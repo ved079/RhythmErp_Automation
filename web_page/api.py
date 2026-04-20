@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
@@ -20,6 +20,7 @@ import asyncio
 import logging
 import time
 import traceback
+import pathlib
 
 import openpyxl
 
@@ -76,6 +77,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------- Serve Dashboard ----------
+@app.get("/")
+async def serve_dashboard():
+    html_path = pathlib.Path(__file__).parent / "index.html"
+    return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
 
 # ---------- Models ----------
 class LoginCredentials(BaseModel):
@@ -366,27 +373,10 @@ def automation_worker(exec_id: str, req: AutomationRequest, log_queue: queue.Que
             time.sleep(2)
 
         # ========== DOWNLOADS ==========
-        if "Downloads" in req.modules:
-            logging.info("Showing files in download directory...")
-            download_dir = r"C:\Users\vedantd\Desktop\selenium files\download_files"
-            try:
-                if os.path.exists(download_dir):
-                    files = os.listdir(download_dir)
-                    if files:
-                        logging.info(f"Found {len(files)} file(s):")
-                        for f in sorted(files):
-                            file_path = os.path.join(download_dir, f)
-                            if os.path.isfile(file_path):
-                                size = os.path.getsize(file_path)
-                                logging.info(f"   {f} ({size:,} bytes)")
-                            else:
-                                logging.info(f"   {f} (folder)")
-                    else:
-                        logging.info("   Directory is empty.")
-                else:
-                    logging.warning(f"   Directory not found: {download_dir}")
-            except Exception as e:
-                logging.error(f"   Failed to list directory: {e}")
+        if "Downloaded Recon Files" in req.modules:
+            logging.info("Opening file browser in dashboard...")
+            log_queue.put("UI_TRIGGER:OPEN_FILES")
+            logging.info("Files view triggered.")
 
         # ========== REPORT GENERATION ==========
         log_queue.put("UI_TRIGGER:EXEC_DONE")
