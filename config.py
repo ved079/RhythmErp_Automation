@@ -1,0 +1,5 @@
+URL = "https://servicesuat.agdi.in/#/authentication/signin"
+USER = "nilesh.tidake@godafarm.com"
+PASS = "Final@1987"
+TENANT_NAME = "Goda Agro Tech Pvt Ltd"
+PURCAHSE = "https://servicesuat.agdi.in/#/purchase/purchase-booking"

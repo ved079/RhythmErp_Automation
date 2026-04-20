@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPC Automation Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        #logTerminal::-webkit-scrollbar { width: 8px; }
+        #logTerminal::-webkit-scrollbar-track { background: #1e1e1e; }
+        #logTerminal::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        .excel-table-wrap::-webkit-scrollbar { height: 8px; width: 8px; }
+        .excel-table-wrap::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .excel-table-wrap::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        .excel-table-wrap::-webkit-scrollbar-thumb:hover { background: #a1a1a1; }
+        .sheet-tab { cursor: pointer; padding: 6px 16px; border-radius: 6px 6px 0 0; font-size: 13px;
+                     border: 1px solid #e5e7eb; border-bottom: none; background: #f9fafb; color: #6b7280;
+                     transition: all 0.15s; white-space: nowrap; }
+        .sheet-tab:hover { background: #e5e7eb; color: #374151; }
+        .sheet-tab.active { background: white; color: #1e3c72; font-weight: 600; border-color: #1e3c72; border-bottom: 2px solid white; margin-bottom: -1px; }
+        .file-card { transition: all 0.15s; }
+        .file-card:hover { border-color: #1e3c72; box-shadow: 0 4px 12px rgba(30,60,114,0.1); }
+        .page-btn { min-width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center;
+                    justify-content: center; font-size: 13px; font-weight: 500; transition: all 0.15s; cursor: pointer;
+                    border: 1px solid #e5e7eb; background: white; color: #374151; }
+        .page-btn:hover:not(:disabled) { border-color: #1e3c72; color: #1e3c72; }
+        .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .page-btn.active-page { background: #1e3c72; color: white; border-color: #1e3c72; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f5f7fa] to-[#c3cfe2] m-0 p-0 font-sans">
+
+    <!-- Fixed Header -->
+    <div class="absolute top-0 left-0 w-full p-6 pl-10 flex items-center bg-white/50 backdrop-blur-sm border-b border-gray-200">
+        <h1 class="text-[#1e3c72] text-2xl font-black">FPC Automation Dashboard</h1>
+    </div>
+
+    <!-- ==================== LOGIN VIEW ==================== -->
+    <div id="loginView" class="bg-white p-10 rounded-2xl shadow-xl w-full max-w-md border border-gray-100 mt-16 transition-all">
+        <div class="text-center mb-8">
+            <h2 class="text-3xl font-semibold text-[#1e3c72] mb-1">Welcome Back</h2>
+            <p class="text-gray-500 text-sm">Login to continue</p>
+        </div>
+        <form id="loginForm" class="space-y-4">
+            <div id="errorMessage" class="hidden bg-red-50 text-red-600 text-sm p-3 rounded-lg border border-red-200"></div>
+            <div>
+                <label class="block text-gray-700 text-sm font-medium mb-1">Username</label>
+                <input type="text" id="usernameInput" value="nilesh.tidake@godafarm.com" class="w-full bg-[#f4f6f9] border border-gray-300 rounded-lg p-2.5 outline-none focus:ring-[#1e3c72] focus:border-[#1e3c72]">
+            </div>
+            <div>
+                <label class="block text-gray-700 text-sm font-medium mb-1">Password</label>
+                <input type="password" id="passwordInput" class="w-full bg-[#f4f6f9] border border-gray-300 rounded-lg p-2.5 outline-none focus:ring-[#1e3c72] focus:border-[#1e3c72]">
+            </div>
+            <div>
+                <label class="block text-gray-700 text-sm font-medium mb-1">Tenant Name</label>
+                <input type="text" id="tenantInput" value="Goda Agro Tech Pvt Ltd" class="w-full bg-[#f4f6f9] border border-gray-300 rounded-lg p-2.5 outline-none focus:ring-[#1e3c72] focus:border-[#1e3c72]">
+            </div>
+            <div class="pt-2">
+                <button type="submit" id="loginBtn" class="w-full bg-[#1e3c72] text-white font-semibold rounded-lg px-8 py-2.5 hover:bg-[#152a51] transition-all">Login</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- ==================== DASHBOARD VIEW ==================== -->
+    <div id="dashboardView" class="hidden bg-white p-10 rounded-2xl shadow-xl w-full max-w-5xl border border-gray-100 mt-16">
+        <h2 class="text-2xl font-semibold text-[#1e3c72] mb-6 border-b pb-4">Select Modules to Execute</h2>
+
+        <div id="homeCategories">
+            <div class="grid grid-cols-3 gap-6">
+                <div class="category-card border-2 border-gray-200 rounded-xl p-6 cursor-pointer hover:border-[#1e3c72] transition-all text-center" data-category="registration">
+                    <div class="text-4xl mb-3">📝</div>
+                    <h3 class="font-bold text-gray-800 text-xl">Registration Module</h3>
+                    <p class="text-xs text-gray-500 mt-2">Farmer, Supplier, Agent, Customer, Employee</p>
+                </div>
+                <div class="category-card border-2 border-gray-200 rounded-xl p-6 cursor-pointer hover:border-[#1e3c72] transition-all text-center" data-category="privateb2b">
+                    <div class="text-4xl mb-3">🏢</div>
+                    <h3 class="font-bold text-gray-800 text-xl">PrivateB2B</h3>
+                    <p class="text-xs text-gray-500 mt-2">Purchase, Sales, Stock Transfer</p>
+                </div>
+                <div class="category-card border-2 border-gray-200 rounded-xl p-6 cursor-pointer hover:border-[#1e3c72] transition-all text-center" data-category="reports">
+                    <div class="text-4xl mb-3">📊</div>
+                    <h3 class="font-bold text-gray-800 text-xl">Reports</h3>
+                    <p class="text-xs text-gray-500 mt-2">Ageing Report</p>
+                </div>
+                <div class="category-card border-2 border-gray-200 rounded-xl p-6 cursor-pointer hover:border-[#1e3c72] transition-all text-center" data-category="downloads">
+                    <div class="text-4xl mb-3">⬇️</div>
+                    <h3 class="font-bold text-gray-800 text-xl">Downlods</h3>
+                    <p class="text-xs text-gray-500 mt-2">All Downloaded Files</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="categoryView" class="hidden">
+            <div class="flex items-center mb-6">
+                <button id="backToHomeBtn" class="text-[#1e3c72] hover:underline font-semibold flex items-center">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                    </svg>
+                    Back to Categories
+                </button>
+                <span class="mx-3 text-gray-400">|</span>
+                <span id="breadcrumb" class="text-gray-600 text-sm font-medium"></span>
+            </div>
+            <div id="subModulesGrid" class="grid grid-cols-2 gap-4"></div>
+        </div>
+
+        <div class="border-t mt-8 pt-6 flex justify-between items-center">
+            <span class="text-sm text-gray-500" id="selectionCount">0 modules selected</span>
+            <button id="runTestsBtn" class="bg-green-600 text-white font-semibold rounded-lg px-8 py-3 hover:bg-green-700 transition-all shadow-md opacity-50 cursor-not-allowed" disabled>▶️ Launch Automation</button>
+        </div>
+    </div>
+
+    <!-- ==================== EXECUTION VIEW ==================== -->
+    <div id="executionView" class="hidden w-full max-w-7xl h-[82vh] flex gap-4 mt-16 px-4">
+
+        <div class="w-1/4 flex flex-col bg-gray-900 rounded-2xl shadow-xl overflow-hidden border border-gray-700">
+            <div class="bg-gray-800 p-3 border-b border-gray-700 flex justify-between items-center">
+                <span class="text-xs font-mono text-gray-400">root@erp:~</span>
+                <div class="flex space-x-2"><div class="w-3 h-3 rounded-full bg-red-500"></div><div class="w-3 h-3 rounded-full bg-yellow-500"></div><div class="w-3 h-3 rounded-full bg-green-500"></div></div>
+            </div>
+            <div id="logTerminal" class="flex-grow p-4 font-mono text-xs text-gray-300 overflow-y-auto space-y-1">
+                <div class="text-blue-400">> System initializing...</div>
+            </div>
+            <div class="p-3 bg-gray-800 border-t border-gray-700">
+                <button id="stopBtn" class="w-full bg-red-600/20 text-red-500 border border-red-500/50 font-semibold rounded-lg px-4 py-2 hover:bg-red-600 hover:text-white transition-all text-sm">🛑 Force Stop</button>
+            </div>
+        </div>
+
+        <div class="w-[45%] flex flex-col bg-gray-900 rounded-2xl shadow-xl overflow-hidden border border-gray-700">
+            <div class="bg-gray-800 p-3 border-b border-gray-700 flex justify-between items-center">
+                <span class="text-xs font-mono text-gray-400 flex items-center gap-2">
+                    <span id="liveDot" class="w-2 h-2 rounded-full bg-gray-500"></span>
+                    Live Browser
+                </span>
+                <div class="flex items-center gap-3">
+                    <span id="browserModeLabel" class="text-[10px] font-mono text-gray-600">off-screen</span>
+                    <span id="screenshotFps" class="text-[10px] font-mono text-gray-600">--</span>
+                </div>
+            </div>
+            <div class="flex-grow bg-black flex items-center justify-center overflow-hidden p-2">
+                <div id="noSignal" class="text-center text-gray-600">
+                    <div class="text-4xl mb-2">📺</div>
+                    <p class="text-xs font-mono">Waiting for browser...</p>
+                </div>
+                <img id="liveScreen" src="" class="hidden w-full h-full object-contain rounded" alt="Live Browser Screen">
+            </div>
+        </div>
+
+        <div class="w-[30%] bg-white rounded-2xl shadow-xl p-6 border border-gray-100 flex flex-col">
+            <h2 class="text-xl font-bold text-[#1e3c72] mb-4 border-b pb-3">Automation Status</h2>
+            <div class="flex-grow flex flex-col justify-center space-y-6 pl-4">
+                <div class="flex items-center space-x-3 pipeline-step opacity-50" id="step-auth">
+                    <div class="w-9 h-9 rounded-full border-2 border-gray-300 flex items-center justify-center font-bold text-gray-500 bg-gray-50 text-sm">1</div>
+                    <div><h4 class="font-bold text-gray-800 text-sm">Authenticating</h4><p class="text-xs text-gray-500">Connecting to ERP</p></div>
+                </div>
+                <div class="flex items-center space-x-3 pipeline-step opacity-50" id="step-exec">
+                    <div class="w-9 h-9 rounded-full border-2 border-gray-300 flex items-center justify-center font-bold text-gray-500 bg-gray-50 text-sm">2</div>
+                    <div><h4 class="font-bold text-gray-800 text-sm">Executing Modules</h4><p class="text-xs text-gray-500" id="execText">Waiting to start...</p></div>
+                </div>
+                <div class="flex items-center space-x-3 pipeline-step opacity-50" id="step-report">
+                    <div class="w-9 h-9 rounded-full border-2 border-gray-300 flex items-center justify-center font-bold text-gray-500 bg-gray-50 text-sm">3</div>
+                    <div><h4 class="font-bold text-gray-800 text-sm">Report Generation</h4><p class="text-xs text-gray-500">Compiling logs.</p></div>
+                </div>
+            </div>
+            <div class="mt-auto pt-4 border-t flex flex-col items-center space-y-3">
+                <button id="toggleBrowserBtn" class="w-full bg-gray-100 text-gray-700 font-medium rounded-lg px-4 py-2.5 hover:bg-gray-200 transition-all text-sm border border-gray-300 flex items-center justify-center gap-2">
+                    <svg id="toggleIconShow" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                    </svg>
+                    <svg id="toggleIconHide" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"></path>
+                    </svg>
+                    <span id="toggleBtnText">Show Browser</span>
+                </button>
+                <div class="flex justify-between items-center w-full">
+                    <button id="backToDashboardBtn" class="hidden text-[#1e3c72] hover:underline font-semibold text-sm flex items-center">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                        Back
+                    </button>
+                    <div id="downloadSection" class="hidden">
+                        <button class="bg-[#1e3c72] text-white font-semibold rounded-lg px-6 py-2.5 hover:bg-[#152a51] shadow-md text-sm">📥 Download Report</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== FILES LIST VIEW ==================== -->
+    <div id="filesListView" class="hidden bg-white p-10 rounded-2xl shadow-xl w-full max-w-4xl border border-gray-100 mt-16">
+        <div class="flex items-center justify-between mb-6 border-b pb-4">
+            <div class="flex items-center gap-3">
+                <button id="backFromFilesBtn" class="text-[#1e3c72] hover:underline font-semibold flex items-center">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                    </svg>
+                    Back
+                </button>
+                <span class="mx-2 text-gray-300">|</span>
+                <h2 class="text-xl font-bold text-[#1e3c72]">📁 Downloaded Files</h2>
+            </div>
+            <span id="fileCountBadge" class="text-sm text-gray-500"></span>
+        </div>
+
+        <!-- Search -->
+        <div class="relative mb-4">
+            <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+            <input type="text" id="fileSearchInput" placeholder="Search files..." class="w-full pl-10 pr-4 py-2.5 bg-[#f4f6f9] border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#1e3c72] focus:border-[#1e3c72]">
+        </div>
+
+        <!-- File cards container -->
+        <div id="fileCardsContainer" class="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+            <div class="text-center py-12 text-gray-400">
+                <div class="text-3xl mb-2">⏳</div>
+                <p class="text-sm">Loading files...</p>
+            </div>
+        </div>
+
+        <!-- Empty state -->
+        <div id="noFilesState" class="hidden text-center py-16">
+            <div class="text-5xl mb-4">📭</div>
+            <p class="text-gray-500 font-medium">No files found</p>
+            <p class="text-gray-400 text-sm mt-1">Run an automation to generate reports</p>
+        </div>
+    </div>
+
+    <!-- ==================== EXCEL VIEWER VIEW ==================== -->
+    <div id="fileViewerView" class="hidden bg-white rounded-2xl shadow-xl w-full max-w-6xl border border-gray-100 mt-16 overflow-hidden">
+
+        <!-- Top bar -->
+        <div class="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
+            <div class="flex items-center gap-3">
+                <button id="backToFilesListBtn" class="text-[#1e3c72] hover:underline font-semibold flex items-center text-sm">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                    </svg>
+                    Files
+                </button>
+                <span class="mx-1 text-gray-300">›</span>
+                <span id="viewerFileName" class="font-bold text-gray-800 text-sm truncate max-w-md">file.xlsx</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span id="viewerRowInfo" class="text-xs text-gray-500"></span>
+                <button id="viewerDownloadBtn" class="bg-[#1e3c72] text-white font-medium rounded-lg px-4 py-2 hover:bg-[#152a51] text-sm flex items-center gap-2">
+                    📥 Download
+                </button>
+            </div>
+        </div>
+
+        <!-- Sheet tabs -->
+        <div id="sheetTabsBar" class="flex items-center gap-1 px-6 pt-3 bg-white border-b overflow-x-auto"></div>
+
+        <!-- Search within file -->
+        <div class="px-6 py-3 bg-white border-b">
+            <div class="relative max-w-sm">
+                <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+                <input type="text" id="excelSearchInput" placeholder="Search within file..." class="w-full pl-10 pr-4 py-2 bg-[#f4f6f9] border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#1e3c72] focus:border-[#1e3c72]">
+            </div>
+        </div>
+
+        <!-- Excel table -->
+        <div class="excel-table-wrap overflow-auto max-h-[55vh]">
+            <table id="excelTable" class="w-full text-sm border-collapse">
+                <thead id="excelThead" class="sticky top-0 z-10 bg-gray-100"></thead>
+                <tbody id="excelTbody"></tbody>
+            </table>
+        </div>
+
+        <!-- No data state -->
+        <div id="noSheetData" class="hidden text-center py-12 text-gray-400">
+            <p class="text-sm">No data in this sheet</p>
+        </div>
+
+        <!-- Pagination -->
+        <div class="flex items-center justify-between px-6 py-3 border-t bg-gray-50">
+            <span id="paginationInfo" class="text-xs text-gray-500"></span>
+            <div id="paginationControls" class="flex items-center gap-1"></div>
+        </div>
+    </div>
+
+
+    <script>
+        // ================================================================
+        //  GLOBAL STATE
+        // ================================================================
+        var sessionCreds = {};
+        var selectedModules = [];
+        var currentExecId = null;
+        var browserIsVisible = false;
+        var lastScreenshotTime = 0;
+        var automationCompleted = false;
+
+        // File viewer state
+        var fileState = {
+            allFiles: [],
+            filteredFiles: [],
+            excelData: null,
+            currentSheet: null,
+            currentFileName: null,
+            filteredRows: [],
+            currentPage: 1,
+            rowsPerPage: 50
+        };
+
+        // ================================================================
+        //  MODULE REGISTRY
+        // ================================================================
+        var moduleRegistry = {
+            registration: [
+                { name: "Farmer Registration", icon: "🚜", desc: "Automated onboarding forms." },
+                { name: "Supplier Registration", icon: "🏭", desc: "Vendor data entry." },
+                { name: "Agent Registration", icon: "🤝", desc: "Agent onboarding." },
+                { name: "Customer Registration", icon: "🛒", desc: "Customer profiles." },
+                { name: "Employee Registration", icon: "👔", desc: "Employee records." },
+                { name: "Test_Cases", icon: "🛠️", desc: "Registration Test Cases" }
+            ],
+            privateb2b: [
+                { name: "Purchase Flow", icon: "📦", desc: "Gate Pass > GRN > QC > PB" },
+                { name: "Sales Flow", icon: "💰", desc: "SO > Lot > Dispatch > Invoice > Receipt" },
+                { name: "Stock Transfer", icon: "🔄", desc: "Stock Transfers" }
+            ],
+            reports: [
+                { name: "Trial Balance", icon: "📋", desc: "Verify debit and credit equality" },
+                { name: "Balance Sheet", icon: "⚖️", desc: "View financial position summary" },
+                { name: "Profit & Loss", icon: "📉", desc: "Analyze revenue and expenses" },
+                { name: "Payable", icon: "💸", desc: "Manage accounts payable" },
+                { name: "Receivable", icon: "💰", desc: "Manage accounts receivable" },
+                { name: "Inventory Report 1", icon: "📑", desc: "Secondary stock analysis view" },
+                { name: "Inventory Summary", icon: "📝", desc: "Condensed stock overview" },
+                { name: "Ageing Report", icon: "📊", desc: "Generate ageing analysis" },
+                { name: "Ledger Enquiry", icon: "🔍", desc: "Search specific account ledgers" },
+                { name: "Day Book", icon: "📖", desc: "List all daily transactions" },
+                { name: "Sales Order Status", icon: "🛒", desc: "Track progress of sales orders" },
+                { name: "Supplier Balance", icon: "🏢", desc: "Check outstanding supplier totals" },
+                { name: "Customer Balance", icon: "👤", desc: "Check outstanding customer totals" },
+                { name: "Statistics", icon: "📈", desc: "Visualize data trends and metrics" },
+                { name: "Weighted Average Rate", icon: "🔢", desc: "Calculate average item costs" }
+            ],
+            downloads: [
+                { name: "Downloaded Recon Files", icon: "📁", desc: "All The Downloaded Files" }
+            ]
+        };
+
+        var categoryNames = {
+            registration: "Registration Module",
+            privateb2b: "PrivateB2B",
+            reports: "Reports",
+            downloads: "Downloaded Files",
+        };
+
+        // ================================================================
+        //  HELPERS
+        // ================================================================
+        function updateStep(stepId, status) {
+            var step = document.getElementById(stepId);
+            var circle = step.querySelector('div');
+            step.classList.remove('opacity-50');
+            if (status === 'active') {
+                circle.className = 'w-9 h-9 rounded-full border-2 border-blue-500 text-blue-600 bg-blue-100 flex items-center justify-center font-bold text-sm';
+                circle.innerHTML = '<svg class="w-4 h-4 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+            } else if (status === 'complete') {
+                circle.className = 'w-9 h-9 rounded-full border-2 border-green-500 text-green-600 bg-green-50 flex items-center justify-center font-bold text-sm';
+                circle.innerHTML = '✅';
+            }
+        }
+
+        function updateSelectionUI() {
+            var countSpan = document.getElementById('selectionCount');
+            var btn = document.getElementById('runTestsBtn');
+            countSpan.innerText = selectedModules.length + ' modules selected';
+            if (selectedModules.length > 0) {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                btn.disabled = true;
+                btn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        function updateToggleUI(isVisible) {
+            browserIsVisible = isVisible;
+            document.getElementById('toggleBtnText').textContent = isVisible ? 'Hide Browser' : 'Show Browser';
+            document.getElementById('toggleIconShow').classList.toggle('hidden', isVisible);
+            document.getElementById('toggleIconHide').classList.toggle('hidden', !isVisible);
+            var modeLabel = document.getElementById('browserModeLabel');
+            modeLabel.textContent = isVisible ? 'visible' : 'off-screen';
+            modeLabel.className = isVisible ? 'text-[10px] font-mono text-green-500' : 'text-[10px] font-mono text-gray-600';
+        }
+
+        function resetExecutionView() {
+            document.getElementById('logTerminal').innerHTML = '<div class="text-blue-400">> System initializing...</div>';
+            document.getElementById('liveScreen').classList.add('hidden');
+            document.getElementById('liveScreen').src = '';
+            document.getElementById('noSignal').classList.remove('hidden');
+            document.getElementById('liveDot').className = 'w-2 h-2 rounded-full bg-gray-500';
+            document.getElementById('screenshotFps').textContent = '--';
+            lastScreenshotTime = 0;
+            currentExecId = null;
+            browserIsVisible = false;
+            updateToggleUI(false);
+            ['step-auth', 'step-exec', 'step-report'].forEach(function(id) {
+                var step = document.getElementById(id);
+                step.classList.add('opacity-50');
+                var circle = step.querySelector('div');
+                circle.className = 'w-9 h-9 rounded-full border-2 border-gray-300 flex items-center justify-center font-bold text-gray-500 bg-gray-50 text-sm';
+                circle.textContent = id === 'step-auth' ? '1' : (id === 'step-exec' ? '2' : '3');
+            });
+            document.getElementById('execText').innerText = 'Waiting to start...';
+            document.getElementById('downloadSection').classList.add('hidden');
+            document.getElementById('backToDashboardBtn').classList.add('hidden');
+            document.getElementById('toggleBrowserBtn').classList.remove('hidden');
+            automationCompleted = false;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function showView(viewId) {
+            ['loginView', 'dashboardView', 'executionView', 'filesListView', 'fileViewerView'].forEach(function(id) {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById(viewId).classList.remove('hidden');
+        }
+
+        // ================================================================
+        //  FILE BROWSER
+        // ================================================================
+        function openFileBrowser() {
+            showView('filesListView');
+            document.getElementById('fileSearchInput').value = '';
+            document.getElementById('fileCardsContainer').innerHTML =
+                '<div class="text-center py-12 text-gray-400"><div class="text-3xl mb-2">⏳</div><p class="text-sm">Loading files...</p></div>';
+            document.getElementById('noFilesState').classList.add('hidden');
+
+            fetch('http://127.0.0.1:8000/api/files/list')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    fileState.allFiles = data.files;
+                    fileState.filteredFiles = data.files;
+                    renderFileList();
+                })
+                .catch(function(err) {
+                    document.getElementById('fileCardsContainer').innerHTML =
+                        '<div class="text-center py-12 text-red-400"><div class="text-3xl mb-2">❌</div><p class="text-sm">Failed to load files</p></div>';
+                });
+        }
+
+        function renderFileList() {
+            var container = document.getElementById('fileCardsContainer');
+            var noFiles = document.getElementById('noFilesState');
+            var badge = document.getElementById('fileCountBadge');
+
+            var files = fileState.filteredFiles;
+            badge.textContent = files.length + ' file' + (files.length !== 1 ? 's' : '');
+
+            if (files.length === 0) {
+                container.classList.add('hidden');
+                noFiles.classList.remove('hidden');
+                return;
+            }
+
+            container.classList.remove('hidden');
+            noFiles.classList.add('hidden');
+
+            var html = '';
+            files.forEach(function(f) {
+                var ext = f.name.split('.').pop().toLowerCase();
+                var icon = ext === 'xlsx' ? '📊' : ext === 'csv' ? '📄' : ext === 'pdf' ? '📕' : '📎';
+                html += '<div class="file-card border border-gray-200 rounded-xl p-4 flex items-center justify-between gap-4 cursor-pointer bg-white" data-filename="' + f.name + '">' +
+                    '<div class="flex items-center gap-4 min-w-0">' +
+                        '<div class="text-2xl flex-shrink-0">' + icon + '</div>' +
+                        '<div class="min-w-0">' +
+                            '<p class="font-semibold text-gray-800 text-sm truncate" title="' + f.name + '">' + f.name + '</p>' +
+                            '<p class="text-xs text-gray-400 mt-0.5">' + formatFileSize(f.size) + ' &bull; ' + f.modified + '</p>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="flex items-center gap-2 flex-shrink-0">' +
+                        '<button class="view-file-btn bg-[#1e3c72] text-white text-xs font-medium px-4 py-1.5 rounded-lg hover:bg-[#152a51] transition-all">View</button>' +
+                        '<a href="http://127.0.0.1:8000/api/files/download/' + encodeURIComponent(f.name) + '" class="bg-gray-100 text-gray-600 text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-gray-200 transition-all border border-gray-200">📥</a>' +
+                    '</div>' +
+                '</div>';
+            });
+            container.innerHTML = html;
+
+            // Attach click events
+            container.querySelectorAll('.file-card').forEach(function(card) {
+                card.querySelector('.view-file-btn').addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    viewExcelFile(card.dataset.filename);
+                });
+                card.addEventListener('click', function() {
+                    viewExcelFile(card.dataset.filename);
+                });
+            });
+        }
+
+        // File search
+        document.getElementById('fileSearchInput').addEventListener('input', function(e) {
+            var q = e.target.value.toLowerCase().trim();
+            if (!q) {
+                fileState.filteredFiles = fileState.allFiles;
+            } else {
+                fileState.filteredFiles = fileState.allFiles.filter(function(f) {
+                    return f.name.toLowerCase().includes(q);
+                });
+            }
+            renderFileList();
+        });
+
+        // Back from files list
+        document.getElementById('backFromFilesBtn').addEventListener('click', function() {
+            showView('dashboardView');
+        });
+
+        // ================================================================
+        //  EXCEL VIEWER
+        // ================================================================
+        function viewExcelFile(filename) {
+            fileState.currentFileName = filename;
+            document.getElementById('viewerFileName').textContent = filename;
+            document.getElementById('viewerDownloadBtn').onclick = function() {
+                window.open('http://127.0.0.1:8000/api/files/download/' + encodeURIComponent(filename), '_blank');
+            };
+
+            // Show loading state
+            showView('fileViewerView');
+            document.getElementById('sheetTabsBar').innerHTML = '';
+            document.getElementById('excelThead').innerHTML = '';
+            document.getElementById('excelTbody').innerHTML = '';
+            document.getElementById('noSheetData').classList.add('hidden');
+            document.getElementById('excelSearchInput').value = '';
+            document.getElementById('paginationInfo').textContent = 'Loading...';
+            document.getElementById('paginationControls').innerHTML = '';
+
+            fetch('http://127.0.0.1:8000/api/files/read/' + encodeURIComponent(filename))
+                .then(function(r) {
+                    if (!r.ok) throw new Error('Failed to read file');
+                    return r.json();
+                })
+                .then(function(data) {
+                    fileState.excelData = data.sheets;
+                    var sheetNames = Object.keys(data.sheets);
+
+                    if (sheetNames.length === 0) {
+                        document.getElementById('noSheetData').classList.remove('hidden');
+                        document.getElementById('paginationInfo').textContent = '';
+                        return;
+                    }
+
+                    // Render sheet tabs
+                    var tabsHtml = '';
+                    sheetNames.forEach(function(name, i) {
+                        tabsHtml += '<div class="sheet-tab' + (i === 0 ? ' active' : '') + '" data-sheet="' + name + '">' + name + '</div>';
+                    });
+                    document.getElementById('sheetTabsBar').innerHTML = tabsHtml;
+
+                    // Attach tab click events
+                    document.querySelectorAll('.sheet-tab').forEach(function(tab) {
+                        tab.addEventListener('click', function() {
+                            document.querySelectorAll('.sheet-tab').forEach(function(t) { t.classList.remove('active'); });
+                            tab.classList.add('active');
+                            switchSheet(tab.dataset.sheet);
+                        });
+                    });
+
+                    // Show first sheet
+                    switchSheet(sheetNames[0]);
+                })
+                .catch(function(err) {
+                    document.getElementById('excelThead').innerHTML = '';
+                    document.getElementById('excelTbody').innerHTML =
+                        '<tr><td class="text-center py-12 text-red-400">Failed to read file. It may not be a valid Excel file.</td></tr>';
+                    document.getElementById('paginationInfo').textContent = '';
+                });
+        }
+
+        function switchSheet(sheetName) {
+            fileState.currentSheet = sheetName;
+            fileState.currentPage = 1;
+            fileState.filteredRows = [];
+
+            var sheet = fileState.excelData[sheetName];
+            if (!sheet || !sheet.headers) return;
+
+            fileState.filteredRows = sheet.rows.slice(); // copy
+            document.getElementById('viewerRowInfo').textContent = sheet.rows.length + ' rows';
+
+            renderExcelTable();
+        }
+
+        function renderExcelTable() {
+            var sheet = fileState.excelData[fileState.currentSheet];
+            if (!sheet) return;
+
+            var headers = sheet.headers;
+            var rows = fileState.filteredRows;
+            var perPage = fileState.rowsPerPage;
+            var currentPage = fileState.currentPage;
+            var totalPages = Math.max(1, Math.ceil(rows.length / perPage));
+            if (currentPage > totalPages) currentPage = totalPages;
+            fileState.currentPage = currentPage;
+
+            var startIdx = (currentPage - 1) * perPage;
+            var endIdx = Math.min(startIdx + perPage, rows.length);
+            var pageRows = rows.slice(startIdx, endIdx);
+
+            // Render thead
+            var theadHtml = '<tr>';
+            headers.forEach(function(h) {
+                theadHtml += '<th class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 border-b border-gray-200 whitespace-nowrap bg-gray-100 max-w-xs truncate" title="' + h + '">' + (h || '') + '</th>';
+            });
+            theadHtml += '</tr>';
+            document.getElementById('excelThead').innerHTML = theadHtml;
+
+            // Render tbody
+            if (pageRows.length === 0) {
+                document.getElementById('excelTbody').innerHTML =
+                    '<tr><td colspan="' + headers.length + '" class="text-center py-8 text-gray-400 text-sm">No matching rows</td></tr>';
+            } else {
+                var tbodyHtml = '';
+                pageRows.forEach(function(row, ri) {
+                    var rowClass = ri % 2 === 0 ? 'bg-white' : 'bg-gray-50/50';
+                    tbodyHtml += '<tr class="' + rowClass + ' hover:bg-blue-50/50 transition-colors">';
+                    row.forEach(function(cell) {
+                        var cellStr = (cell !== null && cell !== undefined) ? String(cell) : '';
+                        tbodyHtml += '<td class="px-3 py-2 text-xs text-gray-700 border-b border-gray-100 max-w-xs truncate" title="' + cellStr.replace(/"/g, '&quot;') + '">' + cellStr + '</td>';
+                    });
+                    tbodyHtml += '</tr>';
+                });
+                document.getElementById('excelTbody').innerHTML = tbodyHtml;
+            }
+
+            // Update pagination info
+            if (rows.length === 0) {
+                document.getElementById('paginationInfo').textContent = 'No results';
+            } else {
+                document.getElementById('paginationInfo').textContent =
+                    'Showing ' + (startIdx + 1) + '–' + endIdx + ' of ' + rows.length + ' rows';
+            }
+
+            // Render pagination controls
+            renderPagination(totalPages, currentPage);
+        }
+
+        function renderPagination(totalPages, currentPage) {
+            var controls = document.getElementById('paginationControls');
+            if (totalPages <= 1) {
+                controls.innerHTML = '';
+                return;
+            }
+
+            var html = '<button class="page-btn" data-page="prev" ' + (currentPage <= 1 ? 'disabled' : '') + '>&laquo;</button>';
+
+            // Show max 7 page buttons
+            var startPage = Math.max(1, currentPage - 3);
+            var endPage = Math.min(totalPages, startPage + 6);
+            if (endPage - startPage < 6) startPage = Math.max(1, endPage - 6);
+
+            for (var p = startPage; p <= endPage; p++) {
+                html += '<button class="page-btn' + (p === currentPage ? ' active-page' : '') + '" data-page="' + p + '">' + p + '</button>';
+            }
+
+            html += '<button class="page-btn" data-page="next" ' + (currentPage >= totalPages ? 'disabled' : '') + '>&raquo;</button>';
+            controls.innerHTML = html;
+
+            controls.querySelectorAll('.page-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var page = btn.dataset.page;
+                    if (page === 'prev') {
+                        fileState.currentPage = Math.max(1, fileState.currentPage - 1);
+                    } else if (page === 'next') {
+                        fileState.currentPage = Math.min(totalPages, fileState.currentPage + 1);
+                    } else {
+                        fileState.currentPage = parseInt(page);
+                    }
+                    renderExcelTable();
+                });
+            });
+        }
+
+        // Search within Excel
+        document.getElementById('excelSearchInput').addEventListener('input', function(e) {
+            var q = e.target.value.toLowerCase().trim();
+            var sheet = fileState.excelData[fileState.currentSheet];
+            if (!sheet) return;
+
+            if (!q) {
+                fileState.filteredRows = sheet.rows.slice();
+            } else {
+                fileState.filteredRows = sheet.rows.filter(function(row) {
+                    return row.some(function(cell) {
+                        return String(cell).toLowerCase().includes(q);
+                    });
+                });
+            }
+            fileState.currentPage = 1;
+            renderExcelTable();
+        });
+
+        // Back from viewer to file list
+        document.getElementById('backToFilesListBtn').addEventListener('click', function() {
+            openFileBrowser();
+        });
+
+        // ================================================================
+        //  LOGIN
+        // ================================================================
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var btn = document.getElementById('loginBtn');
+            var errorBox = document.getElementById('errorMessage');
+            errorBox.classList.add('hidden');
+
+            sessionCreds = {
+                username: document.getElementById('usernameInput').value,
+                password: document.getElementById('passwordInput').value,
+                tenant: document.getElementById('tenantInput').value
+            };
+
+            btn.innerHTML = 'Validating...';
+            btn.disabled = true;
+
+            try {
+                var resp = await fetch('http://127.0.0.1:8000/validate_login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(sessionCreds)
+                });
+                if (resp.ok) {
+                    showView('dashboardView');
+                } else {
+                    var err = await resp.json();
+                    errorBox.textContent = '❌ ' + (err.detail || 'Invalid credentials');
+                    errorBox.classList.remove('hidden');
+                }
+            } catch {
+                errorBox.textContent = '❌ Server error. Is FastAPI running?';
+                errorBox.classList.remove('hidden');
+            } finally {
+                btn.innerHTML = 'Login';
+                btn.disabled = false;
+            }
+        });
+
+        // ================================================================
+        //  CATEGORY CARD CLICK
+        // ================================================================
+        document.querySelectorAll('.category-card').forEach(function(card) {
+            card.addEventListener('click', function() {
+                var category = card.dataset.category;
+
+                // Downloads category opens file browser directly
+                if (category === 'downloads') {
+                    openFileBrowser();
+                    return;
+                }
+
+                document.getElementById('breadcrumb').innerText = categoryNames[category];
+                document.getElementById('homeCategories').classList.add('hidden');
+                document.getElementById('categoryView').classList.remove('hidden');
+
+                var grid = document.getElementById('subModulesGrid');
+                grid.innerHTML = '';
+                moduleRegistry[category].forEach(function(mod) {
+                    var moduleCard = document.createElement('div');
+                    moduleCard.className = 'module-card border-2 border-gray-200 rounded-xl p-4 cursor-pointer hover:border-[#1e3c72] transition-all';
+                    moduleCard.dataset.value = mod.name;
+
+                    if (selectedModules.includes(mod.name)) {
+                        moduleCard.classList.add('border-[#1e3c72]', 'bg-blue-50');
+                    }
+
+                    moduleCard.innerHTML =
+                        '<div class="text-xl mb-2">' + mod.icon + '</div>' +
+                        '<h3 class="font-bold text-gray-800">' + mod.name + '</h3>' +
+                        '<p class="text-xs text-gray-500 mt-1">' + mod.desc + '</p>';
+
+                    moduleCard.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        var val = moduleCard.dataset.value;
+                        moduleCard.classList.toggle('border-[#1e3c72]');
+                        moduleCard.classList.toggle('bg-blue-50');
+                        if (selectedModules.includes(val)) {
+                            selectedModules = selectedModules.filter(function(m) { return m !== val; });
+                        } else {
+                            selectedModules.push(val);
+                        }
+                        updateSelectionUI();
+                    });
+
+                    grid.appendChild(moduleCard);
+                });
+            });
+        });
+
+        // ================================================================
+        //  NAVIGATION BUTTONS
+        // ================================================================
+        document.getElementById('backToHomeBtn').addEventListener('click', function() {
+            document.getElementById('categoryView').classList.add('hidden');
+            document.getElementById('homeCategories').classList.remove('hidden');
+        });
+
+        document.getElementById('backToDashboardBtn').addEventListener('click', function() {
+            showView('dashboardView');
+            resetExecutionView();
+        });
+
+        // ================================================================
+        //  TOGGLE BROWSER VISIBILITY
+        // ================================================================
+        document.getElementById('toggleBrowserBtn').addEventListener('click', async function() {
+            if (!currentExecId) return;
+            var btn = document.getElementById('toggleBrowserBtn');
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+            try {
+                var resp = await fetch('http://127.0.0.1:8000/toggle_browser/' + currentExecId, { method: 'POST' });
+                if (!resp.ok) console.error('Toggle failed:', resp.status);
+            } catch (err) {
+                console.error('Toggle error:', err);
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+            }
+        });
+
+        // ================================================================
+        //  LAUNCH AUTOMATION
+        // ================================================================
+        document.getElementById('runTestsBtn').addEventListener('click', async function() {
+            if (selectedModules.length === 0) return;
+
+            showView('executionView');
+            resetExecutionView();
+
+            var term = document.getElementById('logTerminal');
+            term.innerHTML = '<div class="text-blue-400">> System initializing...</div>';
+            document.getElementById('execText').innerText = 'Queued: ' + selectedModules.join(', ');
+
+            try {
+                var startResp = await fetch('http://127.0.0.1:8000/run_automation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: sessionCreds.username,
+                        password: sessionCreds.password,
+                        tenant: sessionCreds.tenant,
+                        modules: selectedModules
+                    })
+                });
+                var startData = await startResp.json();
+                currentExecId = startData.execution_id;
+
+                var ws = new WebSocket('ws://127.0.0.1:8000/ws/logs/' + currentExecId);
+
+                ws.onmessage = function(event) {
+                    var msg = event.data;
+
+                    if (msg.startsWith('SCREENSHOT:')) {
+                        document.getElementById('liveScreen').src = msg.substring(11);
+                        document.getElementById('liveScreen').classList.remove('hidden');
+                        document.getElementById('noSignal').classList.add('hidden');
+                        document.getElementById('liveDot').className = 'w-2 h-2 rounded-full bg-green-500 animate-pulse';
+                        var now = Date.now();
+                        if (lastScreenshotTime > 0) {
+                            var delta = (now - lastScreenshotTime) / 1000;
+                            document.getElementById('screenshotFps').textContent = (1 / delta).toFixed(1) + ' fps';
+                        }
+                        lastScreenshotTime = now;
+                        return;
+                    }
+
+                    if (msg.startsWith('UI_TRIGGER:')) {
+                        if (msg === 'UI_TRIGGER:AUTH_START') updateStep('step-auth', 'active');
+                        else if (msg === 'UI_TRIGGER:AUTH_DONE') updateStep('step-auth', 'complete');
+                        else if (msg === 'UI_TRIGGER:EXEC_START') {
+                            updateStep('step-exec', 'active');
+                            document.getElementById('execText').innerText = 'Running: ' + selectedModules.join(', ');
+                        } else if (msg === 'UI_TRIGGER:EXEC_DONE') updateStep('step-exec', 'complete');
+                        else if (msg === 'UI_TRIGGER:REPORT_START') updateStep('step-report', 'active');
+                        else if (msg === 'UI_TRIGGER:REPORT_DONE') {
+                            updateStep('step-report', 'complete');
+                            document.getElementById('downloadSection').classList.remove('hidden');
+                        } else if (msg === 'UI_TRIGGER:ALL_DONE') {
+                            automationCompleted = true;
+                            document.getElementById('liveDot').className = 'w-2 h-2 rounded-full bg-gray-500';
+                            document.getElementById('screenshotFps').textContent = 'ended';
+                            document.getElementById('browserModeLabel').textContent = 'ended';
+                            document.getElementById('browserModeLabel').className = 'text-[10px] font-mono text-gray-500';
+                            document.getElementById('toggleBrowserBtn').classList.add('hidden');
+                            document.getElementById('backToDashboardBtn').classList.remove('hidden');
+                            ws.close();
+                        } else if (msg === 'UI_TRIGGER:BROWSER_SHOW') updateToggleUI(true);
+                        else if (msg === 'UI_TRIGGER:BROWSER_HIDE') updateToggleUI(false);
+                        return;
+                    }
+
+                    var line = document.createElement('div');
+                    if (msg.startsWith('ERROR')) line.className = 'text-red-400';
+                    else if (msg.includes('✅')) line.className = 'text-green-400';
+                    else line.className = 'text-gray-300';
+                    line.textContent = msg;
+                    term.appendChild(line);
+                    term.scrollTop = term.scrollHeight;
+                };
+
+                ws.onerror = function() {
+                    var errLine = document.createElement('div');
+                    errLine.className = 'text-red-400';
+                    errLine.textContent = '> WebSocket error.';
+                    term.appendChild(errLine);
+                };
+
+                ws.onclose = function() {
+                    if (automationCompleted) return;
+                    document.getElementById('backToDashboardBtn').classList.remove('hidden');
+                    document.getElementById('toggleBrowserBtn').classList.add('hidden');
+                    document.getElementById('liveDot').className = 'w-2 h-2 rounded-full bg-red-500';
+                    var closeLine = document.createElement('div');
+                    closeLine.className = 'text-yellow-400';
+                    closeLine.textContent = '> Connection lost unexpectedly.';
+                    term.appendChild(closeLine);
+                };
+
+            } catch (error) {
+                term.innerHTML += '<div class="text-red-400">> Failed: ' + error.message + '</div>';
+            }
+        });
+
+        // ================================================================
+        //  STOP BUTTON
+        // ================================================================
+        document.getElementById('stopBtn').addEventListener('click', function() {
+            location.reload();
+        });
+    </script>
+</body>
+</html>
