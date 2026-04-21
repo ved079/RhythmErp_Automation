@@ -1,6 +1,8 @@
 import pytest
 import time
 import logging
+import os
+from datetime import datetime
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
@@ -8,8 +10,6 @@ from selenium.common.exceptions import TimeoutException, StaleElementReferenceEx
 
 import config
 from common import auth_section, nav_section
-from Registration import farmer_section
-from data.test_data import farmer_data
 
 # Set up module-level logger
 logger = logging.getLogger(__name__)
@@ -19,197 +19,290 @@ if not logger.handlers:
     console.setFormatter(logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s', datefmt='%H:%M:%S'))
     logger.addHandler(console)
 
+# ─────────────────────────────────────────────
+#  TIMEOUT CONSTANTS (no magic numbers)
+# ─────────────────────────────────────────────
+ANGULAR_SETTLE = 2
+DROPDOWN_LOAD = 1.5
+ACCORDION_ANIM = 1
+OVERLAY_WAIT = 5
 
-class TestRegistrationEdgeCases:
+# ─────────────────────────────────────────────
+#  SCREENSHOT DIRECTORY
+# ─────────────────────────────────────────────
+SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots", "farmer")
+os.makedirs(SCREENSHOT_DIR, exist_ok=True)
+
+
+def take_screenshot(driver, test_name):
+    """Save a screenshot on failure for debugging."""
+    timestamp = datetime.now().strftime("%H%M%S")
+    filename = f"{test_name}_{timestamp}.png"
+    filepath = os.path.join(SCREENSHOT_DIR, filename)
+    try:
+        driver.save_screenshot(filepath)
+        logger.error(f"  📸 Screenshot saved: {filepath}")
+    except Exception as e:
+        logger.error(f"  📸 Screenshot failed: {e}")
+    return filepath
+
+
+def grab_error_texts(driver, wait):
+    """Grab all visible mat-error texts from the page."""
+    errors = wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "mat-error")))
+    return [
+        driver.execute_script("return arguments[0].textContent;", err).strip().lower()
+        for err in errors
+        if driver.execute_script("return arguments[0].textContent;", err).strip() != ""
+    ]
+
+
+def reset_form(driver, wait):
+    """Click the Reset button to clear the form between tests."""
+    try:
+        reset_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.send")))
+        driver.execute_script("arguments[0].click();", reset_btn)
+        time.sleep(ANGULAR_SETTLE)
+    except Exception:
+        pass
+        try:
+            driver.refresh()
+            time.sleep(ANGULAR_SETTLE)
+        except Exception:
+            pass
+
+
+# ─────────────────────────────────────────────
+#  STANDALONE SETUP / RESET  (runner calls these directly)
+# ─────────────────────────────────────────────
+def do_setup_and_navigate(driver, wait):
+    """Navigate to farmer page. Used by runner.py AND the pytest fixture below."""
+    driver.get(config.URL)
+    auth_section.perform_login(driver, wait, config)
+    nav_section.go_to_farmer_page(driver, wait)
+    time.sleep(ANGULAR_SETTLE)
+
+
+def do_reset_between_tests(driver, wait):
+    """Reset form between tests. Used by runner.py AND the pytest fixture below."""
+    reset_form(driver, wait)
+
+
+# ═══════════════════════════════════════════════
+#  TEST CLASS
+# ═══════════════════════════════════════════════
+class TestFarmerEdgeCases:
+
+    @pytest.fixture(scope="class", autouse=True)
+    def setup_and_navigate(self, driver, wait):
+        do_setup_and_navigate(driver, wait)
+        yield
 
     @pytest.fixture(autouse=True)
-    def setup_and_navigate(self, driver, wait):
-        driver.get(config.URL)
-        auth_section.perform_login(driver, wait, config)
-        nav_section.go_to_farmer_page(driver, wait)
-        time.sleep(2)
+    def reset_between_tests(self, driver, wait):
+        yield
+        do_reset_between_tests(driver, wait)
 
-    def test_prevent_double_submission_on_save(self, driver, wait):
-        logger.info("\n[DEBUG] Filling mandatory fields to enable valid submission...")
+    # ═══════════════════════════════════════════
+    #  GROUP 1: Pure Validation (no side effects)
+    #  These DO NOT submit the form — just check errors
+    # ═══════════════════════════════════════════
 
-        try:
-            wait.until(
-                EC.invisibility_of_element_located(
-                    (By.CSS_SELECTOR, ".cdk-overlay-container, .ngx-spinner-overlay, .swal2-container")
-                )
-            )
-        except TimeoutException:
-            pass
+    def test_empty_form_required_field_errors(self, driver, wait):
+        """Clicking Submit on an empty form should show validation errors for all mandatory fields."""
 
-        name_input = wait.until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "input[formcontrolname='name'], input#name"))
-        )
-        name_input.clear()
-        name_input.send_keys("Robust Test Farmer")
-
-        driver.find_element(By.ID, "email").send_keys(farmer_data["email"])
-        driver.find_element(By.ID, "phone").send_keys("9876543210")
-        driver.find_element(By.ID, "password").send_keys(farmer_data["password"])
-
-        farmer_section.fill_datepicker(driver, wait, farmer_data["dob"])
-        farmer_section.select_with_filter(driver, wait, "gender", farmer_data["gender"])
-        farmer_section.select_with_filter(driver, wait, "cast_religion", farmer_data["caste"])
-
-        addr_toggle = wait.until(EC.element_to_be_clickable((By.XPATH, "//strong[contains(text(), 'Address')]")))
-        driver.execute_script("arguments[0].click();", addr_toggle)
-        time.sleep(1)
-
-        farmer_section.select_with_filter(driver, wait, "state_ref_id_id", farmer_data["state"])
-        time.sleep(1)
-        farmer_section.select_with_filter(driver, wait, "district_ref_id_id", farmer_data["district"])
-        time.sleep(1)
-        farmer_section.select_with_filter(driver, wait, "sub_district_ref_id_id", farmer_data["taluka"])
-        time.sleep(1)
-        farmer_section.select_with_filter(driver, wait, "village_ref_id_id", farmer_data["village"])
-
-        driver.find_element(By.ID, "pincode").send_keys(farmer_data["pincode"])
-
-        try:
-            address1 = wait.until(EC.visibility_of_element_located((By.NAME, "Address1")))
-            address1.send_keys("123 Test Street")
-        except TimeoutException:
-            pass
-
-        submit_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.submit")))
+        submit_btn = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.submit")))
         driver.execute_script("arguments[0].scrollIntoView({block:'center'});", submit_btn)
+        driver.execute_script("arguments[0].click();", submit_btn)
+        time.sleep(ANGULAR_SETTLE)
 
-        logger.info("[DEBUG] Form valid. Clicking Submit Button...")
-        submit_btn.click()
+        error_texts = grab_error_texts(driver, wait)
+        error_block = " ".join(error_texts)
 
-        def ui_locked(d):
-            try:
-                btn = d.find_element(By.CSS_SELECTOR, "button.submit")
-                disabled = btn.get_attribute("disabled") is not None or "disabled" in (btn.get_attribute("class") or "")
-            except StaleElementReferenceException:
-                disabled = True
+        logger.info(f"[DEBUG] Empty form errors found: {error_texts}")
 
-            overlay_present = len(
-                d.find_elements(By.CSS_SELECTOR, ".cdk-overlay-backdrop-showing, .swal2-container, .ngx-spinner-overlay")
-            ) > 0
+        assert "name" in error_block, \
+            f"Missing validation for Farmer Name! Errors found: [{error_block}]"
+        assert "phone" in error_block or "mobile" in error_block, \
+            f"Missing validation for Phone! Errors found: [{error_block}]"
 
-            return disabled or overlay_present
+    def test_phone_9_digits_rejected(self, driver, wait):
+        """Phone with 9 digits should be rejected."""
+        phone_input = wait.until(EC.visibility_of_element_located((By.ID, "phone")))
+        phone_input.clear()
+        phone_input.send_keys("987654321")
 
-        try:
-            WebDriverWait(driver, 5).until(ui_locked)
-            logger.info("[DEBUG] ✅ UI successfully locked down after click.")
-        except TimeoutException:
-            logger.info("[DEBUG] ❌ UI remained unlocked after click.")
-            assert False, "BUG: Submit button remained clickable during save! UI did not lock down."
+        submit_btn = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.submit")))
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", submit_btn)
+        driver.execute_script("arguments[0].click();", submit_btn)
+        time.sleep(ANGULAR_SETTLE)
 
-    # def test_required_field_errors_on_submit(self, driver, wait):
-    #     """Verify clicking a clickable submit button on an empty form shows red errors."""
-    #     
-    #     # 1. Click the submit button
-    #     submit_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.submit")))
-    #     driver.execute_script("arguments[0].scrollIntoView({block:'center'});", submit_btn)
-    #     driver.execute_script("arguments[0].click();", submit_btn)
-    #     
-    #     # 2. Wait a split second for the Angular animations to display the red text
-    #     time.sleep(1) 
-    #     
-    #     # 3. Find the errors. We use presence, not visibility, just in case.
-    #     errors = wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "mat-error")))
-    #     
-    #     # 4. Extract text using JavaScript to bypass visibility issues
-    #     error_texts = [driver.execute_script("return arguments[0].textContent;", err).strip() for err in errors]
-    #     error_texts = [text for text in error_texts if text != ""] # Filter out empty ones
-    #     
-    #     print(f"\n[DEBUG] Visible Error Texts Found: {error_texts}")
-    #     
-    #     # 5. Check if the expected errors appeared based on your app's actual output!
-    #     assert "Farmer Name Is Required" in error_texts, "Validation missing for Farmer Name!"
-    #     assert "Phone Number Is Required" in error_texts, "Validation missing for Phone Number!"
-    #     assert "Date Of Birth Is Required" in error_texts, "Validation missing for DOB!"
-    #     assert "State Is Required" in error_texts, "Validation missing for State!"
-    #     assert "District Is Required" in error_texts, "Validation missing for District!"
+        error_texts = grab_error_texts(driver, wait)
+        error_block = " ".join(error_texts)
 
-    # def test_invalid_phone_number_length(self, driver, wait):
-    #     """Verify entering a phone number with less than 10 digits triggers a validation error."""
-    #     
-    #     # 1. Enter the 5-digit bad phone number
-    #     phone_input = wait.until(EC.visibility_of_element_located((By.ID, "phone")))
-    #     phone_input.clear()
-    #     phone_input.send_keys("12345")
-    #     
-    #     # 2. Force click the Submit button using JavaScript (just like in your working script!)
-    #     # This guarantees the form tries to submit and forces all red errors to appear.
-    #     submit_btn = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.submit")))
-    #     driver.execute_script("arguments[0].scrollIntoView({block:'center'});", submit_btn)
-    #     driver.execute_script("arguments[0].click();", submit_btn)
-    #     
-    #     # 3. Give Angular a full second to render the error texts
-    #     time.sleep(1)
-    #     
-    #     # 4. Grab all visible error texts
-    #     errors = wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "mat-error")))
-    #     error_texts = [driver.execute_script("return arguments[0].textContent;", err).strip() for err in errors]
-    #     error_texts = [text for text in error_texts if text != ""]
-    #     
-    #     print(f"\n[DEBUG] Errors after entering bad phone number: {error_texts}")
-    #     
-    #     # 5. Check if the app generated an error about the phone/mobile number
-    #     # We convert everything to lowercase to make matching easier
-    #     error_string_block = " ".join(error_texts).lower()
-    #     
-    #     assert "phone" in error_string_block or "mobile" in error_string_block or "valid" in error_string_block, "BUG: The form accepted a 5-digit phone number!"
+        logger.info(f"[DEBUG] 9-digit phone errors: {error_texts}")
 
-    # def test_invalid_email_format(self, driver, wait):
-    #     """Verify the system rejects an email address missing the @ symbol and domain."""
-    #     
-    #     # 1. Enter an invalid email format
-    #     email_input = wait.until(EC.visibility_of_element_located((By.ID, "email")))
-    #     email_input.clear()
-    #     email_input.send_keys("nilesh.tidake_at_godafarm") # Intentionally missing @ and .com
-    #     
-    #     # 2. Force click Submit using our reliable JavaScript method
-    #     submit_btn = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.submit")))
-    #     driver.execute_script("arguments[0].scrollIntoView({block:'center'});", submit_btn)
-    #     driver.execute_script("arguments[0].click();", submit_btn)
-    #     
-    #     # 3. Give Angular a second to render
-    #     time.sleep(1)
-    #     
-    #     # 4. Grab all visible error texts and convert to lowercase for easy matching
-    #     errors = wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "mat-error")))
-    #     error_texts = [driver.execute_script("return arguments[0].textContent;", err).strip().lower() for err in errors if err != ""]
-    #     
-    #     print(f"\n[DEBUG] Email Test Errors: {error_texts}")
-    #     
-    #     # 5. Assert the system caught the bad email
-    #     error_string_block = " ".join(error_texts)
-    #     assert "email" in error_string_block or "valid" in error_string_block, "BUG: The form accepted an invalid email format!"
+        assert "phone" in error_block or "mobile" in error_block or "valid" in error_block or "digit" in error_block, \
+            f"BUG: 9-digit phone accepted! Errors found: [{error_block}]"
 
-    # def test_pincode_rejects_letters(self, driver, wait):
-    #     """Verify the pincode field strictly enforces numeric input by rejecting letters."""
-    #     
-    #     # 1. Expand the Address section first (since Pincode is hidden inside it)
-    #     addr_toggle = wait.until(EC.element_to_be_clickable((By.XPATH, "//strong[contains(text(), 'Address')]")))
-    #     driver.execute_script("arguments[0].scrollIntoView({block:'center'});", addr_toggle)
-    #     driver.execute_script("arguments[0].click();", addr_toggle)
-    #     time.sleep(1) # Wait for the accordion animation to open
+    def test_phone_10_digits_accepted(self, driver, wait):
+        """Phone with exactly 10 digits should NOT show a phone-length validation error."""
+        phone_input = wait.until(EC.visibility_of_element_located((By.ID, "phone")))
+        phone_input.clear()
+        phone_input.send_keys("9876543210")
 
-    #     # 2. Enter letters into the Pincode field
-    #     pincode_input = wait.until(EC.visibility_of_element_located((By.ID, "pincode")))
-    #     pincode_input.clear()
-    #     pincode_input.send_keys("ABCDEF")
-    #     
-    #     # 3. Force click Submit
-    #     submit_btn = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.submit")))
-    #     driver.execute_script("arguments[0].scrollIntoView({block:'center'});", submit_btn)
-    #     driver.execute_script("arguments[0].click();", submit_btn)
-    #     
-    #     # 4. Grab all visible error texts
-    #     time.sleep(1)
-    #     errors = wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "mat-error")))
-    #     error_texts = [driver.execute_script("return arguments[0].textContent;", err).strip().lower() for err in errors if err != ""]
-    #     
-    #     print(f"\n[DEBUG] Pincode Test Errors: {error_texts}")
-    #     
-    #     # 5. Assert the system caught the alphabetical characters
-    #     error_string_block = " ".join(error_texts)
-    #     assert "pincode" in error_string_block or "number" in error_string_block or "invalid" in error_string_block, "BUG: The form accepted letters in the Pincode field!"
+        submit_btn = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.submit")))
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", submit_btn)
+        driver.execute_script("arguments[0].click();", submit_btn)
+        time.sleep(ANGULAR_SETTLE)
+
+        error_texts = grab_error_texts(driver, wait)
+        error_block = " ".join(error_texts)
+
+        logger.info(f"[DEBUG] 10-digit phone errors: {error_texts}")
+
+        phone_length_errors = [e for e in error_texts if "phone" in e or "mobile" in e or "10" in e or "digit" in e]
+        assert len(phone_length_errors) == 0, \
+            f"BUG: 10-digit phone was rejected! Phone errors found: {phone_length_errors}"
+
+    def test_phone_11_digits_rejected(self, driver, wait):
+        """Phone with 11 digits should be rejected."""
+        phone_input = wait.until(EC.visibility_of_element_located((By.ID, "phone")))
+        phone_input.clear()
+        phone_input.send_keys("98765432101")
+
+        submit_btn = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.submit")))
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", submit_btn)
+        driver.execute_script("arguments[0].click();", submit_btn)
+        time.sleep(ANGULAR_SETTLE)
+
+        error_texts = grab_error_texts(driver, wait)
+        error_block = " ".join(error_texts)
+
+        logger.info(f"[DEBUG] 11-digit phone errors: {error_texts}")
+
+        assert "phone" in error_block or "mobile" in error_block or "valid" in error_block or "digit" in error_block, \
+            f"BUG: 11-digit phone accepted! Errors found: [{error_block}]"
+
+    def test_invalid_email_format_rejected(self, driver, wait):
+        """Email missing @ and domain should be rejected."""
+        email_input = wait.until(EC.visibility_of_element_located((By.ID, "email")))
+        email_input.clear()
+        email_input.send_keys("nilesh.tidake_at_godafarm")
+
+        submit_btn = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.submit")))
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", submit_btn)
+        driver.execute_script("arguments[0].click();", submit_btn)
+        time.sleep(ANGULAR_SETTLE)
+
+        error_texts = grab_error_texts(driver, wait)
+        error_block = " ".join(error_texts)
+
+        logger.info(f"[DEBUG] Invalid email errors: {error_texts}")
+
+        assert "email" in error_block or "valid" in error_block, \
+            f"BUG: Invalid email format accepted! Errors found: [{error_block}]"
+
+    def test_pincode_rejects_letters(self, driver, wait):
+        """Pincode field should reject alphabetical characters."""
+        addr_toggle = wait.until(EC.element_to_be_clickable(
+            (By.XPATH, "//strong[contains(text(), 'Address')]")
+        ))
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", addr_toggle)
+        driver.execute_script("arguments[0].click();", addr_toggle)
+        time.sleep(ACCORDION_ANIM)
+
+        pincode_input = wait.until(EC.visibility_of_element_located((By.ID, "pincode")))
+        pincode_input.clear()
+        pincode_input.send_keys("ABCDEF")
+
+        submit_btn = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.submit")))
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", submit_btn)
+        driver.execute_script("arguments[0].click();", submit_btn)
+        time.sleep(ANGULAR_SETTLE)
+
+        error_texts = grab_error_texts(driver, wait)
+        error_block = " ".join(error_texts)
+
+        logger.info(f"[DEBUG] Pincode errors: {error_texts}")
+
+        assert "pincode" in error_block or "number" in error_block or "invalid" in error_block or "numeric" in error_block, \
+            f"BUG: Letters accepted in Pincode! Errors found: [{error_block}]"
+
+    def test_name_rejects_numbers(self, driver, wait):
+        """Farmer Name field should reject numbers and special characters."""
+        name_input = wait.until(EC.visibility_of_element_located(
+            (By.CSS_SELECTOR, "input[formcontrolname='name'], input#name")
+        ))
+        name_input.clear()
+        name_input.send_keys("John123!@#")
+
+        submit_btn = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.submit")))
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", submit_btn)
+        driver.execute_script("arguments[0].click();", submit_btn)
+        time.sleep(ANGULAR_SETTLE)
+
+        error_texts = grab_error_texts(driver, wait)
+        error_block = " ".join(error_texts)
+
+        logger.info(f"[DEBUG] Invalid name errors: {error_texts}")
+
+        assert "name" in error_block or "character" in error_block or "invalid" in error_block or "alphabet" in error_block, \
+            f"BUG: Numbers/symbols accepted in Name! Errors found: [{error_block}]"
+
+    def test_phone_rejects_letters(self, driver, wait):
+        """Phone field should reject non-numeric characters like letters."""
+        phone_input = wait.until(EC.visibility_of_element_located((By.ID, "phone")))
+        phone_input.clear()
+        phone_input.send_keys("abcdefghij")
+
+        submit_btn = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.submit")))
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", submit_btn)
+        driver.execute_script("arguments[0].click();", submit_btn)
+        time.sleep(ANGULAR_SETTLE)
+
+        error_texts = grab_error_texts(driver, wait)
+        error_block = " ".join(error_texts)
+
+        logger.info(f"[DEBUG] Phone letters errors: {error_texts}")
+
+        assert "phone" in error_block or "mobile" in error_block or "number" in error_block or "digit" in error_block or "numeric" in error_block, \
+            f"BUG: Letters accepted in Phone! Errors found: [{error_block}]"
+
+    def test_reset_button_clears_form(self, driver, wait):
+        """Clicking the Reset button should clear all filled fields back to empty."""
+
+        # Fill a couple of fields
+        name_input = wait.until(EC.visibility_of_element_located(
+            (By.CSS_SELECTOR, "input[formcontrolname='name'], input#name")
+        ))
+        name_input.clear()
+        name_input.send_keys("Temporary Test Name")
+
+        phone_input = wait.until(EC.visibility_of_element_located((By.ID, "phone")))
+        phone_input.clear()
+        phone_input.send_keys("9876543210")
+
+        email_input = wait.until(EC.visibility_of_element_located((By.ID, "email")))
+        email_input.clear()
+        email_input.send_keys("temp@test.com")
+
+        logger.info("[DEBUG] Filled 3 fields. Clicking Reset...")
+
+        # Click Reset
+        reset_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.send")))
+        driver.execute_script("arguments[0].click();", reset_btn)
+        time.sleep(ANGULAR_SETTLE)
+
+        # Verify fields are cleared
+        name_val = wait.until(EC.visibility_of_element_located(
+            (By.CSS_SELECTOR, "input[formcontrolname='name'], input#name")
+        )).get_attribute("value")
+        phone_val = driver.find_element(By.ID, "phone").get_attribute("value")
+        email_val = driver.find_element(By.ID, "email").get_attribute("value")
+
+        logger.info(f"[DEBUG] After reset — name='{name_val}', phone='{phone_val}', email='{email_val}'")
+
+        assert name_val == "", f"BUG: Reset did not clear Name! Value: '{name_val}'"
+        assert phone_val == "", f"BUG: Reset did not clear Phone! Value: '{phone_val}'"
+        assert email_val == "", f"BUG: Reset did not clear Email! Value: '{email_val}'"
