@@ -72,10 +72,11 @@ def reset_form(driver, wait):
 # ─────────────────────────────────────────────
 #  STANDALONE SETUP / RESET  (runner calls these directly)
 # ─────────────────────────────────────────────
-def do_setup_and_navigate(driver, wait):
-    """Navigate to supplier page. Used by runner.py AND the pytest fixture below."""
-    driver.get(config.URL)
-    auth_section.perform_login(driver, wait, config)
+def do_setup_and_navigate(driver, wait, skip_login=False):
+    """Navigate to agent page. Used by runner.py AND the pytest fixture below."""
+    if not skip_login:
+        driver.get(config.URL)
+        auth_section.perform_login(driver, wait, config)
     nav_section.go_to_supplier_page(driver, wait)
     time.sleep(ANGULAR_SETTLE)
 

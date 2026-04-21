@@ -104,6 +104,21 @@
             <div id="subModulesGrid" class="grid grid-cols-2 gap-4"></div>
         </div>
 
+        <!-- ========== CHANGE 3: Test Cases sub-view (added after categoryView) ========== -->
+        <div id="testCasesView" class="hidden">
+            <div class="flex items-center mb-6">
+                <button id="backFromTestCasesBtn" class="text-[#1e3c72] hover:underline font-semibold flex items-center">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                    </svg>
+                    Back to Registration
+                </button>
+                <span class="mx-3 text-gray-400">|</span>
+                <span class="text-gray-600 text-sm font-medium">Test Cases</span>
+            </div>
+            <div id="testCasesGrid" class="grid grid-cols-2 gap-4"></div>
+        </div>
+
         <div class="border-t mt-8 pt-6 flex justify-between items-center">
             <span class="text-sm text-gray-500" id="selectionCount">0 modules selected</span>
             <button id="runTestsBtn" class="bg-green-600 text-white font-semibold rounded-lg px-8 py-3 hover:bg-green-700 transition-all shadow-md opacity-50 cursor-not-allowed" disabled>▶️ Launch Automation</button>
@@ -318,7 +333,8 @@
                 { name: "Agent Registration", icon: "🤝", desc: "Agent onboarding." },
                 { name: "Customer Registration", icon: "🛒", desc: "Customer profiles." },
                 { name: "Employee Registration", icon: "👔", desc: "Employee records." },
-                { name: "Test_Cases", icon: "🛠️", desc: "Registration Test Cases" }
+                // ========== CHANGE 1: Added isFolder: true ==========
+                { name: "Test_Cases", icon: "📁", desc: "Registration Test Cases", isFolder: true }
             ],
             privateb2b: [
                 { name: "Purchase Flow", icon: "📦", desc: "Gate Pass > GRN > QC > PB" },
@@ -346,6 +362,15 @@
                 { name: "Downloaded Recon Files", icon: "📁", desc: "All The Downloaded Files" }
             ]
         };
+
+        // ========== CHANGE 2: Test Cases registry added ==========
+        var testCasesRegistry = [
+            { name: "Farmer Registration TC", icon: "🚜", desc: "Farmer registration test case" },
+            { name: "Supplier Registration TC", icon: "🏭", desc: "Supplier registration test case" },
+            { name: "Agent Registration TC", icon: "🤝", desc: "Agent registration test case" },
+            { name: "Customer Registration TC", icon: "🛒", desc: "Customer registration test case" },
+            { name: "Employee Registration TC", icon: "👔", desc: "Employee registration test case" }
+        ];
 
         var categoryNames = {
             registration: "Registration Module",
@@ -429,6 +454,44 @@
                 document.getElementById(id).classList.add('hidden');
             });
             document.getElementById(viewId).classList.remove('hidden');
+        }
+
+        // ========== CHANGE 5: openTestCasesView function added ==========
+        function openTestCasesView() {
+            document.getElementById('categoryView').classList.add('hidden');
+            document.getElementById('testCasesView').classList.remove('hidden');
+
+            var grid = document.getElementById('testCasesGrid');
+            grid.innerHTML = '';
+            testCasesRegistry.forEach(function(tc) {
+                var card = document.createElement('div');
+                card.className = 'module-card border-2 border-gray-200 rounded-xl p-4 cursor-pointer hover:border-[#1e3c72] transition-all';
+                card.dataset.value = tc.name;
+
+                if (selectedModules.includes(tc.name)) {
+                    card.classList.add('border-[#1e3c72]', 'bg-blue-50');
+                }
+
+                card.innerHTML =
+                    '<div class="text-xl mb-2">' + tc.icon + '</div>' +
+                    '<h3 class="font-bold text-gray-800">' + tc.name + '</h3>' +
+                    '<p class="text-xs text-gray-500 mt-1">' + tc.desc + '</p>';
+
+                card.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    var val = card.dataset.value;
+                    card.classList.toggle('border-[#1e3c72]');
+                    card.classList.toggle('bg-blue-50');
+                    if (selectedModules.includes(val)) {
+                        selectedModules = selectedModules.filter(function(m) { return m !== val; });
+                    } else {
+                        selectedModules.push(val);
+                    }
+                    updateSelectionUI();
+                });
+
+                grid.appendChild(card);
+            });
         }
 
         // ================================================================
@@ -774,19 +837,31 @@
                     var moduleCard = document.createElement('div');
                     moduleCard.className = 'module-card border-2 border-gray-200 rounded-xl p-4 cursor-pointer hover:border-[#1e3c72] transition-all';
                     moduleCard.dataset.value = mod.name;
+                    // ========== CHANGE 4a: Add data-folder attribute ==========
+                    moduleCard.dataset.folder = mod.isFolder ? 'true' : 'false';
 
                     if (selectedModules.includes(mod.name)) {
                         moduleCard.classList.add('border-[#1e3c72]', 'bg-blue-50');
                     }
 
+                    // Show a small folder indicator
+                    var folderBadge = mod.isFolder ? ' <span class="text-[10px] text-gray-400 ml-1">›</span>' : '';
                     moduleCard.innerHTML =
                         '<div class="text-xl mb-2">' + mod.icon + '</div>' +
-                        '<h3 class="font-bold text-gray-800">' + mod.name + '</h3>' +
+                        '<h3 class="font-bold text-gray-800">' + mod.name + folderBadge + '</h3>' +
                         '<p class="text-xs text-gray-500 mt-1">' + mod.desc + '</p>';
 
+                    // ========== CHANGE 4b: Handle folder click ==========
                     moduleCard.addEventListener('click', function(e) {
                         e.stopPropagation();
                         var val = moduleCard.dataset.value;
+
+                        // If it's a folder, navigate into it instead of toggling
+                        if (moduleCard.dataset.folder === 'true') {
+                            openTestCasesView();
+                            return;
+                        }
+
                         moduleCard.classList.toggle('border-[#1e3c72]');
                         moduleCard.classList.toggle('bg-blue-50');
                         if (selectedModules.includes(val)) {
@@ -807,7 +882,15 @@
         // ================================================================
         document.getElementById('backToHomeBtn').addEventListener('click', function() {
             document.getElementById('categoryView').classList.add('hidden');
+            // ========== CHANGE 7: Also hide test cases view ==========
+            document.getElementById('testCasesView').classList.add('hidden');
             document.getElementById('homeCategories').classList.remove('hidden');
+        });
+
+        // ========== CHANGE 6: Back from test cases button ==========
+        document.getElementById('backFromTestCasesBtn').addEventListener('click', function() {
+            document.getElementById('testCasesView').classList.add('hidden');
+            document.getElementById('categoryView').classList.remove('hidden');
         });
 
         document.getElementById('backToDashboardBtn').addEventListener('click', function() {
@@ -887,10 +970,19 @@
                             updateStep('step-exec', 'active');
                             document.getElementById('execText').innerText = 'Running: ' + selectedModules.join(', ');
                         } else if (msg === 'UI_TRIGGER:EXEC_DONE') updateStep('step-exec', 'complete');
-                        else if (msg === 'UI_TRIGGER:REPORT_START') updateStep('step-report', 'active');
+                        else if (msg.startsWith('UI_TRIGGER:EXEC_TEXT:')) {
+                            document.getElementById('execText').innerText = msg.substring('UI_TRIGGER:EXEC_TEXT:'.length);
+                        } else if (msg === 'UI_TRIGGER:REPORT_START') updateStep('step-report', 'active');
                         else if (msg === 'UI_TRIGGER:REPORT_DONE') {
                             updateStep('step-report', 'complete');
                             document.getElementById('downloadSection').classList.remove('hidden');
+                        } else if (msg.startsWith('UI_TRIGGER:REPORT_FILE:')) {
+                            // Store the report file path and wire the download button
+                            var reportRelPath = msg.substring('UI_TRIGGER:REPORT_FILE:'.length);
+                            var dlBtn = document.querySelector('#downloadSection button');
+                            dlBtn.onclick = function() {
+                                window.open('http://127.0.0.1:8000/api/files/download/' + encodeURIComponent(reportRelPath), '_blank');
+                            };
                         } else if (msg === 'UI_TRIGGER:ALL_DONE') {
                             automationCompleted = true;
                             document.getElementById('liveDot').className = 'w-2 h-2 rounded-full bg-gray-500';

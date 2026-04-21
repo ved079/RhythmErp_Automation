@@ -144,7 +144,7 @@ TEST_REGISTRY = {
 }
 
 
-def run_test_case(test_name, driver, wait):
+def run_test_case(test_name, driver, wait, skip_login=False):
     """
     Run a single test case and return rich results.
 
@@ -172,9 +172,9 @@ def run_test_case(test_name, driver, wait):
     fail_count = 0
     results = []
 
-    # Run setup ONCE — navigates to the correct page
+        # Run setup ONCE — navigates to the correct page
     try:
-        setup_fn(driver, wait)
+        setup_fn(driver, wait, skip_login=skip_login)
     except Exception as e:
         logger.error(f"SETUP FAILED for {test_name}: {e}")
         return {
@@ -243,7 +243,7 @@ def run_test_case(test_name, driver, wait):
     }
 
 
-def run_all_selected(test_names, driver, wait):
+def run_all_selected(test_names, driver, wait, skip_login=False):
     """Run multiple test cases and return all results."""
     all_results = []
     for test_name in test_names:
@@ -251,7 +251,7 @@ def run_all_selected(test_names, driver, wait):
             logger.info(f"\n{'='*50}")
             logger.info(f"Running: {test_name}")
             logger.info(f"{'='*50}")
-            result = run_test_case(test_name, driver, wait)
+            result = run_test_case(test_name, driver, wait, skip_login=skip_login)
             all_results.append(result)
             logger.info(f"{test_name}: {result['summary']}")
         else:

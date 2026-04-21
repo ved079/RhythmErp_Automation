@@ -21,6 +21,7 @@ import logging
 import time
 import traceback
 import pathlib
+from datetime import datetime
 
 import openpyxl
 
@@ -83,6 +84,10 @@ app.add_middleware(
 async def serve_dashboard():
     html_path = pathlib.Path(__file__).parent / "index.html"
     return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+
+# ---------- Download directory (dynamic path, scans recursively) ----------
+DOWNLOAD_DIR = os.path.join(project_root, "download_files")
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 # ---------- Models ----------
 class LoginCredentials(BaseModel):
@@ -260,39 +265,45 @@ def automation_worker(exec_id: str, req: AutomationRequest, log_queue: queue.Que
         log_queue.put("UI_TRIGGER:AUTH_DONE")
         log_queue.put("UI_TRIGGER:EXEC_START")
 
+        # ───────────────────────────────────────────
+        #  Separate TC modules from regular modules
+        # ───────────────────────────────────────────
+        tc_modules = [m for m in req.modules if m.endswith(" TC")]
+        regular_modules = [m for m in req.modules if not m.endswith(" TC")]
+
         # ========== REGISTRATION MODULES ==========
-        if "Farmer Registration" in req.modules:
+        if "Farmer Registration" in regular_modules:
             logging.info("Running Farmer Registration...")
             nav_section.go_to_farmer_page(driver, wait)
             farmer_section.fill_registration(driver, wait, farmer_data)
             logging.info("Farmer Registration complete.")
 
-        if "Supplier Registration" in req.modules:
+        if "Supplier Registration" in regular_modules:
             logging.info("Running Supplier Registration...")
             nav_section.go_to_supplier_page(driver, wait)
             supplier_section.fill_supplier_registration(driver, wait, supplier_data)
             logging.info("Supplier Registration complete.")
 
-        if "Agent Registration" in req.modules:
+        if "Agent Registration" in regular_modules:
             logging.info("Running Agent Registration...")
             nav_section.go_to_agent_page(driver, wait)
             agent_section.fill_agent_registration(driver, wait, agent_data)
             logging.info("Agent Registration complete.")
 
-        if "Customer Registration" in req.modules:
+        if "Customer Registration" in regular_modules:
             logging.info("Running Customer Registration...")
             nav_section.go_to_customer_page(driver, wait)
             customer_section.fill_customer_registration(driver, wait, customer_data)
             logging.info("Customer Registration complete.")
 
-        if "Employee Registration" in req.modules:
+        if "Employee Registration" in regular_modules:
             logging.info("Running Employee Registration...")
             nav_section.go_to_employee_page(driver, wait)
             employee_section.fill_employee_registration(driver, wait, employee_data)
             logging.info("Employee Registration complete.")
 
         # ========== PURCHASE FLOW ==========
-        if "Purchase Flow" in req.modules:
+        if "Purchase Flow" in regular_modules:
             logging.info("Running Purchase Flow...")
 
             # Gatepass
@@ -325,7 +336,7 @@ def automation_worker(exec_id: str, req: AutomationRequest, log_queue: queue.Que
             logging.info("Purchase Flow complete.")
 
         # ========== SALES FLOW ==========
-        if "Sales Flow" in req.modules:
+        if "Sales Flow" in regular_modules:
             logging.info("Running Sales Flow...")
 
             nav_section.go_to_sales_order_page(driver, wait)
@@ -358,7 +369,7 @@ def automation_worker(exec_id: str, req: AutomationRequest, log_queue: queue.Que
             logging.info("Sales Flow complete.")
 
         # ========== STOCK TRANSFER RECONCILIATION ==========
-        if "Stock Transfer Reconciliation" in req.modules:
+        if "Stock Transfer Reconciliation" in regular_modules:
             logging.info("Running Stock Transfer Reconciliation...")
 
             nav_section.go_to_stock_transfer_page(driver, wait)
@@ -368,21 +379,81 @@ def automation_worker(exec_id: str, req: AutomationRequest, log_queue: queue.Que
             time.sleep(2)
 
         # ========== AGEING REPORT ==========
-        if "Ageing Report" in req.modules:
+        if "Ageing Report" in regular_modules:
             logging.info("Running Ageing Report...")
             time.sleep(2)
 
         # ========== DOWNLOADS ==========
-        if "Downloaded Recon Files" in req.modules:
+        if "Downloaded Recon Files" in regular_modules:
             logging.info("Opening file browser in dashboard...")
             log_queue.put("UI_TRIGGER:OPEN_FILES")
             logging.info("Files view triggered.")
 
+        # ========== EDGE-CASE TEST MODULES ==========
+        tc_results = None
+        if tc_modules:
+            logging.info(f"Running {len(tc_modules)} test case module(s)...")
+            log_queue.put(f"UI_TRIGGER:EXEC_TEXT:Running TCs: {', '.join(tc_modules)}")
+
+            # PAUSE keepalive — it refreshes the page and kills mid-test state
+            keepalive_event.set()
+            logging.info("Keepalive paused for test case execution.")
+
+            try:
+                from edge_tests.runner import run_all_selected, generate_report as gen_tc_report
+                tc_results = run_all_selected(tc_modules, driver, wait, skip_login=True)
+
+
+                # Print summary to terminal
+
+                grand_total = 0
+                grand_pass = 0
+                grand_fail = 0
+                for r in tc_results:
+                    logging.info(f"  {r['test_case']}: {r['summary']}")
+                    for d in r['results']:
+                        icon = "PASSED" if d['status'] == "PASSED" else "FAILED"
+                        logging.info(f"    {icon} - {d['method']}")
+                    grand_total += r['total']
+                    grand_pass += r['pass_count']
+                    grand_fail += r['fail_count']
+
+                rate = f"{(grand_pass / grand_total * 100):.0f}%" if grand_total > 0 else "N/A"
+                logging.info(f"Test Cases Complete: {grand_pass}/{grand_total} passed ({rate})")
+
+            except ImportError as e:
+                logging.error(f"Could not import test runner: {e}")
+                log_queue.put(f"ERROR: Test runner not available - {e}")
+            except Exception as e:
+                logging.error(f"Test execution failed: {e}")
+                log_queue.put(f"ERROR: Test execution failed - {e}")
+            finally:
+                # RESUME keepalive after TC runs
+                keepalive_event.clear()
+                logging.info("Keepalive resumed.")
+
         # ========== REPORT GENERATION ==========
         log_queue.put("UI_TRIGGER:EXEC_DONE")
         log_queue.put("UI_TRIGGER:REPORT_START")
-        logging.info("Generating reports...")
-        time.sleep(2)
+
+        if tc_results:
+            try:
+                from edge_tests.runner import generate_report as gen_tc_report
+                logging.info("Generating test case Excel report...")
+                report_path = gen_tc_report(tc_results)
+                if report_path:
+                    rel_path = os.path.relpath(report_path, DOWNLOAD_DIR)
+                    log_queue.put(f"UI_TRIGGER:REPORT_FILE:{rel_path}")
+                    logging.info(f"Report saved: {report_path}")
+                else:
+                    logging.warning("Report generation returned no path")
+            except Exception as e:
+                logging.error(f"Report generation failed: {e}")
+                log_queue.put(f"ERROR: Report generation failed - {e}")
+        else:
+            logging.info("No test cases selected. Skipping report generation.")
+            time.sleep(1)
+
         logging.info("Reports ready.")
         log_queue.put("UI_TRIGGER:REPORT_DONE")
 
@@ -473,36 +544,47 @@ async def toggle_browser(exec_id: str):
     return {"status": "ok"}
 
 
-# ---------- File Browser Endpoints ----------
-DOWNLOAD_DIR = r"C:\Users\vedantd\Desktop\selenium files\download_files"
-
-
+# ---------- File Browser Endpoints (recursive) ----------
 @app.get("/api/files/list")
 def list_files():
-    """List all files in the download directory."""
+    """
+    Recursively list all files inside download_files/.
+    Returns each file with its relative path (e.g. "Registration_TestCases/report.xlsx").
+    """
     files = []
-    if os.path.exists(DOWNLOAD_DIR):
-        for f in sorted(os.listdir(DOWNLOAD_DIR), key=lambda x: os.path.getmtime(os.path.join(DOWNLOAD_DIR, x)), reverse=True):
-            path = os.path.join(DOWNLOAD_DIR, f)
-            if os.path.isfile(path):
-                stat = os.stat(path)
-                files.append({
-                    "name": f,
-                    "size": stat.st_size,
-                    "modified": time.strftime("%d-%b-%Y %H:%M", time.localtime(stat.st_mtime))
-                })
+    if not os.path.isdir(DOWNLOAD_DIR):
+        return {"files": files}
+
+    for root, dirs, filenames in os.walk(DOWNLOAD_DIR):
+        for fname in filenames:
+            full_path = os.path.join(root, fname)
+            rel_path = os.path.relpath(full_path, DOWNLOAD_DIR)
+            stat = os.stat(full_path)
+            mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%d-%b-%Y %H:%M")
+            files.append({
+                "name": rel_path.replace("\\", "/"),
+                "size": stat.st_size,
+                "modified": mtime,
+            })
+
+    # Sort newest first
+    files.sort(key=lambda f: f["modified"], reverse=True)
     return {"files": files}
 
 
-@app.get("/api/files/read/{filename}")
-def read_excel_file(filename: str):
-    """Read an Excel file and return all sheets as JSON."""
-    file_path = os.path.join(DOWNLOAD_DIR, filename)
-    if not os.path.exists(file_path):
+@app.get("/api/files/read/{file_path:path}")
+def read_excel_file(file_path: str):
+    """
+    Read an Excel file from download_files/ and return its sheets as JSON.
+    file_path is relative to DOWNLOAD_DIR, e.g. "Registration_TestCases/report.xlsx"
+    """
+    full_path = os.path.join(DOWNLOAD_DIR, file_path.replace("/", os.sep))
+
+    if not os.path.isfile(full_path):
         raise HTTPException(status_code=404, detail="File not found")
 
     try:
-        wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+        wb = openpyxl.load_workbook(full_path, read_only=True, data_only=True)
         sheets = {}
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
@@ -522,13 +604,23 @@ def read_excel_file(filename: str):
         raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
 
 
-@app.get("/api/files/download/{filename}")
-def download_file(filename: str):
-    """Serve the raw file for browser download."""
-    file_path = os.path.join(DOWNLOAD_DIR, filename)
-    if not os.path.exists(file_path):
+@app.get("/api/files/download/{file_path:path}")
+def download_file(file_path: str):
+    """
+    Serve a file from download_files/ for browser download.
+    file_path is relative to DOWNLOAD_DIR.
+    """
+    full_path = os.path.join(DOWNLOAD_DIR, file_path.replace("/", os.sep))
+
+    if not os.path.isfile(full_path):
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path, filename=filename)
+
+    filename = os.path.basename(full_path)
+    return FileResponse(
+        path=full_path,
+        filename=filename,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 
 @app.websocket("/ws/logs/{exec_id}")
