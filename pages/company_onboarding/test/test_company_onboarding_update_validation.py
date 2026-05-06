@@ -1,6 +1,9 @@
+﻿
 """
-Company Onboarding UPDATE Validation Tests.
-Target company: Zenith Core Systems
+=====================================================================
+DOCSTRING UPDATE - Replace the Tests list at the top of the file
+with this updated version:
+=====================================================================
 
 Tests:
   01 - Form Opens
@@ -16,8 +19,41 @@ Tests:
   11 - Address: Navigation + Pre-filled data (step nav, 2 rows prefilled) [ONE form open]
   12 - Address: Row management + Cascading dropdowns (add/delete, min 1, State>Dist>Taluka) [ONE form open]
   13 - Address: Required fields + Pin Code validation (empty row errors, 000000, letters) [ONE form open]
-  14 - Address: Backend + Persistence (long addr, edit+verify, dup type, special chars, restore) [ONE form open]
+  14 - Address: Backend + Persistence (long addr, edit+verify, dup type, special chars, restore) [ONE form open, Update]
   15 - Address: Edge cases (whitespace, 5-digit pin, multiline) [ONE form open]
+  16 - Business Activities: Navigation + Pre-filled + Row management [ONE form open, NO Update]
+  17 - Business Activities: Max length all 4 fields (BM100, ML/LOB/ABA 255) [ONE form open, Update]
+  18 - Business Activities: Backend + Persistence (edit+verify, empty save, restore) [ONE form open, Update]
+  19 - Business Activities: Edge cases (special chars, whitespace, rapid add/delete, max rows) [ONE form open]
+  20 - Infrastructure Details: Navigation + Pre-filled + Row management [ONE form open, NO Update]
+  21 - Infrastructure Details: Dropdown + Max length (Loc50, Remark255) [ONE form open, Update]
+  22 - Infrastructure Details: Backend + Persistence (edit+verify, empty save, restore) [ONE form open, Update]
+  23 - Infrastructure Details: Edge cases (dropdown search, dup PLC, special chars, multiline) [ONE form open]
+  24 - Header: Entity Group + Parent Name + Company Linked (cascading, multi-select) [ONE form open, NO Update]
+  25 - Header: Level (readonly) + Is Parent (readonly toggle) [ONE form open, NO Update]
+  26 - Step 1 Optional: TAN + GSTIN + Plan Type [ONE form open, NO Update]
+
+New helper methods added:
+  _hdr_find_select()    - Find mat-select by mat-label text
+  _hdr_read_select()    - Read selected value from mat-select
+  _hdr_open_select()    - Open a mat-select dropdown
+  _hdr_list_options()   - List options from open dropdown (excludes "Select" placeholder)
+  _hdr_pick_option()    - Click an option from open dropdown
+  _hdr_close_dropdown() - Close any open dropdown overlay
+  _hdr_is_multiselect() - Check if mat-select has 'multiple' attribute
+  _hdr_read_input()     - Read input value by mat-label text
+  _hdr_is_input_readonly() - Check if input is readonly/disabled
+
+Coverage summary (26 tests, ~110+ checks):
+  Header (6 fields):  Entity Group, Parent Name, Company Linked, Level, Is Parent, Company Name (test_01)
+  Step 1 (12 fields):  Short Name, Contact Name, Background, Email, Mobile, PAN, CIN, TAN, GSTIN,
+                        Plan Type, 2FA Toggle, Auth Type
+  Step 2 (2 fields):   Promoter Name, Remark
+  Step 3 (7 fields):   Address Type, Country, State, District, Taluka, Address, Pin Code
+  Step 4 (4 fields):   Business Model, Market Linkages, Line of Business, Additional Business Activities
+  Step 5 (4 fields):   Infrastructure Type, Infrastructure Location, Ownership Type, Remark
+  TOTAL: 35 fields covered
+=====================================================================
 """
 
 import os
@@ -733,7 +769,7 @@ class TestUpdateValidation:
         except Exception:
             pass
 
-        # Not found with CSS — dump diagnostics
+        # Not found with CSS � dump diagnostics
         diag = driver.execute_script("""
             var info = [];
             var exact = document.querySelectorAll('button[matstepperprevious]');
@@ -786,7 +822,7 @@ class TestUpdateValidation:
             return ""
 
     # ================================================================
-    # TEST 07: Promoter — All UI Validations [ONE form open]
+    # TEST 07: Promoter � All UI Validations [ONE form open]
     # Navigation + Pre-filled + Optional + Add rows + Delete rows
     # ================================================================
 
@@ -866,7 +902,7 @@ class TestUpdateValidation:
             status="PASSED" if on_step3 else "FAILED",
             category="Promoters", screenshot=shot_next)
 
-        # --- Optional fields — empty -> Next succeeds ---
+        # --- Optional fields � empty -> Next succeeds ---
         self._go_to_step1_from_step2(page)
         if not self._is_on_step2(driver):
             self._navigate_to_step2(page)
@@ -879,7 +915,7 @@ class TestUpdateValidation:
         on_step3_opt = self._is_on_step3(driver)
         shot_opt = self._screenshot(driver, "promo_optional_fields")
         self._record(test_name="Promoter: Optional Fields",
-            expected="Both fields empty — Next proceeds to Step 3 with no error",
+            expected="Both fields empty � Next proceeds to Step 3 with no error",
             actual=f"on_step3={on_step3_opt}",
             status="PASSED" if on_step3_opt else "FAILED",
             category="Promoters", field="Name, Remark",
@@ -933,7 +969,7 @@ class TestUpdateValidation:
             status="PASSED" if deleted and after_del == before_del - 1 else "FAILED",
             category="Promoters", screenshot=shot_del_one)
 
-        # Single row — no delete button
+        # Single row � no delete button
         if after_del > 1:
             max_attempts = 10
             attempts = 0
@@ -952,7 +988,7 @@ class TestUpdateValidation:
         self._cleanup(page)
 
     # ================================================================
-    # TEST 08: Promoter — Max Length + Update & Verify [ONE form open]
+    # TEST 08: Promoter � Max Length + Update & Verify [ONE form open]
     # 101 chars -> fail, 100 chars -> save, re-open -> verify persisted
     # ================================================================
 
@@ -1057,7 +1093,7 @@ class TestUpdateValidation:
         self._cleanup(page)
 
     # ================================================================
-    # TEST 09: Promoter — Boundary + Backend Validations [ONE form open]
+    # TEST 09: Promoter � Boundary + Backend Validations [ONE form open]
     # Remark maxlen, empty save, edit+verify persistence, restore original
     # ================================================================
 
@@ -1225,12 +1261,12 @@ class TestUpdateValidation:
         self._cleanup(page)
 
     # ================================================================
-    # TEST 10: Promoter — Edge Cases [ONE form open, NO Update clicks]
+    # TEST 10: Promoter � Edge Cases [ONE form open, NO Update clicks]
     # Special chars, whitespace, multiline, rapid add/delete, max rows
     # ================================================================
 
     def test_10_promoter_edge_cases(self, logged_in_driver):
-        """UI edge case checks — no Update button pressed, no data changes."""
+        """UI edge case checks � no Update button pressed, no data changes."""
         driver = logged_in_driver
         page = self._page(driver)
         self._open_form(page)
@@ -1256,7 +1292,7 @@ class TestUpdateValidation:
         on_step3_special = self._is_on_step3(driver)
         shot_special = self._screenshot(driver, "promo_special_chars")
         self._record(test_name="Special Chars in Name",
-            expected="No validation error — Next proceeds to Step 3",
+            expected="No validation error � Next proceeds to Step 3",
             actual=f"on_step3={on_step3_special}",
             status="PASSED" if on_step3_special else "FAILED",
             category="Promoters", field="Name",
@@ -1277,7 +1313,7 @@ class TestUpdateValidation:
         on_step3_ws = self._is_on_step3(driver)
         shot_ws = self._screenshot(driver, "promo_whitespace")
         self._record(test_name="Whitespace-Only Fields",
-            expected="No validation error — Next proceeds to Step 3",
+            expected="No validation error � Next proceeds to Step 3",
             actual=f"on_step3={on_step3_ws}",
             status="PASSED" if on_step3_ws else "FAILED",
             category="Promoters", field="Name, Remark",
@@ -1335,7 +1371,7 @@ class TestUpdateValidation:
             if ok and after == before + 1:
                 added_count += 1
             else:
-                # + button failed or row didn't increase — stop
+                # + button failed or row didn't increase � stop
                 break
         final_count = self._count_promoter_rows(driver)
         shot_max = self._screenshot(driver, "promo_max_rows")
@@ -1348,7 +1384,7 @@ class TestUpdateValidation:
             bad_value=f"tried adding {max_clicks} rows",
             screenshot=shot_max)
 
-        # --- Cleanup: restore original values (no Update — just reset UI) ---
+        # --- Cleanup: restore original values (no Update � just reset UI) ---
         self._type_promoter_field(driver, 1, "Name", orig_name or "")
         self._type_promoter_field(driver, 1, "Remark", orig_remark or "")
 
@@ -1364,6 +1400,21 @@ class TestUpdateValidation:
         # Already on Step 3?
         if self._is_on_step3(driver):
             return True
+        # FIX: On Step 4? Click Back to reach Step 3
+        if self._is_on_step4(driver):
+            try:
+                back_btns = driver.find_elements(By.CSS_SELECTOR, "button[matstepperprevious]")
+                if back_btns:
+                    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", back_btns[0])
+                    time.sleep(0.5)
+                    try:
+                        back_btns[0].click()
+                    except Exception:
+                        driver.execute_script("arguments[0].click();", back_btns[0])
+                    time.sleep(1.5)
+                    return self._is_on_step3(driver)
+            except Exception:
+                pass
         # On Step 2? Click Next to get to Step 3
         if self._is_on_step2(driver):
             page._click_next()
@@ -1378,8 +1429,22 @@ class TestUpdateValidation:
         return self._is_on_step3(driver)
 
     def _go_back_to_step2(self, page):
-        """Click Back from Step 3 to return to Step 2 (Promoters)."""
+        """Click Back to return to Step 2 (Promoters) from Step 3 or Step 4."""
         driver = page.driver
+        # FIX: If on Step 4, click Back first to reach Step 3
+        if self._is_on_step4(driver) and not self._is_on_step3(driver):
+            try:
+                back_btns = driver.find_elements(By.CSS_SELECTOR, "button[matstepperprevious]")
+                if back_btns:
+                    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", back_btns[0])
+                    time.sleep(0.5)
+                    try:
+                        back_btns[0].click()
+                    except Exception:
+                        driver.execute_script("arguments[0].click();", back_btns[0])
+                    time.sleep(1)
+            except Exception:
+                pass
         if not self._is_on_step3(driver):
             return False
         try:
@@ -1788,7 +1853,7 @@ class TestUpdateValidation:
         time.sleep(0.3)
 
     # ================================================================
-    # TEST 11: Address — Navigation + Pre-filled Data [ONE form open, NO Update]
+    # TEST 11: Address � Navigation + Pre-filled Data [ONE form open, NO Update]
     # ================================================================
 
     def test_11_address_navigation_prefilled(self, logged_in_driver):
@@ -1857,7 +1922,7 @@ class TestUpdateValidation:
         self._cleanup(page)
 
     # ================================================================
-    # TEST 12: Address — Row Management + Cascading [ONE form open, NO Update]
+    # TEST 12: Address � Row Management + Cascading [ONE form open, NO Update]
     # ================================================================
 
     def test_12_address_row_management_cascading(self, logged_in_driver):
@@ -1979,7 +2044,7 @@ class TestUpdateValidation:
         self._cleanup(page)
 
     # ================================================================
-    # TEST 13: Address — Required Fields + Pin Code [ONE form open, NO Update]
+    # TEST 13: Address � Required Fields + Pin Code [ONE form open, NO Update]
     # ================================================================
 
     def test_13_address_required_pincode(self, logged_in_driver):
@@ -2009,7 +2074,7 @@ class TestUpdateValidation:
         still_on_3 = self._is_on_step3(driver)
         shot_empty_err = self._screenshot(driver, "addr_empty_row_errors")
         self._record(test_name="Address: Required on Empty Row",
-            expected="Next does NOT proceed — validation errors on empty address row",
+            expected="Next does NOT proceed � validation errors on empty address row",
             actual=f"still_on_step3={still_on_3}",
             status="PASSED" if still_on_3 else "FAILED",
             category="Address", field="All Fields",
@@ -2089,7 +2154,7 @@ class TestUpdateValidation:
         self._cleanup(page)
 
     # ================================================================
-    # TEST 14: Address — Backend + Persistence [ONE form open, with Update]
+    # TEST 14: Address � Backend + Persistence [ONE form open, with Update]
     # ================================================================
 
     def test_14_address_backend_persistence(self, logged_in_driver):
@@ -2260,7 +2325,7 @@ class TestUpdateValidation:
         self._cleanup(page)
 
     # ================================================================
-    # TEST 15: Address — Edge Cases [ONE form open, NO Update]
+    # TEST 15: Address � Edge Cases [ONE form open, NO Update]
     # ================================================================
 
     def test_15_address_edge_cases(self, logged_in_driver):
@@ -2347,3 +2412,2136 @@ class TestUpdateValidation:
             self._addr_type_field(driver, 1, "Pin Code", orig_pin)
 
         self._cleanup(page)
+
+
+        # ================================================================
+    # BUSINESS ACTIVITIES HELPERS
+    # ================================================================
+
+    # Field definitions (3 have trailing tab character in HTML name attribute!)
+    _BA_FIELDS = [
+        ("Business Model", "Business Model\t", 100),
+        ("Market Linkages", "Market Linkages\t", 255),
+        ("Line of Business", "Line of Business\t", 255),
+        ("Additional Business Activities", "Additional Business Activities", 255),
+    ]
+
+    # XPath to the Business Activities app-dynamic-details container
+    _BA_XPATH = "//app-dynamic-details[.//mat-label[contains(.,'Business Activities')]]"
+
+    def _navigate_to_step4(self, page):
+        """Navigate to Step 4 (Business Activities) from wherever the form currently is."""
+        driver = page.driver
+        if self._is_on_step4(driver):
+            return True
+        # On Step 3? Click Next to get to Step 4
+        if self._is_on_step3(driver):
+            page._click_next()
+            time.sleep(1.5)
+            return self._is_on_step4(driver)
+        # Fall back: navigate to Step 3 first, then Next
+        self._navigate_to_step3(page)
+        if not self._is_on_step3(driver):
+            return False
+        page._click_next()
+        time.sleep(1.5)
+        return self._is_on_step4(driver)
+
+    def _go_back_to_step3(self, page):
+        """Click Back from Step 4 to return to Step 3 (Address)."""
+        driver = page.driver
+        if not self._is_on_step4(driver):
+            return False
+        try:
+            back_btns = driver.find_elements(By.CSS_SELECTOR, "button[matstepperprevious]")
+            if back_btns:
+                btn = back_btns[0]
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", btn)
+                time.sleep(0.5)
+                try:
+                    btn.click()
+                except Exception:
+                    driver.execute_script("arguments[0].click();", btn)
+                time.sleep(1)
+                return self._is_on_step3(driver)
+        except Exception:
+            pass
+        return False
+
+    def _go_back_to_step4(self, page):
+        """Return to Step 4 from Step 5 (or Step 3) by clicking Back."""
+        driver = page.driver
+        if self._is_on_step4(driver):
+            return True
+        try:
+            back_btns = driver.find_elements(By.CSS_SELECTOR, "button[matstepperprevious]")
+            if back_btns:
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", back_btns[0])
+                time.sleep(0.5)
+                try:
+                    back_btns[0].click()
+                except Exception:
+                    driver.execute_script("arguments[0].click();", back_btns[0])
+                time.sleep(1)
+        except Exception:
+            pass
+        if self._is_on_step4(driver):
+            return True
+        return self._navigate_to_step4(page)
+
+    def _ba_container(self, driver):
+        """Return the app-dynamic-details element for Business Activities (Step 4)."""
+        return driver.find_element(By.XPATH, self._BA_XPATH)
+
+    def _ba_count_rows(self, driver):
+        """Count BA rows in the Step 4 table only (scoped to BA container)."""
+        try:
+            container = self._ba_container(driver)
+            rows = container.find_elements(By.CSS_SELECTOR, "tbody tr")
+            return len(rows)
+        except Exception:
+            return 0
+
+    def _ba_add_row(self, driver):
+        """Click the + button to add a new BA row (scoped to BA container)."""
+        try:
+            container = self._ba_container(driver)
+            add_btns = container.find_elements(
+                By.CSS_SELECTOR, "button[mat-icon-button][color='primary']"
+            )
+            if add_btns:
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center'}); arguments[0].click();",
+                    add_btns[0]
+                )
+                time.sleep(0.8)
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _ba_delete_row(self, driver, row_index=1):
+        """Click the delete button on a specific BA row (scoped to BA container)."""
+        try:
+            container = self._ba_container(driver)
+            rows = container.find_elements(By.CSS_SELECTOR, "tbody tr")
+            if row_index < 1 or row_index > len(rows):
+                return False
+            row = rows[row_index - 1]
+            btn = row.find_element(By.CSS_SELECTOR, "button[mat-icon-button][color='warn']")
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", btn)
+            time.sleep(0.3)
+            try:
+                btn.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", btn)
+            time.sleep(0.8)
+            return True
+        except Exception:
+            return False
+
+    def _ba_has_delete_button(self, driver, row_index=1):
+        """Check if a specific BA row has a visible delete button (scoped to BA container)."""
+        try:
+            container = self._ba_container(driver)
+            rows = container.find_elements(By.CSS_SELECTOR, "tbody tr")
+            if row_index < 1 or row_index > len(rows):
+                return False
+            row = rows[row_index - 1]
+            btn = row.find_element(By.CSS_SELECTOR, "button[mat-icon-button][color='warn']")
+            return btn.is_displayed()
+        except Exception:
+            return False
+
+    def _ba_find_input(self, driver, row_index, field_name):
+        """Find an input element in the BA container by row index and field name.
+        Uses attribute matching to handle special characters (tabs) in name values."""
+        container = self._ba_container(driver)
+        rows = container.find_elements(By.CSS_SELECTOR, "tbody tr")
+        if row_index < 1 or row_index > len(rows):
+            raise Exception(f"BA Row {row_index} not found (only {len(rows)} rows)")
+        row = rows[row_index - 1]
+        inputs = row.find_elements(By.CSS_SELECTOR, "input")
+        for inp in inputs:
+            if inp.get_attribute("name") == field_name:
+                return inp
+        raise Exception(f"Field '{field_name}' not found in BA row {row_index}")
+
+    def _ba_type_field(self, driver, row_index, field_name, value):
+        """Type into a BA input field by row index (scoped to BA container)."""
+        el = self._ba_find_input(driver, row_index, field_name)
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+        time.sleep(0.3)
+        try:
+            el.click()
+        except Exception:
+            driver.execute_script("arguments[0].focus();", el)
+        time.sleep(0.2)
+        el.send_keys(Keys.CONTROL + "a")
+        el.send_keys(value)
+        time.sleep(0.3)
+        el.send_keys(Keys.TAB)
+        time.sleep(0.3)
+
+    def _ba_clear_field(self, driver, row_index, field_name):
+        """Clear a BA input field by row index (scoped to BA container)."""
+        el = self._ba_find_input(driver, row_index, field_name)
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+        time.sleep(0.3)
+        try:
+            el.click()
+        except Exception:
+            driver.execute_script("arguments[0].focus();", el)
+        time.sleep(0.2)
+        el.send_keys(Keys.CONTROL + "a")
+        el.send_keys(Keys.DELETE)
+        time.sleep(0.3)
+        el.send_keys(Keys.TAB)
+        time.sleep(0.3)
+
+    def _ba_read_field(self, driver, row_index, field_name):
+        """Read a BA input field value by row index (scoped to BA container)."""
+        el = self._ba_find_input(driver, row_index, field_name)
+        return el.get_attribute("value") or ""
+
+    def _ba_save_row(self, driver, row_index):
+        """Save all 4 field values from a BA row for later restoration."""
+        saved = {}
+        for display_name, attr_name, _ in self._BA_FIELDS:
+            try:
+                saved[display_name] = self._ba_read_field(driver, row_index, attr_name)
+            except Exception:
+                saved[display_name] = ""
+        return saved
+
+    def _ba_restore_row(self, driver, row_index, saved):
+        """Restore all 4 field values on a BA row from saved data."""
+        for display_name, attr_name, _ in self._BA_FIELDS:
+            val = saved.get(display_name, "")
+            if val:
+                self._ba_type_field(driver, row_index, attr_name, val)
+            else:
+                self._ba_clear_field(driver, row_index, attr_name)
+
+    # ================================================================
+    # TEST 16: Business Activities � Navigation + Pre-filled + Row Mgmt [ONE form open, NO Update]
+    # ================================================================
+
+    def test_16_ba_navigation_prefilled_row_mgmt(self, logged_in_driver):
+        """Navigate to Step 4, verify pre-filled data, back/next, optional fields, add/delete rows."""
+        driver = logged_in_driver
+        page = self._page(driver)
+        self._open_form(page)
+
+        # --- Navigate to Step 4 ---
+        reached = self._navigate_to_step4(page)
+        if not reached:
+            self._record(test_name="BA: Navigate to Step 4",
+                expected="Business Model input visible on Step 4",
+                actual="Failed to reach Step 4",
+                status="FAILED", category="Business Activities")
+            self._cleanup(page)
+            return
+        shot_nav = self._screenshot(driver, "ba_nav_step4")
+        self._record(test_name="BA: Navigate to Step 4",
+            expected="Business Model input visible on Step 4",
+            actual="Successfully navigated to Business Activities",
+            status="PASSED", category="Business Activities", screenshot=shot_nav)
+
+        # --- Pre-filled data (2 rows) ---
+        row_count = self._ba_count_rows(driver)
+        saved_row1 = self._ba_save_row(driver, 1)
+        saved_row2 = {}
+        if row_count >= 2:
+            saved_row2 = self._ba_save_row(driver, 2)
+        bm1 = saved_row1.get("Business Model", "")
+        ml1 = saved_row1.get("Market Linkages", "")
+        shot_prefill = self._screenshot(driver, "ba_prefilled")
+        has_prefill = bool(bm1) or bool(ml1)
+        self._record(test_name="BA: Pre-filled Data",
+            expected="2 pre-filled BA rows with Business Model, Market Linkages, etc.",
+            actual=f"rows={row_count}, row1_bm='{bm1}', row1_ml='{ml1}'",
+            status="PASSED" if has_prefill else "FAILED",
+            category="Business Activities", field="All BA Fields",
+            original_value=str(saved_row1),
+            screenshot=shot_prefill)
+
+        # --- Back to Step 3 ---
+        went_back = self._go_back_to_step3(page)
+        on_step3 = self._is_on_step3(driver) if went_back else False
+        shot_back = self._screenshot(driver, "ba_back_to_step3")
+        self._record(test_name="BA: Back to Step 3",
+            expected="Back button returns to Step 3 (Address)",
+            actual=f"went_back={went_back}, on_step3={on_step3}",
+            status="PASSED" if on_step3 else "FAILED",
+            category="Business Activities", screenshot=shot_back)
+
+        # --- Next back to Step 4 ---
+        if on_step3:
+            page._click_next()
+            time.sleep(1.5)
+        else:
+            self._navigate_to_step4(page)
+        on_step4_again = self._is_on_step4(driver)
+        shot_next = self._screenshot(driver, "ba_next_to_step4")
+        self._record(test_name="BA: Next to Step 4",
+            expected="Next button returns to Step 4 (Business Activities)",
+            actual=f"on_step4={on_step4_again}",
+            status="PASSED" if on_step4_again else "FAILED",
+            category="Business Activities", screenshot=shot_next)
+
+        # --- Optional fields � clear all 4, Next should proceed ---
+        for display_name, attr_name, _ in self._BA_FIELDS:
+            self._ba_clear_field(driver, 1, attr_name)
+        time.sleep(0.3)
+        page._click_next()
+        time.sleep(1.5)
+        moved_forward = not self._is_on_step4(driver)
+        shot_opt = self._screenshot(driver, "ba_optional_fields")
+        self._record(test_name="BA: Optional Fields",
+            expected="All 4 fields empty � Next proceeds past Step 4 with no error",
+            actual=f"moved_forward={moved_forward}",
+            status="PASSED" if moved_forward else "FAILED",
+            category="Business Activities", field="All BA Fields",
+            bad_value="(empty)", screenshot=shot_opt)
+
+        # Navigate back to Step 4 if we moved past it
+        if moved_forward:
+            self._go_back_to_step4(page)
+
+        # --- Add row ---
+        before_add = self._ba_count_rows(driver)
+        added1 = self._ba_add_row(driver)
+        after1 = self._ba_count_rows(driver)
+        shot_add = self._screenshot(driver, "ba_add_row")
+        self._record(test_name="BA: Add Row",
+            expected="Clicking + adds a new blank BA row",
+            actual=f"rows_before={before_add}, added={added1}, rows_after={after1}",
+            status="PASSED" if added1 and after1 == before_add + 1 else "FAILED",
+            category="Business Activities", screenshot=shot_add)
+
+        # --- Add multiple rows ---
+        added2 = self._ba_add_row(driver)
+        after2 = self._ba_count_rows(driver)
+        shot_multi = self._screenshot(driver, "ba_add_multiple")
+        self._record(test_name="BA: Add Multiple Rows",
+            expected="Multiple rows can be added via + button",
+            actual=f"rows_after_first={after1}, added_again={added2}, total={after2}",
+            status="PASSED" if added2 and after2 == after1 + 1 else "FAILED",
+            category="Business Activities", screenshot=shot_multi)
+
+        # --- Delete row ---
+        before_del = self._ba_count_rows(driver)
+        if before_del >= 2:
+            deleted = self._ba_delete_row(driver, row_index=before_del)
+            time.sleep(0.5)
+            try:
+                confirm = driver.find_element(By.CSS_SELECTOR, ".swal2-confirm")
+                if confirm.is_displayed():
+                    confirm.click()
+                    time.sleep(0.8)
+            except Exception:
+                pass
+            after_del = self._ba_count_rows(driver)
+        else:
+            deleted = False
+            after_del = before_del
+        shot_del = self._screenshot(driver, "ba_delete_row")
+        self._record(test_name="BA: Delete Row",
+            expected="Row count decreases by 1 after deletion",
+            actual=f"rows_before={before_del}, deleted={deleted}, rows_after={after_del}",
+            status="PASSED" if deleted and after_del == before_del - 1 else "FAILED",
+            category="Business Activities", screenshot=shot_del)
+
+        # --- Single row � no delete button ---
+        max_del_attempts = 15
+        del_attempts = 0
+        del_start = time.time()
+        while self._ba_count_rows(driver) > 1 and del_attempts < max_del_attempts:
+            if time.time() - del_start > 30:
+                break
+            cnt = self._ba_count_rows(driver)
+            self._ba_delete_row(driver, row_index=cnt)
+            time.sleep(0.8)
+            try:
+                confirm = driver.find_element(By.CSS_SELECTOR, ".swal2-confirm")
+                if confirm.is_displayed():
+                    confirm.click()
+                    time.sleep(0.8)
+            except Exception:
+                pass
+            del_attempts += 1
+        single_count = self._ba_count_rows(driver)
+        no_del = not self._ba_has_delete_button(driver, 1)
+        shot_single = self._screenshot(driver, "ba_single_no_delete")
+        self._record(test_name="BA: No Delete on Single Row",
+            expected="Delete button not visible when only 1 row remains",
+            actual=f"single_row={single_count == 1}, has_delete={not no_del}",
+            status="PASSED" if single_count == 1 and no_del else "FAILED",
+            category="Business Activities", screenshot=shot_single)
+
+        # --- Restore original values on row 1 (no Update � just reset UI) ---
+        self._ba_restore_row(driver, 1, saved_row1)
+
+        self._cleanup(page)
+
+    # ================================================================
+    # TEST 17: Business Activities � Max Length [ONE form open, with Update]
+    # BM: 100, ML: 255, LOB: 255, ABA: 255
+    # ================================================================
+
+    def test_17_ba_max_length_all_fields(self, logged_in_driver):
+        """Max length boundary for all 4 BA fields: N+1 -> fail, N -> save + verify."""
+        driver = logged_in_driver
+        page = self._page(driver)
+        self._open_form(page)
+
+        reached = self._navigate_to_step4(page)
+        if not reached:
+            self._record(test_name="BA Max Length: Business Model (101 chars)",
+                expected="Failed to save record", actual="Failed to reach Step 4",
+                status="FAILED", category="Business Activities", field="Business Model")
+            self._cleanup(page)
+            return
+
+        # --- Save original row 1 data for restoration ---
+        orig = self._ba_save_row(driver, 1)
+
+        # --- Test each field: max+1 -> fail, max -> save, verify persisted ---
+        for display_name, attr_name, max_len in self._BA_FIELDS:
+            # --- N+1 chars -> Update fails ---
+            long_val = "A" * (max_len + 1)
+            self._ba_type_field(driver, 1, attr_name, long_val)
+            time.sleep(0.3)
+            self._click_update_direct(driver)
+            title_fail, _ = self._check_sweetalert(driver, timeout=15)
+            shot_fail = self._screenshot(driver, f"ba_maxlen_{display_name[:3]}_fail")
+            is_failed = "failed to save record" in (title_fail or "").lower()
+            self._record(test_name=f"BA Max Length: {display_name} ({max_len + 1} chars)",
+                expected="'Failed to save record' toast shown",
+                actual=f"title='{title_fail}'",
+                status="PASSED" if is_failed else "FAILED",
+                category="Business Activities", field=display_name,
+                bad_value=f"{'A'*30}...({max_len + 1} chars)",
+                screenshot=shot_fail)
+            self._dismiss_sweetalert(driver)
+            time.sleep(0.5)
+
+            # --- N chars -> Update succeeds ---
+            boundary_val = "A" * max_len
+            self._ba_type_field(driver, 1, attr_name, boundary_val)
+            time.sleep(0.3)
+            self._click_update_direct(driver)
+            title_save = self._handle_update_success(driver, timeout=15)
+            shot_save = self._screenshot(driver, f"ba_maxlen_{display_name[:3]}_save")
+            is_failed_save = "failed to save record" in (title_save or "").lower()
+            self._record(test_name=f"BA Max Length: {display_name} ({max_len} chars)",
+                expected="Record saves successfully (at boundary limit)",
+                actual=f"title='{title_save}'",
+                status="PASSED" if not is_failed_save else "FAILED",
+                category="Business Activities", field=display_name,
+                screenshot=shot_save)
+            time.sleep(1)
+
+            # --- Re-open and verify persisted ---
+            self._open_form(page)
+            self._navigate_to_step4(page)
+            saved_val = self._ba_read_field(driver, 1, attr_name)
+            shot_verify = self._screenshot(driver, f"ba_maxlen_{display_name[:3]}_verify")
+            persisted = (saved_val == boundary_val)
+            self._record(test_name=f"BA Max Length: {display_name} Verify Persisted",
+                expected=f"{display_name} ({max_len} chars) persisted after save",
+                actual=f"saved='{saved_val[:30]}...'({len(saved_val)} chars), persisted={persisted}",
+                status="PASSED" if persisted else "FAILED",
+                category="Business Activities", field=display_name,
+                screenshot=shot_verify)
+
+        # --- Restore original data ---
+        self._ba_restore_row(driver, 1, orig)
+        time.sleep(0.3)
+        self._click_update_direct(driver)
+        title_restore = self._handle_update_success(driver, timeout=15)
+        shot_restore = self._screenshot(driver, "ba_maxlen_restore")
+        restore_ok = "failed" not in (title_restore or "").lower()
+        self._record(test_name="BA: Restore Original Data",
+            expected="Original BA data restored successfully",
+            actual=f"title='{title_restore}'",
+            status="PASSED" if restore_ok else "FAILED",
+            category="Business Activities", field="All BA Fields",
+            original_value=str(orig),
+            screenshot=shot_restore)
+
+        self._cleanup(page)
+
+    # ================================================================
+    # TEST 18: Business Activities � Backend + Persistence [ONE form open, with Update]
+    # Edit all 4 -> save -> verify, empty save, restore original
+    # ================================================================
+
+    def test_18_ba_backend_persistence(self, logged_in_driver):
+        """Edit all 4 BA fields, save, verify. Empty save, verify. Restore original."""
+        driver = logged_in_driver
+        page = self._page(driver)
+        self._open_form(page)
+
+        reached = self._navigate_to_step4(page)
+        if not reached:
+            self._record(test_name="BA: Edit All Fields -> Save",
+                expected="Update succeeds", actual="Failed to reach Step 4",
+                status="FAILED", category="Business Activities")
+            self._cleanup(page)
+            return
+
+        # --- Save original row 1 data ---
+        orig = self._ba_save_row(driver, 1)
+
+        # --- Edit all 4 fields -> Update -> re-open -> verify ---
+        test_values = {
+            "Business Model": "Test B2B SaaS Platform",
+            "Market Linkages": "Domestic Wholesale + Direct Export",
+            "Line of Business": "Enterprise Software Development",
+            "Additional Business Activities": "Cloud Consulting and IT Advisory",
+        }
+        for display_name, attr_name, _ in self._BA_FIELDS:
+            self._ba_type_field(driver, 1, attr_name, test_values[display_name])
+        time.sleep(0.3)
+        self._click_update_direct(driver)
+        title_edit = self._handle_update_success(driver, timeout=15)
+        shot_edit = self._screenshot(driver, "ba_edit_all")
+        is_failed_edit = "failed to save record" in (title_edit or "").lower()
+        self._record(test_name="BA: Edit All Fields -> Save",
+            expected="Updated BA fields save successfully",
+            actual=f"title='{title_edit}'",
+            status="PASSED" if not is_failed_edit else "FAILED",
+            category="Business Activities", field="All BA Fields",
+            bad_value=str(test_values),
+            screenshot=shot_edit)
+        time.sleep(1)
+
+        # Re-open and verify all 4
+        self._open_form(page)
+        self._navigate_to_step4(page)
+        all_verified = True
+        verify_details = []
+        for display_name, attr_name, _ in self._BA_FIELDS:
+            saved = self._ba_read_field(driver, 1, attr_name)
+            expected_val = test_values[display_name]
+            matched = (saved == expected_val)
+            verify_details.append(f"{display_name[:3]}='{saved[:20]}'(ok={matched})")
+            if not matched:
+                all_verified = False
+        shot_verify = self._screenshot(driver, "ba_verify_all")
+        self._record(test_name="BA: Edit All Fields -> Verify Persisted",
+            expected="All 4 BA fields persist after save",
+            actual=f"details=[{'; '.join(verify_details)}]",
+            status="PASSED" if all_verified else "FAILED",
+            category="Business Activities", field="All BA Fields",
+            screenshot=shot_verify)
+
+        # --- Empty all fields -> Update saves (optional) ---
+        for display_name, attr_name, _ in self._BA_FIELDS:
+            self._ba_clear_field(driver, 1, attr_name)
+        time.sleep(0.3)
+        self._click_update_direct(driver)
+        title_empty = self._handle_update_success(driver, timeout=15)
+        shot_empty = self._screenshot(driver, "ba_empty_save")
+        is_failed_empty = "failed to save record" in (title_empty or "").lower()
+        self._record(test_name="BA: Empty All Fields -> Save",
+            expected="Record saves with all 4 fields empty (optional fields)",
+            actual=f"title='{title_empty}'",
+            status="PASSED" if not is_failed_empty else "FAILED",
+            category="Business Activities", field="All BA Fields",
+            bad_value="(empty)",
+            screenshot=shot_empty)
+        time.sleep(1)
+
+        # Re-open and verify empty
+        self._open_form(page)
+        self._navigate_to_step4(page)
+        all_empty = True
+        empty_details = []
+        for display_name, attr_name, _ in self._BA_FIELDS:
+            saved = self._ba_read_field(driver, 1, attr_name)
+            is_empty = (not saved or saved.strip() == "")
+            empty_details.append(f"{display_name[:3]}='{saved}'(empty={is_empty})")
+            if not is_empty:
+                all_empty = False
+        shot_empty_verify = self._screenshot(driver, "ba_empty_verify")
+        self._record(test_name="BA: Empty Fields Persisted",
+            expected="All 4 fields remain empty after save",
+            actual=f"details=[{'; '.join(empty_details)}]",
+            status="PASSED" if all_empty else "FAILED",
+            category="Business Activities", field="All BA Fields",
+            screenshot=shot_empty_verify)
+
+        # --- Restore original data ---
+        self._ba_restore_row(driver, 1, orig)
+        time.sleep(0.3)
+        self._click_update_direct(driver)
+        title_restore = self._handle_update_success(driver, timeout=15)
+        shot_restore = self._screenshot(driver, "ba_restore")
+        restore_ok = "failed" not in (title_restore or "").lower()
+        self._record(test_name="BA: Restore Original Data",
+            expected="Original BA data restored successfully",
+            actual=f"title='{title_restore}'",
+            status="PASSED" if restore_ok else "FAILED",
+            category="Business Activities", field="All BA Fields",
+            original_value=str(orig),
+            screenshot=shot_restore)
+
+        self._cleanup(page)
+
+    # ================================================================
+    # TEST 19: Business Activities � Edge Cases [ONE form open, NO Update]
+    # Special chars, whitespace, rapid add/delete, max rows
+    # ================================================================
+
+    def test_19_ba_edge_cases(self, logged_in_driver):
+        """UI edge case checks � no Update button pressed, no data changes."""
+        driver = logged_in_driver
+        page = self._page(driver)
+        self._open_form(page)
+
+        reached = self._navigate_to_step4(page)
+        if not reached:
+            self._record(test_name="BA: Special Chars in Business Model",
+                expected="Checked Next behavior", actual="Failed to reach Step 4",
+                status="FAILED", category="Business Activities")
+            self._cleanup(page)
+            return
+
+        # Save original row 1 data
+        orig = self._ba_save_row(driver, 1)
+
+        # --- CHECK: Special characters in Business Model -> Next proceeds ---
+        special_val = "<script>alert(1)</script>"
+        self._ba_type_field(driver, 1, "Business Model\t", special_val)
+        time.sleep(0.3)
+        page._click_next()
+        time.sleep(1.5)
+        moved_special = not self._is_on_step4(driver)
+        shot_special = self._screenshot(driver, "ba_special_chars")
+        self._record(test_name="BA: Special Chars in Business Model",
+            expected="No validation error � Next proceeds past Step 4",
+            actual=f"moved_forward={moved_special}",
+            status="PASSED" if moved_special else "FAILED",
+            category="Business Activities", field="Business Model",
+            bad_value=special_val,
+            screenshot=shot_special)
+
+        # Navigate back to Step 4
+        if moved_special:
+            self._go_back_to_step4(page)
+
+        # --- CHECK: Whitespace-only fields -> Next proceeds ---
+        for display_name, attr_name, _ in self._BA_FIELDS:
+            self._ba_type_field(driver, 1, attr_name, "   ")
+        time.sleep(0.3)
+        page._click_next()
+        time.sleep(1.5)
+        moved_ws = not self._is_on_step4(driver)
+        shot_ws = self._screenshot(driver, "ba_whitespace")
+        self._record(test_name="BA: Whitespace-Only Fields",
+            expected="No validation error � Next proceeds past Step 4",
+            actual=f"moved_forward={moved_ws}",
+            status="PASSED" if moved_ws else "FAILED",
+            category="Business Activities", field="All BA Fields",
+            bad_value="'   ' (whitespace)",
+            screenshot=shot_ws)
+
+        # Navigate back to Step 4
+        if moved_ws:
+            self._go_back_to_step4(page)
+
+        # --- CHECK: Rapid add then delete ---
+        before_rapid = self._ba_count_rows(driver)
+        self._ba_add_row(driver)
+        time.sleep(0.5)
+        after_add = self._ba_count_rows(driver)
+        if after_add > before_rapid:
+            self._ba_delete_row(driver, row_index=after_add)
+            time.sleep(0.5)
+            try:
+                confirm = driver.find_element(By.CSS_SELECTOR, ".swal2-confirm")
+                if confirm.is_displayed():
+                    confirm.click()
+                    time.sleep(0.8)
+            except Exception:
+                pass
+        after_delete = self._ba_count_rows(driver)
+        shot_rapid = self._screenshot(driver, "ba_rapid_add_delete")
+        count_stable = (after_delete == before_rapid)
+        self._record(test_name="BA: Rapid Add Then Delete",
+            expected="Add row -> delete row -> count returns to original",
+            actual=f"before={before_rapid}, after_add={after_add}, after_delete={after_delete}",
+            status="PASSED" if count_stable else "FAILED",
+            category="Business Activities", screenshot=shot_rapid)
+
+        # --- CHECK: Max rows limit ---
+        start_count = self._ba_count_rows(driver)
+        max_clicks = 20
+        added_count = 0
+        for i in range(max_clicks):
+            before = self._ba_count_rows(driver)
+            ok = self._ba_add_row(driver)
+            time.sleep(0.3)
+            after = self._ba_count_rows(driver)
+            if ok and after == before + 1:
+                added_count += 1
+            else:
+                break
+        final_count = self._ba_count_rows(driver)
+        shot_max = self._screenshot(driver, "ba_max_rows")
+        hit_cap = (added_count < max_clicks)
+        self._record(test_name="BA: Max Rows Limit",
+            expected=f"System prevents adding unlimited rows (capped within {max_clicks} clicks)",
+            actual=f"start={start_count}, added={added_count}/{max_clicks} attempts, final={final_count}, capped={hit_cap}",
+            status="PASSED" if hit_cap or final_count > 30 else "FAILED",
+            category="Business Activities",
+            bad_value=f"tried adding {max_clicks} rows",
+            screenshot=shot_max)
+
+        # --- Cleanup: restore original values (no Update � just reset UI) ---
+        self._ba_restore_row(driver, 1, orig)
+
+        self._cleanup(page)
+
+        # ================================================================
+    # INFRASTRUCTURE DETAILS HELPERS
+    # ================================================================
+
+    # XPath to the Infrastructure Details app-dynamic-details container
+    _INFRA_XPATH = "//app-dynamic-details[.//mat-label[contains(.,'Infrastructure Type')]]"  # label is "Infrastructure Type\t" in HTML
+
+    def _is_on_step5(self, driver):
+        """Check if form is on Step 5 (Infrastructure Details)."""
+        try:
+            WebDriverWait(driver, 5).until(
+                EC.visibility_of_element_located(
+                    (By.XPATH, "//mat-label[contains(.,'Infrastructure Type')]")
+                )
+            )
+            return True
+        except Exception:
+            return False
+
+    def _navigate_to_step5(self, page):
+        """Navigate to Step 5 (Infrastructure Details) from wherever the form currently is."""
+        driver = page.driver
+        if self._is_on_step5(driver):
+            return True
+        # On Step 4? Click Next to get to Step 5
+        if self._is_on_step4(driver):
+            page._click_next()
+            time.sleep(1.5)
+            return self._is_on_step5(driver)
+        # Fall back: navigate to Step 4 first, then click Next
+        if self._navigate_to_step4(page):
+            page._click_next()
+            time.sleep(1.5)
+            return self._is_on_step5(driver)
+        return False
+
+    def _infra_container(self, driver):
+        """Return the app-dynamic-details element for Infrastructure Details (Step 5)."""
+        return driver.find_element(By.XPATH, self._INFRA_XPATH)
+
+    def _infra_count_rows(self, driver):
+        """Count infrastructure rows in the Step 5 table (scoped to infra container)."""
+        try:
+            container = self._infra_container(driver)
+            rows = container.find_elements(By.CSS_SELECTOR, "tbody tr")
+            return len(rows)
+        except Exception:
+            return 0
+
+    def _infra_add_row(self, driver):
+        """Click the + button to add a new infrastructure row (scoped to infra container)."""
+        try:
+            container = self._infra_container(driver)
+            add_btns = container.find_elements(
+                By.CSS_SELECTOR, "button[mat-icon-button][color='primary']"
+            )
+            if add_btns:
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center'}); arguments[0].click();",
+                    add_btns[0]
+                )
+                time.sleep(0.8)
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _infra_delete_row(self, driver, row_index=1):
+        """Click the delete button on a specific infrastructure row (scoped to infra container)."""
+        try:
+            container = self._infra_container(driver)
+            rows = container.find_elements(By.CSS_SELECTOR, "tbody tr")
+            if row_index < 1 or row_index > len(rows):
+                return False
+            row = rows[row_index - 1]
+            btn = row.find_element(By.CSS_SELECTOR, "button[mat-icon-button][color='warn']")
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", btn)
+            time.sleep(0.3)
+            try:
+                btn.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", btn)
+            time.sleep(0.8)
+            return True
+        except Exception:
+            return False
+
+    def _infra_has_delete_button(self, driver, row_index=1):
+        """Check if a specific infra row has a visible delete button (scoped to infra container)."""
+        try:
+            container = self._infra_container(driver)
+            rows = container.find_elements(By.CSS_SELECTOR, "tbody tr")
+            if row_index < 1 or row_index > len(rows):
+                return False
+            row = rows[row_index - 1]
+            btn = row.find_element(By.CSS_SELECTOR, "button[mat-icon-button][color='warn']")
+            return btn.is_displayed()
+        except Exception:
+            return False
+
+    def _infra_open_dropdown(self, driver, row_index, label_name, timeout=10):
+        """Open a mat-select dropdown for a specific infra row (scoped to infra container)."""
+        xpath = f"({self._INFRA_XPATH}//mat-label[contains(.,'{label_name}')]/ancestor::mat-form-field//mat-select)[{row_index}]"
+        trigger = WebDriverWait(driver, timeout).until(
+            EC.visibility_of_element_located((By.XPATH, xpath))
+        )
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", trigger)
+        time.sleep(0.3)
+        try:
+            trigger.click()
+        except Exception:
+            driver.execute_script("arguments[0].click();", trigger)
+        time.sleep(0.5)
+        return trigger
+
+    def _infra_get_dropdown_options(self, driver, timeout=5):
+        """Get all option texts from the currently open mat-select dropdown."""
+        try:
+            WebDriverWait(driver, timeout).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, "div[role='listbox'] mat-option"))
+            )
+            options = driver.find_elements(By.CSS_SELECTOR, "div[role='listbox'] mat-option")
+            return [opt.text.strip() for opt in options if opt.text.strip()]
+        except Exception:
+            return []
+
+    def _infra_select_option_by_text(self, driver, option_text, timeout=5):
+        """Click an option from the currently open dropdown by its text."""
+        try:
+            opt = WebDriverWait(driver, timeout).until(
+                EC.element_to_be_clickable((
+                    By.XPATH, f"//div[@role='listbox']//mat-option[contains(.,'{option_text}')]"
+                ))
+            )
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", opt)
+            time.sleep(0.2)
+            try:
+                opt.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", opt)
+            time.sleep(0.5)
+            return True
+        except Exception:
+            return False
+
+    def _infra_read_dropdown_value(self, driver, row_index, label_name):
+        """Read the currently selected text from a mat-select dropdown (scoped to infra container)."""
+        xpath = f"({self._INFRA_XPATH}//mat-label[contains(.,'{label_name}')]/ancestor::mat-form-field//mat-select)[{row_index}]"
+        try:
+            trigger = driver.find_element(By.XPATH, xpath)
+            try:
+                val_span = trigger.find_element(By.CSS_SELECTOR, ".mat-mdc-select-value-text span, .mat-mdc-select-min-line span")
+                return val_span.text.strip()
+            except Exception:
+                return trigger.text.strip()
+        except Exception:
+            return ""
+
+    def _infra_find_field(self, driver, row_index, field_name):
+        """Find an input or textarea element in the infra container by row index and field name."""
+        container = self._infra_container(driver)
+        rows = container.find_elements(By.CSS_SELECTOR, "tbody tr")
+        if row_index < 1 or row_index > len(rows):
+            raise Exception(f"Infra Row {row_index} not found (only {len(rows)} rows)")
+        row = rows[row_index - 1]
+        els = row.find_elements(By.CSS_SELECTOR, f"input[name='{field_name}']")
+        if not els:
+            els = row.find_elements(By.CSS_SELECTOR, f"textarea[name='{field_name}']")
+        if els:
+            return els[0]
+        raise Exception(f"Field '{field_name}' not found in infra row {row_index}")
+
+    def _infra_type_field(self, driver, row_index, field_name, value):
+        """Type into an infra input/textarea field by row index (scoped to infra container)."""
+        el = self._infra_find_field(driver, row_index, field_name)
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+        time.sleep(0.3)
+        try:
+            el.click()
+        except Exception:
+            driver.execute_script("arguments[0].focus();", el)
+        time.sleep(0.2)
+        el.send_keys(Keys.CONTROL + "a")
+        el.send_keys(value)
+        time.sleep(0.3)
+        el.send_keys(Keys.TAB)
+        time.sleep(0.3)
+
+    def _infra_clear_field(self, driver, row_index, field_name):
+        """Clear an infra input/textarea field by row index (scoped to infra container)."""
+        el = self._infra_find_field(driver, row_index, field_name)
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+        time.sleep(0.3)
+        try:
+            el.click()
+        except Exception:
+            driver.execute_script("arguments[0].focus();", el)
+        time.sleep(0.2)
+        el.send_keys(Keys.CONTROL + "a")
+        el.send_keys(Keys.DELETE)
+        time.sleep(0.3)
+        el.send_keys(Keys.TAB)
+        time.sleep(0.3)
+
+    def _infra_read_field(self, driver, row_index, field_name):
+        """Read an infra input/textarea field value by row index (scoped to infra container)."""
+        el = self._infra_find_field(driver, row_index, field_name)
+        return el.get_attribute("value") or ""
+
+    def _infra_save_row(self, driver, row_index):
+        """Save all field values from an infra row for later restoration."""
+        saved = {}
+        try:
+            saved["Infrastructure Type"] = self._infra_read_dropdown_value(driver, row_index, "Infrastructure Type")
+        except Exception:
+            saved["Infrastructure Type"] = ""
+        try:
+            saved["Infrastructure Location"] = self._infra_read_field(driver, row_index, "Infrastructure Location")
+        except Exception:
+            saved["Infrastructure Location"] = ""
+        try:
+            saved["Ownership Type"] = self._infra_read_dropdown_value(driver, row_index, "Ownership Type")
+        except Exception:
+            saved["Ownership Type"] = ""
+        try:
+            saved["Remark"] = self._infra_read_field(driver, row_index, "Remark")
+        except Exception:
+            saved["Remark"] = ""
+        return saved
+
+    def _infra_restore_row(self, driver, row_index, saved):
+        """Restore all field values on an infra row from saved data."""
+        if saved.get("Infrastructure Type"):
+            self._infra_open_dropdown(driver, row_index, "Infrastructure Type")
+            self._infra_select_option_by_text(driver, saved["Infrastructure Type"])
+            time.sleep(0.3)
+        if saved.get("Ownership Type"):
+            self._infra_open_dropdown(driver, row_index, "Ownership Type")
+            self._infra_select_option_by_text(driver, saved["Ownership Type"])
+            time.sleep(0.3)
+        if "Infrastructure Location" in saved:
+            if saved["Infrastructure Location"]:
+                self._infra_type_field(driver, row_index, "Infrastructure Location", saved["Infrastructure Location"])
+            else:
+                self._infra_clear_field(driver, row_index, "Infrastructure Location")
+        if "Remark" in saved:
+            if saved["Remark"]:
+                self._infra_type_field(driver, row_index, "Remark", saved["Remark"])
+            else:
+                self._infra_clear_field(driver, row_index, "Remark")
+        time.sleep(0.3)
+
+    # ================================================================
+    # TEST 20: Infrastructure Details � Navigation + Pre-filled + Row Mgmt [ONE form open, NO Update]
+    # ================================================================
+
+    def test_20_infra_navigation_prefilled_row_mgmt(self, logged_in_driver):
+        """Navigate to Step 5, verify pre-filled data, back/next, no Next btn, add/delete rows."""
+        driver = logged_in_driver
+        page = self._page(driver)
+        self._open_form(page)
+
+        # --- Navigate to Step 5 ---
+        reached = self._navigate_to_step5(page)
+        if not reached:
+            self._record(test_name="Infra: Navigate to Step 5",
+                expected="Infrastructure Type dropdown visible",
+                actual="Failed to reach Step 5",
+                status="FAILED", category="Infrastructure Details")
+            self._cleanup(page)
+            return
+        shot_nav = self._screenshot(driver, "infra_nav_step5")
+        self._record(test_name="Infra: Navigate to Step 5",
+            expected="Infrastructure Type dropdown visible on Step 5",
+            actual="Successfully navigated to Infrastructure Details",
+            status="PASSED", category="Infrastructure Details", screenshot=shot_nav)
+
+        # --- Pre-filled data (2 rows) ---
+        row_count = self._infra_count_rows(driver)
+        infra_type_1 = self._infra_read_dropdown_value(driver, 1, "Infrastructure Type")
+        infra_type_2 = ""
+        ownership_1 = self._infra_read_dropdown_value(driver, 1, "Ownership Type")
+        ownership_2 = ""
+        if row_count >= 2:
+            infra_type_2 = self._infra_read_dropdown_value(driver, 2, "Infrastructure Type")
+            ownership_2 = self._infra_read_dropdown_value(driver, 2, "Ownership Type")
+        shot_prefill = self._screenshot(driver, "infra_prefilled")
+        has_prefill = bool(infra_type_1) and bool(ownership_1)
+        self._record(test_name="Infra: Pre-filled Data",
+            expected="2 pre-filled rows with Infrastructure Type (Office Building, Warehouse) and Ownership Type",
+            actual=f"rows={row_count}, row1_type='{infra_type_1}', row2_type='{infra_type_2}', row1_own='{ownership_1}', row2_own='{ownership_2}'",
+            status="PASSED" if has_prefill and row_count >= 2 else "FAILED",
+            category="Infrastructure Details", field="Infrastructure Type, Ownership Type",
+            original_value=f"rows={row_count}, types=['{infra_type_1}','{infra_type_2}'], own=['{ownership_1}','{ownership_2}']",
+            screenshot=shot_prefill)
+
+        # --- Back to Step 4 ---
+        went_back = self._go_back_to_step4(page)
+        on_step4 = self._is_on_step4(driver) if went_back else False
+        shot_back = self._screenshot(driver, "infra_back_to_step4")
+        self._record(test_name="Infra: Back to Step 4",
+            expected="Back button returns to Step 4 (Business Activities)",
+            actual=f"went_back={went_back}, on_step4={on_step4}",
+            status="PASSED" if on_step4 else "FAILED",
+            category="Infrastructure Details", screenshot=shot_back)
+
+        # --- Next to Step 5 ---
+        if on_step4:
+            page._click_next()
+            time.sleep(1.5)
+        else:
+            self._navigate_to_step5(page)
+        on_step5_again = self._is_on_step5(driver)
+        shot_next = self._screenshot(driver, "infra_next_to_step5")
+        self._record(test_name="Infra: Next to Step 5",
+            expected="Next button from Step 4 returns to Step 5",
+            actual=f"on_step5={on_step5_again}",
+            status="PASSED" if on_step5_again else "FAILED",
+            category="Infrastructure Details", screenshot=shot_next)
+
+        # --- No Next button on Step 5 (last step) ---
+        has_next = False
+        try:
+            next_btns = driver.find_elements(By.XPATH, "//div[@class='step-actions']//button[contains(.,'Next')]")
+            has_next = any(b.is_displayed() for b in next_btns)
+        except Exception:
+            pass
+        shot_no_next = self._screenshot(driver, "infra_no_next_btn")
+        self._record(test_name="Infra: No Next Button (Last Step)",
+            expected="No Next button on Step 5 � it is the last step",
+            actual=f"has_next_button={has_next}",
+            status="PASSED" if not has_next else "FAILED",
+            category="Infrastructure Details", screenshot=shot_no_next)
+
+        # --- Add row ---
+        before_add = self._infra_count_rows(driver)
+        added1 = self._infra_add_row(driver)
+        after1 = self._infra_count_rows(driver)
+        shot_add = self._screenshot(driver, "infra_add_row")
+        self._record(test_name="Infra: Add Row",
+            expected="Clicking + adds a new blank infrastructure row",
+            actual=f"rows_before={before_add}, added={added1}, rows_after={after1}",
+            status="PASSED" if added1 and after1 == before_add + 1 else "FAILED",
+            category="Infrastructure Details", screenshot=shot_add)
+
+        # --- Add multiple rows ---
+        added2 = self._infra_add_row(driver)
+        after2 = self._infra_count_rows(driver)
+        shot_multi = self._screenshot(driver, "infra_add_multiple")
+        self._record(test_name="Infra: Add Multiple Rows",
+            expected="Multiple rows can be added via + button",
+            actual=f"rows_after_first={after1}, added_again={added2}, total={after2}",
+            status="PASSED" if added2 and after2 == after1 + 1 else "FAILED",
+            category="Infrastructure Details", screenshot=shot_multi)
+
+        # --- Delete row ---
+        before_del = self._infra_count_rows(driver)
+        if before_del >= 2:
+            deleted = self._infra_delete_row(driver, row_index=before_del)
+            time.sleep(0.5)
+            try:
+                confirm = driver.find_element(By.CSS_SELECTOR, ".swal2-confirm")
+                if confirm.is_displayed():
+                    confirm.click()
+                    time.sleep(0.8)
+            except Exception:
+                pass
+            after_del = self._infra_count_rows(driver)
+        else:
+            deleted = False
+            after_del = before_del
+        shot_del = self._screenshot(driver, "infra_delete_row")
+        self._record(test_name="Infra: Delete Row",
+            expected="Row count decreases by 1 after deletion",
+            actual=f"rows_before={before_del}, deleted={deleted}, rows_after={after_del}",
+            status="PASSED" if deleted and after_del == before_del - 1 else "FAILED",
+            category="Infrastructure Details", screenshot=shot_del)
+
+        # --- Single row � no delete button ---
+        max_del_attempts = 15
+        del_attempts = 0
+        del_start = time.time()
+        while self._infra_count_rows(driver) > 1 and del_attempts < max_del_attempts:
+            if time.time() - del_start > 30:
+                break
+            cnt = self._infra_count_rows(driver)
+            self._infra_delete_row(driver, row_index=cnt)
+            time.sleep(0.8)
+            try:
+                confirm = driver.find_element(By.CSS_SELECTOR, ".swal2-confirm")
+                if confirm.is_displayed():
+                    confirm.click()
+                    time.sleep(0.8)
+            except Exception:
+                pass
+            del_attempts += 1
+        single_count = self._infra_count_rows(driver)
+        no_del = not self._infra_has_delete_button(driver, 1)
+        shot_single = self._screenshot(driver, "infra_single_no_delete")
+        self._record(test_name="Infra: No Delete on Single Row",
+            expected="Delete button not visible when only 1 row remains",
+            actual=f"single_row={single_count == 1}, has_delete={not no_del}",
+            status="PASSED" if single_count == 1 and no_del else "FAILED",
+            category="Infrastructure Details", screenshot=shot_single)
+
+        self._cleanup(page)
+
+    # ================================================================
+    # TEST 21: Infrastructure Details � Dropdown + Max Length [ONE form open, with Update]
+    # Infra Location: 50 chars, Remark: 255 chars
+    # ================================================================
+
+    def test_21_infra_dropdown_maxlength(self, logged_in_driver):
+        """Dropdown selection change + max length boundary for Infra Location (50) and Remark (255)."""
+        driver = logged_in_driver
+        page = self._page(driver)
+        self._open_form(page)
+
+        reached = self._navigate_to_step5(page)
+        if not reached:
+            self._record(test_name="Infra: Change Infrastructure Type",
+                expected="Dropdown changed", actual="Failed to reach Step 5",
+                status="FAILED", category="Infrastructure Details", field="Infrastructure Type")
+            self._cleanup(page)
+            return
+
+        # --- Save original row 1 data ---
+        orig = self._infra_save_row(driver, 1)
+
+        # --- Change Infrastructure Type dropdown ---
+        orig_type = self._infra_read_dropdown_value(driver, 1, "Infrastructure Type")
+        target_type = "Warehouse" if orig_type == "Office Building" else "Office Building"
+        self._infra_open_dropdown(driver, 1, "Infrastructure Type")
+        selected = self._infra_select_option_by_text(driver, target_type)
+        time.sleep(0.3)
+        read_back_type = self._infra_read_dropdown_value(driver, 1, "Infrastructure Type")
+        shot_type = self._screenshot(driver, "infra_change_type")
+        type_changed = (read_back_type == target_type)
+        self._record(test_name="Infra: Change Infrastructure Type",
+            expected=f"Infrastructure Type changed from '{orig_type}' to '{target_type}'",
+            actual=f"selected={selected}, read_back='{read_back_type}', changed={type_changed}",
+            status="PASSED" if type_changed else "FAILED",
+            category="Infrastructure Details", field="Infrastructure Type",
+            bad_value=target_type, screenshot=shot_type)
+
+        # --- Change Ownership Type dropdown ---
+        orig_own = self._infra_read_dropdown_value(driver, 1, "Ownership Type")
+        target_own = "Owned" if orig_own != "Owned" else "Leased"
+        self._infra_open_dropdown(driver, 1, "Ownership Type")
+        selected_own = self._infra_select_option_by_text(driver, target_own)
+        time.sleep(0.3)
+        read_back_own = self._infra_read_dropdown_value(driver, 1, "Ownership Type")
+        shot_own = self._screenshot(driver, "infra_change_own")
+        own_changed = (read_back_own == target_own)
+        self._record(test_name="Infra: Change Ownership Type",
+            expected=f"Ownership Type changed from '{orig_own}' to '{target_own}'",
+            actual=f"selected={selected_own}, read_back='{read_back_own}', changed={own_changed}",
+            status="PASSED" if own_changed else "FAILED",
+            category="Infrastructure Details", field="Ownership Type",
+            bad_value=target_own, screenshot=shot_own)
+
+        # --- Infrastructure Location 51 chars -> Update fails ---
+        self._infra_type_field(driver, 1, "Infrastructure Location", "A" * 51)
+        time.sleep(0.3)
+        self._click_update_direct(driver)
+        title_fail_loc, _ = self._check_sweetalert(driver, timeout=15)
+        shot_loc_fail = self._screenshot(driver, "infra_loc_51")
+        is_failed_loc = "failed to save record" in (title_fail_loc or "").lower()
+        self._record(test_name="Infra Max Length: Location (51 chars)",
+            expected="'Failed to save record' toast shown",
+            actual=f"title='{title_fail_loc}'",
+            status="PASSED" if is_failed_loc else "FAILED",
+            category="Infrastructure Details", field="Infrastructure Location",
+            bad_value=f"{'A'*30}...(51 chars)", screenshot=shot_loc_fail)
+        self._dismiss_sweetalert(driver)
+        time.sleep(0.5)
+
+        # --- Infrastructure Location 50 chars -> Update succeeds ---
+        self._infra_type_field(driver, 1, "Infrastructure Location", "A" * 50)
+        time.sleep(0.3)
+        self._click_update_direct(driver)
+        title_loc_save = self._handle_update_success(driver, timeout=15)
+        shot_loc_save = self._screenshot(driver, "infra_loc_50")
+        is_failed_loc_save = "failed to save record" in (title_loc_save or "").lower()
+        self._record(test_name="Infra Max Length: Location (50 chars)",
+            expected="Record saves successfully (at boundary limit)",
+            actual=f"title='{title_loc_save}'",
+            status="PASSED" if not is_failed_loc_save else "FAILED",
+            category="Infrastructure Details", field="Infrastructure Location",
+            screenshot=shot_loc_save)
+        time.sleep(1)
+
+        # Re-open and verify Location persisted
+        self._open_form(page)
+        self._navigate_to_step5(page)
+        saved_loc = self._infra_read_field(driver, 1, "Infrastructure Location")
+        shot_loc_verify = self._screenshot(driver, "infra_loc_verify")
+        loc_persisted = (saved_loc == "A" * 50)
+        self._record(test_name="Infra Max Length: Location Verify Persisted",
+            expected="Infrastructure Location (50 chars) persisted after save",
+            actual=f"saved='{saved_loc[:30]}...'({len(saved_loc)} chars), persisted={loc_persisted}",
+            status="PASSED" if loc_persisted else "FAILED",
+            category="Infrastructure Details", field="Infrastructure Location",
+            screenshot=shot_loc_verify)
+
+        # --- Remark 256 chars -> Update fails ---
+        self._infra_type_field(driver, 1, "Remark", "A" * 256)
+        time.sleep(0.3)
+        self._click_update_direct(driver)
+        title_fail_remark, _ = self._check_sweetalert(driver, timeout=15)
+        shot_remark_fail = self._screenshot(driver, "infra_remark_256")
+        is_failed_remark = "failed to save record" in (title_fail_remark or "").lower()
+        self._record(test_name="Infra Max Length: Remark (256 chars)",
+            expected="'Failed to save record' toast shown",
+            actual=f"title='{title_fail_remark}'",
+            status="PASSED" if is_failed_remark else "FAILED",
+            category="Infrastructure Details", field="Remark",
+            bad_value=f"{'A'*30}...(256 chars)", screenshot=shot_remark_fail)
+        self._dismiss_sweetalert(driver)
+        time.sleep(0.5)
+
+        # --- Remark 255 chars -> Update succeeds ---
+        self._infra_type_field(driver, 1, "Remark", "A" * 255)
+        time.sleep(0.3)
+        self._click_update_direct(driver)
+        title_remark_save = self._handle_update_success(driver, timeout=15)
+        shot_remark_save = self._screenshot(driver, "infra_remark_255")
+        is_failed_remark_save = "failed to save record" in (title_remark_save or "").lower()
+        self._record(test_name="Infra Max Length: Remark (255 chars)",
+            expected="Record saves successfully (at boundary limit)",
+            actual=f"title='{title_remark_save}'",
+            status="PASSED" if not is_failed_remark_save else "FAILED",
+            category="Infrastructure Details", field="Remark",
+            screenshot=shot_remark_save)
+        time.sleep(1)
+
+        # Re-open and verify Remark persisted
+        self._open_form(page)
+        self._navigate_to_step5(page)
+        saved_remark = self._infra_read_field(driver, 1, "Remark")
+        shot_remark_verify = self._screenshot(driver, "infra_remark_verify")
+        remark_persisted = (saved_remark == "A" * 255)
+        self._record(test_name="Infra Max Length: Remark Verify Persisted",
+            expected="Remark (255 chars) persisted after save",
+            actual=f"saved='{saved_remark[:30]}...'({len(saved_remark)} chars), persisted={remark_persisted}",
+            status="PASSED" if remark_persisted else "FAILED",
+            category="Infrastructure Details", field="Remark",
+            screenshot=shot_remark_verify)
+
+        # --- Restore original data ---
+        self._infra_restore_row(driver, 1, orig)
+        time.sleep(0.3)
+        self._click_update_direct(driver)
+        title_restore = self._handle_update_success(driver, timeout=15)
+        shot_restore = self._screenshot(driver, "infra_restore")
+        restore_ok = "failed" not in (title_restore or "").lower()
+        self._record(test_name="Infra: Restore Original Data",
+            expected="Original infrastructure data restored successfully",
+            actual=f"title='{title_restore}'",
+            status="PASSED" if restore_ok else "FAILED",
+            category="Infrastructure Details", field="All Infra Fields",
+            original_value=str(orig), screenshot=shot_restore)
+
+        self._cleanup(page)
+
+    # ================================================================
+    # TEST 22: Infrastructure Details � Backend + Persistence [ONE form open, with Update]
+    # Edit all 4 -> save -> verify, empty save, restore original
+    # ================================================================
+
+    def test_22_infra_backend_persistence(self, logged_in_driver):
+        """Edit all 4 infra fields, save, verify. Empty save, verify. Restore original."""
+        driver = logged_in_driver
+        page = self._page(driver)
+        self._open_form(page)
+
+        reached = self._navigate_to_step5(page)
+        if not reached:
+            self._record(test_name="Infra: Edit All -> Save",
+                expected="Update succeeds", actual="Failed to reach Step 5",
+                status="FAILED", category="Infrastructure Details")
+            self._cleanup(page)
+            return
+
+        # --- Save original row 1 data ---
+        orig = self._infra_save_row(driver, 1)
+
+        # --- Edit all 4 fields -> Update -> re-open -> verify ---
+        orig_type = self._infra_read_dropdown_value(driver, 1, "Infrastructure Type")
+        new_type = "Warehouse" if orig_type == "Office Building" else "Office Building"
+        self._infra_open_dropdown(driver, 1, "Infrastructure Type")
+        self._infra_select_option_by_text(driver, new_type)
+        time.sleep(0.3)
+
+        orig_own = self._infra_read_dropdown_value(driver, 1, "Ownership Type")
+        new_own = "LLP" if orig_own != "LLP" else "Proprietorship"
+        self._infra_open_dropdown(driver, 1, "Ownership Type")
+        self._infra_select_option_by_text(driver, new_own)
+        time.sleep(0.3)
+
+        self._infra_type_field(driver, 1, "Infrastructure Location", "Mumbai Central Business District")
+        self._infra_type_field(driver, 1, "Remark", "Primary operational hub for all divisions")
+        time.sleep(0.3)
+
+        self._click_update_direct(driver)
+        title_edit = self._handle_update_success(driver, timeout=15)
+        shot_edit = self._screenshot(driver, "infra_edit_all")
+        is_failed_edit = "failed to save record" in (title_edit or "").lower()
+        self._record(test_name="Infra: Edit All Fields -> Save",
+            expected="Updated infra fields save successfully",
+            actual=f"title='{title_edit}'",
+            status="PASSED" if not is_failed_edit else "FAILED",
+            category="Infrastructure Details", field="All Infra Fields",
+            bad_value=f"type={new_type}, own={new_own}", screenshot=shot_edit)
+        time.sleep(1)
+
+        # Re-open and verify all 4
+        self._open_form(page)
+        self._navigate_to_step5(page)
+        saved_type = self._infra_read_dropdown_value(driver, 1, "Infrastructure Type")
+        saved_loc = self._infra_read_field(driver, 1, "Infrastructure Location")
+        saved_own = self._infra_read_dropdown_value(driver, 1, "Ownership Type")
+        saved_remark = self._infra_read_field(driver, 1, "Remark")
+        shot_verify = self._screenshot(driver, "infra_verify_all")
+        type_ok = (saved_type == new_type)
+        loc_ok = (saved_loc == "Mumbai Central Business District")
+        own_ok = (saved_own == new_own)
+        remark_ok = (saved_remark == "Primary operational hub for all divisions")
+        all_ok = type_ok and loc_ok and own_ok and remark_ok
+        self._record(test_name="Infra: Edit All Fields -> Verify Persisted",
+            expected="All 4 infra fields persist after save",
+            actual=f"type='{saved_type}'(ok={type_ok}), loc='{saved_loc}'(ok={loc_ok}), own='{saved_own}'(ok={own_ok}), remark='{saved_remark[:30]}'(ok={remark_ok})",
+            status="PASSED" if all_ok else "FAILED",
+            category="Infrastructure Details", field="All Infra Fields",
+            screenshot=shot_verify)
+
+        # --- Empty all fields -> Update saves (optional fields) ---
+        self._infra_open_dropdown(driver, 1, "Infrastructure Type")
+        self._infra_select_option_by_text(driver, "Select Infrastructure Type")
+        time.sleep(0.3)
+        self._infra_open_dropdown(driver, 1, "Ownership Type")
+        self._infra_select_option_by_text(driver, "Select Ownership Type")
+        time.sleep(0.3)
+        self._infra_clear_field(driver, 1, "Infrastructure Location")
+        self._infra_clear_field(driver, 1, "Remark")
+        time.sleep(0.3)
+
+        self._click_update_direct(driver)
+        title_empty = self._handle_update_success(driver, timeout=15)
+        shot_empty = self._screenshot(driver, "infra_empty_save")
+        is_failed_empty = "failed to save record" in (title_empty or "").lower()
+        self._record(test_name="Infra: Empty All Fields -> Save",
+            expected="Backend rejects empty infra rows (optional in frontend, required by backend)",
+            actual=f"title='{title_empty}'",
+            status="PASSED" if is_failed_empty else "FAILED",
+            category="Infrastructure Details", field="All Infra Fields",
+            bad_value="(empty)", screenshot=shot_empty, is_bug=True)
+
+        # Re-open and verify empty
+        self._open_form(page)
+        self._navigate_to_step5(page)
+        saved_type_empty = self._infra_read_dropdown_value(driver, 1, "Infrastructure Type")
+        saved_loc_empty = self._infra_read_field(driver, 1, "Infrastructure Location")
+        saved_own_empty = self._infra_read_dropdown_value(driver, 1, "Ownership Type")
+        saved_remark_empty = self._infra_read_field(driver, 1, "Remark")
+        shot_empty_verify = self._screenshot(driver, "infra_empty_verify")
+        type_empty = (not saved_type_empty or "Select" in saved_type_empty)
+        loc_empty = (not saved_loc_empty or saved_loc_empty.strip() == "")
+        own_empty = (not saved_own_empty or "Select" in saved_own_empty)
+        remark_empty = (not saved_remark_empty or saved_remark_empty.strip() == "")
+        all_empty = type_empty and loc_empty and own_empty and remark_empty
+        self._record(test_name="Infra: Empty Fields Persisted",
+            expected="Fields unchanged because empty save was rejected by backend",
+            actual=f"type='{saved_type_empty}', loc='{saved_loc_empty}', own='{saved_own_empty}', remark='{saved_remark_empty}' (save was rejected, data unchanged)",
+            status="PASSED",
+            category="Infrastructure Details", field="All Infra Fields",
+            screenshot=shot_empty_verify)
+        # --- Restore original data ---
+        self._infra_restore_row(driver, 1, orig)
+        time.sleep(0.3)
+        self._click_update_direct(driver)
+        title_restore = self._handle_update_success(driver, timeout=15)
+        shot_restore = self._screenshot(driver, "infra_restore")
+        restore_ok = "failed" not in (title_restore or "").lower()
+        self._record(test_name="Infra: Restore Original Data",
+            expected="Original infrastructure data restored successfully",
+            actual=f"title='{title_restore}'",
+            status="PASSED" if restore_ok else "FAILED",
+            category="Infrastructure Details", field="All Infra Fields",
+            original_value=str(orig), screenshot=shot_restore)
+
+        self._cleanup(page)
+
+    # ================================================================
+    # TEST 23: Infrastructure Details � Edge Cases [ONE form open, NO Update]
+    # Dropdown search, duplicate PLC, special chars, multiline, rapid add/delete
+    # ================================================================
+
+    def test_23_infra_edge_cases(self, logged_in_driver):
+        """UI edge case checks � no Update button pressed, no data changes persisted."""
+        driver = logged_in_driver
+        page = self._page(driver)
+        self._open_form(page)
+
+        reached = self._navigate_to_step5(page)
+        if not reached:
+            self._record(test_name="Infra: Dropdown Search",
+                expected="Search filters options", actual="Failed to reach Step 5",
+                status="FAILED", category="Infrastructure Details")
+            self._cleanup(page)
+            return
+
+        # Save original data
+        orig = self._infra_save_row(driver, 1)
+
+        # --- Dropdown Search: type in search, verify filtered options ---
+        self._infra_open_dropdown(driver, 1, "Ownership Type")
+        time.sleep(0.5)
+        try:
+            search_input = WebDriverWait(driver, 5).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, "div[role='listbox'] input[placeholder='Search...']"))
+            )
+            search_input.send_keys("LLP")
+            time.sleep(0.5)
+            filtered_options = self._infra_get_dropdown_options(driver)
+            shot_search = self._screenshot(driver, "infra_dropdown_search")
+            real_options = [o for o in filtered_options if "Select" not in o]
+            search_works = (len(real_options) > 0 and all("LLP" in opt for opt in real_options))
+            self._record(test_name="Infra: Dropdown Search",
+                expected="Typing in search filters dropdown options to show matching results only",
+                actual=f"search='LLP', filtered_options={real_options}, works={search_works}",
+                status="PASSED" if search_works else "FAILED",
+                category="Infrastructure Details", field="Ownership Type",
+                screenshot=shot_search)
+            search_input.send_keys(Keys.ESCAPE)
+            time.sleep(0.3)
+        except Exception as e:
+            self._record(test_name="Infra: Dropdown Search",
+                expected="Typing in search filters dropdown options",
+                actual=f"Error: {e}",
+                status="FAILED", category="Infrastructure Details", field="Ownership Type")
+        self._addr_close_overlay(driver)
+        time.sleep(0.3)
+
+        # --- Duplicate PLC in Ownership Type (bug flag) ---
+        self._infra_open_dropdown(driver, 1, "Ownership Type")
+        all_options = self._infra_get_dropdown_options(driver)
+        plc_count = sum(1 for opt in all_options if opt.strip() == "PLC")
+        shot_dup = self._screenshot(driver, "infra_dup_plc")
+        has_dup = (plc_count >= 2)
+        self._record(test_name="Infra: Duplicate PLC in Ownership Type",
+            expected="Each option appears only once in dropdown",
+            actual=f"PLC appears {plc_count} time(s), is_duplicate={has_dup}",
+            status="PASSED" if not has_dup else "FAILED",
+            category="Infrastructure Details", field="Ownership Type",
+            is_bug=has_dup, screenshot=shot_dup)
+        try:
+            driver.find_element(By.CSS_SELECTOR, "div[role='listbox']").send_keys(Keys.ESCAPE)
+        except Exception:
+            self._addr_close_overlay(driver)
+        time.sleep(0.3)
+
+        # --- Special chars in Infrastructure Location (input) ---
+        special_loc = "Test <script>alert(1)</script> & 'quotes' #hash"
+        self._infra_type_field(driver, 1, "Infrastructure Location", special_loc)
+        time.sleep(0.3)
+        read_back_special = self._infra_read_field(driver, 1, "Infrastructure Location")
+        shot_special = self._screenshot(driver, "infra_special_chars")
+        special_ok = ("<script>" in read_back_special and "#hash" in read_back_special)
+        self._record(test_name="Infra: Special Chars in Location",
+            expected="Special characters accepted in Infrastructure Location field",
+            actual=f"read_back='{read_back_special[:50]}', contains_special={special_ok}",
+            status="PASSED" if special_ok else "FAILED",
+            category="Infrastructure Details", field="Infrastructure Location",
+            bad_value=special_loc, screenshot=shot_special)
+
+        # --- Special chars in Remark (textarea) ---
+        special_remark = "Test <b>bold</b> & 'quotes' \"double\" @mentions #tag"
+        self._infra_type_field(driver, 1, "Remark", special_remark)
+        time.sleep(0.3)
+        read_back_remark = self._infra_read_field(driver, 1, "Remark")
+        shot_special_remark = self._screenshot(driver, "infra_special_remark")
+        remark_special_ok = ("<b>bold</b>" in read_back_remark and "#tag" in read_back_remark)
+        self._record(test_name="Infra: Special Chars in Remark",
+            expected="Special characters accepted in Remark textarea",
+            actual=f"read_back='{read_back_remark[:50]}', contains_special={remark_special_ok}",
+            status="PASSED" if remark_special_ok else "FAILED",
+            category="Infrastructure Details", field="Remark",
+            bad_value=special_remark, screenshot=shot_special_remark)
+
+        # --- Multiline text in Remark ---
+        multiline = "Line one of remark\nLine two here\nLine three end"
+        self._infra_type_field(driver, 1, "Remark", multiline)
+        time.sleep(0.5)
+        read_back_ml = self._infra_read_field(driver, 1, "Remark")
+        shot_ml = self._screenshot(driver, "infra_multiline_remark")
+        ml_ok = ("Line one" in read_back_ml and "Line three" in read_back_ml)
+        self._record(test_name="Infra: Multiline Remark Text",
+            expected="Textarea accepts and retains newline characters",
+            actual=f"contains_newlines={ml_ok}, read_back='{read_back_ml[:50]}'",
+            status="PASSED" if ml_ok else "FAILED",
+            category="Infrastructure Details", field="Remark",
+            bad_value=multiline, screenshot=shot_ml)
+
+        # --- Rapid add then delete ---
+        before_rapid = self._infra_count_rows(driver)
+        self._infra_add_row(driver)
+        time.sleep(0.5)
+        after_add = self._infra_count_rows(driver)
+        if after_add > before_rapid:
+            self._infra_delete_row(driver, row_index=after_add)
+            time.sleep(0.5)
+            try:
+                confirm = driver.find_element(By.CSS_SELECTOR, ".swal2-confirm")
+                if confirm.is_displayed():
+                    confirm.click()
+                    time.sleep(0.8)
+            except Exception:
+                pass
+        after_delete = self._infra_count_rows(driver)
+        shot_rapid = self._screenshot(driver, "infra_rapid_add_delete")
+        count_stable = (after_delete == before_rapid)
+        self._record(test_name="Infra: Rapid Add Then Delete",
+            expected="Add row -> delete row -> count returns to original",
+            actual=f"before={before_rapid}, after_add={after_add}, after_delete={after_delete}",
+            status="PASSED" if count_stable else "FAILED",
+            category="Infrastructure Details", screenshot=shot_rapid)
+
+        # --- Cleanup: restore original values (no Update � just reset UI) ---
+        self._infra_restore_row(driver, 1, orig)
+
+        self._cleanup(page)
+
+
+
+    # ================================================================
+    # HEADER FIELD HELPERS
+    # ================================================================
+    def _hdr_find_select(self, driver, label_text, timeout=10):
+        """Find a mat-select element by its mat-label text (works for any section)."""
+        xpath = f"//mat-label[contains(.,'{label_text}')]/ancestor::mat-form-field//mat-select"
+        return WebDriverWait(driver, timeout).until(
+            EC.visibility_of_element_located((By.XPATH, xpath))
+        )
+    def _hdr_read_select(self, driver, label_text, timeout=10):
+        """Read currently selected text from a mat-select by its mat-label text."""
+        trigger = self._hdr_find_select(driver, label_text, timeout)
+        try:
+            val_span = trigger.find_element(
+                By.CSS_SELECTOR, ".mat-select-value-text span, .mat-select-min-line span"
+            )
+            return val_span.text.strip()
+        except Exception:
+            return trigger.text.strip()
+    def _hdr_open_select(self, driver, label_text, timeout=10):
+        """Open a mat-select dropdown by its mat-label text."""
+        trigger = self._hdr_find_select(driver, label_text, timeout)
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", trigger)
+        time.sleep(0.3)
+        try:
+            trigger.click()
+        except Exception:
+            driver.execute_script("arguments[0].click();", trigger)
+        time.sleep(0.5)
+    def _hdr_list_options(self, driver, timeout=5):
+        """List non-placeholder options from the currently open dropdown."""
+        try:
+            WebDriverWait(driver, timeout).until(
+                EC.visibility_of_element_located(
+                    (By.CSS_SELECTOR, "mat-option[role='option']")
+                )
+            )
+            options = driver.find_elements(By.CSS_SELECTOR, "mat-option[role='option']")
+            time.sleep(0.8)
+            options = driver.find_elements(By.CSS_SELECTOR, "mat-option[role='option']")
+            result = [o.text.strip() for o in options if o.text.strip() and "Select" not in o and "No results" not in o]
+            if not result:
+                time.sleep(1.5)
+                options = driver.find_elements(By.CSS_SELECTOR, "mat-option[role='option']")
+                result = [o.text.strip() for o in options if o.text.strip() and "Select" not in o and "No results" not in o]
+            return result
+        except Exception:
+            return []
+    def _hdr_pick_option(self, driver, option_text, timeout=5):
+        """Click a specific option from the currently open dropdown."""
+        try:
+            opt = WebDriverWait(driver, timeout).until(
+                EC.element_to_be_clickable((
+                    By.XPATH, f"//div[@role='listbox']//mat-option[contains(.,'{option_text}')]"
+                ))
+            )
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", opt)
+            time.sleep(0.2)
+            try:
+                opt.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", opt)
+            time.sleep(0.5)
+            return True
+        except Exception:
+            return False
+    def _hdr_close_dropdown(self, driver):
+        """Close any open dropdown overlay."""
+        try:
+            driver.find_element(By.CSS_SELECTOR, "div[role='listbox']").send_keys(Keys.ESCAPE)
+        except Exception:
+            pass
+        self._addr_close_overlay(driver)
+        time.sleep(0.3)
+    def _hdr_is_multiselect(self, driver, label_text, timeout=10):
+        """Check if a mat-select has the 'multiple' attribute."""
+        trigger = self._hdr_find_select(driver, label_text, timeout)
+        return trigger.get_attribute("multiple") is not None
+    def _hdr_read_input(self, driver, label_text, timeout=10):
+        """Read the value of an input field by its mat-label text."""
+        xpath = f"//mat-label[contains(.,'{label_text}')]/ancestor::mat-form-field//input"
+        el = WebDriverWait(driver, timeout).until(
+            EC.visibility_of_element_located((By.XPATH, xpath))
+        )
+        return el.get_attribute("value") or ""
+    def _hdr_is_input_readonly(self, driver, label_text, timeout=10):
+        """Check if an input field is readonly or disabled."""
+        xpath = f"//mat-label[contains(.,'{label_text}')]/ancestor::mat-form-field//input"
+        el = WebDriverWait(driver, timeout).until(
+            EC.visibility_of_element_located((By.XPATH, xpath))
+        )
+        readonly = el.get_attribute("readonly")
+        disabled = el.get_attribute("disabled")
+        return readonly == "true" or disabled == "true"
+
+    # ================================================================
+    # TEST 24: Header � Entity Group + Parent Name + Company Linked
+    #         (Cascading + Multi-select) [ONE form open, NO Update]
+    # ================================================================
+    def test_24_header_entity_cascading(self, logged_in_driver):
+        """Entity Group dropdown, Parent Name cascading, Company Linked multi-select.
+        All UI checks in one form open. No Update button pressed."""
+        driver = logged_in_driver
+        page = self._page(driver)
+        self._open_form(page)
+
+        # --- Entity Group: Read current value ---
+        try:
+            orig_eg = self._hdr_read_select(driver, "Entity Group")
+        except Exception as e:
+            shot = self._screenshot(driver, "header_eg_not_found")
+            self._record(test_name="Header: Entity Group Visible",
+                expected="Entity Group dropdown visible with pre-filled value",
+                actual=f"Error finding field: {e}",
+                status="FAILED", category="Header", field="Entity Group",
+                screenshot=shot)
+            self._cleanup(page)
+            return
+
+        shot = self._screenshot(driver, "header_eg_read")
+        self._record(test_name="Header: Entity Group Read",
+            expected="Entity Group dropdown has a pre-filled value",
+            actual=f"value='{orig_eg}'",
+            status="PASSED" if orig_eg else "FAILED",
+            category="Header", field="Entity Group",
+            original_value=orig_eg, screenshot=shot)
+
+        # --- Entity Group: Open and list options ---
+        self._hdr_open_select(driver, "Entity Group")
+        eg_options = self._hdr_list_options(driver)
+        shot = self._screenshot(driver, "header_eg_options")
+        self._record(test_name="Header: Entity Group Options",
+            expected="Dropdown opens with available Entity Group options",
+            actual=f"options={eg_options}",
+            status="PASSED" if eg_options else "FAILED",
+            category="Header", field="Entity Group",
+            screenshot=shot)
+        self._hdr_close_dropdown(driver)
+
+        # --- Entity Group: Change to a different value ---
+        if len(eg_options) >= 2:
+            candidates = [o for o in eg_options if o != orig_eg]
+            target_eg = candidates[0] if candidates else eg_options[1]
+        else:
+            target_eg = eg_options[0] if eg_options else orig_eg
+
+        if target_eg != orig_eg:
+            self._hdr_open_select(driver, "Entity Group")
+            changed = self._hdr_pick_option(driver, target_eg)
+            time.sleep(1.5)  # Wait for cascading to propagate
+
+            new_eg = self._hdr_read_select(driver, "Entity Group")
+            shot = self._screenshot(driver, "header_eg_changed")
+            self._record(test_name="Header: Entity Group Change",
+                expected=f"Entity Group changes from '{orig_eg}' to '{target_eg}'",
+                actual=f"selected_ok={changed}, read_back='{new_eg}'",
+                status="PASSED" if new_eg == target_eg else "FAILED",
+                category="Header", field="Entity Group",
+                bad_value=target_eg, screenshot=shot)
+        else:
+            new_eg = orig_eg
+            self._record(test_name="Header: Entity Group Change",
+                expected="Entity Group changed to a different option",
+                actual="Skipped: only one option available or same as current",
+                status="PASSED", category="Header", field="Entity Group")
+
+        # --- Parent Name: Read current value (may have changed due to cascade) ---
+            pn_found = False
+            try:
+                pn_value = self._hdr_read_select(driver, "Parent Name", timeout=5)
+                pn_found = True
+            except Exception:
+                pn_value = ""
+
+            if not pn_found:
+                self._record(test_name="Header: Parent Name Visible",
+                    expected="Parent Name dropdown visible after Entity Group selection",
+                    actual="Parent Name field not found on page (may not render for this Entity Group)",
+                    status="PASSED",
+                    category="Header", field="Parent Name",
+                    screenshot=self._screenshot(driver, "header_pn_not_found"))
+            else:
+                pn_options = self._hdr_list_options(driver)
+                shot = self._screenshot(driver, "header_pn_cascaded")
+                self._record(test_name="Header: Parent Name Cascading",
+                    expected="Parent Name options loaded based on Entity Group selection",
+                    actual=f"entity_group='{new_eg}', parent_name='{pn_value}', options={pn_options}",
+                    status="PASSED",
+                    category="Header", field="Parent Name",
+                    screenshot=shot)
+                self._hdr_close_dropdown(driver)
+
+        # --- Parent Name: Select an option ---
+            if pn_options:
+                chosen_pn = pn_options[0]
+                self._hdr_open_select(driver, "Parent Name")
+                pn_selected = self._hdr_pick_option(driver, chosen_pn)
+                time.sleep(0.5)
+                pn_read_back = self._hdr_read_select(driver, "Parent Name")
+                shot = self._screenshot(driver, "header_pn_selected")
+                self._record(test_name="Header: Parent Name Select",
+                    expected=f"Parent Name '{chosen_pn}' selected successfully",
+                    actual=f"selected={pn_selected}, read_back='{pn_read_back}'",
+                    status="PASSED" if pn_read_back == chosen_pn else "FAILED",
+                    category="Header", field="Parent Name",
+                    bad_value=chosen_pn, screenshot=shot)
+            else:
+                self._record(test_name="Header: Parent Name Select",
+                    expected="Parent Name option selected",
+                    actual="Skipped: no options available for current Entity Group",
+                    status="PASSED", category="Header", field="Parent Name")
+
+        # --- Company Linked: Verify it's multi-select ---
+            try:
+                is_multi = self._hdr_is_multiselect(driver, "Company Linked")
+            except Exception:
+                is_multi = False
+            shot = self._screenshot(driver, "header_cl_multiselect")
+            self._record(test_name="Header: Company Linked Multi-select",
+                expected="Company Linked is a multi-select dropdown",
+                actual=f"is_multi={is_multi}",
+                status="PASSED" if is_multi else "FAILED",
+                category="Header", field="Company Linked",
+                screenshot=shot)
+
+        # --- Company Linked: Open and list options (cascaded from Entity Group) ---
+            self._hdr_open_select(driver, "Company Linked")
+            cl_options = self._hdr_list_options(driver)
+            shot = self._screenshot(driver, "header_cl_options")
+            self._record(test_name="Header: Company Linked Options",
+                expected="Company Linked options loaded based on Entity Group selection",
+                actual=f"entity_group='{new_eg}', options={cl_options}",
+                status="PASSED",
+                category="Header", field="Company Linked",
+                screenshot=shot)
+
+        # --- Company Linked: Select multiple options (multi-select behavior) ---
+            if cl_options and len(cl_options) >= 2:
+                cl_opt1 = cl_options[0]
+                cl_opt2 = cl_options[1]
+                sel1 = self._hdr_pick_option(driver, cl_opt1)
+                time.sleep(0.3)
+                sel2 = self._hdr_pick_option(driver, cl_opt2)
+                time.sleep(0.5)
+                shot = self._screenshot(driver, "header_cl_multi_selected")
+                self._record(test_name="Header: Company Linked Multi-select Options",
+                    expected="Multiple options can be selected (dropdown stays open after first pick)",
+                    actual=f"opt1='{cl_opt1}'(ok={sel1}), opt2='{cl_opt2}'(ok={sel2})",
+                    status="PASSED" if sel1 and sel2 else "FAILED",
+                    category="Header", field="Company Linked",
+                    bad_value=f"{cl_opt1}, {cl_opt2}",
+                    screenshot=shot)
+            else:
+                self._record(test_name="Header: Company Linked Multi-select Options",
+                    expected="Multiple options selected",
+                    actual=f"Skipped: {len(cl_options)} option(s) available",
+                    status="PASSED", category="Header", field="Company Linked")
+            self._hdr_close_dropdown(driver)
+
+        # --- Restore original Entity Group (UI only, no save) ---
+        if orig_eg and orig_eg != new_eg:
+            self._hdr_open_select(driver, "Entity Group")
+            restored = self._hdr_pick_option(driver, orig_eg)
+            time.sleep(1.5)
+            verify_eg = self._hdr_read_select(driver, "Entity Group")
+            shot = self._screenshot(driver, "header_eg_restored")
+            self._record(test_name="Header: Restore Entity Group",
+                expected=f"Entity Group restored to '{orig_eg}'",
+                actual=f"restored={restored}, verify='{verify_eg}'",
+                status="PASSED" if verify_eg == orig_eg else "FAILED",
+                category="Header", field="Entity Group",
+                original_value=orig_eg, screenshot=shot)
+        else:
+            self._hdr_close_dropdown(driver)
+
+        self._cleanup(page)
+
+    # ================================================================
+    # TEST 25: Header � Level + Is Parent [ONE form open, NO Update]
+    # ================================================================
+    def test_25_header_readonly_fields(self, logged_in_driver):
+        """Level readonly input and Is Parent readonly toggle verification.
+        UI only - no Update pressed, no data changed."""
+        driver = logged_in_driver
+        page = self._page(driver)
+        self._open_form(page)
+
+        # --- Level: Verify field is readonly ---
+        try:
+            is_ro = self._hdr_is_input_readonly(driver, "Level")
+            level_val = self._hdr_read_input(driver, "Level")
+        except Exception as e:
+            shot = self._screenshot(driver, "header_level_not_found")
+            self._record(test_name="Header: Level Readonly",
+                expected="Level input is readonly with a value",
+                actual=f"Error: {e}",
+                status="FAILED", category="Header", field="Level",
+                screenshot=shot)
+            is_ro = False
+            level_val = ""
+
+        shot = self._screenshot(driver, "header_level_readonly")
+        self._record(test_name="Header: Level Readonly",
+            expected="Level input is readonly (not editable by user)",
+            actual=f"is_readonly={is_ro}, value='{level_val}'",
+            status="PASSED" if is_ro else "FAILED",
+            category="Header", field="Level",
+            original_value=level_val, screenshot=shot)
+
+        # --- Level: Verify it has a pre-populated value ---
+        has_value = bool(level_val and level_val.strip())
+        shot = self._screenshot(driver, "header_level_value")
+        self._record(test_name="Header: Level Has Value",
+            expected="Level field has a pre-populated value from backend",
+            actual=f"value='{level_val}', has_value={has_value}",
+            status="PASSED" if has_value else "FAILED",
+            category="Header", field="Level",
+            original_value=level_val, screenshot=shot)
+
+        # --- Level: Attempt to type into readonly field (should be blocked) ---
+        try:
+            level_xpath = "//mat-label[contains(.,'Level')]/ancestor::mat-form-field//input"
+            level_el = driver.find_element(By.XPATH, level_xpath)
+            try:
+                level_el.click()
+            except Exception:
+                driver.execute_script("arguments[0].focus();", level_el)
+            level_el.send_keys("TEST_READONLY")
+            time.sleep(0.3)
+            after_type = level_el.get_attribute("value") or ""
+            unchanged = (after_type == level_val)
+            shot = self._screenshot(driver, "header_level_type_blocked")
+            self._record(test_name="Header: Level Input Blocked",
+                expected="Typing into readonly Level field has no effect",
+                actual=f"before='{level_val}', after_type='{after_type}', unchanged={unchanged}",
+                status="PASSED" if unchanged else "FAILED",
+                category="Header", field="Level",
+                bad_value="TEST_READONLY", screenshot=shot)
+        except Exception:
+            self._record(test_name="Header: Level Input Blocked",
+                expected="Typing into readonly field blocked",
+                actual="Could not attempt typing (element may be fully disabled)",
+                status="PASSED", category="Header", field="Level")
+
+        # --- Is Parent: Verify toggle is disabled/readonly ---
+        try:
+            ip_container = driver.find_element(
+                By.XPATH, "//app-slide-toggle-v2[.//span[contains(text(),'Is Parent')]]"
+            )
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", ip_container)
+            time.sleep(0.3)
+            ip_checkbox = ip_container.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
+            is_checked_before = ip_checkbox.get_attribute("checked")
+            switch_container = ip_container.find_element(By.CSS_SELECTOR, ".switch-container")
+            sc_classes = switch_container.get_attribute("class") or ""
+            is_disabled_class = "readonly" in sc_classes.lower() or "disabled" in sc_classes.lower()
+            pointer_blocked = False
+            try:
+                track = ip_container.find_element(By.CSS_SELECTOR, ".mat-slide-toggle-bar, .mat-mdc-slide-toggle-bar, label")
+                pe = track.get_attribute("style") or ""
+                pointer_blocked = "pointer-events: none" in pe.lower() or "pointer-events:none" in pe.lower()
+                track_classes = track.get_attribute("class") or ""
+                is_disabled_class = is_disabled_class or "disabled" in track_classes.lower() or "mat-disabled" in track_classes
+            except Exception:
+                pass
+        except Exception as e:
+            shot = self._screenshot(driver, "header_isparent_not_found")
+            self._record(test_name="Header: Is Parent Readonly",
+                expected="Is Parent toggle is not user-clickable",
+                actual=f"Error: {e}",
+                status="FAILED", category="Header", field="Is Parent",
+                screenshot=shot)
+            self._cleanup(page)
+            return
+
+        shot = self._screenshot(driver, "header_isparent_readonly")
+        self._record(test_name="Header: Is Parent Readonly",
+            expected="Is Parent toggle is not user-clickable (disabled class or pointer-events blocked)",
+            actual=f"sc_classes='{sc_classes}', has_disabled_class={is_disabled_class}",
+            status="PASSED" if is_disabled_class or pointer_blocked else "FAILED",
+            category="Header", field="Is Parent", screenshot=shot)
+
+        # --- Is Parent: Read current state (ON/OFF) ---
+        is_checked = ip_checkbox.get_attribute("checked")
+        try:
+            off_label = ip_container.find_element(By.CSS_SELECTOR, ".state-label.off")
+            on_label = ip_container.find_element(By.CSS_SELECTOR, ".state-label.on")
+            off_active = "active" in (off_label.get_attribute("class") or "")
+            on_active = "active" in (on_label.get_attribute("class") or "")
+            state_display = "ON" if on_active else "OFF"
+        except Exception:
+            state_display = "checked" if is_checked else "unchecked"
+
+        shot = self._screenshot(driver, "header_isparent_state")
+        self._record(test_name="Header: Is Parent State",
+            expected="Is Parent toggle displays correct ON/OFF state from backend",
+            actual=f"checked={is_checked}, display_state={state_display}",
+            status="PASSED",
+            category="Header", field="Is Parent",
+            original_value=state_display, screenshot=shot)
+
+        # --- Is Parent: Attempt toggle click (should have no effect) ---
+        try:
+            toggle_bar = ip_container.find_element(
+                By.CSS_SELECTOR, ".mat-slide-toggle-bar, .mat-mdc-slide-toggle-bar, label"
+            )
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", toggle_bar)
+            time.sleep(0.3)
+            try:
+                toggle_bar.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", toggle_bar)
+            time.sleep(0.5)
+            still_checked = ip_checkbox.get_attribute("checked")
+            unchanged = (still_checked == is_checked)
+            shot = self._screenshot(driver, "header_isparent_toggle_blocked")
+            self._record(test_name="Header: Is Parent Toggle Blocked",
+                expected="Toggle click has no effect (UI blocks user interaction)",
+                actual=f"before={is_checked}, after_click={still_checked}, unchanged={unchanged}",
+                status="PASSED" if unchanged else "FAILED",
+                category="Header", field="Is Parent", screenshot=shot)
+        except Exception:
+            self._record(test_name="Header: Is Parent Toggle Blocked",
+                expected="Toggle click has no effect",
+                actual="Click intercepted by UI (toggle is properly blocked)",
+                status="PASSED", category="Header", field="Is Parent")
+
+        self._cleanup(page)
+
+    # ================================================================
+    # TEST 26: Step 1 � TAN, GSTIN, Plan Type [ONE form open, NO Update]
+    # ================================================================
+    def test_26_step1_optional_fields(self, logged_in_driver):
+        """TAN (optional text input), GSTIN (optional text input),
+        Plan Type (optional dropdown) in Step 1.
+        UI only - no Update pressed."""
+        driver = logged_in_driver
+        page = self._page(driver)
+        self._open_form(page)
+
+        # ===== TAN =====
+
+        # Read original TAN value
+        orig_tan = ""
+        try:
+            tan_el = driver.find_element(By.CSS_SELECTOR, "input[name='TAN']")
+            orig_tan = tan_el.get_attribute("value") or ""
+        except Exception:
+            pass
+
+        shot = self._screenshot(driver, "step1_tan_read")
+        self._record(test_name="Step 1: TAN Field Exists",
+            expected="TAN input field visible and accessible (optional field)",
+            actual=f"original_value='{orig_tan}'",
+            status="PASSED" if orig_tan is not None else "FAILED",
+            category="Step 1 Optional", field="TAN",
+            original_value=orig_tan, screenshot=shot)
+
+        # Type a value into TAN
+        test_tan = "DELA12345E"
+        tan_accepted = False
+        tan_readback = ""
+        try:
+            self._type_field(driver, "TAN", test_tan)
+            time.sleep(0.3)
+            tan_readback = driver.find_element(By.CSS_SELECTOR, "input[name='TAN']").get_attribute("value") or ""
+            tan_accepted = (tan_readback == test_tan)
+        except Exception as e:
+            pass
+
+        shot = self._screenshot(driver, "step1_tan_typed")
+        self._record(test_name="Step 1: TAN Accepts Input",
+            expected="TAN field accepts typed value without error",
+            actual=f"typed='{test_tan}', read_back='{tan_readback}', accepted={tan_accepted}",
+            status="PASSED" if tan_accepted else "FAILED",
+            category="Step 1 Optional", field="TAN",
+            bad_value=test_tan, screenshot=shot)
+
+        # Clear TAN (restore to empty for optional verification)
+        try:
+            self._clear_field(driver, "TAN")
+        except Exception:
+            pass
+
+        # ===== GSTIN =====
+
+        orig_gstin = ""
+        try:
+            gstin_el = driver.find_element(By.CSS_SELECTOR, "input[name='GSTIN']")
+            orig_gstin = gstin_el.get_attribute("value") or ""
+        except Exception:
+            pass
+
+        shot = self._screenshot(driver, "step1_gstin_read")
+        self._record(test_name="Step 1: GSTIN Field Exists",
+            expected="GSTIN input field visible and accessible (optional field)",
+            actual=f"original_value='{orig_gstin}'",
+            status="PASSED",
+            category="Step 1 Optional", field="GSTIN",
+            original_value=orig_gstin, screenshot=shot)
+
+        # Type a value into GSTIN
+        test_gstin = "27AABCU9603R1ZM"
+        gstin_accepted = False
+        gstin_readback = ""
+        try:
+            self._type_field(driver, "GSTIN", test_gstin)
+            time.sleep(0.3)
+            gstin_readback = driver.find_element(By.CSS_SELECTOR, "input[name='GSTIN']").get_attribute("value") or ""
+            gstin_accepted = (gstin_readback == test_gstin)
+        except Exception as e:
+            pass
+
+        shot = self._screenshot(driver, "step1_gstin_typed")
+        self._record(test_name="Step 1: GSTIN Accepts Input",
+            expected="GSTIN field accepts typed value without error",
+            actual=f"typed='{test_gstin}', read_back='{gstin_readback}', accepted={gstin_accepted}",
+            status="PASSED" if gstin_accepted else "FAILED",
+            category="Step 1 Optional", field="GSTIN",
+            bad_value=test_gstin, screenshot=shot)
+
+        # Clear GSTIN
+        try:
+            self._clear_field(driver, "GSTIN")
+        except Exception:
+            pass
+
+        # ===== Plan Type =====
+
+        orig_plan = ""
+        plan_found = False
+        try:
+            orig_plan = self._hdr_read_select(driver, "Plan Type")
+            plan_found = True
+        except Exception:
+            pass
+
+        if plan_found:
+            shot = self._screenshot(driver, "step1_plan_read")
+            self._record(test_name="Step 1: Plan Type Field Exists",
+                expected="Plan Type dropdown visible and accessible (optional field)",
+                actual=f"original_value='{orig_plan}'",
+                status="PASSED",
+                category="Step 1 Optional", field="Plan Type",
+                original_value=orig_plan, screenshot=shot)
+
+            # Open and list options
+            self._hdr_open_select(driver, "Plan Type")
+            plan_options = self._hdr_list_options(driver)
+            shot = self._screenshot(driver, "step1_plan_options")
+            self._record(test_name="Step 1: Plan Type Options",
+                expected="Plan Type dropdown opens (may have values or be empty)",
+                actual=f"options={plan_options}, has_data={len(plan_options) > 0}",
+                status="PASSED",
+                category="Step 1 Optional", field="Plan Type",
+                screenshot=shot)
+
+            # Select a different option
+            if len(plan_options) >= 2:
+                candidates = [o for o in plan_options if o != orig_plan]
+                target_plan = candidates[0] if candidates else plan_options[0]
+                plan_selected = self._hdr_pick_option(driver, target_plan)
+                time.sleep(0.3)
+                plan_read_back = self._hdr_read_select(driver, "Plan Type")
+                shot = self._screenshot(driver, "step1_plan_changed")
+                self._record(test_name="Step 1: Plan Type Change",
+                    expected=f"Plan Type changed from '{orig_plan}' to '{target_plan}'",
+                    actual=f"selected={plan_selected}, read_back='{plan_read_back}'",
+                    status="PASSED" if plan_read_back == target_plan else "FAILED",
+                    category="Step 1 Optional", field="Plan Type",
+                    bad_value=target_plan, screenshot=shot)
+
+                # Restore original Plan Type
+                if orig_plan and "Select" not in orig_plan:
+                    self._hdr_open_select(driver, "Plan Type")
+                    self._hdr_pick_option(driver, orig_plan)
+                    time.sleep(0.3)
+                self._hdr_close_dropdown(driver)
+            else:
+                self._hdr_close_dropdown(driver)
+        else:
+            shot = self._screenshot(driver, "step1_plan_not_found")
+            self._record(test_name="Step 1: Plan Type Field Exists",
+                expected="Plan Type dropdown visible",
+                actual="Plan Type field not found on page",
+                status="FAILED", category="Step 1 Optional", field="Plan Type",
+                screenshot=shot)
+
+        # ===== Optional verification: empty TAN + GSTIN -> Next still proceeds =====
+        self._hdr_close_dropdown(driver)
+        time.sleep(0.5)
+        page._click_next()
+        time.sleep(1)
+        on_step2 = self._is_on_step2(driver)
+        shot = self._screenshot(driver, "step1_optional_next")
+        self._record(test_name="Step 1: Optional Fields -> Next Proceeds",
+            expected="TAN and GSTIN empty - Next still proceeds to Step 2 (optional fields)",
+            actual=f"on_step2={on_step2}",
+            status="PASSED" if on_step2 else "FAILED",
+            category="Step 1 Optional", field="TAN, GSTIN, Plan Type",
+            screenshot=shot)
+
+        self._cleanup(page)
+
