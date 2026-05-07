@@ -46,7 +46,7 @@ class TestSingleCompanyCreation:
 
     def test_create_single_company(self, logged_in_driver):
         """
-        Happy path â€” create one company using SINGLE_COMPANY template.
+        Happy path — create one company using SINGLE_COMPANY template.
         Opens ADD form, fills Step 1, goes to Step 2, fills address, submits.
         """
         driver = logged_in_driver
@@ -68,23 +68,26 @@ class TestSingleCompanyCreation:
         log.step(2, "Fill Company Details (Step 1)")
         page.fill_company_details(SINGLE_COMPANY)
 
-        # Step 3: Go to Step 2
-        log.step(3, "Navigate to Address Details (Step 2)")
-        page.go_to_step2()
-        assert page.is_step2_visible(), "Step 2 (Address Details) is not visible"
+        # Step 3: Navigate to Promoters (Step 2) then to Address Details (Step 3)
+        log.step(3, "Navigate to Promoters Details (Step 2)")
+        page.go_to_step2()          # Step 1 → Step 2 (Promoters)
+        log.step(4, "Navigate to Address Details (Step 3)")
+        page._click_next()          # Step 2 → Step 3 (Address)
+        page.wait_seconds(1)
 
-        # Step 4: Fill Address Details
-        log.step(4, "Fill Address Details (Step 2)")
+        # Step 4 (renumbered): Fill Address Details
+        log.step(5, "Fill Address Details (Step 3)")
+        assert page.is_step2_visible(), "Step 3 (Address Details) is not visible"
         page.fill_address_details(SINGLE_COMPANY)
 
         # Step 5: Submit
-        log.step(5, "Submit company form")
+        log.step(6, "Submit company form")
         page.submit()
 
-        # Step 6: Verify â€” dialog should close after successful submission
-        log.step(6, "Verify submission")
-        page.wait_seconds(5)
-        msg = page.get_success_message(timeout=15)
+        # Step 6: Verify — dialog should close after successful submission
+        log.step(7, "Verify submission")
+        page.wait_seconds(2)
+        msg = page.get_success_message(timeout=8)
         if msg:
             log.info(f"Server message: {msg}")
 

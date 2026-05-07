@@ -82,27 +82,56 @@ def driver():
 
 
 # ================================================================
-# AUTHENTICATED SESSION FIXTURE
+# AUTHENTICATED SESSION FIXTURE (RHYTHMERP VERSION – SAME AS COMPANY ONBOARDING)
 # ================================================================
 
 @pytest.fixture(scope="session")
 def logged_in_driver(driver):
-    """Driver with completed login session. Shared across all tests."""
+    """Driver with completed RhythmERP login session."""
     log.separator()
-    log.info("PERFORMING SESSION LOGIN...")
+    log.info("LOGGING INTO RHYTHMERP...")
     log.separator()
 
-    auth = AuthSection(driver)
-    try:
-        auth.login_default()
-        log.info("Session login successful!")
-    except Exception as e:
-        log.error(f"Session login failed: {e}")
-        raise
+    from pages.login_screens.Login_Screens_.login_page import LoginPage
+    from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHYTHMERP_FACILITY
 
-    time.sleep(3)  # Wait for dashboard to fully load
+    login_page = LoginPage(driver)
+
+    log.info(f"Navigating to: {RHYTHMERP_LOGIN_URL}")
+    driver.get(RHYTHMERP_LOGIN_URL)
+    login_page.wait_seconds(2)
+
+    log.step(1, f"Entering email: {RHYTHMERP_EMAIL}")
+    login_page.enter_email(RHYTHMERP_EMAIL)
+
+    log.step(2, "Entering password")
+    login_page.enter_password(RHYTHMERP_PASSWORD)
+
+    if RHYTHMERP_FACILITY:
+        log.step(3, f"Selecting facility: {RHYTHMERP_FACILITY}")
+        login_page.select_facility(RHYTHMERP_FACILITY)
+    else:
+        log.step(3, "Selecting facility (blank - first option)")
+        login_page.select_facility(" ")
+
+    login_page.wait_seconds(1)
+
+    log.step(4, "Clicking Login button")
+    login_button = ("xpath", "//button[contains(.,'Login')]")
+    login_page.click(login_button)
+    login_page.wait_seconds(3)
+
+    login_page.wait_for_login_complete()
+    log.info("RhythmERP login successful!")
+
+    # Override BASE_URL so navigation to Access screens uses RhythmERP
+    import config as cfg
+    original_base = cfg.BASE_URL
+    cfg.BASE_URL = "https://rhythmerp.algorhythms.in"
 
     yield driver
+
+    cfg.BASE_URL = original_base
 
 
 # ================================================================
