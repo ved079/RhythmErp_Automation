@@ -28,13 +28,13 @@ def run_test(test_type, run_id, company_count=1):
     report_path = None
     try:
         if test_type == "creation":
-            cmd = ["python", "-m", "pytest", CREATION_TEST_FILE, "-n", str(company_count), "-v", "--tb=short"]
+            cmd = ["python", "-m", "pytest", CREATION_TEST_FILE + "::TestSingleCompanyCreation::test_create_single_company_one_call", "-v", "-s"]
             test_name = "Company Creation"
         elif test_type == "update":
-            cmd = ["python", "-m", "pytest", UPDATE_TEST_FILE, "::TestCompanyOnboardingUpdate::test_update_using_one_call", "-v", "--tb=short"]
+            cmd = ["python", "-m", "pytest", UPDATE_TEST_FILE + "::TestCompanyOnboardingUpdate::test_update_using_one_call", "-v", "--tb=short"]
             test_name = "Company Update"
         elif test_type == "full":
-            cmd = ["python", "-m", "pytest", CREATION_TEST_FILE, "-n", str(company_count), "-v", "--tb=short", "--", UPDATE_TEST_FILE, "::TestCompanyOnboardingUpdate::test_update_using_one_call", "-v", "--tb=short"]
+            cmd = ["python", "-m", "pytest", CREATION_TEST_FILE + "::TestSingleCompanyCreation::test_create_single_company_one_call", "-v", "-s", "--", UPDATE_TEST_FILE + "::TestCompanyOnboardingUpdate::test_update_using_one_call", "-v", "--tb=short"]
             test_name = "Full Suite"
         else:
             raise ValueError(f"Unknown test type: {test_type}")
