@@ -85,6 +85,54 @@ def logged_in_driver(driver):
 
 _cs_store = CSReportStore()
 
+# ---- UOM Known Issues (discovered during validation testing) ----
+_cs_store.record_issue(
+    severity="High",
+    module="UOM",
+    category="Backend",
+    description="255-char backend limit with generic error message. "
+                "Both UOM Code and Description reject 256+ characters with a "
+                "generic 'Failed to save record' error toast (Pattern C). "
+                "No field-level indication of the character limit.",
+    expected="System should show a clear field-level error indicating the "
+             "255-character maximum limit before submission.",
+    actual="Generic 'Failed to save record' toast appears. User gets no "
+           "indication of why the save failed or what the limit is.",
+    test_ref="Test 12, Test 14",
+    status="Open",
+)
+_cs_store.record_issue(
+    severity="Medium",
+    module="UOM",
+    category="Data Integrity",
+    description="Leading/trailing spaces in UOM Code are silently trimmed "
+                "by the backend without any warning to the user. The UOM is "
+                "created with the trimmed code, which could cause confusion "
+                "if the user expects spaces to be preserved.",
+    expected="System should either preserve the spaces or warn the user "
+             "that leading/trailing spaces will be removed.",
+    actual="Spaces are silently trimmed. UOM created with trimmed code "
+           "(e.g. '  ABCDEFGH' becomes 'ABCDEFGH'). No alert or info shown.",
+    test_ref="Test 24",
+    status="Open",
+)
+_cs_store.record_issue(
+    severity="Low",
+    module="UOM",
+    category="UI",
+    description="After successful UOM creation, the SweetAlert confirmation "
+                "auto-closes the form popup. The try/finally cleanup in tests "
+                "then fails to find the Cancel button, logging a cosmetic "
+                "ERROR that could mask real issues in logs.",
+    expected="Either the form should remain open after success (for further "
+             "actions), or the Cancel cleanup should handle the already-closed "
+             "state gracefully without logging an ERROR.",
+    actual="Form closes automatically on success. Cancel button click fails "
+           "with ERROR log, then force-close handles it silently.",
+    test_ref="Test 20, Test 21, Test 24, Test 25",
+    status="Open",
+)
+
 
 class _LogCapture(logging.Handler):
     """Captures log messages during each test for step-level reporting."""
@@ -157,9 +205,10 @@ def pytest_sessionfinish(session, exitstatus):
     """Generate Excel report at end of test session."""
     if not _cs_store.has_results():
         return
-    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "reports")
+    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
     try:
-        filepath = generate_cs_report(_cs_store.results, output_dir)
+        filepath = generate_cs_report(_cs_store.results, output_dir,
+                                       issues=_cs_store.known_issues)
         print("")
         print("=" * 60)
         print("  REPORT GENERATED: " + filepath)

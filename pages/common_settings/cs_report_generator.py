@@ -7,10 +7,11 @@ Auto-generates after every pytest run in the Common Settings module.
 Parses test logs for step-level details - no test code changes needed.
 
 Output: pages/common_settings/reports/CommonSettings_Report_YYYYMMDD_HHMMSS.xlsx
-  Sheet 1: Summary   - totals, module breakdown, KPIs
-  Sheet 2: Test Results - per-test pass/fail/duration (full-row colored)
-  Sheet 3: Step Details  - auto-parsed from log messages
+  Sheet 1: Summary        - totals, module breakdown, KPIs
+  Sheet 2: Test Results   - per-test pass/fail/duration (full-row colored)
+  Sheet 3: Step Details   - auto-parsed from log messages
   Sheet 4: Error Details  - only created if failures exist
+  Sheet 5: Known Issues   - bugs/findings documented during testing
 """
 
 import os
@@ -208,13 +209,14 @@ def parse_steps_from_logs(log_messages):
 
 # -- Main report generator --------------------------------------
 
-def generate_cs_report(results, output_dir):
+def generate_cs_report(results, output_dir, issues=None):
     """
     Generate the Common Settings Excel report.
 
     Args:
         results: list of dicts (from CSReportStore.results)
         output_dir: directory to save the xlsx file
+        issues: optional list of issue dicts (from CSReportStore.known_issues)
 
     Returns:
         str: absolute path to the generated file
@@ -231,6 +233,9 @@ def generate_cs_report(results, output_dir):
     has_failures = any(r.get("status") == "FAILED" for r in results)
     if has_failures:
         _build_error_details(wb, results)
+
+    if issues:
+        _build_known_issues(wb, issues)
 
     wb.save(fp)
     return fp
@@ -352,6 +357,43 @@ def _build_step_details(wb, results):
     _widths(ws, {1: 5, 2: 45, 3: 20, 4: 12, 5: 60})
 
 
+def _build_known_issues(wb, issues):
+    """Sheet 5: Known Issues / Bugs discovered during testing."""
+    ws = wb.create_sheet("Known Issues")
+    ws.sheet_properties.tabColor = "BF8F00"
+
+    _title_banner(ws, "KNOWN ISSUES / BUGS",
+                  str(len(issues)) + " issue(s) documented during testing", cols=9)
+
+    r = 4
+    r = _headers(ws, r, ["#", "Severity", "Module", "Category", "Description",
+                          "Expected Behavior", "Actual Behavior", "Test Ref", "Status"])
+
+    for i, issue in enumerate(issues, 1):
+        alt = i % 2 == 0
+        vals = [i, issue.get("severity", ""), issue.get("module", ""),
+                issue.get("category", ""), issue.get("description", ""),
+                issue.get("expected", ""), issue.get("actual", ""),
+                issue.get("test_ref", ""), issue.get("status", "Open")]
+        r = _row(ws, r, vals, alt=alt)
+
+        # Color the severity cell based on level
+        sev = issue.get("severity", "")
+        if sev == "Critical":
+            _sc(ws.cell(row=r - 1, column=2), FONT_FAIL, FILL_RED, A_C, BORDER)
+        elif sev == "High":
+            _sc(ws.cell(row=r - 1, column=2),
+                Font(name="Calibri", bold=True, size=10, color="C65911"), FILL_GOLD, A_C, BORDER)
+        elif sev == "Medium":
+            _sc(ws.cell(row=r - 1, column=2), FONT_BOLD, FILL_LIGHT, A_C, BORDER)
+        elif sev == "Low":
+            _sc(ws.cell(row=r - 1, column=2), FONT_NORMAL, FILL_ALT, A_C, BORDER)
+        else:
+            _sc(ws.cell(row=r - 1, column=2), FONT_NORMAL, FILL_WHITE, A_C, BORDER)
+
+    _widths(ws, {1: 5, 2: 12, 3: 16, 4: 18, 5: 50, 6: 40, 7: 40, 8: 14, 9: 14})
+
+
 def _build_error_details(wb, results):
     ws = wb.create_sheet("Error Details")
     ws.sheet_properties.tabColor = "C00000"
@@ -403,9 +445,36 @@ class CSReportStore:
 
     def __init__(self):
         self.results = []
+        self.known_issues = []
         self._current = None
         self._logs = []
         self._start_time = None
+
+    def record_issue(self, severity, module, category, description,
+                     expected="", actual="", test_ref="", status="Open"):
+        """
+        Record a known issue / bug found during testing.
+
+        Args:
+            severity: Critical | High | Medium | Low | Info
+            module: e.g. "UOM", "Currency"
+            category: Backend | Frontend | Validation | UI | Data Integrity
+            description: what the issue is
+            expected: what should happen
+            actual: what actually happens
+            test_ref: e.g. "Test 12, Test 14"
+            status: Open | Confirmed | Fixed | By Design
+        """
+        self.known_issues.append({
+            "severity": severity,
+            "module": module,
+            "category": category,
+            "description": description,
+            "expected": expected,
+            "actual": actual,
+            "test_ref": test_ref,
+            "status": status,
+        })
 
     def start_test(self, test_name, nodeid):
         self._current = {

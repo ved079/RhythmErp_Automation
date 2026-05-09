@@ -220,6 +220,22 @@ class UOMPage(BasePage):
         log.error(f"UOM '{code}' NOT found. Table contents were: {last_seen}")
         raise AssertionError(f"UOM '{code}' NOT found in table after search. Last table rows: {last_seen}")
 
+    def is_uom_in_table(self, code):
+        """
+        Check if a UOM code exists in the main table (first page only).
+        Returns True if found, False if not. No logging or exceptions.
+        """
+        try:
+            rows = self.find_elements(self.TABLE_ROWS)
+            for row in rows:
+                cells = row.find_elements("css selector", "td")
+                for cell in cells:
+                    if code in cell.text.strip():
+                        return True
+        except Exception:
+            pass
+        return False
+    
 
     def clear_search(self):
         """Clear the search input and refresh to get clean state."""
@@ -537,3 +553,186 @@ class UOMPage(BasePage):
         result = self.driver.execute_script(js, uom_code, column_class)
         log.info("Successfully clicked " + column_class + " button for UOM: " + uom_code)
         return result
+
+    # ================================================================
+    # VALIDATION ALERT HANDLERS
+    # ================================================================
+
+    def handle_validation_warning(self):
+        """
+        Pattern A: 'Please correct the highlighted fields'
+        SweetAlert with only an OK button (.swal2-confirm).
+        Clicks OK to dismiss.
+        """
+        log.info("Handling validation warning (Pattern A)")
+        try:
+            self.driver.find_element("css selector", ".swal2-popup.swal2-icon-warning")
+            log.info("Validation warning SweetAlert detected")
+            confirm_btn = self.driver.find_element("css selector", ".swal2-confirm")
+            self.driver.execute_script("arguments[0].click();", confirm_btn)
+            log.info("Clicked OK to dismiss validation warning")
+            time.sleep(1)
+        except Exception as e:
+            log.warning("No validation warning found: " + str(e))
+
+    def handle_validation_download(self):
+        """
+        Pattern B: 'Fields validation failed. Do you want to download?'
+        SweetAlert with Cancel (.swal2-cancel) + Download Errors (.swal2-confirm).
+        Clicks Cancel to dismiss.
+        """
+        log.info("Handling validation download (Pattern B)")
+        try:
+            self.driver.find_element("css selector", ".swal2-popup.swal2-icon-warning")
+            log.info("Validation download SweetAlert detected")
+            cancel_btn = self.driver.find_element("css selector", ".swal2-cancel")
+            self.driver.execute_script("arguments[0].click();", cancel_btn)
+            log.info("Clicked Cancel to dismiss validation download popup")
+            time.sleep(1)
+        except Exception as e:
+            log.warning("No validation download popup found: " + str(e))
+    
+    def handle_error_toast(self):
+        """
+        Handle 'Failed to save record' error toast (swal2-icon-error).
+        This is a toast notification with no buttons - just wait for auto-dismiss.
+        """
+        log.info("Handling error toast (waiting for auto-dismiss)")
+        time.sleep(3)
+        try:
+            self.driver.find_element("css selector", ".swal2-popup.swal2-icon-error")
+            log.info("Error toast detected, waiting for dismiss")
+            time.sleep(3)
+        except Exception:
+            log.info("Error toast already dismissed")
+
+    def is_validation_alert_present(self, timeout=5):
+        """
+        Check if any SweetAlert validation popup or error toast is visible.
+        Returns True if swal2-icon-warning (Pattern A/B) or
+        swal2-icon-error ('Failed to save record' toast) is present.
+        """
+        try:
+            elements = self.driver.find_elements(
+                "css selector",
+                ".swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error"
+            )
+            for el in elements:
+                if el.is_displayed():
+                    return True
+            return False
+        except Exception:
+            return False
+
+    def get_mat_error_text(self, field_locator):
+        """
+        Get the mat-error text below a form field.
+        Uses pure JS (no Selenium find_element) to avoid locator issues.
+        Walks up parentElement chain to find mat-error at any ancestor level.
+        Returns all error texts joined by ' | ', or empty string if none.
+        """
+        try:
+            css_selector = field_locator[1] if field_locator[0] == "css" else ""
+            if not css_selector:
+                return ""
+            js = """
+            var input = document.querySelector(arguments[0]);
+            if (!input) return JSON.stringify({found: false, reason: 'input not found'});
+            var current = input;
+            for (var steps = 0; steps < 20; steps++) {
+                var errors = current.querySelectorAll('mat-error');
+                if (errors.length > 0) {
+                    var texts = [];
+                    for (var i = 0; i < errors.length; i++) {
+                        var t = errors[i].textContent.trim();
+                        if (t) texts.push(t);
+                    }
+                    return JSON.stringify({found: true, errorText: texts.join(' | ')});
+                }
+                current = current.parentElement;
+                if (!current || current === document.body) break;
+            }
+            var chain = [];
+            current = document.querySelector(arguments[0]);
+            for (var d = 0; d < 15; d++) {
+                if (!current || current === document.body) break;
+                chain.push(current.tagName + '.' + (current.className || '').substring(0, 40).split(' ')[0]);
+                current = current.parentElement;
+            }
+            return JSON.stringify({found: false, chain: chain.join(' > ')});
+            """
+            result = self.driver.execute_script(js, css_selector)
+            log.info("get_mat_error_text raw: " + str(result))
+            if not result:
+                return ""
+            import json
+            data = json.loads(result)
+            if data.get("found"):
+                return data.get("errorText", "")
+            else:
+                log.warning("mat-error not found. Chain: " + data.get("chain", data.get("reason", "unknown")))
+                return ""
+        except Exception as e:
+            log.warning("get_mat_error_text error: " + str(e))
+            return ""
+
+    def has_field_error(self, field_locator):
+        """
+        Check if a form field has error styling (red border / invalid state).
+        Uses pure JS to walk up parentElement chain looking for invalid classes.
+        """
+        try:
+            css_selector = field_locator[1] if field_locator[0] == "css" else ""
+            if not css_selector:
+                return False
+            js = """
+            var input = document.querySelector(arguments[0]);
+            if (!input) return JSON.stringify({found: false, reason: 'input not found'});
+            var current = input;
+            var invalidClasses = ['mat-mdc-form-field-invalid', 'mat-form-field-invalid', 'ng-invalid', 'cdk-text-field-invalid'];
+            for (var steps = 0; steps < 20; steps++) {
+                var classes = current.className || '';
+                for (var i = 0; i < invalidClasses.length; i++) {
+                    if (classes.indexOf(invalidClasses[i]) !== -1) {
+                        return JSON.stringify({found: true, tag: current.tagName, cls: invalidClasses[i]});
+                    }
+                }
+                current = current.parentElement;
+                if (!current || current === document.body) break;
+            }
+            return JSON.stringify({found: false});
+            """
+            result = self.driver.execute_script(js, css_selector)
+            log.info("has_field_error raw: " + str(result))
+            if not result:
+                return False
+            import json
+            data = json.loads(result)
+            return data.get("found", False)
+        except Exception as e:
+            log.warning("has_field_error error: " + str(e))
+            return False
+
+    def is_add_form_open(self):
+        """Check if the Add/Create UOM popup is currently open."""
+        try:
+            self.driver.find_element("css selector", "input[name='UOM Code']")
+            return True
+        except Exception:
+            return False
+
+    def force_close_form_popup(self):
+        """Force-close any open form popup by clicking the X button via JS."""
+        log.info("Force closing form popup")
+        js = """
+        var popup = document.querySelector('div.edit_pop_up');
+        if (!popup) return 'no popup found';
+        var closeBtn = popup.querySelector('button[mat-icon-button] mat-icon');
+        if (!closeBtn) return 'no close button found';
+        var btn = closeBtn.closest('button');
+        if (btn) { btn.click(); return 'clicked close'; }
+        return 'could not click';
+        """
+        result = self.driver.execute_script(js)
+        log.info("Force close result: " + str(result))
+        time.sleep(0.5)

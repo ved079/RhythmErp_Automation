@@ -9,10 +9,10 @@ import os
 import pytest
 from common.logger import log
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 
-from pages.common_settings.Common_Settings.uom_page import UOMPage
-from pages.common_settings.data.uom_data import generate_uom_data, generate_updated_description
+from pages.common_settings.modules.uom.uom_page import UOMPage
+from pages.common_settings.modules.uom.data.uom_data import generate_uom_data, generate_updated_description
 
 
 class TestUOMFullFlow:
