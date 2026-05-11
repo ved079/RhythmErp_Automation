@@ -4,6 +4,8 @@ Extends BasePage with pure-JS helpers for Angular Material MDC components.
 """
 
 import time
+import random
+import random
 
 from common.base_page import BasePage
 from common.logger import log
@@ -25,25 +27,40 @@ class UOMConversionPage(BasePage):
         log.info("Arrived at UOM Conversion page")
 
     def _wait_for_page_ready(self):
+        """
+        Poll until the 'add' icon appears in app-custom-header.
+        Timeout extended to 30s. After expiry, waits an extra 3s as a
+        last-ditch buffer so Angular can finish rendering before callers
+        proceed.
+        """
         waited = 0
-        while waited < 20:
+        while waited < 30:
             try:
-                self.driver.find_element("css selector", "button.search-btn")
-                log.info("Page ready after " + str(waited) + "s")
-                return
-            except Exception:
-                pass
-            try:
-                self.driver.find_element("css selector", "table#excel-table")
-                log.info("Page ready after " + str(waited) + "s")
-                return
+                has_add = self.driver.execute_script("""
+                    var icons = document.querySelectorAll('app-custom-header mat-icon');
+                    for (var i = 0; i < icons.length; i++) {
+                        if (icons[i].textContent.trim() === 'add') return true;
+                    }
+                    return false;
+                """)
+                if has_add:
+                    log.info("Page ready after " + str(waited) + "s")
+                    return
             except Exception:
                 pass
             time.sleep(1)
             waited += 1
+        log.warning("Page may not be fully ready after 30s")
+        # Last-ditch buffer: give Angular a few more seconds
+        time.sleep(3)
 
     def open_add_form(self):
-        """Click the ADD button to open the form popup."""
+        """
+        Click the ADD button to open the form popup.
+        Retries up to 3 times with a short wait between attempts so that
+        a slow Angular render after navigate_to_page() doesn't cause an
+        immediate 'ADD button not found' error.
+        """
         js = """
         var icons = document.querySelectorAll('app-custom-header mat-icon');
         for (var i = 0; i < icons.length; i++) {
@@ -54,10 +71,18 @@ class UOMConversionPage(BasePage):
         }
         throw new Error('ADD button not found');
         """
-        result = self.driver.execute_script(js)
-        log.info(f"Open add form: {result}")
-        time.sleep(1)
-        return result
+        last_exc = None
+        for attempt in range(1, 4):
+            try:
+                result = self.driver.execute_script(js)
+                log.info(f"Open add form: {result}")
+                time.sleep(1)
+                return result
+            except Exception as e:
+                last_exc = e
+                log.warning(f"open_add_form attempt {attempt}/3 failed: {e}")
+                time.sleep(2)
+        raise last_exc
 
     # ================================================================
     #  MAT-SELECT DROPDOWN (MDC)
@@ -472,7 +497,7 @@ class UOMConversionPage(BasePage):
         """Remove any open CDK overlay panels/backdrops."""
         try:
             self.driver.execute_script("""
-                document.querySelectorAll('.cdk-overlay-backdrop').forEach(function(b) { b.remove(); });
+                document.querySelectorAll('.cdk-overlay-backdrop:not(.cdk-overlay-dark-backdrop)').forEach(function(b) { b.remove(); });
                 document.querySelectorAll('.cdk-overlay-pane').forEach(function(p) {
                     if (!p.querySelector('.swal2-popup')) p.remove();
                 });
@@ -529,3 +554,446 @@ class UOMConversionPage(BasePage):
         return '';
         """
         return self.driver.execute_script(js) or ""
+
+    # ================================================================
+    #  ALIASES (methods called by tests with different names)
+    # ================================================================
+
+    CONVERSION_FACTOR_INPUT = "Conversion Factor"
+
+    def enter_conversion_factor(self, value):
+        """Alias for type_conversion_factor."""
+        self.type_conversion_factor(value)
+
+    def submit(self):
+        """Alias for click_save_button."""
+        self.click_save_button()
+
+    def click_update(self):
+        """Alias for submit (used in edit flow)."""
+        self.click_save_button()
+
+    def is_add_form_open(self):
+        """Alias for is_form_open."""
+        return self.is_form_open()
+
+    def click_row_edit(self, source, target):
+        """Alias for click_edit_button."""
+        return self.click_edit_button(source, target)
+
+    def click_row_view(self, source, target):
+        """Alias for click_view_button."""
+        return self.click_view_button(source, target)
+
+    def click_row_history(self, source, target):
+        """Alias for click_history_button."""
+        return self.click_history_button(source, target)
+
+    def cleanup(self):
+        """General cleanup: close form, close popups, force close panels."""
+        try:
+            self.force_close_form_popup()
+        except Exception:
+            pass
+        try:
+            self.close_popup()
+        except Exception:
+            pass
+        self._force_close_panels()
+
+    # ================================================================
+    #  SUCCESS / VALIDATION ALERT HELPERS
+    # ================================================================
+
+    def is_success_alert_present(self, timeout=5):
+        """Check if SweetAlert success popup appeared."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                visible = self.driver.execute_script("""
+                    var el = document.querySelector('.swal2-popup');
+                    if (!el) return false;
+                    if (el.offsetParent === null) return false;
+                    var title = el.querySelector('.swal2-title');
+                    if (title && title.textContent.toLowerCase().indexOf('success') !== -1) return true;
+                    var icon = el.querySelector('.swal2-icon.swal2-success');
+                    if (icon) return true;
+                    return false;
+                """)
+                if visible:
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.3)
+        return False
+
+    def is_validation_alert_present(self, timeout=5):
+        """Check if SweetAlert validation/warning popup appeared."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                visible = self.driver.execute_script("""
+                    var el = document.querySelector('.swal2-popup');
+                    if (!el) return false;
+                    if (el.offsetParent === null) return false;
+                    return true;
+                """)
+                if visible:
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.3)
+        return False
+
+    def handle_success_alert(self):
+        """Click OK on success SweetAlert."""
+        time.sleep(0.5)
+        try:
+            self.driver.execute_script("""
+                var btn = document.querySelector('.swal2-confirm');
+                if (btn) { btn.click(); return 'clicked'; }
+            """)
+            time.sleep(0.5)
+        except Exception:
+            pass
+
+    def get_swal_title(self):
+        """Get the SweetAlert popup title text."""
+        try:
+            return self.driver.execute_script("""
+                var el = document.querySelector('.swal2-title');
+                return el ? el.textContent.trim() : '';
+            """) or ""
+        except Exception:
+            return ""
+
+    # ================================================================
+    #  FORM FIELD HELPERS
+    # ================================================================
+
+    def is_dropdown_error(self, label_text):
+        """Check if a mat-select dropdown has error state."""
+        js = """
+        var fields = document.querySelectorAll('mat-form-field');
+        for (var i = 0; i < fields.length; i++) {
+            var label = fields[i].querySelector('mat-label');
+            if (label && label.textContent.trim().indexOf(arguments[0]) !== -1) {
+                var select = fields[i].querySelector('mat-select');
+                if (select) {
+                    return select.classList.contains('mat-mdc-select-invalid') ||
+                           select.classList.contains('ng-invalid');
+                }
+            }
+        }
+        return false;
+        """
+        return self.driver.execute_script(js, label_text)
+
+    def clear_conversion_factor_via_js(self):
+        """Clear the Conversion Factor input field via JS."""
+        js = """
+        var fields = document.querySelectorAll('mat-form-field');
+        for (var i = 0; i < fields.length; i++) {
+            var label = fields[i].querySelector('mat-label');
+            if (label && label.textContent.trim().indexOf('Conversion Factor') !== -1) {
+                var input = fields[i].querySelector('input');
+                if (input) {
+                    input.focus();
+                    var setter = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value'
+                    ).set;
+                    setter.call(input, '');
+                    input.dispatchEvent(new Event('input', {bubbles: true}));
+                    input.dispatchEvent(new Event('change', {bubbles: true}));
+                    return 'cleared';
+                }
+            }
+        }
+        throw new Error('Conversion Factor input not found');
+        """
+        self.driver.execute_script(js)
+        time.sleep(0.3)
+
+    # ================================================================
+    #  TABLE HELPERS
+    # ================================================================
+
+    def get_table_rows(self):
+        """Get table rows as a list of row indices [0, 1, 2, ...]."""
+        count = self.get_table_row_count()
+        return list(range(count))
+
+    def find_table_row(self, source_uom, target_uom):
+        """Find row index for a record. Returns -1 if not found."""
+        js = """
+        var rows = document.querySelectorAll('table#excel-table tbody tr.mat-mdc-row');
+        for (var i = 0; i < rows.length; i++) {
+            var src = rows[i].querySelector('.cdk-column-source_uom_code');
+            var tgt = rows[i].querySelector('.cdk-column-target_uom_code');
+            if (src && tgt &&
+                src.textContent.trim() === arguments[0] &&
+                tgt.textContent.trim() === arguments[1]) {
+                return i;
+            }
+        }
+        return -1;
+        """
+        return self.driver.execute_script(js, source_uom, target_uom)
+
+    def is_record_in_table(self, source_uom, target_uom):
+        """Alias for is_record_present."""
+        return self.is_record_present(source_uom, target_uom)
+
+    def get_conversion_factor_from_row(self, row_index):
+        """Get conversion factor value from a table row."""
+        return self.get_table_cell_value(row_index, "conversion_factor")
+
+    # ================================================================
+    #  DYNAMIC PAIR FINDER
+    # ================================================================
+
+    def get_available_uoms(self):
+        """
+        Read all available UOM codes from the Source UOM dropdown.
+        Opens the Add form popup temporarily to access the dropdown,
+        then closes it. Returns a list of UOM code strings.
+        """
+        log.info("Reading available UOMs from dropdown")
+
+        # Must open popup first � dropdown only exists inside the form
+        self.open_add_form()
+        time.sleep(1.5)
+
+        # Read all mat-option texts from the Source UOM dropdown
+        js_read = """
+        var trigger = document.querySelector(
+            "div.edit_pop_up mat-form-field mat-select .mat-mdc-select-trigger"
+        );
+        if (!trigger) throw new Error('Source UOM dropdown not found inside popup');
+        trigger.click();
+
+        // Wait a moment for options to render
+        var start = Date.now();
+        while (Date.now() - start < 2000) {
+            var opts = document.querySelectorAll('.cdk-overlay-pane mat-option');
+            if (opts.length > 0) break;
+        }
+
+        var options = document.querySelectorAll('.cdk-overlay-pane mat-option');
+        var uoms = [];
+        for (var i = 0; i < options.length; i++) {
+            var text = options[i].textContent.trim();
+            if (text) uoms.push(text);
+        }
+
+        // Close the dropdown panel
+        var backdrop = document.querySelector('.cdk-overlay-backdrop');
+        if (backdrop) backdrop.click();
+        else {
+            var panels = document.querySelectorAll('.cdk-overlay-pane');
+            for (var j = 0; j < panels.length; j++) panels[j].remove();
+        }
+
+        return uoms;
+        """
+        uoms = self.driver.execute_script(js_read)
+        log.info("Found " + str(len(uoms) if uoms else 0) + " available UOMs")
+
+        # Close the Add form popup
+        time.sleep(0.5)
+        self.force_close_form_popup()
+        time.sleep(0.5)
+        self._force_close_panels()
+
+        if not uoms:
+            raise RuntimeError("No UOM options found in dropdown")
+        return uoms
+
+    def get_existing_pairs(self):
+        """
+        Read all existing Source?Target UOM pairs from the main table.
+        No popup needed � reads directly from the visible table.
+        Returns a set of tuples: {('KG', 'ML'), ('NOS', 'PCS'), ...}
+        """
+        log.info("Reading existing pairs from table")
+        js_read = """
+        var table = document.querySelector('table#excel-table');
+        if (!table) throw new Error('Table not found on page');
+        var rows = table.querySelectorAll('tbody tr');
+        var pairs = [];
+        for (var i = 0; i < rows.length; i++) {
+            var source = '', target = '';
+            var cells = rows[i].querySelectorAll('td');
+            for (var j = 0; j < cells.length; j++) {
+                var cls = cells[j].getAttribute('class') || '';
+                if (cls.indexOf('cdk-column-source_uom_code') !== -1)
+                    source = cells[j].textContent.trim();
+                if (cls.indexOf('cdk-column-target_uom_code') !== -1)
+                    target = cells[j].textContent.trim();
+            }
+            if (source && target) pairs.push([source, target]);
+        }
+        return pairs;
+        """
+        raw_pairs = self.driver.execute_script(js_read)
+        pair_set = set()
+        if raw_pairs:
+            for pair in raw_pairs:
+                pair_set.add((pair[0], pair[1]))
+        log.info("Found " + str(len(pair_set)) + " existing pairs in table")
+        return pair_set
+
+
+    # ================================================================
+    #  SELECT PANEL CLEANUP (Company Onboarding pattern)
+    # ================================================================
+
+    def _close_select_panel(self):
+        """Close only select dropdown panel, keeping form popup open."""
+        try:
+            self.driver.execute_script("""
+                var backdrops = document.querySelectorAll('.cdk-overlay-backdrop:not(.cdk-overlay-dark-backdrop)');
+                for (var i = 0; i < backdrops.length; i++) {
+                    backdrops[i].click();
+                }
+                document.querySelectorAll('.cdk-overlay-pane').forEach(function(p) {
+                    if (!p.querySelector('.swal2-popup')) p.remove();
+                });
+            """)
+            time.sleep(0.3)
+        except Exception:
+            pass
+
+    def _read_dropdown_uoms(self):
+        """Read UOM options from Source UOM dropdown. Form must be open."""
+        log.info("Reading UOM options from Source UOM dropdown")
+        js_open = """
+        var fields = document.querySelectorAll('div.edit_pop_up mat-form-field');
+        for (var i = 0; i < fields.length; i++) {
+            var label = fields[i].querySelector('mat-label');
+            if (label && label.textContent.trim().indexOf('Source UOM') !== -1) {
+                var trigger = fields[i].querySelector('.mat-mdc-select-trigger');
+                if (trigger) { trigger.click(); return 'opened'; }
+            }
+        }
+        throw new Error('Source UOM dropdown not found in form');
+        """
+        self.driver.execute_script(js_open)
+        time.sleep(1.5)
+        js_read = """
+        var start = Date.now();
+        while (Date.now() - start < 3000) {
+            var opts = document.querySelectorAll('.cdk-overlay-pane mat-option .mdc-list-item__primary-text');
+            if (opts.length > 0) break;
+        }
+        var options = document.querySelectorAll('.cdk-overlay-pane mat-option .mdc-list-item__primary-text');
+        var uoms = [];
+        for (var i = 0; i < options.length; i++) {
+            var text = options[i].textContent.trim();
+            if (text) uoms.push(text);
+        }
+        return uoms;
+        """
+        uoms = self.driver.execute_script(js_read)
+        log.info("Found " + str(len(uoms) if uoms else 0) + " UOM options in dropdown")
+        self._close_select_panel()
+        time.sleep(0.5)
+        if not uoms:
+            raise RuntimeError("No UOM options found in dropdown")
+        return uoms
+
+    def create_fresh_record(self):
+        """
+        One-flow: read existing pairs from table, open form, read dropdown,
+        pick fresh pair, fill fields, submit. Form opens once, never closes
+        until submit. Returns dict with source_uom, target_uom, conversion_factor.
+        """
+        log.info("Creating fresh UOM conversion record")
+        existing = self.get_existing_pairs()
+        self.open_add_form()
+        time.sleep(1)
+        uoms = self._read_dropdown_uoms()
+        source, target = None, None
+        for _ in range(50):
+            s, t = random.sample(uoms, 2)
+            if (s, t) not in existing:
+                source, target = s, t
+                break
+        if not source:
+            raise RuntimeError("Could not find fresh pair after 50 attempts")
+        factor = str(random.randint(1, 1000))
+        log.info("Fresh pair: " + source + " -> " + target + " = " + factor)
+        self.select_source_uom(source)
+        self.select_target_uom(target)
+        self.enter_conversion_factor(factor)
+        self.submit()
+        return {"source_uom": source, "target_uom": target, "conversion_factor": factor}
+
+
+    # ================================================================
+
+    #  HISTORY POPUP HELPERS
+    # ================================================================
+
+    def get_history_row_count(self):
+        """Count rows in the history popup table."""
+        try:
+            return self.driver.execute_script("""
+                var rows = document.querySelectorAll('table tbody tr');
+                if (rows.length === 0) {
+                    rows = document.querySelectorAll('.mat-mdc-row');
+                }
+                return rows.length;
+            """) or 0
+        except Exception:
+            return 0
+
+    def get_history_data(self):
+        """Get all history table data as a list of row strings."""
+        try:
+            return self.driver.execute_script("""
+                var rows = document.querySelectorAll('table tbody tr.mat-mdc-row');
+                var data = [];
+                for (var i = 0; i < rows.length; i++) {
+                    data.push(rows[i].textContent.trim());
+                }
+                return data;
+            """) or []
+        except Exception:
+            return []
+
+    def close_history_popup(self):
+        """Close the history popup."""
+        try:
+            self.driver.execute_script("""
+                var btn = document.querySelector('.swal2-confirm');
+                if (btn) { btn.click(); return 'swal2'; }
+                var close = document.querySelector('button[mat-icon-button] mat-icon[font]');
+                if (close && close.textContent.trim() === 'close') {
+                    close.click();
+                    return 'icon';
+                }
+                return 'none';
+            """)
+            time.sleep(0.5)
+        except Exception:
+            pass
+        self._force_close_panels()
+
+    def verify_view_popup_read_only(self):
+        """Check if the view popup fields are disabled/read-only."""
+        try:
+            return self.driver.execute_script("""
+                var fields = document.querySelectorAll('mat-form-field');
+                for (var i = 0; i < fields.length; i++) {
+                    var input = fields[i].querySelector('input');
+                    if (input && !input.disabled && !input.readOnly) {
+                        var label = fields[i].querySelector('mat-label');
+                        var name = label ? label.textContent.trim() : 'unknown';
+                        return false;
+                    }
+                }
+                return true;
+            """)
+        except Exception:
+            return False
