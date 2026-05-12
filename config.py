@@ -12,17 +12,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-# ============================================================
-# APPLICATION URLs
-# ============================================================
-BASE_URL = os.getenv("PACS_BASE_URL", "https://pacstest.algorhythms.in")
-LOGIN_URL = f"{BASE_URL}/#/authentication/signin"
-FORGOT_PASSWORD_URL = f"{BASE_URL}/#/authentication/forgot-password"
-
-COMPANY_ONBOARDING_URL = f"{BASE_URL}/#/dynamic-screens/Company%20Onboarding"
-
-MODULE_BASE_URL = os.getenv("MODULE_BASE_URL", "https://pacstest.algorhythms.in")
-MODULE_LOGIN_URL = MODULE_BASE_URL
 
 
 # ============================================================
@@ -30,16 +19,11 @@ MODULE_LOGIN_URL = MODULE_BASE_URL
 # ============================================================
 RHYTHMERP_BASE_URL = "https://rhythmerp.algorhythms.in"
 RHYTHMERP_LOGIN_URL = f"{RHYTHMERP_BASE_URL}/#/authentication/signin"
+RHYTHMERP_LOGIN_URL = f"{RHYTHMERP_BASE_URL}/#/authentication/signin"
+LOGIN_URL = RHYTHMERP_LOGIN_URL    # <-- add this line
 COMPANY_ONBOARDING_URL = f"{RHYTHMERP_BASE_URL}/#/dynamic-screens/Company%20Onboarding"
 RHYTHMERP_FORGOT_PASSWORD_URL = f"{RHYTHMERP_BASE_URL}/#/authentication/forgot-password"
 
-
-# ============================================================
-# LOGIN CREDENTIALS (loaded from .env)
-# ============================================================
-PACS_EMAIL = os.getenv("PACS_EMAIL", "")
-PACS_PASSWORD = os.getenv("PACS_PASSWORD", "")
-PACS_FACILITY = os.getenv("PACS_FACILITY", "")
 
 
 # ============================================================
