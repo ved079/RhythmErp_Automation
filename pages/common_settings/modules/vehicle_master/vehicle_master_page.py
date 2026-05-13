@@ -1214,11 +1214,17 @@ class VehicleMasterPage(BasePage):
     def is_history_popup_open(self):
         """Check if the History popup is currently visible."""
         try:
-            heading = self.driver.find_element(
+            headings = self.driver.find_elements(
                 By.CSS_SELECTOR,
-                ".big-model h3, mat-dialog-container h3",
+                "h3.popup-title, .big-model h3, mat-dialog-container h3",
             )
-            return "history" in heading.text.lower()
+            for h in headings:
+                try:
+                    if h.is_displayed() and "history" in h.text.lower():
+                        return True
+                except Exception:
+                    continue
+            return False
         except Exception:
             return False
 
@@ -1287,46 +1293,69 @@ class VehicleMasterPage(BasePage):
             return False
 
     def close_history_popup(self):
-        """Close the history popup via Close button or X icon."""
+        """Close the history popup via Cancel button, X icon, or JS force."""
         log.info("Closing history popup...")
-        try:
-            # Try Close button via popup-footer
-            close_btns = self.driver.find_elements(
-                By.XPATH,
-                "//div[@class='popup-footer']//button[contains(.,'Close')]",
-            )
-            for btn in close_btns:
-                try:
-                    if btn.is_displayed():
-                        self.driver.execute_script(
-                            "arguments[0].click();", btn
-                        )
-                        self.wait_seconds(0.5)
-                        log.info("History popup closed via Close button")
-                        return
-                except Exception:
-                    continue
 
-            # Try X icon
-            close_icons = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                ".big-model button mat-icon, "
-                "mat-dialog-container button mat-icon",
-            )
-            for icon in close_icons:
-                try:
-                    if icon.text.strip().lower() == "close":
-                        self.driver.execute_script(
-                            "arguments[0].closest('button').click();", icon
-                        )
-                        self.wait_seconds(0.5)
-                        log.info("History popup closed via X icon")
-                        return
-                except Exception:
-                    continue
+        # Strategy 1: JS click the Cancel button in popup-footer
+        try:
+            self.driver.execute_script("""
+                var btns = document.querySelectorAll(
+                    '.popup-footer button'
+                );
+                for (var i = 0; i < btns.length; i++) {
+                    if (btns[i].textContent.includes('Cancel') ||
+                        btns[i].textContent.includes('Close')) {
+                        btns[i].click();
+                        break;
+                    }
+                }
+            """)
+            self.wait_seconds(1)
+            if not self.is_history_popup_open():
+                log.info("History popup closed via Cancel button (JS)")
+                return
         except Exception:
             pass
-        log.warning("Could not close history popup with buttons")
+
+        # Strategy 2: JS click the X icon in popup-header
+        try:
+            self.driver.execute_script("""
+                var icons = document.querySelectorAll(
+                    '.popup-header button mat-icon'
+                );
+                for (var i = 0; i < icons.length; i++) {
+                    if (icons[i].textContent.trim().toLowerCase() === 'close') {
+                        icons[i].closest('button').click();
+                        break;
+                    }
+                }
+            """)
+            self.wait_seconds(1)
+            if not self.is_history_popup_open():
+                log.info("History popup closed via X icon (JS)")
+                return
+        except Exception:
+            pass
+
+        # Strategy 3: JS force remove all popup containers + overlays
+        try:
+            self.driver.execute_script("""
+                document.querySelectorAll('.cdk-overlay-pane').forEach(function(el) { el.remove(); });
+                document.querySelectorAll('.cdk-overlay-backdrop').forEach(function(el) { el.remove(); });
+            """)
+            self.wait_seconds(0.5)
+        except Exception:
+            pass
+
+        if self.is_history_popup_open():
+            log.warning("Could not close history popup")
+        else:
+            log.info("History popup closed")
+
+        if self.is_history_popup_open():
+            log.warning("Could not close history popup")
+        else:
+            log.info("History popup closed")
 
     # ==============================================================
     #  Dropdown helpers — dynamic option reading (NEVER hardcode)
@@ -1503,10 +1532,12 @@ class VehicleMasterPage(BasePage):
         return selected
 
     def get_dropdown_options(self, select_locator):
-        """Open a dropdown, read all option texts, then close it.
-        Returns a list of option strings.
-        """
+        """Open a dropdown, read all option texts, then close it."""
         log.info("Reading dropdown options...")
+
+        # Close any leftover overlay panels first
+        self._close_select_panel()
+        self.wait_seconds(0.3)
 
         # Click the mat-select trigger
         try:
@@ -1525,15 +1556,30 @@ class VehicleMasterPage(BasePage):
                 self.driver.execute_script("arguments[0].click();", el)
         self.wait_seconds(0.5)
 
-        # Read options
+        # Wait for the VISIBLE dropdown panel to appear with options
+        try:
+            WebDriverWait(self.driver, 8).until(
+                EC.visibility_of_element_located(
+                    (
+                        By.CSS_SELECTOR,
+                        "div.mat-mdc-select-panel mat-option",
+                    )
+                )
+            )
+            self.wait_seconds(0.3)
+        except TimeoutException:
+            log.warning("Timed out waiting for dropdown options to become visible")
+
+        # Read only VISIBLE options
         options = self.driver.find_elements(
             By.CSS_SELECTOR,
-            "div[role='listbox'] mat-option, "
-            "div[role='listbox'] [role='option']",
+            "div.mat-mdc-select-panel mat-option",
         )
         option_texts = []
         for opt in options:
             try:
+                if not opt.is_displayed():
+                    continue
                 t = opt.text.strip()
                 if t and t != "No results found":
                     option_texts.append(t)
@@ -1544,7 +1590,6 @@ class VehicleMasterPage(BasePage):
         self._close_select_panel()
         log.info(f"Dropdown options: {option_texts}")
         return option_texts
-
     # ==============================================================
     #  Force close form popup (cleanup)
     # ==============================================================
