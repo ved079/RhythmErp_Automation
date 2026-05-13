@@ -12,6 +12,7 @@ import time
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
@@ -45,10 +46,12 @@ class BankPage(BasePage):
     CASH_CREDIT_LIMIT_INPUT = ("css", "input[name='Cash Credit Limit']")
     BANK_ADDRESS_INPUT = ("css", "input[name='Bank Address']")
 
-    # --- Dropdowns (label-based XPath — nth-child fails because each
-    #     dropdown is wrapped in its own app-dropdown-v2 component) ---
-    ACCOUNT_TYPE_SELECT = ("xpath", "//mat-label[normalize-space()='Account Type']/ancestor::mat-form-field//mat-select")
-    GL_ACCOUNT_SELECT = ("xpath", "//mat-label[normalize-space()='GL Account']/ancestor::mat-form-field//mat-select")
+    # --- Dropdowns (label-based XPath targeting mat-mdc-select-trigger) ---
+    # IMPORTANT: We must click .mat-mdc-select-trigger (the inner div), NOT
+    # <mat-select> (the wrapper). Clicking the wrapper doesn't always propagate
+    # the click event to Angular's trigger handler, so the dropdown stays closed.
+    ACCOUNT_TYPE_SELECT = ("xpath", "//mat-label[normalize-space()='Account Type']/ancestor::mat-form-field//mat-select/div[contains(@class,'mat-mdc-select-trigger')]")
+    GL_ACCOUNT_SELECT = ("xpath", "//mat-label[normalize-space()='GL Account']/ancestor::mat-form-field//mat-select/div[contains(@class,'mat-mdc-select-trigger')]")
 
     # --- Toggles (label-based XPath — nth-child fails because each toggle
     #     is wrapped in its own app-slide-toggle-v2 component) ---
@@ -81,25 +84,23 @@ class BankPage(BasePage):
     ADD_BUTTON = ("xpath", "//*[@mattooltip='ADD']")
 
     # Data table (Angular MDC migration: mat-mdc-table, mat-mdc-row)
-    TABLE = ("css", "table.mat-mdc-table")
-    TABLE_BODY = ("css", "table.mat-mdc-table tbody")
-    TABLE_ROWS = ("css", "table.mat-mdc-table tbody tr.mat-mdc-row")
+    TABLE = ("css", "table#excel-table")
+    TABLE_BODY = ("css", "table#excel-table tbody")
+    TABLE_ROWS = ("css", "table#excel-table tbody tr")
 
     # Action buttons per row (View, Edit, History)
-    # Column names: mat-column-view, mat-column-edit, mat-column-archive
     def _view_button(self, row_index):
-        return ("xpath", f"(//table.mat-mdc-table//td[@class='mat-column-view']//button)[{row_index + 1}]")
+        return ("xpath", f"(//table[@id='excel-table']//tbody//tr)[{row_index + 1}]//button[contains(@class,'tblActnBtn')][1]")
 
     def _edit_button(self, row_index):
-        return ("xpath", f"(//table.mat-mdc-table//td[@class='mat-column-edit']//button)[{row_index + 1}]")
+        return ("xpath", f"(//table[@id='excel-table']//tbody//tr)[{row_index + 1}]//button[contains(@class,'tblActnBtn')][2]")
 
     def _history_button(self, row_index):
-        return ("xpath", f"(//table.mat-mdc-table//td[@class='mat-column-archive']//button)[{row_index + 1}]")
+        return ("xpath", f"(//table[@id='excel-table']//tbody//tr)[{row_index + 1}]//button[contains(@class,'tblActnBtn')][3]")
 
     # Table cell text (row=0-based data row, col=0-based)
-    # Columns: 0=View(btn), 1=Edit(btn), 2=History(btn), 3=Bank Name, 4=Account Number, 5=IFSC Code, 6=Status
     def _table_cell(self, row, col):
-        return ("xpath", f"(//table.mat-mdc-table//tbody//tr[@class='mat-mdc-row'])[{row + 1}]/td[{col + 1}]")
+        return ("xpath", f"(//table[@id='excel-table']//tbody//tr)[{row + 1}]/td[{col + 1}]")
 
     # Search toggle button
     SEARCH_TOGGLE = ("css", "button.search-btn")
@@ -116,7 +117,6 @@ class BankPage(BasePage):
     # LOCATORS — History Side Panel
     # ================================================================
 
-    # History is a SIDE PANEL (.popup-content), NOT a popup overlay
     HISTORY_PANEL = ("css", ".popup-content")
     HISTORY_TITLE = ("css", ".popup-content .popup-title")
     HISTORY_TABLE_ROWS = ("css", ".popup-content table.mat-mdc-table tbody tr")
@@ -124,12 +124,9 @@ class BankPage(BasePage):
     HISTORY_REFRESH_BTN = ("css", ".popup-content button[mattooltip='Refresh']")
     HISTORY_SEARCH_INPUT = ("css", ".popup-content input[placeholder='Search in table']")
 
-    # History table columns:
-    # 0=View(btn), 1=Creation Time, 2=Updated Time, 3=Bank Name, 4=Account Number, 5=IFSC Code, 6=Status
     def _history_table_cell(self, row, col):
         return ("xpath", f"(.popup-content table.mat-mdc-table//tbody//tr)[{row + 1}]/td[{col + 1}]")
 
-    # History paginator
     HISTORY_PAGER = ("css", ".popup-content mat-paginator")
     HISTORY_PAGER_RANGE_LABEL = ("css", ".popup-content mat-paginator .mat-mdc-paginator-range-label")
     HISTORY_NEXT_PAGE_BTN = ("css", ".popup-content mat-paginator button[aria-label='Next page']")
@@ -157,15 +154,7 @@ class BankPage(BasePage):
     # ================================================================
 
     def _recover_from_stuck_state(self):
-        """Recover from any stuck popups, overlays, or alerts.
-
-        This is called before navigation and before opening forms to
-        ensure a clean state. Handles:
-        - SweetAlert popups (validation/success still visible)
-        - CDK overlay backdrops blocking clicks
-        - Form popup still open from previous test
-        - History side panel still open
-        """
+        """Recover from any stuck popups, overlays, or alerts."""
         try:
             # 1. Dismiss any SweetAlert popup
             try:
@@ -227,7 +216,6 @@ class BankPage(BasePage):
         try:
             self.click(self.ADD_BUTTON)
         except Exception:
-            # Fallback: try mat-icon text
             add_btn = ("xpath", "//button[mat-icon[text()='add']]")
             self.click(add_btn)
         self.wait_for_form_to_open()
@@ -248,7 +236,6 @@ class BankPage(BasePage):
     def close_form_via_escape(self):
         """Press Escape to close the form."""
         log.info("Closing form via Escape key")
-        from selenium.webdriver.common.action_chains import ActionChains
         ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
         self.wait_for_form_to_close()
 
@@ -257,10 +244,7 @@ class BankPage(BasePage):
     # ================================================================
 
     def _set_text_field(self, locator, value):
-        """Set text field value using atomic JavaScript for Angular reactivity.
-
-        Uses nativeInputValueSetter to ensure Angular change detection fires.
-        """
+        """Set text field value using atomic JavaScript for Angular reactivity."""
         try:
             self.driver.execute_script("""
                 var input = arguments[0];
@@ -272,60 +256,44 @@ class BankPage(BasePage):
                 input.dispatchEvent(new Event('change', {bubbles: true}));
             """, self.find_element(locator), value)
         except Exception:
-            # Fallback to regular type_text
             self.type_text(locator, value, clear_first=True)
 
     def fill_bank_name(self, name):
-        """Type bank name into the Bank Name field."""
         self._set_text_field(self.BANK_NAME_INPUT, name)
 
     def fill_bank_code(self, code):
-        """Type bank code into the Bank Code field."""
         self._set_text_field(self.BANK_CODE_INPUT, code)
 
     def fill_branch_name(self, name):
-        """Type branch name into the Branch Name field."""
         self._set_text_field(self.BRANCH_NAME_INPUT, name)
 
     def fill_branch_code(self, code):
-        """Type branch code into the Branch Code field."""
         self._set_text_field(self.BRANCH_CODE_INPUT, code)
 
     def fill_account_number(self, number):
-        """Type account number into the Account Number field."""
         self._set_text_field(self.ACCOUNT_NUMBER_INPUT, number)
 
     def fill_swift_number(self, swift):
-        """Type SWIFT number (optional field)."""
         self._set_text_field(self.SWIFT_NUMBER_INPUT, swift)
 
     def fill_iban_number(self, iban):
-        """Type IBAN number (optional field)."""
         self._set_text_field(self.IBAN_NUMBER_INPUT, iban)
 
     def fill_ifsc_code(self, ifsc):
-        """Type IFSC code into the IFSC Code field."""
         self._set_text_field(self.IFSC_CODE_INPUT, ifsc)
 
     def fill_cash_credit_limit(self, ccl):
-        """Type cash credit limit into the CCL field."""
         self._set_text_field(self.CASH_CREDIT_LIMIT_INPUT, ccl)
 
     def fill_bank_address(self, address):
-        """Type bank address into the Bank Address field."""
         self._set_text_field(self.BANK_ADDRESS_INPUT, address)
 
     def fill_all_fields(self, data):
         """Fill all form fields from a data dictionary.
 
-        Expected keys: FIELD_* constants from bank_data.py
-        (Bank Name, Bank Code, Branch Name, Branch Code,
-         Account Number, IFSC Code, Cash Credit Limit, Bank Address,
-         Account Type, GL Account, Is Default Bank, Status).
-        Optional keys: Swift Number, IBAN Number.
-
-        Toggle values accept both boolean and string:
-          bool True/False  →  auto-converted to "Yes"/"No" or "Active"/"Inactive"
+        Every cycle starts with a hard refresh + open form to ensure
+        clean Angular state. Dropdowns are filled first. If either fails,
+        close form, refresh, reopen, and restart (up to 3 cycles).
         """
         from data.bank_data import (
             FIELD_BANK_NAME, FIELD_BANK_CODE, FIELD_BRANCH_NAME,
@@ -336,45 +304,74 @@ class BankPage(BasePage):
             FIELD_IS_DEFAULT_BANK, FIELD_STATUS,
         )
 
-        # Text fields
-        if FIELD_BANK_NAME in data:
-            self.fill_bank_name(data[FIELD_BANK_NAME])
-        if FIELD_BANK_CODE in data:
-            self.fill_bank_code(data[FIELD_BANK_CODE])
-        if FIELD_BRANCH_NAME in data:
-            self.fill_branch_name(data[FIELD_BRANCH_NAME])
-        if FIELD_BRANCH_CODE in data:
-            self.fill_branch_code(data[FIELD_BRANCH_CODE])
-        if FIELD_ACCOUNT_NUMBER in data:
-            self.fill_account_number(data[FIELD_ACCOUNT_NUMBER])
-        if FIELD_SWIFT_NUMBER in data:
-            self.fill_swift_number(data[FIELD_SWIFT_NUMBER])
-        if FIELD_IBAN_NUMBER in data:
-            self.fill_iban_number(data[FIELD_IBAN_NUMBER])
-        if FIELD_IFSC_CODE in data:
-            self.fill_ifsc_code(data[FIELD_IFSC_CODE])
-        if FIELD_CASH_CREDIT_LIMIT in data:
-            self.fill_cash_credit_limit(data[FIELD_CASH_CREDIT_LIMIT])
-        if FIELD_BANK_ADDRESS in data:
-            self.fill_bank_address(data[FIELD_BANK_ADDRESS])
+        for cycle in range(3):
+            # --- Hard refresh + open form ---
+            log.info(f"  Fill cycle {cycle+1}/3 — refreshing page")
+            self.navigate_to_bank()
+            self.wait_seconds(2)
+            self.open_add_form()
+            self.wait_seconds(1)
 
-        # Dropdowns
-        if FIELD_ACCOUNT_TYPE in data:
-            self.select_account_type(data[FIELD_ACCOUNT_TYPE])
-        if FIELD_GL_ACCOUNT in data:
-            self.select_gl_account(data[FIELD_GL_ACCOUNT])
+            # --- Dropdowns ---
+            account_ok = True
+            gl_ok = True
 
-        # Toggles — handle both boolean and string values
-        if FIELD_IS_DEFAULT_BANK in data:
-            val = data[FIELD_IS_DEFAULT_BANK]
-            if isinstance(val, bool):
-                val = "Yes" if val else "No"
-            self.set_is_default_bank(val)
-        if FIELD_STATUS in data:
-            val = data[FIELD_STATUS]
-            if isinstance(val, bool):
-                val = "Active" if val else "Inactive"
-            self.set_status(val)
+            if FIELD_ACCOUNT_TYPE in data:
+                account_ok = self.select_account_type(data[FIELD_ACCOUNT_TYPE])
+            if FIELD_GL_ACCOUNT in data:
+                gl_ok = self.select_gl_account(data[FIELD_GL_ACCOUNT])
+
+            # If both succeeded, fill the rest and we're done
+            if account_ok and gl_ok:
+                # Text fields
+                if FIELD_BANK_NAME in data:
+                    self.fill_bank_name(data[FIELD_BANK_NAME])
+                if FIELD_BANK_CODE in data:
+                    self.fill_bank_code(data[FIELD_BANK_CODE])
+                if FIELD_BRANCH_NAME in data:
+                    self.fill_branch_name(data[FIELD_BRANCH_NAME])
+                if FIELD_BRANCH_CODE in data:
+                    self.fill_branch_code(data[FIELD_BRANCH_CODE])
+                if FIELD_ACCOUNT_NUMBER in data:
+                    self.fill_account_number(data[FIELD_ACCOUNT_NUMBER])
+                if FIELD_SWIFT_NUMBER in data:
+                    self.fill_swift_number(data[FIELD_SWIFT_NUMBER])
+                if FIELD_IBAN_NUMBER in data:
+                    self.fill_iban_number(data[FIELD_IBAN_NUMBER])
+                if FIELD_IFSC_CODE in data:
+                    self.fill_ifsc_code(data[FIELD_IFSC_CODE])
+                if FIELD_CASH_CREDIT_LIMIT in data:
+                    self.fill_cash_credit_limit(data[FIELD_CASH_CREDIT_LIMIT])
+                if FIELD_BANK_ADDRESS in data:
+                    self.fill_bank_address(data[FIELD_BANK_ADDRESS])
+
+                # Toggles
+                if FIELD_IS_DEFAULT_BANK in data:
+                    val = data[FIELD_IS_DEFAULT_BANK]
+                    if isinstance(val, bool):
+                        val = "Yes" if val else "No"
+                    self.set_is_default_bank(val)
+                if FIELD_STATUS in data:
+                    val = data[FIELD_STATUS]
+                    if isinstance(val, bool):
+                        val = "Active" if val else "Inactive"
+                    self.set_status(val)
+
+                log.info(f"  Form filled successfully on cycle {cycle+1}")
+                return
+
+            # --- Dropdown failed — close form, loop will refresh at top ---
+            log.warning(f"  Dropdown failed (account={account_ok}, gl={gl_ok}). Closing form for next cycle...")
+            try:
+                self.close_form_via_cancel()
+            except Exception:
+                try:
+                    self.close_form_via_x()
+                except Exception:
+                    ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+            self.wait_seconds(1)
+
+        raise Exception("Could not fill form after 3 hard refresh cycles — dropdowns keep failing")
 
     def clear_form(self):
         """Clear all text fields in the form."""
@@ -392,29 +389,98 @@ class BankPage(BasePage):
     # ================================================================
     # DROPDOWN SELECTION
     # ================================================================
-    # NOTE: Angular Material places a .cdk-overlay-backdrop over the page
-    # when a dropdown opens. REMOVING this backdrop via el.remove() causes
-    # Angular to close the dropdown. Instead, we use JavaScript .click()
-    # on options, which fires the click event directly on the element and
-    # completely bypasses the overlay interception.
+    # Strategy:
+    #   1. Click mat-mdc-select-trigger (NOT <mat-select> wrapper)
+    #   2. If dropdown doesn't open (0 overlay panes), retry with JS click
+    #   3. If still doesn't open, retry with ActionChains click
+    #   4. Once open: wait for mat-option in DOM, click via JS
+    #   5. NEVER remove .cdk-overlay-backdrop — it kills the dropdown
     # ================================================================
 
-    def _js_click(self, locator):
-        """Click an element using JavaScript.
-
-        Unlike Selenium's physical click (which checks if another element
-        would receive the click), JS .click() fires the event directly on
-        the target element — bypassing CDK overlay interception.
+    def _open_dropdown(self, trigger_locator, label="dropdown"):
+        """Open a mat-select dropdown.
+        
+        If the dropdown fails to open after 3 attempts, close the form,
+        hard-refresh the page (Ctrl+R), reopen the form, and try once more.
         """
-        element = self.find_element(locator)
-        self.driver.execute_script("arguments[0].click();", element)
+        # --- First attempt: normal click flow ---
+        for attempt in range(3):
+            try:
+                if attempt == 0:
+                    self.click(trigger_locator)
+                    log.info(f"  [{label}] Selenium click on trigger (attempt {attempt+1})")
+                elif attempt == 1:
+                    el = self.find_element(trigger_locator)
+                    self.driver.execute_script("arguments[0].click();", el)
+                    log.info(f"  [{label}] JS click on trigger (attempt {attempt+1})")
+                else:
+                    el = self.find_element(trigger_locator)
+                    ActionChains(self.driver).move_to_element(el).click().perform()
+                    log.info(f"  [{label}] ActionChains click on trigger (attempt {attempt+1})")
+
+                self.wait_seconds(1)
+
+                options = self.driver.find_elements(By.CSS_SELECTOR, "mat-option")
+                if len(options) > 0:
+                    log.info(f"  [{label}] Dropdown opened! ({len(options)} option(s))")
+                    return True
+                else:
+                    log.warning(f"  [{label}] Click did not open dropdown (0 options)")
+
+            except Exception as e:
+                log.warning(f"  [{label}] Click attempt {attempt+1} failed: {e}")
+
+        # --- Recovery: close form, hard refresh (Ctrl+R), reopen, try again ---
+        log.warning(f"  [{label}] All 3 attempts failed. Recovering: close form → hard refresh → reopen")
+
+        # Close the form
+        try:
+            self.close_form_via_cancel()
+        except Exception:
+            try:
+                self.close_form_via_x()
+            except Exception:
+                ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+        self.wait_seconds(1)
+
+        # Hard refresh (like Ctrl+R) — reloads the entire page from server
+        self.navigate_to_bank()
+        self.wait_seconds(2)
+
+        # Wait for the table to be visible again after refresh
+        try:
+            self.wait_for_visible(self.TABLE, timeout=15)
+            log.info(f"  [{label}] Page reloaded, table visible")
+        except Exception:
+            log.warning(f"  [{label}] Table not visible after refresh, navigating to Bank page")
+            self.navigate_to_bank()
+        self.wait_seconds(1)
+
+        # Reopen the form
+        self.open_add_form()
+        self.wait_seconds(1)
+
+        # --- Second attempt: one more try after recovery ---
+        log.info(f"  [{label}] Retrying after hard refresh...")
+        try:
+            el = self.find_element(trigger_locator)
+            self.driver.execute_script("arguments[0].click();", el)
+            self.wait_seconds(1.5)
+
+            options = self.driver.find_elements(By.CSS_SELECTOR, "mat-option")
+            if len(options) > 0:
+                log.info(f"  [{label}] Dropdown opened after refresh! ({len(options)} option(s))")
+                return True
+            else:
+                log.warning(f"  [{label}] Still 0 options after refresh")
+        except Exception as e:
+            log.warning(f"  [{label}] Retry after refresh failed: {e}")
+
+        self._log_overlay_state()
+        return False
 
     def _log_overlay_state(self):
-        """Diagnostic: log current CDK overlay pane state.
-
-        Call this in except blocks to understand what's in the DOM
-        when dropdown selection fails.
-        """
+        """Diagnostic: log current overlay state when dropdown fails."""
         try:
             panes = self.driver.find_elements(By.CSS_SELECTOR, ".cdk-overlay-pane")
             log.info(f"[DIAG] {len(panes)} overlay pane(s) in DOM")
@@ -436,22 +502,23 @@ class BankPage(BasePage):
         """
         log.step(2, f"Selecting Account Type: {account_type}")
         try:
-            # Step 1: Click the dropdown trigger to open it (Selenium click)
-            self.click(self.ACCOUNT_TYPE_SELECT)
-            self.wait_seconds(1)
+            # Step 1: Open dropdown (with 3-strategy retry)
+            opened = self._open_dropdown(self.ACCOUNT_TYPE_SELECT, "Account Type")
+            if not opened:
+                log.error("[Account Type] Dropdown did not open after 3 attempts")
+                self._log_overlay_state()
+                return
 
-            # Step 2: Wait for the option to appear in the DOM
-            #         Use PRESENCE (not visibility) — the CDK overlay does
-            #         not prevent the option from being in the DOM.
+            # Step 2: Wait for the specific option to appear in the DOM
             option = ("xpath", f"//mat-option//span[contains(text(),'{account_type}')]")
             WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located(option)
             )
             self.wait_seconds(0.3)
 
-            # Step 3: Click option via JavaScript — bypasses CDK overlay
-            #         completely (no need to remove the backdrop)
-            self._js_click(option)
+            # Step 3: Click the option via JavaScript (bypasses CDK overlay interception)
+            el = self.find_element(option)
+            self.driver.execute_script("arguments[0].click();", el)
             self.wait_seconds(0.5)
             log.info(f"Account Type set to: {account_type}")
         except Exception as e:
@@ -469,11 +536,14 @@ class BankPage(BasePage):
         """
         log.step(3, f"Selecting GL Account with search: {search_text}")
         try:
-            # Step 1: Click the dropdown trigger to open it (Selenium click)
-            self.click(self.GL_ACCOUNT_SELECT)
-            self.wait_seconds(1)
+            # Step 1: Open dropdown (with 3-strategy retry)
+            opened = self._open_dropdown(self.GL_ACCOUNT_SELECT, "GL Account")
+            if not opened:
+                log.error("[GL Account] Dropdown did not open after 3 attempts")
+                self._log_overlay_state()
+                return
 
-            # Step 2: Wait for the dropdown panel to appear (mat-option elements)
+            # Step 2: Wait for mat-option elements to appear
             WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located(
                     (By.CSS_SELECTOR, ".cdk-overlay-pane mat-option")
@@ -482,7 +552,6 @@ class BankPage(BasePage):
             self.wait_seconds(0.5)
 
             # Step 3: Find and type in the search input
-            #         Try multiple selectors — the exact structure varies
             search_typed = False
             search_selectors = [
                 ".cdk-overlay-pane mat-form-field input",
@@ -504,20 +573,19 @@ class BankPage(BasePage):
                     continue
 
             if not search_typed:
-                # Fallback: send keys to the currently focused element
-                from selenium.webdriver.common.action_chains import ActionChains
                 ActionChains(self.driver).send_keys(search_text).perform()
                 log.info(f"Sent '{search_text}' via ActionChains (fallback)")
 
             self.wait_seconds(1.5)
 
-            # Step 4: Wait for filtered option to appear, then click via JS
+            # Step 4: Wait for filtered option and click via JS
             first_option = ("xpath", "(//mat-option[contains(@class,'mat-mdc-option')])[1]")
             WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located(first_option)
             )
             self.wait_seconds(0.3)
-            self._js_click(first_option)
+            el = self.find_element(first_option)
+            self.driver.execute_script("arguments[0].click();", el)
             self.wait_seconds(0.5)
             log.info(f"GL Account set to: {search_text}")
         except Exception as e:
@@ -529,15 +597,10 @@ class BankPage(BasePage):
     # ================================================================
 
     def set_is_default_bank(self, value):
-        """Set Is Default Bank toggle to Yes or No.
-
-        Args:
-            value: 'Yes' or 'No'
-        """
+        """Set Is Default Bank toggle to Yes or No."""
         log.step(4, f"Setting Is Default Bank: {value}")
         try:
             toggle = self.find_element(self.IS_DEFAULT_BANK_TOGGLE)
-            # Find the appropriate label: .state-label.on for Yes, .state-label.off for No
             if value == "Yes":
                 label = toggle.find_element(By.CSS_SELECTOR, "span.state-label.on")
             else:
@@ -548,11 +611,7 @@ class BankPage(BasePage):
             log.warning(f"Is Default Bank toggle failed: {e}")
 
     def set_status(self, value):
-        """Set Status toggle to Active or Inactive.
-
-        Args:
-            value: 'Active' or 'Inactive'
-        """
+        """Set Status toggle to Active or Inactive."""
         log.step(5, f"Setting Status: {value}")
         try:
             toggle = self.find_element(self.STATUS_TOGGLE)
@@ -575,7 +634,7 @@ class BankPage(BasePage):
         self.click(self.SUBMIT_BUTTON)
 
     def click_update(self):
-        """Click the Update button (Edit mode). Same element as Submit."""
+        """Click the Update button (Edit mode)."""
         log.step(6, "Clicking Update button")
         self.click(self.SUBMIT_BUTTON)
 
@@ -642,21 +701,12 @@ class BankPage(BasePage):
         """Handle success SweetAlert — click OK with CDK removal."""
         try:
             self.wait_for_visible(self.SWEET_ALERT_CONFIRM_BTN, timeout=timeout)
-
             # Diagnostic: log which alert we're handling
             try:
                 title = self.get_text(("css", ".swal2-title"))
                 log.info(f"ALERT TITLE: '{title}'")
             except Exception:
                 pass
-
-            # Remove CDK overlay backdrops that can block the confirm button
-            try:
-                self._remove_cdk_overlay()
-                self.wait_seconds(0.3)
-            except Exception:
-                pass
-
             self.click(self.SWEET_ALERT_CONFIRM_BTN)
             self.wait_seconds(0.5)
             self.wait_for_success_alert_to_dismiss(timeout=5)
@@ -679,11 +729,9 @@ class BankPage(BasePage):
     # ================================================================
 
     def is_form_open(self):
-        """Check if the Bank form popup is currently visible."""
         return self.is_displayed(self.FORM_POPUP, timeout=5)
 
     def wait_for_form_to_open(self, timeout=10):
-        """Wait until the form popup appears."""
         try:
             self.wait_for_visible(self.FORM_POPUP, timeout=timeout)
             log.info("Form popup is now open")
@@ -693,7 +741,6 @@ class BankPage(BasePage):
             raise
 
     def wait_for_form_to_close(self, timeout=10):
-        """Wait until the form popup disappears."""
         try:
             self.wait_for_invisible(self.FORM_POPUP, timeout=timeout)
             log.info("Form popup closed")
@@ -702,7 +749,6 @@ class BankPage(BasePage):
             log.warning("Form popup still visible after timeout")
 
     def is_field_disabled(self, locator):
-        """Check if a form field is disabled (for View mode)."""
         try:
             element = self.find_element(locator)
             disabled = element.get_attribute("disabled")
@@ -712,14 +758,12 @@ class BankPage(BasePage):
             return False
 
     def is_form_in_view_mode(self):
-        """Check if the form is in View mode (no Submit/Update button)."""
         try:
             return not self.is_displayed(self.SUBMIT_BUTTON, timeout=3)
         except Exception:
             return True
 
     def get_form_title(self):
-        """Get the form popup header title."""
         try:
             return self.get_text(self.FORM_HEADER_TITLE)
         except Exception:
@@ -730,7 +774,6 @@ class BankPage(BasePage):
     # ================================================================
 
     def get_table_row_count(self):
-        """Get the number of data rows in the Bank list table."""
         try:
             rows = self.find_elements(self.TABLE_ROWS)
             count = len(rows)
@@ -740,22 +783,10 @@ class BankPage(BasePage):
             return 0
 
     def get_cell_text(self, row_index, col_index):
-        """Get text from a specific table cell (0-based indices).
-
-        Bank table columns (0-indexed):
-            0 = View (button)
-            1 = Edit (button)
-            2 = History (button)
-            3 = Bank Name
-            4 = Account Number
-            5 = IFSC Code
-            6 = Status
-        """
         cell_locator = self._table_cell(row_index, col_index)
         return self.get_text(cell_locator)
 
     def get_column_headers(self):
-        """Get all column header texts from the Bank table."""
         try:
             headers = self.driver.find_elements(
                 By.CSS_SELECTOR, "table.mat-mdc-table thead th"
@@ -765,65 +796,52 @@ class BankPage(BasePage):
             return []
 
     def get_pager_range_text(self):
-        """Get the paginator range label text (e.g., '1 – 10 of 65')."""
         try:
             return self.get_text(self.PAGER_RANGE_LABEL)
         except Exception:
             return ""
 
     def is_next_page_enabled(self):
-        """Check if Next page button is enabled."""
         try:
             btn = self.find_element(self.NEXT_PAGE_BTN)
-            aria_disabled = btn.get_attribute("aria-disabled")
-            return aria_disabled != "true"
+            return btn.get_attribute("aria-disabled") != "true"
         except Exception:
             return False
 
     def is_prev_page_enabled(self):
-        """Check if Previous page button is enabled."""
         try:
             btn = self.find_element(self.PREV_PAGE_BTN)
-            aria_disabled = btn.get_attribute("aria-disabled")
-            return aria_disabled != "true"
+            return btn.get_attribute("aria-disabled") != "true"
         except Exception:
             return False
 
     def is_first_page_enabled(self):
-        """Check if First page button is enabled."""
         try:
             btn = self.find_element(self.FIRST_PAGE_BTN)
-            aria_disabled = btn.get_attribute("aria-disabled")
-            return aria_disabled != "true"
+            return btn.get_attribute("aria-disabled") != "true"
         except Exception:
             return False
 
     def is_last_page_enabled(self):
-        """Check if Last page button is enabled."""
         try:
             btn = self.find_element(self.LAST_PAGE_BTN)
-            aria_disabled = btn.get_attribute("aria-disabled")
-            return aria_disabled != "true"
+            return btn.get_attribute("aria-disabled") != "true"
         except Exception:
             return False
 
     def click_next_page(self):
-        """Click the Next page button."""
         self.click(self.NEXT_PAGE_BTN)
         self.wait_seconds(1)
 
     def click_prev_page(self):
-        """Click the Previous page button."""
         self.click(self.PREV_PAGE_BTN)
         self.wait_seconds(1)
 
     def click_first_page(self):
-        """Click the First page button."""
         self.click(self.FIRST_PAGE_BTN)
         self.wait_seconds(1)
 
     def click_last_page(self):
-        """Click the Last page button."""
         self.click(self.LAST_PAGE_BTN)
         self.wait_seconds(1)
 
@@ -832,19 +850,16 @@ class BankPage(BasePage):
     # ================================================================
 
     def click_view_button(self, row_index=0):
-        """Click the View button on a specific row."""
         log.info(f"Clicking View button on row {row_index}")
         self.click(self._view_button(row_index))
         self.wait_for_form_to_open()
 
     def click_edit_button(self, row_index=0):
-        """Click the Edit button on a specific row."""
         log.info(f"Clicking Edit button on row {row_index}")
         self.click(self._edit_button(row_index))
         self.wait_for_form_to_open()
 
     def click_history_button(self, row_index=0):
-        """Click the History button on a specific row."""
         log.info(f"Clicking History button on row {row_index}")
         self.click(self._history_button(row_index))
         self.wait_for_history_panel()
@@ -854,7 +869,6 @@ class BankPage(BasePage):
     # ================================================================
 
     def refresh_table(self):
-        """Click the Refresh button to reload the table data."""
         log.info("Refreshing Bank table...")
         try:
             refresh_btn = ("xpath", "//button[mat-icon[text()='refresh']]")
@@ -867,17 +881,10 @@ class BankPage(BasePage):
             self.wait_seconds(2)
 
     # ================================================================
-    # SEARCH (Atomic JS — input destroyed/recreated on toggle)
+    # SEARCH (Atomic JS)
     # ================================================================
 
     def _do_js_search(self, text):
-        """Execute search using atomic JavaScript.
-
-        The search input is completely removed from DOM when closed and
-        freshly injected when opened. Uses nativeInputValueSetter for
-        Angular change detection.
-        """
-        # Toggle search bar ON
         self.driver.execute_script("""
             var toggleBtn = document.querySelector('button.search-btn');
             if (toggleBtn) toggleBtn.click();
@@ -886,8 +893,6 @@ class BankPage(BasePage):
             EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder='Search']"))
         )
         self.wait_seconds(1)
-
-        # Atomic JS: clear + type + Enter all in one call
         self.driver.execute_script("""
             var input = document.querySelector('input[placeholder="Search"]');
             var nativeSetter = Object.getOwnPropertyDescriptor(
@@ -904,16 +909,6 @@ class BankPage(BasePage):
         self.wait_seconds(2)
 
     def search_record(self, name, exact=False):
-        """Search for a record by bank name.
-
-        Args:
-            name: The search text.
-            exact: If True, verifies at least one visible result has an
-                   EXACT name match (case-insensitive).
-
-        Returns:
-            True if matching results found, False otherwise.
-        """
         log.info(f"Searching for record: {name} (exact={exact})")
         try:
             self._do_js_search(name)
@@ -927,19 +922,18 @@ class BankPage(BasePage):
                 first_name = ""
                 try:
                     first_name = self.get_text(
-                        ("xpath", "(//table.mat-mdc-table//tbody//tr[@class='mat-mdc-row'])[1]/td[4]")
+                        ("xpath", "(//table[@id='excel-table']//tbody//tr)[1]/td[4]")
                     ).strip()
                 except Exception:
                     first_name = "(could not read)"
                 log.info(f"Search found {row_count} result(s), first: '{first_name}'")
                 return True
 
-            # Exact mode: scan all visible rows
             name_lower = name.strip().lower()
             for i in range(row_count):
                 try:
                     row_name = self.get_text(
-                        ("xpath", f"(//table.mat-mdc-table//tbody//tr[@class='mat-mdc-row'])[{i + 1}]/td[4]")
+                        ("xpath", f"(//table[@id='excel-table']//tbody//tr)[{i + 1}]/td[4]")
                     ).strip()
                     if row_name.lower() == name_lower:
                         log.info(f"Exact match found at row {i}: '{row_name}'")
@@ -954,7 +948,6 @@ class BankPage(BasePage):
             return False
 
     def clear_search(self):
-        """Clear the search filter to show all records."""
         log.info("Clearing search filter...")
         try:
             self.driver.execute_script("""
@@ -983,7 +976,6 @@ class BankPage(BasePage):
     # ================================================================
 
     def wait_for_history_panel(self, timeout=10):
-        """Wait for the history side panel to open and load data."""
         try:
             self.wait_for_visible(self.HISTORY_PANEL, timeout=timeout)
             self.wait_seconds(1)
@@ -993,21 +985,15 @@ class BankPage(BasePage):
             self.take_screenshot("history_panel_not_opened")
 
     def is_history_panel_open(self, timeout=5):
-        """Check if the History side panel is currently visible."""
         return self.is_displayed(self.HISTORY_PANEL, timeout=timeout)
 
     def get_history_title(self):
-        """Get the title text from the History panel."""
         try:
             return self.get_text(self.HISTORY_TITLE)
         except Exception:
             return ""
 
     def get_history_row_count(self):
-        """Get the number of data rows in the history table.
-
-        Note: Row 0 is the header row. Data rows start at index 1.
-        """
         try:
             rows = self.find_elements(self.HISTORY_TABLE_ROWS)
             count = len(rows)
@@ -1017,17 +1003,6 @@ class BankPage(BasePage):
             return 0
 
     def get_history_cell_text(self, row_index, col_index):
-        """Get text from a specific history table cell.
-
-        History columns (0-indexed):
-            0 = View (button)
-            1 = Creation Time
-            2 = Updated Time
-            3 = Bank Name
-            4 = Account Number
-            5 = IFSC Code
-            6 = Status
-        """
         cell_locator = self._history_table_cell(row_index, col_index)
         try:
             return self.get_text(cell_locator)
@@ -1035,17 +1010,14 @@ class BankPage(BasePage):
             return "CELL_NOT_FOUND"
 
     def close_history_panel(self):
-        """Close the History side panel."""
         log.info("Closing History panel")
         try:
             self.click(self.HISTORY_CANCEL_BTN)
             self.wait_seconds(0.5)
         except Exception:
-            from selenium.webdriver.common.action_chains import ActionChains
             ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
 
     def search_in_history(self, text):
-        """Search within the History panel using atomic JS."""
         log.info(f"Searching in history for: {text}")
         try:
             self.driver.execute_script("""
@@ -1067,7 +1039,6 @@ class BankPage(BasePage):
             log.error(f"History search failed: {e}")
 
     def refresh_history(self):
-        """Click the Refresh button inside the History panel."""
         log.info("Refreshing history panel...")
         try:
             self.click(self.HISTORY_REFRESH_BTN)
@@ -1077,23 +1048,19 @@ class BankPage(BasePage):
             log.warning(f"History refresh failed: {e}")
 
     def get_history_pager_range(self):
-        """Get the history paginator range label text."""
         try:
             return self.get_text(self.HISTORY_PAGER_RANGE_LABEL)
         except Exception:
             return ""
 
     def is_history_next_page_enabled(self):
-        """Check if history Next page button is enabled."""
         try:
             btn = self.find_element(self.HISTORY_NEXT_PAGE_BTN)
-            aria_disabled = btn.get_attribute("aria-disabled")
-            return aria_disabled != "true"
+            return btn.get_attribute("aria-disabled") != "true"
         except Exception:
             return False
 
     def click_history_next_page(self):
-        """Click the Next page button inside the History panel."""
         self.click(self.HISTORY_NEXT_PAGE_BTN)
         self.wait_seconds(1)
 
@@ -1102,13 +1069,11 @@ class BankPage(BasePage):
     # ================================================================
 
     def click_fullscreen_button(self):
-        """Click the Fullscreen button in the popup header."""
         log.info("Clicking Fullscreen button")
         self.click(self.FULLSCREEN_BUTTON)
         self.wait_seconds(0.5)
 
     def is_fullscreen_active(self):
-        """Check if the form popup is in fullscreen mode."""
         try:
             popup = self.driver.find_element(By.CSS_SELECTOR, "div.edit_pop_up")
             classes = popup.get_attribute("class") or ""
