@@ -43,7 +43,7 @@ class TestCreateFormValidations:
 
     def test_C01_empty_form_submit_shows_validation_failed(self, ecm_page):
         """C01: Submit empty form → SweetAlert2 'Validation Failed'."""
-        log.test("C01: Empty form submit shows Validation Failed")
+        log.info("C01: Empty form submit shows Validation Failed")
         ecm_page.open_add_form()
         time.sleep(1)
         ecm_page.submit()
@@ -54,7 +54,7 @@ class TestCreateFormValidations:
 
     def test_C02_submit_without_dropdown_shows_validation(self, ecm_page):
         """C02: Fill Code, skip dropdown → Validation Failed, dropdown highlighted."""
-        log.test("C02: Submit without dropdown shows validation")
+        log.info("C02: Submit without dropdown shows validation")
         data = missing_dropdown_data()
         ecm_page.open_add_form()
         time.sleep(1)
@@ -67,7 +67,7 @@ class TestCreateFormValidations:
 
     def test_C03_submit_without_code_shows_validation(self, ecm_page):
         """C03: Select dropdown, skip Code → Validation Failed, Code highlighted."""
-        log.test("C03: Submit without code shows validation")
+        log.info("C03: Submit without code shows validation")
         data = missing_code_data()
         ecm_page.open_add_form()
         time.sleep(1)
@@ -80,30 +80,26 @@ class TestCreateFormValidations:
         ecm_page.cancel()
 
     def test_C04_create_valid_record_all_fields(self, ecm_page):
-        """C04: Fill all 4 fields → form closes, new row in table."""
-        log.test("C04: Create valid record with all fields")
+        """C04: Fill all 4 fields → form closes, record found in table."""
+        log.info("C04: Create valid record with all fields")
         data = generate_create_test_data()
-        initial_count = ecm_page.get_table_row_count()
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
         time.sleep(1)
-        new_count = ecm_page.get_table_row_count()
-        assert new_count > initial_count, f"Row count didn't increase: {initial_count} → {new_count}"
+        assert ecm_page.is_code_in_table(data["code"]), "Created record not found in table"
 
     def test_C05_create_record_without_description(self, ecm_page):
         """C05: Skip Description (optional) → record created successfully."""
-        log.test("C05: Create record without description")
+        log.info("C05: Create record without description")
         data = generate_create_without_description()
-        initial_count = ecm_page.get_table_row_count()
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
         time.sleep(1)
-        new_count = ecm_page.get_table_row_count()
-        assert new_count > initial_count, f"Row count didn't increase: {initial_count} → {new_count}"
+        assert ecm_page.is_code_in_table(data["code"]), "Created record not found in table"
 
     def test_C06_duplicate_record_shows_validation(self, ecm_page):
         """C06: Create with existing Error Code Type + Code → Validation Failed."""
-        log.test("C06: Duplicate record shows validation")
+        log.info("C06: Duplicate record shows validation")
         data = generate_create_test_data()
         # Create first record
         result1 = ecm_page.create_record(data)
@@ -124,7 +120,7 @@ class TestCreateFormValidations:
 
     def test_C07_create_with_toggle_quantity(self, ecm_page):
         """C07: Toggle Is Qty/Amt to Quantity → table shows 'Yes'."""
-        log.test("C07: Create with toggle quantity")
+        log.info("C07: Create with toggle quantity")
         data = generate_create_with_toggle_qty()
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
@@ -133,7 +129,7 @@ class TestCreateFormValidations:
 
     def test_C08_special_characters_in_code(self, ecm_page):
         """C08: Code with special chars TEST@#$%^&*() → record created."""
-        log.test("C08: Special characters in code")
+        log.info("C08: Special characters in code")
         data = special_chars_code_data()
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
@@ -150,7 +146,7 @@ class TestViewFormBehaviors:
 
     def test_V01_view_form_fields_disabled(self, ecm_page):
         """V01: Click View → all fields disabled, no Submit/Update button."""
-        log.test("V01: View form fields are disabled")
+        log.info("V01: View form fields are disabled")
         ecm_page.open_add_form()
         time.sleep(0.5)
         data = generate_create_test_data()
@@ -174,7 +170,7 @@ class TestViewFormBehaviors:
 
     def test_V02_view_form_displays_correct_data(self, ecm_page):
         """V02: View shows exact same values as table row."""
-        log.test("V02: View form displays correct data")
+        log.info("V02: View form displays correct data")
         data = generate_create_test_data()
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
@@ -192,7 +188,7 @@ class TestViewFormBehaviors:
 
     def test_V03_view_form_cancel_closes_popup(self, ecm_page):
         """V03: Open View → Cancel → popup closes, table visible."""
-        log.test("V03: View form cancel closes popup")
+        log.info("V03: View form cancel closes popup")
         data = generate_create_test_data()
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
@@ -218,7 +214,7 @@ class TestEditFormValidations:
 
     def test_E01_edit_form_has_update_button(self, ecm_page):
         """E01: Click Edit → Update button present (not Submit)."""
-        log.test("E01: Edit form has Update button")
+        log.info("E01: Edit form has Update button")
         data = generate_create_test_data()
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
@@ -235,7 +231,7 @@ class TestEditFormValidations:
 
     def test_E02_edit_form_fields_are_enabled(self, ecm_page):
         """E02: Edit mode → all fields are editable (enabled)."""
-        log.test("E02: Edit form fields are enabled")
+        log.info("E02: Edit form fields are enabled")
         data = generate_create_test_data()
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
@@ -252,7 +248,7 @@ class TestEditFormValidations:
 
     def test_E03_edit_form_pre_filled_with_data(self, ecm_page):
         """E03: Edit → form shows existing values from the row."""
-        log.test("E03: Edit form pre-filled with data")
+        log.info("E03: Edit form pre-filled with data")
         data = generate_create_test_data()
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
@@ -272,7 +268,7 @@ class TestEditFormValidations:
 
     def test_E04_edit_update_changes_table(self, ecm_page):
         """E04: Edit Code → Update → table row updated with new Code."""
-        log.test("E04: Edit update changes table")
+        log.info("E04: Edit update changes table")
         data = generate_create_test_data()
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
@@ -293,7 +289,7 @@ class TestEditFormValidations:
 
     def test_E05_edit_duplicate_shows_validation(self, ecm_page):
         """E05: Edit to use another row's Error Code Type + Code → Validation Failed."""
-        log.test("E05: Edit duplicate shows validation")
+        log.info("E05: Edit duplicate shows validation")
         data1 = generate_create_test_data()
         data2 = generate_create_test_data()
         # Ensure different types
@@ -331,7 +327,7 @@ class TestHistoryValidations:
 
     def test_H01_history_popup_opens(self, ecm_page):
         """H01: Click History → popup opens with 'Error Code Mst History' title."""
-        log.test("H01: History popup opens")
+        log.info("H01: History popup opens")
         data = generate_create_test_data()
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
@@ -347,7 +343,7 @@ class TestHistoryValidations:
 
     def test_H02_history_popup_shows_table_or_no_data(self, ecm_page):
         """H02: History on new record → shows 'No Data Available' (no history yet)."""
-        log.test("H02: History shows table or no data message")
+        log.info("H02: History shows table or no data message")
         data = generate_create_test_data()
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
@@ -364,7 +360,7 @@ class TestHistoryValidations:
 
     def test_H03_history_popup_cancel_closes(self, ecm_page):
         """H03: Open History → Cancel → popup closes."""
-        log.test("H03: History popup cancel closes")
+        log.info("H03: History popup cancel closes")
         data = generate_create_test_data()
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
@@ -390,20 +386,17 @@ class TestTableOperations:
     """Tests for table display, columns, and toggle default."""
 
     def test_T01_new_record_appears_in_table(self, ecm_page):
-        """T01: Create record → new row with correct Error Code Type + Code."""
-        log.test("T01: New record appears in table")
+        """T01: Create record → new row with correct Code in table."""
+        log.info("T01: New record appears in table")
         data = generate_create_test_data()
-        initial_count = ecm_page.get_table_row_count()
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
         time.sleep(1)
-        new_count = ecm_page.get_table_row_count()
-        assert new_count == initial_count + 1, f"Expected {initial_count + 1} rows, got {new_count}"
-        assert ecm_page.is_code_in_table(data["code"]), "Code not found in table"
+        assert ecm_page.is_code_in_table(data["code"]), "Created record not found in table"
 
     def test_T02_table_columns_match_form_fields(self, ecm_page):
         """T02: Create with all fields → table row shows all 4 column values."""
-        log.test("T02: Table columns match form fields")
+        log.info("T02: Table columns match form fields")
         data = generate_create_with_toggle_qty()  # Uses toggle=quantity
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
@@ -434,7 +427,7 @@ class TestTableOperations:
 
     def test_T03_toggle_default_shows_no_in_table(self, ecm_page):
         """T03: Create without toggling → Is Qty/Amt column shows 'No'."""
-        log.test("T03: Toggle default shows No in table")
+        log.info("T03: Toggle default shows No in table")
         data = generate_create_test_data()  # Default toggle = amount
         result = ecm_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"

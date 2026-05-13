@@ -228,16 +228,22 @@ class ErrorCodeMstPage:
     def toggle_is_qty_amt(self, state):
         """
         Set Is Qty/Amt toggle to 'amount' (off) or 'quantity' (on).
-        Clicks the switch container wrapper to toggle state.
+        Clicks the underlying checkbox + dispatches change/input events
+        to trigger Angular's change detection (app-slide-toggle-v2).
         """
         try:
-            container = self.driver.find_element(*self.TOGGLE_CONTAINER)
+            cb = self.driver.find_element(*self.TOGGLE_CHECKBOX)
             current = self.is_toggle_quantity()
 
             want_on = (state == TOGGLE_QUANTITY)
             if current != want_on:
-                self.driver.execute_script("arguments[0].click();", container)
-                time.sleep(0.5)
+                self.driver.execute_script("""
+                    var cb = arguments[0];
+                    cb.click();
+                    cb.dispatchEvent(new Event('change', {bubbles: true}));
+                    cb.dispatchEvent(new Event('input', {bubbles: true}));
+                """, cb)
+                time.sleep(0.8)
         except Exception as e:
             print(f"  [Toggle] Error: {e}")
 
@@ -801,20 +807,22 @@ class ErrorCodeMstPage:
             time.sleep(0.5)
             self.submit()
 
-            # Wait for form to close (no success alert for this module)
-            time.sleep(3)
+            # Check for validation alert FIRST (catches duplicates + empty fields)
+            if self.is_validation_alert_present(timeout=5):
+                warning = self.handle_validation_warning()
+                result["error"] = f"Validation: {warning}"
+                # Alert handled — force close form if still open
+                self.force_close_form_popup()
+                time.sleep(0.5)
+                return result
 
-            # Check if form closed = success
+            # No alert — wait for form to close = success
+            time.sleep(3)
             if self.is_form_closed():
                 result["status"] = "success"
                 result["message"] = "Record created (form closed silently)"
             else:
-                # Validation alert appeared
-                if self.is_validation_alert_present(timeout=3):
-                    warning = self.handle_validation_warning()
-                    result["error"] = f"Validation: {warning}"
-                else:
-                    result["error"] = "Form still open after submit — unknown error"
+                result["error"] = "Form still open after submit — unknown error"
 
         except Exception as e:
             result["error"] = str(e)
@@ -853,18 +861,21 @@ class ErrorCodeMstPage:
             time.sleep(0.5)
             self.click_update()
 
-            # Wait for form to close
-            time.sleep(3)
+            # Check for validation alert FIRST (catches duplicates)
+            if self.is_validation_alert_present(timeout=5):
+                warning = self.handle_validation_warning()
+                result["error"] = f"Validation: {warning}"
+                self.force_close_form_popup()
+                time.sleep(0.5)
+                return result
 
+            # No alert — wait for form to close = success
+            time.sleep(3)
             if self.is_form_closed():
                 result["status"] = "success"
                 result["message"] = "Record updated (form closed silently)"
             else:
-                if self.is_validation_alert_present(timeout=3):
-                    warning = self.handle_validation_warning()
-                    result["error"] = f"Validation: {warning}"
-                else:
-                    result["error"] = "Form still open after update — unknown error"
+                result["error"] = "Form still open after update — unknown error"
 
         except Exception as e:
             result["error"] = str(e)
