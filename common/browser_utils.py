@@ -39,6 +39,7 @@ def get_chrome_driver():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-autofill")
+    options.add_argument("--remote-allow-origins=*")
 
     # Handle "Chrome is being controlled by automated test software" banner
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -85,6 +86,7 @@ def get_edge_driver():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-autofill")
+    options.add_argument("--remote-allow-origins=*")
 
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)

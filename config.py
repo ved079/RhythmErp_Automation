@@ -75,7 +75,7 @@ HEADLESS = os.getenv("HEADLESS", "false").lower() == "true"
 # TIMEOUTS (in seconds)
 # ============================================================
 EXPLICIT_WAIT = int(os.getenv("EXPLICIT_WAIT", "15"))
-PAGE_LOAD_TIMEOUT = int(os.getenv("PAGE_LOAD_TIMEOUT", "30"))
+PAGE_LOAD_TIMEOUT = int(os.getenv("PAGE_LOAD_TIMEOUT", "60"))
 IMPLICIT_WAIT = 5
 
 
