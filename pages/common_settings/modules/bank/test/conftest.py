@@ -1,11 +1,14 @@
 """
 conftest.py - Bank Common Settings (RhythmERP)
 """
-
-import os
 import sys
-import logging
+import os
+import logging  # <-- ADD THIS LINE
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 import pytest
+from selenium import webdriver
+# ... rest of your existing conftest code
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
