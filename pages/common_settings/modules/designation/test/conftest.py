@@ -52,6 +52,14 @@ DESIGNATION_KNOWN_ISSUES = [
         'severity': 'Low',
     },
     {
+        'id': 'DES-02b',
+        'phase': 'Create',
+        'description': 'type="character" rejects punctuation in Name',
+        'expected': 'Names like "Jr. Manager", "Vice-President" should be valid',
+        'actual': 'type="character" only allows letters and spaces — dots, commas, hyphens, parens all rejected as "Invalid Name"',
+        'severity': 'Medium',
+    },
+    {
         'id': 'DES-03',
         'phase': 'Filter',
         'description': 'Apply Filters button completely non-functional',
@@ -95,7 +103,7 @@ def driver():
 
 @pytest.fixture(scope='session')
 def logged_in_driver(driver):
-    """Login once for the entire test session."""
+    """Login once for the entire test test session."""
     log.info("Logging into RhythmERP")
     driver.get(RHYTHMERP_LOGIN_URL)
     time.sleep(2)
