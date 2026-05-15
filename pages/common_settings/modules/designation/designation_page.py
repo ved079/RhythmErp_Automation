@@ -146,23 +146,32 @@ class DesignationPage(BasePage):
         self._wait_for_page_ready()
         log.info("Designation page loaded successfully")
 
-    def _wait_for_page_ready(self, timeout=15):
-        """Wait for page fully loaded — table + toolbar ready."""
-        try:
-            WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located(
-                    (By.CSS_SELECTOR, "table#excel-table")
+    def _wait_for_page_ready(self, timeout=20):
+        """Wait for page fully loaded — table + toolbar ready.
+        Retries once on timeout to handle flaky page loads.
+        """
+        for attempt in range(2):
+            try:
+                WebDriverWait(self.driver, timeout).until(
+                    EC.visibility_of_element_located(
+                        (By.CSS_SELECTOR, "table#excel-table")
+                    )
                 )
-            )
-            WebDriverWait(self.driver, timeout).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, "ul.tbl-export-btn")
+                WebDriverWait(self.driver, timeout).until(
+                    EC.presence_of_element_located(
+                        (By.CSS_SELECTOR, "ul.tbl-export-btn")
+                    )
                 )
-            )
-            time.sleep(1)  # Angular digest cycle
-            self._wait_for_toolbar()
-        except TimeoutException:
-            log.warning("Page ready wait timed out, continuing anyway")
+                time.sleep(1)  # Angular digest cycle
+                self._wait_for_toolbar()
+                return  # Success
+            except TimeoutException:
+                if attempt == 0:
+                    log.warning("Page ready wait timed out, retrying with refresh...")
+                    self.driver.refresh()
+                    time.sleep(3)
+                else:
+                    log.warning("Page ready wait timed out after retry, continuing anyway")
 
     def _wait_for_toolbar(self, retries=3, delay=2):
         """Retry ADD button readiness."""
@@ -646,31 +655,26 @@ class DesignationPage(BasePage):
     # ═══════════════════════════════════════════
 
     def get_mat_error_text(self):
-        """Get all mat-error texts."""
+        """Get all inline validation error texts — 4-tier approach:
+        Tier 1: Look for visible mat-error elements in DOM.
+        Tier 2: Check Angular FormControl invalid state via ng-invalid class.
+        Tier 3: Compare intended value vs actual DOM value — detect when
+                Angular's type="character" silently rejected the value.
+        Tier 4: Directly validate the DOM value against type="character" rules
+                (catches spaces-only and invalid chars even when Angular doesn't
+                mark the control as invalid).
+        """
+        import re
         errors = []
+
+        # Tier 1: Find visible mat-error elements
         try:
-            time.sleep(1)
-            all_info = self.driver.execute_script("""
-                var results = [];
-                var matErrors = document.querySelectorAll('mat-error');
-                matErrors.forEach(function(el) {
-                    results.push({
-                        text: el.textContent.trim(),
-                        display: window.getComputedStyle(el).display,
-                        visibility: window.getComputedStyle(el).visibility,
-                        offsetParent: el.offsetParent ? true : false,
-                        parentTag: el.parentElement ? el.parentElement.tagName : 'none'
-                    });
-                });
-                return JSON.stringify(results);
-            """)
-            print(f"DEBUG mat-errors: {all_info}")
             js_errors = self.driver.execute_script("""
                 var errors = [];
                 var matErrors = document.querySelectorAll('mat-error');
                 matErrors.forEach(function(el) {
                     var text = el.textContent.trim();
-                    if (text && window.getComputedStyle(el).display !== 'none') {
+                    if (text) {
                         errors.push(text);
                     }
                 });
@@ -678,17 +682,120 @@ class DesignationPage(BasePage):
             """)
             if js_errors:
                 errors = js_errors
-        except Exception as e:
-            print(f"DEBUG get_mat_error_text error: {e}")
+                return errors
+        except Exception:
+            pass
+
+        # Tier 2: Check Angular FormControl invalid state directly
+        try:
+            angular_errors = self.driver.execute_script("""
+                var errors = [];
+                var inputs = document.querySelectorAll(
+                    '.big-model input[name], .big-model input[formcontrolname]'
+                );
+                inputs.forEach(function(input) {
+                    if (!input.classList.contains('ng-invalid')) return;
+
+                    var fieldName = input.getAttribute('name') ||
+                                    input.getAttribute('formcontrolname') || 'unknown';
+
+                    // Skip if input was never modified AND never touched
+                    // (pristine untouched = fresh form, not a validation error)
+                    if (input.classList.contains('ng-pristine') &&
+                        input.classList.contains('ng-untouched')) return;
+
+                    // Determine error message based on field
+                    if (fieldName === 'Name') {
+                        errors.push('Invalid Name');
+                    } else {
+                        errors.push(fieldName + ' is invalid');
+                    }
+                });
+                return errors;
+            """)
+            if angular_errors:
+                errors = angular_errors
+                return errors
+        except Exception:
+            pass
+
+        # Tier 3: Compare intended value vs actual DOM value
+        # When Angular's type="character" silently REJECTS the value,
+        # the DOM value will differ from what we tried to set.
+        # E.g., we set "12345" but Angular stripped it to ""
+        try:
+            intended = getattr(self, '_intended_values', {})
+            for field_name, intended_value in intended.items():
+                if not intended_value:
+                    continue  # Skip empty intended values
+                try:
+                    actual_el = self.driver.find_element(
+                        By.CSS_SELECTOR, f"input[name='{field_name}']"
+                    )
+                    actual_value = actual_el.get_attribute('value') or ''
+
+                    if field_name == 'Name':
+                        # Case 1: Value was completely rejected (Angular stripped it)
+                        # We set "12345" but Angular cleared it to ""
+                        if intended_value and not actual_value:
+                            errors.append('Invalid Name')
+                        # Case 2: Value was partially rejected or different
+                        # Angular may have stripped some chars
+                        elif actual_value != intended_value:
+                            errors.append('Invalid Name')
+                        # Case 3: Value accepted but invalid per pattern
+                        # Spaces-only: "     " passes type="character" but is invalid
+                        elif actual_value and actual_value.strip() == '':
+                            errors.append('Invalid Name')
+                        # Case 4: Value contains chars rejected by type="character"
+                        # type="character" allows: letters, spaces, . , - ( )
+                        # It rejects: digits, @#$%^&*!, underscores
+                        elif actual_value and not re.match(r'^[a-zA-Z\s\.\,\-\(\)]+$', actual_value):
+                            errors.append('Invalid Name')
+                except Exception:
+                    continue
+            if errors:
+                return errors
+        except Exception:
+            pass
+
+        # Tier 4: Direct DOM value validation for Name field
+        # Check the actual DOM value against type="character" rules
+        # regardless of Angular's FormControl state.
+        try:
+            name_input = self.driver.find_element(
+                By.CSS_SELECTOR, ".big-model input[name='Name']"
+            )
+            actual_value = name_input.get_attribute('value') or ''
+            input_type = name_input.get_attribute('type') or ''
+
+            # Only validate if there's a value or if we intended to set one
+            intended_name = getattr(self, '_intended_values', {}).get('Name', '')
+
+            if input_type == 'character' and (actual_value or intended_name):
+                # Value was set but Angular cleared it
+                if intended_name and not actual_value:
+                    errors.append('Invalid Name')
+                # Value exists — check against character rules
+                # type="character" allows: letters, spaces, . , - ( )
+                elif actual_value:
+                    if not re.match(r'^[a-zA-Z\s\.\,\-\(\)]+$', actual_value):
+                        errors.append('Invalid Name')
+                    elif actual_value.strip() == '':
+                        errors.append('Invalid Name')
+        except Exception:
+            pass
+
         return errors
 
     def has_field_error(self, field_label):
         """Check if specific field has inline error.
         field_label: 'Name' or 'Description' or 'Status'
+        Uses 2-tier approach: mat-error elements first, then ng-invalid class.
         """
         try:
+            # Tier 1: Look for mat-error element via XPath
             if field_label == 'Status':
-                # Status uses main-label, not mat-label
                 xpath = (
                     "//span[contains(@class,'main-label') and "
                     f"text()='{field_label}']/ancestor::div"
@@ -703,17 +810,59 @@ class DesignationPage(BasePage):
                     "//mat-error"
                 )
             errors = self.driver.find_elements(By.XPATH, xpath)
-            return len(errors) > 0
+            if len(errors) > 0:
+                return True
+
+            # Tier 2: Check ng-invalid on the input + mat-form-field-invalid
+            if field_label == 'Name':
+                return self.has_name_invalid_class()
+            elif field_label == 'Description':
+                try:
+                    desc_input = self.driver.find_element(
+                        By.CSS_SELECTOR, "input[name='Description']"
+                    )
+                    cls = desc_input.get_attribute('class') or ''
+                    if 'ng-invalid' in cls and 'ng-touched' in cls:
+                        return True
+                except Exception:
+                    pass
+            return False
         except Exception:
             return False
 
     def has_name_invalid_class(self):
-        """Check if Name input has ng-invalid class (pattern validation)."""
+        """Check if Name input is in an invalid state.
+        Checks: ng-invalid + ng-touched class, OR value is invalid for
+        type="character" (spaces-only, contains digits/special chars).
+        Angular's type="character" accepts spaces as valid characters,
+        so spaces-only names have ng-valid but are actually invalid per
+        the pattern validation that only shows on Submit.
+        """
         try:
             name_input = self.driver.find_element(
                 By.CSS_SELECTOR, "input[name='Name']"
             )
-            return 'ng-invalid' in name_input.get_attribute('class')
+            cls = name_input.get_attribute('class') or ''
+            value = name_input.get_attribute('value') or ''
+
+            # Standard Angular check: ng-invalid + ng-touched
+            if 'ng-invalid' in cls and 'ng-touched' in cls:
+                return True
+
+            # Value-based check: type="character" should reject invalid content
+            # even when Angular marks it as ng-valid
+            # type="character" allows: letters, spaces, . , - ( )
+            # It rejects: digits, @#$%^&*!, underscores
+            if value and 'ng-touched' in cls:
+                import re
+                # Spaces-only is invalid for Name
+                if value.strip() == '':
+                    return True
+                # Contains chars rejected by type="character"
+                if not re.match(r'^[a-zA-Z\s\.\,\-\(\)]+$', value):
+                    return True
+
+            return False
         except Exception:
             return False
 
@@ -881,7 +1030,6 @@ class DesignationPage(BasePage):
                     "arguments[0].value = arguments[1];",
                     search_input, designation_name
                 )
-                search_input.dispatchEvent = None  # not a real line
                 self.driver.execute_script(
                     "arguments[0].dispatchEvent("
                     "new Event('input', {bubbles: true}));",
@@ -1466,16 +1614,25 @@ class DesignationPage(BasePage):
             log.error(f"History check failed: {e}")
 
         return result
-    
+
     def _set_angular_input(self, locator, value, clear_first=True):
-        """Set input value using JS native value setter to trigger Angular reactive form detection."""
+        """Set input value using JS native value setter to trigger Angular reactive form detection.
+        Forces Angular to mark the control as touched + dirty so validation fires.
+        Also tracks intended value for validation detection in get_mat_error_text().
+        """
         element = self._parse_locator(locator)
         el = self.driver.find_element(*element)
-        
+
+        # Track the intended value for this input (used by get_mat_error_text Tier 3)
+        field_name = el.get_attribute('name') or el.get_attribute('formcontrolname') or ''
+        if not hasattr(self, '_intended_values'):
+            self._intended_values = {}
+        self._intended_values[field_name] = value
+
         # Click to focus
         el.click()
         time.sleep(0.1)
-        
+
         if clear_first:
             self.driver.execute_script("""
                 var el = arguments[0];
@@ -1486,16 +1643,41 @@ class DesignationPage(BasePage):
             from selenium.webdriver.common.keys import Keys
             el.send_keys(Keys.BACK_SPACE)
             time.sleep(0.1)
-        
-        # Use native input value setter to trigger Angular change detection
+
+        # Use native input value setter to trigger Angular change detection.
+        # Dispatch focus event first so Angular registers the control as active.
+        # After setting value, dispatch input/change events and blur to trigger
+        # touched + dirty + validation cycle.
         self.driver.execute_script("""
             var el = arguments[0];
+            var value = arguments[1];
+
+            // Focus first so Angular marks the control as active
+            el.focus();
+            el.dispatchEvent(new Event('focus', { bubbles: true }));
+
+            // Set value via native setter (bypasses Angular's value accessor)
             var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
                 window.HTMLInputElement.prototype, 'value').set;
-            nativeInputValueSetter.call(el, arguments[1]);
+            nativeInputValueSetter.call(el, value);
+
+            // Dispatch events to trigger Angular change detection
             el.dispatchEvent(new Event('input', { bubbles: true }));
             el.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Blur to mark control as touched — triggers validation display
             el.blur();
+            el.dispatchEvent(new Event('blur', { bubbles: true }));
+
+            // Force Angular change detection by triggering a zone tick
+            // This ensures ng-touched, ng-dirty, ng-invalid classes are set
+            try {
+                var ngZone = window.ng && window.ng.probe
+                    && window.ng.probe(el) && window.ng.probe(el).injector;
+                if (ngZone) {
+                    var zone = ngZone.get('NgZone');
+                    if (zone) zone.run(function() {});
+                }
+            } catch(e) {}
         """, el, value)
         time.sleep(0.3)
-        

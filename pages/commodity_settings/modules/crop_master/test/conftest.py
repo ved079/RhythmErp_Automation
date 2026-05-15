@@ -1,9 +1,17 @@
 """
-conftest.py - Designation (RhythmERP Common Settings)
+conftest.py - Crop Master (RhythmERP Commodity Settings)
 
-Pytest fixtures for Designation test suite.
+Pytest fixtures for Crop Master test suite.
 Handles browser setup, login, page object creation,
 and report generation with known-issues tracking.
+
+44 test cases across 6 classes:
+  - TestCreateFormValidations (15)
+  - TestFileUpload (5)
+  - TestEditFormValidations (5)
+  - TestSearchFilter (5)
+  - TestPopupUIBehaviors (6)
+  - TestHistoryValidations (8)
 """
 
 import os
@@ -26,62 +34,86 @@ from config import (
     RHYTHMERP_PASSWORD,
 )
 from pages.login_screens.Login_Screens_.login_page import LoginPage
-from pages.common_settings.modules.designation.designation_page import DesignationPage
-from pages.common_settings.modules.designation.des_report_generator import des_report
+from pages.commodity_settings.modules.crop_master.crop_master_page import CropMasterPage
+from pages.commodity_settings.modules.crop_master.cm_report_generator import cm_report
 
 
 # ═══════════════════════════════════════════
-#  Known Issues for Designation
+#  Known Issues for Crop Master (9 Bugs)
 # ═══════════════════════════════════════════
 
-DESIGNATION_KNOWN_ISSUES = [
+CROP_MASTER_KNOWN_ISSUES = [
     {
-        'id': 'DES-01',
-        'phase': 'Create/Edit',
-        'description': 'Duplicate Designation Name allowed',
-        'expected': 'System should reject duplicate name',
-        'actual': 'Duplicate name accepted without warning',
+        'id': 'BUG-CM01',
+        'phase': 'Create',
+        'description': 'Blank (spaces-only) Name accepted on Create',
+        'expected': 'System should reject spaces-only input with validation error',
+        'actual': "Spaces-only name '   ' accepted and saved without any warning",
         'severity': 'High',
     },
     {
-        'id': 'DES-02',
+        'id': 'BUG-CM02',
+        'phase': 'Create/Edit',
+        'description': 'Duplicate Crop Name allowed in Create and Edit',
+        'expected': "System should show validation error 'Crop Name already exists'",
+        'actual': 'Duplicate name accepted and saved without any warning',
+        'severity': 'High',
+    },
+    {
+        'id': 'BUG-CM03',
+        'phase': 'Create',
+        'description': 'Leading/trailing spaces NOT trimmed in Name',
+        'expected': 'System should trim leading/trailing spaces before saving',
+        'actual': 'Spaces preserved as-is in the Name field, causing duplicates',
+        'severity': 'Medium',
+    },
+    {
+        'id': 'BUG-CM04',
+        'phase': 'Create/Edit',
+        'description': 'No per-field inline error messages',
+        'expected': 'Each invalid field should show inline error message below it',
+        'actual': 'No inline error messages appear — only generic SweetAlert2 popup',
+        'severity': 'Low-Medium',
+    },
+    {
+        'id': 'BUG-CM05',
         'phase': 'Create',
         'description': 'No max length validation on Name',
-        'expected': 'Should restrict or truncate at 255 chars',
-        'actual': '256+ char names accepted (submit may silently fail)',
+        'expected': 'System should restrict or truncate names at 255 chars',
+        'actual': 'Names with 256+ chars accepted without error',
         'severity': 'Low',
     },
     {
-        'id': 'DES-02b',
+        'id': 'BUG-CM06',
         'phase': 'Create',
-        'description': 'type="character" rejects punctuation in Name',
-        'expected': 'Names like "Jr. Manager", "Vice-President" should be valid',
-        'actual': 'type="character" only allows letters and spaces — dots, commas, hyphens, parens all rejected as "Invalid Name"',
-        'severity': 'Medium',
+        'description': 'Special characters accepted in Name without sanitization',
+        'expected': 'System should reject or sanitize special character input',
+        'actual': 'Special chars like !@#$%^&*() stored and displayed as-is',
+        'severity': 'Low-Medium',
     },
     {
-        'id': 'DES-03',
-        'phase': 'Filter',
-        'description': 'Apply Filters button completely non-functional',
-        'expected': 'Apply Filters should filter table rows',
-        'actual': 'Apply Filters click has zero effect',
-        'severity': 'Critical',
-    },
-    {
-        'id': 'DES-04',
+        'id': 'BUG-CM07',
         'phase': 'History',
-        'description': 'History shows no data after creation',
-        'expected': 'History should record create/edit actions',
-        'actual': 'History popup shows "No data available"',
+        'description': 'RhythmERP does not create history entries on creation',
+        'expected': 'History should show at least 1 row after creating a crop',
+        'actual': 'After creating a crop, History popup shows 0 rows',
         'severity': 'Medium',
     },
     {
-        'id': 'DES-05',
-        'phase': 'Create',
-        'description': '256-char Name submit silently fails',
-        'expected': 'Should show error or success message',
-        'actual': 'No SweetAlert2 response — form stays open with no feedback',
+        'id': 'BUG-CM08',
+        'phase': 'History',
+        'description': "Column sort doesn't reorder rows",
+        'expected': 'Clicking sortable column should reorder rows ascending/descending',
+        'actual': 'Sort indicators toggle but rows stay in same order',
         'severity': 'Medium',
+    },
+    {
+        'id': 'BUG-CM09',
+        'phase': 'Edit',
+        'description': 'Blank (spaces-only) Name accepted on Edit/Update',
+        'expected': 'System should reject spaces-only input during edit',
+        'actual': 'Spaces-only name accepted and updated without any warning',
+        'severity': 'High',
     },
 ]
 
@@ -93,42 +125,52 @@ DESIGNATION_KNOWN_ISSUES = [
 @pytest.fixture(scope='session')
 def driver():
     """Session-scoped browser driver — one instance for all tests."""
-    log.info("Starting Designation Test Session")
+    log.separator()
+    log.info("LAUNCHING BROWSER (RhythmERP - Crop Master Tests)...")
+    log.separator()
     driver = get_driver()
     driver.maximize_window()
     yield driver
-    log.info("Ending Designation Test Session")
+    log.separator()
+    log.info("CLOSING BROWSER...")
+    log.separator()
     driver.quit()
 
 
 @pytest.fixture(scope='session')
 def logged_in_driver(driver):
-    """Login once for the entire test test session."""
-    log.info("Logging into RhythmERP")
+    """Login once for the entire test session."""
+    log.separator()
+    log.info("LOGGING INTO RHYTHMERP...")
+    log.separator()
     driver.get(RHYTHMERP_LOGIN_URL)
     time.sleep(2)
 
     login_page = LoginPage(driver)
 
-    # Enter email
+    # Step 1: Enter email
+    log.step(1, "Entering email: " + RHYTHMERP_EMAIL)
     login_page.enter_email(RHYTHMERP_EMAIL)
     time.sleep(0.5)
 
-    # Enter password
+    # Step 2: Enter password
+    log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
     time.sleep(0.5)
 
-    # Select facility by index 0
+    # Step 3: Select facility by index 0
+    log.step(3, "Selecting facility (Agdi — first option)")
     login_page.select_facility_by_index(0)
     time.sleep(1)
 
-    # Click Login (JS click required)
+    # Step 4: Click Login (JS click required)
+    log.step(4, "Clicking Login button")
     login_page.click_login()
     time.sleep(3)
 
     # Wait for login complete
     login_page.wait_for_login_complete()
-    log.info("Login successful — dashboard loaded")
+    log.info("RhythmERP login successful!")
 
     return driver
 
@@ -138,9 +180,11 @@ def logged_in_driver(driver):
 # ═══════════════════════════════════════════
 
 @pytest.fixture(scope='function')
-def designation_page(logged_in_driver):
-    """Function-scoped page fixture — fresh navigate_to_page() per test."""
-    page = DesignationPage(logged_in_driver)
+def crop_master_page(logged_in_driver):
+    """Function-scoped page fixture — fresh navigate_to_page() per test.
+    Includes driver.refresh() to clear SPA state.
+    """
+    page = CropMasterPage(logged_in_driver)
     page.navigate_to_page()
     yield page
     # Cleanup: force close any leftover popups/overlays
@@ -156,17 +200,16 @@ def designation_page(logged_in_driver):
 # ═══════════════════════════════════════════
 
 @pytest.fixture(scope='session', autouse=True)
-def _des_report_generator():
-    """
-    Session-scoped report generator.
+def _cm_report_generator():
+    """Session-scoped report generator.
     Starts timer, registers known issues, yields, then
     generates Excel report at session end.
     """
-    des_report.start()
+    cm_report.start()
 
-    # Register known issues into the report store
-    for issue in DESIGNATION_KNOWN_ISSUES:
-        des_report.add_known_issue(
+    # Register known issues
+    for issue in CROP_MASTER_KNOWN_ISSUES:
+        cm_report.add_known_issue(
             issue_id=issue['id'],
             phase=issue['phase'],
             description=issue['description'],
@@ -177,13 +220,12 @@ def _des_report_generator():
 
     yield
 
-    # Generate report at session end
-    des_report.finish()
+    cm_report.finish()
     try:
         report_dir = os.path.join(
             os.path.dirname(__file__), '..', 'reports'
         )
-        report_path = des_report.generate_excel(report_dir)
+        report_path = cm_report.generate_excel(report_dir)
         log.info(f"Report generated: {report_path}")
     except Exception as e:
         log.warning(f"Report generation failed: {e}")
@@ -197,7 +239,7 @@ def pytest_collection_modifyitems(items):
     """Sort tests by class order for consistent execution."""
     class_order = [
         'TestCreateFormValidations',
-        'TestStatusToggleValidations',
+        'TestFileUpload',
         'TestEditFormValidations',
         'TestSearchFilter',
         'TestPopupUIBehaviors',
