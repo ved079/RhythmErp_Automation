@@ -19,7 +19,8 @@ from selenium.common.exceptions import (
     TimeoutException,
     NoSuchElementException,
     ElementClickInterceptedException,
-    StaleElementReferenceException
+    StaleElementReferenceException,
+    InvalidElementStateException
 )
 
 from config import EXPLICIT_WAIT, SCREENSHOT_DIR
@@ -184,22 +185,70 @@ class BasePage:
     def type_text(self, locator, text, clear_first=True):
         """
         Type text into an input field.
-        Args:
-            locator: Element locator tuple
-            text: Text to type
-            clear_first: Clear existing text before typing (default: True)
+        Tries standard Selenium first; on InvalidElementStateException,
+        falls back to JavaScript-based clearing and typing (for Angular
+        reactive form controls that block .clear()).
         """
         element = self.find_visible_element(locator)
-        if clear_first:
-            element.clear()
-        element.send_keys(text)
-        log.info(f"Typed '{text}' into: {locator}")
+        try:
+            if clear_first:
+                element.clear()
+            element.send_keys(text)
+            log.info(f"Typed '{text}' into: {locator}")
+        except InvalidElementStateException:
+            # Angular reactive form input — use JS fallback
+            log.info(f"Standard clear/send_keys failed, using JS fallback for: {locator}")
+            self.js_type_text(locator, text, clear_first=clear_first)
+
+    def js_type_text(self, locator, text, clear_first=True):
+        """
+        JavaScript-based type for Angular reactive form inputs.
+        Standard Selenium .clear() throws InvalidElementStateException
+        on Angular Material inputs. This method:
+          1. Clears value via JS (using the native setter to bypass Angular)
+          2. Dispatches 'input' + 'change' events so Angular detects the change
+          3. Sets the new value via JS
+          4. Dispatches events again so Angular picks up the new value
+        """
+        element = self.find_visible_element(locator)
+        script = """
+        var el = arguments[0];
+        var newText = arguments[1];
+        var shouldClear = arguments[2];
+        var nativeSet = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype, 'value'
+        ).set;
+        var nativeSetArea = Object.getOwnPropertyDescriptor(
+            window.HTMLTextAreaElement.prototype, 'value'
+        );
+        if (nativeSetArea) { nativeSetArea = nativeSetArea.set; }
+
+        var setter = el.tagName === 'TEXTAREA' && nativeSetArea
+                     ? nativeSetArea : nativeSet;
+
+        if (shouldClear) {
+            setter.call(el, '');
+            el.dispatchEvent(new Event('input', {bubbles: true}));
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+        setter.call(el, newText);
+        el.dispatchEvent(new Event('input', {bubbles: true}));
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+        """
+        self.driver.execute_script(script, element, str(text), clear_first)
+        log.info(f"JS-typed '{text}' into: {locator}")
 
     def clear_field(self, locator):
-        """Clear the text from an input field."""
+        """Clear the text from an input field.
+        Falls back to JS clearing for Angular reactive form controls.
+        """
         element = self.find_visible_element(locator)
-        element.clear()
-        log.info(f"Cleared field: {locator}")
+        try:
+            element.clear()
+            log.info(f"Cleared field: {locator}")
+        except InvalidElementStateException:
+            self.js_type_text(locator, "", clear_first=True)
+            log.info(f"Cleared field (JS fallback): {locator}")
 
     def press_enter(self, locator):
         """Press Enter key on a specific element."""

@@ -38,6 +38,18 @@ def driver():
         pass
 
 
+@pytest.fixture(scope="function", autouse=True)
+def reset_between_tests(logged_in_driver):
+    """Hard refresh page after each test to clear stale overlays/state."""
+    yield
+    try:
+        logged_in_driver.execute_script("location.reload(true)")
+        import time as _t
+        _t.sleep(2)
+    except Exception:
+        pass
+
+
 @pytest.fixture(scope="session")
 def logged_in_driver(driver):
     """Driver with completed RhythmERP login session."""
