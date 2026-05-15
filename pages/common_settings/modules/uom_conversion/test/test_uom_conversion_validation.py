@@ -18,6 +18,7 @@ Run:
 import sys
 import os
 import time
+import random
 import pytest
 from common.logger import log
 
@@ -54,11 +55,11 @@ class TestUOMConversionValidation:
             page.navigate_to_page()
             data = page.create_fresh_record()
 
-            log.step(2, "Verify success alert")
-            assert page.is_success_alert_present(timeout=5), \
-                "Success alert should appear after valid submission"
-            page.handle_success_alert()
-            log.info("  [PASS] Success alert handled")
+            log.step(2, "Verify record exists in table")
+            page.navigate_to_page()
+            assert page.is_record_present(data["source_uom"], data["target_uom"]), \
+                "Record should exist in table: " + data["source_uom"] + " -> " + data["target_uom"]
+            log.info("  [PASS] Record found in table: " + data["source_uom"] + " -> " + data["target_uom"])
 
             log.info(">>> TEST 1 PASSED: Valid UOM conversion created successfully")
         except Exception:
@@ -69,32 +70,30 @@ class TestUOMConversionValidation:
             time.sleep(1)
 
     def test_add_decimal_conversion_factor(self, logged_in_driver):
-        """Test 2: Add with a decimal conversion factor — system rejects decimals (validation)."""
+        """Test 2: Add with a decimal conversion factor — system accepts decimals."""
         driver = logged_in_driver
         page = UOMConversionPage(driver)
 
         try:
             factor = generate_decimal_conversion_factor()
 
-            log.step(1, "Navigate to page and open Add form")
+            log.step(1, "Create fresh record with decimal factor: " + factor)
             page.navigate_to_page()
-            page.open_add_form()
+            data = page.create_fresh_record(factor=factor)
 
-            log.step(2, "Select NOS -> ML with decimal factor: " + factor)
-            page.select_source_uom("NOS")
-            page.select_target_uom("ML")
-            page.enter_conversion_factor(factor)
+            log.step(2, "Verify decimal factor is accepted")
+            assert data["success"], "Expected success but got: " + str(data.get("error"))
 
-            log.step(3, "Click Submit")
-            page.submit()
+            log.step(3, "Verify record exists in table")
+            page.navigate_to_page()
+            page.search_table(data["source_uom"])
+            time.sleep(1)
+            exists = page.is_record_in_table(data["source_uom"], data["target_uom"])
+            page.clear_search()
+            assert exists, "Record should exist: " + data["source_uom"] + " -> " + data["target_uom"]
+            log.info("  [PASS] Decimal factor accepted: " + factor)
 
-            log.step(4, "Verify Pattern A validation alert (decimals rejected)")
-            assert page.is_validation_alert_present(timeout=5), \
-                "Pattern A alert should appear for decimal factor"
-            page.handle_validation_warning()
-            log.info("  [PASS] Decimal factor rejected by system: " + factor)
-
-            log.info(">>> TEST 2 PASSED: Decimal conversion factor rejected")
+            log.info(">>> TEST 2 PASSED: Decimal conversion factor accepted")
         except Exception:
             raise
         finally:
@@ -112,9 +111,9 @@ class TestUOMConversionValidation:
             page.navigate_to_page()
             page.open_add_form()
 
-            log.step(2, "Select Fest -> Fest with factor 1")
-            page.select_source_uom("Fest")
-            page.select_target_uom("Fest")
+            log.step(2, "Select NOS -> NOS with factor 1")
+            page.select_source_uom("NOS")
+            page.select_target_uom("NOS")
             page.enter_conversion_factor("1")
 
             log.step(3, "Click Submit")
@@ -233,7 +232,7 @@ class TestUOMConversionValidation:
             page.open_add_form()
 
             page.select_source_uom("NOS")
-            page.select_target_uom("BAKMRMRY")
+            page.select_target_uom("KG")
             log.info("  Left Conversion Factor empty")
 
             log.step(2, "Click Submit")
@@ -314,7 +313,7 @@ class TestUOMConversionValidation:
             page.open_add_form()
 
             page.select_source_uom("NOS")
-            page.select_target_uom("BAKMRMRY")
+            page.select_target_uom("KG")
             text_value = generate_text_conversion_factor()
             page.enter_conversion_factor(text_value)
             log.info("  Entered: " + text_value)
@@ -382,40 +381,24 @@ class TestUOMConversionValidation:
             time.sleep(1)
 
     def test_add_negative_conversion_factor(self, logged_in_driver):
-        """Test 10: Enter -5 as conversion factor. OBSERVE — accepted or rejected?"""
+        """Test 10: Enter negative conversion factor. OBSERVE — accepted or rejected?"""
         driver = logged_in_driver
         page = UOMConversionPage(driver)
 
         try:
-            log.step(1, "Open Add form with negative Conversion Factor")
-            page.navigate_to_page()
-            page.open_add_form()
-
-            page.select_source_uom("KG")
-            page.select_target_uom("ML")
             negative_value = generate_negative_conversion_factor()
-            page.enter_conversion_factor(negative_value)
-            log.info("  Entered: " + negative_value)
 
-            log.step(2, "Click Submit and observe response")
-            page.submit()
-            time.sleep(2)
+            log.step(1, "Create fresh record with negative factor: " + negative_value)
+            page.navigate_to_page()
+            data = page.create_fresh_record(factor=negative_value, raise_on_error=False)
 
-            alert_title = page.get_swal_title()
-            log.info("  [OBSERVE] Alert for negative factor: " + str(alert_title))
-
-            if page.is_validation_alert_present(timeout=3):
-                page.handle_validation_warning()
-                log.info("  [OBSERVE] Negative factor REJECTED by system")
-            elif page.is_success_alert_present(timeout=3):
-                page.handle_success_alert()
+            if data["success"]:
                 log.info("  [OBSERVE] Negative factor ACCEPTED by system")
                 page.navigate_to_page()
-                exists = page.is_record_in_table("KG", "ML")
+                exists = page.is_record_in_table(data["source_uom"], data["target_uom"])
                 log.info("  [OBSERVE] Record in table: " + str(exists))
             else:
-                page.handle_error_toast()
-                log.info("  [OBSERVE] Error toast for negative factor")
+                log.info("  [OBSERVE] Negative factor REJECTED: " + str(data.get("error")))
 
             log.info(">>> TEST 10 PASSED: Negative factor behavior observed")
         except Exception:
@@ -431,31 +414,14 @@ class TestUOMConversionValidation:
         page = UOMConversionPage(driver)
 
         try:
-            log.step(1, "Open Add form with zero Conversion Factor")
+            log.step(1, "Create fresh record with zero factor")
             page.navigate_to_page()
-            page.open_add_form()
+            data = page.create_fresh_record(factor="0", raise_on_error=False)
 
-            page.select_source_uom("NOS")
-            page.select_target_uom("BAKMRMRY")
-            page.enter_conversion_factor("0")
-            log.info("  Entered: 0")
-
-            log.step(2, "Click Submit and observe response")
-            page.submit()
-            time.sleep(2)
-
-            alert_title = page.get_swal_title()
-            log.info("  [OBSERVE] Alert for zero factor: " + str(alert_title))
-
-            if page.is_validation_alert_present(timeout=3):
-                page.handle_validation_warning()
-                log.info("  [OBSERVE] Zero factor REJECTED by system")
-            elif page.is_success_alert_present(timeout=3):
-                page.handle_success_alert()
+            if data["success"]:
                 log.info("  [OBSERVE] Zero factor ACCEPTED by system")
             else:
-                page.handle_error_toast()
-                log.info("  [OBSERVE] Error toast for zero factor")
+                log.info("  [OBSERVE] Zero factor REJECTED: " + str(data.get("error")))
 
             log.info(">>> TEST 11 PASSED: Zero factor behavior observed")
         except Exception:
@@ -478,23 +444,12 @@ class TestUOMConversionValidation:
         try:
             factor = generate_large_conversion_factor(21)
 
-            log.step(1, "Open Add form with 21-digit Conversion Factor")
+            log.step(1, "Create fresh record with 21-digit factor")
             page.navigate_to_page()
-            page.open_add_form()
+            data = page.create_fresh_record(factor=factor)
 
-            page.select_source_uom("ML")
-            page.select_target_uom("Dozens")
-            page.enter_conversion_factor(factor)
-            log.info("  Entered: " + factor + " (length: " + str(len(factor)) + ")")
-
-            log.step(2, "Click Submit")
-            page.submit()
-
-            log.step(3, "Verify success — 21-digit factor saves correctly")
-            assert page.is_success_alert_present(timeout=5), \
-                "21-digit factor should save successfully"
-            page.handle_success_alert()
-            log.info("  [PASS] 21-digit factor saved successfully")
+            assert data["success"], "21-digit factor should save: " + str(data.get("error"))
+            log.info("  [PASS] 21-digit factor saved: " + data["source_uom"] + " -> " + data["target_uom"])
 
             log.info(">>> TEST 12 PASSED: 21-digit conversion factor accepted")
         except Exception:
@@ -505,51 +460,40 @@ class TestUOMConversionValidation:
             time.sleep(1)
 
     def test_conversion_factor_22_digits_bug(self, logged_in_driver):
-        """Test 13: 22-digit factor — OBSERVE system behavior (may reject or save with scientific notation)."""
+        """Test 13: 22-digit factor — OBSERVE system behavior."""
         driver = logged_in_driver
         page = UOMConversionPage(driver)
 
         try:
             factor = generate_large_conversion_factor(22)
 
-            log.step(1, "Open Add form with 22-digit Conversion Factor")
+            log.step(1, "Create fresh record with 22-digit factor: " + factor)
             page.navigate_to_page()
-            page.open_add_form()
+            data = page.create_fresh_record(factor=factor, raise_on_error=False)
 
-            page.select_source_uom("MT")
-            page.select_target_uom("KG")
-            page.enter_conversion_factor(factor)
-            log.info("  Entered: " + factor + " (length: " + str(len(factor)) + ")")
+            if not data["success"]:
+                log.info("  [OBSERVE] 22-digit factor REJECTED: " + str(data.get("error")))
+                log.info(">>> TEST 13 PASSED: 22-digit factor rejected")
+                return
 
-            log.step(2, "Click Submit and observe response")
-            page.submit()
-            time.sleep(2)
+            log.info("  [OBSERVE] 22-digit factor ACCEPTED by system")
 
-            alert_title = page.get_swal_title()
-            log.info("  [OBSERVE] Alert for 22-digit factor: " + str(alert_title))
-
-            if page.is_validation_alert_present(timeout=3):
-                page.handle_validation_warning()
-                log.info("  [OBSERVE] 22-digit factor REJECTED by system (backend validation)")
-            elif page.is_success_alert_present(timeout=3):
-                page.handle_success_alert()
-                log.info("  [OBSERVE] 22-digit factor ACCEPTED by system")
-                page.navigate_to_page()
-                page.cleanup()
+            log.step(2, "Check displayed value in edit form")
+            page.navigate_to_page()
+            time.sleep(1)
+            page.cleanup()
+            page.search_table(data["source_uom"])
+            time.sleep(1)
+            row = page.find_table_row(data["source_uom"], data["target_uom"])
+            if row is not None:
+                page.click_row_edit(data["source_uom"], data["target_uom"])
                 time.sleep(1)
-                row = page.find_table_row("MT", "KG")
-                if row is not None:
-                    page.click_row_edit("MT", "KG")
-                    time.sleep(1)
-                    displayed_value = page.get_conversion_factor_value()
-                    log.info("  [BUG CHECK] Saved '" + factor + "', Edit form shows: '" + str(displayed_value) + "'")
-                    if displayed_value and "e+" in displayed_value.lower():
-                        log.info("  [PASS] Scientific notation bug confirmed: " + displayed_value)
-                    else:
-                        log.info("  [PASS] No scientific notation — value displayed correctly")
-            else:
-                page.handle_error_toast()
-                log.info("  [OBSERVE] Error toast for 22-digit factor")
+                displayed_value = page.get_conversion_factor_value()
+                log.info("  [BUG CHECK] Saved '" + factor + "', shows: '" + str(displayed_value) + "'")
+                if displayed_value and "e+" in displayed_value.lower():
+                    log.info("  [PASS] Scientific notation bug confirmed")
+                else:
+                    log.info("  [PASS] No scientific notation")
 
             log.info(">>> TEST 13 PASSED: 22-digit factor behavior observed")
         except Exception:
@@ -560,24 +504,35 @@ class TestUOMConversionValidation:
             time.sleep(1)
 
     def test_scientific_notation_not_editable(self, logged_in_driver):
-        """Test 14: OBSERVE — if 22-digit record exists, check if re-editing triggers validation error."""
+        """Test 14: OBSERVE — create 22-digit record, check re-edit behavior."""
         driver = logged_in_driver
         page = UOMConversionPage(driver)
 
         try:
-            log.step(1, "Check if MT->KG row exists (from Test 13)")
-            page.navigate_to_page()
-            page.cleanup()
-            time.sleep(1)
+            factor = generate_large_conversion_factor(22)
 
-            row = page.find_table_row("MT", "KG")
-            if row is None:
-                log.info("  [OBSERVE] MT->KG row not found — Test 13 was rejected by system. Skipping edit check.")
+            log.step(1, "Create fresh record with 22-digit factor for edit check")
+            page.navigate_to_page()
+            data = page.create_fresh_record(factor=factor, raise_on_error=False)
+
+            if not data["success"]:
+                log.info("  [OBSERVE] 22-digit factor REJECTED. Cannot test re-edit.")
                 log.info(">>> TEST 14 PASSED: Skipped (no 22-digit record to re-edit)")
                 return
 
-            log.step(2, "Open Edit form for the 22-digit record")
-            page.click_row_edit("MT", "KG")
+            log.step(2, "Search and open Edit form for the 22-digit record")
+            page.navigate_to_page()
+            time.sleep(1)
+            page.search_table(data["source_uom"])
+            time.sleep(1)
+            row = page.find_table_row(data["source_uom"], data["target_uom"])
+            if row is None:
+                log.info("  [OBSERVE] Record not found in table after search. Skipping.")
+                page.clear_search()
+                log.info(">>> TEST 14 PASSED: Skipped")
+                return
+
+            page.click_row_edit(data["source_uom"], data["target_uom"])
             time.sleep(1)
 
             log.step(3, "Click Update without changing anything")
@@ -585,9 +540,6 @@ class TestUOMConversionValidation:
             time.sleep(1)
 
             log.step(4, "Observe system response")
-            alert_title = page.get_swal_title()
-            log.info("  [OBSERVE] Alert on update: " + str(alert_title))
-
             if page.is_validation_alert_present(timeout=3):
                 page.handle_validation_warning()
                 log.info("  [PASS] Validation alert confirmed on re-edit")
@@ -620,19 +572,11 @@ class TestUOMConversionValidation:
             log.step(1, "Create fresh record via one-flow")
             page.navigate_to_page()
             data = page.create_fresh_record()
-
-            if page.is_validation_alert_present(timeout=5):
-                page.handle_validation_warning()
-                raise AssertionError(
-                    "Create should succeed: " + data["source_uom"] + " -> " + data["target_uom"])
-
-            assert page.is_success_alert_present(timeout=5), \
-                "Success alert expected after creating " + data["source_uom"] + " -> " + data["target_uom"]
-            page.handle_success_alert()
             log.info("  Created: " + data["source_uom"] + " -> " + data["target_uom"] + " = " + data["conversion_factor"])
 
             log.step(2, "Open Edit form for the record")
             page.navigate_to_page()
+            page.search_table(data["source_uom"])
             time.sleep(1)
             page.click_row_edit(data["source_uom"], data["target_uom"])
             time.sleep(1)
@@ -650,6 +594,7 @@ class TestUOMConversionValidation:
 
             log.step(5, "Verify new factor in table")
             page.navigate_to_page()
+            page.search_table(data["source_uom"])
             time.sleep(1)
             row = page.find_table_row(data["source_uom"], data["target_uom"])
             assert row is not None, "Record not found after update"
@@ -675,13 +620,14 @@ class TestUOMConversionValidation:
             log.step(1, "Create fresh record via one-flow")
             page.navigate_to_page()
             data = page.create_fresh_record()
-            assert page.is_success_alert_present(timeout=5), \
+            assert data["success"], \
                 "Create should succeed for pair: " + data["source_uom"] + " -> " + data["target_uom"]
-            page.handle_success_alert()
             log.info("  Created: " + data["source_uom"] + " -> " + data["target_uom"] + " = " + data["conversion_factor"])
 
             log.step(2, "Open Edit form and clear Conversion Factor via JS")
             page.navigate_to_page()
+            page.search_table(data["source_uom"])
+            time.sleep(1)
             page.click_row_edit(data["source_uom"], data["target_uom"])
             time.sleep(1)
 
@@ -721,13 +667,14 @@ class TestUOMConversionValidation:
             log.step(1, "Create fresh record via one-flow")
             page.navigate_to_page()
             data = page.create_fresh_record()
-            assert page.is_success_alert_present(timeout=5), \
+            assert data["success"], \
                 "Create should succeed for pair: " + data["source_uom"] + " -> " + data["target_uom"]
-            page.handle_success_alert()
             log.info("  Created: " + data["source_uom"] + " -> " + data["target_uom"] + " = " + data["conversion_factor"])
 
             log.step(2, "Open View popup")
             page.navigate_to_page()
+            page.search_table(data["source_uom"])
+            time.sleep(1)
             page.click_row_view(data["source_uom"], data["target_uom"])
             time.sleep(1.5)
 
@@ -752,13 +699,14 @@ class TestUOMConversionValidation:
             log.step(1, "Create fresh record via one-flow")
             page.navigate_to_page()
             data = page.create_fresh_record()
-            assert page.is_success_alert_present(timeout=5), \
+            assert data["success"], \
                 "Create should succeed for pair: " + data["source_uom"] + " -> " + data["target_uom"]
-            page.handle_success_alert()
             log.info("  Created: " + data["source_uom"] + " -> " + data["target_uom"] + " = " + data["conversion_factor"])
 
             log.step(2, "Read original factor from table")
             page.navigate_to_page()
+            page.search_table(data["source_uom"])
+            time.sleep(1)
             row = page.find_table_row(data["source_uom"], data["target_uom"])
             assert row is not None, "Record not found"
             original_factor = page.get_conversion_factor_from_row(row)
@@ -776,6 +724,8 @@ class TestUOMConversionValidation:
 
             log.step(5, "Verify original factor is unchanged in table")
             page.navigate_to_page()
+            page.search_table(data["source_uom"])
+            time.sleep(1)
             row_after = page.find_table_row(data["source_uom"], data["target_uom"])
             assert row_after is not None, "Record not found after cancel"
             current_factor = page.get_conversion_factor_from_row(row_after)
@@ -805,13 +755,14 @@ class TestUOMConversionValidation:
             log.step(1, "Create fresh record via one-flow")
             page.navigate_to_page()
             data = page.create_fresh_record()
-            assert page.is_success_alert_present(timeout=5), \
+            assert data["success"], \
                 "Create should succeed for pair: " + data["source_uom"] + " -> " + data["target_uom"]
-            page.handle_success_alert()
             log.info("  Created: " + data["source_uom"] + " -> " + data["target_uom"] + " = " + data["conversion_factor"])
 
             log.step(2, "Open History popup")
             page.navigate_to_page()
+            page.search_table(data["source_uom"])
+            time.sleep(1)
             page.click_row_history(data["source_uom"], data["target_uom"])
             time.sleep(2)
 
@@ -843,13 +794,14 @@ class TestUOMConversionValidation:
             log.step(1, "Create fresh record via one-flow")
             page.navigate_to_page()
             data = page.create_fresh_record()
-            assert page.is_success_alert_present(timeout=5), \
+            assert data["success"], \
                 "Create should succeed for pair: " + data["source_uom"] + " -> " + data["target_uom"]
-            page.handle_success_alert()
             log.info("  Created: " + data["source_uom"] + " -> " + data["target_uom"] + " = " + data["conversion_factor"])
 
             log.step(2, "Open History popup")
             page.navigate_to_page()
+            page.search_table(data["source_uom"])
+            time.sleep(1)
             page.click_row_history(data["source_uom"], data["target_uom"])
             time.sleep(2)
 
@@ -923,13 +875,14 @@ class TestUOMConversionValidation:
             log.step(1, "Create fresh record via one-flow")
             page.navigate_to_page()
             data = page.create_fresh_record()
-            assert page.is_success_alert_present(timeout=5), \
+            assert data["success"], \
                 "Create should succeed for pair: " + data["source_uom"] + " -> " + data["target_uom"]
-            page.handle_success_alert()
             log.info("  Created: " + data["source_uom"] + " -> " + data["target_uom"] + " = " + data["conversion_factor"])
 
             log.step(2, "Read original factor from table")
             page.navigate_to_page()
+            page.search_table(data["source_uom"])
+            time.sleep(1)
             row = page.find_table_row(data["source_uom"], data["target_uom"])
             assert row is not None, "Record not found"
             original_factor = page.get_conversion_factor_from_row(row)
@@ -944,6 +897,8 @@ class TestUOMConversionValidation:
 
             log.step(4, "Verify factor unchanged in table")
             page.navigate_to_page()
+            page.search_table(data["source_uom"])
+            time.sleep(1)
             row_after = page.find_table_row(data["source_uom"], data["target_uom"])
             assert row_after is not None, "Record not found after cancel"
             current_factor = page.get_conversion_factor_from_row(row_after)

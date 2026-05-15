@@ -54,12 +54,22 @@ class UOMConversionPage(BasePage):
         # Last-ditch buffer: give Angular a few more seconds
         time.sleep(3)
 
+    def hard_refresh(self):
+        """Hard refresh the current page to clear stale overlays/state."""
+        log.info("Hard refreshing page...")
+        try:
+            self.driver.execute_script("location.reload(true)")
+            time.sleep(2)
+            log.info("Hard refresh complete")
+        except Exception as e:
+            log.warning("Hard refresh failed: " + str(e))
+            time.sleep(2)
+
     def open_add_form(self):
         """
         Click the ADD button to open the form popup.
-        Retries up to 3 times with a short wait between attempts so that
-        a slow Angular render after navigate_to_page() doesn't cause an
-        immediate 'ADD button not found' error.
+        Retries up to 3 times. Between retries, attempts to close stale
+        overlays and hard refresh the page.
         """
         js = """
         var icons = document.querySelectorAll('app-custom-header mat-icon');
@@ -81,7 +91,18 @@ class UOMConversionPage(BasePage):
             except Exception as e:
                 last_exc = e
                 log.warning(f"open_add_form attempt {attempt}/3 failed: {e}")
-                time.sleep(2)
+                if attempt < 3:
+                    try:
+                        self._force_close_panels()
+                    except Exception:
+                        pass
+                    try:
+                        self.force_close_form_popup()
+                    except Exception:
+                        pass
+                    self.hard_refresh()
+                else:
+                    time.sleep(2)
         raise last_exc
 
     # ================================================================
@@ -922,56 +943,159 @@ class UOMConversionPage(BasePage):
         log.info(result)
         time.sleep(0.5)
 
-    def create_fresh_record(self):
+    def create_fresh_record(self, factor=None, max_retries=5, raise_on_error=True):
         """
-        One-flow: read existing pairs, open form, open Source dropdown,
-        read all options, pick fresh pair, select source from open dropdown,
-        then open Target dropdown and select target. Form opens once.
-        Dropdown state is never corrupted.
+        Creates a new UOM conversion record with a fresh (non-duplicate) pair.
+        Uses try-submit-catch-duplicate pattern - does NOT pre-read the table.
+        Args:
+            factor: If None, generates random integer 1-1000.
+                    If provided, uses the given factor string/value.
+            max_retries: Retry count on validation error (default 5).
+            raise_on_error: If True (default), retries on error, raises on exhaustion.
+                            If False, returns dict with success=False on first error.
+        Returns: dict with source_uom, target_uom, conversion_factor,
+                 success (bool), error (str, only if success=False).
         """
         log.info("Creating fresh UOM conversion record")
-        existing = self.get_existing_pairs()
-        self.open_add_form()
-        time.sleep(1)
+        last_error = None
 
-        # Open Source dropdown and read ALL options (dropdown stays OPEN)
+        for attempt in range(max_retries):
+            log.info("Attempt " + str(attempt + 1) + "/" + str(max_retries))
+
+            self.open_add_form()
+            time.sleep(1)
+
+            uoms = self._read_dropdown_uoms()
+            source, target = random.sample(uoms, 2)
+
+            actual_factor = str(factor) if factor is not None else str(random.randint(1, 1000))
+            log.info("Trying: " + source + " -> " + target + " = " + actual_factor)
+
+            self._select_from_open_panel(source)
+            time.sleep(0.5)
+            self.select_target_uom(target)
+            self.enter_conversion_factor(actual_factor)
+            self.submit()
+
+            # --- Success path ---
+            if self.is_success_alert_present(timeout=5):
+                self.handle_success_alert()
+                log.info("Record created successfully: " + source + " -> " + target)
+                return {
+                    "source_uom": source, "target_uom": target,
+                    "conversion_factor": actual_factor, "success": True
+                }
+
+            # --- Validation / duplicate path ---
+            if self.is_validation_alert_present(timeout=3):
+                last_error = self.get_swal_title()
+                log.warning("Validation alert on attempt " + str(attempt + 1) + ": " + str(last_error))
+                # Dismiss the SweetAlert popup
+                self.handle_success_alert()
+                time.sleep(0.5)
+
+                if not raise_on_error:
+                    # Caller wants to observe the error (Tests 10, 11, 13)
+                    self.force_close_form_popup()
+                    return {
+                        "source_uom": source, "target_uom": target,
+                        "conversion_factor": actual_factor,
+                        "success": False, "error": last_error
+                    }
+
+                # Retry with a completely new random pair
+                log.info("Duplicate/error detected - closing form and retrying with new pair...")
+                self.force_close_form_popup()
+                time.sleep(0.5)
+                self.navigate_to_page()
+                self.hard_refresh()
+                time.sleep(1)
+                continue
+
+            # --- No alert at all (unexpected) ---
+            last_error = "No alert appeared after submit"
+            log.warning(last_error)
+            self.force_close_form_popup()
+            if not raise_on_error:
+                return {
+                    "source_uom": source, "target_uom": target,
+                    "conversion_factor": actual_factor,
+                    "success": False, "error": last_error
+                }
+
+        # All retries exhausted
+        if raise_on_error:
+            raise RuntimeError("Failed to create record after " + str(max_retries) +
+                             " attempts. Last error: " + str(last_error))
+        return {
+            "source_uom": source or "?", "target_uom": target or "?",
+            "conversion_factor": str(factor) if factor is not None else "?",
+            "success": False, "error": last_error or "max retries exhausted"
+        }
+
+    def get_available_uoms_from_form(self):
+        """Read all UOM options from Source dropdown of currently open form.
+        Closes dropdown after reading. Form stays open."""
         uoms = self._read_dropdown_uoms()
+        self._close_select_panel()
+        time.sleep(0.3)
+        log.info("Available UOMs from form: " + str(len(uoms)) + " options")
+        return uoms
 
-        # Pick a fresh pair
-        source, target = None, None
-        for _ in range(50):
-            s, t = random.sample(uoms, 2)
-            if (s, t) not in existing:
-                source, target = s, t
-                break
-        if not source:
-            raise RuntimeError("Could not find fresh pair after 50 attempts")
-        factor = str(random.randint(1, 1000))
-        log.info("Fresh pair: " + source + " -> " + target + " = " + factor)
+    # ================================================================
 
-        # Select source from the ALREADY OPEN dropdown (no reopen needed)
-        self._select_from_open_panel(source)
-        time.sleep(0.5)
+    #  TABLE SEARCH
+    # ================================================================
 
-        # Select target via normal flow (opens fresh dropdown)
-        self.select_target_uom(target)
+    def search_table(self, text):
+        """Click search button, type text, press Enter to filter table."""
+        log.info("Searching table: " + text)
+        self.driver.execute_script("""
+            var btn = document.querySelector('.search-btn');
+            if (btn) btn.click();
+        """)
+        time.sleep(0.8)
+        self.driver.execute_script("""
+            var inp = document.getElementById('erpSearchInput');
+            if (inp) {
+                inp.value = '';
+                inp.dispatchEvent(new Event('input', {bubbles:true}));
+            }
+        """)
+        time.sleep(0.3)
+        self.driver.execute_script("""
+            var inp = document.getElementById('erpSearchInput');
+            if (inp) {
+                inp.value = arguments[0];
+                inp.dispatchEvent(new Event('input', {bubbles:true}));
+            }
+        """, text)
+        time.sleep(0.3)
+        self.driver.execute_script("""
+            var inp = document.getElementById('erpSearchInput');
+            if (inp) {
+                inp.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',code:'Enter',bubbles:true}));
+                inp.dispatchEvent(new KeyboardEvent('keyup', {key:'Enter',code:'Enter',bubbles:true}));
+            }
+        """)
+        time.sleep(1.5)
+        log.info("Search applied: " + text)
 
-        # Fill factor and submit
-        self.enter_conversion_factor(factor)
-        self.submit()
-
-        # Handle SweetAlert that appears after submit
-        time.sleep(1)
-        title = self.get_swal_title()
-        if title and 'success' in title.lower():
-            self.handle_success_alert()
-            log.info("Record created successfully: " + source + " -> " + target)
-        elif title:
-            self.close_popup()
-            raise RuntimeError("Submit failed: " + title)
-
-        return {"source_uom": source, "target_uom": target, "conversion_factor": factor}
-
+    def clear_search(self):
+        """Clear search input and press Enter to reset table."""
+        try:
+            self.driver.execute_script("""
+                var inp = document.getElementById('erpSearchInput');
+                if (inp) {
+                    inp.value = '';
+                    inp.dispatchEvent(new Event('input', {bubbles:true}));
+                    inp.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',code:'Enter',bubbles:true}));
+                }
+            """)
+            time.sleep(1)
+            log.info("Search cleared")
+        except Exception:
+            pass
 
     # ================================================================
 
