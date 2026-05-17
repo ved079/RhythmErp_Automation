@@ -1627,13 +1627,11 @@ function LiveExecutionTab({
   const prevRunningTestIdRef = useRef<string | null>(null)
   const stepTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Get steps for running test
   const runningTest = tests.find((t) => t.status === 'running')
   const runningTestId = runningTest?.id || null
+
   const runningSteps = useMemo(() => {
     if (!runningTestId) return []
-
-    // Search in currentTestGroups (real API tests) first
     for (const g of testGroups) {
       const t = g.tests.find((x) =>
         x.id === runningTestId ||
@@ -1642,28 +1640,16 @@ function LiveExecutionTab({
       )
       if (t) {
         const stepsText = t.steps || t.description || ''
-
-        // Try → separator first
         const arrowSteps = stepsText.split('→').map((s) => s.trim()).filter(Boolean)
         if (arrowSteps.length > 1) return arrowSteps
-
-        // Try numbered lines like "1. Do this"
         const numberedSteps = stepsText.split(/\d+\.\s+/).map((s) => s.trim()).filter(Boolean)
         if (numberedSteps.length > 1) return numberedSteps
-
-        // Try newline separated
         const newlineSteps = stepsText.split('\n').map((s) => s.trim()).filter(Boolean)
         if (newlineSteps.length > 1) return newlineSteps
-
-        // Try period+space as sentence separator
         const sentenceSteps = stepsText.split(/\.\s+/).map((s) => s.trim()).filter(Boolean)
         if (sentenceSteps.length > 1) return sentenceSteps
-
-        // Single step — show it as-is but truncate if too long
         const trimmed = stepsText.trim()
         if (trimmed.length <= 80) return [trimmed]
-        
-        // Break long single string into ~60 char chunks at word boundaries
         const words = trimmed.split(' ')
         const lines: string[] = []
         let current = ''
@@ -1677,10 +1663,8 @@ function LiveExecutionTab({
         }
         if (current) lines.push(current.trim())
         return lines
-}
+      }
     }
-
-    // Fallback: search in static testSpecGroups
     for (const g of testSpecGroups) {
       const t = g.tests.find((x) => x.id === runningTestId)
       if (t) {
@@ -1688,20 +1672,15 @@ function LiveExecutionTab({
         if (arrowSteps.length > 0) return arrowSteps
       }
     }
-
-    // Last fallback: use the test name as the single step
-    const runningTest = tests.find((t) => t.id === runningTestId)
-    return runningTest ? [runningTest.name] : ['Running test...']
+    const rt = tests.find((t) => t.id === runningTestId)
+    return rt ? [rt.name] : ['Running test...']
   }, [runningTestId, testGroups, tests])
 
-  // Step progress effect (Feature 2)
   useEffect(() => {
-    // Clear previous timer
     if (stepTimerRef.current) {
       clearInterval(stepTimerRef.current)
       stepTimerRef.current = null
     }
-
     if (runningTestId && runningTestId !== prevRunningTestIdRef.current) {
       prevRunningTestIdRef.current = runningTestId
       if (runningSteps.length > 0) {
@@ -1723,7 +1702,6 @@ function LiveExecutionTab({
       setCurrentStepIndex(-1)
       prevRunningTestIdRef.current = null
     }
-
     return () => {
       if (stepTimerRef.current) {
         clearInterval(stepTimerRef.current)
@@ -1732,7 +1710,6 @@ function LiveExecutionTab({
     }
   }, [runningTestId, runningSteps.length])
 
-  // Track console lines via ref + parent updates
   useEffect(() => {
     if (runningProgress && runningProgress !== lastProgressRef.current) {
       lastProgressRef.current = runningProgress
@@ -1751,7 +1728,7 @@ function LiveExecutionTab({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Top Bar: Back + Progress + Stop */}
+      {/* Top Bar */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 shrink-0 bg-gray-50/50 dark:bg-gray-800/30">
         <Button
           variant="ghost"
@@ -1771,10 +1748,7 @@ function LiveExecutionTab({
               </span>
             </div>
             <div className="flex-1" />
-            <Button
-              onClick={onStop}
-              className="bg-red-500 hover:bg-red-600 text-white h-8 text-[13px] gap-1.5 cursor-pointer"
-            >
+            <Button onClick={onStop} className="bg-red-500 hover:bg-red-600 text-white h-8 text-[13px] gap-1.5 cursor-pointer">
               <Square className="size-3.5" />
               Stop
             </Button>
@@ -1786,18 +1760,12 @@ function LiveExecutionTab({
             </span>
             <div className="flex-1" />
             {failedCount > 0 && (
-              <Button
-                onClick={onRerunFailed}
-                className="bg-orange-500 hover:bg-orange-600 text-white h-8 text-[13px] gap-1.5 cursor-pointer mr-2"
-              >
+              <Button onClick={onRerunFailed} className="bg-orange-500 hover:bg-orange-600 text-white h-8 text-[13px] gap-1.5 cursor-pointer mr-2">
                 <RotateCcw className="size-3.5" />
                 Rerun Failed ({failedCount})
               </Button>
             )}
-            <Button
-              onClick={onBack}
-              className="bg-[#1976d2] hover:bg-[#1565c0] text-white h-8 text-[13px] gap-1.5 cursor-pointer"
-            >
+            <Button onClick={onBack} className="bg-[#1976d2] hover:bg-[#1565c0] text-white h-8 text-[13px] gap-1.5 cursor-pointer">
               <RotateCcw className="size-3.5" />
               New Run
             </Button>
@@ -1816,9 +1784,8 @@ function LiveExecutionTab({
 
       {/* Main Content */}
       <div className="flex-1 overflow-hidden flex flex-col">
-        {/* Step Progress Panel + Browser View split */}
         <div className="flex-1 px-4 pt-3 pb-2 min-h-0 flex gap-3">
-          {/* Step Progress Side Panel — only visible when a test is running with steps */}
+          {/* Step Progress Panel */}
           {isRunning && runningTest && runningSteps.length > 0 && (
             <div className="w-72 shrink-0 flex flex-col bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/80">
@@ -1854,12 +1821,8 @@ function LiveExecutionTab({
                           <Circle className="size-3.5 text-gray-300 dark:text-gray-600 shrink-0 mt-0.5" />
                         )}
                         <span className={`flex-1 leading-tight ${isCompleted ? 'line-through opacity-70' : ''}`}>{step}</span>
-                        {isCurrent && (
-                          <span className="text-[10px] text-blue-500 dark:text-blue-400 whitespace-nowrap shrink-0">Running</span>
-                        )}
-                        {isCompleted && (
-                          <span className="text-[10px] text-green-500 dark:text-green-400 whitespace-nowrap shrink-0">Done</span>
-                        )}
+                        {isCurrent && <span className="text-[10px] text-blue-500 dark:text-blue-400 whitespace-nowrap shrink-0">Running</span>}
+                        {isCompleted && <span className="text-[10px] text-green-500 dark:text-green-400 whitespace-nowrap shrink-0">Done</span>}
                       </div>
                     )
                   })}
@@ -1880,7 +1843,7 @@ function LiveExecutionTab({
           {/* Live Browser View */}
           <div className="flex-1 min-w-0">
             <div className="h-full rounded-lg border-2 border-gray-700 dark:border-gray-600 overflow-hidden flex flex-col bg-white dark:bg-gray-900">
-              {/* Chrome-like top bar */}
+              {/* Chrome top bar */}
               <div className="bg-gray-200 dark:bg-gray-700 px-3 py-1.5 flex items-center gap-2 shrink-0">
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 rounded-full bg-red-400" />
@@ -1891,9 +1854,7 @@ function LiveExecutionTab({
                   <div className="bg-white dark:bg-gray-800 rounded-md px-3 py-0.5 flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 min-w-[300px]">
                     <Globe className="size-3 text-gray-400 dark:text-gray-500" />
                     <span className="truncate">
-                      {isRunning
-                        ? `https://rhythmerp.com/common-settings/tax-rate — ${runningTest?.name || 'Running...'}`
-                        : 'https://rhythmerp.com/common-settings/tax-rate'}
+                      {isRunning ? `https://rhythmerp.com — ${runningTest?.name || 'Running...'}` : 'https://rhythmerp.com'}
                     </span>
                   </div>
                 </div>
@@ -1901,444 +1862,78 @@ function LiveExecutionTab({
               </div>
 
               {/* Browser Content */}
-              {/* Browser Content */}
-            <div className="flex-1 overflow-hidden relative" style={{ minHeight: 0 }}>
-              {isRunning && runningTest ? (
-              <div className="w-full h-full flex flex-col bg-white dark:bg-gray-900">
-                {/* ERP top bar */}
-                <div className="bg-green-800 px-3 py-2 flex items-center gap-3 shrink-0">
-                    <span className="text-white text-xs font-semibold">RhythmERP</span>
-                    <span className="text-green-300 text-xs">›</span>
-                    <span className="text-green-200 text-xs">Common Settings</span>
-                    <span className="text-green-300 text-xs">›</span>
-                    <span className="text-white text-xs">{runningTest.name}</span>
-                    <span className="ml-auto flex items-center gap-1.5 text-[10px] text-green-300">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                      Selenium running
-                    </span>
+              <div className="flex-1 overflow-hidden relative" style={{ minHeight: 0 }}>
+                {isRunning && runningTest ? (
+                  <LiveScreencast isRunning={isRunning} />
+                ) : completedCount > 0 ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gray-50 dark:bg-gray-800">
+                    <CheckCircle2 className="size-12 text-green-500" />
+                    <p className="text-[15px] font-medium text-gray-700 dark:text-gray-200">Run Complete</p>
+                    <p className="text-[13px] text-gray-500 dark:text-gray-400">{passedCount} passed, {failedCount} failed</p>
                   </div>
-
-                  {/* ERP body */}
-                  <div className="flex flex-1 overflow-hidden">
-                    {/* Mini sidebar */}
-                    <div className="w-36 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-2 shrink-0 overflow-auto">
-                      {['UOM', 'Bank', 'Seasons', 'Tax Authority', 'Tax Rate'].map((item) => (
-                        <div
-                          key={item}
-                          className={`px-3 py-1.5 text-[11px] cursor-default ${
-                            runningTest.name.toLowerCase().includes(item.toLowerCase())
-                              ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-l-2 border-green-600 font-medium'
-                              : 'text-gray-500 dark:text-gray-400'
-                          }`}
-                        >
-                          {item}
-                        </div>
-                      ))}
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-gray-50 dark:bg-gray-800">
+                    <div className="w-20 h-20 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                      <Play className="size-8 text-gray-400 dark:text-gray-500 ml-0.5" />
                     </div>
-
-                    {/* Main content area */}
-                    <div className="flex-1 p-3 overflow-auto">
-                      {/* Page header */}
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-[13px] font-medium text-gray-700 dark:text-gray-200">
-                          {runningTest.name}
-                        </span>
-                        <div className="px-2 py-1 rounded text-[10px] font-medium text-white bg-blue-500 animate-pulse">
-                          + Add (interacting...)
-                        </div>
-                      </div>
-
-                      {/* Fake data table */}
-                      <table className="w-full text-[11px] border border-gray-200 dark:border-gray-700 rounded overflow-hidden">
-                        <thead>
-                          <tr className="bg-gray-50 dark:bg-gray-800">
-                            <th className="px-2 py-1.5 text-left text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">#</th>
-                            <th className="px-2 py-1.5 text-left text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">Name</th>
-                            <th className="px-2 py-1.5 text-left text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">Status</th>
-                            <th className="px-2 py-1.5 text-left text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {['Record A', 'Record B', 'Record C'].map((rec, i) => (
-                            <tr key={rec} className="border-t border-gray-100 dark:border-gray-800">
-                              <td className="px-2 py-1.5 text-gray-400">{i + 1}</td>
-                              <td className="px-2 py-1.5 text-gray-700 dark:text-gray-200">{rec}</td>
-                              <td className="px-2 py-1.5">
-                                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-                                  Active
-                                </span>
-                              </td>
-                              <td className="px-2 py-1.5 text-blue-500 text-[11px] cursor-pointer">Edit</td>
-                            </tr>
-                          ))}
-                          {/* Animated "currently testing" row */}
-                          <tr className="border-t border-gray-100 dark:border-gray-800 bg-yellow-50 dark:bg-yellow-900/10">
-                            <td className="px-2 py-1.5 text-yellow-600">→</td>
-                            <td className="px-2 py-1.5 text-yellow-700 dark:text-yellow-400 font-medium flex items-center gap-1.5">
-                              <Loader2 className="size-3 animate-spin" />
-                              Auto_Test_{runningTest.id}
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 animate-pulse">
-                                Testing...
-                              </span>
-                            </td>
-                            <td className="px-2 py-1.5 text-gray-400 text-[11px]">—</td>
-                          </tr>
-                        </tbody>
-                      </table>
-
-                      {/* Currently running badge */}
-                      <div className="mt-3 border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 rounded p-2 flex items-center gap-2">
-                        <Loader2 className="size-3.5 text-blue-500 animate-spin shrink-0" />
-                        <span className="text-[11px] text-blue-700 dark:text-blue-300 font-medium">{runningTest.id}</span>
-                        <span className="text-[11px] text-blue-500 dark:text-blue-400">— {runningTest.name}</span>
-                      </div>
-                    </div>
+                    <p className="text-[14px] text-gray-500 dark:text-gray-400 font-medium">No test running</p>
+                    <p className="text-[12px] text-gray-400 dark:text-gray-500">Go to Test Runner, select tests and click Run</p>
                   </div>
-                </div>
-              ) : completedCount > 0 ? (
-                <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gray-50 dark:bg-gray-800">
-                  <CheckCircle2 className="size-12 text-green-500" />
-                  <p className="text-[15px] font-medium text-gray-700 dark:text-gray-200">Run Complete</p>
-                  <p className="text-[13px] text-gray-500 dark:text-gray-400">
-                    {passedCount} passed, {failedCount} failed
-                  </p>
-                </div>
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-gray-50 dark:bg-gray-800">
-                  <div className="w-20 h-20 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                    <Play className="size-8 text-gray-400 dark:text-gray-500 ml-0.5" />
-                  </div>
-                  <p className="text-[14px] text-gray-500 dark:text-gray-400 font-medium">No test running</p>
-                  <p className="text-[12px] text-gray-400 dark:text-gray-500">Go to Test Runner, select tests and click Run</p>
-                </div>
-              )}
+                )}
+              </div>
             </div>
-                        </div>
 
-                        {/* Currently running info */}
-                        {isRunning && runningTest && (
-                          <div className="flex items-center gap-3 mt-2 px-1">
-                            <span className="text-[12px] text-gray-500 dark:text-gray-400">
-                              Currently: <span className="font-medium text-gray-700 dark:text-gray-200">{runningTest.id}</span> — {runningTest.name}
-                            </span>
-                            <Separator orientation="vertical" className="h-3" />
-                            <span className="text-[12px] text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                              <Loader2 className="size-3 animate-spin" />
-                              Running...
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Console Output — Full Width */}
-                    <div className="shrink-0 border-t border-gray-700 flex flex-col" style={{ height: '220px' }}>
-                      <div className="flex items-center gap-2 px-3 py-1.5 bg-[#1e1e2e] border-b border-gray-700 shrink-0">
-                        <Terminal className="size-3.5 text-green-400" />
-                        <span className="text-[11px] font-medium text-gray-400">LIVE CONSOLE</span>
-                        <span className="text-[10px] text-gray-600 ml-auto font-mono">pytest • test_tax_rate_validation.py</span>
-                      </div>
-                      <div className="flex-1 bg-[#1a1a2e] overflow-auto p-2">
-                        <div className="space-y-0">
-                          {consoleLines.map((line, i) => (
-                            <div
-                              key={i}
-                              className={`text-[11px] font-mono leading-4 ${
-                                line.includes('PASSED') || line.includes('✅')
-                                  ? 'text-green-400'
-                                  : line.includes('FAILED') || line.includes('❌') || line.includes('ERROR')
-                                    ? 'text-red-400'
-                                    : line.includes('Running') || line.includes('Navigating') || line.includes('Clicking')
-                                      ? 'text-yellow-300'
-                                      : line.startsWith('>')
-                                        ? 'text-blue-300'
-                                        : 'text-gray-400'
-                              }`}
-                            >
-                              {line}
-                            </div>
-                          ))}
-                          <div ref={consoleEndRef} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )
-            }
-
-// ─── REPORT TO ADMIN DIALOG ──────────────────────────────
-// ─── MY TICKETS TAB (Feature 1 & 2 & 4) ─────────────────
-function MyTicketsTab({ userName, userEmail }: { userName: string; userEmail: string }) {
-  const [filter, setFilter] = useState<string>('all')
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [reports, setReports] = useState<BugReport[]>([])
-  const [followUpText, setFollowUpText] = useState('')
-  const [replyingTo, setReplyingTo] = useState<string | null>(null)
-
-  useEffect(() => {
-    const refresh = () => {
-      const all = getBugReports().filter((r) => r.reporterEmail === userEmail)
-      setReports(all)
-      // Mark all as read by user
-      all.forEach((r) => markReportReadByUser(r))
-    }
-    refresh()
-    const interval = setInterval(refresh, 3000)
-    return () => clearInterval(interval)
-  }, [userEmail])
-
-  const handleFollowUp = useCallback((reportId: string) => {
-    if (!followUpText.trim()) return
-    addReplyToReport(reportId, { authorName: userName, authorRole: 'user', message: followUpText.trim() })
-    setFollowUpText('')
-    setReplyingTo(null)
-    const all = getBugReports().filter((r) => r.reporterEmail === userEmail)
-    setReports(all)
-    toast.success('Follow-up sent')
-  }, [followUpText, userName, userEmail])
-
-  const filtered = useMemo(() => {
-    if (filter === 'all') return reports
-    return reports.filter((r) => r.status === filter)
-  }, [reports, filter])
-
-  const openCount = reports.filter((r) => r.status === 'open').length
-  const inProgressCount = reports.filter((r) => r.status === 'in-progress').length
-  const fixedCount = reports.filter((r) => r.status === 'fixed').length
-
-  const statusConfig: Record<string, { label: string; color: string; dot: string }> = {
-    'open': { label: 'Open', color: 'text-orange-700 bg-orange-100 dark:text-orange-300 dark:bg-orange-900/40', dot: 'bg-orange-500' },
-    'in-progress': { label: 'In Progress', color: 'text-blue-700 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/40', dot: 'bg-blue-500' },
-    'fixed': { label: 'Fixed', color: 'text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/40', dot: 'bg-green-500' },
-  }
-
-  const priorityConfig: Record<string, { label: string; color: string; emoji: string }> = {
-    'high': { label: 'High', color: 'text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-900/40', emoji: '🔴' },
-    'medium': { label: 'Medium', color: 'text-orange-700 bg-orange-100 dark:text-orange-300 dark:bg-orange-900/40', emoji: '🟡' },
-    'low': { label: 'Low', color: 'text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/40', emoji: '🟢' },
-  }
-
-  const formatDate = (iso: string) => {
-    try {
-      const d = new Date(iso)
-      return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-    } catch { return iso }
-  }
-
-  return (
-    <div className="flex flex-col h-full overflow-auto">
-      <div className="p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-[18px] font-semibold text-gray-800 dark:text-gray-100 flex items-center gap-2">
-              <Ticket className="size-5 text-green-600" />
-              My Tickets
-            </h2>
-            <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">Bug reports you have raised</p>
-          </div>
-          <span className="text-[12px] text-gray-500 dark:text-gray-400">{reports.length} total</span>
-        </div>
-
-        {/* Summary */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3 border border-orange-100 dark:border-orange-800/50">
-            <div className="text-[11px] text-orange-600 dark:text-orange-400 font-medium uppercase">Open</div>
-            <div className="text-xl font-bold text-orange-700 dark:text-orange-400 mt-0.5">{openCount}</div>
-          </div>
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-100 dark:border-blue-800/50">
-            <div className="text-[11px] text-blue-600 dark:text-blue-400 font-medium uppercase">In Progress</div>
-            <div className="text-xl font-bold text-blue-700 dark:text-blue-400 mt-0.5">{inProgressCount}</div>
-          </div>
-          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 border border-green-100 dark:border-green-800/50">
-            <div className="text-[11px] text-green-600 dark:text-green-400 font-medium uppercase">Fixed</div>
-            <div className="text-xl font-bold text-green-700 dark:text-green-400 mt-0.5">{fixedCount}</div>
+            {/* Currently running info */}
+            {isRunning && runningTest && (
+              <div className="flex items-center gap-3 mt-2 px-1">
+                <span className="text-[12px] text-gray-500 dark:text-gray-400">
+                  Currently: <span className="font-medium text-gray-700 dark:text-gray-200">{runningTest.id}</span> — {runningTest.name}
+                </span>
+                <Separator orientation="vertical" className="h-3" />
+                <span className="text-[12px] text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                  <Loader2 className="size-3 animate-spin" />
+                  Running...
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Filter Tabs */}
-        <div className="flex items-center gap-1.5">
-          {(['all', 'open', 'in-progress', 'fixed'] as const).map((f) => {
-            const count = f === 'all' ? reports.length : f === 'open' ? openCount : f === 'in-progress' ? inProgressCount : fixedCount
-            return (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
-                  filter === f
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                    : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                }`}
-              >
-                {f === 'all' ? 'All' : f === 'in-progress' ? 'In Progress' : f.charAt(0).toUpperCase() + f.slice(1)} ({count})
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Ticket List */}
-        {filtered.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
-            <Ticket className="size-10 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-            <p className="text-[14px] text-gray-500 dark:text-gray-400 font-medium">No tickets raised yet</p>
-            <p className="text-[12px] text-gray-400 dark:text-gray-500 mt-1">
-              Bug reports from test runs will appear here
-            </p>
+        {/* Console Output */}
+        <div className="shrink-0 border-t border-gray-700 flex flex-col" style={{ height: '220px' }}>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-[#1e1e2e] border-b border-gray-700 shrink-0">
+            <Terminal className="size-3.5 text-green-400" />
+            <span className="text-[11px] font-medium text-gray-400">LIVE CONSOLE</span>
+            <span className="text-[10px] text-gray-600 ml-auto font-mono">pytest</span>
           </div>
-        ) : (
-          <div className="space-y-2">
-            {filtered.map((report) => {
-              const sCfg = statusConfig[report.status]
-              const pCfg = priorityConfig[report.priority]
-              const sla = getSLAStatus(report.priority, report.createdAt, report.status)
-              const isExpanded = expandedId === report.id
-              return (
+          <div className="flex-1 bg-[#1a1a2e] overflow-auto p-2">
+            <div className="space-y-0">
+              {consoleLines.map((line, i) => (
                 <div
-                  key={report.id}
-                  className={`bg-white dark:bg-gray-800 rounded-lg border transition-all cursor-pointer ${
-                    report.status === 'open'
-                      ? 'border-orange-200 dark:border-orange-800/40 hover:border-orange-300'
-                      : report.status === 'in-progress'
-                        ? 'border-blue-200 dark:border-blue-800/40 hover:border-blue-300'
-                        : 'border-green-200 dark:border-green-800/40 hover:border-green-300 opacity-70'
-                  } ${isExpanded ? 'shadow-sm' : ''}`}
-                  onClick={() => setExpandedId(isExpanded ? null : report.id)}
+                  key={i}
+                  className={`text-[11px] font-mono leading-4 ${
+                    line.includes('PASSED') || line.includes('✅')
+                      ? 'text-green-400'
+                      : line.includes('FAILED') || line.includes('❌') || line.includes('ERROR')
+                        ? 'text-red-400'
+                        : line.includes('Running') || line.includes('Navigating') || line.includes('Clicking')
+                          ? 'text-yellow-300'
+                          : line.startsWith('>')
+                            ? 'text-blue-300'
+                            : 'text-gray-400'
+                  }`}
                 >
-                  <div className="flex items-center gap-3 px-4 py-3">
-                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${sCfg.dot} ${report.status === 'open' ? 'animate-pulse' : ''}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100">{report.id}</span>
-                        <span className="text-[12px] text-gray-400">—</span>
-                        <span className="text-[12px] text-gray-700 dark:text-gray-200 truncate">{report.testDescription}</span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-                        <span className="font-mono">{report.testId}</span>
-                        <span>in</span>
-                        <span>{report.moduleName}</span>
-                      </div>
-                    </div>
-                    {/* SLA Badge */}
-                    <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${sla.color}`}>
-                      {sla.label === 'Overdue' ? '⚠️' : sla.label === 'At Risk' ? '⏰' : '✅'} {sla.remaining}
-                    </span>
-                    <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${pCfg.color}`}>
-                      {pCfg.emoji} {pCfg.label}
-                    </span>
-                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border-0 shrink-0 ${sCfg.color}`}>
-                      {sCfg.label}
-                    </Badge>
-                    {(report.replies?.length ?? 0) > 0 && (
-                      <span className="text-[10px] text-gray-400 shrink-0 flex items-center gap-0.5">
-                        <MessageSquare className="size-3" /> {report.replies.length}
-                      </span>
-                    )}
-                    <span className="text-[10px] text-gray-400 shrink-0 w-28 text-right">{formatDate(report.createdAt)}</span>
-                    <ChevronDown className={`size-4 text-gray-400 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                  </div>
-
-                  {isExpanded && (
-                    <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-700 pt-3 space-y-3" onClick={(e) => e.stopPropagation()}>
-                      {/* Error */}
-                      <div>
-                        <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider mb-1">Error Message</div>
-                        <div className="bg-red-50 dark:bg-red-900/15 rounded-md p-2.5 text-[12px] text-red-600 dark:text-red-400 font-mono break-all border border-red-100 dark:border-red-800/30">
-                          {report.error}
-                        </div>
-                      </div>
-
-                      {/* User Note */}
-                      {report.userNote && (
-                        <div>
-                          <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider mb-1">Your Note</div>
-                          <div className="bg-gray-50 dark:bg-gray-900 rounded-md p-2.5 text-[12px] text-gray-700 dark:text-gray-200 border border-gray-100 dark:border-gray-700">
-                            {report.userNote}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* SLA Detail */}
-                      <div className="flex items-center gap-3">
-                        <div className={`inline-flex items-center text-[11px] font-medium px-2 py-1 rounded-full ${sla.color}`}>
-                          {sla.label === 'Overdue' ? '⚠️' : sla.label === 'At Risk' ? '⏰' : '✅'} SLA: {sla.remaining}
-                        </div>
-                        <span className="text-[11px] text-gray-400">
-                          Priority {report.priority}: {report.priority === 'high' ? '24h' : report.priority === 'medium' ? '48h' : '7 days'} resolution target
-                        </span>
-                      </div>
-
-                      {/* Replies Thread */}
-                      {(report.replies?.length ?? 0) > 0 && (
-                        <div>
-                          <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider mb-2">Conversation ({report.replies.length})</div>
-                          <div className="space-y-2 max-h-48 overflow-y-auto">
-                            {report.replies.map((reply) => (
-                              <div key={reply.id} className={`rounded-md p-2.5 border ${
-                                reply.authorRole === 'admin'
-                                  ? 'bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-800/30'
-                                  : 'bg-green-50 dark:bg-green-900/10 border-green-100 dark:border-green-800/30'
-                              }`}>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className={`text-[11px] font-semibold ${reply.authorRole === 'admin' ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
-                                    {reply.authorRole === 'admin' ? '👤 Admin' : '🧑 You'}
-                                  </span>
-                                  <span className="text-[10px] text-gray-400">{formatDate(reply.createdAt)}</span>
-                                </div>
-                                <div className="text-[12px] text-gray-700 dark:text-gray-200">{reply.message}</div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Follow Up */}
-                      <div>
-                        {replyingTo === report.id ? (
-                          <div className="flex items-end gap-2">
-                            <textarea
-                              value={followUpText}
-                              onChange={(e) => setFollowUpText(e.target.value)}
-                              placeholder="Add a follow-up message..."
-                              rows={2}
-                              className="flex-1 px-3 py-2 text-[12px] rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-800 dark:text-gray-100 resize-none focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
-                            />
-                            <Button
-                              size="sm"
-                              onClick={() => handleFollowUp(report.id)}
-                              disabled={!followUpText.trim()}
-                              className="bg-green-600 hover:bg-green-700 text-white text-[12px] cursor-pointer shrink-0"
-                            >
-                              <Send className="size-3 mr-1" /> Send
-                            </Button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => { setReplyingTo(report.id); setFollowUpText('') }}
-                            className="text-[12px] text-green-600 hover:text-green-700 font-medium cursor-pointer flex items-center gap-1"
-                          >
-                            <MessageSquare className="size-3.5" /> Follow Up
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Meta */}
-                      <div className="text-[11px] text-gray-400 dark:text-gray-500">
-                        Reported: {formatDate(report.createdAt)} • Updated: {formatDate(report.updatedAt)}
-                      </div>
-                    </div>
-                  )}
+                  {line}
                 </div>
-              )
-            })}
+              ))}
+              <div ref={consoleEndRef} />
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   )
 }
-
 // ─── SCHEDULE RUNS TAB (Feature 5) ────────────────────────
 function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sidebarModules: SidebarModule[] }) {
   const [runs, setRuns] = useState<ScheduledRun[]>([])

@@ -47,13 +47,17 @@ def generate_special_char_description():
 
 
 def generate_lowercase_uom_code():
-    """Generate a UOM code with lowercase letters."""
-    return "abcdefgh"
+    """Generate a unique UOM code with lowercase letters."""
+    suffix = "".join(random.choices(string.ascii_lowercase, k=4))
+    timestamp = datetime.now().strftime("%H%M%S")
+    return f"lc{suffix}{timestamp}"
 
 
 def generate_mixed_case_uom_code():
-    """Generate a UOM code with mixed case letters."""
-    return "AbCdEfGh"
+    """Generate a unique UOM code with mixed case letters."""
+    suffix = "".join(random.choices(string.ascii_letters, k=4))
+    timestamp = datetime.now().strftime("%H%M%S")
+    return f"Mx{suffix}{timestamp}"
 
 
 def generate_number_uom_code():
@@ -67,8 +71,10 @@ def generate_special_char_uom_code():
 
 
 def generate_leading_space_uom_code():
-    """Generate a UOM code with leading spaces."""
-    return "  ABCDEFGH"
+    """Generate a UOM code with leading spaces + unique random suffix."""
+    suffix = "".join(random.choices(string.ascii_uppercase, k=6))
+    timestamp = datetime.now().strftime("%H%M%S")
+    return f"  {suffix}{timestamp}"
 
 
 def generate_trailing_space_uom_code():

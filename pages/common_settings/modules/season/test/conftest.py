@@ -79,6 +79,30 @@ def season_page(logged_in_driver):
     page = SeasonPage(logged_in_driver)
     page.navigate_to_season()
     yield page
+    # Teardown: force-close any lingering overlays/forms after each test
+    try:
+        page._force_close_panels()
+        page.driver.refresh()
+        page.wait_seconds(2)
+    except Exception:
+        pass
+
+
+@pytest.fixture(autouse=True)
+def hard_refresh_between_tests(logged_in_driver):
+    """Hard refresh the page before each test to ensure clean state."""
+    try:
+        logged_in_driver.refresh()
+        logged_in_driver.implicitly_wait(2)
+    except Exception:
+        pass
+    yield
+    # After test: hard refresh again
+    try:
+        logged_in_driver.refresh()
+        logged_in_driver.implicitly_wait(2)
+    except Exception:
+        pass
 
 
 # ================================================================
@@ -89,17 +113,16 @@ _cs_store = CSReportStore()
 
 # ---- Season Known Issues ----
 _cs_store.record_issue(
-    severity="High",
+    severity="Medium",
     module="Season",
     category="Data Integrity",
-    description="Duplicate Season Name causes system to hang indefinitely with no "
-                "error message or alert. The submit button appears to do nothing, "
-                "no loading spinner appears, and the form stays open forever. "
-                "The only way to recover is to close the popup.",
-    expected="System should show a validation error like 'Season Name already exists' "
-             "and keep the form open for correction.",
-    actual="System hangs indefinitely. No error, no alert, no response. "
-           "User must close the popup to recover.",
+    description="Duplicate Season Name shows generic 'Validation Failed' alert "
+                "without specifically mentioning the duplicate field. User must "
+                "click Cancel to dismiss and the form stays open for correction.",
+    expected="System should show a specific error like 'Season Name already exists' "
+             "highlighting the Name field.",
+    actual="Generic 'Validation Failed' Pattern B alert appears with option to "
+           "download errors as Excel. Form stays open for correction.",
     test_ref="Test T5",
     status="Open",
 )

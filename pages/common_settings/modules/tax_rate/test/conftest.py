@@ -1,5 +1,8 @@
 """
 conftest.py — Tax Rate Common Settings (RhythmERP)
+====================================================
+Overrides logged_in_driver to use RHYTHMERP credentials.
+Inherits driver from root conftest.
 """
 
 import os
@@ -7,43 +10,47 @@ import sys
 import logging
 import pytest
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+# ── PATH SETUP ── (5 ".." → Pacs_Automation/)
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
 from common.logger import log
-from common.browser_utils import get_driver
-from pages.login_screens.Login_Screens_.login_page import LoginPage
 from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHYTHMERP_FACILITY
 from pages.common_settings.cs_report_generator import CSReportStore, generate_cs_report
 from pages.common_settings.modules.tax_rate.tax_rate_page import TaxRatePage
+from pages.login_screens.Login_Screens_.login_page import LoginPage
 
 
 # ================================================================
 # FIXTURES
 # ================================================================
 
-@pytest.fixture(scope="session")
-def driver():
-    log.separator()
-    log.info("LAUNCHING BROWSER (RhythmERP - Tax Rate Tests)...")
-    log.separator()
-    drv = get_driver()
-    drv.maximize_window()
-    yield drv
-    log.separator()
-    log.info("CLOSING BROWSER...")
-    log.separator()
+@pytest.fixture(scope="function")
+def tr_page(logged_in_driver):
+    """
+    Fresh TaxRatePage instance per test.
+    Navigates to Tax Rate page and ensures clean state.
+    """
+    page = TaxRatePage(logged_in_driver)
+    page.navigate_to_page()
+    page.force_cleanup_all()
+    yield page
     try:
-        drv.quit()
+        page.force_cleanup_all()
     except Exception:
         pass
 
+
+# ================================================================
+# OVERRIDE: logged_in_driver with RHYTHMERP credentials
+# (root conftest uses PACS credentials — wrong for Tax Rate)
+# ================================================================
 
 @pytest.fixture(scope="session")
 def logged_in_driver(driver):
     """Driver with completed RhythmERP login session."""
     log.separator()
-    log.info("LOGGING INTO RHYTHMERP...")
+    log.info("LOGGING INTO RHYTHMERP (Tax Rate tests)...")
     log.separator()
 
     login_page = LoginPage(driver)
@@ -78,30 +85,11 @@ def logged_in_driver(driver):
     yield driver
 
 
-@pytest.fixture(scope="function")
-def tr_page(logged_in_driver):
-    """
-    Fresh TaxRatePage instance per test.
-    Navigates to Tax Rate page and ensures clean state.
-    """
-    page = TaxRatePage(logged_in_driver)
-    page.navigate_to_page()
-    page.force_cleanup_all()
-    yield page
-    # Teardown: force close any leftover popups
-    try:
-        page.force_cleanup_all()
-    except Exception:
-        pass
-
-
 # ================================================================
 # REPORT GENERATOR HOOKS
 # ================================================================
 
 _cs_store = CSReportStore()
-
-# ---- Tax Rate Known Issues ----
 
 _cs_store.record_issue(
     severity="High",
@@ -253,7 +241,7 @@ def pytest_sessionfinish(session, exitstatus):
     """Generate Excel report at end of test session."""
     if not _cs_store.has_results():
         return
-    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "reports")
+    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "reports")
     try:
         filepath = generate_cs_report(_cs_store.results, output_dir,
                                        issues=_cs_store.known_issues)

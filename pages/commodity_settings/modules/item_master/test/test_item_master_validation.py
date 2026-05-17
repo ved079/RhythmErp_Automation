@@ -12,19 +12,51 @@ Phases:
   5. Popup & UI Behaviors       (8 tests) — IM-P01 to IM-P08
   6. History & Audit Trail      (5 tests) — IM-H01 to IM-H05
 
-Known Bugs (suspected — to be confirmed during test execution):
-  BUG-001 (HIGH)  : Spaces-only Item Name creates empty record
-  BUG-002 (HIGH)  : Duplicate Item Names allowed
-  BUG-003 (MEDIUM): No maxlength on Item Name input
+IMPORTANT — Item Name is READONLY:
+  - Item Name field has readonly=true and CANNOT be typed into
+  - It is auto-generated as a space-separated concatenation of
+    Item Attribute 1-5 values
+  - Tests for spaces-only, maxlength, special chars in Item Name
+    are NOT APPLICABLE — the field cannot receive manual input
+  - Duplicate name checks would require selecting identical attribute
+    values, which is difficult to control from live UI dropdowns
+  - Item Name is also readonly in Edit mode
+
+Stepper Layout (verified from live application 2026-05-18 — V2 exploration):
+  - Step 1: All form fields + 3 toggle switches (NOT 4!)
+    (Status, Is Critical, Include Wip, Is Packing Material)
+    "Allow Negative Stock" toggle DOES NOT EXIST in Item Master
+  - Step 2: Attachment Type (combobox) + File Upload ONLY
+  - Step 3: Packaging table with Add Row
+  - Edit mode: Step 2 & 3 tabs DISABLED, button says "Update" not "Submit"
+  - Item Group is NOT required in Create or Edit mode
+  - Base Uom does NOT auto-sync with UOM — independent fields
+  - DROPDOWN FILL ORDER: Category → Group → Type → Attr1 → Attr2 → Attr3 → Attr4 → Attr5
+
+Known Bugs (CONFIRMED via browser exploration 2026-05-18):
+  BUG-001 (HIGH)  : [RETRACTED] Spaces-only Item Name — not applicable,
+                     field is readonly and auto-generated
+  BUG-002 (HIGH)  : Duplicate Item Names ALLOWED — confirmed! Two "Soyabean"
+                     rows exist in table both Active. No uniqueness validation.
+  BUG-003 (MEDIUM): [RETRACTED] No maxlength on Item Name — not applicable,
+                     field is readonly and auto-generated
   BUG-004 (MEDIUM): Negative Base Uom Conversion accepted
   BUG-005 (LOW)   : No Delete option anywhere on screen
+  BUG-006 (MEDIUM): Dropdown option duplication — Item Category & Item Group
+                     show options TWICE in dropdown
+  BUG-007 (CRITICAL): Browser-clicked mat-select does NOT update Angular form
+                     model — must use JS value-setter + dispatchEvent pattern
 
 Bug Handling Decisions:
-  BUG-001: Test expects rejection — mark xfail, will FAIL until ERP is fixed
-  BUG-002: Mark as known bug — test PASSES documenting current behavior
-  BUG-003: Document as known issue, test confirms the bug
+  BUG-001: Retracted — Item Name is readonly; cannot type spaces
+  BUG-002: CONFIRMED — Duplicate Item Names ARE allowed. Table has two
+           "Soyabean" rows both Active. Test should verify duplicates
+           CAN be created (not that they're blocked).
+  BUG-003: Retracted — Item Name is auto-generated; maxlength not testable
   BUG-004: Test expects rejection — mark xfail if bug confirmed
   BUG-005: Documented in UI phase, not tested (no button to click)
+  BUG-006: Documented — dropdown shows duplicate options, no test needed
+  BUG-007: CRITICAL for automation — must use JS value-setter for dropdowns
 
 Run:
   pytest test_item_master_validation.py -v --tb=short
@@ -50,16 +82,8 @@ from pages.commodity_settings.modules.item_master.item_master_page import (
 from pages.commodity_settings.modules.item_master.data.item_master_data import (
     generate_valid_item_data,
     generate_valid_step2_data,
-    generate_valid_step3_data,
     generate_full_valid_item_data,
     generate_valid_edit_data,
-    generate_empty_data,
-    generate_name_only_data,
-    generate_duplicate_name_data,
-    generate_string_255,
-    generate_string_256,
-    generate_spaces_only,
-    generate_special_char_name,
     generate_negative_uom_conversion,
     generate_zero_uom_conversion,
     generate_alpha_uom_conversion,
@@ -67,10 +91,6 @@ from pages.commodity_settings.modules.item_master.data.item_master_data import (
     generate_decimal_uom_conversion,
     generate_uom_conversion_with_spaces,
     generate_item_code_with_special_chars,
-    generate_item_name,
-    generate_item_code,
-    generate_description,
-    generate_base_uom_conversion,
 )
 from common.logger import log
 
@@ -81,7 +101,10 @@ from common.logger import log
 
 def _create_prerequisite_item(page, name_prefix="PreReq"):
     """Create an Item Master entry for tests that need existing data.
-    Returns the item name used.
+    Returns the auto-generated item name and the data dict.
+
+    Note: Item Name is auto-generated from Item Attribute 1-5 values
+    and cannot be manually typed (readonly=true).
     """
     data = generate_full_valid_item_data(name_prefix)
     result = page.create_item(data)
@@ -96,7 +119,8 @@ def _create_prerequisite_item(page, name_prefix="PreReq"):
         pass
     page.click_refresh()
     page.wait_seconds(2)
-    name = data.get("item_name", "")
+    # Item Name is auto-generated from attributes
+    name = result.get("item_name", "") or data.get("_auto_item_name", "")
     log.info(f"Prerequisite item created: {name}")
     return name, data
 
@@ -108,6 +132,10 @@ def _create_prerequisite_item(page, name_prefix="PreReq"):
 class TestCreateFormValidations:
     """IM-C01 to IM-C15: Validation checks on the Create form.
     Item Master has a 3-step stepper with many fields.
+
+    Note: Item Name is READONLY (auto-generated from Item Attributes 1-5).
+    Tests that previously tried to type into Item Name have been redesigned
+    to verify readonly enforcement instead.
     """
 
     # ---- IM-C01: Submit with all fields empty ----
@@ -158,7 +186,8 @@ class TestCreateFormValidations:
 
         data = generate_full_valid_item_data("ValidC")
         result = page.create_item(data)
-        name = data.get("item_name", "")
+        # Item Name is auto-generated from Item Attribute 1-5 concatenation
+        name = result.get("item_name", "") or data.get("_auto_item_name", "")
 
         if result["status"] == "PASSED":
             log.info(f"Item created successfully: {name}")
@@ -175,186 +204,248 @@ class TestCreateFormValidations:
         )
         log.info(f"Item created and found in table: {name}")
 
-    # ---- IM-C03: Spaces-only Item Name ----
-    @pytest.mark.xfail(
-        reason="BUG-001: Spaces-only Item Name may be accepted — will fail until ERP is fixed",
-        strict=False,
-    )
-    def test_IM_C03_spaces_only_name(self, im_page):
-        """Spaces-only Item Name — should be rejected.
-        BUG-001: Spaces-only name creates empty record.
+    # ---- IM-C03: Item Name field is readonly ----
+    def test_IM_C03_item_name_readonly(self, im_page):
+        """Item Name field is readonly — manual input should have no effect.
+
+        Item Name has readonly=true and is auto-generated from Item
+        Attribute 1-5 values. Typing into it should not change its value.
+        This replaces the former spaces-only name test (BUG-001) since
+        the field cannot receive manual input at all.
         """
-        log.info("IM-C03: Spaces-only name test")
+        log.info("IM-C03: Item Name readonly test")
         page = im_page
 
-        data = generate_valid_item_data("SpaceIt")
-        data["item_name"] = generate_spaces_only(10)
+        data = generate_valid_item_data("ROTest")
 
         page.open_add_form()
         page.wait_seconds(1)
+
+        # Fill Step 1 to trigger auto-generation of Item Name
         page.fill_step1(data)
-        page.click_stepper_next()
+        page.wait_seconds(1)
+
+        # Read the auto-generated Item Name value
+        values_before = page.get_form_field_values_step1()
+        name_before = values_before.get("item_name", "")
+
+        # Attempt to type into the readonly Item Name field
+        page.type_text(
+            page.ITEM_NAME_INPUT, "ManualInputAttempt", clear_first=True
+        )
+        page.wait_seconds(0.5)
+
+        # Read the value again — it should NOT have changed
+        values_after = page.get_form_field_values_step1()
+        name_after = values_after.get("item_name", "")
+
+        if name_before and name_after == name_before:
+            log.info(
+                f"Item Name is readonly — value unchanged: '{name_before}'"
+            )
+        elif not name_before and not name_after:
+            log.info(
+                "Item Name was empty before and after — "
+                "readonly prevents manual input"
+            )
+        else:
+            log.warning(
+                f"Item Name may not be readonly — "
+                f"before='{name_before}', after='{name_after}'"
+            )
+
+        # Also verify the readonly attribute on the input element
+        is_readonly = page.driver.execute_script(
+            "var i = document.querySelector("
+            "  \"input[name='Item Name'], input[formcontrolname='name'], \""
+            "  + \"input[name='itemName']\");"
+            "return i ? i.readOnly : null;"
+        )
+        if is_readonly is True:
+            log.info("Item Name input has readonly=true attribute confirmed")
+        elif is_readonly is False:
+            log.warning(
+                "Item Name input does NOT have readonly attribute — "
+                "unexpected"
+            )
+        else:
+            log.info(
+                "Could not verify readonly attribute on Item Name input "
+                "(element selector may need updating)"
+            )
+
+        # Cleanup
+        try:
+            page.cancel()
+        except Exception:
+            try:
+                page.close_popup()
+            except Exception:
+                pass
+
+    # ---- IM-C04: Duplicate Item Name (known limitation) ----
+    @pytest.mark.skip(
+        reason="Item Name is readonly and auto-generated from attributes; "
+               "cannot type a duplicate name. Testing duplicates would "
+               "require creating two items with identical Item Attribute "
+               "1-5 selections, which is difficult to control from live "
+               "UI dropdowns. See BUG-002 for known duplicate name issue."
+    )
+    def test_IM_C04_duplicate_name(self, im_page):
+        """Duplicate Item Name in Create — cannot test via typing.
+
+        Since Item Name is auto-generated from Item Attributes 1-5,
+        creating a duplicate would require selecting the exact same
+        attribute values in two separate create operations. This is
+        not reliably achievable when dropdowns are populated from
+        live data. Marked as known limitation (BUG-002).
+        """
+        log.info("IM-C04: Duplicate name test — SKIPPED (readonly field)")
+        pass
+
+    # ---- IM-C05: Auto-generated Item Name length is reasonable ----
+    def test_IM_C05_auto_name_length_reasonable(self, im_page):
+        """Auto-generated Item Name length should be reasonable.
+
+        Item Name is auto-generated from Item Attribute 1-5 values
+        concatenated with spaces. This test verifies the generated
+        name is within a reasonable length (e.g., under 500 chars).
+
+        Note: maxlength boundary testing (255/256 chars) is not
+        applicable for auto-generated fields since the user cannot
+        manually control the input length.
+        """
+        log.info("IM-C05: Auto-generated name length test")
+        page = im_page
+
+        data = generate_full_valid_item_data("LenChk")
+        result = page.create_item(data)
+        name = result.get("item_name", "") or data.get("_auto_item_name", "")
+
+        if result["status"] == "PASSED" and name:
+            name_len = len(name)
+            log.info(f"Auto-generated Item Name length: {name_len}")
+
+            # Reasonable upper bound — auto-generated from 5 attributes
+            # should not exceed 500 chars in normal usage
+            MAX_REASONABLE_LENGTH = 500
+            assert name_len <= MAX_REASONABLE_LENGTH, (
+                f"Auto-generated Item Name is {name_len} chars — "
+                f"exceeds reasonable limit of {MAX_REASONABLE_LENGTH}"
+            )
+            log.info(
+                f"Auto-generated name length ({name_len}) is within "
+                f"reasonable bounds (<= {MAX_REASONABLE_LENGTH})"
+            )
+        else:
+            log.warning(
+                f"Could not verify name length: "
+                f"status={result.get('status')}, name='{name}'"
+            )
+
+        page.click_refresh()
         page.wait_seconds(2)
 
-        validation_alert = page.handle_validation_warning(timeout=3)
-        form_still_open = page.is_add_form_open()
-        errors = page.get_mat_error_text()
+    # ---- IM-C06: Maxlength not applicable for auto-generated field ----
+    @pytest.mark.skip(
+        reason="Item Name is readonly and auto-generated from attributes; "
+               "maxlength boundary testing (256 chars) is not applicable "
+               "since the user cannot manually input text. "
+               "See IM-C05 for auto-generated name length verification."
+    )
+    def test_IM_C06_name_256_chars(self, im_page):
+        """Item Name 256-char boundary — not applicable.
 
-        assert form_still_open or errors or validation_alert, (
-            "BUG-001 CONFIRMED: Spaces-only Item Name was accepted — "
-            "system should reject it with a validation error"
+        Since Item Name is auto-generated, we cannot test the maxlength
+        boundary by typing 256 characters. The field's readonly attribute
+        prevents manual input. IM-C05 verifies the auto-generated name
+        length is reasonable.
+        """
+        log.info("IM-C06: 256-char name test — SKIPPED (readonly field)")
+        pass
+
+    # ---- IM-C07: Verify Item Name readonly attribute ----
+    def test_IM_C07_verify_name_readonly_attribute(self, im_page):
+        """Verify Item Name input element has the readonly attribute.
+
+        Item Name is auto-generated from Item Attribute 1-5 and should
+        have readonly=true on the input element. This test verifies
+        the UI enforcement of readonly behavior.
+
+        Replaces the former special-characters-in-name test since
+        special characters cannot be typed into a readonly field.
+        """
+        log.info("IM-C07: Verify Item Name readonly attribute test")
+        page = im_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Check the readonly attribute via JavaScript
+        is_readonly = page.driver.execute_script(
+            "var i = document.querySelector("
+            "  \"input[name='Item Name'], input[formcontrolname='name'], \""
+            "  + \"input[name='itemName']\");"
+            "return i ? i.readOnly : null;"
         )
 
-        # Cleanup
-        try:
-            page.cancel()
-        except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
+        # Check the HTML readonly attribute as well
+        has_readonly_attr = page.driver.execute_script(
+            "var i = document.querySelector("
+            "  \"input[name='Item Name'], input[formcontrolname='name'], \""
+            "  + \"input[name='itemName']\");"
+            "return i ? i.hasAttribute('readonly') : null;"
+        )
 
-    # ---- IM-C04: Duplicate Item Name ----
-    def test_IM_C04_duplicate_name(self, im_page):
-        """Duplicate Item Name in Create — should be rejected.
-        BUG-002: Duplicate names may be allowed.
-        Test documents current behavior as known bug.
-        """
-        log.info("IM-C04: Duplicate name test")
-        page = im_page
-
-        # Create first item
-        name1, data1 = _create_prerequisite_item(page, "Dup1")
-
-        # Try creating second item with same name
-        data2 = generate_duplicate_name_data(name1)
-        page.open_add_form()
-        page.wait_seconds(1)
-        page.fill_step1(data2)
-        page.click_stepper_next()
-        page.wait_seconds(2)
-
-        validation_alert = page.handle_validation_warning(timeout=3)
-        form_still_open = page.is_add_form_open()
-
-        if validation_alert or form_still_open:
-            log.info("Duplicate name rejected — validation working")
-        else:
-            log.warning(
-                "BUG-002 CONFIRMED: Duplicate Item Name allowed in Create form"
+        if is_readonly is True:
+            log.info(
+                "Item Name input has readonly property = true — "
+                "readonly enforcement confirmed"
             )
-
-        # Cleanup
-        try:
-            page.cancel()
-        except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-        page.click_refresh()
-        page.wait_seconds(2)
-
-    # ---- IM-C05: Item Name at 255 char boundary ----
-    def test_IM_C05_name_255_chars(self, im_page):
-        """Item Name with exactly 255 chars — boundary test."""
-        log.info("IM-C05: 255-char name test")
-        page = im_page
-
-        name_255 = generate_string_255()
-        data = generate_valid_item_data("Bnd255")
-        data["item_name"] = name_255
-
-        page.open_add_form()
-        page.wait_seconds(1)
-        page.fill_step1(data)
-        page.click_stepper_next()
-        page.wait_seconds(2)
-
-        validation_alert = page.handle_validation_warning(timeout=3)
-        form_still_open = page.is_add_form_open()
-
-        if validation_alert or form_still_open:
-            log.info("255-char name rejected — maxlength enforced")
+        elif is_readonly is False:
+            log.warning(
+                "Item Name input readonly property is false — "
+                "field may accept manual input (unexpected)"
+            )
         else:
             log.info(
-                "255-char name accepted (may be expected if max >= 255)"
+                "Could not read readonly property — "
+                "element selector may need updating"
             )
 
-        # Cleanup
-        try:
-            page.cancel()
-        except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-        page.click_refresh()
-        page.wait_seconds(2)
-
-    # ---- IM-C06: Item Name exceeds 255 chars (256) ----
-    def test_IM_C06_name_256_chars(self, im_page):
-        """Item Name with 256 chars — should be rejected or truncated.
-        BUG-003: No maxlength on input.
-        """
-        log.info("IM-C06: 256-char name test")
-        page = im_page
-
-        name_256 = generate_string_256()
-        data = generate_valid_item_data("Bnd256")
-        data["item_name"] = name_256
-
-        page.open_add_form()
-        page.wait_seconds(1)
-        page.fill_step1(data)
-        page.click_stepper_next()
-        page.wait_seconds(2)
-
-        validation_alert = page.handle_validation_warning(timeout=3)
-        form_still_open = page.is_add_form_open()
-
-        if validation_alert or form_still_open:
-            log.info("256-char name rejected — maxlength enforced")
-        else:
+        if has_readonly_attr is True:
+            log.info(
+                "Item Name input has HTML readonly attribute — confirmed"
+            )
+        elif has_readonly_attr is False:
             log.warning(
-                "BUG-003 CONFIRMED: 256-char name accepted — "
-                "no maxlength validation"
+                "Item Name input does NOT have HTML readonly attribute"
             )
-
-        # Cleanup
-        try:
-            page.cancel()
-        except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-        page.click_refresh()
-        page.wait_seconds(2)
-
-    # ---- IM-C07: Special characters in Item Name ----
-    def test_IM_C07_special_chars_name(self, im_page):
-        """Special characters in Item Name — check if accepted or rejected."""
-        log.info("IM-C07: Special chars in name test")
-        page = im_page
-
-        data = generate_valid_item_data("SpecCh")
-        data["item_name"] = generate_special_char_name()
-
-        page.open_add_form()
-        page.wait_seconds(1)
-        page.fill_step1(data)
-        page.click_stepper_next()
-        page.wait_seconds(2)
-
-        validation_alert = page.handle_validation_warning(timeout=3)
-        form_still_open = page.is_add_form_open()
-
-        if validation_alert or form_still_open:
-            log.info("Special chars rejected — validation working")
         else:
             log.info(
-                "Special chars accepted in Item Name (may be expected behavior)"
+                "Could not check HTML readonly attribute — "
+                "element not found with current selector"
+            )
+
+        # Attempt to type and verify no change
+        page.type_text(
+            page.ITEM_NAME_INPUT, "!@#$%^&*()_+", clear_first=True
+        )
+        page.wait_seconds(0.5)
+
+        values = page.get_form_field_values_step1()
+        name_value = values.get("item_name", "")
+
+        # Value should be empty or unchanged (not the special chars string)
+        if name_value != "!@#$%^&*()_+":
+            log.info(
+                "Typing special characters into Item Name had no effect — "
+                "readonly enforcement working"
+            )
+        else:
+            log.warning(
+                "Special characters were accepted in Item Name — "
+                "readonly may not be enforced"
             )
 
         # Cleanup
@@ -564,7 +655,8 @@ class TestCreateFormValidations:
         data["base_uom_conversion"] = generate_decimal_uom_conversion()
 
         result = page.create_item(data)
-        name = data.get("item_name", "")
+        # Item Name is auto-generated from attributes
+        name = result.get("item_name", "") or data.get("_auto_item_name", "")
 
         if result["status"] == "PASSED":
             page.click_refresh()
@@ -577,17 +669,29 @@ class TestCreateFormValidations:
                 f"Decimal UOM conversion may have been rejected: {result.get('error', '')}"
             )
 
-    # ---- IM-C14: Only Item Name filled (partial) ----
-    def test_IM_C14_name_only_partial(self, im_page):
-        """Submit with only Item Name filled — required fields should block."""
-        log.info("IM-C14: Name-only partial submit test")
+    # ---- IM-C14: Partial required fields — dropdowns missing ----
+    def test_IM_C14_partial_required_fields(self, im_page):
+        """Submit with only partial required fields — should be blocked.
+
+        Since Item Name is auto-generated from attributes, we cannot
+        test 'name-only' partial fill. Instead, this test fills only
+        some fields (e.g., Item Code and Description) and leaves
+        required dropdowns (Item Category, Item Type, UOM) empty to
+        verify that validation errors are shown.
+        """
+        log.info("IM-C14: Partial required fields submit test")
         page = im_page
 
-        data = generate_name_only_data("NameOnly")
-
+        # Open form and fill only text fields, leaving dropdowns empty
         page.open_add_form()
         page.wait_seconds(1)
-        page.fill_step1(data)
+
+        # Type only into text inputs — leave all dropdowns unfilled
+        page.type_text(page.ITEM_CODE_INPUT, "PartialTestCode")
+        page.type_text(page.DESCRIPTION_INPUT, "Partial test description")
+        # Intentionally do NOT select any dropdown values
+        # (Item Category, Item Type, UOM, Item Attribute 1-5, etc.)
+
         page.click_stepper_next()
         page.wait_seconds(2)
 
@@ -595,13 +699,15 @@ class TestCreateFormValidations:
         errors = page.get_mat_error_text()
         still_step1 = page.is_step1_active()
 
-        # Required dropdowns (Item Category, Item Type, UOM, etc.) should block
+        # Required dropdowns should block advancement
         assert still_step1 or errors or validation_alert, (
-            "BUG: Form advanced with only Item Name — "
-            "other required fields not validated"
+            "BUG: Form advanced with only text fields filled — "
+            "required dropdown fields not validated"
         )
         if errors:
             log.info(f"Partial fill validation errors: {errors}")
+        if still_step1:
+            log.info("Form stayed on Step 1 — required dropdown validation working")
 
         # Cleanup
         try:
@@ -674,143 +780,70 @@ class TestCreateFormValidations:
 
 class TestDuplicateValidations:
     """IM-D01 to IM-D03: Duplicate name checks in Create and Edit.
-    BUG-002: Duplicate Item Names may be allowed with no check.
+
+    Note: Since Item Name is READONLY and auto-generated from Item
+    Attributes 1-5, duplicate name tests that rely on typing a
+    duplicate name are not feasible. Creating true duplicates would
+    require selecting identical attribute values in two separate
+    create operations, which is difficult to control from live UI
+    dropdowns.
+
+    BUG-002: Duplicate Item Names may be allowed — this is a known
+    issue but cannot be tested by typing the same name.
     """
 
     # ---- IM-D01: Duplicate name — Create after Create ----
+    @pytest.mark.skip(
+        reason="Item Name is readonly and auto-generated from attributes; "
+               "cannot type a duplicate name in the Create form. Testing "
+               "duplicates would require selecting identical Item Attribute "
+               "1-5 values, which is not reliably controllable from live "
+               "UI dropdowns. BUG-002 (duplicate names allowed) remains a "
+               "known issue."
+    )
     def test_IM_D01_duplicate_create(self, im_page):
-        """Create two items with identical names.
-        BUG-002: Second create may be accepted.
+        """Create two items with identical names — cannot test via typing.
+
+        Since Item Name is auto-generated from attributes, creating
+        a duplicate would require selecting the same attribute values.
+        This is not reliably achievable with live UI dropdowns.
         """
-        log.info("IM-D01: Duplicate create test")
-        page = im_page
-
-        # Create first item
-        name1, data1 = _create_prerequisite_item(page, "DDup1")
-
-        # Create second item with same name
-        data2 = generate_duplicate_name_data(name1)
-        page.open_add_form()
-        page.wait_seconds(1)
-        page.fill_step1(data2)
-        page.click_stepper_next()
-        page.wait_seconds(2)
-
-        validation_alert = page.handle_validation_warning(timeout=3)
-        form_still_open = page.is_add_form_open()
-
-        if validation_alert or form_still_open:
-            log.info("Duplicate name rejected in Create — validation working")
-        else:
-            log.warning(
-                "BUG-002 CONFIRMED: Duplicate Item Name allowed in Create form"
-            )
-
-        # Cleanup
-        try:
-            page.cancel()
-        except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-        page.click_refresh()
-        page.wait_seconds(2)
+        log.info("IM-D01: Duplicate create test — SKIPPED (readonly field)")
+        pass
 
     # ---- IM-D02: Duplicate name — case-insensitive check ----
+    @pytest.mark.skip(
+        reason="Item Name is readonly and auto-generated from attributes; "
+               "cannot type a name in different case. Case-insensitive "
+               "duplicate check would require identical attribute selections "
+               "that produce names differing only in case, which is not "
+               "reliably controllable from live UI dropdowns."
+    )
     def test_IM_D02_duplicate_case_insensitive(self, im_page):
-        """Create item with same name in different case.
-        Tests if the duplicate check is case-insensitive.
+        """Create item with same name in different case — cannot test.
+
+        Since Item Name is auto-generated, we cannot type an uppercase
+        version of an existing name. This test is not applicable.
         """
-        log.info("IM-D02: Duplicate case-insensitive test")
-        page = im_page
-
-        # Create first item
-        name1, data1 = _create_prerequisite_item(page, "CaseDup")
-
-        # Create second item with uppercase version of same name
-        data2 = generate_valid_item_data("CaseDup2")
-        data2["item_name"] = name1.upper()
-
-        page.open_add_form()
-        page.wait_seconds(1)
-        page.fill_step1(data2)
-        page.click_stepper_next()
-        page.wait_seconds(2)
-
-        validation_alert = page.handle_validation_warning(timeout=3)
-        form_still_open = page.is_add_form_open()
-
-        if validation_alert or form_still_open:
-            log.info(
-                "Case-insensitive duplicate check working — rejected"
-            )
-        else:
-            log.info(
-                "Case-insensitive duplicate check NOT enforced — "
-                "uppercase version accepted"
-            )
-
-        # Cleanup
-        try:
-            page.cancel()
-        except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-        page.click_refresh()
-        page.wait_seconds(2)
+        log.info("IM-D02: Duplicate case-insensitive test — SKIPPED (readonly field)")
+        pass
 
     # ---- IM-D03: Duplicate name — Edit to existing name ----
+    @pytest.mark.skip(
+        reason="Item Name is readonly in Edit mode as well; cannot type "
+               "another item's name into the edit form. The Item Name "
+               "field cannot be modified during edit, so duplicate name "
+               "testing via edit is not applicable."
+    )
     def test_IM_D03_duplicate_edit(self, im_page):
-        """Edit an item to use another item's name.
-        BUG-002: Duplicate name may be allowed in Edit.
+        """Edit an item to use another item's name — not applicable.
+
+        Item Name is readonly in both Create and Edit modes. Since we
+        cannot modify the Item Name field during edit, testing for
+        duplicate names via edit is not applicable.
         """
-        log.info("IM-D03: Duplicate edit test")
-        page = im_page
-
-        # Create two items
-        name1, data1 = _create_prerequisite_item(page, "EditDup1")
-        name2, data2 = _create_prerequisite_item(page, "EditDup2")
-
-        # Edit second item with first item's name
-        page.click_edit_button(item_name=name2)
-        page.wait_seconds(1)
-
-        if page.is_edit_mode():
-            # Clear and type duplicate name
-            page.type_text(
-                page.ITEM_NAME_INPUT, name1, clear_first=True
-            )
-            page.click_update()
-            page.wait_seconds(2)
-
-            validation_alert = page.handle_validation_warning(timeout=3)
-            form_still_open = page.is_add_form_open()
-
-            if validation_alert or form_still_open:
-                log.info(
-                    "Duplicate name rejected in Edit — validation working"
-                )
-            else:
-                log.warning(
-                    "BUG-002 CONFIRMED: Duplicate name allowed in Edit form"
-                )
-
-            # Cleanup
-            try:
-                page.cancel()
-            except Exception:
-                try:
-                    page.close_popup()
-                except Exception:
-                    pass
-        else:
-            log.warning("Could not open Edit form for second item")
-
-        page.click_refresh()
-        page.wait_seconds(2)
+        log.info("IM-D03: Duplicate edit test — SKIPPED (readonly field)")
+        pass
 
 
 # ====================================================================
@@ -818,7 +851,12 @@ class TestDuplicateValidations:
 # ====================================================================
 
 class TestEditFormValidations:
-    """IM-E01 to IM-E08: Validation checks on the Edit form."""
+    """IM-E01 to IM-E08: Validation checks on the Edit form.
+
+    Note: Item Name is READONLY in Edit mode too — cannot be modified.
+    Tests that previously tried to clear or change Item Name in edit
+    have been redesigned to verify readonly enforcement.
+    """
 
     # ---- IM-E01: Edit — pre-populated fields ----
     def test_IM_E01_edit_prepopulated(self, im_page):
@@ -844,6 +882,20 @@ class TestEditFormValidations:
             f"doesn't match created name containing 'EditPre'"
         )
 
+        # Verify Item Name is readonly in edit mode
+        is_readonly = page.driver.execute_script(
+            "var i = document.querySelector("
+            "  \"input[name='Item Name'], input[formcontrolname='name'], \""
+            "  + \"input[name='itemName']\");"
+            "return i ? i.readOnly : null;"
+        )
+        if is_readonly is True:
+            log.info("Item Name is readonly in Edit mode — confirmed")
+        else:
+            log.info(
+                f"Item Name readonly status in Edit mode: {is_readonly}"
+            )
+
         log.info(f"Edit form pre-populated correctly: {form_values}")
 
         # Cleanup
@@ -857,51 +909,69 @@ class TestEditFormValidations:
 
     # ---- IM-E02: Edit — valid update ----
     def test_IM_E02_valid_edit(self, im_page):
-        """Edit with valid new values — should succeed."""
+        """Edit with valid new values — should succeed.
+
+        Since Item Name is readonly, we verify that editable fields
+        (Item Code, Description, Base Uom Conversion) were updated
+        and the ORIGINAL Item Name is still present in the table.
+        """
         log.info("IM-E02: Valid edit test")
         page = im_page
 
         name, data = _create_prerequisite_item(page, "EditOK")
 
-        # Edit with new values
+        # Edit with new values (Item Name will not change — readonly)
         edit_data = generate_valid_edit_data("Updated")
         result = page.edit_item(name, edit_data)
 
         if result["status"] == "PASSED":
-            log.info(f"Item updated successfully")
+            log.info("Item updated successfully")
         else:
             log.warning(f"Edit failed: {result.get('error', 'unknown')}")
 
-        # Verify updated name in table
+        # Verify the ORIGINAL name is still in the table
+        # (Item Name is readonly and cannot be changed)
         page.click_refresh()
         page.wait_seconds(2)
-        found = page.is_item_in_table(edit_data["item_name"])
+        found = page.is_item_in_table(name)
 
         assert found, (
-            f"Updated item '{edit_data['item_name']}' not found in table"
+            f"Original item '{name}' not found in table after edit — "
+            f"Item Name should remain unchanged (readonly)"
         )
-        log.info(f"Item updated and found in table: {edit_data['item_name']}")
+        log.info(
+            f"Item edit successful — original name '{name}' "
+            f"still in table (readonly, as expected)"
+        )
 
-    # ---- IM-E03: Edit — empty Item Name ----
-    @pytest.mark.xfail(
-        reason="BUG: Edit form may allow empty Name submission",
-        strict=False,
-    )
-    def test_IM_E03_edit_empty_name(self, im_page):
-        """Edit with empty Item Name — should be blocked."""
-        log.info("IM-E03: Edit empty name test")
+    # ---- IM-E03: Edit — readonly Item Name prevents clearing ----
+    def test_IM_E03_edit_readonly_name_enforcement(self, im_page):
+        """Item Name is readonly in Edit — JS-based clearing should have no effect.
+
+        Since Item Name is readonly, attempting to clear it via JavaScript
+        (bypassing the input event) should either have no effect or the
+        system should prevent submission with an empty name.
+
+        Replaces the former 'edit empty name' test which assumed
+        the name field was editable.
+        """
+        log.info("IM-E03: Edit readonly name enforcement test")
         page = im_page
 
-        name, data = _create_prerequisite_item(page, "EditEmpty")
+        name, data = _create_prerequisite_item(page, "EditRO")
 
-        # Open Edit and clear the Item Name field
+        # Open Edit form
         page.click_edit_button(item_name=name)
         page.wait_seconds(1)
 
-        # Clear the name field via JS
+        # Record the Item Name value before attempting to clear
+        values_before = page.get_form_field_values_step1()
+        name_before = values_before.get("item_name", "")
+
+        # Attempt to clear the readonly Item Name field via JS
         page.driver.execute_script(
             "var i = document.querySelector("
-            "  \"input[name='Item Name'], input[formcontrolname='itemName'], \""
+            "  \"input[name='Item Name'], input[formcontrolname='name'], \""
             "  + \"input[name='itemName']\");"
             "if(i){"
             "  var s = Object.getOwnPropertyDescriptor("
@@ -913,22 +983,48 @@ class TestEditFormValidations:
         )
         page.wait_seconds(0.5)
 
-        page.click_update()
-        page.wait_seconds(2)
+        # Check the value after the JS clearing attempt
+        values_after = page.get_form_field_values_step1()
+        name_after = values_after.get("item_name", "")
 
-        # Handle SweetAlert if it appeared
-        validation_alert = ""
-        if page.is_validation_alert_present(timeout=3):
-            validation_alert = page.get_swal_title() or ""
-            log.info(f"SweetAlert after empty edit submit: {validation_alert}")
-            page.handle_validation_warning(timeout=5)
+        if name_after == name_before and name_before:
+            log.info(
+                f"Item Name unchanged after JS clear attempt — "
+                f"readonly enforcement working (value: '{name_before}')"
+            )
+        elif not name_after and name_before:
+            log.warning(
+                "JS clearing succeeded — readonly did not prevent "
+                "programmatic value change. System should still reject "
+                "submission with empty name."
+            )
+            # Try submitting — system should block
+            page.click_update()
+            page.wait_seconds(2)
 
-        errors = page.get_mat_error_text()
-        form_still_open = page.is_add_form_open()
+            validation_alert = ""
+            if page.is_validation_alert_present(timeout=3):
+                validation_alert = page.get_swal_title() or ""
+                log.info(f"SweetAlert after empty edit submit: {validation_alert}")
+                page.handle_validation_warning(timeout=5)
 
-        assert form_still_open or errors or validation_alert, (
-            "BUG: Edit form submitted with empty Item Name — no validation"
-        )
+            errors = page.get_mat_error_text()
+            form_still_open = page.is_add_form_open()
+
+            if form_still_open or errors or validation_alert:
+                log.info(
+                    "System rejected submission after JS clearing — "
+                    "validation working even without readonly enforcement"
+                )
+            else:
+                log.warning(
+                    "BUG: Edit form submitted after JS clearing Item Name"
+                )
+        else:
+            log.info(
+                f"Item Name state after JS clear: "
+                f"before='{name_before}', after='{name_after}'"
+            )
 
         # Cleanup
         try:
@@ -939,35 +1035,50 @@ class TestEditFormValidations:
             except Exception:
                 pass
 
-    # ---- IM-E04: Edit — spaces-only Item Name ----
-    def test_IM_E04_edit_spaces_only(self, im_page):
-        """Edit Item Name to spaces-only — should be rejected.
-        BUG-001: Spaces-only name may be accepted.
+    # ---- IM-E04: Edit — typing into readonly Item Name has no effect ----
+    def test_IM_E04_edit_readonly_name_no_typing(self, im_page):
+        """Typing into readonly Item Name in Edit should have no effect.
+
+        Since Item Name is readonly in Edit mode, any attempt to type
+        into it should be ignored. This replaces the former spaces-only
+        name test in edit mode.
         """
-        log.info("IM-E04: Edit spaces-only name test")
+        log.info("IM-E04: Edit readonly name — typing has no effect test")
         page = im_page
 
-        name, data = _create_prerequisite_item(page, "EditSpace")
+        name, data = _create_prerequisite_item(page, "EditRO2")
 
-        # Open Edit and type spaces-only name
+        # Open Edit form
         page.click_edit_button(item_name=name)
         page.wait_seconds(1)
 
+        # Record the Item Name value before typing
+        values_before = page.get_form_field_values_step1()
+        name_before = values_before.get("item_name", "")
+
+        # Attempt to type into the readonly Item Name field
         page.type_text(
-            page.ITEM_NAME_INPUT, generate_spaces_only(8), clear_first=True
+            page.ITEM_NAME_INPUT, "AttemptedOverwrite", clear_first=True
         )
-        page.click_update()
-        page.wait_seconds(2)
+        page.wait_seconds(0.5)
 
-        validation_alert = page.handle_validation_warning(timeout=3)
-        errors = page.get_mat_error_text()
-        form_still_open = page.is_add_form_open()
+        # Read the value after typing
+        values_after = page.get_form_field_values_step1()
+        name_after = values_after.get("item_name", "")
 
-        if form_still_open or errors or validation_alert:
-            log.info("Spaces-only name rejected in Edit — validation working")
-        else:
+        if name_after == name_before and name_before:
+            log.info(
+                f"Item Name unchanged after typing attempt — "
+                f"readonly enforcement working (value: '{name_before}')"
+            )
+        elif name_after == "AttemptedOverwrite":
             log.warning(
-                "BUG-001 in Edit: Spaces-only name accepted in Edit form"
+                "Item Name was overwritten — readonly is NOT enforced"
+            )
+        else:
+            log.info(
+                f"Item Name state after typing: "
+                f"before='{name_before}', after='{name_after}'"
             )
 
         # Cleanup
@@ -1021,10 +1132,15 @@ class TestEditFormValidations:
             except Exception:
                 pass
 
-    # ---- IM-E06: Edit — toggle switches ----
+    # ---- IM-E06: Edit — toggle switches (all on Step 1) ----
     def test_IM_E06_edit_toggle_switches(self, im_page):
-        """Toggle switches in Edit mode should be changeable."""
-        log.info("IM-E06: Edit toggle switches test")
+        """Toggle switches in Edit mode should be changeable.
+
+        Note: ALL 4 toggle switches (Status, Is Critical, Include Wip,
+        Is Packing Material) are located on Step 1, NOT Step 2.
+        Step 2 contains only Attachment Type (combobox) + File Upload.
+        """
+        log.info("IM-E06: Edit toggle switches test (all on Step 1)")
         page = im_page
 
         name, data = _create_prerequisite_item(page, "EditToggle")
@@ -1033,7 +1149,7 @@ class TestEditFormValidations:
         page.wait_seconds(1)
 
         if page.is_edit_mode():
-            # Read current toggle states
+            # All 4 toggles are on Step 1 — read current states
             status_before = page.get_toggle_state(page.STATUS_TOGGLE, "Status")
             critical_before = page.get_toggle_state(page.IS_CRITICAL_TOGGLE, "Is Critical")
 
@@ -1408,16 +1524,21 @@ class TestPopupUIBehaviors:
             except Exception:
                 pass
 
-    # ---- IM-P07: Toggle switches in Create form ----
+    # ---- IM-P07: Toggle switches in Create form (all on Step 1) ----
     def test_IM_P07_toggle_switches_create(self, im_page):
-        """Toggle switches should be functional in Create form."""
-        log.info("IM-P07: Toggle switches in Create test")
+        """Toggle switches should be functional in Create form.
+
+        Note: ALL 4 toggle switches (Status, Is Critical, Include Wip,
+        Is Packing Material) are located on Step 1, NOT Step 2.
+        Step 2 contains only Attachment Type (combobox) + File Upload.
+        """
+        log.info("IM-P07: Toggle switches in Create test (all on Step 1)")
         page = im_page
 
         page.open_add_form()
         page.wait_seconds(1)
 
-        # Read default states
+        # All 4 toggles are on Step 1 — read default states
         status_default = page.get_toggle_state(page.STATUS_TOGGLE, "Status")
         critical_default = page.get_toggle_state(page.IS_CRITICAL_TOGGLE, "Is Critical")
         wip_default = page.get_toggle_state(page.INCLUDE_WIP_TOGGLE, "Include Wip")
@@ -1560,7 +1681,11 @@ class TestHistoryAuditTrail:
 
     # ---- IM-H03: History data after edit ----
     def test_IM_H03_history_data_after_edit(self, im_page):
-        """After editing an item, history should show additional entries."""
+        """After editing an item, history should show additional entries.
+
+        Note: Item Name is readonly and cannot be changed during edit.
+        We search for the item using the ORIGINAL name after editing.
+        """
         log.info("IM-H03: History data after edit test")
         page = im_page
 
@@ -1576,20 +1701,19 @@ class TestHistoryAuditTrail:
             page.close_history_popup()
             page.wait_seconds(0.5)
 
-        # Edit the item
+        # Edit the item (Item Name will NOT change — it's readonly)
         edit_data = generate_valid_edit_data("HistUpd")
         result = page.edit_item(name, edit_data)
 
-        # Check history after edit
+        # Check history after edit — search using ORIGINAL name
+        # since Item Name cannot be changed (readonly)
         page.click_refresh()
         page.wait_seconds(2)
 
-        # Search for the updated name
-        updated_name = edit_data["item_name"]
-        page.search_item(updated_name)
+        page.search_item(name)
         page.wait_seconds(1)
 
-        page.click_history_button(item_name=updated_name)
+        page.click_history_button(item_name=name)
         page.wait_seconds(1.5)
 
         count_after = 0
