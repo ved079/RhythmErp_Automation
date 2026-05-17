@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { fetchModules, folderToSidebarId, type ApiModule, type ApiSubModule } from '@/lib/api'
+import { fetchModules, folderToSidebarId, sidebarToFolderMapping, startRun, type ApiModule, type ApiSubModule } from '@/lib/api'
 import {
   addBugReport,
   getBugReports,
@@ -189,6 +189,70 @@ function getStepsForTest(testId: string): string[] {
 
 // Full list of ALL sidebar modules (with or without tests).
 // API data enriches these with real test counts.
+
+/**
+ * Given a sidebar module ID (e.g. "seasons") and the API modules data,
+ * return { groups: TestClassGroup[], items: TestItem[] } from real test functions.
+ * Returns empty arrays for modules without API tests.
+ */
+function getTestsForSidebarModule(
+  sidebarId: string,
+  apiModules: ApiModule[]
+): { groups: TestClassGroup[]; items: TestItem[] } {
+  const empty = { groups: [] as TestClassGroup[], items: [] as TestItem[] }
+  const mapping = sidebarToFolderMapping(sidebarId)
+  if (!mapping) return empty
+
+  // Find the API module
+  const apiMod = apiModules.find((m) => m.name === mapping.module)
+  if (!apiMod) return empty
+
+  let subModule: ApiSubModule | undefined
+  if (mapping.subModule) {
+    subModule = apiMod.sub_modules.find((s) => s.name === mapping.subModule)
+    if (!subModule) return empty
+  }
+
+  // Get tests list
+  const apiTests = subModule ? subModule.tests : apiMod.sub_modules.flatMap((s) => s.tests)
+  if (apiTests.length === 0) return empty
+
+  // Group tests by their test file name (extract class name from file)
+  const testFileGroups: Record<string, { file: string; tests: ApiSubModule['tests'] }> = {}
+  for (const test of apiTests) {
+    const parts = test.name.split('::')
+    const fileName = parts[0]?.split('/').pop() || 'tests'
+    const className = parts.length >= 3 ? parts[1] : fileName.replace('.py', '')
+
+    if (!testFileGroups[className]) {
+      testFileGroups[className] = { file: fileName, tests: [] }
+    }
+    testFileGroups[className].tests.push(test)
+  }
+
+    // Group all tests under one group (API names don't include file paths)
+  const groups: TestClassGroup[] = [{
+    className: 'All Tests',
+    tests: apiTests.map((t) => ({
+      id: t.name,
+      description: t.display_name || t.name.split('::').pop() || t.name,
+      status: 'not-run' as const,
+      duration: '—',
+      steps: t.docstring || '',
+      expected: t.docstring || '',
+    })),
+  }]
+
+  // Convert to TestItem[]
+  const items: TestItem[] = apiTests.map((t) => ({
+    id: t.name,
+    name: t.display_name || t.name.split('::').pop() || t.name,
+    status: 'pending' as const,
+    duration: '',
+  }))
+
+  return { groups, items }
+}
 const ALL_SIDEBAR_MODULES: SidebarModule[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'customer', label: 'Customer' },
@@ -978,7 +1042,8 @@ function DashboardTab({
 }
 
 // ─── OPERATIONS TAB (Test Specification View) ────────────
-function OperationsTab() {
+function OperationsTab({ testGroups }: { testGroups: TestClassGroup[] }) {
+  const testSpecGroups = testGroups
   const [searchVal, setSearchVal] = useState('')
   const [filter, setFilter] = useState<'all' | 'passed' | 'failed' | 'not-run'>('all')
   const [priorityFilter, setPriorityFilter] = useState<'all' | TestPriority>('all')
@@ -1029,7 +1094,7 @@ function OperationsTab() {
         return { ...group, tests: filteredTests, filteredTestCount: filteredTests.length }
       })
       .filter((g) => g.filteredTestCount > 0),
-  [searchVal, filter, priorityFilter])
+  [searchVal, filter, priorityFilter, testSpecGroups])
 
   const totalTests = testSpecGroups.reduce((acc, g) => acc + g.tests.length, 0)
   const totalPassed = testSpecGroups.reduce(
@@ -1042,7 +1107,7 @@ function OperationsTab() {
   )
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
         <div className="relative flex-1 max-w-sm">
@@ -1109,7 +1174,7 @@ function OperationsTab() {
       </div>
 
       {/* Test Groups */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="p-4 space-y-2">
           {filteredGroups.map((group) => {
             const passed = group.tests.filter((t) => t.status === 'passed').length
@@ -1198,8 +1263,8 @@ function OperationsTab() {
                             ) : (
                               <ChevronRight className="size-3 text-gray-400 dark:text-gray-500 shrink-0" />
                             )}
-                            <span className="text-[11px] text-gray-400 dark:text-gray-500 font-mono w-7 text-left shrink-0">
-                              {test.id}
+                            <span className="text-[11px] text-gray-400 dark:text-gray-500 font-mono w-6 text-center shrink-0">
+                              {idx + 1}
                             </span>
                             <span className="text-[12px] text-gray-700 dark:text-gray-200 flex-1 text-left">
                               {test.description}
@@ -1326,7 +1391,7 @@ function TestRunnerTab({
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Action Bar */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0 flex-wrap">
         <Button
@@ -1401,7 +1466,7 @@ function TestRunnerTab({
       </div>
 
       {/* Test List by Groups */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="px-4 py-3 space-y-3">
           {testGroups.map((group) => {
             const groupPassed = group.tests.filter((t) => t.status === 'passed').length
@@ -1454,7 +1519,7 @@ function TestRunnerTab({
                         onCheckedChange={() => { if (test.status === 'pending') toggleTestCheck(test.id) }}
                         className="size-3.5"
                       />
-                      <span className="text-[11px] text-gray-400 dark:text-gray-500 font-mono w-8 shrink-0">{test.id}</span>
+                      <span className="text-[11px] text-gray-400 dark:text-gray-500 font-mono w-16 shrink-0 truncate" title={test.id}>{test.id.split('::').pop()?.replace(/^test_/, '') || test.id}</span>
                       <span className={`text-[13px] flex-1 truncate ${
                         test.status === 'running' ? 'text-blue-600 dark:text-blue-400 font-medium' :
                         test.status === 'failed' ? 'text-red-600 dark:text-red-400' :
@@ -1475,9 +1540,69 @@ function TestRunnerTab({
   )
 }
 
+// ─── LIVE SCREENCAST ─────────────────────────────────────
+function LiveScreencast({ isRunning }: { isRunning: boolean }) {
+  const [imgSrc, setImgSrc] = useState<string>('')
+  const [active, setActive] = useState(false)
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    if (!isRunning) {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      return
+    }
+
+    const poll = async () => {
+      try {
+        const res = await fetch('/api/proxy?path=screenshot')
+        const data = await res.json()
+        if (data.active && data.screenshot) {
+          setImgSrc(`data:image/png;base64,${data.screenshot}`)
+          setActive(true)
+        } else {
+          setActive(false)
+        }
+      } catch {
+        setActive(false)
+      }
+    }
+
+    poll()
+    intervalRef.current = setInterval(poll, 1000)
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [isRunning])
+
+  if (!active || !imgSrc) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-gray-900">
+        <Loader2 className="size-8 text-green-400 animate-spin" />
+        <p className="text-[13px] text-gray-400">Connecting to browser...</p>
+        <p className="text-[11px] text-gray-600">Make sure FastAPI backend is running</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full h-full relative bg-black">
+      <img
+        src={imgSrc}
+        alt="Live browser"
+        className="w-full h-full object-contain"
+      />
+      <div className="absolute top-2 right-2 flex items-center gap-1.5 bg-black/60 text-white text-[10px] px-2 py-1 rounded-full">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+        LIVE
+      </div>
+    </div>
+  )
+}
+
 // ─── LIVE EXECUTION TAB (Browser view + Console) ────────
 function LiveExecutionTab({
   tests,
+  testGroups,
   isRunning,
   runningProgress,
   onStop,
@@ -1485,6 +1610,7 @@ function LiveExecutionTab({
   onRerunFailed,
 }: {
   tests: TestItem[]
+  testGroups: TestClassGroup[]
   isRunning: boolean
   runningProgress: string
   onStop: () => void
@@ -1504,7 +1630,69 @@ function LiveExecutionTab({
   // Get steps for running test
   const runningTest = tests.find((t) => t.status === 'running')
   const runningTestId = runningTest?.id || null
-  const runningSteps = useMemo(() => (runningTestId ? getStepsForTest(runningTestId) : []), [runningTestId])
+  const runningSteps = useMemo(() => {
+    if (!runningTestId) return []
+
+    // Search in currentTestGroups (real API tests) first
+    for (const g of testGroups) {
+      const t = g.tests.find((x) =>
+        x.id === runningTestId ||
+        runningTestId.endsWith('::' + x.id) ||
+        runningTestId.includes(x.id)
+      )
+      if (t) {
+        const stepsText = t.steps || t.description || ''
+
+        // Try → separator first
+        const arrowSteps = stepsText.split('→').map((s) => s.trim()).filter(Boolean)
+        if (arrowSteps.length > 1) return arrowSteps
+
+        // Try numbered lines like "1. Do this"
+        const numberedSteps = stepsText.split(/\d+\.\s+/).map((s) => s.trim()).filter(Boolean)
+        if (numberedSteps.length > 1) return numberedSteps
+
+        // Try newline separated
+        const newlineSteps = stepsText.split('\n').map((s) => s.trim()).filter(Boolean)
+        if (newlineSteps.length > 1) return newlineSteps
+
+        // Try period+space as sentence separator
+        const sentenceSteps = stepsText.split(/\.\s+/).map((s) => s.trim()).filter(Boolean)
+        if (sentenceSteps.length > 1) return sentenceSteps
+
+        // Single step — show it as-is but truncate if too long
+        const trimmed = stepsText.trim()
+        if (trimmed.length <= 80) return [trimmed]
+        
+        // Break long single string into ~60 char chunks at word boundaries
+        const words = trimmed.split(' ')
+        const lines: string[] = []
+        let current = ''
+        for (const word of words) {
+          if ((current + ' ' + word).trim().length > 60 && current.length > 0) {
+            lines.push(current.trim())
+            current = word
+          } else {
+            current = current ? current + ' ' + word : word
+          }
+        }
+        if (current) lines.push(current.trim())
+        return lines
+}
+    }
+
+    // Fallback: search in static testSpecGroups
+    for (const g of testSpecGroups) {
+      const t = g.tests.find((x) => x.id === runningTestId)
+      if (t) {
+        const arrowSteps = t.steps.split('→').map((s) => s.trim()).filter(Boolean)
+        if (arrowSteps.length > 0) return arrowSteps
+      }
+    }
+
+    // Last fallback: use the test name as the single step
+    const runningTest = tests.find((t) => t.id === runningTestId)
+    return runningTest ? [runningTest.name] : ['Running test...']
+  }, [runningTestId, testGroups, tests])
 
   // Step progress effect (Feature 2)
   useEffect(() => {
@@ -1562,7 +1750,7 @@ function LiveExecutionTab({
   const progressPercent = tests.length > 0 ? Math.round((completedCount / tests.length) * 100) : 0
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Top Bar: Back + Progress + Stop */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 shrink-0 bg-gray-50/50 dark:bg-gray-800/30">
         <Button
@@ -1713,96 +1901,173 @@ function LiveExecutionTab({
               </div>
 
               {/* Browser Content */}
-              <div className="flex-1 bg-gray-100 dark:bg-gray-800 flex items-center justify-center min-h-0 overflow-auto">
-                {isRunning && runningTest ? (
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-16 h-16 rounded-2xl bg-green-600/10 dark:bg-green-400/10 flex items-center justify-center">
-                      <Loader2 className="size-7 text-green-600 dark:text-green-400 animate-spin" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-[15px] font-semibold text-gray-700 dark:text-gray-200">
-                        {runningTest.id}
-                      </p>
-                      <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5 max-w-xs">
-                        {runningTest.name}
-                      </p>
-                    </div>
-                    <span className="text-[11px] text-gray-400 dark:text-gray-500 flex items-center gap-1.5 bg-white dark:bg-gray-700 px-3 py-1 rounded-full border border-gray-200 dark:border-gray-600">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                      CDP Screencast — awaiting connection
+              {/* Browser Content */}
+            <div className="flex-1 overflow-hidden relative" style={{ minHeight: 0 }}>
+              {isRunning && runningTest ? (
+              <div className="w-full h-full flex flex-col bg-white dark:bg-gray-900">
+                {/* ERP top bar */}
+                <div className="bg-green-800 px-3 py-2 flex items-center gap-3 shrink-0">
+                    <span className="text-white text-xs font-semibold">RhythmERP</span>
+                    <span className="text-green-300 text-xs">›</span>
+                    <span className="text-green-200 text-xs">Common Settings</span>
+                    <span className="text-green-300 text-xs">›</span>
+                    <span className="text-white text-xs">{runningTest.name}</span>
+                    <span className="ml-auto flex items-center gap-1.5 text-[10px] text-green-300">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                      Selenium running
                     </span>
                   </div>
-                ) : completedCount > 0 ? (
-                  <div className="flex flex-col items-center gap-2">
-                    <CheckCircle2 className="size-12 text-green-500" />
-                    <p className="text-[15px] font-medium text-gray-700 dark:text-gray-200">Run Complete</p>
-                    <p className="text-[13px] text-gray-500 dark:text-gray-400">
-                      {passedCount} passed, {failedCount} failed
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-20 h-20 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                      <Play className="size-8 text-gray-400 dark:text-gray-500 ml-0.5" />
+
+                  {/* ERP body */}
+                  <div className="flex flex-1 overflow-hidden">
+                    {/* Mini sidebar */}
+                    <div className="w-36 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 py-2 shrink-0 overflow-auto">
+                      {['UOM', 'Bank', 'Seasons', 'Tax Authority', 'Tax Rate'].map((item) => (
+                        <div
+                          key={item}
+                          className={`px-3 py-1.5 text-[11px] cursor-default ${
+                            runningTest.name.toLowerCase().includes(item.toLowerCase())
+                              ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-l-2 border-green-600 font-medium'
+                              : 'text-gray-500 dark:text-gray-400'
+                          }`}
+                        >
+                          {item}
+                        </div>
+                      ))}
                     </div>
-                    <p className="text-[14px] text-gray-500 dark:text-gray-400 font-medium">No test running</p>
-                    <p className="text-[12px] text-gray-400 dark:text-gray-500">Go to Test Runner, select tests and click Run</p>
+
+                    {/* Main content area */}
+                    <div className="flex-1 p-3 overflow-auto">
+                      {/* Page header */}
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-[13px] font-medium text-gray-700 dark:text-gray-200">
+                          {runningTest.name}
+                        </span>
+                        <div className="px-2 py-1 rounded text-[10px] font-medium text-white bg-blue-500 animate-pulse">
+                          + Add (interacting...)
+                        </div>
+                      </div>
+
+                      {/* Fake data table */}
+                      <table className="w-full text-[11px] border border-gray-200 dark:border-gray-700 rounded overflow-hidden">
+                        <thead>
+                          <tr className="bg-gray-50 dark:bg-gray-800">
+                            <th className="px-2 py-1.5 text-left text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">#</th>
+                            <th className="px-2 py-1.5 text-left text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">Name</th>
+                            <th className="px-2 py-1.5 text-left text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">Status</th>
+                            <th className="px-2 py-1.5 text-left text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {['Record A', 'Record B', 'Record C'].map((rec, i) => (
+                            <tr key={rec} className="border-t border-gray-100 dark:border-gray-800">
+                              <td className="px-2 py-1.5 text-gray-400">{i + 1}</td>
+                              <td className="px-2 py-1.5 text-gray-700 dark:text-gray-200">{rec}</td>
+                              <td className="px-2 py-1.5">
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                                  Active
+                                </span>
+                              </td>
+                              <td className="px-2 py-1.5 text-blue-500 text-[11px] cursor-pointer">Edit</td>
+                            </tr>
+                          ))}
+                          {/* Animated "currently testing" row */}
+                          <tr className="border-t border-gray-100 dark:border-gray-800 bg-yellow-50 dark:bg-yellow-900/10">
+                            <td className="px-2 py-1.5 text-yellow-600">→</td>
+                            <td className="px-2 py-1.5 text-yellow-700 dark:text-yellow-400 font-medium flex items-center gap-1.5">
+                              <Loader2 className="size-3 animate-spin" />
+                              Auto_Test_{runningTest.id}
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 animate-pulse">
+                                Testing...
+                              </span>
+                            </td>
+                            <td className="px-2 py-1.5 text-gray-400 text-[11px]">—</td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      {/* Currently running badge */}
+                      <div className="mt-3 border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 rounded p-2 flex items-center gap-2">
+                        <Loader2 className="size-3.5 text-blue-500 animate-spin shrink-0" />
+                        <span className="text-[11px] text-blue-700 dark:text-blue-300 font-medium">{runningTest.id}</span>
+                        <span className="text-[11px] text-blue-500 dark:text-blue-400">— {runningTest.name}</span>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
-
-            {/* Currently running info */}
-            {isRunning && runningTest && (
-              <div className="flex items-center gap-3 mt-2 px-1">
-                <span className="text-[12px] text-gray-500 dark:text-gray-400">
-                  Currently: <span className="font-medium text-gray-700 dark:text-gray-200">{runningTest.id}</span> — {runningTest.name}
-                </span>
-                <Separator orientation="vertical" className="h-3" />
-                <span className="text-[12px] text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                  <Loader2 className="size-3 animate-spin" />
-                  Running...
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Console Output — Full Width */}
-        <div className="shrink-0 border-t border-gray-700 flex flex-col" style={{ height: '220px' }}>
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-[#1e1e2e] border-b border-gray-700 shrink-0">
-            <Terminal className="size-3.5 text-green-400" />
-            <span className="text-[11px] font-medium text-gray-400">LIVE CONSOLE</span>
-            <span className="text-[10px] text-gray-600 ml-auto font-mono">pytest • test_tax_rate_validation.py</span>
-          </div>
-          <div className="flex-1 bg-[#1a1a2e] overflow-auto p-2">
-            <div className="space-y-0">
-              {consoleLines.map((line, i) => (
-                <div
-                  key={i}
-                  className={`text-[11px] font-mono leading-4 ${
-                    line.includes('PASSED') || line.includes('✅')
-                      ? 'text-green-400'
-                      : line.includes('FAILED') || line.includes('❌') || line.includes('ERROR')
-                        ? 'text-red-400'
-                        : line.includes('Running') || line.includes('Navigating') || line.includes('Clicking')
-                          ? 'text-yellow-300'
-                          : line.startsWith('>')
-                            ? 'text-blue-300'
-                            : 'text-gray-400'
-                  }`}
-                >
-                  {line}
                 </div>
-              ))}
-              <div ref={consoleEndRef} />
+              ) : completedCount > 0 ? (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gray-50 dark:bg-gray-800">
+                  <CheckCircle2 className="size-12 text-green-500" />
+                  <p className="text-[15px] font-medium text-gray-700 dark:text-gray-200">Run Complete</p>
+                  <p className="text-[13px] text-gray-500 dark:text-gray-400">
+                    {passedCount} passed, {failedCount} failed
+                  </p>
+                </div>
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-gray-50 dark:bg-gray-800">
+                  <div className="w-20 h-20 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                    <Play className="size-8 text-gray-400 dark:text-gray-500 ml-0.5" />
+                  </div>
+                  <p className="text-[14px] text-gray-500 dark:text-gray-400 font-medium">No test running</p>
+                  <p className="text-[12px] text-gray-400 dark:text-gray-500">Go to Test Runner, select tests and click Run</p>
+                </div>
+              )}
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
+                        </div>
+
+                        {/* Currently running info */}
+                        {isRunning && runningTest && (
+                          <div className="flex items-center gap-3 mt-2 px-1">
+                            <span className="text-[12px] text-gray-500 dark:text-gray-400">
+                              Currently: <span className="font-medium text-gray-700 dark:text-gray-200">{runningTest.id}</span> — {runningTest.name}
+                            </span>
+                            <Separator orientation="vertical" className="h-3" />
+                            <span className="text-[12px] text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                              <Loader2 className="size-3 animate-spin" />
+                              Running...
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Console Output — Full Width */}
+                    <div className="shrink-0 border-t border-gray-700 flex flex-col" style={{ height: '220px' }}>
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-[#1e1e2e] border-b border-gray-700 shrink-0">
+                        <Terminal className="size-3.5 text-green-400" />
+                        <span className="text-[11px] font-medium text-gray-400">LIVE CONSOLE</span>
+                        <span className="text-[10px] text-gray-600 ml-auto font-mono">pytest • test_tax_rate_validation.py</span>
+                      </div>
+                      <div className="flex-1 bg-[#1a1a2e] overflow-auto p-2">
+                        <div className="space-y-0">
+                          {consoleLines.map((line, i) => (
+                            <div
+                              key={i}
+                              className={`text-[11px] font-mono leading-4 ${
+                                line.includes('PASSED') || line.includes('✅')
+                                  ? 'text-green-400'
+                                  : line.includes('FAILED') || line.includes('❌') || line.includes('ERROR')
+                                    ? 'text-red-400'
+                                    : line.includes('Running') || line.includes('Navigating') || line.includes('Clicking')
+                                      ? 'text-yellow-300'
+                                      : line.startsWith('>')
+                                        ? 'text-blue-300'
+                                        : 'text-gray-400'
+                              }`}
+                            >
+                              {line}
+                            </div>
+                          ))}
+                          <div ref={consoleEndRef} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            }
 
 // ─── REPORT TO ADMIN DIALOG ──────────────────────────────
 // ─── MY TICKETS TAB (Feature 1 & 2 & 4) ─────────────────
@@ -2981,6 +3246,39 @@ function ResultsTab({
   )
 }
 
+// ─── NAV TOAST ───────────────────────────────────────────
+function NavToast({ label, parent }: { label: string; parent?: string | null }) {
+  const [visible, setVisible] = useState(true)
+  const [fading, setFading] = useState(false)
+
+  useEffect(() => {
+    const fadeTimer = setTimeout(() => setFading(true), 1200)
+    const hideTimer = setTimeout(() => setVisible(false), 1600)
+    return () => { clearTimeout(fadeTimer); clearTimeout(hideTimer) }
+  }, [])
+
+  if (!visible) return null
+
+  return (
+    <div
+      className={`pointer-events-none absolute top-3 left-1/2 z-50 transition-all duration-300 ease-out ${
+        fading ? 'opacity-0' : 'opacity-100'
+      }`}
+      style={{ transform: `translateX(-50%) translateY(${fading ? '-4px' : '0px'})` }}
+    >
+      <div className="flex items-center gap-2 bg-gray-900/90 dark:bg-gray-100/90 text-white dark:text-gray-900 text-[12px] font-medium px-3.5 py-1.5 rounded-full shadow-lg shadow-black/20 backdrop-blur-sm whitespace-nowrap">
+        {parent && (
+          <>
+            <span className="opacity-50">{parent}</span>
+            <span className="opacity-30 mx-0.5">›</span>
+          </>
+        )}
+        <span>{label}</span>
+      </div>
+    </div>
+  )
+}
+
 // ─── MAIN PAGE COMPONENT ─────────────────────────────────
 export default function Home() {
   const [user, setUser] = useState<AuthUser | null>(null)
@@ -2993,6 +3291,7 @@ export default function Home() {
   const [consoleOpen, setConsoleOpen] = useState(false)
   const [testChecks, setTestChecks] = useState<Set<string>>(new Set())
   const [tests, setTests] = useState<TestItem[]>(initialTests)
+  const [currentTestGroups, setCurrentTestGroups] = useState<TestClassGroup[]>(testSpecGroups)
   const [isRunning, setIsRunning] = useState(false)
   const [runningProgress, setRunningProgress] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -3048,6 +3347,7 @@ export default function Home() {
   const runIdCounterRef = useRef(initialRunHistory.length + 1)
 
   // Feature 6: Dark mode
+  const [navToast, setNavToast] = useState<{ key: number; label: string; parent?: string | null } | null>(null)
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('rhythmerp-dark-mode')
@@ -3169,8 +3469,30 @@ export default function Home() {
 
   const handleSelectModule = useCallback((id: string) => {
     setSelectedModule(id)
+    const found = (() => {
+      for (const mod of sidebarModules) {
+        if (mod.id === id) return { label: mod.label, parent: null }
+        for (const child of mod.children ?? []) {
+          if (child.id === id) return { label: child.label, parent: mod.label }
+        }
+      }
+      return { label: id, parent: null }
+    })()
+    setNavToast({ key: Date.now(), label: found.label, parent: found.parent })
     setActiveTab('operations')
-  }, [])
+    setTestChecks(new Set())
+
+    // Load real tests from API data for this sub-module
+    const { groups, items } = getTestsForSidebarModule(id, apiModules)
+    if (groups.length > 0) {
+      setCurrentTestGroups(groups)
+      setTests(items)
+    } else {
+      // No API tests — keep showing "coming soon" empty state
+      setCurrentTestGroups([])
+      setTests([])
+    }
+  }, [apiModules])
 
   const handleGoHome = useCallback(() => {
     setSelectedModule('dashboard')
@@ -3205,10 +3527,9 @@ export default function Home() {
   }, [])
 
   // Mock run animation
-  const mockRunTests = useCallback(
+    const runTests = useCallback(
     (selectedOnly: boolean, forceIds?: string[]) => {
       if (isRunning) return
-      setIsRunning(true)
 
       let testsToRun: TestItem[]
       if (forceIds) {
@@ -3216,98 +3537,86 @@ export default function Home() {
       } else if (selectedOnly) {
         testsToRun = tests.filter((t) => testChecks.has(t.id))
       } else {
-        testsToRun = tests.filter((t) => t.status === 'pending')
+        testsToRun = tests.filter((t) => t.status === 'pending' || t.status === 'failed')
       }
 
       if (testsToRun.length === 0) {
-        setIsRunning(false)
+        toast.info('No tests to run')
         return
       }
 
-      // Reset all to-be-run tests to pending first
+      const mapping = sidebarToFolderMapping(selectedModule)
+      if (!mapping) {
+        toast.error('Cannot determine module path for: ' + selectedModule)
+        return
+      }
+
       setTests((prev) =>
         prev.map((t) =>
-          testsToRun.some((r) => r.id === t.id) ? { ...t, status: 'pending' as const, duration: '' } : t
+          testsToRun.some((r) => r.id === t.id) ? { ...t, status: (t.id === testsToRun[0].id ? 'running' as const : 'pending' as const), duration: '' } : t
         )
       )
+      setIsRunning(true)
+      setRunningProgress('Starting tests...')
+      setActiveTab('live-execution')
 
-      let i = 0
-      const interval = setInterval(() => {
-        if (i >= testsToRun.length) {
+      const testNames = testsToRun.map((t) => t.id)
+      const runOnlyTests = selectedOnly || forceIds ? testNames : null
+
+      startRun(
+        mapping.module,
+        mapping.subModule,
+        runOnlyTests,
+        (event) => {
+          if (event.type === 'log') {
+            setRunningProgress(event.message)
+          } else if (event.type === 'test_end') {
+            if (event.test_name && event.status) {
+              const testId = testsToRun.find((t) => t.id.endsWith('::' + event.test_name))?.id
+                || testsToRun.find((t) => t.id.includes(event.test_name || ''))?.id
+              if (testId) {
+                setTests((prev) =>
+                  prev.map((t) =>
+                    t.id === testId
+                      ? {
+                          ...t,
+                          status: event.status === 'passed' ? ('passed' as const)
+                            : event.status === 'failed' ? ('failed' as const)
+                            : ('pending' as const),
+                          duration: event.duration ? `${(event.duration / 1000).toFixed(1)}s` : '--',
+                        }
+                      : t
+                  )
+                )
+                if (event.status === 'failed') {
+                  toast.error(`Failed: ${event.test_name}`, {
+                    description: event.message || '',
+                    duration: 8000,
+                  })
+                }
+              }
+            }
+          } else if (event.type === 'run_end') {
+            setRunningProgress('Run complete!')
+          } else if (event.type === 'error') {
+            toast.error('Run error', { description: event.message, duration: 8000 })
+          }
+        },
+        () => {
           setIsRunning(false)
           setRunningProgress('')
-          clearInterval(interval)
-          // Save run to history (Feature 5)
-          setTests((currentTests) => {
-            const completedTests = currentTests.filter((t) =>
-              testsToRun.some((r) => r.id === t.id)
-            )
-            const passed = completedTests.filter((t) => t.status === 'passed').length
-            const failed = completedTests.filter((t) => t.status === 'failed').length
-            const results = completedTests.map((t) => ({
-              testId: t.id,
-              status: t.status as 'passed' | 'failed',
-            }))
-            const runSnapshot: RunSnapshot = {
-              id: runIdCounterRef.current++,
-              date: new Date().toLocaleDateString('en-GB', {
-                day: 'numeric', month: 'short', year: 'numeric',
-              }) + ', ' + new Date().toLocaleTimeString('en-US', {
-                hour: 'numeric', minute: '2-digit', hour12: true,
-              }),
-              moduleId: selectedModule,
-              results,
-              passed,
-              failed,
-              total: completedTests.length,
-              duration: `${Math.floor(Math.random() * 5) + 2}:${String(Math.floor(Math.random() * 59)).padStart(2, '0')}`,
-              rate: completedTests.length > 0 ? Math.round((passed / completedTests.length) * 100) : 0,
-            }
-            setRunHistory((prev) => [runSnapshot, ...prev])
-            return currentTests
-          })
-          return
+          toast.success('Test run finished!')
+        },
+        (err) => {
+          setIsRunning(false)
+          setRunningProgress('')
+          toast.error('Connection failed', { description: err.message, duration: 8000 })
         }
-
-        const test = testsToRun[i]
-        const willFail = test.id === 'T03' || test.id === 'T09' || test.id === 'T16'
-
-        setTests((prev) =>
-          prev.map((t) =>
-            t.id === test.id ? { ...t, status: 'running' as const, duration: '...' } : t
-          )
-        )
-        setRunningProgress(`Running ${i + 1}/${testsToRun.length} tests...`)
-
-        setTimeout(() => {
-          setTests((prev) =>
-            prev.map((t) =>
-              t.id === test.id
-                ? {
-                    ...t,
-                    status: willFail ? ('failed' as const) : ('passed' as const),
-                    duration: willFail
-                      ? '--'
-                      : `${Math.floor(Math.random() * 3) + 1}:${String(Math.floor(Math.random() * 59)).padStart(2, '0')}`,
-                  }
-                : t
-            )
-          )
-          // Fire failure toast
-          if (willFail) {
-            const error = getTestError(test.id)
-            toast.error(`${test.id} failed`, {
-              description: error || test.name,
-              duration: 6000,
-            })
-          }
-        }, 600)
-
-        i++
-      }, 1200)
+      )
     },
-    [isRunning, tests, testChecks, getTestError, selectedModule]
+    [isRunning, tests, testChecks, selectedModule]
   )
+   
 
   // Feature 4: Run by priority
   const runByPriority = useCallback(
@@ -3316,10 +3625,10 @@ export default function Home() {
       const priorityIds = tests.filter((t) => t.priority === priority).map((t) => t.id)
       if (priorityIds.length === 0) return
       rerunTestIds(priorityIds)
-      mockRunTests(true, priorityIds)
+      runTests(true, priorityIds)
       setActiveTab('live-execution')
     },
-    [isRunning, tests, rerunTestIds, mockRunTests]
+    [isRunning, tests, rerunTestIds, runTests]
   )
 
   const passedCount = tests.filter((t) => t.status === 'passed').length
@@ -3351,10 +3660,10 @@ export default function Home() {
     const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id)
     if (failedIds.length > 0) {
       rerunTestIds(failedIds)
-      mockRunTests(true, failedIds)
+      runTests(true, failedIds)
       setActiveTab('live-execution')
     }
-  }, [tests, rerunTestIds, mockRunTests])
+  }, [tests, rerunTestIds, runTests])
 
   const handleNewRun = useCallback(() => {
     setCompletionModalOpen(false)
@@ -3522,7 +3831,7 @@ export default function Home() {
       <div className="flex flex-1 overflow-hidden">
         {/* ─── SIDEBAR ──────────────────────────────────── */}
         <div
-          className={`shrink-0 transition-all duration-200 ease-in-out overflow-hidden ${
+          className={`shrink-0 transition-all duration-200 ease-in-out overflow-hidden h-full h-full ${
             sidebarOpen ? 'w-60' : 'w-0'
           }`}
         >
@@ -3540,7 +3849,7 @@ export default function Home() {
               <ChevronLeft className="size-4" />
             </button>
           </div>
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="py-2 px-2">
               {sidebarModules.map((mod) => (
                 <SidebarModuleItem
@@ -3564,7 +3873,10 @@ export default function Home() {
         </div>
 
         {/* ─── MAIN CONTENT ─────────────────────────────── */}
-        <main className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900">
+        <main className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900 relative">
+          {navToast && (
+            <NavToast key={navToast.key} label={navToast.label} parent={navToast.parent} />
+          )}
           {/* Breadcrumb (when sidebar collapsed + not on Dashboard) */}
           {!sidebarOpen && selectedModule !== 'dashboard' && (
             <div className="flex items-center gap-1.5 px-4 py-2 border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
@@ -3605,7 +3917,7 @@ export default function Home() {
 
           {/* ── MODULE VIEW (module selected — tabs + content) ── */}
           {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && (
-            <>
+              <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               {/* Tab bar */}
               <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 shrink-0">
                 <div className="flex items-center h-10 px-4 gap-0">
@@ -3633,8 +3945,8 @@ export default function Home() {
               </div>
 
               {/* Tab Content */}
-              <div className="flex-1 overflow-hidden">
-                {activeTab === 'operations' && <OperationsTab />}
+              <div className="flex-1 overflow-hidden min-h-0">
+                {activeTab === 'operations' && <OperationsTab testGroups={currentTestGroups} />}
             {activeTab === 'test-runner' && (
               <TestRunnerTab
                 tests={tests}
@@ -3643,7 +3955,7 @@ export default function Home() {
                 isRunning={isRunning}
                 totalFailed={failedCount}
                 onRun={(selectedOnly) => {
-                  mockRunTests(selectedOnly)
+                  runTests(selectedOnly)
                   setActiveTab('live-execution')
                 }}
                 onRunByPriority={runByPriority}
@@ -3651,7 +3963,7 @@ export default function Home() {
                   const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id)
                   if (failedIds.length > 0) {
                     rerunTestIds(failedIds)
-                    mockRunTests(true, failedIds)
+                    runTests(true, failedIds)
                     setActiveTab('live-execution')
                   }
                 }}
@@ -3660,6 +3972,7 @@ export default function Home() {
             {activeTab === 'live-execution' && (
               <LiveExecutionTab
                 tests={tests}
+                testGroups={currentTestGroups}
                 isRunning={isRunning}
                 runningProgress={runningProgress}
                 onStop={() => setIsRunning(false)}
@@ -3668,7 +3981,7 @@ export default function Home() {
                   const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id)
                   if (failedIds.length > 0) {
                     rerunTestIds(failedIds)
-                    mockRunTests(true, failedIds)
+                    runTests(true, failedIds)
                   }
                 }}
               />
@@ -3687,7 +4000,7 @@ export default function Home() {
               <ScheduleRunsTab userName={user.name} sidebarModules={sidebarModules} />
             )}
           </div>
-            </>
+              </div>
           )}
         </main>
       </div>
