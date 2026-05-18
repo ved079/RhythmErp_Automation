@@ -27,6 +27,7 @@ DISPLAY_NAMES = {
     "crop_master": "Crop Master",
     "item_master": "Item Master",
     "quality_parameter_master": "Quality Parameter Master",
+    "item_attribute": "Item Category"
 }
 
 

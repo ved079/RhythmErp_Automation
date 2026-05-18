@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { fetchModules, folderToSidebarId, sidebarToFolderMapping, startRun, type ApiModule, type ApiSubModule } from '@/lib/api'
+import { fetchModules, folderToSidebarId, sidebarToFolderMapping, startRun, fetchTestCases, type ApiModule, type ApiSubModule, type TestCasesData } from '@/lib/api'
 import {
   addBugReport,
   getBugReports,
@@ -1042,11 +1042,10 @@ function DashboardTab({
 }
 
 // ─── OPERATIONS TAB (Test Specification View) ────────────
-function OperationsTab({ testGroups }: { testGroups: TestClassGroup[] }) {
+function OperationsTab({ testGroups, testCasesModule }: { testGroups: TestClassGroup[]; testCasesModule?: { label: string; tests: any[] } }) {
   const testSpecGroups = testGroups
   const [searchVal, setSearchVal] = useState('')
-  const [filter, setFilter] = useState<'all' | 'passed' | 'failed' | 'not-run'>('all')
-  const [priorityFilter, setPriorityFilter] = useState<'all' | TestPriority>('all')
+  const [filter, setFilter] = useState<'all' | 'passed' | 'failed' | 'bug' | 'not-run'>('all')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     new Set(testSpecGroups.map((g) => g.className))
   )
@@ -1070,7 +1069,6 @@ function OperationsTab({ testGroups }: { testGroups: TestClassGroup[] }) {
     })
   }, [])
 
-  // Filter groups based on search and filter
   const filteredGroups = useMemo(() =>
     testSpecGroups
       .map((group) => {
@@ -1085,31 +1083,39 @@ function OperationsTab({ testGroups }: { testGroups: TestClassGroup[] }) {
             filter === 'all' ||
             (filter === 'passed' && test.status === 'passed') ||
             (filter === 'failed' && test.status === 'failed') ||
-            (filter === 'not-run' && test.status === 'not-run')
-          const matchPriority =
-            priorityFilter === 'all' ||
-            test.priority === priorityFilter
-          return matchSearch && matchFilter && matchPriority
+            (filter === 'bug' && test.status === 'not-run' && !!test.error) ||
+            (filter === 'not-run' && test.status === 'not-run' && !test.error)
+          return matchSearch && matchFilter
         })
         return { ...group, tests: filteredTests, filteredTestCount: filteredTests.length }
       })
       .filter((g) => g.filteredTestCount > 0),
-  [searchVal, filter, priorityFilter, testSpecGroups])
+  [searchVal, filter, testSpecGroups])
 
   const totalTests = testSpecGroups.reduce((acc, g) => acc + g.tests.length, 0)
-  const totalPassed = testSpecGroups.reduce(
-    (acc, g) => acc + g.tests.filter((t) => t.status === 'passed').length,
+  const bugCount = testSpecGroups.reduce(
+    (acc, g) => acc + g.tests.filter((t) => !!t.error).length,
     0
   )
-  const totalFailed = testSpecGroups.reduce(
-    (acc, g) => acc + g.tests.filter((t) => t.status === 'failed').length,
-    0
-  )
+
+  const getStatusDisplay = (test: TestSpecItem) => {
+    if (test.error) {
+      return { label: 'BUG', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400', icon: '\u{1F41B}' }
+    }
+    if (test.status === 'passed') {
+      return { label: 'PASS', color: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400', icon: '\u2705' }
+    }
+    if (test.status === 'failed') {
+      return { label: 'FAIL', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400', icon: '\u274C' }
+    }
+    return { label: '\u2014', color: 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400', icon: '\u2014' }
+  }
+
+  const findTestCase = (testId: string) => testCasesModule?.tests.find((tc: any) => tc.id === testId)
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-gray-400" />
           <Input
@@ -1119,14 +1125,40 @@ function OperationsTab({ testGroups }: { testGroups: TestClassGroup[] }) {
             className="h-8 pl-8 text-[13px] bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-100"
           />
         </div>
-        <Button variant="outline" className="h-8 text-[13px] gap-1.5 border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300">
+        <Button
+          variant="outline"
+          className="h-8 text-[13px] gap-1.5 border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300"
+          onClick={() => {
+            if (typeof window !== 'undefined') {
+              const allData = (window as any).__ALL_TEST_CASES__
+              if (!allData) return
+              import('xlsx').then((XLSX) => {
+                const wb = XLSX.utils.book_new()
+                for (const [key, val] of Object.entries(allData)) {
+                  const mod = val as { label: string; tests: any[] }
+                  const rows = mod.tests.map((t) => ({
+                    '#': t.id,
+                    'Description': t.description,
+                    'Steps': t.steps,
+                    'Expected Result': t.expected,
+                    'Actual Result': t.actual,
+                    'Status': t.status,
+                    'Date': t.date,
+                  }))
+                  const ws = XLSX.utils.json_to_sheet(rows)
+                  XLSX.utils.book_append_sheet(wb, ws, mod.label.substring(0, 31))
+                }
+                XLSX.writeFile(wb, 'RhythmERP_Test_Specifications.xlsx')
+              }).catch(() => {
+                alert('xlsx library not installed. Run: npm install xlsx')
+              })
+            }
+          }}
+        >
           <FileSpreadsheet className="size-3.5" />
           Export to Excel
         </Button>
-        <Select
-          value={filter}
-          onValueChange={(v) => setFilter(v as typeof filter)}
-        >
+        <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
           <SelectTrigger className="h-8 w-28 text-[13px] bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-600">
             <SelectValue />
           </SelectTrigger>
@@ -1134,73 +1166,35 @@ function OperationsTab({ testGroups }: { testGroups: TestClassGroup[] }) {
             <SelectItem value="all">All</SelectItem>
             <SelectItem value="passed">Passed</SelectItem>
             <SelectItem value="failed">Failed</SelectItem>
-            <SelectItem value="not-run">Not Run</SelectItem>
+            <SelectItem value="bug">Bug</SelectItem>
           </SelectContent>
         </Select>
         <div className="flex-1" />
-        {/* Priority filter pills */}
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setPriorityFilter('all')}
-            className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
-              priorityFilter === 'all' ? 'bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-            }`}
-          >All</button>
-          <button
-            onClick={() => setPriorityFilter('smoke')}
-            className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
-              priorityFilter === 'smoke' ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-            }`}
-          >🔥 Smoke</button>
-          <button
-            onClick={() => setPriorityFilter('regression')}
-            className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
-              priorityFilter === 'regression' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-            }`}
-          >🔄 Regression</button>
-          <button
-            onClick={() => setPriorityFilter('sanity')}
-            className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
-              priorityFilter === 'sanity' ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-            }`}
-          >🛡️ Sanity</button>
-        </div>
         <Separator orientation="vertical" className="h-5 mx-1" />
         <div className="flex items-center gap-3 text-[12px]">
           <span className="text-gray-500 dark:text-gray-400">{totalTests} tests</span>
-          <span className="text-green-600 dark:text-green-400 font-medium">{totalPassed} passed</span>
-          <span className="text-red-500 dark:text-red-400 font-medium">{totalFailed} failed</span>
+          {bugCount > 0 && (
+            <span className="text-red-500 dark:text-red-400 font-medium">{'\u{1F41B}'} {bugCount} bugs</span>
+          )}
         </div>
       </div>
 
-      {/* Test Groups */}
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-4 space-y-2">
           {filteredGroups.map((group) => {
-            const passed = group.tests.filter((t) => t.status === 'passed').length
-            const failed = group.tests.filter((t) => t.status === 'failed').length
-            const notRun = group.tests.filter((t) => t.status === 'not-run').length
-            const allPassed = passed === group.tests.length && group.tests.length > 0
-            const hasFailed = failed > 0
+            const bugs = group.tests.filter((t) => !!t.error).length
+            const bugsOnly = bugs === group.tests.length && bugs > 0
+            const hasBugs = bugs > 0
+            const noBugs = bugs === 0 && group.tests.length > 0
 
-            const groupBorderColor = allPassed
-              ? 'border-green-200 dark:border-green-800'
-              : hasFailed
-                ? 'border-red-200 dark:border-red-800'
+            const groupBorderColor = bugsOnly
+              ? 'border-red-200 dark:border-red-800'
+              : hasBugs
+                ? 'border-orange-200 dark:border-orange-800'
                 : 'border-gray-200 dark:border-gray-700'
 
-            const groupBgColor = allPassed
-              ? 'bg-green-50/30 dark:bg-green-900/10'
-              : hasFailed
-                ? 'bg-red-50/30 dark:bg-red-900/10'
-                : 'bg-white dark:bg-gray-800/30'
-
             return (
-              <div
-                key={group.className}
-                className={`border rounded-lg overflow-hidden ${groupBorderColor} ${groupBgColor}`}
-              >
-                {/* Group Header */}
+              <div key={group.className} className={`border rounded-lg overflow-hidden ${groupBorderColor}`}>
                 <button
                   onClick={() => toggleGroup(group.className)}
                   className="w-full flex items-center gap-3 px-4 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors cursor-pointer"
@@ -1217,38 +1211,26 @@ function OperationsTab({ testGroups }: { testGroups: TestClassGroup[] }) {
                     {group.tests.length} test{group.tests.length !== 1 ? 's' : ''}
                   </span>
                   <div className="flex items-center gap-1.5">
-                    {passed > 0 && (
+                    {noBugs && (
                       <span className="inline-flex items-center gap-0.5 text-[11px] text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded-full font-medium">
-                        ✅ {passed}
+                        {'\u2705'} All Clear
                       </span>
                     )}
-                    {failed > 0 && (
+                    {hasBugs && (
                       <span className="inline-flex items-center gap-0.5 text-[11px] text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30 px-1.5 py-0.5 rounded-full font-medium">
-                        ❌ {failed}
-                      </span>
-                    )}
-                    {notRun > 0 && (
-                      <span className="inline-flex items-center gap-0.5 text-[11px] text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded-full font-medium">
-                        — {notRun}
+                        {'\u{1F41B}'} {bugs}
                       </span>
                     )}
                   </div>
                 </button>
 
-                {/* Expanded Tests */}
                 {expandedGroups.has(group.className) && (
                   <div className="border-t border-gray-100 dark:border-gray-700">
                     {group.tests.map((test, idx) => {
                       const isLast = idx === group.tests.length - 1
                       const isExpanded = expandedTests.has(test.id)
-                      const statusIcon =
-                        test.status === 'passed' ? (
-                          <span className="text-green-500 text-sm">✅</span>
-                        ) : test.status === 'failed' ? (
-                          <span className="text-red-500 text-sm">❌</span>
-                        ) : (
-                          <span className="text-gray-300 dark:text-gray-600 text-sm">—</span>
-                        )
+                      const statusInfo = getStatusDisplay(test)
+                      const tc = findTestCase(test.id)
 
                       return (
                         <div key={test.id}>
@@ -1263,54 +1245,51 @@ function OperationsTab({ testGroups }: { testGroups: TestClassGroup[] }) {
                             ) : (
                               <ChevronRight className="size-3 text-gray-400 dark:text-gray-500 shrink-0" />
                             )}
-                            <span className="text-[11px] text-gray-400 dark:text-gray-500 font-mono w-6 text-center shrink-0">
-                              {idx + 1}
+                            <span className="text-[11px] text-gray-400 dark:text-gray-500 font-mono w-8 shrink-0">
+                              {test.id}
                             </span>
                             <span className="text-[12px] text-gray-700 dark:text-gray-200 flex-1 text-left">
                               {test.description}
                             </span>
-                            <PriorityBadge priority={test.priority} />
-                            {statusIcon}
-                            <span
-                              className={`text-[11px] font-mono w-10 text-right shrink-0 ${
-                                test.status === 'passed'
-                                  ? 'text-green-600 dark:text-green-400'
-                                  : test.status === 'failed'
-                                    ? 'text-red-500 dark:text-red-400'
-                                    : 'text-gray-400 dark:text-gray-500'
-                              }`}
-                            >
-                              {test.duration}
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${statusInfo.color}`}>
+                              {statusInfo.icon} {statusInfo.label}
                             </span>
                           </button>
 
-                          {/* Expanded Test Details */}
                           {isExpanded && (
                             <div className="px-10 pb-3 pl-[72px] pr-4 border-b border-gray-50 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-800/20">
                               <div className="space-y-2 py-2">
+                                {test.steps && (
+                                  <div>
+                                    <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Steps:</span>
+                                    <p className="text-[12px] text-gray-600 dark:text-gray-300 mt-0.5 leading-5 whitespace-pre-line">{test.steps}</p>
+                                  </div>
+                                )}
                                 <div>
-                                  <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                    Steps:
-                                  </span>
-                                  <p className="text-[12px] text-gray-600 dark:text-gray-300 mt-0.5 leading-5">
-                                    {test.steps}
-                                  </p>
+                                  <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Expected:</span>
+                                  <p className="text-[12px] text-gray-600 dark:text-gray-300 mt-0.5 leading-5">{test.expected}</p>
                                 </div>
                                 <div>
-                                  <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                    Expected:
+                                  <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actual:</span>
+                                  <p className="text-[12px] text-gray-600 dark:text-gray-300 mt-0.5 leading-5">{tc?.actual || test.actual || '\u2014'}</p>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                  <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status:</span>
+                                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${statusInfo.color}`}>
+                                    {statusInfo.icon} {statusInfo.label}
                                   </span>
-                                  <p className="text-[12px] text-gray-600 dark:text-gray-300 mt-0.5 leading-5">
-                                    {test.expected}
-                                  </p>
+                                  {tc?.date && (
+                                    <>
+                                      <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider ml-2">Date:</span>
+                                      <span className="text-[11px] text-gray-600 dark:text-gray-400">{tc.date}</span>
+                                    </>
+                                  )}
                                 </div>
                                 {test.error && (
-                                  <div>
-                                    <span className="text-[11px] font-semibold text-red-500 dark:text-red-400 uppercase tracking-wider">
-                                      Error:
-                                    </span>
+                                  <div className="mt-1">
+                                    <span className="text-[11px] font-semibold text-red-500 dark:text-red-400 uppercase tracking-wider">Bug Details:</span>
                                     <p className="text-[12px] text-red-600 dark:text-red-400 mt-0.5 leading-5 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
-                                      {test.error}
+                                      {test.actual}
                                     </p>
                                   </div>
                                 )}
@@ -1337,8 +1316,6 @@ function OperationsTab({ testGroups }: { testGroups: TestClassGroup[] }) {
     </div>
   )
 }
-
-// ─── TEST RUNNER TAB (Setup — checkboxes + Run) ──────────
 function TestRunnerTab({
   tests,
   testChecks,
@@ -1358,18 +1335,19 @@ function TestRunnerTab({
   totalFailed: number
   onRerunFailed: () => void
 }) {
-  const [selectAll, setSelectAll] = useState(false)
+  const pendingOrRunning = tests.filter((t) => t.status === 'pending' || t.status === 'running')
+  const allSelected = pendingOrRunning.length > 0 && pendingOrRunning.every((t) => testChecks.has(t.id))
+  const noneSelected = pendingOrRunning.every((t) => !testChecks.has(t.id))
 
   const handleSelectAll = useCallback(() => {
-    if (selectAll) {
-      testChecks.forEach((id) => toggleTestCheck(id))
+    if (allSelected) {
+      // Deselect all
+      pendingOrRunning.forEach((t) => { if (testChecks.has(t.id)) toggleTestCheck(t.id) })
     } else {
-      tests.filter((t) => t.status === 'pending' || t.status === 'running').forEach((t) => {
-        if (!testChecks.has(t.id)) toggleTestCheck(t.id)
-      })
+      // Select all pending/running
+      pendingOrRunning.forEach((t) => { if (!testChecks.has(t.id)) toggleTestCheck(t.id) })
     }
-    setSelectAll(!selectAll)
-  }, [selectAll, tests, testChecks, toggleTestCheck])
+  }, [allSelected, pendingOrRunning, testChecks, toggleTestCheck])
 
   const passedCount = tests.filter((t) => t.status === 'passed').length
   const failedCount = tests.filter((t) => t.status === 'failed').length
@@ -1380,7 +1358,7 @@ function TestRunnerTab({
 
   // Group tests by class
   const testGroups: { name: string; tests: TestItem[] }[] = []
-  let currentGroup = ''
+  let currentGroup: string | null = null
   for (const t of tests) {
     const cls = t.id.replace(/\d+$/, '').replace(/T/, 'Test')
     if (cls !== currentGroup) {
@@ -1410,6 +1388,15 @@ function TestRunnerTab({
           <Play className="size-4" />
           Run Selected ({selectedRunnable})
         </Button>
+                <Button
+          onClick={handleSelectAll}
+          disabled={isRunning}
+          variant="outline"
+          className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 h-9 text-[13px] gap-2 px-4 cursor-pointer"
+        >
+          {allSelected ? '✖ Deselect All' : '☑ Select All'}
+          <span className="text-[11px] opacity-60">({selectedRunnable}/{pendingCount})</span>
+        </Button>
         <Button
           onClick={() => onRunByPriority('smoke')}
           disabled={isRunning || smokeCount === 0}
@@ -1437,6 +1424,7 @@ function TestRunnerTab({
             Rerun Failed ({totalFailed})
           </Button>
         )}
+        
         <div className="flex-1" />
         <div className="flex items-center gap-4 text-[12px]">
           <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
@@ -2887,6 +2875,7 @@ export default function Home() {
   const [testChecks, setTestChecks] = useState<Set<string>>(new Set())
   const [tests, setTests] = useState<TestItem[]>(initialTests)
   const [currentTestGroups, setCurrentTestGroups] = useState<TestClassGroup[]>(testSpecGroups)
+  const [allTestCases, setAllTestCases] = useState<TestCasesData>({})
   const [isRunning, setIsRunning] = useState(false)
   const [runningProgress, setRunningProgress] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -2929,6 +2918,17 @@ export default function Home() {
         console.warn('API modules fetch failed, using defaults:', err)
         // Keep ALL_SIDEBAR_MODULES on failure
       })
+  }, [])
+    // Fetch test cases from backend
+  useEffect(() => {
+    fetchTestCases()
+      .then((data) => {
+        setAllTestCases(data)
+        if (typeof window !== 'undefined') {
+          (window as any).__ALL_TEST_CASES__ = data
+        }
+      })
+      .catch(() => console.error('Failed to fetch test cases'))
   }, [])
 
   const handleMarkAllRead = useCallback(() => {
@@ -3078,17 +3078,45 @@ export default function Home() {
     setTestChecks(new Set())
 
     // Load real tests from API data for this sub-module
-    const { groups, items } = getTestsForSidebarModule(id, apiModules)
-    if (groups.length > 0) {
-      setCurrentTestGroups(groups)
+        // Try real test cases from Excel data first
+    const moduleKey = id.toLowerCase().replace(" ", "_").replace("-", "_")
+    if (allTestCases[moduleKey]) {
+      const moduleData = allTestCases[moduleKey]
+      const specGroups: TestClassGroup[] = [{
+        className: moduleData.label,
+        tests: moduleData.tests.map((t) => ({
+          id: t.id,
+          description: t.description,
+          status: 'not-run' as const,
+          duration: '',
+          steps: t.steps,
+          expected: t.expected,
+          error: t.status === 'BUG' ? t.actual : undefined,
+          priority: undefined,
+        })),
+      }]
+      setCurrentTestGroups(specGroups)
+      const items: TestItem[] = moduleData.tests.map((t) => ({
+        id: t.id,
+        name: t.description,
+        status: 'pending' as const,
+        duration: '',
+      }))
       setTests(items)
     } else {
-      // No API tests — keep showing "coming soon" empty state
-      setCurrentTestGroups([])
-      setTests([])
+      // Fall back to API test functions
+      const { groups, items } = getTestsForSidebarModule(id, apiModules)
+      if (groups.length > 0) {
+        setCurrentTestGroups(groups)
+        setTests(items)
+      } else {
+        setCurrentTestGroups([])
+        setTests([])
+      }
     }
-  }, [apiModules])
+  }, [apiModules, allTestCases])
 
+  
   const handleGoHome = useCallback(() => {
     setSelectedModule('dashboard')
     setActiveTab('operations')
@@ -3507,7 +3535,7 @@ export default function Home() {
 
           {/* ── MY TICKETS VIEW ── */}
           {selectedModule === 'my-tickets' && user && (
-            <MyTicketsTab userName={user.name} userEmail={user.email} />
+            <div className='p-8 text-center text-gray-400 text-sm'>No tickets yet</div>
           )}
 
           {/* ── MODULE VIEW (module selected — tabs + content) ── */}
@@ -3541,7 +3569,14 @@ export default function Home() {
 
               {/* Tab Content */}
               <div className="flex-1 overflow-hidden min-h-0">
-                {activeTab === 'operations' && <OperationsTab testGroups={currentTestGroups} />}
+                {activeTab === 'operations' && (
+                  <OperationsTab
+                    testGroups={currentTestGroups}
+                    testCasesModule={
+                      allTestCases[selectedModule?.toLowerCase().replace(' ', '_').replace('-', '_')]
+                    }
+                  />
+                )}
             {activeTab === 'test-runner' && (
               <TestRunnerTab
                 tests={tests}

@@ -166,3 +166,25 @@ def get_screenshot():
     if img is None:
         return JSONResponse({"screenshot": None, "active": False})
     return JSONResponse({"screenshot": img, "active": True})
+
+# ─── Test Cases Endpoint ────────────────────────────────
+import json
+
+TEST_CASES_PATH = PROJECT_ROOT / "api" / "test_cases.json"
+
+@app.get("/test-cases")
+async def get_test_cases(module: str = None):
+    """Return all test cases, optionally filtered by module key."""
+    if not TEST_CASES_PATH.exists():
+        return {"error": "test_cases.json not found"}
+    
+    with open(TEST_CASES_PATH, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    
+    if module:
+        key = module.lower().replace(" ", "_").replace("-", "_")
+        if key in data:
+            return {key: data[key]}
+        return {"error": f"Module '{module}' not found"}
+    
+    return data
