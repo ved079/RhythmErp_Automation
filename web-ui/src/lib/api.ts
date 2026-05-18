@@ -164,6 +164,8 @@ const FOLDER_TO_SIDEBAR: Record<string, string> = {
   crop_master: "crop-master",
   item_master: "item-master",
   quality_parameter_master: "quality-parameter-def",
+  services_master: "services-master",
+  item_category: "item-category",
 };
 
 export function folderToSidebarId(folderName: string): string {
@@ -184,7 +186,7 @@ export function sidebarToFolderMapping(sidebarId: string): { module: string; sub
       if (commonSubs.includes(folder)) {
         return { module: "common_settings", subModule: folder };
       }
-      const commoditySubs = ["crop_master", "item_master", "quality_parameter_master"];
+      const commoditySubs = ["crop_master", "item_master", "quality_parameter_master", "services_master", "item_category"];
       if (commoditySubs.includes(folder)) {
         return { module: "commodity_settings", subModule: folder };
       }
@@ -192,4 +194,31 @@ export function sidebarToFolderMapping(sidebarId: string): { module: string; sub
     }
   }
   return null;
+
+}
+
+// ─── Test Cases Types & Fetch ──────────────────────────
+export interface TestCaseItem {
+  id: string
+  screenName: string
+  description: string
+  steps: string
+  expected: string
+  actual: string
+  status: string
+  date: string
+}
+
+export interface TestCaseModule {
+  label: string
+  tests: TestCaseItem[]
+}
+
+export type TestCasesData = Record<string, TestCaseModule>
+
+export async function fetchTestCases(): Promise<TestCasesData> {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
+  const res = await fetch(`${baseUrl}/test-cases`)
+  if (!res.ok) throw new Error('Failed to fetch test cases')
+  return res.json()
 }

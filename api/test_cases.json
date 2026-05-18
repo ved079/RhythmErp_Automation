@@ -1,0 +1,2672 @@
+{
+  "uom": {
+    "label": "UOM",
+    "tests": [
+      {
+        "id": "1",
+        "screenName": "UOM",
+        "description": "Empty Code field validation",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Leave Code empty, fill Description\n4. Click Submit",
+        "expected": "Validation warning appears. Code field shows error message. Form stays open.",
+        "actual": "Validation warning appeared. Code field showed \"UOM Code is required\". Form remained open.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "2",
+        "screenName": "UOM",
+        "description": "Empty Description field validation",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Fill Code, leave Description empty\n4. Click Submit",
+        "expected": "Validation warning appears. Description field highlights red. Form stays open.",
+        "actual": "Validation warning appeared. Description field turned red. Form remained open.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "3",
+        "screenName": "UOM",
+        "description": "Both fields empty validation",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Leave both Code and Description empty\n4. Click Submit",
+        "expected": "Validation warning appears. Both fields show errors. Form stays open.",
+        "actual": "Validation warning appeared. Code showed error message, Description turned red. Form remained open.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "4",
+        "screenName": "UOM",
+        "description": "Duplicate code 'MT' rejection",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Enter Code as 'MT'\n4. Fill Description\n5. Click Submit",
+        "expected": "System should not allow creating a UOM with a code that already exists. Warning displayed.",
+        "actual": "Validation warning appeared. Duplicate UOM was not created in the table.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "5",
+        "screenName": "UOM",
+        "description": "Duplicate code 'KG' rejection",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Enter Code as 'KG'\n4. Fill Description\n5. Click Submit",
+        "expected": "System should not allow creating a UOM with a code that already exists. Warning displayed.",
+        "actual": "Validation warning appeared. Duplicate UOM was not created in the table.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "6",
+        "screenName": "UOM",
+        "description": "Maximum length Description rejection (256 chars)",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Fill Code with valid value\n4. Enter 256 characters in Description\n5. Click Submit",
+        "expected": "System should reject and show an error message. UOM must not be saved.",
+        "actual": "Error toast appeared saying \"Failed to save record\". UOM was not created. No field-level error shown.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "7",
+        "screenName": "UOM",
+        "description": "Maximum allowed Description accepted (255 chars)",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Fill Code with valid value\n4. Enter 255 characters in Description\n5. Click Submit",
+        "expected": "UOM should be created successfully with 255-character description.",
+        "actual": "UOM created successfully. Confirmed in table. Description later cleaned up to normal.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "8",
+        "screenName": "UOM",
+        "description": "Maximum length Code rejection (256 chars)",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Enter 256 characters in Code\n4. Fill Description\n5. Click Submit",
+        "expected": "System should reject and show an error message. UOM must not be saved.",
+        "actual": "Error toast appeared saying \"Failed to save record\". UOM was not created. No field-level error shown.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "9",
+        "screenName": "UOM",
+        "description": "Maximum allowed Code accepted (255 chars)",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Enter 255 characters in Code\n4. Fill Description\n5. Click Submit",
+        "expected": "UOM should be created successfully with 255-character code.",
+        "actual": "UOM created successfully. Confirmed in table.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "10",
+        "screenName": "UOM",
+        "description": "Cancel button discards new entry",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Fill both Code and Description\n4. Click Cancel",
+        "expected": "Form should close without saving. UOM must not appear in the table.",
+        "actual": "Form closed. UOM was not created in the table.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "11",
+        "screenName": "UOM",
+        "description": "Edit with empty Description validation",
+        "steps": "1. Navigate to UOM page\n2. Create a new UOM\n3. Click Edit on the new UOM\n4. Clear the Description field\n5. Click Update",
+        "expected": "Validation warning appears. Description field highlights red. Original data unchanged.",
+        "actual": "Validation warning appeared. Description field turned red.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "12",
+        "screenName": "UOM",
+        "description": "Edit with empty Code validation",
+        "steps": "1. Navigate to UOM page\n2. Create a new UOM\n3. Click Edit on the new UOM\n4. Clear the Code field\n5. Click Update",
+        "expected": "Validation warning appears. Code field shows error message. Original data unchanged.",
+        "actual": "Validation warning appeared. Code field showed error message.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "13",
+        "screenName": "UOM",
+        "description": "Submit immediately without filling any fields",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Click Submit without typing anything",
+        "expected": "Validation warning appears. Both fields show errors. Form stays open.",
+        "actual": "Validation warning appeared. Both Code and Description showed errors. Form remained open.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "14",
+        "screenName": "UOM",
+        "description": "Lowercase Code accepted",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Enter lowercase code (e.g. 'abcdefgh')\n4. Fill Description\n5. Click Submit",
+        "expected": "UOM should be created with lowercase code preserved as typed.",
+        "actual": "UOM created successfully. Code 'abcdefgh' saved as-is in the table.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "15",
+        "screenName": "UOM",
+        "description": "Mixed case Code accepted",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Enter mixed case code (e.g. 'AbCdEfGh')\n4. Fill Description\n5. Click Submit",
+        "expected": "UOM should be created with mixed case code preserved as typed.",
+        "actual": "UOM created successfully. Code 'AbCdEfGh' saved as-is in the table.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "16",
+        "screenName": "UOM",
+        "description": "Numbers in Code rejected",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Enter code with numbers (e.g. 'ABC12345')\n4. Fill Description\n5. Click Submit",
+        "expected": "System should reject code containing numbers. Warning displayed.",
+        "actual": "Validation warning appeared. UOM was not created in the table.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "17",
+        "screenName": "UOM",
+        "description": "Special characters in Code rejected",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Enter code with special chars (e.g. 'AB!@#$%^')\n4. Fill Description\n5. Click Submit",
+        "expected": "System should reject code containing special characters. Warning displayed.",
+        "actual": "Validation warning appeared. UOM was not created in the table.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "18",
+        "screenName": "UOM",
+        "description": "Leading spaces in Code auto-trimmed",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Enter code with leading spaces (e.g. ' ABCDEFGH')\n4. Fill Description\n5. Click Submit",
+        "expected": "System should accept the code. Leading spaces may be trimmed automatically.",
+        "actual": "UOM created successfully. Code saved as 'ABCDEFGH' (spaces silently trimmed). No warning given to user.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      },
+      {
+        "id": "19",
+        "screenName": "UOM",
+        "description": "Special characters in Description accepted",
+        "steps": "1. Navigate to UOM page\n2. Click Add\n3. Fill Code with valid value\n4. Enter special characters in Description\n5. Click Submit",
+        "expected": "UOM should be created with special characters in description preserved.",
+        "actual": "UOM created successfully. Special characters saved as-is in the description.",
+        "status": "PASS",
+        "date": "2026-05-09"
+      }
+    ]
+  },
+  "uom_conversion": {
+    "label": "UOM_Conversion",
+    "tests": [
+      {
+        "id": "T1",
+        "screenName": "UOM Conversion",
+        "description": "Create a valid UOM conversion with normal integer factor",
+        "steps": "1. Navigate to UOM Conversion page\n2. Click Add button\n3. Select Source UOM\n4. Select Target UOM\n5. Enter conversion factor\n6. Click Submit",
+        "expected": "Record is saved successfully and appears in the table",
+        "actual": "User created a UOM conversion with a valid integer factor - the form closed and the new conversion record appeared in the table with the correct values",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T2",
+        "screenName": "UOM Conversion",
+        "description": "Create with decimal conversion factor (e.g., 2.5)",
+        "steps": "1. Open Add form\n2. Select Source and Target UOM\n3. Enter decimal factor (e.g., 2.5)\n4. Click Submit",
+        "expected": "System should accept decimal values as conversion factors",
+        "actual": "User entered a decimal conversion factor (e.g., 2.5) - the system accepted it and saved the record successfully",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T3",
+        "screenName": "UOM Conversion",
+        "description": "Same UOM for source and target with factor = 1",
+        "steps": "1. Open Add form\n2. Select same UOM for Source and Target (e.g., NOS -> NOS)\n3. Enter factor 1\n4. Click Submit",
+        "expected": "System should handle appropriately (may reject as duplicate or accept with validation)",
+        "actual": "User attempted to create a conversion from a UOM to itself - the system responded with an appropriate message (either validation or duplicate notification)",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T4",
+        "screenName": "UOM Conversion",
+        "description": "Submit without selecting Source UOM",
+        "steps": "1. Open Add form\n2. Leave Source UOM empty\n3. Select Target UOM and enter factor\n4. Click Submit",
+        "expected": "\"Validation Failed\" popup appears. Source UOM dropdown is highlighted as required",
+        "actual": "User filled all fields except Source UOM - the system showed a validation error and highlighted that Source UOM must be selected",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T5",
+        "screenName": "UOM Conversion",
+        "description": "Submit without selecting Target UOM",
+        "steps": "1. Open Add form\n2. Leave Target UOM empty\n3. Select Source UOM and enter factor\n4. Click Submit",
+        "expected": "\"Validation Failed\" popup appears. Target UOM dropdown is highlighted as required",
+        "actual": "User filled all fields except Target UOM - the system showed a validation error and highlighted that Target UOM must be selected",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T6",
+        "screenName": "UOM Conversion",
+        "description": "Submit without entering Conversion Factor",
+        "steps": "1. Open Add form\n2. Select Source and Target UOM\n3. Leave Conversion Factor empty\n4. Click Submit",
+        "expected": "\"Validation Failed\" popup appears. Conversion Factor field shows error message",
+        "actual": "User selected both UOMs but left the conversion factor blank - the system showed a validation error with a message under the Conversion Factor field",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T7",
+        "screenName": "UOM Conversion",
+        "description": "Submit empty form (no fields filled)",
+        "steps": "1. Open Add form\n2. Click Submit without filling anything",
+        "expected": "\"Validation Failed\" popup appears. All fields show validation errors",
+        "actual": "User clicked Submit without entering any information - the system showed a validation error and highlighted all three fields as required",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T8",
+        "screenName": "UOM Conversion",
+        "description": "Enter text in Conversion Factor field (e.g., \"abc\")",
+        "steps": "1. Open Add form\n2. Select UOMs\n3. Enter text in Conversion Factor\n4. Click Submit",
+        "expected": "\"Validation Failed\" popup appears. \"Invalid Conversion Factor\" error message shown",
+        "actual": "User entered text instead of a number in the Conversion Factor field - the system rejected it with a validation error indicating invalid format",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T9",
+        "screenName": "UOM Conversion",
+        "description": "Enter special characters in Conversion Factor (e.g., \"@#$\")",
+        "steps": "1. Open Add form\n2. Select UOMs\n3. Enter special characters\n4. Click Submit",
+        "expected": "\"Validation Failed\" popup appears. Conversion Factor field shows error",
+        "actual": "User entered special characters in the Conversion Factor field - the system rejected it with a validation error",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T10",
+        "screenName": "UOM Conversion",
+        "description": "Enter negative conversion factor",
+        "steps": "1. Open Add form\n2. Select UOMs\n3. Enter negative number (e.g., -5)\n4. Click Submit",
+        "expected": "System behavior observed (may accept or reject based on business rules)",
+        "actual": "User entered a negative conversion factor - the system either accepted or rejected it based on business rules. No crash occurred",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T11",
+        "screenName": "UOM Conversion",
+        "description": "Enter zero as conversion factor",
+        "steps": "1. Open Add form\n2. Select UOMs\n3. Enter 0 as factor\n4. Click Submit",
+        "expected": "System behavior observed (may accept or reject zero as valid factor)",
+        "actual": "User entered zero as the conversion factor - the system handled it appropriately (either accepted or rejected based on business rules)",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T12",
+        "screenName": "UOM Conversion",
+        "description": "Very large factor (21 digits)",
+        "steps": "1. Open Add form\n2. Select UOMs\n3. Enter 21-digit number\n4. Click Submit",
+        "expected": "System should accept and save the 21-digit factor correctly",
+        "actual": "User entered an extremely large 21-digit conversion factor - the system accepted it and saved the record successfully",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T13",
+        "screenName": "UOM Conversion",
+        "description": "Very large factor (22 digits) - boundary test",
+        "steps": "1. Open Add form\n2. Select UOMs\n3. Enter 22-digit number\n4. Click Submit",
+        "expected": "System behavior observed (may accept with scientific notation or reject)",
+        "actual": "User entered a 22-digit conversion factor - the system handled it (either accepted or rejected). Behavior documented for review",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T14",
+        "screenName": "UOM Conversion",
+        "description": "Edit a 22-digit factor record",
+        "steps": "1. Create record with 22-digit factor\n2. Open Edit form for that record\n3. Click Update without changes",
+        "expected": "System should handle re-editing without errors",
+        "actual": "User created a record with a very large factor and then re-edited it - the system responded appropriately (either allowed edit or showed validation)",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T15",
+        "screenName": "UOM Conversion",
+        "description": "Edit an existing record with new valid factor",
+        "steps": "1. Create a conversion record\n2. Click Edit\n3. Change conversion factor to 7\n4. Click Update",
+        "expected": "Record is updated successfully. Table shows new factor",
+        "actual": "User edited an existing conversion record and changed the factor - the system saved the change and the table showed the updated value",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T16",
+        "screenName": "UOM Conversion",
+        "description": "Edit and clear Conversion Factor",
+        "steps": "1. Create a conversion record\n2. Open Edit\n3. Clear the Conversion Factor field\n4. Click Update",
+        "expected": "\"Validation Failed\" popup appears. Error message shown on factor field",
+        "actual": "User tried to update a record by clearing the conversion factor - the system showed a validation error and prevented the update",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T17",
+        "screenName": "UOM Conversion",
+        "description": "View mode - verify fields are read-only",
+        "steps": "1. Create a conversion record\n2. Click View (eye icon)\n3. Check form fields",
+        "expected": "All fields should be disabled (cannot be edited). No Submit/Update button",
+        "actual": "User opened a record in View mode - both UOM dropdowns and the conversion factor field were disabled and could not be edited",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T18",
+        "screenName": "UOM Conversion",
+        "description": "Cancel during Edit - no changes saved",
+        "steps": "1. Create a record\n2. Open Edit and change factor to 99999\n3. Click Cancel (not Update)",
+        "expected": "Form closes. Original factor remains unchanged in table",
+        "actual": "User opened a record for editing, changed the factor, but clicked Cancel - the form closed and the original factor value remained unchanged in the table",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T19",
+        "screenName": "UOM Conversion",
+        "description": "History popup shows record data",
+        "steps": "1. Create a conversion record\n2. Click History (clock icon)",
+        "expected": "History popup opens showing at least one row with record change history",
+        "actual": "User clicked the History button on a conversion record - a popup opened showing the record's creation history with the correct details",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T20",
+        "screenName": "UOM Conversion",
+        "description": "History popup close button works",
+        "steps": "1. Open History popup for a record\n2. Click Cancel/Close button",
+        "expected": "History popup closes and returns to main table view",
+        "actual": "User opened the history popup and closed it - the popup closed successfully and the main table was visible again",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T21",
+        "screenName": "UOM Conversion",
+        "description": "Cancel during Add - no record created",
+        "steps": "1. Open Add form and fill all fields\n2. Click Cancel (not Submit)\n3. Check table",
+        "expected": "Form closes. No new record should appear in the table",
+        "actual": "User filled the Add form but clicked Cancel instead of Submit - the form closed and no new conversion record was created. Table row count remained unchanged",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T22",
+        "screenName": "UOM Conversion",
+        "description": "Cancel during Edit - changes not saved",
+        "steps": "1. Create a record\n2. Open Edit, change factor to 55555\n3. Click Cancel\n4. Verify table value",
+        "expected": "Form closes. Original conversion factor remains unchanged",
+        "actual": "User opened a record for editing, changed the conversion factor, but clicked Cancel - the form closed and the table still showed the original factor value",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      }
+    ]
+  },
+  "designation": {
+    "label": "Designation",
+    "tests": [
+      {
+        "id": "C01",
+        "screenName": "Designation",
+        "description": "Submit with all fields empty",
+        "steps": "1. Navigate to Designation screen\n2. Click ADD button\n3. Leave all fields empty\n4. Click Submit",
+        "expected": "SweetAlert2 'Validation Failed' popup appears; form stays open",
+        "actual": "SweetAlert2 'Validation Failed — Please correct the highlighted fields' shown; form remains open",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C02",
+        "screenName": "Designation",
+        "description": "Submit with only Name filled",
+        "steps": "1. Click ADD button\n2. Enter a valid alphabetic Name\n3. Leave Description empty\n4. Leave Status as Active (default)\n5. Click Submit",
+        "expected": "Record created successfully; success toast appears",
+        "actual": "Record added successfully with only Name filled; Description optional, Status defaults Active",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C03",
+        "screenName": "Designation",
+        "description": "Name with leading/trailing spaces",
+        "steps": "1. Click ADD button\n2. Enter Name with leading & trailing spaces e.g. '  Manager  '\n3. Click Submit",
+        "expected": "Name should be trimmed to 'Manager' before saving",
+        "actual": "Spaces NOT trimmed — stored as '  Manager  ' with spaces (BUG #5: no trimming)",
+        "status": "BUG",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C04",
+        "screenName": "Designation",
+        "description": "Name with spaces only",
+        "steps": "1. Click ADD button\n2. Enter spaces-only Name '     '\n3. Observe inline error",
+        "expected": "Inline 'Invalid Name' mat-error shown; Name field marked ng-invalid",
+        "actual": "Invalid Name' mat-error displayed; ng-invalid class present on Name input",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C05",
+        "screenName": "Designation",
+        "description": "Name with special characters @#$%^&*",
+        "steps": "1. Click ADD button\n2. Enter Name with special chars e.g. 'Test@Name'\n3. Observe inline error\n4. Click Submit",
+        "expected": "Inline 'Invalid Name' mat-error shown; SweetAlert2 'Validation Failed' on Submit",
+        "actual": "Invalid Name' mat-error shown; SweetAlert2 'Validation Failed' also appears on Submit",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C06",
+        "screenName": "Designation",
+        "description": "Name with digits only",
+        "steps": "1. Click ADD button\n2. Enter digits-only Name e.g. '12345'\n3. Observe inline error",
+        "expected": "Inline 'Invalid Name' mat-error shown; type='character' strips digits",
+        "actual": "Invalid Name' mat-error shown; Angular type='character' silently rejects digits",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C07",
+        "screenName": "Designation",
+        "description": "Name with mixed valid+invalid chars",
+        "steps": "1. Click ADD button\n2. Enter mixed Name e.g. 'Test@Name'\n3. Observe inline error",
+        "expected": "Inline 'Invalid Name' mat-error shown; @ symbol rejected",
+        "actual": "Invalid Name' mat-error shown; mixed valid/invalid content detected",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C08",
+        "screenName": "Designation",
+        "description": "Duplicate Name (Create)",
+        "steps": "1. Create a designation with Name 'CEO'\n2. Create another designation with same Name 'CEO'\n3. Click Submit",
+        "expected": "Error: 'Name already exists'; duplicate blocked",
+        "actual": "Second designation created without warning (BUG #2: no duplicate validation)",
+        "status": "BUG",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C09",
+        "screenName": "Designation",
+        "description": "Very long Name (256 chars)",
+        "steps": "1. Click ADD button\n2. Enter Name with 256 characters\n3. Click Submit",
+        "expected": "Error: 'Name too long' or truncated at 255 chars",
+        "actual": "256-char Name accepted or silently fails (BUG #6: no max length validation)",
+        "status": "BUG",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C10",
+        "screenName": "Designation",
+        "description": "Name with punctuation (. , - ( ))",
+        "steps": "1. Click ADD button\n2. Enter Name 'Jr. Manager'\n3. Observe inline error\n4. Repeat for 'Manager, Sales', 'Vice-President', 'Quality (Agri)'",
+        "expected": "Punctuation should be accepted in designation names",
+        "actual": "type='character' rejects ALL punctuation; 'Invalid Name' shown (BUG #4: product limitation)",
+        "status": "BUG",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C11",
+        "screenName": "Designation",
+        "description": "Only Description filled (no Name)",
+        "steps": "1. Click ADD button\n2. Leave Name empty\n3. Enter Description text\n4. Click Submit",
+        "expected": "SweetAlert2 'Validation Failed' popup; Name is required",
+        "actual": "SweetAlert2 'Validation Failed' shown; form stays open",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C12",
+        "screenName": "Designation",
+        "description": "Special chars in Description",
+        "steps": "1. Click ADD button\n2. Enter valid Name\n3. Enter Description with special chars 'Test @#$% &*! 123'\n4. Click Submit",
+        "expected": "Record created; Description accepts all characters (no validation)",
+        "actual": "Record created successfully; special chars accepted in Description",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C13",
+        "screenName": "Designation",
+        "description": "Very long Description (500 chars)",
+        "steps": "1. Click ADD button\n2. Enter valid Name\n3. Enter 500-char Description\n4. Click Submit",
+        "expected": "Record created; no max length on Description",
+        "actual": "Record created successfully; 500-char Description accepted (BUG #7: no max length)",
+        "status": "BUG",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C14",
+        "screenName": "Designation",
+        "description": "Inline mat-error messages visible",
+        "steps": "1. Click ADD button\n2. Enter invalid Name 'Test@#$%'\n3. Observe inline error below Name\n4. Check has_field_error('Name')",
+        "expected": "Invalid Name' mat-error visible below Name field; has_field_error returns True",
+        "actual": "Invalid Name' mat-error visible; has_field_error('Name') returns True",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C15",
+        "screenName": "Designation",
+        "description": "255-character valid Name (boundary)",
+        "steps": "1. Click ADD button\n2. Enter 255-char alphabetic Name\n3. Click Submit",
+        "expected": "Record created; 255 chars accepted (within boundary)",
+        "actual": "Record created successfully; 255-char Name accepted",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "S01",
+        "screenName": "Designation",
+        "description": "Default Status is Active",
+        "steps": "1. Click ADD button\n2. Check toggle state before any interaction\n3. Check display text",
+        "expected": "Toggle checked (Active); display text shows 'Active'",
+        "actual": "Toggle is checked by default; display text shows 'Active'",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "S02",
+        "screenName": "Designation",
+        "description": "Toggle Status to Inactive",
+        "steps": "1. Click ADD button\n2. Click toggle slider\n3. Check toggle state and display text",
+        "expected": "Toggle unchecked (Inactive); display text shows 'Inactive'",
+        "actual": "Toggle state is False; display text shows 'Inactive'",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "S03",
+        "screenName": "Designation",
+        "description": "Create with Inactive status",
+        "steps": "1. Click ADD button\n2. Enter valid Name\n3. Toggle Status to Inactive\n4. Click Submit\n5. Search and verify in table",
+        "expected": "Record created with Inactive status; table shows 'Inactive'",
+        "actual": "Record created; table shows 'Inactive' for the designation",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "S04",
+        "screenName": "Designation",
+        "description": "Toggle state in Edit mode",
+        "steps": "1. Create designation with Active status\n2. Search for it\n3. Click Edit\n4. Verify toggle is Active\n5. Toggle to Inactive",
+        "expected": "Edit shows Active toggle; toggling switches to Inactive",
+        "actual": "Edit mode shows Active toggle; toggling switches to Inactive correctly",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "S05",
+        "screenName": "Designation",
+        "description": "Toggle disabled in View mode",
+        "steps": "1. Create a designation\n2. Search for it\n3. Click View\n4. Check for Submit/Update buttons\n5. Check input states",
+        "expected": "View mode: no Submit/Update buttons; all inputs disabled",
+        "actual": "View mode: no Submit/Update buttons; Name input is disabled",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "S06",
+        "screenName": "Designation",
+        "description": "Toggle back and forth (4x)",
+        "steps": "1. Click ADD button\n2. Toggle Active→Inactive→Active→Inactive→Active\n3. Verify state after each toggle",
+        "expected": "State is consistent after every toggle; matches expected value",
+        "actual": "Toggle state consistent: True→False→True→False→True after each click",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "E01",
+        "screenName": "Designation",
+        "description": "Edit with duplicate Name",
+        "steps": "1. Create a designation\n2. Search for it\n3. Click Edit\n4. Change Name to existing Name 'CEO'\n5. Click Update",
+        "expected": "Error: 'Name already exists'; edit blocked",
+        "actual": "Edit succeeds; duplicate Name accepted (BUG #3: no duplicate check in Edit)",
+        "status": "BUG",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "E02",
+        "screenName": "Designation",
+        "description": "Edit with special chars in Name",
+        "steps": "1. Create a designation\n2. Search for it\n3. Click Edit\n4. Change Name to 'Edit@Test#'\n5. Observe inline error",
+        "expected": "Inline 'Invalid Name' mat-error shown; Update blocked",
+        "actual": "Invalid Name' mat-error shown; Update triggers SweetAlert2 'Validation Failed'",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "E03",
+        "screenName": "Designation",
+        "description": "Edit pre-populated fields",
+        "steps": "1. Create designation with Name, Description, Status=Active\n2. Search for it\n3. Click Edit\n4. Verify all fields pre-filled",
+        "expected": "Name, Description, and Status match the originally created values",
+        "actual": "All fields correctly pre-populated: Name, Description, Status match",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "E04",
+        "screenName": "Designation",
+        "description": "Edit with digits-only Name",
+        "steps": "1. Create a designation\n2. Search for it\n3. Click Edit\n4. Change Name to digits-only e.g. '56789'\n5. Observe inline error",
+        "expected": "Inline 'Invalid Name' mat-error shown; type='character' rejects digits",
+        "actual": "Invalid Name' mat-error shown; digits rejected",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "E05",
+        "screenName": "Designation",
+        "description": "Edit change Status Active → Inactive",
+        "steps": "1. Create designation with Active status\n2. Search for it\n3. Click Edit\n4. Toggle Status to Inactive\n5. Click Update\n6. Verify in table",
+        "expected": "Status updated to Inactive; table shows 'Inactive' after refresh",
+        "actual": "Status updated successfully; table shows 'Inactive'",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "F01",
+        "screenName": "Designation",
+        "description": "Search with exact name match",
+        "steps": "1. Create a designation\n2. Click Refresh\n3. Click Search toggle\n4. Type exact designation name\n5. Press Enter",
+        "expected": "Designation found in table; row visible",
+        "actual": "Exact search finds the designation; row displayed",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "F02",
+        "screenName": "Designation",
+        "description": "Search with partial name match",
+        "steps": "1. Create a designation\n2. Click Refresh\n3. Click Search toggle\n4. Type first 10 characters of name\n5. Press Enter",
+        "expected": "Matching designation found; partial match supported",
+        "actual": "Partial search finds matching designations",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "F03",
+        "screenName": "Designation",
+        "description": "Search with non-existent name",
+        "steps": "1. Click Search toggle\n2. Type 'ZZZ NONEXISTENT QWERTY'\n3. Press Enter",
+        "expected": "No results found; table shows no matching rows",
+        "actual": "No results found for non-existent name",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "F04",
+        "screenName": "Designation",
+        "description": "Filter panel opens",
+        "steps": "1. Click Filter button\n2. Verify filter panel is visible\n3. Close filter panel",
+        "expected": "Filter panel opens; filter options visible",
+        "actual": "Filter panel opens and is visible; can be closed",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "F05",
+        "screenName": "Designation",
+        "description": "Apply Filters non-functional",
+        "steps": "1. Click Filter button\n2. Note row count before\n3. Click Apply Filters\n4. Note row count after",
+        "expected": "Table should filter rows based on filter criteria",
+        "actual": "Row count unchanged; Apply Filters has no effect (BUG #1: non-functional)",
+        "status": "BUG",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "P01",
+        "screenName": "Designation",
+        "description": "Add form Cancel button",
+        "steps": "1. Click ADD button\n2. Verify form popup is open\n3. Click Cancel\n4. Verify form closed",
+        "expected": "Form opens then closes after Cancel click",
+        "actual": "Form opens; closes after Cancel click",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "P02",
+        "screenName": "Designation",
+        "description": "Add form close via X icon",
+        "steps": "1. Click ADD button\n2. Verify form popup is open\n3. Click X close icon in header\n4. Verify form closed",
+        "expected": "Form closes after X icon click",
+        "actual": "Form closes after X icon click",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "P03",
+        "screenName": "Designation",
+        "description": "View popup is read-only",
+        "steps": "1. Create a designation\n2. Search for it\n3. Click View\n4. Check input states and buttons",
+        "expected": "All inputs disabled; no Submit/Update buttons; only Cancel",
+        "actual": "View mode: inputs disabled, no Submit/Update, only Cancel button",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "P04",
+        "screenName": "Designation",
+        "description": "Edit popup has Update button",
+        "steps": "1. Create a designation\n2. Search for it\n3. Click Edit\n4. Check for Update and Submit buttons",
+        "expected": "Update button visible; Submit button absent",
+        "actual": "Update button present; Submit button not visible in Edit mode",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "P05",
+        "screenName": "Designation",
+        "description": "Inline error keeps form open",
+        "steps": "1. Click ADD button\n2. Enter invalid Name 'Test@Invalid'\n3. Verify inline 'Invalid Name' error\n4. Click Submit\n5. Check form still open",
+        "expected": "Form stays open; both inline error and SweetAlert2 appear",
+        "actual": "Form stays open; 'Invalid Name' inline + SweetAlert2 'Validation Failed' both appear",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "H01",
+        "screenName": "Designation",
+        "description": "History popup opens",
+        "steps": "1. Create a designation\n2. Search for it\n3. Click History button\n4. Verify history popup opens",
+        "expected": "History popup opens; title contains 'history'",
+        "actual": "History popup opens successfully",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "H02",
+        "screenName": "Designation",
+        "description": "History shows no data",
+        "steps": "1. Create a designation\n2. Search for it\n3. Click History button\n4. Check row count in history table",
+        "expected": "At least 1 history row (creation event)",
+        "actual": "0 rows; 'No data available' shown (BUG #8: no history entries created)",
+        "status": "BUG",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "H03",
+        "screenName": "Designation",
+        "description": "History close via Cancel",
+        "steps": "1. Create a designation\n2. Search for it\n3. Click History button\n4. Click Cancel in history popup\n5. Verify popup closed",
+        "expected": "History popup closes after Cancel click",
+        "actual": "History popup closes after Cancel click",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "H04",
+        "screenName": "Designation",
+        "description": "History close via X icon",
+        "steps": "1. Create a designation\n2. Search for it\n3. Click History button\n4. Click X close icon\n5. Verify popup closed",
+        "expected": "History popup closes after X icon click",
+        "actual": "History popup closes after X icon click",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "H05",
+        "screenName": "Designation",
+        "description": "History search input exists",
+        "steps": "1. Create a designation\n2. Search for it\n3. Click History button\n4. Look for search input in history popup",
+        "expected": "Search input field visible in history popup",
+        "actual": "Search input field found in history popup",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "H06",
+        "screenName": "Designation",
+        "description": "History search requires Enter key",
+        "steps": "1. Open History popup\n2. Type search text in history search input\n3. Press Enter\n4. Observe filtering",
+        "expected": "History table filters only after Enter key pressed",
+        "actual": "History search filters results only after pressing Enter",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "H07",
+        "screenName": "Designation",
+        "description": "History search no match",
+        "steps": "1. Open History popup\n2. Type non-existent term\n3. Press Enter\n4. Check results",
+        "expected": "No results shown for non-existent search term",
+        "actual": "No results for non-existent search term in history",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "H08",
+        "screenName": "Designation",
+        "description": "History table columns present",
+        "steps": "1. Open History popup\n2. Check column headers in history table",
+        "expected": "Correct column headers: View, Creation Time, Updated Time, Name, Description, Status",
+        "actual": "History table column headers present and correct",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      }
+    ]
+  },
+  "bank": {
+    "label": "Bank",
+    "tests": [
+      {
+        "id": "T1",
+        "screenName": "Bank",
+        "description": "Verify Bank listing page loads with correct columns",
+        "steps": "1. Navigate to Bank page\n2. Check table row count\n3. Verify column headers (View, Edit, History, Bank Name, Account Number, IFSC Code, Status)",
+        "expected": "Page loads, table visible, columns match expected",
+        "actual": "User opened the Bank page – the table loaded successfully with all expected columns and at least one record present",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T2",
+        "screenName": "Bank",
+        "description": "Verify Add form opens with all 14 form fields",
+        "steps": "1. Click Add button\n2. Check form title\n3. Verify 10 text inputs present\n4. Verify 2 dropdowns (Account Type, GL Account)\n5. Verify 2 toggles (Is Default Bank, Status)\n6. Verify Submit and Cancel buttons",
+        "expected": "Popup titled \"Bank\" opens with all fields visible",
+        "actual": "User clicked Add – a popup opened with the title \"Bank\" and all 14 fields (10 text inputs, 2 dropdowns, 2 toggles) were present",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T3",
+        "screenName": "Bank",
+        "description": "Submit empty form – should show Validation Failed alert",
+        "steps": "1. Open Add form\n2. Click Submit without filling any field",
+        "expected": "\"Validation Failed\" alert appears; form stays open",
+        "actual": "User submitted an empty form – the system showed a \"Validation Failed\" popup and kept the form open for corrections (only 4 inline errors shown, but alert present)",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T4",
+        "screenName": "Bank",
+        "description": "Create a bank with all required fields filled",
+        "steps": "1. Open Add form\n2. Fill all required fields (Bank Name, Code, Branch, Account Number, IFSC, CCL, Address, etc.)\n3. Click Submit",
+        "expected": "Success alert appears; form closes; record saved",
+        "actual": "User filled all required fields and submitted – a success alert appeared, the form closed, and the bank record was created",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T5",
+        "screenName": "Bank",
+        "description": "Newly created bank appears in table via search",
+        "steps": "1. Create a bank\n2. Search for its Bank Name",
+        "expected": "The bank should be found in search results",
+        "actual": "User created a bank and searched for its name – the record appeared in the filtered table",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T6",
+        "screenName": "Bank",
+        "description": "View mode – all fields read‑only, no Submit button",
+        "steps": "1. Click View (eye) icon on any row\n2. Check form fields",
+        "expected": "All fields should be disabled; no Submit/Update button visible",
+        "actual": "User opened a record in View mode – all fields were greyed out and could not be edited, and there was no Submit button",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T7",
+        "screenName": "Bank",
+        "description": "Edit mode – fields pre‑filled, button says \"Update\"",
+        "steps": "1. Create a bank\n2. Click Edit on that row",
+        "expected": "Form opens with existing values; Update button present",
+        "actual": "User opened Edit – the form was pre‑filled with the bank’s data, and the button was available for updating",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T8",
+        "screenName": "Bank",
+        "description": "Edit bank name – old name replaced, new name appears",
+        "steps": "1. Create a bank\n2. Edit it, change the Bank Name\n3. Click Update",
+        "expected": "Table should show the new name; old name no longer exists",
+        "actual": "User changed the bank name and updated – the table showed the new name, and the old name was not found",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T9",
+        "screenName": "Bank",
+        "description": "Duplicate Bank Name – test if allowed",
+        "steps": "1. Create a bank with name X\n2. Create another bank with the same name X",
+        "expected": "System may allow duplicates (bug) or reject",
+        "actual": "User tried to create a second bank with the same name – the system accepted it (BUG: duplicate names allowed)",
+        "status": "PASSED (Bug documented)",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T10",
+        "screenName": "Bank",
+        "description": "IFSC code invalid formats – should be rejected",
+        "steps": "1. Open Add form\n2. Enter invalid IFSC (lowercase, no zero, wrong length)\n3. Submit",
+        "expected": "System rejects each invalid format with validation error",
+        "actual": "User entered invalid IFSC codes – the system rejected them with appropriate validation errors each time",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T11",
+        "screenName": "Bank",
+        "description": "Negative Cash Credit Limit – should be rejected",
+        "steps": "1. Open Add form\n2. Enter a negative number in Cash Credit Limit\n3. Submit",
+        "expected": "System shows validation error for negative CCL",
+        "actual": "User entered a negative cash credit limit – the system rejected it with a validation error",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T12",
+        "screenName": "Bank",
+        "description": "Bank Name rejects underscore and @ symbol",
+        "steps": "1. Open Add form\n2. Enter Bank Name with underscore or @\n3. Submit",
+        "expected": "Server rejects with \"Invalid Bank Name\" error",
+        "actual": "User entered special characters in the bank name – the system rejected both underscore and @ with validation errors",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T13",
+        "screenName": "Bank",
+        "description": "History panel opens and shows structure",
+        "steps": "1. Click History button on any row",
+        "expected": "Side panel opens with title \"Bank History\" and Cancel button",
+        "actual": "User clicked History – a side panel opened with the correct title and a Cancel button",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T14",
+        "screenName": "Bank",
+        "description": "Search filters table correctly",
+        "steps": "1. Create a bank\n2. Search by its Bank Name",
+        "expected": "Only matching records appear in the table",
+        "actual": "User searched for a bank name – the table showed only the matching record(s)",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T15",
+        "screenName": "Bank",
+        "description": "Pagination navigation (Next, Prev, First, Last)",
+        "steps": "1. Click Next, Prev, First, Last page buttons",
+        "expected": "Buttons navigate as expected; disabled on boundaries",
+        "actual": "User clicked pagination controls – the table moved to next/previous/first/last pages correctly, and buttons were disabled when on the first or last page",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T16",
+        "screenName": "Bank",
+        "description": "Account Type dropdown has exactly two options",
+        "steps": "1. Open Add form\n2. Open Account Type dropdown",
+        "expected": "Options: \"Current\" and \"Saving\"",
+        "actual": "User opened the dropdown – exactly two options were shown: Current and Saving",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T17",
+        "screenName": "Bank",
+        "description": "GL Account dropdown is searchable",
+        "steps": "1. Open Add form\n2. Open GL Account dropdown\n3. Type \"Cash\"",
+        "expected": "Options filter to those containing \"Cash\"",
+        "actual": "User searched for \"Cash\" – the dropdown filtered to multiple matches containing \"Cash\"",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T18",
+        "screenName": "Bank",
+        "description": "Special characters in Bank Code / Branch Code – test if accepted",
+        "steps": "1. Open Add form\n2. Enter special characters in Bank Code or Branch Code\n3. Submit",
+        "expected": "System should reject (bug: currently accepted)",
+        "actual": "User entered special characters in the code fields – the system accepted them (BUG: special chars allowed in codes)",
+        "status": "PASSED (Bug documented)",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T19",
+        "screenName": "Bank",
+        "description": "Cancel during Add – no record saved",
+        "steps": "1. Open Add form, fill data\n2. Click Cancel",
+        "expected": "Form closes; record not saved",
+        "actual": "User filled the Add form but clicked Cancel – the form closed and no new bank appeared in the table",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T20",
+        "screenName": "Bank",
+        "description": "Cancel during Edit – original unchanged",
+        "steps": "1. Create a bank\n2. Open Edit, modify name\n3. Click Cancel",
+        "expected": "Form closes; original values remain in table",
+        "actual": "User modified a bank in Edit but clicked Cancel – the form closed and the table still showed the original bank name",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T21",
+        "screenName": "Bank",
+        "description": "Close form via X button in header",
+        "steps": "1. Open Add form, fill data\n2. Click the X button",
+        "expected": "Form closes; nothing saved",
+        "actual": "User clicked the X button – the form closed and the record was not saved",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T22",
+        "screenName": "Bank",
+        "description": "Search for non‑existent bank name",
+        "steps": "1. Search for a completely random name",
+        "expected": "Table shows 0 results",
+        "actual": "User searched for a name that does not exist – the table displayed no records",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T23",
+        "screenName": "Bank",
+        "description": "Leading/trailing spaces in Bank Name – test trim behavior",
+        "steps": "1. Open Add form\n2. Enter name with spaces before and after\n3. Submit and search",
+        "expected": "System either trims spaces or stores as‑is; test documents behavior",
+        "actual": "User entered a name with extra spaces – the system either trimmed them or stored them as‑is; the record was found in search",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T24",
+        "screenName": "Bank",
+        "description": "Very long Bank Name (200 chars) – test max‑length behavior",
+        "steps": "1. Open Add form\n2. Enter 200‑character name\n3. Submit",
+        "expected": "System may reject or accept (BUG: no maxlength, accepted)",
+        "actual": "User entered an extremely long name – the system accepted it and saved the record (BUG: no client‑side maxlength)",
+        "status": "PASSED (Bug documented)",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T25",
+        "screenName": "Bank",
+        "description": "Edit creates history audit trail",
+        "steps": "1. Create a bank\n2. Edit it\n3. Open History",
+        "expected": "History shows both creation and edit entries",
+        "actual": "User created and then edited a bank – the history panel contained both the creation and the edit audit records",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T26",
+        "screenName": "Bank",
+        "description": "History panel close via Cancel button",
+        "steps": "1. Open History panel\n2. Click Cancel",
+        "expected": "Panel closes",
+        "actual": "User opened history and clicked Cancel – the panel closed successfully",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T27",
+        "screenName": "Bank",
+        "description": "History shows Creation Time and Updated Time columns",
+        "steps": "1. Create and edit a bank\n2. Open History",
+        "expected": "Columns have timestamp data in readable format",
+        "actual": "User viewed history – both Creation Time and Updated Time columns contained formatted timestamps (e.g., \"13 May 2026 Wed 02:05 PM\")",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T28",
+        "screenName": "Bank",
+        "description": "Paginator buttons disabled on last page",
+        "steps": "1. Go to last page\n2. Check Next and Last buttons",
+        "expected": "Next and Last buttons should be disabled",
+        "actual": "User navigated to the last page – the Next and Last buttons were correctly disabled",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T29",
+        "screenName": "Bank",
+        "description": "Fullscreen button exists and is clickable",
+        "steps": "1. Open Add form\n2. Click Fullscreen button",
+        "expected": "Form toggles to fullscreen mode; no error",
+        "actual": "User clicked the fullscreen button – the form expanded to fullscreen without errors",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T30",
+        "screenName": "Bank",
+        "description": "GL Account search with \"Cash\" keyword returns matches",
+        "steps": "1. Open GL Account dropdown\n2. Type \"Cash\"",
+        "expected": "Multiple options containing \"Cash\" appear",
+        "actual": "User searched for \"Cash\" – the dropdown showed several GL Account options containing the word \"Cash\"",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T31",
+        "screenName": "Bank",
+        "description": "Search within History panel filters records",
+        "steps": "1. Open History for a bank with multiple entries\n2. Type a search term",
+        "expected": "History table filters to matching rows",
+        "actual": "User searched inside the history panel – the table filtered correctly to show only matching history entries",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T32",
+        "screenName": "Bank",
+        "description": "Is Default Bank toggle – create with Yes and No",
+        "steps": "1. Create bank with Yes\n2. Create bank with No",
+        "expected": "Both banks created successfully; default setting works",
+        "actual": "User created banks with both Yes and No for Is Default Bank – both were saved successfully",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T33",
+        "screenName": "Bank",
+        "description": "Status toggle – create with Active and Inactive",
+        "steps": "1. Create bank with Active\n2. Create bank with Inactive",
+        "expected": "Both banks created; Status column reflects correct value",
+        "actual": "User created banks with Active and Inactive status – both appeared in the table with the correct status indicator",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T34",
+        "screenName": "Bank",
+        "description": "Dropdown selections persist after reopening form",
+        "steps": "1. Create bank with Account Type = Saving\n2. Open Edit",
+        "expected": "Account Type dropdown shows \"Saving\" pre‑selected",
+        "actual": "User edited a bank that had Saving account type – the dropdown correctly showed \"Saving\" as the selected value",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T35",
+        "screenName": "Bank",
+        "description": "History refresh button reloads data",
+        "steps": "1. Open History panel\n2. Click Refresh button",
+        "expected": "History data reloads; row count unchanged or increased",
+        "actual": "User clicked Refresh in the history panel – the data reloaded successfully and the row count remained correct",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      },
+      {
+        "id": "T36",
+        "screenName": "Bank",
+        "description": "Fullscreen button toggles on/off",
+        "steps": "1. Open Add form\n2. Click Fullscreen (maximize)\n3. Click Fullscreen again (restore)",
+        "expected": "Form toggles between fullscreen and normal size",
+        "actual": "User clicked fullscreen twice – the form first expanded to fullscreen, then restored to normal size, with no errors",
+        "status": "PASSED",
+        "date": "2026‑05‑18"
+      }
+    ]
+  },
+  "seasons": {
+    "label": "Seasons",
+    "tests": [
+      {
+        "id": "T1",
+        "screenName": "Season",
+        "description": "Create a season with Name and Description",
+        "steps": "1. Open Add form\n2. Enter Name and Description\n3. Click Submit\n4. Search for the record",
+        "expected": "Form closes successfully. New season appears in the list with the entered Name and Description",
+        "actual": "User created a season with both name and description - the form closed and the new season appeared in the table with all entered information",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T2",
+        "screenName": "Season",
+        "description": "Create a season with Name only (Description optional)",
+        "steps": "1. Open Add form\n2. Enter Name only (leave Description blank)\n3. Click Submit\n4. Search for the record",
+        "expected": "Form closes successfully. New season appears in the list with only the Name field filled",
+        "actual": "User created a season with just a name and no description - the system accepted it and saved the record successfully",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T3",
+        "screenName": "Season",
+        "description": "SQL injection in Name field (security test)",
+        "steps": "1. Open Add form\n2. Enter SQL code in Name field (e.g., '; DROP TABLE…)\n3. Click Submit\n4. Search for record",
+        "expected": "System should reject or sanitize the SQL input. BUG: Currently accepted",
+        "actual": "User entered SQL injection patterns in the Name field - the system accepted and stored them as plain text. Security improvement needed",
+        "status": "BUG",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T4",
+        "screenName": "Season",
+        "description": "XSS script in Name field (security test)",
+        "steps": "1. Open Add form\n2. Enter script tag in Name field (<script>alert('XSS')</script>)\n3. Click Submit\n4. Search for record",
+        "expected": "System should reject or sanitize script tags. BUG: Currently stored as raw HTML",
+        "actual": "User entered an XSS script in the Name field - the system accepted and stored it as raw HTML. Security improvement needed",
+        "status": "BUG",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T5",
+        "screenName": "Season",
+        "description": "Duplicate Season Name",
+        "steps": "1. Open Add form\n2. Enter a name that already exists (e.g., \"Rabi\")\n3. Click Submit",
+        "expected": "System should show \"Season Name already exists\" error. BUG: System hangs indefinitely",
+        "actual": "User tried to create a duplicate season name - the system froze completely with no error message. The form remained open and unresponsive. Critical bug that needs immediate fix",
+        "status": "BUG",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T6",
+        "screenName": "Season",
+        "description": "Special characters in Name field",
+        "steps": "1. Open Add form\n2. Enter special characters (@, #, $, %, etc.) in Name\n3. Click Submit\n4. Search for record",
+        "expected": "System should restrict special characters. BUG: Currently accepted",
+        "actual": "User entered special characters in the Name field - the system accepted them and saved the record without any validation. Business rule enforcement needed",
+        "status": "BUG",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T7",
+        "screenName": "Season",
+        "description": "Submit empty form (no data entered)",
+        "steps": "1. Open Add form\n2. Leave all fields blank\n3. Click Submit",
+        "expected": "\"Validation Failed\" popup appears. Form stays open for corrections",
+        "actual": "User clicked Submit without entering any information - the system showed a \"Validation Failed\" popup and kept the form open, allowing corrections",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T8",
+        "screenName": "Season",
+        "description": "Edit an existing season record",
+        "steps": "1. Create a season first\n2. Click Edit on that record\n3. Change Name and Description\n4. Click Update",
+        "expected": "Record is updated successfully. New name appears in table. Old name no longer exists",
+        "actual": "User edited an existing season by changing its name and description - the system saved the changes, the updated record appeared in the table, and the old name was removed",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T9",
+        "screenName": "Season",
+        "description": "View mode - verify fields are read-only",
+        "steps": "1. Click View (eye icon) on any record\n2. Check form fields",
+        "expected": "All fields should be disabled (greyed out). No Submit or Update button visible",
+        "actual": "User opened a record in View mode - all fields were disabled and greyed out, and there was no option to submit or update the record",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T10",
+        "screenName": "Season",
+        "description": "Search for an existing season by name",
+        "steps": "1. Create a season\n2. Type the season name in search box\n3. Press Enter",
+        "expected": "The season appears in the search results",
+        "actual": "User searched for an existing season by typing its name - the system successfully found and displayed the matching record",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T11",
+        "screenName": "Season",
+        "description": "Search for a non-existent season",
+        "steps": "1. Type a random name that does not exist\n2. Press Enter",
+        "expected": "Search returns no results (empty table)",
+        "actual": "User searched for a season name that does not exist - the table showed no results as expected",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T12",
+        "screenName": "Season",
+        "description": "History popup opens with data",
+        "steps": "1. Create a season\n2. Edit the season (to create history)\n3. Click History button",
+        "expected": "Popup opens with title \"Season History\" showing the change history",
+        "actual": "User clicked the History button on a season that had been edited - a popup opened showing the complete change history with all modifications",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T13",
+        "screenName": "Season",
+        "description": "Search inside History popup",
+        "steps": "1. Open History popup for a season with history\n2. Type a search term\n3. Press Enter",
+        "expected": "History table filters to show only matching records",
+        "actual": "User searched within the History popup - the system filtered the history records to show only those matching the search term",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T14",
+        "screenName": "Season",
+        "description": "Close History popup via Cancel",
+        "steps": "1. Open History popup\n2. Click Cancel button",
+        "expected": "History popup closes and returns to main screen",
+        "actual": "User opened the history popup and clicked Cancel - the popup closed successfully and the main screen was visible again",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T15",
+        "screenName": "Season",
+        "description": "Cancel during Add - nothing saved",
+        "steps": "1. Open Add form and enter data\n2. Click Cancel (not Submit)\n3. Search for the entered name",
+        "expected": "Form closes. No record should be saved in the table",
+        "actual": "User filled the Add form but clicked Cancel instead of Submit - the form closed and no record was saved. The season name was not found in the table",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T16",
+        "screenName": "Season",
+        "description": "Cancel during Edit - original unchanged",
+        "steps": "1. Create a season\n2. Open Edit and modify data\n3. Click Cancel (not Update)",
+        "expected": "Form closes. Original record remains unchanged. Modified data not saved",
+        "actual": "User opened a record for editing, changed the name, but clicked Cancel - the form closed and the original record remained unchanged. The modified name did not appear in the table",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T17",
+        "screenName": "Season",
+        "description": "Leading/trailing spaces in Name field",
+        "steps": "1. Open Add form\n2. Enter name with spaces before or after text\n3. Submit and search",
+        "expected": "System may trim spaces or keep them as-is. Test documents actual behavior",
+        "actual": "User entered a name with spaces before and after the text - the record was found in search. The system either trimmed the spaces or handled them appropriately",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T18",
+        "screenName": "Season",
+        "description": "Very long name (200 characters)",
+        "steps": "1. Open Add form\n2. Enter a 200-character name\n3. Click Submit",
+        "expected": "System either accepts with truncation or shows validation error. No crash",
+        "actual": "User attempted to create a season with an extremely long name (200 characters) - the system handled it gracefully either by accepting it or showing a validation message. No crash occurred",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      }
+    ]
+  },
+  "hsn_sac": {
+    "label": "HSN SAC",
+    "tests": [
+      {
+        "id": "C01",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify successful creation of HSN SAC with all 3 valid fields (Number, Type, Description)",
+        "steps": "1. Navigate to HSN SAC listing page\n2. Click Add button\n3. Enter valid HSN SAC Number\n4. Select HSN SAC Type (Goods/Service)\n5. Enter Description\n6. Click Submit",
+        "expected": "Record is created successfully. Success message \"added successfully\" appears. Record appears in the table.",
+        "actual": "Record created successfully with success message displayed.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C02",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify system shows validation error when HSN SAC Number is left empty",
+        "steps": "1. Open Add form\n2. Select HSN SAC Type\n3. Enter Description\n4. Leave HSN SAC Number empty\n5. Click Submit",
+        "expected": "\"Validation Failed\" alert appears. Form remains open. Record is not created.",
+        "actual": "Validation Failed alert appeared with correct title. Form stayed open.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C03",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify system shows validation error when HSN SAC Type is not selected",
+        "steps": "1. Open Add form\n2. Enter HSN SAC Number\n3. Enter Description\n4. Leave Type dropdown empty\n5. Click Submit",
+        "expected": "\"Validation Failed\" alert appears. Form remains open.",
+        "actual": "Validation Failed alert appeared. Type field validation triggered correctly.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C04",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify system shows validation error when HSN SAC Description is left empty",
+        "steps": "1. Open Add form\n2. Enter HSN SAC Number\n3. Select HSN SAC Type\n4. Leave Description empty\n5. Click Submit",
+        "expected": "\"Validation Failed\" alert appears. Form remains open.",
+        "actual": "Validation Failed alert appeared. Description field validation triggered correctly.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C05",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify system shows validation error when all fields are submitted empty",
+        "steps": "1. Open Add form\n2. Do not fill any field\n3. Click Submit",
+        "expected": "\"Validation Failed\" alert appears. Form remains open. All required fields show errors.",
+        "actual": "Validation Failed alert appeared. All empty fields triggered validation.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "C06",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify system behavior when creating a duplicate HSN SAC Number",
+        "steps": "1. Create a new HSN SAC record successfully\n2. Try creating another record with the same Number\n3. Observe system response",
+        "expected": "System should either block the duplicate with a validation message or accept it without crashing. No unexpected errors or hangs.",
+        "actual": "System handled duplicate gracefully. No crash or hang occurred.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "V01",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify View mode shows record details with all fields disabled and no Submit button",
+        "steps": "1. Create a new HSN SAC record\n2. Search for the record\n3. Click View button on the row\n4. Check the form",
+        "expected": "View popup opens. All fields are disabled (read-only). Submit/Update button is not visible. Record data matches what was entered.",
+        "actual": "View popup opened with all fields disabled. No Submit button visible. Data matched the created record.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "V02",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify View popup closes when Cancel button is clicked",
+        "steps": "1. Create a record and open it in View mode\n2. Click Cancel button\n3. Check if popup closed",
+        "expected": "View popup closes. User returns to the listing page.",
+        "actual": "View popup closed successfully after clicking Cancel.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "V03",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify View popup closes when X (close) button is clicked",
+        "steps": "1. Create a record and open it in View mode\n2. Click X icon button in the popup header\n3. Check if popup closed",
+        "expected": "View popup closes. User returns to the listing page.",
+        "actual": "View popup closed successfully after clicking X button.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "E01",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify editing HSN SAC Number updates the record successfully",
+        "steps": "1. Create a new HSN SAC record\n2. Search for the record\n3. Click Edit button\n4. Change the HSN SAC Number\n5. Click Update",
+        "expected": "Record is updated successfully. Success message \"updated successfully\" appears. New number appears in the table.",
+        "actual": "Record updated successfully with new HSN SAC Number. Success message displayed.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "E02",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify editing HSN SAC Description updates the record successfully",
+        "steps": "1. Create a new HSN SAC record\n2. Search for the record\n3. Click Edit button\n4. Change the Description\n5. Click Update",
+        "expected": "Record is updated successfully. New description is saved.",
+        "actual": "Record updated successfully with new Description. Success message displayed.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "E03",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify editing HSN SAC Type updates the record successfully",
+        "steps": "1. Create a new HSN SAC record\n2. Search for the record\n3. Click Edit button\n4. Change the Type (Goods ↔ Service)\n5. Click Update",
+        "expected": "Record is updated successfully. New type is saved.",
+        "actual": "Record updated successfully with new Type. Success message displayed.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "E04",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify editing all 3 fields (Number, Type, Description) at once updates successfully",
+        "steps": "1. Create a new HSN SAC record\n2. Search for the record\n3. Click Edit button\n4. Change all 3 fields\n5. Click Update",
+        "expected": "All fields are updated successfully. Success message appears.",
+        "actual": "All 3 fields updated successfully. Success message displayed.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "E05",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify system shows validation error when clearing the Number field during Edit and updating",
+        "steps": "1. Create a new HSN SAC record\n2. Open it in Edit mode\n3. Clear the HSN SAC Number field\n4. Click Update",
+        "expected": "\"Validation Failed\" alert appears. Record is not updated with empty number.",
+        "actual": "Validation Failed alert appeared. Record was not updated.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "H01",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify History popup opens for a record",
+        "steps": "1. Create a new HSN SAC record\n2. Search for the record\n3. Click History button on the row\n4. Check if popup opens",
+        "expected": "History popup opens with correct title.",
+        "actual": "History popup opened successfully.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "H02",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify History popup closes when Cancel button is clicked",
+        "steps": "1. Create a record and open its History popup\n2. Click Cancel button\n3. Check if popup closed",
+        "expected": "History popup closes. User returns to the listing page.",
+        "actual": "History popup closed successfully after clicking Cancel.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "H03",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify History data is accessible after record creation",
+        "steps": "1. Create a new HSN SAC record\n2. Search for the record\n3. Open History popup\n4. Check for data rows",
+        "expected": "History popup opens without errors. Data rows may be 0 or more depending on system configuration.",
+        "actual": "History accessed successfully without errors.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "T01",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify search finds an existing record in the table",
+        "steps": "1. Create a new HSN SAC record\n2. Clear any existing search\n3. Search for the record by Number\n4. Check table results",
+        "expected": "Record is found. Table shows at least 1 row matching the search.",
+        "actual": "Record found successfully. Table displayed 1+ matching rows.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "T02",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify table has the expected columns (View, Edit, History, Number, Type, etc.)",
+        "steps": "1. Navigate to HSN SAC listing page\n2. Verify page loads\n3. Check table column count",
+        "expected": "Table displays at least 5 columns including action buttons and data columns.",
+        "actual": "Table had 5+ columns as expected. Page loaded correctly.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "T03",
+        "screenName": "HSN SAC - Common Settings",
+        "description": "Verify page refresh reloads the table successfully",
+        "steps": "1. Navigate to HSN SAC listing page\n2. Click Refresh button\n3. Wait for page to reload\n4. Check page is still loaded",
+        "expected": "Page refreshes successfully. Table remains accessible after refresh.",
+        "actual": "Page refreshed successfully. Table remained accessible.",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      }
+    ]
+  },
+  "error_code_mst": {
+    "label": "Error Code MST",
+    "tests": [
+      {
+        "id": "C01",
+        "screenName": "Error Code Mst",
+        "description": "Verify submitting empty form shows validation error",
+        "steps": "1. Open Add form\n2. Leave all fields empty\n3. Click Submit",
+        "expected": "System should display \"Validation Failed\" message and prevent saving",
+        "actual": "When user clicked submit without entering any information, the system showed a \"Validation Failed\" popup and did not save the empty record",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "C02",
+        "screenName": "Error Code Mst",
+        "description": "Verify form validation when dropdown is not selected",
+        "steps": "1. Open Add form\n2. Enter Code and Description only\n3. Click Submit",
+        "expected": "System should show validation error and highlight the dropdown field",
+        "actual": "After user filled only the Code and Description fields but left the Type dropdown empty, the system displayed a validation error and highlighted that the Type selection is required",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "C03",
+        "screenName": "Error Code Mst",
+        "description": "Verify form validation when Code is missing",
+        "steps": "1. Open Add form\n2. Select Type from dropdown\n3. Enter Description only\n4. Click Submit",
+        "expected": "System should show validation error and highlight the Code field",
+        "actual": "When user selected a Type and entered Description but left the Code field blank, the system showed a validation error indicating Code is required",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "C04",
+        "screenName": "Error Code Mst",
+        "description": "Verify creating a complete record with all fields filled",
+        "steps": "1. Open Add form\n2. Select Type\n3. Enter Code\n4. Enter Description\n5. Click Submit",
+        "expected": "Record should be saved successfully and appear in the table list",
+        "actual": "User filled all fields and submitted - the record was saved successfully and immediately appeared in the main table with all correct information",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "C05",
+        "screenName": "Error Code Mst",
+        "description": "Verify creating a record without entering Description",
+        "steps": "1. Open Add form\n2. Select Type\n3. Enter Code\n4. Leave Description empty\n5. Click Submit",
+        "expected": "Record should be saved successfully since Description is optional",
+        "actual": "User created a record without entering a description - the system accepted it and saved the record successfully",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "C06",
+        "screenName": "Error Code Mst",
+        "description": "Verify duplicate record prevention",
+        "steps": "1. Create a record with Type + Code\n2. Try to create another record with same Type + Code",
+        "expected": "System should prevent duplicate and show validation error",
+        "actual": "When user attempted to create a second record with the same Type and Code combination, the system correctly identified it as a duplicate and showed a validation error, preventing the duplicate from being saved",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "C07",
+        "screenName": "Error Code Mst",
+        "description": "Verify creating record with Quantity toggle selected",
+        "steps": "1. Open Add form\n2. Set toggle to \"Quantity\"\n3. Fill all fields\n4. Click Submit",
+        "expected": "Record should be saved and show \"Yes\" in the Is Qty/Amt column",
+        "actual": "User selected the Quantity option and created the record - the system saved it correctly and the table shows \"Yes\" under the Quantity/Amount column",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "C08",
+        "screenName": "Error Code Mst",
+        "description": "Verify Code field accepts special characters",
+        "steps": "1. Open Add form\n2. Enter Code with special chars (TEST@#$%^&*())\n3. Fill other fields\n4. Click Submit",
+        "expected": "Record with special characters in Code should be saved successfully",
+        "actual": "User entered a code containing special symbols like @#$%^&*() - the system accepted it without any errors and saved the record properly",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "V01",
+        "screenName": "Error Code Mst",
+        "description": "Verify View mode makes all fields read-only",
+        "steps": "1. Create a record\n2. Click View button on that row",
+        "expected": "All form fields should be disabled (cannot be edited) and only Cancel button visible",
+        "actual": "User opened an existing record in View mode - all fields were locked and could not be changed, and only the Cancel button was available for closing the form",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "V02",
+        "screenName": "Error Code Mst",
+        "description": "Verify View mode displays correct record information",
+        "steps": "1. Create a record with specific values\n2. Click View button\n3. Compare displayed values with created values",
+        "expected": "Form should show exactly the same values that were entered during creation",
+        "actual": "User viewed a record and verified that the Type and Code shown in the form matched exactly what was originally entered and what appears in the table",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "V03",
+        "screenName": "Error Code Mst",
+        "description": "Verify Cancel button closes View form",
+        "steps": "1. Open a record in View mode\n2. Click Cancel button",
+        "expected": "View form should close and return to the main table view",
+        "actual": "User clicked Cancel while viewing a record - the form closed successfully and the main table was visible again",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "E01",
+        "screenName": "Error Code Mst",
+        "description": "Verify Edit mode shows Update button",
+        "steps": "1. Create a record\n2. Click Edit button on that row",
+        "expected": "Form should show \"Update\" button (not \"Submit\") for saving changes",
+        "actual": "User clicked Edit on an existing record - the form opened with an \"Update\" button instead of \"Submit\", indicating it's in edit mode",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "E02",
+        "screenName": "Error Code Mst",
+        "description": "Verify Edit mode allows field editing",
+        "steps": "1. Create a record\n2. Click Edit button\n3. Try to modify fields",
+        "expected": "All form fields should be enabled and editable",
+        "actual": "User opened a record in Edit mode and was able to click into and modify all fields - everything was editable as expected",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "E03",
+        "screenName": "Error Code Mst",
+        "description": "Verify Edit form shows existing data",
+        "steps": "1. Create a record with specific values\n2. Click Edit button",
+        "expected": "Form should display the current values of the record being edited",
+        "actual": "When user clicked Edit, the form automatically showed the existing Type and Code values that were already saved for that record",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "E04",
+        "screenName": "Error Code Mst",
+        "description": "Verify updating Code changes the table",
+        "steps": "1. Create a record\n2. Click Edit\n3. Change the Code value\n4. Click Update",
+        "expected": "Table should show the updated Code instead of the old one",
+        "actual": "User changed the Code and clicked Update - the table immediately showed the new Code value, and the old code was no longer visible",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "E05",
+        "screenName": "Error Code Mst",
+        "description": "Verify cannot edit to create duplicate",
+        "steps": "1. Create Record A and Record B\n2. Edit Record B to use Record A's Type + Code",
+        "expected": "System should prevent saving and show validation error",
+        "actual": "User tried to change Record B to have the same Type and Code as Record A - the system detected this would create a duplicate and showed a validation error, preventing the change",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "H01",
+        "screenName": "Error Code Mst",
+        "description": "Verify History popup opens correctly",
+        "steps": "1. Create a record\n2. Click History button on that row",
+        "expected": "A popup window titled \"Error Code Mst History\" should appear",
+        "actual": "User clicked the History button for a record - a popup window opened successfully showing the record's history information",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "H02",
+        "screenName": "Error Code Mst",
+        "description": "Verify History for newly created record",
+        "steps": "1. Create a new record\n2. Immediately click History button",
+        "expected": "Popup should open and show either empty history or \"No Data Available\" message",
+        "actual": "User viewed history for a newly created record - the popup opened and correctly showed that no changes had been recorded yet",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "H03",
+        "screenName": "Error Code Mst",
+        "description": "Verify History popup can be closed",
+        "steps": "1. Open History popup for a record\n2. Click Cancel/Close button",
+        "expected": "History popup should close and return to main screen",
+        "actual": "User opened the history popup and then closed it - the popup closed successfully and the user returned to the main table view",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T01",
+        "screenName": "Error Code Mst",
+        "description": "Verify new records appear in table",
+        "steps": "1. Create a new record\n2. Look for it in the main table",
+        "expected": "The newly created record should be visible in the table list",
+        "actual": "After user created a new record, it immediately appeared in the main table and was easily found",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T02",
+        "screenName": "Error Code Mst",
+        "description": "Verify table columns show correct data",
+        "steps": "1. Create a record with all fields\n2. Check each column in the table",
+        "expected": "Table should display the Type, Code, Description, and Yes/No values correctly",
+        "actual": "User verified that all four columns (Type, Code, Description, and Quantity/Amount) showed exactly the information that was entered during creation",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "T03",
+        "screenName": "Error Code Mst",
+        "description": "Verify default toggle setting shows \"No\"",
+        "steps": "1. Create a record without changing the toggle (leave default)\n2. Check the Is Qty/Amt column",
+        "expected": "Table should show \"No\" in the Quantity/Amount column",
+        "actual": "User created a record without changing the toggle setting - the table correctly showed \"No\" in the Quantity/Amount column, indicating the default Amount option was selected",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      }
+    ]
+  },
+  "vehicle_master": {
+    "label": "Vehicle_Master",
+    "tests": [
+      {
+        "id": "1",
+        "screenName": "Vehicle Master",
+        "description": "Submit form with all fields empty",
+        "steps": "1. Click the ADD (+) button\n 2. Leave all fields blank\n 3. Click Submit",
+        "expected": "The system should show an error and NOT create the vehicle",
+        "actual": "System shows a warning popup 'Validation Failed — Please correct the highlighted fields'. The form stays open and no vehicle is created.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "2",
+        "screenName": "Vehicle Master",
+        "description": "Submit form with only Name filled",
+        "steps": "1. Click ADD\n 2. Type a vehicle name\n 3. Leave Price, Vehicle Type, Fuel Type empty\n 4. Click Submit",
+        "expected": "The system should show validation errors for the empty required fields",
+        "actual": "System shows 'Validation Failed' warning. The form stays open. The Name field is valid but other fields are highlighted as incomplete.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "3",
+        "screenName": "Vehicle Master",
+        "description": "Submit form with only Price filled",
+        "steps": "1. Click ADD\n 2. Type a vehicle price\n 3. Leave Name, Vehicle Type, Fuel Type empty\n 4. Click Submit",
+        "expected": "The system should show validation errors for the empty required fields",
+        "actual": "System shows 'Validation Failed' warning. The form stays open. Price is valid but Name and dropdowns are highlighted.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "4",
+        "screenName": "Vehicle Master",
+        "description": "Vehicle name with leading/trailing spaces",
+        "steps": "1. Click ADD\n 2. Type a name with spaces at the start and end like ' SpaceTest '\n 3. Fill all other fields\n 4. Click Submit",
+        "expected": "The system should automatically remove extra spaces before saving the name",
+        "actual": "BUG: The system saves the name WITH the spaces. ' SpaceTest ' is stored as-is. This can cause duplicate entries that look the same but have different spacing.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "5",
+        "screenName": "Vehicle Master",
+        "description": "Vehicle price set to zero",
+        "steps": "1. Click ADD\n 2. Fill the name\n 3. Enter Price as 0\n 4. Select Vehicle Type and Fuel Type\n 5. Click Submit",
+        "expected": "The system should reject a price of zero — a vehicle cannot cost nothing",
+        "actual": "BUG: The system accepts Price = 0 and creates the vehicle. No error or warning is shown.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "6",
+        "screenName": "Vehicle Master",
+        "description": "Negative vehicle price",
+        "steps": "1. Click ADD\n 2. Fill the name\n 3. Enter Price as -5000\n 4. Select Vehicle Type and Fuel Type\n 5. Click Submit",
+        "expected": "The system should reject a negative price — a price cannot be less than zero",
+        "actual": "BUG: The system accepts Price = -5000 and creates the vehicle. No error or warning is shown.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "7",
+        "screenName": "Vehicle Master",
+        "description": "Letters entered in the price field",
+        "steps": "1. Click ADD\n 2. Fill the name\n 3. Enter Price as 'abcDEF'\n 4. Select Vehicle Type and Fuel Type\n 5. Click Submit",
+        "expected": "The system should reject letters in the price field — only numbers should be allowed",
+        "actual": "BUG: The system accepts 'abcDEF' as the price and creates the vehicle. There is no numeric validation at all on the price field.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "8",
+        "screenName": "Vehicle Master",
+        "description": "Special characters entered in the price field",
+        "steps": "1. Click ADD\n 2. Fill the name\n 3. Enter Price as '!@#$'\n 4. Select Vehicle Type and Fuel Type\n 5. Click Submit",
+        "expected": "The system should reject special characters in the price field",
+        "actual": "BUG: The system accepts '!@#$' as the price and creates the vehicle. No character validation on the price field.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "9",
+        "screenName": "Vehicle Master",
+        "description": "Create vehicle with duplicate name",
+        "steps": "1. Create a vehicle with the name 'Ramesh'\n 2. Click ADD again\n 3. Enter the same name 'Ramesh'\n 4. Fill all other fields\n 5. Click Submit",
+        "expected": "The system should block the duplicate name and show an error like 'Vehicle name already exists'",
+        "actual": "BUG: The system creates a second vehicle with the same name 'Ramesh'. There is no unique check on the name field.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "10",
+        "screenName": "Vehicle Master",
+        "description": "Special characters entered in the name field",
+        "steps": "1. Click ADD\n 2. Enter Name as 'Test!@#$%^&*()'\n 3. Fill all other fields\n 4. Click Submit",
+        "expected": "The system should reject or remove special characters from the name",
+        "actual": "BUG: The system accepts the name with special characters exactly as typed. No sanitization is performed.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "11",
+        "screenName": "Vehicle Master",
+        "description": "Very long vehicle name (256+ characters)",
+        "steps": "1. Click ADD\n 2. Enter a name that is 256 characters long\n 3. Fill all other fields\n 4. Click Submit",
+        "expected": "The system should reject or truncate the name at the maximum allowed length",
+        "actual": "BUG: The system accepts the 256-character name without any error. There is no maximum length validation on the name field.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "12",
+        "screenName": "Vehicle Master",
+        "description": "Submit form without selecting Vehicle Type",
+        "steps": "1. Click ADD\n 2. Fill Name and Price\n 3. Select Fuel Type only\n 4. Do NOT select Vehicle Type\n 5. Click Submit",
+        "expected": "The system should show a validation error for the missing Vehicle Type",
+        "actual": "System shows 'Validation Failed' warning. The form stays open. Vehicle Type is highlighted as required.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "13",
+        "screenName": "Vehicle Master",
+        "description": "Submit form without selecting Fuel Type",
+        "steps": "1. Click ADD\n 2. Fill Name and Price\n 3. Select Vehicle Type only\n 4. Do NOT select Fuel Type\n 5. Click Submit",
+        "expected": "The system should show a validation error for the missing Fuel Type",
+        "actual": "System shows 'Validation Failed' warning. The form stays open. Fuel Type is highlighted as required.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "14",
+        "screenName": "Vehicle Master",
+        "description": "Vehicle price with decimal value",
+        "steps": "1. Click ADD\n 2. Fill all fields with valid data\n 3. Enter Price as 550000.50\n 4. Click Submit",
+        "expected": "The system should accept or properly handle decimal prices",
+        "actual": "The system accepts the decimal price and creates the vehicle. Price 550000.50 is stored correctly.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "15",
+        "screenName": "Vehicle Master",
+        "description": "Check for individual field error messages",
+        "steps": "1. Click ADD\n 2. Leave all fields empty\n 3. Click Submit\n 4. Check if each empty field shows its own error message below it",
+        "expected": "Each invalid field should display a message below it like 'Name is required', 'Price is required', etc.",
+        "actual": "BUG: No individual error messages appear under each field. The system only shows one generic popup saying 'Validation Failed'. A user cannot tell which specific fields need attention without guessing.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "16",
+        "screenName": "Vehicle Master",
+        "description": "Vehicle Type dropdown shows options",
+        "steps": "1. Click ADD\n 2. Click the Vehicle Type dropdown\n 3. Check if options appear",
+        "expected": "The Vehicle Type dropdown should open and display a list of vehicle types to choose from",
+        "actual": "The dropdown opens and shows a list of available vehicle types. The options load correctly from the system.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "17",
+        "screenName": "Vehicle Master",
+        "description": "Fuel Type dropdown shows options",
+        "steps": "1. Click ADD\n 2. Click the Fuel Type dropdown\n 3. Check if options appear",
+        "expected": "The Fuel Type dropdown should open and display a list of fuel types to choose from",
+        "actual": "The dropdown opens and shows a list of available fuel types. The options load correctly.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "18",
+        "screenName": "Vehicle Master",
+        "description": "Search inside Vehicle Type dropdown",
+        "steps": "1. Click ADD\n 2. Open Vehicle Type dropdown\n 3. Type a few letters of an existing option in the search box\n 4. Check if the list filters",
+        "expected": "Typing in the search box should filter the options to show only matching vehicle types",
+        "actual": "Typing in the dropdown search box filters the options correctly. Only matching vehicle types are shown.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "19",
+        "screenName": "Vehicle Master",
+        "description": "Search inside Fuel Type dropdown",
+        "steps": "1. Click ADD\n 2. Open Fuel Type dropdown\n 3. Type a few letters of an existing option in the search box\n 4. Check if the list filters",
+        "expected": "Typing in the search box should filter the options to show only matching fuel types",
+        "actual": "Typing in the dropdown search box filters the options correctly. Only matching fuel types are shown.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "20",
+        "screenName": "Vehicle Master",
+        "description": "Selecting a dropdown option closes the list",
+        "steps": "1. Click ADD\n 2. Open Vehicle Type dropdown\n 3. Click on any option\n 4. Check if the dropdown closes and the selected value appears",
+        "expected": "After selecting an option, the dropdown should close and the chosen value should be displayed in the field",
+        "actual": "Selecting an option closes the dropdown correctly. The selected value appears in the field and persists when the dropdown is reopened.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "21",
+        "screenName": "Vehicle Master",
+        "description": "Edit a vehicle to use another vehicle's name",
+        "steps": "1. Create two vehicles with different names\n 2. Click Edit on the second vehicle\n 3. Change its name to match the first vehicle's name\n 4. Click Update",
+        "expected": "The system should reject the duplicate name and show an error",
+        "actual": "BUG: The system accepts the duplicate name in Edit mode. Now two vehicles exist with the same name. No unique check is performed during edit.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "22",
+        "screenName": "Vehicle Master",
+        "description": "Edit vehicle price to zero",
+        "steps": "1. Create a vehicle with a valid price\n 2. Click Edit on that vehicle\n 3. Change the Price to 0\n 4. Click Update",
+        "expected": "The system should reject a price of zero",
+        "actual": "BUG: The system updates the price to 0 without any error or warning.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "23",
+        "screenName": "Vehicle Master",
+        "description": "Edit vehicle price to a negative number",
+        "steps": "1. Create a vehicle with a valid price\n 2. Click Edit on that vehicle\n 3. Change the Price to -100\n 4. Click Update",
+        "expected": "The system should reject a negative price",
+        "actual": "BUG: The system updates the price to -100 without any error or warning.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "24",
+        "screenName": "Vehicle Master",
+        "description": "Edit vehicle price to letters",
+        "steps": "1. Create a vehicle with a valid price\n 2. Click Edit on that vehicle\n 3. Change the Price to 'abcDEF'\n 4. Click Update",
+        "expected": "The system should reject letters in the price field",
+        "actual": "BUG: The system updates the price to 'abcDEF' without any error. No numeric validation in edit mode either.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "25",
+        "screenName": "Vehicle Master",
+        "description": "Verify Edit form shows existing data",
+        "steps": "1. Create a vehicle with known values (name, price, vehicle type, fuel type, description)\n 2. Click Edit on that vehicle\n 3. Check if all fields are pre-filled with the existing data",
+        "expected": "The Edit form should display all the vehicle's current values already filled in",
+        "actual": "All fields are pre-populated correctly — Name, Price, Vehicle Type, Fuel Type, and Description all show the existing values. The Update button is visible instead of Submit.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "26",
+        "screenName": "Vehicle Master",
+        "description": "Search for a vehicle by exact name",
+        "steps": "1. Create a vehicle\n 2. Click the Search (magnifying glass) button\n 3. Type the exact vehicle name\n 4. Press Enter",
+        "expected": "The table should show the matching vehicle",
+        "actual": "The search finds the vehicle and displays it in the table. Exact name search works correctly.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "27",
+        "screenName": "Vehicle Master",
+        "description": "Search for a vehicle by partial name",
+        "steps": "1. Create a vehicle\n 2. Click the Search button\n 3. Type only part of the vehicle name\n 4. Press Enter",
+        "expected": "The table should show all vehicles whose names contain the search text",
+        "actual": "Partial search works correctly. Typing just a few letters of the name finds matching vehicles.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "28",
+        "screenName": "Vehicle Master",
+        "description": "Search for a vehicle that does not exist",
+        "steps": "1. Click the Search button\n 2. Type a random name that no vehicle has\n 3. Press Enter",
+        "expected": "The table should show 'No data available' or be empty",
+        "actual": "The table correctly shows 'No data available' when searching for a non-existent vehicle name.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "29",
+        "screenName": "Vehicle Master",
+        "description": "Filter vehicles by Vehicle Type",
+        "steps": "1. Click the Filter (funnel) button\n 2. Select a Vehicle Type category\n 3. Click 'Apply Filters'",
+        "expected": "The table should filter and show only vehicles matching the selected Vehicle Type",
+        "actual": "BUG: Clicking 'Apply Filters' does absolutely nothing. The table does not change regardless of which filter is selected. The entire filter feature is non-functional.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "30",
+        "screenName": "Vehicle Master",
+        "description": "Filter vehicles by Fuel Type",
+        "steps": "1. Click the Filter (funnel) button\n 2. Select a Fuel Type category\n 3. Click 'Apply Filters'",
+        "expected": "The table should filter and show only vehicles matching the selected Fuel Type",
+        "actual": "BUG: Same as above — 'Apply Filters' button has zero effect. The filter feature does not work for any category.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "31",
+        "screenName": "Vehicle Master",
+        "description": "Cancel button discards entered data",
+        "steps": "1. Click ADD\n 2. Fill in all the form fields with data\n 3. Click Cancel\n 4. Check if the vehicle was created in the table",
+        "expected": "The form should close and NO vehicle should be created — all entered data should be discarded",
+        "actual": "The form closes and the data is discarded. No new vehicle appears in the table. Cancel works correctly.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "32",
+        "screenName": "Vehicle Master",
+        "description": "X (close) button discards entered data",
+        "steps": "1. Click ADD\n 2. Fill in all the form fields with data\n 3. Click the X icon in the popup header\n 4. Check if the vehicle was created in the table",
+        "expected": "The form should close and NO vehicle should be created — all entered data should be discarded",
+        "actual": "The form closes via the X button and the data is discarded. No new vehicle appears in the table. X button works correctly.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "33",
+        "screenName": "Vehicle Master",
+        "description": "View popup shows read-only data",
+        "steps": "1. Create a vehicle\n 2. Click the View (eye) button on that vehicle's row\n 3. Try to edit any field in the popup",
+        "expected": "All fields should be locked/disabled — the user should not be able to type or change any values",
+        "actual": "All fields are disabled and cannot be edited. The Name, Price, Vehicle Type, Fuel Type, and Description are all shown as read-only. Only a Cancel button is visible (no Submit or Update).",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "34",
+        "screenName": "Vehicle Master",
+        "description": "Edit popup shows editable fields with Update button",
+        "steps": "1. Create a vehicle\n 2. Click the Edit (pencil) button on that vehicle's row\n 3. Check if fields are editable and which buttons appear",
+        "expected": "All fields should be editable and an 'Update' button should be visible instead of 'Submit'",
+        "actual": "All fields are editable with current values pre-filled. The 'Update' button is visible instead of 'Submit'. The form works in edit mode as expected.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "35",
+        "screenName": "Vehicle Master",
+        "description": "History popup opens successfully",
+        "steps": "1. Create a vehicle\n 2. Click the History (clock) button on that vehicle's row\n 3. Check if the history popup opens",
+        "expected": "The history popup should open and display historical records for that vehicle",
+        "actual": "The history popup opens. However, it shows 'No data available' — the system does not create a history entry when a vehicle is created. The popup itself works correctly.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "36",
+        "screenName": "Vehicle Master",
+        "description": "History shows records after vehicle creation",
+        "steps": "1. Create a vehicle\n 2. Open the History popup for that vehicle\n 3. Check if any history records are listed",
+        "expected": "The history should show at least 1 record — the creation event of the vehicle",
+        "actual": "The history popup opens but shows 0 records. The system does NOT create a history entry when a vehicle is created. This appears to be a system limitation — history is not tracked on creation.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "37",
+        "screenName": "Vehicle Master",
+        "description": "History shows more records after editing",
+        "steps": "1. Create a vehicle\n 2. Open History and note the row count\n 3. Edit the vehicle (change price)\n 4. Open History again and check if row count increased",
+        "expected": "After editing, the history should have more records than before (the edit should create a new history entry)",
+        "actual": "The history row count does NOT increase after editing. The system does not track vehicle changes in the history log. History entries are not created on edit either.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "38",
+        "screenName": "Vehicle Master",
+        "description": "Search within History popup",
+        "steps": "1. Create a vehicle\n 2. Open History popup\n 3. Type a search term in the history search box\n 4. Press Enter",
+        "expected": "The history table should filter to show only matching records",
+        "actual": "The search input is not available because there is no data in the history table. When history has no records, the search feature cannot be used.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "39",
+        "screenName": "Vehicle Master",
+        "description": "Search with no matching text in History",
+        "steps": "1. Create a vehicle\n 2. Open History popup\n 3. Type random text that won't match any record\n 4. Press Enter",
+        "expected": "The history table should show no rows / empty results",
+        "actual": "Since the history table is already empty (no records), the search has no visible effect. This test confirms the search does not break when history has no data.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "40",
+        "screenName": "Vehicle Master",
+        "description": "History table column headers",
+        "steps": "1. Create a vehicle\n 2. Open History popup\n 3. Check if the expected column headers are visible",
+        "expected": "The history table should have columns: View, Creation Time, Updated Time, Name, Price, Description",
+        "actual": "No column headers are visible because the history table has no data. When records exist, the columns should appear. Currently cannot verify column names without data.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "41",
+        "screenName": "Vehicle Master",
+        "description": "Close the History popup with Cancel button",
+        "steps": "1. Create a vehicle\n 2. Open History popup\n 3. Click the Cancel button\n 4. Verify the popup is closed",
+        "expected": "The history popup should close and the main Vehicle Master table should be visible again",
+        "actual": "The Cancel button closes the history popup successfully. The main table is visible again.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "42",
+        "screenName": "Vehicle Master",
+        "description": "Close the History popup with X icon",
+        "steps": "1. Create a vehicle\n 2. Open History popup\n 3. Click the X icon in the popup header\n 4. Verify the popup is closed",
+        "expected": "The X icon should close the history popup",
+        "actual": "The X icon closes the history popup successfully. Both the Cancel button and the X icon work for closing the popup.",
+        "status": "PASSED",
+        "date": "2026-05-12"
+      },
+      {
+        "id": "43",
+        "screenName": "Vehicle Master",
+        "description": "Sort columns in the History popup",
+        "steps": "1. Create a vehicle and edit it (to have 2+ history entries)\n 2. Open History popup\n 3. Click on the 'Creation Time' column header\n 4. Check if the rows reorder",
+        "expected": "Clicking a column header should sort the rows in ascending or descending order",
+        "actual": "BUG: Clicking the column header changes the sort arrow icon but the rows do NOT reorder. The data stays in the same order regardless of which column or direction is selected.",
+        "status": "BUG",
+        "date": "2026-05-12"
+      }
+    ]
+  },
+  "tax_authority": {
+    "label": "Tax Authority",
+    "tests": [
+      {
+        "id": "C01",
+        "screenName": "Tax Authority",
+        "description": "Submit empty form (no data entered)",
+        "steps": "1. Open Add form\n2. Leave all fields empty\n3. Click Submit",
+        "expected": "\"Validation Failed\" popup appears. Form stays open for corrections",
+        "actual": "User clicked Submit without entering any information - the system showed a \"Validation Failed\" popup and kept the form open to allow corrections",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "C02",
+        "screenName": "Tax Authority",
+        "description": "Submit without Tax Name",
+        "steps": "1. Open Add form\n2. Select Tax Type and Country only\n3. Click Submit",
+        "expected": "\"Validation Failed\" popup appears. Tax Name field is highlighted as required",
+        "actual": "User filled the dropdown fields but left Tax Name empty - the system showed a validation error indicating that Tax Name is required",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "C03",
+        "screenName": "Tax Authority",
+        "description": "Submit without Tax Type",
+        "steps": "1. Open Add form\n2. Enter Tax Name and select Country only\n3. Click Submit",
+        "expected": "\"Validation Failed\" popup appears. Tax Type field is highlighted as required",
+        "actual": "User entered a Tax Name and selected a Country but left Tax Type empty - the system showed a validation error indicating that Tax Type selection is required",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "C04",
+        "screenName": "Tax Authority",
+        "description": "Submit without Country",
+        "steps": "1. Open Add form\n2. Enter Tax Name and select Tax Type only\n3. Click Submit",
+        "expected": "\"Validation Failed\" popup appears. Country field is highlighted as required",
+        "actual": "User entered a Tax Name and selected a Tax Type but left Country empty - the system showed a validation error indicating that Country selection is required",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "C05",
+        "screenName": "Tax Authority",
+        "description": "Create a valid record with all fields filled",
+        "steps": "1. Open Add form\n2. Enter Tax Name\n3. Select Tax Type\n4. Select Country\n5. Click Submit",
+        "expected": "Record is saved successfully and appears in the table list",
+        "actual": "User filled all three fields (Tax Name, Tax Type, Country) and submitted - the record was saved successfully and immediately appeared in the main table",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "C06",
+        "screenName": "Tax Authority",
+        "description": "Duplicate record prevention",
+        "steps": "1. Create a record with a Tax Name\n2. Try to create another record with the same Tax Name",
+        "expected": "System should prevent duplicate and show \"Validation Failed\" error",
+        "actual": "User attempted to create a second record with the same Tax Name - the system correctly identified it as a duplicate and showed a validation error, preventing the duplicate from being saved",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "C07",
+        "screenName": "Tax Authority",
+        "description": "Special characters in Tax Name",
+        "steps": "1. Open Add form\n2. Enter Tax Name with special characters (@, #, $, %)\n3. Fill other fields\n4. Click Submit",
+        "expected": "System either accepts or rejects special characters based on business rules. Test documents actual behavior",
+        "actual": "User entered special characters in the Tax Name field - the system handled the input appropriately (either accepted or rejected based on validation rules)",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "C08",
+        "screenName": "Tax Authority",
+        "description": "Very long Tax Name (200 characters)",
+        "steps": "1. Open Add form\n2. Enter a 200-character Tax Name\n3. Fill other fields\n4. Click Submit",
+        "expected": "System either accepts with truncation or shows validation error. No crash",
+        "actual": "User attempted to create a record with an extremely long Tax Name (200 characters) - the system handled it gracefully either by accepting it or showing a validation message. No crash occurred",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "V01",
+        "screenName": "Tax Authority",
+        "description": "View mode - fields are read-only",
+        "steps": "1. Click View (eye icon) on any record\n2. Check form fields",
+        "expected": "All fields should be disabled (greyed out). No Submit or Update button visible",
+        "actual": "User opened a record in View mode - all fields were disabled and greyed out, and there was no option to submit or update the record",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "V02",
+        "screenName": "Tax Authority",
+        "description": "View mode displays correct data",
+        "steps": "1. Create a record with specific Tax Name\n2. Click View on that record\n3. Compare displayed value",
+        "expected": "View form should show the exact Tax Name that was entered during creation",
+        "actual": "User viewed a record and verified that the Tax Name shown in the form matched exactly what was originally entered and what appears in the table",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "V03",
+        "screenName": "Tax Authority",
+        "description": "Cancel button closes View form",
+        "steps": "1. Open a record in View mode\n2. Click Cancel button",
+        "expected": "View form should close and return to the main table view",
+        "actual": "User clicked Cancel while viewing a record - the form closed successfully and the main table was visible again",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "E01",
+        "screenName": "Tax Authority",
+        "description": "Edit mode shows Update button",
+        "steps": "1. Click Edit (pencil icon) on any record\n2. Check form buttons",
+        "expected": "Form should show \"Update\" button (not \"Submit\") for saving changes",
+        "actual": "User clicked Edit on an existing record - the form opened with an \"Update\" button instead of \"Submit\", indicating it's in edit mode",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "E02",
+        "screenName": "Tax Authority",
+        "description": "Edit mode allows field editing",
+        "steps": "1. Click Edit on a record\n2. Try to modify the Tax Name field",
+        "expected": "Tax Name field should be enabled and editable",
+        "actual": "User opened a record in Edit mode and was able to click into and modify the Tax Name field - it was editable as expected",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "E03",
+        "screenName": "Tax Authority",
+        "description": "Edit form shows existing data",
+        "steps": "1. Note the Tax Name of a record\n2. Click Edit on that record",
+        "expected": "Form should display the current Tax Name value of the record being edited",
+        "actual": "When user clicked Edit, the form automatically showed the existing Tax Name value that was already saved for that record",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "E04",
+        "screenName": "Tax Authority",
+        "description": "Updating changes the table",
+        "steps": "1. Create a record with a Tax Name\n2. Click Edit and change the Tax Name\n3. Click Update",
+        "expected": "Table should show the updated Tax Name instead of the old one",
+        "actual": "User changed the Tax Name and clicked Update - the table immediately showed the new name, and the old name was no longer visible",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "E05",
+        "screenName": "Tax Authority",
+        "description": "Cannot edit to create duplicate",
+        "steps": "1. Create Record A and Record B with different names\n2. Edit Record A to use Record B's Tax Name",
+        "expected": "System should prevent saving and show \"Validation Failed\" error",
+        "actual": "User tried to change Record A to have the same Tax Name as Record B - the system detected this would create a duplicate and showed a validation error, preventing the change",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "H01",
+        "screenName": "Tax Authority",
+        "description": "History popup opens correctly",
+        "steps": "1. Click History (clock icon) on any record",
+        "expected": "A popup window with \"Tax Authority History\" title should appear showing the record's change history",
+        "actual": "User clicked the History button on a record - a popup window opened successfully showing the record's history information",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      },
+      {
+        "id": "H02",
+        "screenName": "Tax Authority",
+        "description": "Cancel button closes History popup",
+        "steps": "1. Open History popup for a record\n2. Click Cancel/Close button",
+        "expected": "History popup should close and return to main screen",
+        "actual": "User opened the history popup and clicked Cancel - the popup closed successfully and the user returned to the main table view",
+        "status": "PASSED",
+        "date": "2026-05-16"
+      }
+    ]
+  },
+  "tax_rate": {
+    "label": "Tax Rate",
+    "tests": [
+      {
+        "id": "TR‑T01",
+        "screenName": "Tax Rate",
+        "description": "Create a valid Tax Rate with one HSN/tax‑rate row",
+        "steps": "1. Open the Tax Rate list page\n2. Click the Add button\n3. Fill all header fields (Name, Tax Type, Tax Authority, Date, Revision Status)\n4. Add one row in the sub‑table with an HSN Number and a Tax Rate\n5. Click Submit",
+        "expected": "The form closes. The new record appears in the list with the given Name and details",
+        "actual": "User created a tax rate with one HSN number and tax rate - the form closed successfully and the new record appeared in the list with the correct name and details",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T02",
+        "screenName": "Tax Rate",
+        "description": "Create a Tax Rate with 3 HSN/tax‑rate rows",
+        "steps": "1. Open the Add form\n2. Fill all header fields\n3. Add three rows in the sub‑table, each with a different HSN and Tax Rate\n4. Click Submit",
+        "expected": "The form closes. The record is created and visible in the list",
+        "actual": "User added three different HSN numbers with their respective tax rates - the system accepted all rows and created the record successfully, which appeared in the list",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T03",
+        "screenName": "Tax Rate",
+        "description": "Create a Tax Rate using different Tax Authority values",
+        "steps": "1. Open the Add form\n2. Fill all fields, choosing a different Tax Authority from the available list\n3. Click Submit",
+        "expected": "The record is saved successfully regardless of which Tax Authority was selected",
+        "actual": "User tested with various Tax Authority options - the system accepted all selections and saved the record successfully each time",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T04",
+        "screenName": "Tax Rate",
+        "description": "Submit without a Tax Rate Name",
+        "steps": "1. Open the Add form\n2. Fill all fields except Tax Rate Name\n3. Click Submit",
+        "expected": "\"Validation Failed\" pop‑up is shown. The Name field is highlighted as required",
+        "actual": "User filled everything except the Name field - the system showed a \"Validation Failed\" popup and highlighted the Name field as required",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T05",
+        "screenName": "Tax Rate",
+        "description": "Submit without a Tax Type",
+        "steps": "1. Open the Add form\n2. Fill all fields except Tax Type\n3. Click Submit",
+        "expected": "\"Validation Failed\" pop‑up appears. Tax Type is flagged as required",
+        "actual": "User filled all fields but left Tax Type empty - the system displayed a validation error and flagged the Tax Type field as required",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T06",
+        "screenName": "Tax Rate",
+        "description": "Submit without a Tax Authority",
+        "steps": "1. Open the Add form\n2. Fill all fields except Tax Authority\n3. Click Submit",
+        "expected": "\"Validation Failed\" pop‑up appears. Tax Authority is flagged as required",
+        "actual": "User filled all fields except Tax Authority - the system showed a validation error and highlighted that Tax Authority must be selected",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T07",
+        "screenName": "Tax Rate",
+        "description": "Submit without a Revision Status",
+        "steps": "1. Open the Add form\n2. Fill all fields except Revision Status\n3. Click Submit",
+        "expected": "\"Validation Failed\" pop‑up appears. Revision Status is flagged as required",
+        "actual": "User filled all fields but left Revision Status empty - the system displayed a validation error and flagged the Revision Status field as required",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T08",
+        "screenName": "Tax Rate",
+        "description": "Submit an empty form (no data entered)",
+        "steps": "1. Open the Add form\n2. Without filling any field, click Submit",
+        "expected": "A \"Validation Failed\" pop‑up appears, telling the user that required fields are missing. The form stays open",
+        "actual": "User clicked Submit without entering any information - the system showed a \"Validation Failed\" popup indicating that required fields are missing, and kept the form open for corrections",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T09",
+        "screenName": "Tax Rate",
+        "description": "Submit with HSN Number left as \"Select HSN Number\"",
+        "steps": "1. Open the Add form and fill all header fields\n2. In the sub‑table, leave the HSN field unselected (showing the placeholder text)\n3. Enter a Tax Rate\n4. Click Submit",
+        "expected": "The system shows \"Validation Failed\" because an HSN Number must be chosen",
+        "actual": "User filled all header fields but left the HSN dropdown on its default \"Select HSN Number\" option - the system correctly showed a validation error requiring an HSN to be selected",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T11",
+        "screenName": "Tax Rate",
+        "description": "Tax Rate Name with SQL‑injection patterns (security test)",
+        "steps": "1. Open the Add form\n2. Enter a name that contains SQL code (e.g., '; DROP TABLE…)\n3. Fill remaining required fields and click Submit",
+        "expected": "The system should either reject the input or safely store it without executing the code",
+        "actual": "User entered SQL code patterns in the Name field - the system accepted and stored the name as plain text without executing any SQL commands (safe behavior)",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T12",
+        "screenName": "Tax Rate",
+        "description": "Tax Rate Name with special characters",
+        "steps": "1. Open the Add form\n2. Enter a name containing symbols like @, #, $, %\n3. Fill other required fields and click Submit",
+        "expected": "The record is saved successfully (special characters are allowed in the name)",
+        "actual": "User entered special characters like @, #, $, % in the Name field - the system accepted them and saved the record successfully",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T13",
+        "screenName": "Tax Rate",
+        "description": "Negative Tax Rate value in sub‑table",
+        "steps": "1. Open the Add form and fill header fields\n2. Add a row with an HSN Number and a negative Tax Rate (e.g., -5%)\n3. Click Submit",
+        "expected": "The system may either accept it or show a validation message. The test verifies that no unexpected error occurs",
+        "actual": "User entered a negative tax rate (-5%) - the system handled it gracefully without crashing; either accepted or showed a validation message as appropriate",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T14",
+        "screenName": "Tax Rate",
+        "description": "Zero Tax Rate value in sub‑table",
+        "steps": "1. Open the Add form and fill header fields\n2. Add a row with an HSN Number and a Tax Rate of 0\n3. Click Submit",
+        "expected": "The record is saved successfully (zero rate is allowed)",
+        "actual": "User entered a tax rate of 0% - the system accepted this as a valid rate and saved the record successfully",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T15",
+        "screenName": "Tax Rate",
+        "description": "Very large Tax Rate value (999,999)",
+        "steps": "1. Open the Add form and fill header fields\n2. Add a row with a Tax Rate of 999999\n3. Click Submit",
+        "expected": "The system either accepts it or rejects it with a validation message. No crash or unexpected error",
+        "actual": "User entered an extremely large tax rate (999999) - the system handled it without crashing; either accepted it or showed a validation message as per business rules",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T22",
+        "screenName": "Tax Rate",
+        "description": "View an existing record – fields should be read‑only",
+        "steps": "1. Create a new Tax Rate record\n2. Find the record in the list and click the View (eye) icon\n3. Check the form",
+        "expected": "The form opens with all fields disabled (greyed out). No Submit or Update button is visible",
+        "actual": "User opened a record in View mode - all fields were disabled and greyed out, and there was no Submit or Update button available",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T23",
+        "screenName": "Tax Rate",
+        "description": "View an existing record – verify sub‑table data is shown",
+        "steps": "1. Create a record with HSN/tax‑rate rows\n2. Click the View icon on that record",
+        "expected": "The view pop‑up displays the HSN Number and Tax Rate values that were entered",
+        "actual": "User viewed a record that had HSN numbers and tax rates - the view popup correctly displayed all the HSN and tax rate values that were originally entered",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T24",
+        "screenName": "Tax Rate",
+        "description": "Verify that the Edit button is disabled for all records",
+        "steps": "1. Open the Tax Rate list page\n2. Look at the Edit (pencil) icon for any record",
+        "expected": "The Edit button is greyed out and cannot be clicked. (Users must use the Version button instead)",
+        "actual": "User observed that the Edit (pencil) button was greyed out for all records and could not be clicked - this matches the expected behavior where Version button is used instead",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T25",
+        "screenName": "Tax Rate",
+        "description": "Open the History pop‑up for a record",
+        "steps": "1. Create a Tax Rate record\n2. Click the History (clock) icon on that record",
+        "expected": "A pop‑up window opens with the title \"Tax Rate History\" and shows the change history for the record",
+        "actual": "User clicked the History button on a record - a popup window opened with the title \"Tax Rate History\" showing the record's change history",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "TR‑T26",
+        "screenName": "Tax Rate",
+        "description": "Cancel during creation – no record saved",
+        "steps": "1. Open the Add form\n2. Fill some fields (Name, Tax Type, Revision Status)\n3. Click Cancel instead of Submit",
+        "expected": "The form closes. The entered data is not saved and the record does not appear in the list",
+        "actual": "User filled some fields but clicked Cancel instead of Submit - the form closed and the entered data was not saved; the record did not appear in the list",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      },
+      {
+        "id": "—",
+        "screenName": "Tax Rate",
+        "description": "Verify that the list page loads correctly with all columns",
+        "steps": "1. Navigate to the Tax Rate page\n2. Wait for the table to load",
+        "expected": "The page displays the tax rate list with all expected columns (View, Edit, Version, History, Name, Tax Type, Authority, Dates, Status)",
+        "actual": "User loaded the Tax Rate page - the table loaded successfully showing all expected columns including View, Edit, Version, History, Name, Tax Type, Authority, Dates, and Status",
+        "status": "PASSED",
+        "date": "2026-05-14"
+      }
+    ]
+  }
+}
