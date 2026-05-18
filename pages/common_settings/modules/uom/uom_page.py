@@ -609,20 +609,45 @@ class UOMPage(BasePage):
     def is_validation_alert_present(self, timeout=5):
         """
         Check if any SweetAlert validation popup or error toast is visible.
+        Polls up to `timeout` seconds (checks every 0.5s).
         Returns True if swal2-icon-warning (Pattern A/B) or
         swal2-icon-error ('Failed to save record' toast) is present.
         """
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            try:
+                elements = self.driver.find_elements(
+                    "css selector",
+                    ".swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error"
+                )
+                for el in elements:
+                    if el.is_displayed():
+                        return True
+            except Exception:
+                pass
+            time.sleep(0.5)
+        return False
+
+    def dismiss_any_validation_alert(self):
+        """
+        Dismiss any SweetAlert validation popup (Pattern A or Pattern B).
+        Pattern A: clicks OK (.swal2-confirm).
+        Pattern B: clicks Cancel (.swal2-cancel).
+        """
         try:
-            elements = self.driver.find_elements(
-                "css selector",
-                ".swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error"
-            )
-            for el in elements:
-                if el.is_displayed():
-                    return True
-            return False
-        except Exception:
-            return False
+            self.driver.find_element("css selector", ".swal2-popup.swal2-icon-warning")
+            log.info("Validation SweetAlert detected, attempting to dismiss")
+            try:
+                cancel_btn = self.driver.find_element("css selector", ".swal2-cancel")
+                self.driver.execute_script("arguments[0].click();", cancel_btn)
+                log.info("Dismissed via Cancel button (Pattern B)")
+            except Exception:
+                confirm_btn = self.driver.find_element("css selector", ".swal2-confirm")
+                self.driver.execute_script("arguments[0].click();", confirm_btn)
+                log.info("Dismissed via OK button (Pattern A)")
+            time.sleep(1)
+        except Exception as e:
+            log.warning("No validation alert to dismiss: " + str(e))
 
     def get_mat_error_text(self, field_locator):
         """

@@ -98,53 +98,32 @@ _im_store = CSReportStore()
 # These will be populated/updated after running tests and observing
 # actual ERP behavior. Placeholder entries below:
 
-# BUG-001 (HIGH): Spaces-only Item Name creates empty record
-_im_store.record_issue(
-    severity="High",
-    module="Item Master",
-    category="Data Integrity",
-    description="Spaces-only Item Name may create an empty/blank record in the table. "
-                "When a user enters only spaces in the Item Name field and submits, "
-                "the ERP may trim the spaces but store an empty string, resulting "
-                "in a row with no visible name text.",
-    expected="System should reject spaces-only input with a validation error "
-             "like 'Item Name cannot be empty or spaces only'.",
-    actual="To be confirmed during test execution.",
-    test_ref="IM-C03",
-    status="Suspected",
-)
+# BUG-001 (HIGH): [RETRACTED] Spaces-only Item Name — not applicable
+# Item Name is READONLY and auto-generated from attributes.
+# Cannot type spaces into it. This bug is not applicable.
+# _im_store.record_issue(...) — REMOVED, not applicable per V2 exploration
 
-# BUG-002 (HIGH): Duplicate Item Names allowed
+# BUG-002 (HIGH): Duplicate Item Names ALLOWED — CONFIRMED 2026-05-18
+# Table has two "Soyabean" rows both Active. No uniqueness validation on Item Name.
 _im_store.record_issue(
     severity="High",
     module="Item Master",
     category="Data Integrity",
-    description="Duplicate Item Names may be allowed in the Create form. "
-                "Two or more items with identical Item Name can exist in the system "
-                "with no warning or rejection.",
+    description="Duplicate Item Names are ALLOWED in the system. "
+                "Two or more items with identical Item Name can exist with no warning. "
+                "Confirmed via browser exploration: two 'Soyabean' rows both Active.",
     expected="System should show a validation error like 'Item Name already exists' "
              "and keep the form open for correction.",
-    actual="To be confirmed during test execution.",
+    actual="CONFIRMED: No uniqueness validation. Duplicate names are accepted.",
     test_ref="IM-C04",
-    status="Suspected",
+    status="Confirmed",
 )
 
-# BUG-003 (MEDIUM): No maxlength on Item Name input
-_im_store.record_issue(
-    severity="Medium",
-    module="Item Master",
-    category="Validation",
-    description="No maxlength attribute on the Item Name input field. Names of 256+ "
-                "characters may be accepted and stored without any truncation or "
-                "validation error.",
-    expected="System should enforce a reasonable maxlength (e.g., 255 chars) "
-             "and show inline validation if exceeded.",
-    actual="To be confirmed during test execution.",
-    test_ref="IM-C05, IM-C06",
-    status="Suspected",
-)
+# BUG-003 (MEDIUM): [RETRACTED] No maxlength on Item Name — not applicable
+# Item Name is READONLY and auto-generated. Maxlength testing not possible.
+# _im_store.record_issue(...) — REMOVED, not applicable per V2 exploration
 
-# BUG-004 (MEDIUM): Negative Base Uom Conversion accepted
+# BUG-004 (MEDIUM): Negative Base Uom Conversion accepted — needs verification
 _im_store.record_issue(
     severity="Medium",
     module="Item Master",
@@ -155,6 +134,34 @@ _im_store.record_issue(
     actual="To be confirmed during test execution.",
     test_ref="IM-C08",
     status="Suspected",
+)
+
+# BUG-006 (MEDIUM): Dropdown option duplication — CONFIRMED 2026-05-18
+_im_store.record_issue(
+    severity="Medium",
+    module="Item Master",
+    category="UI Bug",
+    description="Item Category and Item Group dropdowns show options TWICE. "
+                "e.g., Pulses, Oilseeds, Grains appear twice each in Category. "
+                "Raw Material, Finished Goods, Semi Finished appear twice in Group.",
+    expected="Dropdowns should show unique options only.",
+    actual="CONFIRMED: Options duplicated in Category and Group dropdowns.",
+    test_ref="IM-C11",
+    status="Confirmed",
+)
+
+# BUG-007 (CRITICAL): Angular form model not synced with browser clicks
+_im_store.record_issue(
+    severity="Critical",
+    module="Item Master",
+    category="Automation",
+    description="Browser-clicked mat-select options do NOT update Angular reactive form model. "
+                "Submit still fires 'Validation Failed' even with all fields filled via UI clicks. "
+                "Must use JS value-setter + dispatchEvent pattern for all dropdown selections.",
+    expected="Selenium/Playwright clicks on mat-select options should update form state.",
+    actual="CONFIRMED: Angular form model not synced. Need JS workaround.",
+    test_ref="ALL",
+    status="Confirmed",
 )
 
 # BUG-005 (LOW): No Delete option

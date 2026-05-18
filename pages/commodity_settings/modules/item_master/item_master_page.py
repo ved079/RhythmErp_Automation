@@ -9,31 +9,36 @@ URL:      /#/dynamic-screens/Item%20Master
 FORM LAYOUT (3-STEP STEPPER FORM — NOT a simple popup):
 
   Step 1 — "Additional Details":
-    - Item Name              (text input,   required)
-    - Item Code              (text input,   required)
+    - Item Name              (AUTO-GENERATED, READONLY — space-separated concat of Attr 1-5)
+    - Item Code              (AUTO-GENERATED, editable — dash-separated concat of Attr 1-5)
     - Description            (text input,   optional)
-    - Item Group             (mat-select,   required, searchable)
-    - Item Category          (mat-select,   required, searchable)
+    - Item Category          (mat-select,   required, searchable) ← FILL FIRST
+    - Item Group             (mat-select,   NOT required, searchable) ← NOT required in Create/Edit
     - Item Type              (mat-select,   required, searchable)
     - Item Attribute 1-5     (mat-select,   optional, searchable)
     - UOM                    (mat-select,   required, searchable)
-    - HSN SAC Code           (mat-select,   optional, searchable)
+    - HSN SAC Code           (mat-select,   required, searchable)
     - Base Uom               (mat-select,   required, searchable)
     - Base Uom Conversion    (text input,   required, numeric)
-    - Status                 (toggle switch,  optional)
-    - Is Critical            (toggle switch,  optional)
-    - Include Wip            (toggle switch,  optional)
-    - Is Packing Material    (toggle switch,  optional)
+    *** PLUS 3 TOGGLE SWITCHES (visible on Step 1 — NOT 4!): ***
+    - Status                 (toggle switch,  Active/Inactive, default Active)
+      → Located in .big-model parent (always visible regardless of step)
+    - Is Critical            (toggle switch,  Yes/No, default No)
+    - Include Wip Stock Cal  (toggle switch,  Yes/No, default No)
+    - Is Packing Material    (toggle switch,  Yes/No, default No)
+      → These 3 are in Step 0's mat-horizontal-stepper-content (visible only on Step 1)
+    - NOTE: "Allow Negative Stock" toggle DOES NOT EXIST in Item Master
+      (was incorrectly listed in V1 spec — confirmed absent 2026-05-18)
 
-  Step 2 — "Define Item Master Details":
-    - Attachment Type        (mat-select,   optional)
-    - File Upload            (file input,   optional)
-    - Packaging              (mat-select,   optional)
+  Step 2 — "Define Item Master Details" (ATTACHMENT ONLY — NO toggles!):
+    - Attachment Type        (mat-select/combobox, optional, placeholder "Select Attachment Type")
+    - File Upload            (file upload widget, optional, shows "cloud_upload No File Uploaded")
 
-  Step 3 — "Product Order Packaging Details":
-    - Dynamic table with "Add Row" button
-    - Columns per row: Packaging (mat-select), Capacity, Base Capacity
-    - Multiple rows can be added
+  Step 3 — "Product Order Packeging Details" (note: typo is on actual page):
+    - Table inside <app-dynamic-details> component
+    - Columns: Action (add/delete), Packaging (mat-select),
+               Packaging Capacity (number input), Base Packaging Capacity (number input)
+    - Starts with 1 default empty row; Add (+) button to add more rows
 
 TABLE COLUMNS (main listing):
   - View / Edit / History   (action buttons per row)
@@ -41,15 +46,38 @@ TABLE COLUMNS (main listing):
   - UOM
   - Status
 
-KEY RULES:
+KEY RULES (V2 — updated from browser exploration 2026-05-18):
   - NEVER use Keys.ESCAPE (use backdrop click + JS overlay removal)
   - JS clicks for Angular Material overlays
   - Dropdown options read dynamically at runtime (never hardcode)
-  - Toggle switches use custom .switch-wrapper compact class (NOT standard Angular)
+  - Toggle switches use <app-slide-toggle-v2> with <span class="main-label">
+    and <div class="switch-wrapper compact"> (NOT standard Angular)
+  - Item Name is AUTO-GENERATED and READONLY: space-separated concat of Attr 1-5
+    Cannot be typed into — CANNOT test spaces-only, long strings, or special chars in name
+    formcontrolname="name" (NOT "itemName") — confirmed via browser exploration
+  - Item Code is AUTO-GENERATED but EDITABLE: dash-separated concat of Attr 1-5
+    CAN be manually overridden after auto-generation
+    formcontrolname="code" (NOT "itemCode") — confirmed via browser exploration
+  - ONLY 3 toggles on Step 1 (NOT 4): Status, Is Critical, Include Wip Stock Cal,
+    Is Packing Material. "Allow Negative Stock" DOES NOT EXIST (verified 2026-05-18)
+  - Item Group is NOT required in Create OR Edit mode (confirmed 2026-05-18)
+  - Base Uom does NOT auto-sync with UOM — they are independent fields (confirmed 2026-05-18)
+  - DROPDOWN FILL ORDER IS CRITICAL: Category → Group → Type → Attr1 → Attr2 → Attr3 → Attr4 → Attr5
+    Category/Group/Type are INDEPENDENT of each other, but Attributes cascade:
+    Attr1 depends on Category+Group+Type combo, Attr2 depends on Attr1, etc.
+  - Duplicate Item Names are ALLOWED — no uniqueness validation (confirmed 2026-05-18)
+  - Step 2 & 3 tabs are DISABLED in Edit mode — only Step 1 is editable
+  - Edit mode button says "Update" not "Submit"
+  - Validation error: "This field is required" (generic) + SweetAlert2 "Validation Failed"
+  - Step 2 has ONLY Attachment Type + File Upload
   - Stepper navigation: Next/Back buttons between steps, Submit on final step
+  - After completing Step 1, tab label changes to "Editable Additional Details"
   - History column uses mat-column-archive (NOT mat-column-history)
   - Stacked popups: History -> View (z-index 1001 over 1000)
-  - Step 3 dynamic table rows can be added/removed
+  - Step 3 grid table uses <table class="grid-table"> with <tr>/<td>
+  - CRITICAL: Browser-clicked mat-select options do NOT update Angular reactive form model.
+    Must use JS value-setter + dispatchEvent for all dropdown selections.
+    The _select_mat_option method must trigger Angular change detection.
 """
 
 import os
@@ -177,14 +205,14 @@ class ItemMasterPage(BasePage):
     # Text inputs
     ITEM_NAME_INPUT = (
         "css",
-        "input[name='Item Name'], input[formcontrolname='itemName'], "
+        "input[formcontrolname='name'], input[name='Item Name'], "
         "input[name='itemName']",
-    )
+    )  # V2: formcontrolname='name' confirmed via browser exploration (was 'itemName' in V1)
     ITEM_CODE_INPUT = (
         "css",
-        "input[name='Item Code'], input[formcontrolname='itemCode'], "
+        "input[formcontrolname='code'], input[name='Item Code'], "
         "input[name='itemCode']",
-    )
+    )  # V2: formcontrolname='code' confirmed via browser exploration (was 'itemCode' in V1)
     DESCRIPTION_INPUT = (
         "css",
         "input[name='Description'], textarea[formcontrolname='description'], "
@@ -198,14 +226,16 @@ class ItemMasterPage(BasePage):
     )
 
     # Dropdowns (mat-select) — using XPath by label for reliability
-    ITEM_GROUP_SELECT = (
-        "xpath",
-        "//mat-label[contains(.,'Item Group')]"
-        "/ancestor::mat-form-field//mat-select",
-    )
+    # V2: Fill order is Category → Group → Type (Category FIRST, confirmed 2026-05-18)
+    # Item Group is NOT required in Create or Edit mode
     ITEM_CATEGORY_SELECT = (
         "xpath",
         "//mat-label[contains(.,'Item Category')]"
+        "/ancestor::mat-form-field//mat-select",
+    )
+    ITEM_GROUP_SELECT = (
+        "xpath",
+        "//mat-label[contains(.,'Item Group')]"
         "/ancestor::mat-form-field//mat-select",
     )
     ITEM_TYPE_SELECT = (
@@ -255,30 +285,37 @@ class ItemMasterPage(BasePage):
         "/ancestor::mat-form-field//mat-select",
     )
 
-    # Toggle switches — custom class .switch-wrapper compact
+    # Toggle switches — Step 1 uses <span class="main-label"> + <div class="switch-wrapper compact">
+    #   inside <app-slide-toggle-v2> component (NOT mat-label/mat-form-field)
+    #   NOTE: ONLY 3 toggles on Step 1 (NOT 4! Verified 2026-05-18).
+    #   "Allow Negative Stock" DOES NOT EXIST in Item Master.
+    #   Status toggle is in .big-model parent (always visible regardless of step).
+    #   Is Critical, Include Wip Stock Cal, Is Packing Material are in
+    #   Step 0's mat-horizontal-stepper-content (visible only when Step 1 is active).
     STATUS_TOGGLE = (
         "xpath",
-        "//mat-label[contains(.,'Status')]"
-        "/ancestor::mat-form-field//div[contains(@class,'switch-wrapper')]",
+        "//app-slide-toggle-v2[.//span[contains(@class,'main-label') and contains(.,'Status')]]"
+        "//div[contains(@class,'switch-wrapper')]",
     )
     IS_CRITICAL_TOGGLE = (
         "xpath",
-        "//mat-label[contains(.,'Is Critical') or contains(.,'Critical')]"
-        "/ancestor::mat-form-field//div[contains(@class,'switch-wrapper')]",
+        "//app-slide-toggle-v2[.//span[contains(@class,'main-label') and contains(.,'Is Critical')]]"
+        "//div[contains(@class,'switch-wrapper')]",
     )
     INCLUDE_WIP_TOGGLE = (
         "xpath",
-        "//mat-label[contains(.,'Include Wip') or contains(.,'Wip')]"
-        "/ancestor::mat-form-field//div[contains(@class,'switch-wrapper')]",
+        "//app-slide-toggle-v2[.//span[contains(@class,'main-label') and contains(.,'Include Wip')]]"
+        "//div[contains(@class,'switch-wrapper')]",
     )
     IS_PACKING_MATERIAL_TOGGLE = (
         "xpath",
-        "//mat-label[contains(.,'Is Packing Material') or contains(.,'Packing Material')]"
-        "/ancestor::mat-form-field//div[contains(@class,'switch-wrapper')]",
+        "//app-slide-toggle-v2[.//span[contains(@class,'main-label') and contains(.,'Is Packing Material')]]"
+        "//div[contains(@class,'switch-wrapper')]",
     )
 
     # ==============================================================
     #  LOCATORS — Step 2: "Define Item Master Details"
+    #  (Attachment Type + File Upload — NO toggles!)
     # ==============================================================
     ATTACHMENT_TYPE_SELECT = (
         "xpath",
@@ -289,14 +326,15 @@ class ItemMasterPage(BasePage):
         "css",
         "input[type='file'], input[formcontrolname='fileUpload']",
     )
-    PACKAGING_SELECT_STEP2 = (
+    FILE_UPLOAD_WIDGET = (
         "xpath",
-        "//mat-label[contains(.,'Packaging')]"
-        "/ancestor::mat-form-field//mat-select",
+        "//*[contains(.,'cloud_upload') and contains(.,'No File Uploaded')]",
     )
 
     # ==============================================================
     #  LOCATORS — Step 3: "Product Order Packaging Details"
+    #  Uses <table class="grid-table"> with <tr>/<td> rows
+    #  inside <app-dynamic-details> component
     # ==============================================================
     STEP3_ADD_ROW_BUTTON = (
         "xpath",
@@ -305,13 +343,11 @@ class ItemMasterPage(BasePage):
     )
     STEP3_TABLE = (
         "css",
-        ".big-model mat-table, mat-dialog-container mat-table, "
-        ".edit_pop_up mat-table",
+        "app-dynamic-details table.grid-table",
     )
     STEP3_ROWS = (
         "css",
-        ".big-model mat-row, mat-dialog-container mat-row, "
-        ".edit_pop_up mat-row",
+        "app-dynamic-details table.grid-table tbody tr",
     )
 
     # ==============================================================
@@ -971,14 +1007,18 @@ class ItemMasterPage(BasePage):
     def fill_step1(self, data):
         """Fill all fields on Step 1 — "Additional Details".
         Dropdown values: if None/empty, picks a random option from the live UI.
-        Toggle switches: if key present and True, turns the toggle ON.
+        Item Name is AUTO-GENERATED from Item Attribute 1-5 concatenation,
+        so we do NOT type into the Item Name field.
+        Toggle switches are on Step 1 (verified on live app).
+        Returns the auto-generated item name (concatenation of attribute values).
         """
         log.info("Filling Step 1 — Additional Details...")
 
-        # --- Text Inputs ---
+        # --- Text Inputs (Item Name is auto-generated, do NOT type it) ---
         if data.get("item_name"):
-            self.type_text(
-                self.ITEM_NAME_INPUT, str(data["item_name"]), clear_first=True
+            log.info(
+                "Item Name is auto-generated from attributes — "
+                "skipping manual input"
             )
 
         if data.get("item_code"):
@@ -999,65 +1039,112 @@ class ItemMasterPage(BasePage):
             )
 
         # --- Dropdown selects ---
-        self._fill_dropdown_if_provided(
-            data, "item_group", self.ITEM_GROUP_SELECT, "Item Group"
-        )
+        # Capture selected attribute values for auto-generated item name
+        attr_values = []
+
+        # V2: Fill order is CRITICAL: Category → Group → Type → Attr1 → Attr2 → Attr3 → Attr4 → Attr5
+        # Category/Group/Type are INDEPENDENT of each other, but Attributes cascade:
+        # Attr1 depends on Category+Group+Type combo, Attr2 depends on Attr1, etc.
         self._fill_dropdown_if_provided(
             data, "item_category", self.ITEM_CATEGORY_SELECT, "Item Category"
-        )
+        )  # FILL FIRST — options: Pulses, Oilseeds, Grains
+        self._fill_dropdown_if_provided(
+            data, "item_group", self.ITEM_GROUP_SELECT, "Item Group"
+        )  # NOT required — options: Raw Material, Finished Goods, Semi Finished
         self._fill_dropdown_if_provided(
             data, "item_type", self.ITEM_TYPE_SELECT, "Item Type"
-        )
-        self._fill_dropdown_if_provided(
+        )  # options: Non Farm, Farm
+
+        # Item Attributes 1-5 — capture selected values for name prediction
+        attr1 = self._fill_dropdown_if_provided(
             data, "item_attribute1", self.ITEM_ATTRIBUTE1_SELECT, "Item Attribute 1"
         )
-        self._fill_dropdown_if_provided(
+        if attr1:
+            attr_values.append(attr1)
+
+        attr2 = self._fill_dropdown_if_provided(
             data, "item_attribute2", self.ITEM_ATTRIBUTE2_SELECT, "Item Attribute 2"
         )
-        self._fill_dropdown_if_provided(
+        if attr2:
+            attr_values.append(attr2)
+
+        attr3 = self._fill_dropdown_if_provided(
             data, "item_attribute3", self.ITEM_ATTRIBUTE3_SELECT, "Item Attribute 3"
         )
-        self._fill_dropdown_if_provided(
+        if attr3:
+            attr_values.append(attr3)
+
+        attr4 = self._fill_dropdown_if_provided(
             data, "item_attribute4", self.ITEM_ATTRIBUTE4_SELECT, "Item Attribute 4"
         )
-        self._fill_dropdown_if_provided(
+        if attr4:
+            attr_values.append(attr4)
+
+        attr5 = self._fill_dropdown_if_provided(
             data, "item_attribute5", self.ITEM_ATTRIBUTE5_SELECT, "Item Attribute 5"
         )
+        if attr5:
+            attr_values.append(attr5)
+
+        # Build the auto-generated item name from attribute values
+        auto_name = " ".join(attr_values)
+        if auto_name:
+            log.info(f"Auto-generated Item Name (from attributes): '{auto_name}'")
+            data["_auto_item_name"] = auto_name
+        else:
+            # Fallback: read the Item Name field value after all selections
+            try:
+                name_el = self.driver.find_element(
+                    By.CSS_SELECTOR,
+                    "input[name='Item Name'], input[formcontrolname='itemName']"
+                )
+                auto_name = name_el.get_attribute("value") or ""
+                if auto_name:
+                    log.info(f"Read auto-generated Item Name from field: '{auto_name}'")
+                    data["_auto_item_name"] = auto_name
+            except Exception:
+                pass
+
+        # V2: Base Uom does NOT auto-sync with UOM — must fill independently
         self._fill_dropdown_if_provided(
             data, "uom", self.UOM_SELECT, "UOM"
-        )
+        )  # Use KG for automation. Does NOT auto-fill Base Uom.
         self._fill_dropdown_if_provided(
             data, "hsn_sac_code", self.HSN_SAC_CODE_SELECT, "HSN SAC Code"
-        )
+        )  # e.g., 8537
         self._fill_dropdown_if_provided(
             data, "base_uom", self.BASE_UOM_SELECT, "Base Uom"
-        )
+        )  # INDEPENDENT of UOM. Same lookup data. Use KG.
 
-        # --- Toggle switches ---
+        # --- Toggle switches (3 toggles on Step 1 — NOT 4! Verified 2026-05-18) ---
+        # "Allow Negative Stock" toggle DOES NOT EXIST in Item Master
         self._set_toggle_if_provided(data, "status", self.STATUS_TOGGLE, "Status")
         self._set_toggle_if_provided(data, "is_critical", self.IS_CRITICAL_TOGGLE, "Is Critical")
-        self._set_toggle_if_provided(data, "include_wip", self.INCLUDE_WIP_TOGGLE, "Include Wip")
+        self._set_toggle_if_provided(data, "include_wip", self.INCLUDE_WIP_TOGGLE, "Include Wip Stock Cal")
         self._set_toggle_if_provided(
             data, "is_packing_material", self.IS_PACKING_MATERIAL_TOGGLE, "Is Packing Material"
         )
 
         self._force_close_panels()
         log.info("Step 1 form filled")
+        return auto_name
 
     def _fill_dropdown_if_provided(self, data, key, select_locator, label_name):
         """Fill a dropdown if the key exists in data.
         If value is provided, select that specific option.
         If key exists but value is empty/None, select random.
         If key doesn't exist in data, skip entirely.
+        Returns the selected option text (or None if skipped/failed).
         """
         if key not in data:
-            return  # Key not provided — skip this dropdown entirely
+            return None  # Key not provided — skip this dropdown entirely
 
         value = data[key]
         if value:
             self._select_mat_option(select_locator, str(value))
+            return str(value)
         else:
-            self._select_random_from_dropdown(select_locator, label_name)
+            return self._select_random_from_dropdown(select_locator, label_name)
 
     # ==============================================================
     #  Toggle switch helpers
@@ -1077,28 +1164,77 @@ class ItemMasterPage(BasePage):
 
     def _set_toggle_to(self, toggle_locator, label_name, desired_state):
         """Set a custom toggle switch to the desired state (True=ON, False=OFF).
-        The Item Master uses custom toggle switches with class
-        .switch-wrapper compact, NOT standard Angular checkboxes.
+        The Item Master uses <app-slide-toggle-v2> with:
+          - <span class="main-label">Label Text</span>
+          - <div class="switch-wrapper compact">
+              <span class="state-label off active"> No </span>
+              <input type="checkbox">
+              <div class="slider"><div class="circle"></div></div>
+              <span class="state-label on"> Yes </span>
+            </div>
+        Locator XPath targets the label text to find the right toggle.
         """
         log.info(f"Setting toggle '{label_name}' to {'ON' if desired_state else 'OFF'}...")
 
+        toggle_el = None
+
+        # Strategy 1: Primary XPath locator (app-slide-toggle-v2 based)
         try:
             toggle_el = self.driver.find_element(
                 By.XPATH, toggle_locator[1]
             )
         except Exception:
-            # Fallback: try broader search
+            pass
+
+        # Strategy 2: Broader label-based search using span.main-label
+        if not toggle_el:
             try:
+                # Map common label variations
+                label_map = {
+                    "Status": "Status",
+                    "Is Critical": "Is Critical",
+                    "Include Wip": "Include Wip",
+                    "Include Wip Stock Cal": "Include Wip",
+                    "Is Packing Material": "Is Packing Material",
+                }
+                search_label = label_map.get(label_name, label_name)
                 toggle_el = self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    f".big-model .switch-wrapper, "
-                    f"mat-dialog-container .switch-wrapper"
+                    By.XPATH,
+                    f"//span[contains(@class,'main-label') and contains(.,'{search_label}')]"
+                    "/ancestor::app-slide-toggle-v2"
+                    "//div[contains(@class,'switch-wrapper')]"
                 )
             except Exception:
-                log.warning(f"Toggle '{label_name}' not found")
-                return
+                pass
 
-        # Determine current state: check if 'active' or 'checked' class is present
+        # Strategy 3: Any switch-wrapper with matching label nearby
+        if not toggle_el:
+            try:
+                containers = self.driver.find_elements(
+                    By.CSS_SELECTOR,
+                    "app-slide-toggle-v2"
+                )
+                for container in containers:
+                    try:
+                        label = container.find_element(
+                            By.CSS_SELECTOR, "span.main-label"
+                        )
+                        if label_name.lower() in label.text.lower():
+                            toggle_el = container.find_element(
+                                By.CSS_SELECTOR,
+                                "div.switch-wrapper"
+                            )
+                            break
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+        if not toggle_el:
+            log.warning(f"Toggle '{label_name}' not found")
+            return
+
+        # Determine current state from the 'off active' / 'on active' spans
         current_state = self._is_toggle_on(toggle_el)
 
         if current_state == desired_state:
@@ -1107,22 +1243,33 @@ class ItemMasterPage(BasePage):
 
         # Click the toggle to change state
         try:
-            # Try clicking the inner switch element
-            switch = toggle_el.find_element(
-                By.CSS_SELECTOR, ".switch, label, input[type='checkbox']"
+            # Try clicking the inner checkbox input
+            checkbox = toggle_el.find_element(
+                By.CSS_SELECTOR, "input[type='checkbox']"
             )
             self.driver.execute_script(
                 "arguments[0].scrollIntoView({block:'center'});"
                 "arguments[0].click();",
-                switch,
+                checkbox,
             )
         except Exception:
-            # Fallback: click the toggle wrapper itself
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});"
-                "arguments[0].click();",
-                toggle_el,
-            )
+            # Fallback: click the slider div
+            try:
+                slider = toggle_el.find_element(
+                    By.CSS_SELECTOR, ".slider"
+                )
+                self.driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center'});"
+                    "arguments[0].click();",
+                    slider,
+                )
+            except Exception:
+                # Last fallback: click the toggle wrapper itself
+                self.driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center'});"
+                    "arguments[0].click();",
+                    toggle_el,
+                )
 
         self.wait_seconds(0.5)
 
@@ -1138,17 +1285,38 @@ class ItemMasterPage(BasePage):
 
     def _is_toggle_on(self, toggle_el):
         """Determine if a custom toggle switch element is ON or OFF.
-        Checks for common indicators: 'active' class, 'checked' attribute,
-        or the slider position.
+        For <app-slide-toggle-v2>, the state is indicated by:
+          - <span class="state-label off active"> No </span>  → OFF
+          - <span class="state-label on active"> Yes </span>  → ON
+        Also checks the checkbox input's selected state as fallback.
         Returns True if ON, False if OFF.
         """
         try:
-            classes = toggle_el.get_attribute("class") or ""
-            # Check for active/checked class on the wrapper
-            if "active" in classes or "checked" in classes:
-                return True
+            # Strategy 1: Check "on" state-label has "active" class
+            try:
+                on_labels = toggle_el.find_elements(
+                    By.CSS_SELECTOR, "span.state-label.on"
+                )
+                for on_label in on_labels:
+                    classes = on_label.get_attribute("class") or ""
+                    if "active" in classes:
+                        return True
+            except Exception:
+                pass
 
-            # Check for inner checkbox input
+            # Strategy 2: Check "off" state-label has "active" class → means OFF
+            try:
+                off_labels = toggle_el.find_elements(
+                    By.CSS_SELECTOR, "span.state-label.off"
+                )
+                for off_label in off_labels:
+                    classes = off_label.get_attribute("class") or ""
+                    if "active" in classes:
+                        return False
+            except Exception:
+                pass
+
+            # Strategy 3: Check inner checkbox input
             try:
                 checkbox = toggle_el.find_element(
                     By.CSS_SELECTOR, "input[type='checkbox']"
@@ -1157,20 +1325,9 @@ class ItemMasterPage(BasePage):
             except Exception:
                 pass
 
-            # Check the slider position via CSS class
-            try:
-                slider = toggle_el.find_element(
-                    By.CSS_SELECTOR, ".slider, .switch-slider"
-                )
-                slider_classes = slider.get_attribute("class") or ""
-                if "active" in slider_classes or "checked" in slider_classes:
-                    return True
-            except Exception:
-                pass
-
-            # Check aria-checked attribute
-            aria_checked = toggle_el.get_attribute("aria-checked")
-            if aria_checked == "true":
+            # Strategy 4: Check wrapper class for active/checked
+            classes = toggle_el.get_attribute("class") or ""
+            if "active" in classes or "checked" in classes:
                 return True
 
         except Exception:
@@ -1197,39 +1354,23 @@ class ItemMasterPage(BasePage):
 
     def fill_step2(self, data):
         """Fill all fields on Step 2 — "Define Item Master Details".
-        - Attachment Type: mat-select dropdown
-        - File Upload: file input
-        - Packaging: mat-select dropdown
+        Step 2 contains ONLY:
+          - Attachment Type (mat-select, optional)
+          - File Upload (optional)
+        There are NO toggle switches in Step 2 — all toggles are on Step 1.
         """
-        log.info("Filling Step 2 — Define Item Master Details...")
+        log.info("Filling Step 2 — Define Item Master Details (attachment)...")
 
-        # Attachment Type dropdown
-        if "attachment_type" in data:
-            value = data.get("attachment_type")
-            if value:
-                self._select_mat_option(
-                    self.ATTACHMENT_TYPE_SELECT, str(value)
-                )
-            else:
-                self._select_random_from_dropdown(
-                    self.ATTACHMENT_TYPE_SELECT, "Attachment Type"
-                )
+        # --- Attachment Type dropdown (optional) ---
+        if data.get("attachment_type"):
+            self._select_mat_option(self.ATTACHMENT_TYPE_SELECT, str(data["attachment_type"]))
+        elif "attachment_type" in data and not data["attachment_type"]:
+            # attachment_type key exists but empty — select random
+            self._select_random_from_dropdown(self.ATTACHMENT_TYPE_SELECT, "Attachment Type")
 
-        # File Upload
+        # --- File Upload (optional) ---
         if data.get("file_path"):
             self._upload_file(data["file_path"])
-
-        # Packaging dropdown
-        if "packaging" in data:
-            value = data.get("packaging")
-            if value:
-                self._select_mat_option(
-                    self.PACKAGING_SELECT_STEP2, str(value)
-                )
-            else:
-                self._select_random_from_dropdown(
-                    self.PACKAGING_SELECT_STEP2, "Packaging"
-                )
 
         self._force_close_panels()
         log.info("Step 2 form filled")
@@ -1291,18 +1432,27 @@ class ItemMasterPage(BasePage):
 
     def fill_step3(self, data):
         """Fill Step 3 — "Product Order Packaging Details".
-        This step has a dynamic table where rows can be added.
-        Data format:
+        This step has a dynamic table inside <app-dynamic-details>.
+        Table uses <table class="grid-table"> with <tr>/<td> rows.
+        Each row has: Packaging (mat-select), Packaging Capacity (input),
+        Base Packaging Capacity (input), and an Add (+) button.
+
+        Data format (supports both "rows" and "packaging_rows" keys):
           {
               "rows": [
                   {"packaging": "Box", "capacity": "10", "base_capacity": "5"},
-                  {"packaging": "Pallet", "capacity": "100", "base_capacity": "50"},
               ]
           }
-        If 'rows' is empty or not provided, skips this step.
+        or:
+          {
+              "packaging_rows": [
+                  {"packaging": None, "capacity": "10", "base_capacity": "5"},
+              ]
+          }
+        If rows list is empty or not provided, skips filling (default row exists).
         """
         log.info("Filling Step 3 — Product Order Packaging Details...")
-        rows = data.get("rows", [])
+        rows = data.get("rows", data.get("packaging_rows", []))
 
         for i, row_data in enumerate(rows):
             if i > 0:
@@ -1315,10 +1465,36 @@ class ItemMasterPage(BasePage):
         log.info(f"Step 3 filled with {len(rows)} row(s)")
 
     def _click_add_row_step3(self):
-        """Click the 'Add Row' button in Step 3 to add a new table row."""
+        """Click the Add (+) button in Step 3 to add a new table row.
+        The button is a mat-icon-button with a 'add' mat-icon inside
+        the grid table's Action column.
+        """
         log.info("Clicking Add Row in Step 3...")
 
-        # Strategy 1: Button with 'Add Row' text
+        # Strategy 1: mat-icon-button with add icon inside app-dynamic-details
+        try:
+            add_btns = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "app-dynamic-details button.mat-mdc-icon-button"
+            )
+            for btn in add_btns:
+                try:
+                    icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
+                    if icon.text.strip().lower() == "add" and btn.is_displayed():
+                        self.driver.execute_script(
+                            "arguments[0].scrollIntoView({block:'center'});"
+                            "arguments[0].click();",
+                            btn,
+                        )
+                        self.wait_seconds(1)
+                        log.info("Add Row clicked via icon button in grid table")
+                        return
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        # Strategy 2: Button with 'Add Row' text
         try:
             add_btns = self.driver.find_elements(
                 By.XPATH,
@@ -1340,40 +1516,15 @@ class ItemMasterPage(BasePage):
         except Exception:
             pass
 
-        # Strategy 2: Button with add icon near the Step 3 table
-        try:
-            # Look for fab/mini-fab button with add icon inside the popup
-            add_btns = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                ".big-model button.mat-mdc-mini-fab, "
-                "mat-dialog-container button.mat-mdc-mini-fab"
-            )
-            for btn in add_btns:
-                try:
-                    icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
-                    if icon.text.strip().lower() == "add" and btn.is_displayed():
-                        self.driver.execute_script(
-                            "arguments[0].scrollIntoView({block:'center'});"
-                            "arguments[0].click();",
-                            btn,
-                        )
-                        self.wait_seconds(1)
-                        log.info("Add Row clicked via icon match")
-                        return
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-        # Strategy 3: JS click any add button in the popup
+        # Strategy 3: JS click add button in app-dynamic-details
         try:
             self.driver.execute_script("""
                 var btns = document.querySelectorAll(
-                    '.big-model button, mat-dialog-container button'
+                    'app-dynamic-details button[mat-icon-button]'
                 );
                 for (var i = 0; i < btns.length; i++) {
-                    var txt = btns[i].textContent.trim().toLowerCase();
-                    if (txt === 'add row' || txt === 'add' || txt === 'add row') {
+                    var icon = btns[i].querySelector('mat-icon');
+                    if (icon && icon.textContent.trim().toLowerCase() === 'add') {
                         btns[i].click();
                         break;
                     }
@@ -1386,19 +1537,17 @@ class ItemMasterPage(BasePage):
 
     def _fill_step3_row(self, row_index, row_data):
         """Fill a single row in the Step 3 dynamic table.
+        Uses <app-dynamic-details> > <table class="grid-table"> > <tbody> > <tr>.
         row_data: {"packaging": "Box", "capacity": "10", "base_capacity": "5"}
+        If packaging is None/empty, selects random from dropdown.
         """
         log.info(f"Filling Step 3 row {row_index}...")
 
         try:
-            # Find all rows in the Step 3 table
+            # Find rows in the Step 3 grid table
             rows = self.driver.find_elements(
                 By.CSS_SELECTOR,
-                ".big-model mat-row, "
-                "mat-dialog-container mat-row, "
-                ".edit_pop_up mat-row, "
-                ".big-model tr[mat-row], "
-                "mat-dialog-container tr[mat-row]"
+                "app-dynamic-details table.grid-table tbody tr"
             )
 
             # Filter to visible rows only
@@ -1420,17 +1569,23 @@ class ItemMasterPage(BasePage):
             target_row = visible_rows[row_index]
 
             # Fill Packaging dropdown in this row
-            if row_data.get("packaging"):
-                self._fill_row_dropdown(target_row, row_data["packaging"])
+            packaging_val = row_data.get("packaging")
+            if packaging_val:
+                self._fill_row_dropdown(target_row, str(packaging_val))
+            elif "packaging" in row_data and not packaging_val:
+                # packaging key exists but empty — select random
+                self._fill_row_dropdown_random(target_row, "Packaging")
 
-            # Fill Capacity text input in this row
+            # Fill Packaging Capacity text input in this row
             if row_data.get("capacity"):
-                self._fill_row_text_input(target_row, "Capacity", row_data["capacity"])
+                self._fill_row_text_input(
+                    target_row, "Packaging Capacity", row_data["capacity"]
+                )
 
-            # Fill Base Capacity text input in this row
+            # Fill Base Packaging Capacity text input in this row
             if row_data.get("base_capacity"):
                 self._fill_row_text_input(
-                    target_row, "Base Capacity", row_data["base_capacity"]
+                    target_row, "Base Packaging Capacity", row_data["base_capacity"]
                 )
 
         except Exception as e:
@@ -1445,7 +1600,11 @@ class ItemMasterPage(BasePage):
             for sel in selects:
                 try:
                     if sel.is_displayed():
-                        sel.click()
+                        self.driver.execute_script(
+                            "arguments[0].scrollIntoView({block:'center'});"
+                            "arguments[0].click();",
+                            sel,
+                        )
                         self.wait_seconds(0.5)
 
                         # Try to find and click the option
@@ -1455,7 +1614,11 @@ class ItemMasterPage(BasePage):
                                 f"//div[@role='listbox']//mat-option"
                                 f"[contains(.,'{option_text}')]"
                             )
-                            opt.click()
+                            self.driver.execute_script(
+                                "arguments[0].scrollIntoView({block:'center'});"
+                                "arguments[0].click();",
+                                opt,
+                            )
                             self.wait_seconds(0.3)
                         except Exception:
                             # Try scrolling to find the option
@@ -1482,8 +1645,75 @@ class ItemMasterPage(BasePage):
         except Exception as e:
             log.error(f"Failed to fill row dropdown: {e}")
 
+    def _fill_row_dropdown_random(self, row_element, label_name):
+        """Fill a mat-select dropdown within a specific table row with a random option.
+        Returns the selected option text, or None if no options available.
+        """
+        try:
+            selects = row_element.find_elements(
+                By.CSS_SELECTOR, "mat-select"
+            )
+            for sel in selects:
+                try:
+                    if sel.is_displayed():
+                        self.driver.execute_script(
+                            "arguments[0].scrollIntoView({block:'center'});"
+                            "arguments[0].click();",
+                            sel,
+                        )
+                        self.wait_seconds(0.5)
+
+                        # Read all options
+                        opts = self.driver.find_elements(
+                            By.CSS_SELECTOR,
+                            "div[role='listbox'] mat-option, "
+                            "div[role='listbox'] [role='option']",
+                        )
+                        option_texts = []
+                        for opt in opts:
+                            try:
+                                t = opt.text.strip()
+                                if t and t != "No results found" and not t.startswith("Select"):
+                                    option_texts.append(t)
+                            except Exception:
+                                continue
+
+                        if not option_texts:
+                            log.warning(
+                                f"No options in row '{label_name}' dropdown — skipping"
+                            )
+                            self._close_dropdown_panel_only()
+                            return None
+
+                        selected = random.choice(option_texts)
+                        log.info(f"Random '{label_name}' selected in row: '{selected}'")
+
+                        for opt in opts:
+                            try:
+                                if opt.text.strip() == selected:
+                                    self.driver.execute_script(
+                                        "arguments[0].scrollIntoView({block:'center'});"
+                                        "arguments[0].click();",
+                                        opt,
+                                    )
+                                    break
+                            except Exception:
+                                continue
+
+                        self.wait_seconds(0.3)
+                        self._close_dropdown_panel_only()
+                        return selected
+                except Exception:
+                    continue
+        except Exception as e:
+            log.error(f"Failed to fill row dropdown random: {e}")
+        return None
+
     def _fill_row_text_input(self, row_element, field_name, value):
-        """Fill a text input within a specific table row by field name."""
+        """Fill a text input within a specific table row by field name.
+        Uses JS fallback for Angular reactive form inputs.
+        Field name matching uses the input's 'name' or 'placeholder' attribute.
+        """
         try:
             inputs = row_element.find_elements(
                 By.CSS_SELECTOR, "input"
@@ -1496,29 +1726,61 @@ class ItemMasterPage(BasePage):
                         field_name.lower() in name_attr.lower()
                         or field_name.lower() in placeholder.lower()
                     ):
-                        inp.clear()
-                        inp.send_keys(str(value))
+                        # Use JS fallback for Angular reactive form inputs
+                        try:
+                            inp.clear()
+                            inp.send_keys(str(value))
+                        except Exception:
+                            self.driver.execute_script("""
+                                var el = arguments[0];
+                                var val = arguments[1];
+                                el.focus();
+                                var setter = Object.getOwnPropertyDescriptor(
+                                    window.HTMLInputElement.prototype, 'value'
+                                ).set;
+                                setter.call(el, val);
+                                el.dispatchEvent(new Event('input', {bubbles: true}));
+                                el.dispatchEvent(new Event('change', {bubbles: true}));
+                            """, inp, str(value))
                         self.wait_seconds(0.3)
                         return
                 except Exception:
                     continue
 
             # Fallback: if we know the position, fill by index
-            # Usually: Packaging=0, Capacity=1, Base Capacity=2
-            # But dropdowns are mat-select, not input, so inputs are fewer
+            # Row structure: Packaging(dropdown), Packaging Capacity(input), Base Packaging Capacity(input)
+            # But dropdowns are mat-select, not input, so inputs are: Capacity=0, Base Capacity=1
             visible_inputs = []
             for inp in inputs:
                 try:
-                    if inp.is_displayed() and inp.get_attribute("type") != "file":
+                    if inp.is_displayed() and inp.get_attribute("type") not in ("file", "checkbox"):
                         visible_inputs.append(inp)
                 except Exception:
                     continue
 
-            field_map = {"Capacity": 0, "Base Capacity": 1}
+            field_map = {
+                "Packaging Capacity": 0,
+                "Base Packaging Capacity": 1,
+                "Capacity": 0,
+                "Base Capacity": 1,
+            }
             if field_name in field_map and field_map[field_name] < len(visible_inputs):
                 idx = field_map[field_name]
-                visible_inputs[idx].clear()
-                visible_inputs[idx].send_keys(str(value))
+                try:
+                    visible_inputs[idx].clear()
+                    visible_inputs[idx].send_keys(str(value))
+                except Exception:
+                    self.driver.execute_script("""
+                        var el = arguments[0];
+                        var val = arguments[1];
+                        el.focus();
+                        var setter = Object.getOwnPropertyDescriptor(
+                            window.HTMLInputElement.prototype, 'value'
+                        ).set;
+                        setter.call(el, val);
+                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                    """, visible_inputs[idx], str(value))
                 self.wait_seconds(0.3)
 
         except Exception as e:
@@ -1529,11 +1791,7 @@ class ItemMasterPage(BasePage):
         try:
             rows = self.driver.find_elements(
                 By.CSS_SELECTOR,
-                ".big-model mat-row, "
-                "mat-dialog-container mat-row, "
-                ".edit_pop_up mat-row, "
-                ".big-model tr[mat-row], "
-                "mat-dialog-container tr[mat-row]"
+                "app-dynamic-details table.grid-table tbody tr"
             )
             visible_rows = [r for r in rows if r.is_displayed()]
             return len(visible_rows)
@@ -1547,25 +1805,29 @@ class ItemMasterPage(BasePage):
     def fill_full_form(self, data):
         """Fill the entire 3-step Item Master form.
         data should have keys for all steps:
-          step1: item_name, item_code, description, item_group, etc.
-          step2: attachment_type, file_path, packaging
-          step3: rows list
-        Automatically navigates through steps using Next buttons.
+          step1: item_code, description, item_group, item_category, item_type,
+                 item_attribute1-5, uom, hsn_sac_code, base_uom, base_uom_conversion,
+                 status, is_critical, include_wip, is_packing_material (toggles)
+          step2: attachment_type, file_path
+          step3: rows/packaging_rows list
+        Item Name is auto-generated from attributes — NOT typed manually.
+        ONLY 3 toggles are filled in Step 1 (NOT 4! Verified 2026-05-18).
+        "Allow Negative Stock" toggle DOES NOT EXIST in Item Master.
+        Returns the auto-generated item name.
         """
         log.info("Filling full Item Master 3-step form...")
 
-        # Step 1: Additional Details
+        # Step 1: Additional Details + ALL toggle switches
         step1_data = data.get("step1", data)
-        self.fill_step1(step1_data)
+        auto_name = self.fill_step1(step1_data)
 
         # Navigate to Step 2
         self.click_stepper_next()
         self.wait_seconds(1)
 
-        # Step 2: Define Item Master Details
+        # Step 2: Define Item Master Details (Attachment Type + File Upload only — NO toggles)
         step2_data = data.get("step2", {})
-        if step2_data:
-            self.fill_step2(step2_data)
+        self.fill_step2(step2_data)
 
         # Navigate to Step 3
         self.click_stepper_next()
@@ -1577,6 +1839,7 @@ class ItemMasterPage(BasePage):
             self.fill_step3(step3_data)
 
         log.info("Full 3-step form filled")
+        return auto_name
 
     # ==============================================================
     #  Form submission & cancellation
@@ -1960,10 +2223,10 @@ class ItemMasterPage(BasePage):
             except Exception:
                 values[key] = ""
 
-        # Dropdown selects — read the displayed text
+        # Dropdown selects — read the displayed text (V2: Category before Group per fill order)
         for key, locator in [
-            ("item_group", self.ITEM_GROUP_SELECT),
             ("item_category", self.ITEM_CATEGORY_SELECT),
+            ("item_group", self.ITEM_GROUP_SELECT),
             ("item_type", self.ITEM_TYPE_SELECT),
             ("item_attribute1", self.ITEM_ATTRIBUTE1_SELECT),
             ("item_attribute2", self.ITEM_ATTRIBUTE2_SELECT),
@@ -1980,7 +2243,7 @@ class ItemMasterPage(BasePage):
             except Exception:
                 values[key] = ""
 
-        # Toggle switches
+        # Toggle switches (ALL on Step 1 — verified 2026-05-15)
         for key, locator in [
             ("status", self.STATUS_TOGGLE),
             ("is_critical", self.IS_CRITICAL_TOGGLE),
@@ -2674,15 +2937,17 @@ class ItemMasterPage(BasePage):
         item_data can be:
           - Flat dict with all keys (step1 fields at top level)
           - Nested dict with 'step1', 'step2', 'step3' keys
-        Returns result dict: status, error, message, data.
+        Item Name is auto-generated from attribute values — stored in
+        item_data['_auto_item_name'] and result['item_name'].
+        Returns result dict: status, error, message, data, item_name.
         """
-        name = item_data.get("item_name", item_data.get("step1", {}).get("item_name", "N/A"))
-        log.info(f"Creating Item Master: {name}")
+        log.info(f"Creating Item Master...")
         result = {
             "status": "FAILED",
             "error": "",
             "message": "",
             "data": copy.deepcopy(item_data),
+            "item_name": "",  # Will be set to auto-generated name
         }
 
         try:
@@ -2690,8 +2955,10 @@ class ItemMasterPage(BasePage):
             if not self.is_add_form_open():
                 raise Exception("Add form did not open")
 
-            # Fill the full 3-step form
-            self.fill_full_form(item_data)
+            # Fill the full 3-step form — returns auto-generated name
+            auto_name = self.fill_full_form(item_data)
+            result["item_name"] = auto_name or item_data.get("_auto_item_name", "")
+            log.info(f"Auto-generated Item Name: '{result['item_name']}'")
 
             # Submit on the final step
             self.submit()
@@ -2713,7 +2980,7 @@ class ItemMasterPage(BasePage):
                         result["error"] = "No success message and dialog did not close"
         except Exception as e:
             result["error"] = str(e)
-            log.error(f"Failed to create item '{name}': {e}")
+            log.error(f"Failed to create item: {e}")
 
         # Always clean up
         try:

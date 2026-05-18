@@ -128,6 +128,7 @@ class SeasonPage(BasePage):
         """Navigate directly to the Season screen via URL."""
         from pages.common_settings.modules.season.data.season_data import SEASON_PAGE_URL
         log.info("Navigating to Season screen...")
+        self._force_close_panels()
         self.navigate_to(SEASON_PAGE_URL)
         try:
             self.wait_for_visible(self.TABLE, timeout=15)
@@ -144,6 +145,8 @@ class SeasonPage(BasePage):
     def open_add_form(self):
         """Click the Add (+) button to open the form popup."""
         log.step(1, "Opening Add form")
+        self._force_close_panels()
+        self.wait_seconds(0.5)
         try:
             add_btn = ("xpath", "//button[mat-icon[text()='add']]")
             self.click(add_btn)
@@ -703,6 +706,48 @@ class SeasonPage(BasePage):
             log.error(f"[ERROR] Search failed: {e}")
             return False
 
+    # ================================================================
+    # UTILITY - CDK OVERLAY CLEANUP
+    # ================================================================
+
+    def _force_close_panels(self):
+        """Remove any lingering CDK overlay panels that block clicks."""
+        try:
+            overlays = self.driver.find_elements(
+                "css selector", ".cdk-overlay-backdrop"
+            )
+            for overlay in overlays:
+                self.driver.execute_script("arguments[0].remove();", overlay)
+            panels = self.driver.find_elements(
+                "css selector", ".cdk-overlay-pane"
+            )
+            for panel in panels:
+                self.driver.execute_script("arguments[0].remove();", panel)
+            # Also close any open form popups via JS
+            self.driver.execute_script("""
+                var popups = document.querySelectorAll('div.edit_pop_up');
+                popups.forEach(function(p) { p.remove(); });
+            """)
+        except Exception:
+            pass
+
+    def _dismiss_any_sweet_alert(self):
+        """Dismiss any SweetAlert popup (Pattern A or Pattern B)."""
+        try:
+            self.driver.find_element("css selector", ".swal2-popup")
+            log.info("SweetAlert detected, attempting to dismiss")
+            try:
+                cancel_btn = self.driver.find_element("css selector", ".swal2-cancel")
+                self.driver.execute_script("arguments[0].click();", cancel_btn)
+                log.info("Dismissed via Cancel button (Pattern B)")
+            except Exception:
+                confirm_btn = self.driver.find_element("css selector", ".swal2-confirm")
+                self.driver.execute_script("arguments[0].click();", confirm_btn)
+                log.info("Dismissed via OK button (Pattern A)")
+            self.wait_seconds(1)
+        except Exception:
+            pass
+
     def clear_search(self):
         """Clear the search filter by re-navigating to the Season screen.
 
@@ -711,4 +756,5 @@ class SeasonPage(BasePage):
         DOM immediately after this call exits.
         """
         log.info("Clearing search filter...")
+        self._force_close_panels()
         self.navigate_to_season()

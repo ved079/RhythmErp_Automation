@@ -22,6 +22,7 @@ from common.logger import log
 from common.browser_utils import get_driver
 from common.auth_helper import AuthSection
 from pages.login_screens.Login_Screens_.login_page import LoginPage
+import api.screenshot_store as _ss
 
 
 # ================================================================
@@ -36,8 +37,11 @@ def driver():
     log.separator()
 
     driver = get_driver()
+    _ss.set_driver(driver)
 
     yield driver
+
+    _ss.set_driver(None)
 
     log.separator()
     log.info("CLOSING BROWSER...")
