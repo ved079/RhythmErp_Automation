@@ -40,7 +40,7 @@ class UOMConversionPage(BasePage):
     # ================================================================
     # HEADER BUTTONS
     # ================================================================
-    ADD_BUTTON = ("css", "button[mattooltip='ADD'], div[mattooltip='ADD'] button")
+    ADD_BUTTON = ("css", "button.erp-add-btn")
     REFRESH_BUTTON = ("css", "div[mattooltip='REFRESH'] button")
 
     # ================================================================

@@ -1,4 +1,4 @@
-﻿"""
+"""
 uom_page.py
 ------------
 Page Object for RhythmERP -> Common Settings -> UOM.
@@ -33,7 +33,7 @@ class UOMPage(BasePage):
     # ================================================================
     # MAIN TABLE
     # ================================================================
-    ADD_BUTTON = ("css", "button[mattooltip='ADD'], div[mattooltip='ADD'] button")
+    ADD_BUTTON = ("css", "button.erp-add-btn")
     SEARCH_BUTTON = ("css", "button.search-btn")
     SEARCH_INPUT = ("css", "input#erpSearchInput")
     TABLE_UOM_CODES = ("css", "table#excel-table td.cdk-column-uom_code")

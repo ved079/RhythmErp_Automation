@@ -39,7 +39,7 @@ class HsnSacPage:
     TABLE_BODY_ROWS = (By.CSS_SELECTOR, "table#excel-table tbody tr")
     SEARCH_TOGGLE = (By.CSS_SELECTOR, "button.search-btn")
     SEARCH_INPUT = (By.CSS_SELECTOR, "#erpSearchInput")
-    ADD_BUTTON = (By.XPATH, "//*[@mattooltip='ADD']/button")
+    ADD_BUTTON = (By.XPATH, "button.erp-add-btn")
     FILTER_BUTTON = (By.XPATH, "//*[@mattooltip='Filters']/button")
     REFRESH_BUTTON = (By.XPATH, "//*[@mattooltip='REFRESH']/button")
 
@@ -151,7 +151,7 @@ class HsnSacPage:
             if not self._is_form_popup_open():
                 # Fallback: direct find + JS click
                 self.driver.execute_script(
-                    "document.querySelector(\"//*[@mattooltip='ADD']/button\").click();"
+                    "document.querySelector(\"button.erp-add-btn\").click();"
                 )
                 time.sleep(1.5)
         except Exception as e:

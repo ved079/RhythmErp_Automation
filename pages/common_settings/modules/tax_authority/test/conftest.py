@@ -184,7 +184,7 @@ _cs_store.record_issue(
                 "modules (Bank, Error Code Mst) which have mattooltip='ADD'.",
     expected="ADD button should have mattooltip='ADD' for consistency.",
     actual="ADD button has no mattooltip. Requires different locator strategy "
-           "(//button[mat-icon[text()='add']] instead of //*[@mattooltip='ADD']).",
+           "(//button[mat-icon[text()='add']] instead of //button[contains(@class,'erp-add-btn')]).",
     test_ref="—",
     status="Open",
 )

@@ -38,7 +38,7 @@ from pages.access_screen.Access_screens.user_creation import (
 def _click_add(driver, wait):
     """Click the ADD button to open the creation form."""
     add_btn = wait.until(EC.element_to_be_clickable(
-        (By.XPATH, "//div[@mattooltip='ADD']//button")
+        (By.XPATH, "//button[contains(@class,'erp-add-btn')]")
     ))
     driver.execute_script("arguments[0].click();", add_btn)
     time.sleep(1)

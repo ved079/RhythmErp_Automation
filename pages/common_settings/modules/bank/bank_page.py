@@ -99,7 +99,7 @@ class BankPage(BasePage):
     # LOCATORS — List Page
     # ================================================================
 
-    ADD_BUTTON = ("xpath", "//*[@mattooltip='ADD']")
+    ADD_BUTTON = ("xpath", "//button[contains(@class,'erp-add-btn')]")
 
     TABLE = ("css", "table#excel-table")
     TABLE_BODY = ("css", "table#excel-table tbody")
@@ -186,19 +186,23 @@ class BankPage(BasePage):
         """Recover from any stuck popups, overlays, or alerts.
 
         IMPORTANT: Does NOT remove .cdk-overlay-backdrop because that kills
-        open dropdown menus. Only handles: SweetAlert, form popup, history panel.
+        open dropdown menus. Uses JS click on SweetAlert buttons because
+        Selenium .click() on SweetAlert crashes msedgedriver.
         """
         try:
-            # 1. Dismiss any SweetAlert popup
+            # 1. Dismiss any SweetAlert popup (JS click to avoid msedgedriver crash)
             try:
                 alerts = self.driver.find_elements(By.CSS_SELECTOR, ".swal2-popup")
                 for alert in alerts:
                     if alert.is_displayed():
-                        confirm = alert.find_element(By.CSS_SELECTOR, "button.swal2-confirm")
-                        if confirm.is_displayed():
-                            confirm.click()
-                            log.info("Recovered: Dismissed SweetAlert popup")
-                            self.wait_seconds(0.5)
+                        try:
+                            confirm = alert.find_element(By.CSS_SELECTOR, "button.swal2-confirm")
+                            if confirm.is_displayed():
+                                self.driver.execute_script("arguments[0].click();", confirm)
+                                log.info("Recovered: Dismissed SweetAlert popup (JS click)")
+                                self.wait_seconds(0.5)
+                        except Exception:
+                            pass
             except Exception:
                 pass
 
@@ -698,6 +702,11 @@ class BankPage(BasePage):
     # ================================================================
     # SWEET ALERT — Detection & Handling
     # ================================================================
+    # CRITICAL: All SweetAlert confirm clicks MUST use JavaScript, NOT
+    # Selenium .click(). Selenium's element interaction protocol crashes
+    # msedgedriver when clicking inside SweetAlert2's animated overlay.
+    # JS click fires directly in the browser, bypassing the driver entirely.
+    # ================================================================
 
     def is_validation_alert_present(self, timeout=5):
         """Check if SweetAlert 'Validation Failed' popup is visible.
@@ -762,16 +771,24 @@ class BankPage(BasePage):
             return ""
 
     def handle_validation_alert(self):
-        """Click OK on the Validation Failed SweetAlert."""
-        log.info("Handling Validation Failed alert — clicking OK")
+        """Click OK on the Validation Failed SweetAlert.
+
+        Uses JavaScript click because Selenium .click() on SweetAlert
+        overlay elements crashes msedgedriver.exe.
+        """
+        log.info("Handling Validation Failed alert — clicking OK via JS")
         try:
-            self.click(self.SWEET_ALERT_CONFIRM_BTN)
+            el = self.driver.find_element(By.CSS_SELECTOR, "button.swal2-confirm")
+            self.driver.execute_script("arguments[0].click();", el)
             self.wait_seconds(0.5)
         except Exception:
             log.warning("Could not click validation alert OK button")
 
     def handle_success_alert(self, timeout=10):
         """Handle success SweetAlert — click OK and wait for dismiss.
+
+        Uses JavaScript click because Selenium .click() on SweetAlert
+        overlay elements crashes msedgedriver.exe.
 
         Args:
             timeout: Max seconds to wait for the confirm button.
@@ -784,8 +801,9 @@ class BankPage(BasePage):
                 log.info(f"ALERT TITLE: '{title}'")
             except Exception:
                 pass
-            self.click(self.SWEET_ALERT_CONFIRM_BTN)
-            self.wait_seconds(0.3)
+            el = self.driver.find_element(By.CSS_SELECTOR, "button.swal2-confirm")
+            self.driver.execute_script("arguments[0].click();", el)
+            self.wait_seconds(0.5)
             self.wait_for_success_alert_to_dismiss(timeout=5)
             log.info("Success alert handled — record saved")
         except Exception as e:
@@ -995,9 +1013,8 @@ class BankPage(BasePage):
         """
         log.info(f"Clicking Edit button on row {row_index}")
         self.click(self._edit_button(row_index))
-        # FIX: ERP has heavy popup animation (overlay fade-in + content slide-in)
-        # that crashes msedgedriver.exe during the transition. Hard sleep lets
-        # the animation finish WITHOUT any WebDriver polling adding DOM pressure.
+        # ERP has heavy popup animation (overlay fade-in + content slide-in).
+        # Hard sleep lets the animation finish without WebDriver polling pressure.
         time.sleep(3)
         self.wait_for_form_to_open()
 
@@ -1009,8 +1026,7 @@ class BankPage(BasePage):
         """
         log.info(f"Clicking History button on row {row_index}")
         self.click(self._history_button(row_index))
-        # FIX: History panel has the same popup animation as Edit form.
-        # Hard sleep prevents msedgedriver from crashing during transition.
+        # History panel has the same popup animation as Edit form.
         time.sleep(3)
         self.wait_for_history_panel()
 

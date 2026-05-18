@@ -38,7 +38,7 @@ class ErrorCodeMstPage:
 
     TABLE = (By.CSS_SELECTOR, "table#excel-table")
     TABLE_BODY_ROWS = (By.CSS_SELECTOR, "table#excel-table tbody tr")
-    ADD_BUTTON = (By.XPATH, "//*[@mattooltip='ADD']/button")
+    ADD_BUTTON = (By.XPATH, "//button[contains(@class,'erp-add-btn')]")
     REFRESH_BUTTON = (By.XPATH, "//*[@mattooltip='REFRESH']/button")
     MORE_BUTTON = (By.XPATH, "//button[@mattooltip='More']")
 
@@ -156,7 +156,7 @@ class ErrorCodeMstPage:
             time.sleep(1.5)
             if not self._is_form_popup_open():
                 self.driver.execute_script(
-                    "document.querySelector(\"div[mattooltip='ADD'] button\").click();"
+                    "document.querySelector(\"button.erp-add-btn\").click();"
                 )
                 time.sleep(1.5)
         except Exception as e:

@@ -205,7 +205,7 @@ def create_user(driver, wait, username, email, first_name, last_name,
     # 1. Click Add button
     logger.info("  Clicking Add...")
     add_btn = wait.until(EC.element_to_be_clickable(
-        (By.XPATH, "//div[@mattooltip='ADD']//button")
+        (By.XPATH, "//button[contains(@class,'erp-add-btn')]")
     ))
     driver.execute_script("arguments[0].click();", add_btn)
     time.sleep(1)

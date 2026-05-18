@@ -54,7 +54,7 @@ class DesignationPage(BasePage):
     TOOLBAR = ("css", "ul.tbl-export-btn")
 
     SEARCH_BUTTON = ("css", "button.search-btn")
-    ADD_BUTTON = ("xpath", "//*[@mattooltip='ADD']/button")
+    ADD_BUTTON = ("xpath", "//button[contains(@class,'erp-add-btn')]")
     FILTER_BUTTON = ("css", "button.filter-btn")
     MORE_BUTTON = ("css", "button[mattooltip='More']")
 
@@ -178,7 +178,7 @@ class DesignationPage(BasePage):
         for attempt in range(retries):
             try:
                 add_div = self.driver.find_elements(
-                    By.CSS_SELECTOR, "div[mattooltip='ADD']"
+                    By.CSS_SELECTOR, "button.erp-add-btn"
                 )
                 add_btns = self.driver.find_elements(
                     By.CSS_SELECTOR,
@@ -209,7 +209,7 @@ class DesignationPage(BasePage):
         # Strategy 1: mattooltip div button
         try:
             divs = self.driver.find_elements(
-                By.CSS_SELECTOR, "div[mattooltip='ADD']"
+                By.CSS_SELECTOR, "button.erp-add-btn"
             )
             for div in divs:
                 btn = div.find_element(By.TAG_NAME, "button")
@@ -251,7 +251,7 @@ class DesignationPage(BasePage):
         # Strategy 3: div wrapper click
         try:
             divs = self.driver.find_elements(
-                By.CSS_SELECTOR, "div[mattooltip='ADD']"
+                By.CSS_SELECTOR, "button.erp-add-btn"
             )
             for div in divs:
                 self.driver.execute_script(

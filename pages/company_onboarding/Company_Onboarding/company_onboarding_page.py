@@ -28,7 +28,7 @@ class CompanyOnboardingPage(BasePage):
     PAGE_URL = f"{RHYTHMERP_BASE_URL}/#/dynamic-screens/Company%20Onboarding"
 
     # ---- Toolbar ----
-    ADD_BUTTON = ("css", "button[mattooltip='ADD'], div[mattooltip='ADD'] button")
+    ADD_BUTTON = ("css", "button.erp-add-btn")
     REFRESH_BUTTON = ("css", "button[mattooltip='REFRESH'], div[mattooltip='REFRESH'] button")
 
     # ---- Header fields (outside stepper) ----

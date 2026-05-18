@@ -64,7 +64,7 @@ class VehicleMasterPage(BasePage):
     # ==============================================================
     ADD_BUTTON = (
         "css",
-        "div[mattooltip='ADD'] button",
+        "button.erp-add-btn",
     )
     SEARCH_TOGGLE = ("css", "button.search-btn, button[aria-label='Search']")
     REFRESH_BUTTON = ("css", "button[mattooltip='Refresh']")
@@ -343,10 +343,10 @@ class VehicleMasterPage(BasePage):
         # Ensure toolbar is rendered
         self._wait_for_toolbar()
 
-        # Strategy 1: div[mattooltip='ADD'] button (matches actual HTML structure)
+        # Strategy 1: button.erp-add-btn (matches actual HTML structure)
         try:
             btn = self.driver.find_element(
-                By.CSS_SELECTOR, "div[mattooltip='ADD'] button"
+                By.CSS_SELECTOR, "button.erp-add-btn"
             )
             if btn.is_displayed():
                 self.driver.execute_script(
@@ -384,10 +384,10 @@ class VehicleMasterPage(BasePage):
         except Exception:
             pass
 
-        # Strategy 3: Click the div[mattooltip='ADD'] wrapper itself
+        # Strategy 3: Click the button.erp-add-btn wrapper itself
         try:
             div = self.driver.find_element(
-                By.CSS_SELECTOR, "div[mattooltip='ADD']"
+                By.CSS_SELECTOR, "button.erp-add-btn"
             )
             self.driver.execute_script(
                 "arguments[0].scrollIntoView({block:'center'});"
@@ -421,7 +421,7 @@ class VehicleMasterPage(BasePage):
             try:
                 # Check if ADD button container exists
                 add_container = self.driver.find_elements(
-                    By.CSS_SELECTOR, "div[mattooltip='ADD']"
+                    By.CSS_SELECTOR, "button.erp-add-btn"
                 )
                 if add_container and add_container[0].is_displayed():
                     return  # Toolbar is ready

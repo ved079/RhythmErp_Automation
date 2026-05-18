@@ -175,7 +175,7 @@ def create_entity_group(driver, wait, group_name, level):
     # 1. Click Add button
     logger.info("  Clicking Add...")
     add_btn = wait.until(EC.element_to_be_clickable(
-        (By.XPATH, "//div[@mattooltip='ADD']//button")   # precise from your HTML
+        (By.XPATH, "//button[contains(@class,'erp-add-btn')]")   # precise from your HTML
     ))
     driver.execute_script("arguments[0].click();", add_btn)
     time.sleep(1)
