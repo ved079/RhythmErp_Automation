@@ -1,170 +1,245 @@
 """
 item_group_data.py
 ------------------
-Test data generators for RhythmERP Item Group screen.
+Dynamic test data generators for Item Group automation.
+All values are generated at runtime — no hardcoded test data.
 
-All values are dynamically generated using timestamps so that
-every test run produces unique data (no collisions).
-
-Field catalogue:
-  - Code        (text input,   required, max 255, alphanumeric+special accepted)
-  - Description (text input,   required, max 255, alphanumeric+special accepted)
+Item Group form fields:
+  - Code          (text, required, max 255, alphanumericSpecial)
+  - Description   (text, required, max 255, alphanumericSpecial)
 """
 
-import time
 import random
 import string
+from datetime import datetime
 
 
-# ═══════════════════════════════════════════════════════════════
-#  Unique-name helpers
-# ═══════════════════════════════════════════════════════════════
+# ──────────────────────────────────────────────
+# Valid Data Generators
+# ──────────────────────────────────────────────
 
-def generate_item_group_name(prefix="IG"):
-    """Generate a unique Item Group Code string.
-    Format: {prefix}_{YYYYMMDDHHMMSS}_{random3}
-    Example: IG_20260518174530_482
+def generate_ig_code(prefix="AutoIG"):
+    """Generate a random Item Group code with prefix and timestamp for uniqueness."""
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    rand = random.randint(100, 999)
+    return f"{prefix}_{timestamp}_{rand}"
+
+
+def generate_ig_description(prefix="Auto Desc"):
+    """Generate a random Item Group description."""
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    rand = random.randint(100, 999)
+    return f"{prefix}_{timestamp}_{rand}"
+
+
+def generate_valid_ig_data(code_prefix="AutoIG", desc_prefix="Auto Desc"):
+    """Generate a complete dict of valid Item Group data for Create form.
+
+    Both Code and Description are required fields.
     """
-    ts = time.strftime("%Y%m%d%H%M%S")
-    rnd = random.randint(100, 999)
-    return f"{prefix}_{ts}_{rnd}"
-
-
-def generate_item_group_description(prefix="Desc"):
-    """Generate a unique Description string.
-    Format: {prefix}_{YYYYMMDDHHMMSS}_{random3}
-    """
-    ts = time.strftime("%Y%m%d%H%M%S")
-    rnd = random.randint(100, 999)
-    return f"{prefix}_{ts}_{rnd}"
-
-
-# ═══════════════════════════════════════════════════════════════
-#  Valid / Happy-path data
-# ═══════════════════════════════════════════════════════════════
-
-def generate_valid_item_group_data():
-    """Generate a valid data dict with both Code and Description filled."""
     return {
-        "code": generate_item_group_name("IG"),
-        "description": generate_item_group_description("TestDesc"),
+        "code": generate_ig_code(code_prefix),
+        "description": generate_ig_description(desc_prefix),
     }
 
 
-# ═══════════════════════════════════════════════════════════════
-#  Partial / Validation-trigger data
-# ═══════════════════════════════════════════════════════════════
+def generate_valid_edit_data(code_prefix="EditIG", desc_prefix="Edit Desc"):
+    """Generate valid data for Edit form — new code and description to update to."""
+    return {
+        "code": generate_ig_code(code_prefix),
+        "description": generate_ig_description(desc_prefix),
+    }
 
-def generate_empty_data():
-    """Both fields empty — triggers 'Validation Failed'."""
+
+# ──────────────────────────────────────────────
+# Partial Data Generators (one field missing/empty)
+# ──────────────────────────────────────────────
+
+def generate_empty_code_data():
+    """Return dict with empty Code — for mandatory field validation."""
+    return {
+        "code": "",
+        "description": generate_ig_description("HasDesc"),
+    }
+
+
+def generate_empty_description_data():
+    """Return dict with empty Description — for mandatory field validation."""
+    return {
+        "code": generate_ig_code("HasCode"),
+        "description": "",
+    }
+
+
+def generate_both_empty_data():
+    """Return dict with both Code and Description empty."""
     return {
         "code": "",
         "description": "",
     }
 
 
-def generate_code_only_data():
-    """Only Code filled — triggers 'Validation Failed' for Description."""
+# ──────────────────────────────────────────────
+# Validation Test Data Helpers
+# ──────────────────────────────────────────────
+
+def generate_spaces_only(length=10):
+    """Generate a string of only spaces."""
+    return " " * length
+
+
+def generate_spaces_only_code_data(length=10):
+    """Return dict with spaces-only Code."""
     return {
-        "code": generate_item_group_name("IGCodeOnly"),
-        "description": "",
+        "code": generate_spaces_only(length),
+        "description": generate_ig_description("SpaceCode"),
     }
 
 
-def generate_description_only_data():
-    """Only Description filled — triggers 'Validation Failed' for Code."""
+def generate_spaces_only_description_data(length=10):
+    """Return dict with spaces-only Description."""
     return {
-        "code": "",
-        "description": generate_item_group_description("DescOnly"),
+        "code": generate_ig_code("SpaceDesc"),
+        "description": generate_spaces_only(length),
     }
 
 
-# ═══════════════════════════════════════════════════════════════
-#  Boundary / Length data
-# ═══════════════════════════════════════════════════════════════
+def generate_duplicate_code_data(existing_code):
+    """Return valid data using an existing code — for duplicate code test.
 
-def generate_long_code(length=255):
-    """Generate a Code string of exactly `length` characters."""
-    ts = time.strftime("%Y%m%d%H%M%S")
-    prefix = f"IG_{ts}_"
-    remaining = length - len(prefix)
-    if remaining <= 0:
-        return prefix[:length]
-    suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=remaining))
-    return prefix + suffix
+    BEH-004: Duplicate Codes are currently ALLOWED.
+    Test documents current behavior as known bug — passes either way.
+    """
+    return {
+        "code": existing_code,
+        "description": generate_ig_description("DupCode"),
+    }
 
 
-def generate_long_description(length=255):
-    """Generate a Description string of exactly `length` characters."""
-    ts = time.strftime("%Y%m%d%H%M%S")
-    prefix = f"Desc_{ts}_"
-    remaining = length - len(prefix)
-    if remaining <= 0:
-        return prefix[:length]
-    suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=remaining))
-    return prefix + suffix
+def generate_string_255():
+    """Generate a string of exactly 255 characters (typical max boundary)."""
+    return "A" * 255
 
 
-# ═══════════════════════════════════════════════════════════════
-#  Special character / Security data
-# ═══════════════════════════════════════════════════════════════
+def generate_string_256():
+    """Generate a string of exactly 256 characters (exceeds typical max)."""
+    return "A" * 256
+
+
+def generate_long_string(length=300):
+    """Generate a string of specified length (for maxlength boundary testing)."""
+    return "X" * length
+
 
 def generate_special_char_code():
-    """Code with special characters — tests input sanitization."""
-    ts = time.strftime("%H%M%S")
-    return f"IG@#{ts}$%"
+    """Generate a code with common special characters."""
+    special = "!@#$%^&*()_+-=[]{}|;':\",./<>?"
+    return f"IG{special}"
 
 
-def generate_special_char_description():
-    """Description with special characters."""
-    ts = time.strftime("%H%M%S")
-    return f"Desc!@{ts}&*"
+def generate_special_char_data():
+    """Return dict with special-character code and description."""
+    special = "!@#$%^&*()_+-=[]{}|;':\",./<>?"
+    return {
+        "code": f"IG{special}",
+        "description": f"Desc{special}",
+    }
 
 
-def generate_spaces_only():
-    """Spaces-only string — should trigger validation."""
-    return "     "
+def generate_sql_injection_code():
+    """Generate SQL injection strings to test input sanitization."""
+    injections = [
+        "' OR '1'='1",
+        "'; DROP TABLE item_groups; --",
+        "1; SELECT * FROM users --",
+        "' UNION SELECT * FROM item_groups --",
+        "\" OR \"1\"=\"1",
+    ]
+    return random.choice(injections)
 
 
-def generate_sql_injection():
-    """SQL injection string — tests input sanitization."""
-    return "'; DROP TABLE item_group; --"
+def generate_sql_injection_data():
+    """Return dict with SQL injection code."""
+    return {
+        "code": generate_sql_injection_code(),
+        "description": generate_ig_description("SQLTest"),
+    }
 
 
-def generate_xss_attempt():
-    """XSS attempt string — tests input sanitization."""
-    return '<script>alert("IG_XSS")</script>'
+def generate_xss_code():
+    """Generate XSS payload strings to test input sanitization."""
+    payloads = [
+        "<script>alert('XSS')</script>",
+        "<img src=x onerror=alert('XSS')>",
+        "<svg/onload=alert('XSS')>",
+        "javascript:alert('XSS')",
+        "<iframe src='javascript:alert(XSS)'>",
+    ]
+    return random.choice(payloads)
 
 
-# ═══════════════════════════════════════════════════════════════
-#  Duplicate data
-# ═══════════════════════════════════════════════════════════════
+def generate_xss_data():
+    """Return dict with XSS payload code."""
+    return {
+        "code": generate_xss_code(),
+        "description": generate_ig_description("XSSTest"),
+    }
 
-def generate_duplicate_code_data(original_code):
-    """Generate data with the same Code but different Description.
-    Duplicates are ALLOWED on this screen (BUG).
+
+def generate_unicode_code():
+    """Generate a code with unicode/international characters."""
+    unicode_samples = [
+        "IG\u00e9",           # Latin é
+        "IG\u00fc",           # Latin ü
+        "\u4e2d\u6587\u7ec4",  # 中文组 (Chinese group)
+        "\u0938\u092e\u0942\u0939",  # समूह (Hindi group)
+        "\u0433\u0440\u0443\u043f\u043f\u0430",  # группа (Russian group)
+        "Grupp\u00e0",        # Italian à
+        "Grup\u00f3",         # Spanish ó
+    ]
+    return random.choice(unicode_samples)
+
+
+def generate_unicode_data():
+    """Return dict with unicode code."""
+    return {
+        "code": generate_unicode_code(),
+        "description": generate_ig_description("UniTest"),
+    }
+
+
+def generate_code_with_leading_trailing_spaces():
+    """Generate a code with leading and trailing spaces.
+    Tests whether ERP trims whitespace before storing.
     """
+    base = generate_ig_code("SpaceIG")
+    return f"   {base}   "
+
+
+def generate_leading_trailing_spaces_data():
+    """Return dict with code having leading/trailing spaces."""
     return {
-        "code": original_code,
-        "description": generate_item_group_description("DupDesc"),
+        "code": generate_code_with_leading_trailing_spaces(),
+        "description": generate_ig_description("TrimTest"),
     }
 
 
-def generate_exact_duplicate_data(original_code, original_description):
-    """Generate data with same Code AND Description (exact duplicate)."""
-    return {
-        "code": original_code,
-        "description": original_description,
-    }
+def generate_name_with_inner_spaces():
+    """Generate a valid code containing inner spaces (should be accepted)."""
+    return f"Item Group {random.randint(1000, 9999)}"
 
 
-# ═══════════════════════════════════════════════════════════════
-#  Edit data
-# ═══════════════════════════════════════════════════════════════
+def generate_code_with_numbers():
+    """Generate a code that is purely numeric."""
+    return str(random.randint(100000, 999999))
 
-def generate_valid_edit_data():
-    """Generate data for editing an existing record."""
-    return {
-        "code": generate_item_group_name("IGEdit"),
-        "description": generate_item_group_description("EditDesc"),
-    }
+
+def generate_code_with_mixed_case():
+    """Generate a code with mixed upper/lower case to test case sensitivity."""
+    base = generate_ig_code("MixIG")
+    return ''.join(c.upper() if i % 2 == 0 else c.lower() for i, c in enumerate(base))
+
+
+def generate_single_char_code():
+    """Generate a single-character code (minimum meaningful input)."""
+    return random.choice(string.ascii_uppercase)

@@ -89,7 +89,7 @@ class ServicesMasterPage(BasePage):
     # ==============================================================
     #  LOCATORS - Toolbar
     # ==============================================================
-    ADD_BUTTON = ("css", "div[mattooltip='ADD'] button")
+    ADD_BUTTON = ("css", "button.erp-add-btn")
     SEARCH_TOGGLE = ("css", "button.search-btn, button[aria-label='Search']")
     REFRESH_BUTTON = ("css", "button[mattooltip='Refresh']")
     FILTER_BUTTON = ("css", "div[mattooltip='Filters'] button")
@@ -340,10 +340,10 @@ class ServicesMasterPage(BasePage):
         log.info("Clicking ADD button on Services Master...")
         self._wait_for_toolbar()
 
-        # Strategy 1: div[mattooltip='ADD'] button
+        # Strategy 1: button.erp-add-btn
         try:
             btn = self.driver.find_element(
-                By.CSS_SELECTOR, "div[mattooltip='ADD'] button"
+                By.CSS_SELECTOR, "button.erp-add-btn"
             )
             if btn.is_displayed():
                 self.driver.execute_script(
@@ -398,7 +398,7 @@ class ServicesMasterPage(BasePage):
         for attempt in range(3):
             try:
                 add_container = self.driver.find_elements(
-                    By.CSS_SELECTOR, "div[mattooltip='ADD']"
+                    By.CSS_SELECTOR, "button.erp-add-btn"
                 )
                 if add_container and add_container[0].is_displayed():
                     return

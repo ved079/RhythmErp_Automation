@@ -7,8 +7,9 @@ Location: Commodity Settings > Commodity Master > Item Group
 URL:      /#/dynamic-screens/Item%20Group
 
 FORM LAYOUT (Simple popup — NOT a stepper):
-  - Code        (text input,   required, name="Code",   type="character", max 255)
-  - Description (text input,   required, name="Description", type="character", max 255)
+
+  - Code            (text input,   required, name="Code")
+  - Description     (text input,   required, name="Description")
   [Cancel] [Submit]
 
 TABLE COLUMNS (main listing):
@@ -19,12 +20,10 @@ KNOWN BEHAVIORS (confirmed via ERP exploration):
   BEH-001 : No dropdowns — both fields are text inputs (type="character")
   BEH-002 : No Status toggle on this screen
   BEH-003 : No Delete button — only View, Edit, History
-  BEH-004 : Duplicate Code ALLOWED — no uniqueness constraint (BUG)
-  BEH-005 : Both Code and Description accept alphanumeric + special chars
-  BEH-006 : Max length 255 for both fields
-  BEH-007 : 256+ chars triggers "Failed to save record" (server rejection)
-  BEH-008 : History button present and functional
-  BEH-009 : Fields use name="Code" / name="Description" (NOT formcontrolname)
+  BEH-004 : Duplicate Codes ALLOWED — no uniqueness constraint
+  BEH-005 : Both Code and Description are required
+  BEH-006 : History button present and functional
+  BEH-007 : Fields use name="Code" / name="Description" (NO formcontrolname)
 
 POPUP TYPES:
   Type A — "Validation Failed - Please correct the highlighted fields"
@@ -43,6 +42,7 @@ KEY RULES:
   - Edit mode: all fields editable, button says "Update"
   - View mode: all fields disabled, only Cancel button
   - History column uses cdk-column-archive (NOT cdk-column-history)
+  - History popup uses div.popup-overlay container (NOT mat-dialog-container)
 """
 
 import os
@@ -81,7 +81,7 @@ class ItemGroupPage(BasePage):
     # ==============================================================
     #  LOCATORS - Toolbar
     # ==============================================================
-    ADD_BUTTON = ("css", "div[mattooltip='ADD'] button")
+    ADD_BUTTON = ("css", "button.erp-add-btn")
     SEARCH_TOGGLE = ("css", "button.search-btn, button[aria-label='Search']")
     REFRESH_BUTTON = ("css", "button[mattooltip='Refresh']")
     FILTER_BUTTON = ("css", "div[mattooltip='Filters'] button")
@@ -122,7 +122,7 @@ class ItemGroupPage(BasePage):
         ".big-model, mat-dialog-container",
     )
 
-    # Text inputs — using name attribute (confirmed from ERP)
+    # Text inputs — using name attribute (matching ERP dynamic-screens pattern)
     CODE_INPUT = (
         "css",
         "input[name='Code']",
@@ -132,16 +132,16 @@ class ItemGroupPage(BasePage):
         "input[name='Description']",
     )
 
-    # Fallback locators using mat-label XPath
+    # Fallback locators using formcontrolname (just in case)
     CODE_INPUT_ALT = (
-        "xpath",
-        "//mat-label[contains(.,'Code') or contains(.,'code')]"
-        "/ancestor::mat-form-field//input",
+        "css",
+        "input[formcontrolname='code'], "
+        "input[formcontrolname='Code']",
     )
     DESCRIPTION_INPUT_ALT = (
-        "xpath",
-        "//mat-label[contains(.,'Description') or contains(.,'description')]"
-        "/ancestor::mat-form-field//input",
+        "css",
+        "input[formcontrolname='description'], "
+        "input[formcontrolname='Description']",
     )
 
     # Popup buttons
@@ -288,14 +288,14 @@ class ItemGroupPage(BasePage):
     # ==============================================================
 
     def open_add_form(self):
-        """Click the ADD (+) button to open the create popup form."""
+        """Click the ADD button to open the create popup form."""
         log.info("Clicking ADD button on Item Group...")
         self._wait_for_toolbar()
 
-        # Strategy 1: div[mattooltip='ADD'] button
+        # Strategy 1: button.erp-add-btn (confirmed HTML class)
         try:
             btn = self.driver.find_element(
-                By.CSS_SELECTOR, "div[mattooltip='ADD'] button"
+                By.CSS_SELECTOR, "button.erp-add-btn"
             )
             if btn.is_displayed():
                 self.driver.execute_script(
@@ -310,7 +310,31 @@ class ItemGroupPage(BasePage):
         except Exception:
             pass
 
-        # Strategy 2: mini-fab button with 'add' icon
+        # Strategy 2: button containing text "Add Item Group"
+        try:
+            btns = self.driver.find_elements(
+                By.CSS_SELECTOR, "button"
+            )
+            for btn in btns:
+                try:
+                    btn_text = btn.text.strip().lower()
+                    if ("add" in btn_text and "item" in btn_text 
+                            and btn.is_displayed()):
+                        self.driver.execute_script(
+                            "arguments[0].scrollIntoView({block:'center'});"
+                            "arguments[0].click();",
+                            btn,
+                        )
+                        self.wait_seconds(1.5)
+                        if self._is_form_popup_open():
+                            log.info("ADD form opened via text match on Item Group")
+                            return
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        # Strategy 3: mini-fab button with 'add' icon
         try:
             add_btns = self.driver.find_elements(
                 By.CSS_SELECTOR, "button.mat-mdc-mini-fab"
@@ -333,7 +357,25 @@ class ItemGroupPage(BasePage):
         except Exception:
             pass
 
-        # Strategy 3: click_with_retry
+        # Strategy 4: button.erp-add-btn (legacy fallback)
+        try:
+            btn = self.driver.find_element(
+                By.CSS_SELECTOR, "button.erp-add-btn"
+            )
+            if btn.is_displayed():
+                self.driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center'});"
+                    "arguments[0].click();",
+                    btn,
+                )
+                self.wait_seconds(1.5)
+                if self._is_form_popup_open():
+                    log.info("ADD form opened via mattooltip on Item Group")
+                    return
+        except Exception:
+            pass
+
+        # Strategy 5: click_with_retry
         try:
             self.click_with_retry(self.ADD_BUTTON)
             self.wait_seconds(1.5)
@@ -348,15 +390,31 @@ class ItemGroupPage(BasePage):
     def _wait_for_toolbar(self):
         """Wait for the toolbar and ADD button to be ready."""
         for attempt in range(3):
+            # Check button.erp-add-btn (confirmed class)
             try:
-                add_container = self.driver.find_elements(
-                    By.CSS_SELECTOR, "div[mattooltip='ADD']"
+                btn = self.driver.find_element(
+                    By.CSS_SELECTOR, "button.erp-add-btn"
                 )
-                if add_container and add_container[0].is_displayed():
+                if btn.is_displayed():
                     return
             except Exception:
                 pass
 
+            # Check button with text containing "Add Item Group"
+            try:
+                btns = self.driver.find_elements(By.CSS_SELECTOR, "button")
+                for btn in btns:
+                    try:
+                        btn_text = btn.text.strip().lower()
+                        if ("add" in btn_text and "item" in btn_text 
+                                and btn.is_displayed()):
+                            return
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+            # Check mini-fab with add icon
             try:
                 mini_fabs = self.driver.find_elements(
                     By.CSS_SELECTOR, "button.mat-mdc-mini-fab"
@@ -368,6 +426,16 @@ class ItemGroupPage(BasePage):
                             return
                     except Exception:
                         continue
+            except Exception:
+                pass
+
+            # Check legacy mattooltip
+            try:
+                add_container = self.driver.find_elements(
+                    By.CSS_SELECTOR, "button.erp-add-btn"
+                )
+                if add_container and add_container[0].is_displayed():
+                    return
             except Exception:
                 pass
 
@@ -394,6 +462,7 @@ class ItemGroupPage(BasePage):
 
     def is_add_form_open(self):
         """Check if the Add form is open by looking for Code input."""
+        # Try primary locator, then fallback
         if self.is_displayed(self.CODE_INPUT, timeout=5):
             return True
         return self.is_displayed(self.CODE_INPUT_ALT, timeout=3)
@@ -433,8 +502,8 @@ class ItemGroupPage(BasePage):
         Fill order: Code -> Description
 
         data dict keys:
-          - code        (str, required)
-          - description (str, required)
+          - code          (str, required)
+          - description   (str, required)
         """
         log.info("Filling Item Group form...")
 
@@ -474,7 +543,7 @@ class ItemGroupPage(BasePage):
                     el,
                 )
                 el.send_keys(text)
-                log.info(f"Typed '{text[:30]}...' via primary locator")
+                log.info(f"Typed '{text}' via primary locator")
                 return
         except Exception:
             pass
@@ -494,35 +563,37 @@ class ItemGroupPage(BasePage):
                     el,
                 )
                 el.send_keys(text)
-                log.info(f"Typed '{text[:30]}...' via fallback locator")
+                log.info(f"Typed '{text}' via fallback locator")
                 return
         except Exception:
             pass
 
-        # Last resort: find any visible text/character input in the popup
+        # Last resort: find any visible text input in the popup
         try:
             inputs = self.driver.find_elements(
                 By.CSS_SELECTOR,
-                ".big-model input, "
-                ".edit_pop_up input, "
-                "mat-dialog-container input",
+                ".big-model input[type='text'], "
+                ".edit_pop_up input[type='text'], "
+                "mat-dialog-container input[type='text'], "
+                ".big-model input[type='character'], "
+                ".edit_pop_up input[type='character']",
             )
             for inp in inputs:
                 try:
                     if inp.is_displayed() and inp.is_enabled():
                         inp.clear()
                         inp.send_keys(text)
-                        log.info(f"Typed '{text[:30]}...' via generic input")
+                        log.info(f"Typed '{text}' via generic text input")
                         return
                 except Exception:
                     continue
         except Exception:
             pass
 
-        log.warning(f"Could not type '{text[:30]}...' — no suitable input found")
+        log.warning(f"Could not type '{text}' — no suitable input found")
 
     # ==============================================================
-    #  Read form values
+    #  Read form field values
     # ==============================================================
 
     def get_code_value(self):
@@ -531,7 +602,9 @@ class ItemGroupPage(BasePage):
 
     def get_description_value(self):
         """Read the current value of the Description input."""
-        return self._read_input_value(self.DESCRIPTION_INPUT, self.DESCRIPTION_INPUT_ALT)
+        return self._read_input_value(
+            self.DESCRIPTION_INPUT, self.DESCRIPTION_INPUT_ALT
+        )
 
     def _read_input_value(self, primary_locator, fallback_locator):
         """Read the value of an input field, trying primary then fallback."""
@@ -553,47 +626,15 @@ class ItemGroupPage(BasePage):
             "description": self.get_description_value(),
         }
 
-    def get_input_value(self, locator):
-        """Get value of an input by locator tuple."""
-        try:
-            el = self.find_visible_element(locator, timeout=5)
-            if el:
-                return (el.get_attribute("value") or "").strip()
-        except Exception:
-            pass
-        return ""
-
-    def type_text(self, locator, text, clear_first=False):
-        """Type text into a field identified by locator."""
-        try:
-            el = self.find_visible_element(locator, timeout=5)
-            if el:
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});", el
-                )
-                if clear_first:
-                    self.driver.execute_script(
-                        "var s = Object.getOwnPropertyDescriptor("
-                        "window.HTMLInputElement.prototype,'value').set;"
-                        "s.call(arguments[0], '');"
-                        "arguments[0].dispatchEvent(new Event('input',{bubbles:true}));",
-                        el,
-                    )
-                el.send_keys(text)
-                log.info(f"Typed '{text[:30]}' into locator")
-                return
-        except Exception:
-            pass
-        log.warning(f"Could not type into locator")
-
-    def is_field_enabled(self, locator):
-        """Check if a field is enabled (editable)."""
-        try:
-            el = self.find_visible_element(locator, timeout=5)
-            if el:
-                return el.is_enabled()
-        except Exception:
-            pass
+    def is_input_disabled(self, primary_locator, fallback_locator):
+        """Check if an input field is disabled (read-only)."""
+        for locator in [primary_locator, fallback_locator]:
+            try:
+                el = self.find_visible_element(locator, timeout=3)
+                if el:
+                    return not el.is_enabled()
+            except Exception:
+                continue
         return False
 
     # ==============================================================
@@ -712,6 +753,7 @@ class ItemGroupPage(BasePage):
 
     def handle_validation_warning(self, timeout=10):
         """Handle 'Validation Failed' SweetAlert2 popup (Type A).
+        Appears when required fields are empty (client-side).
         Returns the alert title text, or '' if no alert appeared.
         """
         log.info("Handling validation warning...")
@@ -734,6 +776,7 @@ class ItemGroupPage(BasePage):
 
     def handle_save_failure_alert(self, timeout=10):
         """Handle 'Failed to save record' SweetAlert2 popup (Type B).
+        This popup appears when server-side validation rejects the data.
         Uses JS click to avoid StaleElementReferenceException.
         Returns the alert title text, or '' if no alert appeared.
         """
@@ -747,6 +790,7 @@ class ItemGroupPage(BasePage):
             title = self.get_swal_title()
             log.info(f"Save failure alert: {title}")
 
+            # Read the HTML message if available
             try:
                 html_el = self.driver.find_element(
                     By.CSS_SELECTOR, ".swal2-html-container"
@@ -777,6 +821,7 @@ class ItemGroupPage(BasePage):
         )
         self.wait_seconds(0.3)
 
+        # Fallback: click ALL swal2-confirm buttons
         try:
             remaining = self.driver.find_elements(
                 By.CSS_SELECTOR, ".swal2-confirm"
@@ -905,9 +950,6 @@ class ItemGroupPage(BasePage):
         Note: Uses cdk-column-archive (NOT cdk-column-history).
         """
         log.info(f"Clicking History button (name={item_name}, row={row_index})...")
-
-        self._force_close_panels()
-
         if item_name:
             try:
                 locator = (
@@ -924,47 +966,7 @@ class ItemGroupPage(BasePage):
             except Exception:
                 pass
 
-        # Fallback: use cdk-column-archive directly by row index
-        row = row_index + 1  # XPath is 1-based
-        try:
-            locator = (
-                "xpath",
-                f"(//tr[contains(@class,'mat-mdc-row')])[{row}]"
-                f"//td[contains(@class,'cdk-column-archive')]"
-                f"//button",
-            )
-            btn = self.find_visible_element(locator, timeout=5)
-            if btn:
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});", btn
-                )
-                self.wait_seconds(0.5)
-                self.driver.execute_script("arguments[0].click();", btn)
-                log.info("History button clicked via JS")
-                self.wait_seconds(2)
-                return True
-        except Exception:
-            pass
-
-        # Last resort: find ALL archive buttons and click by index
-        try:
-            all_archive_btns = self.driver.find_elements(
-                By.CSS_SELECTOR, "td.cdk-column-archive button"
-            )
-            if row_index < len(all_archive_btns):
-                btn = all_archive_btns[row_index]
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});", btn
-                )
-                self.wait_seconds(0.5)
-                self.driver.execute_script("arguments[0].click();", btn)
-                log.info(f"History button clicked by index {row_index}")
-                self.wait_seconds(2)
-                return True
-        except Exception:
-            pass
-
-        raise Exception(f"History button not found for row {row_index}")
+        return self._click_action_button_by_index(row_index, 2)
 
     def _click_action_button_by_index(self, row_index, btn_index):
         """Click an action button by row and button index."""
@@ -1021,9 +1023,9 @@ class ItemGroupPage(BasePage):
             # Try fallback locator
             try:
                 inp = self.driver.find_element(
-                    By.XPATH,
-                    "//mat-label[contains(.,'Code')]"
-                    "/ancestor::mat-form-field//input"
+                    By.CSS_SELECTOR,
+                    "input[formcontrolname='code'], "
+                    "input[formcontrolname='Code']"
                 )
                 if not inp.is_enabled():
                     return True
@@ -1041,228 +1043,428 @@ class ItemGroupPage(BasePage):
     # ==============================================================
 
     def is_history_popup_open(self):
-        """Check if the History popup is visible."""
+        """Check if the History popup is visible.
+        Uses div.popup-overlay + h3 containing 'history' text,
+        with fallback to div.big-model.
+        """
         try:
-            # Check mat-dialog containers
-            dialogs = self.driver.find_elements(
-                By.CSS_SELECTOR, "mat-dialog-container"
-            )
-            for d in dialogs:
-                try:
-                    if d.is_displayed():
-                        text = d.text.lower()
-                        if "history" in text:
-                            return True
-                except Exception:
-                    continue
-
-            # Check popup-overlay (confirmed from ERP HTML)
-            overlays = self.driver.find_elements(
-                By.CSS_SELECTOR, "div.popup-overlay"
-            )
-            for o in overlays:
-                try:
-                    if o.is_displayed():
-                        text = o.text.lower()
-                        if "history" in text:
-                            return True
-                except Exception:
-                    continue
-
-            # Fallback: check big-model / edit_pop_up
             popups = self.driver.find_elements(
-                By.CSS_SELECTOR, "div.big-model, div.edit_pop_up"
+                By.CSS_SELECTOR,
+                "div.popup-overlay, div.big-model, div.edit_pop_up"
             )
             for p in popups:
                 try:
-                    if p.is_displayed():
-                        text = p.text.lower()
-                        if "history" in text:
+                    h3s = p.find_elements(By.CSS_SELECTOR, "h3")
+                    for h in h3s:
+                        if "history" in h.text.lower() and p.is_displayed():
                             return True
                 except Exception:
                     continue
+        except (InvalidSessionIdException, WebDriverException):
+            log.error("Browser session lost during history popup check")
+            raise
         except Exception:
             pass
         return False
-
-    def get_history_table_headers(self):
-        """Get column header texts from the History popup table."""
-        headers = []
-        try:
-            header_els = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                ".popup-body table thead th, "
-                "div.popup-overlay table thead th"
-            )
-            for h in header_els:
-                try:
-                    text = h.text.strip()
-                    if text:
-                        headers.append(text)
-                except Exception:
-                    continue
-        except Exception:
-            pass
-        return headers
 
     def close_history_popup(self):
         """Close the History popup."""
         log.info("Closing History popup...")
         try:
-            # Try Cancel button in popup footer
-            btns = self.driver.find_elements(
-                By.CSS_SELECTOR, "div.popup-footer button"
-            )
-            for b in btns:
-                try:
-                    text = b.text.strip().lower()
-                    if ("cancel" in text or "close" in text) and b.is_displayed():
-                        self.driver.execute_script("arguments[0].click();", b)
-                        self.wait_seconds(1)
-                        return
-                except Exception:
-                    continue
+            close_btn = self.find_visible_element(self.HISTORY_CLOSE_BUTTON, timeout=5)
+            if close_btn:
+                self.driver.execute_script("arguments[0].click();", close_btn)
+                self.wait_seconds(0.5)
+                return
         except Exception:
             pass
 
-        # Fallback: close via header X button
+        # Fallback: find any Cancel/Close in visible popup
         try:
-            close_btns = self.driver.find_elements(
-                By.CSS_SELECTOR, "div.popup-header button"
+            btns = self.driver.find_elements(
+                By.XPATH,
+                "//div[contains(@class,'popup-overlay') or contains(@class,'big-model')]"
+                "//button[contains(.,'Cancel') or contains(.,'Close')]"
             )
-            for b in close_btns:
+            for btn in btns:
                 try:
-                    icon = b.find_element(By.CSS_SELECTOR, "mat-icon")
-                    if icon.text.strip().lower() == "close" and b.is_displayed():
-                        self.driver.execute_script("arguments[0].click();", b)
-                        self.wait_seconds(1)
+                    if btn.is_displayed():
+                        self.driver.execute_script("arguments[0].click();", btn)
+                        self.wait_seconds(0.5)
                         return
                 except Exception:
                     continue
         except Exception:
             pass
 
-        # Nuclear: remove via JS
-        self.driver.execute_script("""
-            document.querySelectorAll('div.popup-overlay')
-            .forEach(function(el) { el.remove(); });
-        """)
-        self.wait_seconds(0.5)
+        log.warning("Could not close History popup")
+
+    def get_history_row_count(self):
+        """Count rows in the History popup table."""
+        # Strategy 1: Look inside popup-overlay (confirmed container)
+        try:
+            rows = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "div.popup-overlay table tbody tr, "
+                "div.popup-overlay .popup-body table tbody tr"
+            )
+            if rows:
+                return len(rows)
+        except Exception:
+            pass
+
+        # Strategy 2: Original selectors
+        try:
+            rows = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                ".popup-body table tbody tr, .big-model table tbody tr"
+            )
+            if rows:
+                return len(rows)
+        except Exception:
+            pass
+
+        # Strategy 3: Any table rows inside any visible popup
+        try:
+            popups = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "div.popup-overlay, div.big-model, div.edit_pop_up"
+            )
+            for popup in popups:
+                try:
+                    if popup.is_displayed():
+                        rows = popup.find_elements(
+                            By.CSS_SELECTOR, "table tbody tr"
+                        )
+                        visible_rows = [
+                            r for r in rows
+                            if r.is_displayed() and r.text.strip()
+                        ]
+                        if visible_rows:
+                            return len(visible_rows)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        # Strategy 4: Generic — any table rows on the page inside an overlay
+        try:
+            rows = self.driver.find_elements(
+                By.CSS_SELECTOR, "table tbody tr"
+            )
+            visible = [r for r in rows if r.is_displayed() and r.text.strip()]
+            if visible:
+                return len(visible)
+        except Exception:
+            pass
+
+        return 0
+
 
     # ==============================================================
     #  Table data helpers
     # ==============================================================
 
     def get_table_row_count(self):
-        """Get the number of data rows in the table."""
+        """Count visible data rows in the table."""
         try:
             rows = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "table#excel-table tbody tr.mat-mdc-row"
+                By.CSS_SELECTOR, "table#excel-table tbody tr"
             )
             return len(rows)
         except Exception:
             return 0
 
-    def get_cell_text_by_row(self, row_index, col_index):
-        """Get cell text by row and column index."""
+    def get_all_codes(self):
+        """List all Code values in the table."""
+        names = []
+        for css_selector in [
+            "table#excel-table tbody td.cdk-column-code",
+            "table#excel-table tbody td.mat-column-code",
+        ]:
+            try:
+                cells = self.driver.find_elements(By.CSS_SELECTOR, css_selector)
+                for cell in cells:
+                    try:
+                        text = cell.text.strip()
+                        if text:
+                            names.append(text)
+                    except Exception:
+                        continue
+                if names:
+                    return names
+            except Exception:
+                continue
+
+        # Fallback: get first data cell from each row
         try:
             rows = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "table#excel-table tbody tr.mat-mdc-row"
+                By.CSS_SELECTOR, "table#excel-table tbody tr"
             )
-            if row_index < len(rows):
-                cells = rows[row_index].find_elements(By.CSS_SELECTOR, "td")
-                if col_index < len(cells):
-                    return cells[col_index].text.strip()
-        except Exception:
-            pass
-        return ""
-
-    def get_all_item_names(self):
-        """Get all Code values from the table."""
-        names = []
-        try:
-            cells = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "table#excel-table tbody td.cdk-column-code"
-            )
-            for cell in cells:
+            for row in rows:
                 try:
-                    text = cell.text.strip()
-                    if text:
-                        names.append(text)
+                    cells = row.find_elements(By.TAG_NAME, "td")
+                    data_cells = [c for c in cells if c.text.strip()]
+                    # Skip action button columns — code is the first data column
+                    for cell in data_cells:
+                        text = cell.text.strip()
+                        if text:
+                            names.append(text)
+                            break
                 except Exception:
                     continue
         except Exception:
             pass
         return names
 
-    def is_record_in_table(self, name):
-        """Check if a record with the given name exists in the table."""
-        names = self.get_all_item_names()
-        return any(name.lower() in n.lower() for n in names)
+    def is_item_group_in_table(self, code):
+        """Check if an Item Group with the given code appears in the table."""
+        codes = self.get_all_codes()
+        return any(code.strip().lower() in c.lower() for c in codes)
 
-    def search_record(self, name):
-        """Search for a record by name using the search input."""
-        log.info(f"Searching for: {name}")
+    def find_row_index_by_code(self, code):
+        """Find the 0-based row index for an Item Group by code.
+        Returns -1 if not found.
+        """
+        rows = self.driver.find_elements(
+            By.CSS_SELECTOR, "table#excel-table tbody tr"
+        )
+        for i, row in enumerate(rows):
+            try:
+                cells = row.find_elements(By.TAG_NAME, "td")
+                for cell in cells:
+                    if code.strip().lower() in cell.text.strip().lower():
+                        return i
+            except Exception:
+                continue
+        return -1
+
+    # ==============================================================
+    #  Search
+    # ==============================================================
+
+    def search_item_group(self, search_text):
+        """Search for an Item Group by text in the search bar.
+        Returns True if a matching result appears in the table.
+        """
+        log.info(f"Searching for: {search_text}")
         try:
-            # Toggle search if not visible
-            search_input = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "input#erpSearchInput, .erp-search-wrapper input"
-            )
-            if not search_input or not search_input[0].is_displayed():
-                self.click_with_retry(self.SEARCH_TOGGLE)
-                self.wait_seconds(1)
+            # Click search toggle to open search bar
+            try:
+                search_btns = self.driver.find_elements(
+                    By.CSS_SELECTOR, "button.search-btn"
+                )
+                for btn in search_btns:
+                    try:
+                        if btn.is_displayed():
+                            self.driver.execute_script("arguments[0].click();", btn)
+                            self.wait_seconds(1)
+                            break
+                    except Exception:
+                        continue
+            except Exception:
+                pass
 
-            # Find and fill search input
-            search_input = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "input#erpSearchInput, .erp-search-wrapper input"
-            )
-            if search_input and search_input[0].is_displayed():
-                si = search_input[0]
-                si.clear()
-                si.send_keys(name)
+            # Type in search input
+            try:
+                search_input = self.driver.find_element(
+                    By.CSS_SELECTOR,
+                    "input#erpSearchInput, .erp-search-wrapper input",
+                )
+                # Clear using JS native setter
+                self.driver.execute_script(
+                    "var s = Object.getOwnPropertyDescriptor("
+                    "window.HTMLInputElement.prototype,'value').set;"
+                    "s.call(arguments[0], '');"
+                    "arguments[0].dispatchEvent(new Event('input',{bubbles:true}));",
+                    search_input,
+                )
+                search_input.send_keys(search_text)
+                search_input.send_keys(Keys.ENTER)
                 self.wait_seconds(2)
-                return True
+            except Exception:
+                log.warning("Search input not found")
+                return False
+
+            # Check if the search text appears in the table
+            return self.is_item_group_in_table(search_text)
+
+        except Exception:
+            log.warning("Search failed")
+            return False
+
+    def clear_search(self):
+        """Clear the search bar and refresh the table."""
+        log.info("Clearing search...")
+        try:
+            search_input = self.driver.find_element(
+                By.CSS_SELECTOR,
+                "input#erpSearchInput, .erp-search-wrapper input",
+            )
+            self.driver.execute_script(
+                "var s = Object.getOwnPropertyDescriptor("
+                "window.HTMLInputElement.prototype,'value').set;"
+                "s.call(arguments[0], '');"
+                "arguments[0].dispatchEvent(new Event('input',{bubbles:true}));",
+                search_input,
+            )
+            search_input.send_keys(Keys.ENTER)
+            self.wait_seconds(1)
+        except Exception:
+            pass
+        self.click_refresh()
+        self.wait_seconds(2)
+
+    # ==============================================================
+    #  Filter panel
+    # ==============================================================
+
+    def open_filter_panel(self):
+        """Open the filter panel."""
+        log.info("Opening filter panel...")
+        try:
+            self.click_with_retry(self.FILTER_BUTTON)
+            self.wait_seconds(1)
+        except Exception:
+            log.warning("Filter button not found")
+
+    def is_filter_panel_open(self):
+        """Check if the filter panel is visible."""
+        try:
+            panels = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                ".filter-panel, .cdk-overlay-pane filter-panel, "
+                "div.cdk-overlay-pane [role='listbox']",
+            )
+            for p in panels:
+                try:
+                    if p.is_displayed():
+                        return True
+                except Exception:
+                    continue
         except Exception:
             pass
         return False
 
-    def search_item(self, name):
-        """Alias for search_record."""
-        return self.search_record(name)
+    def close_filter_panel(self):
+        """Close the filter panel."""
+        log.info("Closing filter panel...")
+        self._force_close_panels()
+        self.wait_seconds(0.5)
 
-    def clear_search(self):
-        """Clear the search input."""
+    # ==============================================================
+    #  High-level convenience methods
+    # ==============================================================
+
+    def create_item_group(self, data):
+        """Create an Item Group using the provided data dict.
+        Returns the code used for the new Item Group.
+
+        data dict keys:
+          - code          (str, required)
+          - description   (str, required)
+        """
+        log.info(f"Creating Item Group: code={data.get('code', '')}")
+        code = data.get("code", "")
+
+        self.open_add_form()
+        self.wait_seconds(1)
+
+        if not self.is_add_form_open():
+            raise Exception("Add form did not open for Item Group creation")
+
+        self.fill_form(data)
+        self.submit()
+        self.wait_seconds(2)
+
+        # Handle SweetAlert2 (success or validation)
+        if self.is_validation_alert_present(timeout=5):
+            title = self.get_swal_title()
+            if "Validation Failed" in title or "Failed" in title:
+                log.warning(f"Validation during create: {title}")
+                self._dismiss_swal_confirm()
+                self._cleanup_swal_containers()
+            else:
+                self._dismiss_swal_confirm()
+                self._cleanup_swal_containers()
+        else:
+            # Check for success alert
+            self.handle_success_alert(timeout=5)
+
+        IG_SUBMISSIONS.append({
+            "action": "create",
+            "code": code,
+            "data": data,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        })
+
+        return code
+
+    def edit_item_group(self, existing_code, new_data):
+        """Edit an existing Item Group.
+        Returns the new code from new_data.
+
+        Args:
+            existing_code: code of the Item Group row to edit
+            new_data: dict with code and/or description to update
+        """
+        log.info(f"Editing Item Group: {existing_code}")
+
+        self.click_edit_button(item_name=existing_code)
+        self.wait_seconds(1)
+
+        if not self.is_edit_mode():
+            log.warning("Edit form not detected, trying to proceed anyway")
+
+        self.fill_form(new_data)
+        self.click_update()
+        self.wait_seconds(2)
+
+        # Handle SweetAlert2
+        if self.is_validation_alert_present(timeout=5):
+            title = self.get_swal_title()
+            self._dismiss_swal_confirm()
+            self._cleanup_swal_containers()
+        else:
+            self.handle_success_alert(timeout=5)
+
+        IG_SUBMISSIONS.append({
+            "action": "edit",
+            "original_code": existing_code,
+            "new_data": new_data,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        })
+
+        return new_data.get("code", existing_code)
+
+    def view_item_group(self, code):
+        """Open the View popup for an Item Group.
+
+        Args:
+            code: code of the Item Group row to view
+        """
+        log.info(f"Viewing Item Group: {code}")
+        self.click_view_button(item_name=code)
+        self.wait_seconds(1)
+
+    def open_history(self, code):
+        """Open the History popup for an Item Group.
+
+        Args:
+            code: code of the Item Group row to view history
+        """
+        log.info(f"Opening History for Item Group: {code}")
+        self.click_history_button(item_name=code)
+        self.wait_seconds(1)
+
+    def get_form_heading(self):
+        """Read the heading text of the current popup."""
         try:
-            search_input = self.driver.find_elements(
+            el = self.driver.find_element(
                 By.CSS_SELECTOR,
-                "input#erpSearchInput, .erp-search-wrapper input"
+                ".edit_pop_up h3, .big-model h3, "
+                "mat-dialog-container h3, .mat-mdc-dialog-title",
             )
-            if search_input and search_input[0].is_displayed():
-                search_input[0].clear()
-                self.wait_seconds(1)
+            return el.text.strip()
         except Exception:
-            pass
-
-    def refresh_table(self):
-        """Refresh the table via the Refresh button."""
-        self.click_refresh()
-
-    def wait_for_form_to_close(self, timeout=10):
-        """Wait for the form popup to close after a successful save."""
-        try:
-            WebDriverWait(self.driver, timeout).until(
-                EC.invisibility_of_element_located(
-                    (By.CSS_SELECTOR, "div.big-model, div.edit_pop_up")
-                )
-            )
-        except TimeoutException:
-            pass
-
-    def wait_seconds(self, seconds):
-        """Wait for a specified number of seconds."""
-        time.sleep(seconds)
+            return ""
