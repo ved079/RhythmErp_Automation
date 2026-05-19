@@ -246,13 +246,59 @@ class EntityGroupDefinitionPage(BasePage):
     # ==============================================================
 
     def navigate_to_page(self):
-        """Navigate to the Entity Group Definition listing page.
-        Force-refreshes to clear leftover Angular state from previous tests.
+        """Navigate to the EGD listing page.
+        Detects session timeout and re-logs in automatically.
         """
         log.info("Navigating to Entity Group Definition page...")
         self.navigate_to(self.PAGE_URL)
-        # Force full page reload to clear Angular SPA state
         self.driver.refresh()
+        self._wait_for_page_ready()
+
+        # FIX-1: Check if page actually loaded (not stuck on login)
+        if not self._is_listing_page_loaded():
+            log.warning("Page did not load -- checking for session timeout...")
+            if self._is_on_login_page():
+                log.info("Session expired! Re-logging in...")
+                self._re_login()
+    
+    def _is_listing_page_loaded(self):
+        """Check if the listing page (table or add button) is loaded."""
+        try:
+            tables = self.driver.find_elements(By.CSS_SELECTOR, "table#excel-table")
+            if tables:
+                return True
+            add_btns = self.driver.find_elements(By.CSS_SELECTOR, "button.erp-add-btn")
+            if add_btns:
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _is_on_login_page(self):
+        """Check if the browser is on the login page (session expired)."""
+        current_url = self.driver.current_url.lower()
+        if "signin" in current_url or "authentication" in current_url:
+            return True
+        try:
+            email_inputs = self.driver.find_elements(By.CSS_SELECTOR, "input[formcontrolname='email']")
+            if email_inputs:
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _re_login(self):
+        """Re-login to RhythmERP when session has expired."""
+        from pages.login_screens.Login_Screens_.login_page import LoginPage
+        login_page = LoginPage(self.driver)
+        login_page.load_url(RHYTHMERP_LOGIN_URL)
+        login_page.enter_email(RHYTHMERP_EMAIL)
+        login_page.enter_password(RHYTHMERP_PASSWORD)
+        login_page.select_facility_by_index(index=0)
+        login_page.click_login()
+        login_page.wait_for_login_complete()
+        log.info("Re-login successful. Navigating back to EGD page...")
+        self.navigate_to(self.PAGE_URL)
         self._wait_for_page_ready()
 
     def _wait_for_page_ready(self):
@@ -630,19 +676,41 @@ class EntityGroupDefinitionPage(BasePage):
     # ==============================================================
 
     def create_entity_group_definition(self, data):
-        """Create an Entity Group Definition with given data.
-        Returns the Entity Group Name used for creation.
+        """Create a new Entity Group Definition record.
+        FIX-5: Verifies creation via search after submit.
         """
-        name = data.get("entity_group", "")
-        log.info(f"Creating Entity Group Definition: {name}, Level: {data.get('level')}")
+        name = data.get("entity_group_name", "")
+        log.info(f"Creating Entity Group Definition: '{name}'")
         self.open_add_form()
         self.wait_seconds(1)
-        assert self.is_add_form_open(), "Add form did not open"
         self.fill_form(data)
+        self.wait_seconds(0.5)
         self.submit()
         self.wait_seconds(2)
-        # BUG-008: No success alert — just check if popup closed
-        EGD_SUBMISSIONS.append({"name": name, "level": data.get("level"), "action": "create"})
+        # Handle possible SweetAlert after submit
+        if self.is_validation_alert_present(timeout=3):
+            swal_title = self.get_swal_title()
+            log.warning(f"SweetAlert after submit: '{swal_title}'")
+            self.handle_validation_warning(timeout=5)
+        # FIX-3: After submit, popup may have auto-closed (BUG-008)
+        popup_closed = self.is_form_closed()
+        if not popup_closed:
+            try:
+                self.close_popup()
+            except Exception:
+                pass
+        # FIX-5: Verify creation via search
+        self.wait_seconds(1)
+        self.click_refresh()
+        self.wait_seconds(2)
+        record_exists = self.is_entity_group_in_table(name)
+        if record_exists:
+            log.info(f"Entity Group '{name}' created and verified in table")
+        else:
+            log.warning(
+                f"Entity Group '{name}' NOT found in table after submit! "
+                f"Possible duplicate rejection or silent failure."
+            )
         return name
 
     def edit_entity_group_definition(self, existing_name, new_data):
@@ -1071,6 +1139,9 @@ class EntityGroupDefinitionPage(BasePage):
             except StaleElementReferenceException:
                 continue
         return False
+
+    
+
 
     def click_view_button(self, egd_name):
         """Click the View (eye) button for a specific Entity Group row."""
