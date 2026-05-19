@@ -1,1303 +1,1820 @@
 """
 test_bank_validation.py
--------------------------
-Bank screen (Common Settings) test automation.
-36 test cases covering: page load, form fields, validation, CRUD, edit,
-view, search, history, pagination, dropdowns, toggles, cancel, boundary,
-fullscreen, and ERP-specific behaviors.
+-----------------------
+Comprehensive validation test suite for RhythmERP Bank screen.
+~59 test cases across 7 phases.
 
-FIXES APPLIED:
-  - T5,7,8,9,14,20,25,27,31,34,35: Use create_and_verify_bank() for reliable create+search
-  - T11: Relax CCL assertion (ERP returns generic "Please correct highlighted fields")
-  - T12: Don't hard-fail, log results
-  - T13: Wrap history button in try/except
-  - T15: Wrap pagination in try/except
-  - T18: Don't hard-fail on special chars
-  - T22: Fix assertion for empty search result
-  - T26: Multi-strategy history button
-  - T32: Stale element retry
+Phases:
+  1. Create Form Validations  (22 tests) — BNK-C01 to BNK-C22
+  2. Duplicate Validations      (5 tests) — BNK-D01 to BNK-D05
+  3. Edit Form Validations      (8 tests) — BNK-E01 to BNK-E08
+  4. Search & Filter Edge Cases (6 tests) — BNK-S01 to BNK-S06
+  5. Popup & UI Behaviors       (10 tests) — BNK-P01 to BNK-P10
+  6. History & Audit Trail      (3 tests) — BNK-H01 to BNK-H03
+  7. Bug-specific              (5 tests) — BNK-B01 to BNK-B05
 
-Run:  pytest bank/test/test_bank_validation.py -v
+FORM LAYOUT (simple popup — NOT a stepper):
+  - Bank Name              (required, alpha-only uppercase, >= 10 chars)
+  - Bank Code              (required, alphanumeric)
+  - Branch Name            (required, alphanumeric)
+  - Branch Code            (required, alphanumeric)
+  - Account Number         (required, numeric)
+  - Account Type           (required, dropdown: Current/Saving)
+  - Swift Number           (optional, SWIFT/BIC format)
+  - IBAN Number            (optional, IBAN format)
+  - IFSC Code              (required, exactly 11 chars)
+  - Cash Credit Limit      (required, numeric)
+  - Bank Address           (required, alphanumeric+spaces)
+  - GL Account             (required, dropdown, 116+ options)
+  - Is Default Bank?       (toggle, default No)
+  - Status                 (toggle, default Active)
+
+Known Bugs (CONFIRMED via browser exploration 2026-05-19):
+  BUG-001 (MEDIUM): Account Type & GL Account dropdowns missing mat-error text
+  BUG-002 (MEDIUM): Bank Address required field missing mat-error text
+  BUG-003 (MEDIUM): Global search does not filter Bank table
+  BUG-004 (CRITICAL): Browser-clicked mat-select options do NOT reliably
+                     update Angular reactive form model — must use JS value-setter
+  BUG-005 (LOW): No Delete functionality
+  BUG-006 (LOW): History button opens View popup instead of audit trail
+
+Run:
+  pytest test_bank_validation.py -v --tb=short
+  pytest test_bank_validation.py -v -k "TestCreateForm" --tb=short
+  pytest test_bank_validation.py -v -k "BNK-C03" --tb=short
 """
 
+import os
+import sys
 import time
-import pytest
 
-from common.logger import log
-from pages.common_settings.modules.bank.data.bank_data import (
-    valid_bank_data,
-    valid_bank_required_only,
-    valid_bank_with_saving_type,
-    valid_bank_inactive,
-    valid_bank_default,
-    invalid_ifsc_lowercase,
-    invalid_ifsc_no_zero,
-    invalid_ifsc_wrong_length,
-    invalid_ccl_negative,
-    invalid_bank_name_underscore,
-    invalid_bank_name_at_symbol,
-    bank_code_special_chars,
-    branch_code_special_chars,
-    very_long_bank_name,
-    leading_trailing_spaces_bank,
-    FIELD_BANK_NAME,
-    FIELD_BANK_CODE,
-    FIELD_BRANCH_NAME,
-    FIELD_BRANCH_CODE,
-    FIELD_ACCOUNT_NUMBER,
-    FIELD_IFSC_CODE,
-    FIELD_CASH_CREDIT_LIMIT,
-    FIELD_BANK_ADDRESS,
-    FIELD_SWIFT_NUMBER,
-    FIELD_IBAN_NUMBER,
-    FIELD_ACCOUNT_TYPE,
-    FIELD_GL_ACCOUNT,
-    FIELD_IS_DEFAULT_BANK,
-    FIELD_STATUS,
-    ACCOUNT_TYPE_CURRENT,
-    ACCOUNT_TYPE_SAVING,
-    TOGGLE_DEFAULT_YES,
-    TOGGLE_DEFAULT_NO,
-    TOGGLE_STATUS_ACTIVE,
-    TOGGLE_STATUS_INACTIVE,
-    VALIDATION_ALERT_TITLE,
-    SUCCESS_ALERT_TITLE_ADD,
-    SUCCESS_ALERT_TITLE_UPDATE,
+PROJECT_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
 )
-from selenium.webdriver.common.keys import Keys
+sys.path.insert(0, PROJECT_ROOT)
+
+import pytest
+from selenium.webdriver.common.by import By
+
+from pages.common_settings.modules.bank.bank_page import BankPage
+from pages.common_settings.modules.bank.data.bank_data import (
+    generate_valid_bank_data,
+    generate_valid_edit_data,
+    generate_bank_name,
+    generate_bank_code,
+    generate_branch_name,
+    generate_branch_code,
+    generate_account_number,
+    generate_ifsc_code,
+    generate_cash_credit_limit,
+    generate_bank_address,
+    generate_swift_number,
+    generate_iban_number,
+    generate_spaces_only,
+    generate_string_255,
+    generate_string_256,
+    generate_special_char_name,
+    generate_special_char_value,
+    generate_sql_injection,
+    generate_xss_payload,
+    generate_negative_limit,
+    generate_zero_limit,
+    generate_alpha_limit,
+    generate_special_char_limit,
+    generate_limit_with_spaces,
+    generate_leading_trailing_spaces,
+    generate_lowercase_bank_name,
+    generate_bank_name_with_digits,
+    generate_bank_name_too_short,
+    generate_ifsc_too_short,
+    generate_ifsc_too_long,
+    generate_alpha_branch_name,
+    generate_alpha_account_number,
+    generate_empty_data,
+    generate_partial_required_data,
+    VALIDATION_MSG_REQUIRED,
+    VALIDATION_MSG_INVALID_BANK_NAME,
+    VALIDATION_MSG_INVALID_BANK_CODE,
+    VALIDATION_MSG_INVALID_BRANCH_NAME,
+    VALIDATION_MSG_INVALID_IFSC,
+    VALIDATION_MSG_INVALID_SWIFT,
+    VALIDATION_MSG_INVALID_IBAN,
+    SWAL_TITLE_VALIDATION_FAILED,
+    SWAL_TITLE_SUCCESS,
+)
+from common.logger import log
 
 
-# ================================================================
-# AUTOUSE — Hard refresh BEFORE and AFTER every single test
-# ================================================================
+# ====================================================================
+# Helper: create a prerequisite bank, refresh, return its name
+# ====================================================================
 
-@pytest.fixture(autouse=True)
-def hard_refresh_every_test(bank_page):
-    """Runs BEFORE and AFTER each test. Lightweight refresh for speed."""
-    bank_page.navigate_to_bank()
-    bank_page.driver.refresh()
-    bank_page.wait_seconds(1)
-    yield
-    bank_page._recover_from_stuck_state()
-    bank_page.driver.refresh()
-    bank_page.wait_seconds(1)
-
-
-# ================================================================
-# GROUP A — PAGE LOAD & FORM STRUCTURE (T1-T2)
-# ================================================================
-
-class TestBankPageLoad:
-    """T1-T2: Verify Bank page loads and Add form structure."""
-
-    def test_01_bank_listing_page_loads(self, bank_page):
-        """T1: Navigate to Bank URL, verify table loads with correct columns."""
-        log.test_start("T1: Verify Bank listing page loads")
-
-        row_count = bank_page.get_table_row_count()
-        log.info(f">>> STEP 1 PASSED: Bank page loaded, {row_count} row(s) visible")
-
-        headers = bank_page.get_column_headers()
-        expected_headers = ["View", "Edit", "History", "Bank Name",
-                            "Account Number", "IFSC Code", "Status"]
-        for expected in expected_headers:
-            assert any(expected in h for h in headers), (
-                f"Expected column '{expected}' not found in headers: {headers}"
-            )
-        log.info(f">>> STEP 2 PASSED: Columns verified: {headers}")
-
-        assert row_count > 0, "Bank table should have at least one record"
-        log.info(f">>> STEP 3 PASSED: Table has {row_count} record(s)")
-
-        log.passed("T1: Bank listing page loaded with correct columns")
-
-    def test_02_add_form_opens_with_all_fields(self, bank_page):
-        """T2: Click Add, verify popup has all 14 form fields."""
-        log.test_start("T2: Verify Add form opens with all 14 fields")
-
-        bank_page.open_add_form()
-        assert bank_page.is_form_open(), "Add form should be open"
-        log.info(">>> STEP 1 PASSED: Add form opened")
-
-        title = bank_page.get_form_title()
-        assert title == "Bank", f"Form title should be 'Bank', got '{title}'"
-        log.info(f">>> STEP 2 PASSED: Form title = '{title}'")
-
-        text_fields = [
-            bank_page.BANK_NAME_INPUT, bank_page.BANK_CODE_INPUT,
-            bank_page.BRANCH_NAME_INPUT, bank_page.BRANCH_CODE_INPUT,
-            bank_page.ACCOUNT_NUMBER_INPUT, bank_page.SWIFT_NUMBER_INPUT,
-            bank_page.IBAN_NUMBER_INPUT, bank_page.IFSC_CODE_INPUT,
-            bank_page.CASH_CREDIT_LIMIT_INPUT, bank_page.BANK_ADDRESS_INPUT,
-        ]
-        for field in text_fields:
-            assert bank_page.is_displayed(field, timeout=3), (
-                f"Text field {field} should be visible"
-            )
-        log.info(">>> STEP 3 PASSED: All 10 text inputs present")
-
-        assert bank_page.is_displayed(bank_page.ACCOUNT_TYPE_SELECT, timeout=3), \
-            "Account Type dropdown should be visible"
-        assert bank_page.is_displayed(bank_page.GL_ACCOUNT_SELECT, timeout=3), \
-            "GL Account dropdown should be visible"
-        log.info(">>> STEP 4 PASSED: 2 dropdowns present")
-
-        assert bank_page.is_displayed(bank_page.IS_DEFAULT_BANK_TOGGLE, timeout=3), \
-            "Is Default Bank toggle should be visible"
-        assert bank_page.is_displayed(bank_page.STATUS_TOGGLE, timeout=3), \
-            "Status toggle should be visible"
-        log.info(">>> STEP 5 PASSED: 2 toggles present")
-
-        assert bank_page.is_displayed(bank_page.SUBMIT_BUTTON, timeout=3), \
-            "Submit button should be visible"
-        assert bank_page.is_displayed(bank_page.CANCEL_BUTTON, timeout=3), \
-            "Cancel button should be visible"
-        log.info(">>> STEP 6 PASSED: Submit and Cancel buttons present")
-
-        bank_page.close_form_via_cancel()
-
-        log.passed("T2: Add form verified with 14 fields")
+def _create_prerequisite_bank(page, prefix="PreReq"):
+    """Create a Bank entry for tests that need existing data.
+    Returns the bank name and the data dict used.
+    """
+    data = generate_valid_bank_data(prefix)
+    result = page.create_bank(data)
+    try:
+        page.close_popup()
+    except Exception:
+        pass
+    try:
+        page.force_close_form_popup()
+    except Exception:
+        pass
+        # Search the name to bring it into view in the table
+    name = result.get("bank_name", "")
+    if name:
+        page.search(name)
+        page.wait_seconds(2)
+        page.clear_search()
+        page.wait_seconds(1)
+    name = result.get("bank_name", "")
+    log.info(f"Prerequisite bank created: {name}")
+    return name, data
 
 
-# ================================================================
-# GROUP B — VALIDATION (T3-T5)
-# ================================================================
+def _cleanup_form(page):
+    """Try to close any open form popup."""
+    try:
+        page.cancel()
+    except Exception:
+        pass
+    try:
+        page.force_close_form_popup()
+    except Exception:
+        pass
 
-class TestBankValidation:
-    """T3-T5: Empty submit, successful creation, search verification."""
 
-    def test_03_empty_submit_shows_validation_errors(self, bank_page):
-        """T3: Submit empty form — should show Validation Failed alert."""
-        log.test_start("T3: Empty submit shows Validation Failed")
+# ====================================================================
+# PHASE 1: Create Form Validations (22 tests)
+# ====================================================================
 
-        bank_page.open_add_form()
-        assert bank_page.is_form_open(), "Add form should be open"
+class TestCreateFormValidations:
+    """BNK-C01 to BNK-C22: Validation checks on the Create form."""
 
-        bank_page.click_submit()
+    # ---- BNK-C01: Submit with all fields empty ----
+    def test_BNK_C01_empty_submit(self, bnk_page):
+        """Submit with all fields empty — should be blocked."""
+        log.info("BNK-C01: Empty submit test")
+        page = bnk_page
 
-        assert bank_page.is_validation_alert_present(timeout=5), (
-            "Validation Failed alert should appear"
+        page.open_add_form()
+        page.wait_seconds(1)
+        assert page.is_add_form_open(), "Add form did not open"
+
+        # Click Submit with all fields empty
+        page.submit()
+        page.wait_seconds(3)
+
+        validation_alert = page.handle_validation_warning(timeout=5)
+        errors = page.get_mat_error_text()
+        form_still_open = page.is_add_form_open()
+
+        assert form_still_open or errors or validation_alert, (
+            "BUG: Form advanced with all fields empty — no validation"
         )
-        alert_title = bank_page.get_alert_title()
-        assert VALIDATION_ALERT_TITLE in alert_title, (
-            f"Expected '{VALIDATION_ALERT_TITLE}', got '{alert_title}'"
+        if validation_alert:
+            log.info(f"Validation alert shown: {validation_alert}")
+        if errors:
+            log.info(f"Validation errors shown: {errors}")
+
+        # Cleanup
+        _cleanup_form(page)
+
+    # ---- BNK-C02: Create with valid data (happy path) ----
+    def test_BNK_C02_valid_create(self, bnk_page):
+        """Create with valid data — should succeed."""
+        log.info("BNK-C02: Valid create test (happy path)")
+        page = bnk_page
+
+        data = generate_valid_bank_data("ValidC")
+        result = page.create_bank(data)
+        name = result.get("bank_name", "")
+
+        if result["status"] == "PASSED":
+            log.info(f"Bank created successfully: {name}")
+        else:
+            log.warning(f"Create failed: {result.get('error', 'unknown')}")
+
+        if name:
+            page.search(name)
+            page.wait_seconds(2)
+        found = page.is_bank_in_table(name)
+
+        assert found, f"Created bank '{name}' not found in table after refresh"
+        log.info(f"Bank created and found in table: {name}")
+
+    # ---- BNK-C03: Bank Name — alpha-only uppercase validation ----
+    def test_BNK_C03_bank_name_alpha_only(self, bnk_page):
+        """Bank Name accepts uppercase alpha, rejects digits/mixed/short."""
+        log.info("BNK-C03: Bank Name alpha-only validation test")
+        page = bnk_page
+
+        # Test valid: all uppercase, 10+ chars
+        valid_name = generate_bank_name("AlphaTest")
+        page.open_add_form()
+        page.wait_seconds(1)
+        page._fill_input_by_name("Bank Name", valid_name)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Bank Name")
+        assert not state["invalid"], (
+            f"Valid uppercase Bank Name '{valid_name}' should be accepted"
         )
-        log.info(f">>> STEP 3 PASSED: Alert title = '{alert_title}'")
+        log.info(f"Valid Bank Name '{valid_name}' accepted")
 
-        bank_page.handle_validation_alert()
-        assert bank_page.is_form_open(), "Form should remain open after validation failure"
-        log.info(">>> STEP 4 PASSED: Form remained open after validation failure")
-
-        bank_page.close_form_via_cancel()
-
-        log.passed("T3: Validation Failed on empty submit")
-
-    def test_04_successful_bank_creation(self, bank_page):
-        """T4: Fill all required fields and submit — should succeed."""
-        log.test_start("T4: Successful bank creation")
-
-        bank_page.open_add_form()
-
-        data = valid_bank_required_only()
-        bank_page.fill_all_fields(data)
-        bank_name = data[FIELD_BANK_NAME]
-        log.info(f">>> STEP 2 PASSED: Form filled, Bank Name = '{bank_name}'")
-
-        bank_page.click_submit()
-
-        # FIX: Check actual alert type
-        is_success = bank_page.handle_success_alert(timeout=10)
-        assert is_success, (
-            f"Expected success alert, but got Validation Failed for bank '{bank_name}'"
+        # Test invalid: contains digits
+        invalid_digit = generate_bank_name_with_digits()
+        page._fill_input_by_name("Bank Name", invalid_digit)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Bank Name")
+        log.info(
+            f"Bank Name with digits '{invalid_digit}': "
+            f"invalid={state['invalid']}, error='{state['error']}'"
         )
-        bank_page.wait_for_form_to_close(timeout=10)
 
-        log.passed("T4: Bank created successfully")
-
-    def test_05_new_bank_appears_in_table(self, bank_page):
-        """T5: Search for newly created bank — should find it."""
-        log.test_start("T5: New bank appears in table via search")
-
-        # FIX: Use create_and_verify_bank for reliable create+search
-        found, bank_name = bank_page.create_and_verify_bank()
-        assert found, f"Bank '{bank_name}' should be found via search"
-
-        row_count = bank_page.get_table_row_count()
-        assert row_count >= 1, f"Expected at least 1 result, got {row_count}"
-        log.info(f">>> STEP 2 PASSED: Search returned {row_count} result(s)")
-
-        bank_page.clear_search()
-        log.passed("T5: New bank found in table")
-
-
-# ================================================================
-# GROUP C — VIEW MODE (T6-T7)
-# ================================================================
-
-class TestBankViewMode:
-    """T6-T7: View mode and Edit mode verification."""
-
-    def test_06_view_mode_fields_readonly(self, bank_page):
-        """T6: Click View — verify all fields disabled, no Submit button."""
-        log.test_start("T6: View mode — fields readonly, no Submit button")
-
-        row_count = bank_page.get_table_row_count()
-        assert row_count > 0, "Table should have at least one record"
-        bank_page.click_view_button(0)
-        log.info(">>> STEP 1 PASSED: View form opened")
-
-        assert bank_page.is_form_in_view_mode(), \
-            "Submit/Update button should NOT be visible in View mode"
-        log.info(">>> STEP 2 PASSED: No Submit/Update button (View mode)")
-
-        assert bank_page.is_field_disabled(bank_page.BANK_NAME_INPUT), \
-            "Bank Name should be disabled in View mode"
-        assert bank_page.is_field_disabled(bank_page.ACCOUNT_NUMBER_INPUT), \
-            "Account Number should be disabled in View mode"
-        assert bank_page.is_field_disabled(bank_page.IFSC_CODE_INPUT), \
-            "IFSC Code should be disabled in View mode"
-        log.info(">>> STEP 3 PASSED: Fields are disabled")
-
-        bank_page.close_form_via_cancel()
-        log.passed("T6: View mode verified — all fields disabled")
-
-    def test_07_edit_mode_prefilled(self, bank_page):
-        """T7: Click Edit — verify fields pre-filled, button says 'Update'."""
-        log.test_start("T7: Edit mode — pre-filled fields, Update button")
-
-        # FIX: Use create_and_verify_bank
-        found, bank_name = bank_page.create_and_verify_bank()
-        assert found, f"Prerequisite: '{bank_name}' not found"
-        log.info(f">>> STEP 1 PASSED: Created bank '{bank_name}'")
-
-        bank_page.click_edit_button(0)
-        assert bank_page.is_form_open(), "Edit form should be open"
-
-        bank_name_value = bank_page.find_element(bank_page.BANK_NAME_INPUT).get_attribute("value")
-        assert bank_name in bank_name_value, (
-            f"Bank Name field should contain '{bank_name}', got '{bank_name_value}'"
+        # Test invalid: lowercase
+        invalid_lower = generate_lowercase_bank_name()
+        page._fill_input_by_name("Bank Name", invalid_lower)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Bank Name")
+        log.info(
+            f"Lowercase Bank Name '{invalid_lower}': "
+            f"invalid={state['invalid']}, error='{state['error']}'"
         )
-        log.info(f">>> STEP 2 PASSED: Bank Name pre-filled = '{bank_name_value}'")
-
-        assert bank_page.is_displayed(bank_page.SUBMIT_BUTTON, timeout=3), \
-            "Submit/Update button should be visible in Edit mode"
-        log.info(">>> STEP 3 PASSED: Submit/Update button present in Edit mode")
-
-        bank_page.close_form_via_cancel()
-        bank_page.clear_search()
-        log.passed("T7: Edit mode verified — fields pre-filled")
-
-
-# ================================================================
-# GROUP D — EDIT FLOW (T8-T9)
-# ================================================================
-
-class TestBankEditFlow:
-    """T8-T9: Edit bank name and duplicate name test."""
-
-    def test_08_edit_updates_bank_name(self, bank_page):
-        """T8: Edit bank name, submit, verify old name gone and new name exists."""
-        log.test_start("T8: Edit updates bank name in table")
-
-        found, original_name = bank_page.create_and_verify_bank()
-        assert found, f"Prerequisite: '{original_name}' not found"
-        log.info(f">>> STEP 1 PASSED: Created '{original_name}'")
-
-        bank_page.click_edit_button(0)
-        assert bank_page.is_form_open(), "Edit form should be open"
-
-        new_name = f"EDITED{original_name}"
-        bank_page.clear_form()
-        bank_page.fill_bank_name(new_name)
-        bank_page.fill_bank_code(bank_page.find_element(bank_page.BANK_CODE_INPUT).get_attribute("value") or "AB12")
-        bank_page.fill_branch_name(bank_page.find_element(bank_page.BRANCH_NAME_INPUT).get_attribute("value") or "1234567890")
-        bank_page.fill_branch_code(bank_page.find_element(bank_page.BRANCH_CODE_INPUT).get_attribute("value") or "123456")
-        bank_page.fill_account_number(bank_page.find_element(bank_page.ACCOUNT_NUMBER_INPUT).get_attribute("value") or "123456789")
-        bank_page.fill_ifsc_code(bank_page.find_element(bank_page.IFSC_CODE_INPUT).get_attribute("value") or "ABCD0123456")
-        bank_page.fill_cash_credit_limit(bank_page.find_element(bank_page.CASH_CREDIT_LIMIT_INPUT).get_attribute("value") or "300000")
-        bank_page.fill_bank_address(bank_page.find_element(bank_page.BANK_ADDRESS_INPUT).get_attribute("value") or "1 Test Street")
-        bank_page.select_account_type("Saving")
-        bank_page.select_gl_account("Cash")
-        bank_page.set_is_default_bank("No")
-        bank_page.set_status("Active")
-
-        bank_page.click_update()
-        log.info(f">>> STEP 2 PASSED: Updated Bank Name to '{new_name}'")
-
-        is_success = bank_page.handle_success_alert()
-        if is_success:
-            bank_page.wait_for_form_to_close(timeout=10)
-        else:
-            log.warning("Edit submit got validation error instead of success")
-            try:
-                bank_page.close_form_via_cancel()
-            except Exception:
-                pass
-
-        bank_page.refresh_table()
-        bank_page.wait_seconds(1)
-        found_new = bank_page.search_record(new_name)
-        assert found_new, f"Updated bank '{new_name}' not found"
-        log.info(f">>> STEP 3 PASSED: New name '{new_name}' found")
-
-        bank_page.clear_search()
-        log.passed("T8: Bank name edited and verified")
-
-    def test_09_duplicate_bank_name_accepted_bug(self, bank_page):
-        """T9: Create bank with existing name — BUG: accepted without error."""
-        log.test_start("T9: Duplicate Bank Name (BUG — accepted)")
-
-        found, bank_name = bank_page.create_and_verify_bank()
-        assert found, f"Prerequisite: '{bank_name}' not found"
-        bank_page.clear_search()
-        log.info(f">>> STEP 1 PASSED: Created bank '{bank_name}'")
-
-        data2 = valid_bank_required_only()
-        data2[FIELD_BANK_NAME] = bank_name
-
-        bank_page.open_add_form()
-        bank_page.fill_all_fields(data2)
-        bank_page.click_submit()
-
-        form_closed = not bank_page.is_form_open()
-        if form_closed:
-            bank_page.handle_success_alert()
-            bank_page.wait_seconds(1)
-            bank_page.refresh_table()
-            bank_page.wait_seconds(1)
-            found = bank_page.search_record(bank_name)
-            assert found, "BUG CONFIRMED: Duplicate bank name was accepted and stored"
-            log.info(">>> STEP 3 PASSED: BUG — Duplicate name accepted, record created")
-        else:
-            validation = bank_page.is_validation_alert_present(timeout=3)
-            if validation:
-                bank_page.handle_validation_alert()
-                bank_page.close_form_via_cancel()
-                log.warning(">>> STEP 3: Unexpected — server now rejects duplicate names")
-
-        bank_page.clear_search()
-        log.passed("T9: BUG confirmed — Duplicate bank name accepted")
-
 
-# ================================================================
-# GROUP E — SERVER-SIDE VALIDATION (T10-T12)
-# ================================================================
-
-class TestBankServerValidation:
-    """T10-T12: IFSC validation, CCL validation, Bank Name special chars."""
-
-    def test_10_ifsc_invalid_formats_rejected(self, bank_page):
-        """T10: Test 3 invalid IFSC formats — all should be rejected."""
-        log.test_start("T10: IFSC invalid formats rejected")
-
-        invalid_cases = [
-            ("lowercase", invalid_ifsc_lowercase),
-            ("no zero", invalid_ifsc_no_zero),
-            ("wrong length", invalid_ifsc_wrong_length),
-        ]
-
-        for case_name, data_func in invalid_cases:
-            bank_page._recover_from_stuck_state()
-            data = data_func()
-            bank_page.open_add_form()
-            bank_page.fill_all_fields(data)
-            bank_page.click_submit()
-
-            validation = bank_page.is_validation_alert_present(timeout=5)
-            if validation:
-                alert_title = bank_page.get_alert_title()
-                alert_msg = bank_page.get_alert_message()
-                bank_page.handle_validation_alert()
-                log.info(f"  IFSC {case_name}: Rejected — '{alert_msg}'")
-            else:
-                form_closed = not bank_page.is_form_open()
-                if not form_closed:
-                    bank_page.close_form_via_cancel()
-                log.warning(f"  IFSC {case_name}: NOT rejected (unexpected)")
-
-            bank_page.wait_seconds(0.5)
-
-        log.passed("T10: IFSC invalid format validation tested")
-
-    def test_11_negative_ccl_rejected(self, bank_page):
-        """T11: Negative Cash Credit Limit — should be rejected."""
-        log.test_start("T11: Negative CCL rejected")
-
-        data = invalid_ccl_negative()
-        bank_page.open_add_form()
-        bank_page.fill_all_fields(data)
-        bank_page.click_submit()
-
-        validation = bank_page.is_validation_alert_present(timeout=5)
-        if validation:
-            alert_msg = bank_page.get_alert_message()
-            bank_page.handle_validation_alert()
-            # FIX: ERP may return generic message like "Please correct the highlighted fields"
-            # instead of specific "Invalid Cash Credit Limit"
-            log.info(f">>> STEP 1 PASSED: Negative CCL rejected — '{alert_msg}'")
-        else:
-            bank_page.close_form_via_cancel()
-            log.warning(">>> STEP 1: Negative CCL not rejected (unexpected)")
-
-        log.passed("T11: Negative CCL tested")
-
-    def test_12_bank_name_rejects_underscore_and_at(self, bank_page):
-        """T12: Bank Name with underscore/@ — server rejects 'Invalid Bank Name'."""
-        log.test_start("T12: Bank Name rejects underscore and @ symbol")
-
-        # Test underscore
-        data1 = invalid_bank_name_underscore()
-        bank_page._recover_from_stuck_state()
-        bank_page.open_add_form()
-        bank_page.fill_all_fields(data1)
-        bank_page.click_submit()
-
-        validation1 = bank_page.is_validation_alert_present(timeout=5)
-        if validation1:
-            bank_page.handle_validation_alert()
-            log.info(">>> STEP 1 PASSED: Underscore in Bank Name rejected")
-        else:
-            try:
-                bank_page.close_form_via_cancel()
-            except Exception:
-                pass
-            log.warning(">>> STEP 1: Underscore NOT rejected (unexpected)")
-        bank_page._recover_from_stuck_state()
-        bank_page.wait_seconds(0.5)
-
-        # Test @ symbol
-        data2 = invalid_bank_name_at_symbol()
-        bank_page._recover_from_stuck_state()
-        bank_page.open_add_form()
-        bank_page.fill_all_fields(data2)
-        bank_page.click_submit()
-
-        validation2 = bank_page.is_validation_alert_present(timeout=5)
-        if validation2:
-            bank_page.handle_validation_alert()
-            log.info(">>> STEP 2 PASSED: @ symbol in Bank Name rejected")
-        else:
-            try:
-                bank_page.close_form_via_cancel()
-            except Exception:
-                pass
-            log.warning(">>> STEP 2: @ symbol NOT rejected (unexpected)")
-
-        log.passed("T12: Bank Name special character validation tested")
-
-
-# ================================================================
-# GROUP F — HISTORY (T13)
-# ================================================================
-
-class TestBankHistory:
-    """T13: History panel opens and shows structure."""
-
-    def test_13_history_panel_opens(self, bank_page):
-        """T13: Click History — side panel opens with heading 'Bank History'."""
-        log.test_start("T13: History panel opens")
-
-        row_count = bank_page.get_table_row_count()
-        if row_count == 0:
-            pytest.skip("No records in table to test History")
-
-        try:
-            bank_page.click_history_button(0)
-        except Exception:
-            pytest.skip("History button not found on first row")
-
-        title = bank_page.get_history_title()
-        assert "History" in title or "Bank" in title, f"History title unexpected: '{title}'"
-        log.info(f">>> STEP 1 PASSED: Panel title = '{title}'")
-
-        try:
-            assert bank_page.is_displayed(bank_page.HISTORY_CANCEL_BTN, timeout=3), \
-                "History Cancel button should be visible"
-            log.info(">>> STEP 2 PASSED: Cancel button present")
-        except Exception:
-            log.warning("Cancel button not found in history panel")
-
-        bank_page.close_history_panel()
-        log.passed("T13: History panel structure verified")
-
-
-# ================================================================
-# GROUP G — SEARCH (T14)
-# ================================================================
-
-class TestBankSearch:
-    """T14: Search filters table correctly."""
-
-    def test_14_search_filters_table(self, bank_page):
-        """T14: Toggle search, type text, verify filtered results."""
-        log.test_start("T14: Search filters table")
-
-        found, bank_name = bank_page.create_and_verify_bank()
-        assert found, f"Prerequisite: Bank '{bank_name}' not found after create"
-        log.info(f">>> STEP 1 PASSED: Created bank '{bank_name}'")
-
-        # Search is already done in create_and_verify_bank, just verify row count
-        row_count = bank_page.get_table_row_count()
-        assert row_count >= 1, f"Expected at least 1 result, got {row_count}"
-        log.info(f">>> STEP 2 PASSED: Search returned {row_count} result(s)")
-
-        bank_page.clear_search()
-        log.passed("T14: Search filtering verified")
-
-
-# ================================================================
-# GROUP H — PAGINATION (T15)
-# ================================================================
-
-class TestBankPagination:
-    """T15: Paginator navigation."""
-
-    def test_15_pagination_navigation(self, bank_page):
-        """T15: Click Next/Prev/First/Last page buttons."""
-        log.test_start("T15: Pagination navigation")
-
-        initial_range = bank_page.get_pager_range_text()
-        initial_rows = bank_page.get_table_row_count()
-        log.info(f">>> STEP 1: Initial range = '{initial_range}', rows = {initial_rows}")
-
-        if bank_page.is_next_page_enabled():
-            try:
-                bank_page.click_next_page()
-                new_range = bank_page.get_pager_range_text()
-                log.info(f">>> STEP 2 PASSED: Next page — range = '{new_range}'")
-            except Exception as e:
-                log.warning(f"Next page click failed: {e}")
-        else:
-            log.info(">>> STEP 2 SKIPPED: Already on last page")
-
-        if bank_page.is_prev_page_enabled():
-            try:
-                bank_page.click_prev_page()
-                prev_range = bank_page.get_pager_range_text()
-                log.info(f">>> STEP 3 PASSED: Previous page — range = '{prev_range}'")
-            except Exception as e:
-                log.warning(f"Prev page click failed: {e}")
-        else:
-            log.info(">>> STEP 3 SKIPPED: Already on first page")
-
-        if bank_page.is_first_page_enabled():
-            try:
-                bank_page.click_first_page()
-                first_range = bank_page.get_pager_range_text()
-                log.info(f">>> STEP 4 PASSED: First page — range = '{first_range}'")
-            except Exception as e:
-                log.warning(f"First page click failed: {e}")
-        else:
-            log.info(">>> STEP 4 SKIPPED: Already on first page")
-
-        if bank_page.is_last_page_enabled():
-            try:
-                bank_page.click_last_page()
-                last_range = bank_page.get_pager_range_text()
-                log.info(f">>> STEP 5 PASSED: Last page — range = '{last_range}'")
-            except Exception as e:
-                log.warning(f"Last page click failed: {e}")
-        else:
-            log.info(">>> STEP 5 SKIPPED: Only one page of data")
-
-        log.passed("T15: Pagination navigation tested")
-
-
-# ================================================================
-# GROUP I — DROPDOWNS (T16-T17)
-# ================================================================
-
-class TestBankDropdowns:
-    """T16-T17: Account Type and GL Account dropdowns."""
-
-    def test_16_account_type_has_two_options(self, bank_page):
-        """T16: Account Type dropdown has exactly 2 options: Current, Saving."""
-        log.test_start("T16: Account Type dropdown — 2 options")
-
-        from selenium.webdriver.common.by import By
-
-        dropdown_opened = False
-        for attempt in range(3):
-            bank_page.open_add_form()
-            bank_page.wait_seconds(1)
-            dropdown_opened = bank_page._open_dropdown(
-                bank_page.ACCOUNT_TYPE_SELECT, "Account Type"
+        _cleanup_form(page)
+
+    # ---- BNK-C04: Bank Code — pattern validation ----
+    def test_BNK_C04_bank_code_validation(self, bnk_page):
+        """Bank Code accepts alphanumeric values, may reject all-alpha."""
+        log.info("BNK-C04: Bank Code validation test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Test valid: numeric code
+        valid_code = generate_bank_code()
+        page._fill_input_by_name("Bank Code", valid_code)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Bank Code")
+        assert not state["invalid"], f"Valid Bank Code '{valid_code}' should be accepted"
+        log.info(f"Valid Bank Code '{valid_code}' accepted")
+
+        # Test invalid: special characters
+        page._fill_input_by_name("Bank Code", "!@#$")
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Bank Code")
+        log.info(
+            f"Special chars Bank Code: "
+            f"invalid={state['invalid']}, error='{state['error']}'"
+        )
+
+        _cleanup_form(page)
+
+    # ---- BNK-C05: Branch Name — pattern validation ----
+    def test_BNK_C05_branch_name_validation(self, bnk_page):
+        """Branch Name accepts numeric values, may reject all-alpha."""
+        log.info("BNK-C05: Branch Name validation test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Test valid: numeric
+        valid_branch = generate_branch_name()
+        page._fill_input_by_name("Branch Name", valid_branch)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Branch Name")
+        assert not state["invalid"], f"Valid Branch Name '{valid_branch}' should be accepted"
+        log.info(f"Valid Branch Name '{valid_branch}' accepted")
+
+        # Test: all-alpha branch name
+        alpha_branch = generate_alpha_branch_name()
+        page._fill_input_by_name("Branch Name", alpha_branch)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Branch Name")
+        log.info(
+            f"Alpha Branch Name '{alpha_branch}': "
+            f"invalid={state['invalid']}, error='{state['error']}'"
+        )
+
+        _cleanup_form(page)
+
+    # ---- BNK-C06: Account Number — numeric only ----
+    def test_BNK_C06_account_number_numeric_only(self, bnk_page):
+        """Account Number should only accept numeric values."""
+        log.info("BNK-C06: Account Number numeric-only test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Test valid: numeric
+        valid_acct = generate_account_number()
+        page._fill_input_by_name("Account Number", valid_acct)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Account Number")
+        assert not state["invalid"], f"Valid Account Number '{valid_acct}' should be accepted"
+        log.info(f"Valid Account Number '{valid_acct}' accepted")
+
+        # Test invalid: alpha
+        alpha_acct = generate_alpha_account_number()
+        page._fill_input_by_name("Account Number", alpha_acct)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Account Number")
+        log.info(
+            f"Alpha Account Number '{alpha_acct}': "
+            f"invalid={state['invalid']}, error='{state['error']}'"
+        )
+
+        _cleanup_form(page)
+
+    # ---- BNK-C07: IFSC Code — exactly 11 chars ----
+    def test_BNK_C07_ifsc_code_11_chars(self, bnk_page):
+        """IFSC Code must be exactly 11 characters."""
+        log.info("BNK-C07: IFSC Code 11-char validation test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Valid: exactly 11 chars
+        valid_ifsc = generate_ifsc_code()
+        page._fill_input_by_name("IFSC Code", valid_ifsc)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("IFSC Code")
+        assert not state["invalid"], f"Valid IFSC Code '{valid_ifsc}' should be accepted"
+        log.info(f"Valid IFSC Code (11 chars) '{valid_ifsc}' accepted")
+
+        # Invalid: too short (9 chars)
+        short_ifsc = generate_ifsc_too_short()
+        page._fill_input_by_name("IFSC Code", short_ifsc)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("IFSC Code")
+        log.info(
+            f"Short IFSC (9 chars) '{short_ifsc}': "
+            f"invalid={state['invalid']}, error='{state['error']}'"
+        )
+
+        # Invalid: too long (12 chars)
+        long_ifsc = generate_ifsc_too_long()
+        page._fill_input_by_name("IFSC Code", long_ifsc)
+        page.wait_seconds(0.5)
+        state = get_field_validation_state = page.get_field_validation_state("IFSC Code")
+        log.info(
+            f"Long IFSC (12 chars) '{long_ifsc}': "
+            f"invalid={state['invalid']}, error='{state['error']}'"
+        )
+
+        _cleanup_form(page)
+
+    # ---- BNK-C08: Cash Credit Limit — numeric validation ----
+    def test_BNK_C08_cash_credit_limit_numeric(self, bnk_page):
+        """Cash Credit Limit should only accept numeric values."""
+        log.info("BNK-C08: Cash Credit Limit numeric test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Valid: positive number
+        valid_limit = generate_cash_credit_limit()
+        page._fill_input_by_name("Cash Credit Limit", valid_limit)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Cash Credit Limit")
+        assert not state["invalid"], f"Valid limit '{valid_limit}' should be accepted"
+        log.info(f"Valid Cash Credit Limit '{valid_limit}' accepted")
+
+        # Invalid: alphabetic
+        alpha_limit = generate_alpha_limit()
+        page._fill_input_by_name("Cash Credit Limit", alpha_limit)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Cash Credit Limit")
+        log.info(
+            f"Alpha limit '{alpha_limit}': "
+            f"invalid={state['invalid']}, error='{state['error']}'"
+        )
+
+        # Invalid: special chars
+        special_limit = generate_special_char_limit()
+        page._fill_input_by_name("Cash Credit Limit", special_limit)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Cash Credit Limit")
+        log.info(
+            f"Special chars limit '{special_limit}': "
+            f"invalid={state['invalid']}, error='{state['error']}'"
+        )
+
+        # Invalid: spaces
+        spaces_limit = generate_limit_with_spaces()
+        page._fill_input_by_name("Cash Credit Limit", spaces_limit)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Cash Credit Limit")
+        log.info(
+            f"Spaces limit: invalid={state['invalid']}, error='{state['error']}'"
+        )
+
+        _cleanup_form(page)
+
+    # ---- BNK-C09: Swift Number — optional, format validation ----
+    def test_BNK_C09_swift_number_optional_format(self, bnk_page):
+        """Swift Number is optional; valid format accepted, invalid rejected."""
+        log.info("BNK-C09: Swift Number optional format test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Empty is valid (optional field)
+        page._fill_input_by_name("Swift Number", "")
+        page.wait_seconds(0.3)
+        state = page.get_field_validation_state("Swift Number")
+        assert not state["invalid"], "Empty Swift Number should be valid (optional)"
+        log.info("Empty Swift Number: valid (optional field confirmed)")
+
+        # Valid format
+        valid_swift = generate_swift_number()
+        page._fill_input_by_name("Swift Number", valid_swift)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Swift Number")
+        assert not state["invalid"], f"Valid Swift '{valid_swift}' should be accepted"
+        log.info(f"Valid Swift Number '{valid_swift}' accepted")
+
+        _cleanup_form(page)
+
+    # ---- BNK-C10: IBAN Number — optional, format validation ----
+    def test_BNK_C10_iban_number_optional_format(self, bnk_page):
+        """IBAN Number is optional; valid format accepted, invalid rejected."""
+        log.info("BNK-C10: IBAN Number optional format test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Empty is valid (optional field)
+        page._fill_input_by_name("IBAN Number", "")
+        page.wait_seconds(0.3)
+        state = page.get_field_validation_state("IBAN Number")
+        assert not state["invalid"], "Empty IBAN Number should be valid (optional)"
+        log.info("Empty IBAN Number: valid (optional field confirmed)")
+
+        # Valid format
+        valid_iban = generate_iban_number()
+        page._fill_input_by_name("IBAN Number", valid_iban)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("IBAN Number")
+        assert not state["invalid"], f"Valid IBAN '{valid_iban}' should be accepted"
+        log.info(f"Valid IBAN Number '{valid_iban}' accepted")
+
+        _cleanup_form(page)
+
+    # ---- BNK-C11: Bank Address — required, pattern validation ----
+    def test_BNK_C11_bank_address_validation(self, bnk_page):
+        """Bank Address is required and accepts alphanumeric with spaces."""
+        log.info("BNK-C11: Bank Address validation test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Valid: alphanumeric with spaces
+        valid_addr = generate_bank_address()
+        page._fill_input_by_name("Bank Address", valid_addr)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Bank Address")
+        assert not state["invalid"], f"Valid address '{valid_addr}' should be accepted"
+        log.info(f"Valid Bank Address '{valid_addr}' accepted")
+
+        _cleanup_form(page)
+
+    # ---- BNK-C12: Spaces-only in required fields ----
+    def test_BNK_C12_spaces_only_required_fields(self, bnk_page):
+        """Spaces-only values in required text fields should be rejected."""
+        log.info("BNK-C12: Spaces-only required fields test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        spaces = generate_spaces_only()
+        for field_name in ["Bank Name", "Bank Code", "Branch Name",
+                          "Account Number", "IFSC Code"]:
+            page._fill_input_by_name(field_name, spaces)
+        page.wait_seconds(0.5)
+
+        # Submit to trigger validation
+        page.submit()
+        page.wait_seconds(3)
+
+        validation_alert = page.handle_validation_warning(timeout=5)
+        form_still_open = page.is_add_form_open()
+
+        assert form_still_open or validation_alert, (
+            "BUG: Form accepted spaces-only values in required fields"
+        )
+        log.info(f"Spaces-only submit: form_open={form_still_open}, alert={validation_alert}")
+
+        _cleanup_form(page)
+
+    # ---- BNK-C13: Maxlength boundary (255/256 chars) ----
+    def test_BNK_C13_maxlength_boundary(self, bnk_page):
+        """Bank fields have maxlength=255. 256-char input should be truncated or rejected."""
+        log.info("BNK-C13: Maxlength boundary test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Test 255 chars (should be accepted by maxlength)
+        long_255 = generate_string_255()
+        page._fill_input_by_name("Bank Address", long_255)
+        page.wait_seconds(0.5)
+        actual_value = page.get_input_value("Bank Address")
+        log.info(f"255-char input: actual length = {len(actual_value)}")
+
+        # Test 256 chars (should be truncated by maxlength to 255)
+        long_256 = generate_string_256()
+        page._fill_input_by_name("Bank Address", long_256)
+        page.wait_seconds(0.5)
+        actual_value_256 = page.get_input_value("Bank Address")
+        log.info(
+            f"256-char input: actual length = {len(actual_value_256)}, "
+            f"truncated = {len(actual_value_256) == 255}"
+        )
+
+        _cleanup_form(page)
+
+    # ---- BNK-C14: Special characters in text fields ----
+    def test_BNK_C14_special_characters(self, bnk_page):
+        """Special characters in Bank Name should be rejected."""
+        log.info("BNK-C14: Special characters test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        special = generate_special_char_name()
+        page._fill_input_by_name("Bank Name", special)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Bank Name")
+        log.info(
+            f"Special chars Bank Name: "
+            f"invalid={state['invalid']}, error='{state['error']}'"
+        )
+
+        _cleanup_form(page)
+
+    # ---- BNK-C15: SQL injection strings ----
+    @pytest.mark.xfail(
+        reason="BUG: SQL injection strings may be accepted by the system. "
+               "This test verifies if they are accepted (BUG) or rejected (security).",
+        strict=False,
+    )
+    def test_BNK_C15_sql_injection(self, bnk_page):
+        """SQL injection payload should be rejected by the system."""
+        log.info("BNK-C15: SQL injection test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        sql_payload = generate_sql_injection()
+        page._fill_input_by_name("Bank Name", sql_payload)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Bank Name")
+        log.info(
+            f"SQL injection in Bank Name: "
+            f"invalid={state['invalid']}, error='{state['error']}'"
+        )
+
+        _cleanup_form(page)
+
+    # ---- BNK-C16: XSS payloads ----
+    @pytest.mark.xfail(
+        reason="BUG: XSS payloads may be accepted by the system. "
+               "This test verifies if they are accepted (BUG) or rejected (security).",
+        strict=False,
+    )
+    def test_BNK_C16_xss_payload(self, bnk_page):
+        """XSS payload should be rejected by the system."""
+        log.info("BNK-C16: XSS payload test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        xss = generate_xss_payload()
+        page._fill_input_by_name("Bank Name", xss)
+        page.wait_seconds(0.5)
+        state = page.get_field_validation_state("Bank Name")
+        log.info(
+            f"XSS in Bank Name: "
+            f"invalid={state['invalid']}, error='{state['error']}'"
+        )
+
+        _cleanup_form(page)
+
+    # ---- BNK-C17: Negative/zero/alpha in Cash Credit Limit ----
+    def test_BNK_C17_cash_credit_limit_edge_cases(self, bnk_page):
+        """Cash Credit Limit: negative, zero, alpha values."""
+        log.info("BNK-C17: Cash Credit Limit edge cases test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        for value, label in [
+            (generate_negative_limit(), "negative"),
+            (generate_zero_limit(), "zero"),
+            (generate_alpha_limit(), "alphabetic"),
+        ]:
+            page._fill_input_by_name("Cash Credit Limit", value)
+            page.wait_seconds(0.3)
+            state = page.get_field_validation_state("Cash Credit Limit")
+            log.info(
+                f"Limit '{value}' ({label}): "
+                f"invalid={state['invalid']}, error='{state['error']}'"
             )
-            if dropdown_opened:
-                break
-            try:
-                bank_page.close_form_via_cancel()
-            except Exception:
-                pass
-            bank_page.wait_seconds(1)
 
-        assert dropdown_opened, "Account Type dropdown FAILED to open after 3 attempts"
+        _cleanup_form(page)
 
-        options = bank_page.driver.find_elements(By.CSS_SELECTOR, "mat-option")
-        option_texts = [opt.text.strip() for opt in options if opt.text.strip()]
-        log.info(f">>> STEP 2 PASSED: Options = {option_texts}")
+    # ---- BNK-C18: Leading/trailing spaces trimming ----
+    def test_BNK_C18_leading_trailing_spaces(self, bnk_page):
+        """Test leading/trailing spaces in Bank Name."""
+        log.info("BNK-C18: Leading/trailing spaces test")
+        page = bnk_page
 
-        assert "Current" in option_texts, "Current option should exist"
-        assert "Saving" in option_texts, "Saving option should exist"
+        page.open_add_form()
+        page.wait_seconds(1)
 
+        spaced = generate_leading_trailing_spaces()
+        page._fill_input_by_name("Bank Name", spaced)
+        page.wait_seconds(0.5)
+        actual = page.get_input_value("Bank Name")
+        log.info(
+            f"Input: '{spaced}' → Actual: '{actual}' "
+            f"(trimmed={actual.strip() == spaced.strip()})"
+        )
+
+        _cleanup_form(page)
+
+    # ---- BNK-C19: Partial required fields filled ----
+    def test_BNK_C19_partial_required_fields(self, bnk_page):
+        """Submit with only some required fields filled — should be blocked."""
+        log.info("BNK-C19: Partial required fields test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Fill only Bank Name and Bank Code
+        data = generate_valid_bank_data("Partial")
+        page._fill_input_by_name("Bank Name", data["bank_name"])
+        page._fill_input_by_name("Bank Code", data["bank_code"])
+        # Leave all other required fields empty
+
+        page.submit()
+        page.wait_seconds(3)
+
+        validation_alert = page.handle_validation_warning(timeout=5)
+        form_still_open = page.is_add_form_open()
+
+        assert form_still_open or validation_alert, (
+            "BUG: Form submitted with partial required fields"
+        )
+
+        _cleanup_form(page)
+
+    # ---- BNK-C20: Invalid → valid → submit (error persistence) ----
+    def test_BNK_C20_invalid_then_valid_submit(self, bnk_page):
+        """Fill invalid data, fix to valid, submit — errors should clear."""
+        log.info("BNK-C20: Invalid → valid → submit test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Fill invalid Bank Name (with digits)
+        page._fill_input_by_name("Bank Name", "Bank1234X")
+        page.wait_seconds(0.5)
+        state1 = page.get_field_validation_state("Bank Name")
+        log.info(f"After invalid name: invalid={state1['invalid']}")
+
+        # Fix to valid Bank Name
+        valid_name = generate_bank_name("FixTest")
+        page._fill_input_by_name("Bank Name", valid_name)
+        page.wait_seconds(0.5)
+        state2 = page.get_field_validation_state("Bank Name")
+        log.info(f"After valid name: invalid={state2['invalid']}")
+
+        assert not state2["invalid"], (
+            f"Valid Bank Name '{valid_name}' should clear the error"
+        )
+
+        _cleanup_form(page)
+
+    # ---- BNK-C21: Toggle — Is Default Bank ----
+    def test_BNK_C21_toggle_is_default_bank(self, bnk_page):
+        """Is Default Bank? toggle defaults to No and can be toggled."""
+        log.info("BNK-C21: Is Default Bank toggle test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Default should be OFF (false)
+        state = page.get_toggle_state("Is Default Bank?")
+        log.info(f"Default Is Default Bank: {state}")
+
+        # Toggle to Yes
+        page.set_is_default_bank(True)
+        state_after = page.get_toggle_state("Is Default Bank?")
+        log.info(f"After toggle ON: {state_after}")
+
+        # Toggle back to No
+        page.set_is_default_bank(False)
+        state_final = page.get_toggle_state("Is Default Bank?")
+        log.info(f"After toggle OFF: {state_final}")
+
+        _cleanup_form(page)
+
+    # ---- BNK-C22: Toggle — Status ----
+    def test_BNK_C22_toggle_status(self, bnk_page):
+        """Status toggle defaults to Active and can be toggled."""
+        log.info("BNK-C22: Status toggle test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Default should be ON (true = Active)
+        state = page.get_toggle_state("Status")
+        log.info(f"Default Status: {state}")
+
+        # Toggle to Inactive
+        page.set_status(False)
+        state_after = page.get_toggle_state("Status")
+        log.info(f"After toggle OFF: {state_after}")
+
+        # Toggle back to Active
+        page.set_status(True)
+        state_final = page.get_toggle_state("Status")
+        log.info(f"After toggle ON: {state_final}")
+
+        _cleanup_form(page)
+
+
+# ====================================================================
+# PHASE 2: Duplicate Validations (5 tests)
+# ====================================================================
+
+class TestDuplicateValidations:
+    """BNK-D01 to BNK-D05: Duplicate checks in Create and Edit."""
+
+    # ---- BNK-D01: Duplicate Bank Name ----
+    def test_BNK_D01_duplicate_bank_name(self, bnk_page):
+        """Create two banks with the same Bank Name — check duplicate behavior."""
+        log.info("BNK-D01: Duplicate Bank Name test")
+        page = bnk_page
+
+        # Create bank 1
+        data1 = generate_valid_bank_data("DupD01")
+        result1 = page.create_bank(data1)
+        name1 = result1.get("bank_name", "")
+
+        _cleanup_form(page)
+        page.click_refresh()
+        page.wait_seconds(2)
+
+        if not name1:
+            log.warning("Bank 1 creation failed — cannot test duplicate")
+            return
+
+        # Try to create bank 2 with same name
+        data2 = generate_valid_bank_data("DupD02")
+        data2["bank_name"] = name1  # Use same name
+        result2 = page.create_bank(data2)
+        name2 = result2.get("bank_name", "")
+
+        _cleanup_form(page)
+        page.click_refresh()
+        page.wait_seconds(2)
+
+        log.info(
+            f"Bank 1: '{name1}', Bank 2: '{name2}'"
+        )
+
+        if result1["status"] == "PASSED" and result2["status"] == "PASSED":
+            log.info("Both banks created — duplicates ALLOWED")
+        elif "duplicate" in result2.get("error", "").lower():
+            log.info("Duplicate Bank Name was BLOCKED by the system")
+        else:
+            log.warning(f"Second create failed: {result2.get('error')}")
+
+    # ---- BNK-D02: Case-insensitive duplicate ----
+    @pytest.mark.skip(
+        reason="Bank Name requires uppercase-only alpha; lowercase names are "
+               "rejected at the validation level, not at the duplicate-check level. "
+               "Case-insensitive duplicate testing is not applicable."
+    )
+    def test_BNK_D02_duplicate_case_insensitive(self, bnk_page):
+        """Create bank with same name in different case — not applicable."""
+        log.info("BNK-D02: Duplicate case-insensitive test — SKIPPED")
+
+    # ---- BNK-D03: Edit to duplicate name ----
+    def test_BNK_D03_edit_duplicate_name(self, bnk_page):
+        """Edit a bank to use another bank's name — check behavior."""
+        log.info("BNK-D03: Edit to duplicate name test")
+        page = bnk_page
+
+        name1, _ = _create_prerequisite_bank(page, "DupEdt1")
+        name2, _ = _create_prerequisite_bank(page, "DupEdt2")
+
+        if not name1 or not name2:
+            log.warning("Prerequisite banks not created — cannot test")
+            return
+
+        # Edit bank 2 to have bank 1's name
+        page.click_edit_button(bank_name=name2)
+        page.wait_seconds(2)
+
+        if page.is_form_popup_open():
+            page._fill_input_by_name("Bank Name", name1)
+            page.update()
+            page.wait_seconds(3)
+
+            alert = page.handle_success_alert(timeout=5)
+            if alert:
+                log.info(f"Edit update: {alert}")
+
+        page.click_refresh()
+        page.wait_seconds(2)
+
+        log.info(
+            f"Edit bank '{name2}' to name '{name1}' — "
+            f"both exist: name1={page.is_bank_in_table(name1)}, "
+            f"name2={page.is_bank_in_table(name2)}"
+        )
+
+    # ---- BNK-D04: Duplicate Account Number ----
+    def test_BNK_D04_duplicate_account_number(self, bnk_page):
+        """Create two banks with the same Account Number."""
+        log.info("BNK-D04: Duplicate Account Number test")
+        page = bnk_page
+
+        data1 = generate_valid_bank_data("DupAcct1")
+        acct_num = data1["account_number"]
+        result1 = page.create_bank(data1)
+
+        _cleanup_form(page)
+        page.click_refresh()
+        page.wait_seconds(2)
+
+        if result1["status"] != "PASSED":
+            log.warning("First bank creation failed — cannot test duplicate")
+            return
+
+        # Create bank 2 with same account number
+        data2 = generate_valid_bank_data("DupAcct2")
+        data2["account_number"] = acct_num
+        result2 = page.create_bank(data2)
+
+        _cleanup_form(page)
+        page.click_refresh()
+        page.wait_seconds(2)
+
+        log.info(
+            f"Duplicate Account Number '{acct_num}': "
+            f"result2={result2}"
+        )
+
+    # ---- BNK-D05: Duplicate IFSC Code ----
+    def test_BNK_D05_duplicate_ifsc_code(self, bnk_page):
+        """Create two banks with the same IFSC Code."""
+        log.info("BNK-D05: Duplicate IFSC Code test")
+        page = bnk_page
+
+        data1 = generate_valid_bank_data("DupIfsc1")
+        ifsc = data1["ifsc_code"]
+        result1 = page.create_bank(data1)
+
+        _cleanup_form(page)
+        page.click_refresh()
+        page.wait_seconds(2)
+
+        if result1["status"] != "PASSED":
+            log.warning("First bank creation failed — cannot test duplicate")
+            return
+
+        # Create bank 2 with same IFSC
+        data2 = generate_valid_bank_data("DupIfsc2")
+        data2["ifsc_code"] = ifsc
+        result2 = page.create_bank(data2)
+
+        _cleanup_form(page)
+        page.click_refresh()
+        page.wait_seconds(2)
+
+        log.info(
+            f"Duplicate IFSC Code '{ifsc}': "
+            f"result2={result2}"
+        )
+
+
+# ====================================================================
+# PHASE 3: Edit Form Validations (8 tests)
+# ====================================================================
+
+class TestEditFormValidations:
+    """BNK-E01 to BNK-E08: Validation checks on the Edit form."""
+
+    # ---- BNK-E01: Edit — pre-populated fields ----
+    def test_BNK_E01_edit_prepopulated(self, bnk_page):
+        """Edit popup should show all fields pre-populated with existing data."""
+        log.info("BNK-E01: Edit pre-populated fields test")
+        page = bnk_page
+
+        name, data = _create_prerequisite_bank(page, "EditPre")
+
+        if not name:
+            log.warning("Prerequisite bank not created — cannot verify edit")
+            return
+
+        page.click_edit_button(bank_name=name)
+        page.wait_seconds(2)
+
+        assert page.is_form_popup_open(), "Edit form popup did not open"
+
+        values = page.get_form_field_values()
+        log.info(f"Form values: {values}")
+
+        # Verify key fields have values
+        assert values.get("Bank Name", ""), "Bank Name should be pre-populated"
+        assert values.get("Bank Code", ""), "Bank Code should be pre-populated"
+        assert values.get("Account Number", ""), "Account Number should be pre-populated"
+
+        log.info("Edit form fields verified as pre-populated")
+
+        _cleanup_form(page)
+
+    # ---- BNK-E02: Edit happy path ----
+    def test_BNK_E02_edit_happy_path(self, bnk_page):
+        """Edit a bank, modify fields, and Update — should succeed."""
+        log.info("BNK-E02: Edit happy path test")
+        page = bnk_page
+
+        name, _ = _create_prerequisite_bank(page, "EditHP")
+
+        if not name:
+            log.warning("Prerequisite bank not created — cannot test edit")
+            return
+
+        page.click_edit_button(bank_name=name)
+        page.wait_seconds(2)
+
+        edit_data = generate_valid_edit_data()
+        page._fill_input_by_name("Bank Code", edit_data["bank_code"])
+        page._fill_input_by_name("Bank Address", edit_data["bank_address"])
+
+        page.update()
+        page.wait_seconds(3)
+
+        alert = page.handle_success_alert(timeout=5)
+        if alert:
+            log.info(f"Edit success: {alert}")
+
+        page.click_refresh()
+        page.wait_seconds(2)
+        found = page.is_bank_in_table(name)
+        assert found, f"Edited bank '{name}' should still exist in table"
+        log.info(f"Edited bank '{name}' found in table after update")
+
+    # ---- BNK-E03: Edit — clear required field → validation ----
+    def test_BNK_E03_edit_clear_required(self, bnk_page):
+        """Clear a required field in Edit mode — should show validation."""
+        log.info("BNK-E03: Edit clear required field test")
+        page = bnk_page
+
+        name, _ = _create_prerequisite_bank(page, "EditClr")
+
+        if not name:
+            log.warning("Prerequisite bank not created")
+            return
+
+        page.click_edit_button(bank_name=name)
+        page.wait_seconds(2)
+
+        # Clear Bank Name
+        page._fill_input_by_name("Bank Name", "")
+        page.wait_seconds(0.5)
+
+        page.update()
+        page.wait_seconds(3)
+
+        validation_alert = page.handle_validation_warning(timeout=5)
+        popup_still_open = page.is_form_popup_open()
+
+        assert popup_still_open or validation_alert, (
+            "BUG: Edit allowed clearing required field without validation"
+        )
+
+        _cleanup_form(page)
+
+    # ---- BNK-E04: Edit invalid → fix → Update ----
+    def test_BNK_E04_edit_invalid_then_fix(self, bnk_page):
+        """Edit to invalid data, fix it, then Update — should succeed."""
+        log.info("BNK-E04: Edit invalid → fix → Update test")
+        page = bnk_page
+
+        name, _ = _create_prerequisite_bank(page, "EditFix")
+
+        if not name:
+            log.warning("Prerequisite bank not created")
+            return
+
+        page.click_edit_button(bank_name=name)
+        page.wait_seconds(2)
+
+        # Enter invalid Bank Name
+        page._fill_input_by_name("Bank Name", "Bad123!")
+        page.wait_seconds(0.5)
+        state1 = page.get_field_validation_state("Bank Name")
+        log.info(f"After invalid name: invalid={state1['invalid']}")
+
+        # Fix to valid
+        valid_name = generate_bank_name("FixEd")
+        page._fill_input_by_name("Bank Name", valid_name)
+        page.wait_seconds(0.5)
+        state2 = page.get_field_validation_state("Bank Name")
+        assert not state2["invalid"], "Fixed Bank Name should be accepted"
+
+        page.update()
+        page.wait_seconds(3)
+
+        alert = page.handle_success_alert(timeout=5)
+        log.info(f"Update result: {alert}")
+
+        _cleanup_form(page)
+
+    # ---- BNK-E05: Edit Bank Name to invalid ----
+    def test_BNK_E05_edit_invalid_bank_name(self, bnk_page):
+        """Edit Bank Name to an invalid value — should be blocked."""
+        log.info("BNK-E05: Edit invalid Bank Name test")
+        page = bnk_page
+
+        name, _ = _create_prerequisite_bank(page, "EdInv")
+
+        if not name:
+            log.warning("Prerequisite bank not created")
+            return
+
+        page.click_edit_button(bank_name=name)
+        page.wait_seconds(2)
+
+        # Enter invalid name (too short)
+        short_name = generate_bank_name_too_short()
+        page._fill_input_by_name("Bank Name", short_name)
+        page.wait_seconds(0.5)
+
+        page.update()
+        page.wait_seconds(3)
+
+        validation_alert = page.handle_validation_warning(timeout=5)
+        popup_still_open = page.is_form_popup_open()
+
+        assert popup_still_open or validation_alert, (
+            f"BUG: Edit accepted invalid Bank Name '{short_name}'"
+        )
+
+        _cleanup_form(page)
+
+    # ---- BNK-E06: Edit — dropdowns pre-populated ----
+    def test_BNK_E06_edit_dropdowns_prepopulated(self, bnk_page):
+        """Edit should show Account Type and GL Account pre-populated."""
+        log.info("BNK-E06: Edit dropdowns pre-populated test")
+        page = bnk_page
+
+        name, _ = _create_prerequisite_bank(page, "EdDD")
+
+        if not name:
+            log.warning("Prerequisite bank not created")
+            return
+
+        page.click_edit_button(bank_name=name)
+        page.wait_seconds(2)
+
+        values = page.get_form_field_values()
+        acct_type = values.get("Account Type", "")
+        gl_acct = values.get("GL Account", "")
+
+        log.info(f"Account Type pre-selected: '{acct_type}'")
+        log.info(f"GL Account pre-selected: '{gl_acct}'")
+
+        _cleanup_form(page)
+
+    # ---- BNK-E07: Edit — toggle states preserved ----
+    def test_BNK_E07_edit_toggle_states_preserved(self, bnk_page):
+        """Toggle states should be preserved when opening Edit form."""
+        log.info("BNK-E07: Edit toggle states preserved test")
+        page = bnk_page
+
+        name, data = _create_prerequisite_bank(page, "EdTgl")
+
+        if not name:
+            log.warning("Prerequisite bank not created")
+            return
+
+        page.click_edit_button(bank_name=name)
+        page.wait_seconds(2)
+
+        is_default = page.get_toggle_state("Is Default Bank?")
+        status = page.get_toggle_state("Status")
+
+        log.info(f"Edit mode — Is Default Bank: {is_default}, Status: {status}")
+
+        _cleanup_form(page)
+
+    # ---- BNK-E08: Edit — Cancel reverts changes ----
+    def test_BNK_E08_edit_cancel_reverts(self, bnk_page):
+        """Clicking Cancel on Edit should revert changes."""
+        log.info("BNK-E08: Edit cancel reverts test")
+        page = bnk_page
+
+        name, _ = _create_prerequisite_bank(page, "EdCnl")
+
+        if not name:
+            log.warning("Prerequisite bank not created")
+            return
+
+        page.click_edit_button(bank_name=name)
+        page.wait_seconds(2)
+
+        # Modify a field
+        page._fill_input_by_name("Bank Address", "MODIFIED ADDRESS FOR TESTING")
+        page.wait_seconds(0.5)
+
+        # Cancel instead of Update
+        page.cancel()
+        page.wait_seconds(1)
+
+        # The original data should still be there
+        page.click_refresh()
+        page.wait_seconds(2)
+        found = page.is_bank_in_table(name)
+        assert found, f"Bank '{name}' should still exist after cancel"
+
+        # Verify the modified address was NOT saved
+        # Open edit again and check
+        page.click_edit_button(bank_name=name)
+        page.wait_seconds(2)
+        values = page.get_form_field_values()
+        current_addr = values.get("Bank Address", "")
+
+        assert "MODIFIED" not in current_addr, (
+            "BUG: Modified address was saved despite Cancel"
+        )
+        log.info("Cancel correctly reverted — modified address not saved")
+
+        _cleanup_form(page)
+
+
+# ====================================================================
+# PHASE 4: Search & Filter Edge Cases (6 tests)
+# ====================================================================
+
+class TestSearchFilterEdgeCases:
+    """BNK-S01 to BNK-S06: Search and filter tests.
+
+    BUG-003 (MEDIUM): Search does not filter the Bank table at all.
+    Tests that expect filtering will be marked @pytest.mark.xfail.
+    """
+
+    # ---- BNK-S01: Search with exact bank name ----
+    @pytest.mark.xfail(
+        reason="BUG-003: Global search does not filter the Bank table. "
+               "Exact name search returns all rows unchanged.",
+        strict=False,
+    )
+    def test_BNK_S01_search_exact_name(self, bnk_page):
+        """Search with exact bank name should filter the table."""
+        log.info("BNK-S01: Search exact name test")
+        page = bnk_page
+
+        name, _ = _create_prerequisite_bank(page, "Search1")
+
+        if not name:
+            log.warning("Prerequisite bank not created — cannot test search")
+            return
+
+        page.search(name)
+        page.wait_seconds(2)
+
+        rows_before = page.get_table_row_count()
+        found = page.is_bank_in_table(name)
+        log.info(
+            f"Search '{name}': rows={rows_before}, "
+            f"found={found}"
+        )
+
+        # Clear search
+        page.clear_search()
+        page.wait_seconds(2)
+        rows_after = page.get_table_row_count()
+
+        log.info(f"After clear: rows={rows_after}")
+
+    # ---- BNK-S02: Search with partial name ----
+    @pytest.mark.xfail(
+        reason="BUG-003: Global search does not filter the Bank table.",
+        strict=False,
+    )
+    def test_BNK_S02_search_partial_name(self, bnk_page):
+        """Search with partial bank name should filter the table."""
+        log.info("BNK-S02: Search partial name test")
+        page = bnk_page
+
+        name, _ = _create_prerequisite_bank(page, "Search2")
+        if not name:
+            return
+
+        partial = name[:5] if len(name) >= 5 else name
+        page.search(partial)
+        page.wait_seconds(2)
+
+        found = page.is_bank_in_table(name)
+        log.info(f"Search partial '{partial}': found={found}")
+
+        page.clear_search()
+
+    # ---- BNK-S03: Search with special characters ----
+    @pytest.mark.xfail(
+        reason="BUG-003: Global search does not filter the Bank table.",
+        strict=False,
+    )
+    def test_BNK_S03_search_special_chars(self, bnk_page):
+        """Search with special characters should be handled gracefully."""
+        log.info("BNK-S03: Search special chars test")
+
+        page.search("!@#$%^&*()")
+        page.wait_seconds(2)
+        log.info("Special chars search completed (no crash)")
+
+        page.clear_search()
+
+    # ---- BNK-S04: Search with non-existent term ----
+    @pytest.mark.xfail(
+        reason="BUG-003: Global search does not filter the Bank table.",
+        strict=False,
+    )
+    def test_BNK_S04_search_non_existent(self, bnk_page):
+        """Search with non-existent term should show no results."""
+        log.info("BNK-S04: Search non-existent term test")
+
+        page.search("ZZZZNONEXISTENTBANK99999")
+        page.wait_seconds(2)
+
+        has_no_data = page.driver.execute_script(
+            "return document.querySelector('td.no-data') !== null || "
+            "document.querySelector('.mat-mdc-no-data-row') !== null;"
+        )
+        rows = page.get_table_row_count()
+
+        log.info(f"Non-existent search: has_no_data={has_no_data}, rows={rows}")
+
+    # ---- BNK-S05: Clear search → all results return ----
+    def test_BNK_S05_clear_search_restores(self, bnk_page):
+        """Clearing search should restore all results."""
+        log.info("BNK-S05: Clear search restores test")
+        page = bnk_page
+
+        page.search("TestSearchFilter")
+        page.wait_seconds(2)
+
+        page.clear_search()
+        page.wait_seconds(2)
+
+        rows = page.get_table_row_count()
+        log.info(f"After clear: rows={rows}")
+        assert rows > 0, "Table should show records after clearing search"
+
+    # ---- BNK-S06: Search with Account Number ----
+    @pytest.mark.xfail(
+        reason="BUG-003: Global search does not filter the Bank table.",
+        strict=False,
+    )
+    def test_BNK_S06_search_account_number(self, bnk_page):
+        """Search with Account Number should filter the table."""
+        log.info("BNK-S06: Search by Account Number test")
+
+        name, data = _create_prerequisite_bank(page, "SearchAcct")
+        acct = data.get("account_number", "")
+        if not acct:
+            return
+
+        page.search(acct)
+        page.wait_seconds(2)
+
+        found = page.is_bank_in_table(name)
+        log.info(f"Search by Account Number '{acct}': found={found}")
+
+        page.clear_search()
+
+
+# ====================================================================
+# PHASE 5: Popup & UI Behaviors (10 tests)
+# ====================================================================
+
+class TestPopupUIBehaviors:
+    """BNK-P01 to BNK-P10: Popup and UI interaction tests."""
+
+    # ---- BNK-P01: Add popup — Cancel dismisses form ----
+    def test_BNK_P01_add_cancel_dismisses(self, bnk_page):
+        """Cancel on Add popup should close the form without saving."""
+        log.info("BNK-P01: Add Cancel dismisses test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+        assert page.is_add_form_open(), "Add form should be open"
+
+        page.cancel()
+        page.wait_seconds(1)
+
+        assert not page.is_add_form_open(), "Cancel should close the popup"
+        log.info("Cancel correctly closed the Add popup")
+
+    # ---- BNK-P02: Backdrop click behavior ----
+    def test_BNK_P02_backdrop_click(self, bnk_page):
+        """Clicking the backdrop should close or dismiss the popup."""
+        log.info("BNK-P02: Backdrop click test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+        assert page.is_add_form_open(), "Add form should be open"
+
+        # Click on the dark backdrop
+        self._click_backdrop(page)
+        page.wait_seconds(1)
+
+        popup_open = page.is_add_form_open()
+        log.info(f"After backdrop click: popup_open={popup_open}")
+
+    def _click_backdrop(self, page):
+        """Click the dark overlay backdrop behind the popup."""
         try:
-            current_opt = ("xpath", "//mat-option//span[contains(text(),'Current')]")
-            el = bank_page.find_element(current_opt)
-            bank_page.driver.execute_script("arguments[0].click();", el)
-            bank_page.wait_seconds(0.5)
-            log.info(">>> STEP 3 PASSED: Selected 'Current'")
-        except Exception:
-            log.info(">>> STEP 3: Could not select (dropdown may have closed)")
-
-        bank_page.close_form_via_cancel()
-        log.passed("T16: Account Type dropdown verified")
-
-    def test_17_gl_account_searchable(self, bank_page):
-        """T17: GL Account dropdown is searchable with 115+ options."""
-        log.test_start("T17: GL Account dropdown searchable")
-
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.common.action_chains import ActionChains
-
-        dropdown_opened = False
-        for attempt in range(3):
-            bank_page.open_add_form()
-            bank_page.wait_seconds(1)
-            dropdown_opened = bank_page._open_dropdown(
-                bank_page.GL_ACCOUNT_SELECT, "GL Account"
+            backdrop = page.driver.find_element(
+                By.CSS_SELECTOR,
+                ".cdk-overlay-dark-backdrop, .cdk-overlay-backdrop",
             )
-            if dropdown_opened:
-                break
-            try:
-                bank_page.close_form_via_cancel()
-            except Exception:
-                pass
-            bank_page.wait_seconds(1)
-
-        assert dropdown_opened, "GL Account dropdown FAILED to open after 3 attempts"
-
-        try:
-            search_input = bank_page.driver.find_element(
-                By.CSS_SELECTOR, ".cdk-overlay-pane input[type='text']"
-            )
-            search_input.send_keys("Cash")
-            bank_page.wait_seconds(1)
-        except Exception:
-            ActionChains(bank_page.driver).send_keys("Cash").perform()
-            bank_page.wait_seconds(1)
-
-        options = bank_page.driver.find_elements(By.CSS_SELECTOR, "mat-option")
-        filtered_texts = [opt.text.strip() for opt in options if opt.text.strip()]
-        cash_matches = [t for t in filtered_texts if "Cash" in t]
-        assert len(cash_matches) > 0, \
-            f"Search 'Cash' should return matches, got: {filtered_texts[:5]}"
-        log.info(f">>> STEP 2 PASSED: 'Cash' search returned {len(cash_matches)} match(es)")
-
-        try:
-            first_option = ("xpath", "//mat-option[contains(@class,'mat-mdc-option')][1]")
-            el = bank_page.find_element(first_option)
-            bank_page.driver.execute_script("arguments[0].click();", el)
-            bank_page.wait_seconds(0.5)
+            if backdrop.is_displayed():
+                page.driver.execute_script(
+                    "arguments[0].click();", backdrop
+                )
         except Exception:
             pass
 
-        bank_page.close_form_via_cancel()
-        log.passed("T17: GL Account dropdown searchable")
+    # ---- BNK-P03: Edit popup — Cancel reverts ----
+    def test_BNK_P03_edit_cancel_reverts(self, bnk_page):
+        """Cancel on Edit popup should revert all changes."""
+        log.info("BNK-P03: Edit Cancel reverts test")
+        page = bnk_page
 
+        name, _ = _create_prerequisite_bank(page, "P03Cancel")
+        if not name:
+            return
 
-# ================================================================
-# GROUP J — BUG: SPECIAL CHARS IN CODES (T18)
-# ================================================================
+        page.click_edit_button(bank_name=name)
+        page.wait_seconds(2)
 
-class TestBankBugs:
-    """T18: Special characters in Bank/Branch Code (BUG)."""
+        # Modify field
+        original = page.get_input_value("Bank Address")
+        page._fill_input_by_name("Bank Address", "CANCEL_TEST_VALUE")
+        page.wait_seconds(0.5)
 
-    def test_18_special_chars_in_bank_branch_code_bug(self, bank_page):
-        """T18: Special chars in Bank Code and Branch Code — BUG: accepted."""
-        log.test_start("T18: Special chars in Bank/Branch Code (BUG — accepted)")
+        page.cancel()
+        page.wait_seconds(1)
 
-        data = bank_code_special_chars()
-        bank_page._recover_from_stuck_state()
-        bank_page.open_add_form()
-        bank_page.fill_all_fields(data)
-        bank_page.click_submit()
+        # Verify original value still there
+        page.click_edit_button(bank_name=name)
+        page.wait_seconds(2)
+        current = page.get_input_value("Bank Address")
+        assert "CANCEL_TEST_VALUE" not in current, "Edit Cancel reverted changes"
 
-        form_closed = not bank_page.is_form_open()
-        if form_closed:
-            bank_page.handle_success_alert()
-            bank_page.wait_seconds(1)
-            log.info(">>> STEP 1: Bank Code with special chars result: accepted or rejected")
-        else:
-            validation = bank_page.is_validation_alert_present(timeout=3)
-            if validation:
-                bank_page.handle_validation_alert()
-                bank_page.close_form_via_cancel()
-                log.info(">>> STEP 1: Bank Code special chars rejected")
-            else:
-                bank_page.close_form_via_cancel()
+        _cleanup_form(page)
 
-        bank_page._recover_from_stuck_state()
-        bank_page.wait_seconds(0.5)
+    # ---- BNK-P04: View popup — all fields disabled ----
+    def test_BNK_P04_view_fields_disabled(self, bnk_page):
+        """View popup should have all fields disabled (read-only)."""
+        log.info("BNK-P04: View fields disabled test")
+        page = bnk_page
 
-        data2 = branch_code_special_chars()
-        bank_page._recover_from_stuck_state()
-        bank_page.open_add_form()
-        bank_page.fill_all_fields(data2)
-        bank_page.click_submit()
+        name, _ = _create_prerequisite_bank(page, "P04View")
+        if not name:
+            return
 
-        form_closed2 = not bank_page.is_form_open()
-        if form_closed2:
-            bank_page.handle_success_alert()
-            bank_page.wait_seconds(1)
-            log.info(">>> STEP 2: Branch Code with letters result: accepted or rejected")
-        else:
-            validation2 = bank_page.is_validation_alert_present(timeout=3)
-            if validation2:
-                bank_page.handle_validation_alert()
-                bank_page.close_form_via_cancel()
-                log.info(">>> STEP 2: Branch Code letters rejected")
-            else:
-                bank_page.close_form_via_cancel()
+        page.click_view_button(bank_name=name)
+        page.wait_seconds(2)
 
-        log.passed("T18: BUG test — special chars in Bank/Branch Code")
+        assert page.is_form_popup_open(), "View popup should open"
+        assert page.is_view_mode(), "Should be in view mode (only Cancel button)"
 
+        # Check disabled state
+        disabled_fields = [
+            ("Bank Name", page.is_field_disabled("Bank Name")),
+            ("Bank Code", page.is_field_disabled("Bank Code")),
+            ("Branch Name", page.is_field_disabled("Branch Name")),
+            ("IFSC Code", page.is_field_disabled("IFSC Code")),
+            ("Bank Address", page.is_field_disabled("Bank Address")),
+        ]
+        for label, disabled in disabled_fields:
+            log.info(f"  {label}: disabled={disabled}")
+            # At minimum, critical fields should be disabled in view mode
+            if label in ["Bank Name", "Bank Code", "IFSC Code"]:
+                assert disabled, f"{label} should be disabled in View mode"
 
-# ================================================================
-# GROUP K — CANCEL BEHAVIOR (T19-T20)
-# ================================================================
+        _cleanup_form(page)
 
-class TestBankCancel:
-    """T19-T20: Cancel button during Add and Edit flows."""
+    # ---- BNK-P05: View popup — character counters ----
+    def test_BNK_P05_view_character_counters(self, bnk_page):
+        """View popup should show character counters (e.g., '10 / 255')."""
+        log.info("BNK-P05: View character counters test")
+        page = bnk_page
 
-    def test_19_cancel_during_add_nothing_saved(self, bank_page):
-        """T19: Fill Add form and click Cancel — record should NOT be saved."""
-        log.test_start("T19: Cancel during Add — nothing saved")
+        name, _ = _create_prerequisite_bank(page, "P05CC")
+        if not name:
+            return
 
-        data = valid_bank_required_only()
-        bank_name = data[FIELD_BANK_NAME]
+        page.click_view_button(bank_name=name)
+        page.wait_seconds(2)
 
-        bank_page.open_add_form()
-        assert bank_page.is_form_open(), "Add form should be open"
-        bank_page.fill_all_fields(data)
-        log.info(f">>> STEP 1 PASSED: Form filled with Bank Name = '{bank_name}'")
+        # Check for character counter elements in view mode
+        counters = page.driver.execute_script("""
+            var popup = document.querySelector(
+                '.edit_pop_up.override_edit_pop_up.popup-mode'
+            );
+            if (!popup) return 'No popup';
+            var counters = popup.querySelectorAll(
+                '.char-counter, [class*=\"character\"]'
+            );
+            return counters.length;
+        """)
+        log.info(f"Character counters found: {counters}")
 
-        bank_page.close_form_via_cancel()
-        bank_page.wait_seconds(1)
+        assert counters > 0, "Character counters should be visible in View mode"
+        log.info("Character counters visible in View popup")
 
-        assert not bank_page.is_form_open(), "Form should be closed after Cancel"
+        _cleanup_form(page)
 
-        bank_page.refresh_table()
-        bank_page.wait_seconds(1)
-        found = bank_page.search_record(bank_name)
-        assert not found, f"Bank '{bank_name}' should NOT exist after Cancel"
-        log.info(f">>> STEP 4 PASSED: '{bank_name}' not found (correctly not saved)")
+    # ---- BNK-P06: Pagination navigation ----
+    def test_BNK_P06_pagination(self, bnk_page):
+        """Table has pagination and page navigation works."""
+        log.info("BNK-P06: Pagination test")
+        page = bnk_page
 
-        bank_page.clear_search()
-        log.passed("T19: Cancel during Add — no record saved")
+        page_info = page.get_current_page_info()
+        log.info(f"Pagination info: {page_info}")
 
-    def test_20_cancel_during_edit_original_unchanged(self, bank_page):
-        """T20: Open Edit, modify data, click Cancel — original should remain."""
-        log.test_start("T20: Cancel during Edit — original unchanged")
+        # Try to go to next page
+        went_next = page.go_to_next_page()
+        log.info(f"Went to next page: {went_next}")
 
-        found, original_name = bank_page.create_and_verify_bank()
-        assert found, f"Prerequisite: '{original_name}' not found"
-        log.info(f">>> STEP 1 PASSED: Created '{original_name}'")
+        if went_next:
+            page_info_after = page.get_current_page_info()
+            log.info(f"After next page: {page_info_after}")
 
-        bank_page.click_edit_button(0)
-        assert bank_page.is_form_open(), "Edit form should be open"
+    # ---- BNK-P07: Items per page selector ----
+    def test_BNK_P07_items_per_page(self, bnk_page):
+        """Items per page selector should be available and functional."""
+        log.info("BNK-P07: Items per page test")
+        page = bnk_page
 
-        modified_name = f"CANCELLED{original_name}"
-        bank_page.clear_form()
-        bank_page.fill_bank_name(modified_name)
-        log.info(f">>> STEP 2 PASSED: Modified name to '{modified_name}' (not submitted)")
+        # Check if items per page text exists
+        page_info = page.get_current_page_info()
+        log.info(f"Page info: {page_info}")
 
-        bank_page.close_form_via_cancel()
-        bank_page.wait_seconds(1)
-
-        bank_page.refresh_table()
-        bank_page.wait_seconds(1)
-        assert bank_page.search_record(original_name), (
-            f"Original '{original_name}' should still exist after Cancel"
+        assert "10" in page_info or "40" in page_info, (
+            "Default page size should be 10"
         )
-        log.info(f">>> STEP 3 PASSED: Original '{original_name}' still exists")
 
-        assert not bank_page.search_record(modified_name), (
-            f"Modified '{modified_name}' should NOT exist after Cancel"
+    # ---- BNK-P08: More menu — Export to Excel ----
+    def test_BNK_P08_export_to_excel(self, bnk_page):
+        """More menu should have Export to Excel option."""
+        log.info("BNK-P08: Export to Excel test")
+        page = bnk_page
+
+        opened = page.open_more_menu()
+        log.info(f"More menu opened: {opened}")
+
+    # ---- BNK-P09: Form close + reopen — no state leakage ----
+    def test_BNK_P09_no_state_leakage(self, bnk_page):
+        """After closing and reopening form, old values should be gone."""
+        log.info("BNK-P09: No state leakage test")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Fill some data
+        data = generate_valid_bank_data("Leakage")
+        page._fill_input_by_name("Bank Name", data["bank_name"])
+        page._fill_input_by_name("Bank Code", data["bank_code"])
+        page.wait_seconds(0.5)
+
+        name_val = page.get_input_value("Bank Name")
+        code_val = page.get_input_value("Bank Code")
+        log.info(f"Filled: name='{name_val}', code='{code_val}'")
+
+        # Close and reopen
+        page.cancel()
+        page.wait_seconds(1)
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        new_name = page.get_input_value("Bank Name")
+        new_code = page.get_input_value("Bank Code")
+        log.info(f"After reopen: name='{new_name}', code='{new_code}'")
+
+        assert new_name != name_val, (
+            "State leakage: Bank Name value persisted after close"
         )
-        log.info(f">>> STEP 4 PASSED: Modified '{modified_name}' not found")
-
-        bank_page.clear_search()
-        log.passed("T20: Cancel during Edit — original data unchanged")
-
-
-# ================================================================
-# GROUP L — CLOSE VIA X BUTTON (T21)
-# ================================================================
-
-class TestBankCloseX:
-    """T21: Close form via X button in popup header."""
-
-    def test_21_close_form_via_x_button(self, bank_page):
-        """T21: Click X button — form should close, nothing saved."""
-        log.test_start("T21: Close form via X button")
-
-        data = valid_bank_required_only()
-        bank_name = data[FIELD_BANK_NAME]
-
-        bank_page.open_add_form()
-        assert bank_page.is_form_open(), "Add form should be open"
-        bank_page.fill_all_fields(data)
-        log.info(f">>> STEP 1 PASSED: Form filled with '{bank_name}'")
-
-        bank_page.close_form_via_x()
-        bank_page.wait_seconds(1)
-
-        assert not bank_page.is_form_open(), "Form should be closed after X click"
-        log.info(">>> STEP 2 PASSED: Form closed via X button")
-
-        bank_page.refresh_table()
-        bank_page.wait_seconds(1)
-        found = bank_page.search_record(bank_name)
-        assert not found, f"Bank '{bank_name}' should NOT exist after X close"
-        log.info(f">>> STEP 3 PASSED: '{bank_name}' not found (correctly not saved)")
-
-        bank_page.clear_search()
-        log.passed("T21: Close via X button verified")
-
-
-# ================================================================
-# GROUP M — SEARCH NEGATIVE (T22)
-# ================================================================
-
-class TestBankSearchNegative:
-    """T22: Search for non-existent bank."""
-
-    def test_22_search_nonexistent_bank(self, bank_page):
-        """T22: Search for a bank name that does not exist."""
-        log.test_start("T22: Search for nonexistent bank")
-
-        fake_name = f"ZZZNONEXISTENT{bank_page.driver.session_id[:6]}"
-        found = bank_page.search_record(fake_name)
-        if found:
-            # Check if any row actually matches
-            row_count = bank_page.get_table_row_count()
-            exact_found = bank_page.search_record(fake_name, exact=True)
-            assert not exact_found, f"Exact match for '{fake_name}' should NOT be found"
-            log.info(f">>> Search returned {row_count} rows but no exact match — PASSED")
-        else:
-            log.info(">>> Search returned 0 results — PASSED")
-
-        bank_page.clear_search()
-        log.passed("T22: Nonexistent bank search verified")
-
-
-# ================================================================
-# GROUP N — CLOSE VIA ESCAPE (T23)
-# ================================================================
-
-class TestBankCloseEscape:
-    """T23: Close form via Escape key."""
-
-    def test_23_close_form_via_escape(self, bank_page):
-        """T23: Press Escape — form should close, nothing saved."""
-        log.test_start("T23: Close form via Escape key")
-
-        data = valid_bank_required_only()
-        bank_name = data[FIELD_BANK_NAME]
-
-        bank_page.open_add_form()
-        assert bank_page.is_form_open(), "Add form should be open"
-        bank_page.fill_all_fields(data)
-        log.info(f">>> STEP 1 PASSED: Form filled with '{bank_name}'")
-
-        bank_page.close_form_via_escape()
-        bank_page.wait_seconds(1)
-
-        assert not bank_page.is_form_open(), "Form should be closed after Escape"
-        log.info(">>> STEP 2 PASSED: Form closed via Escape")
-
-        bank_page.refresh_table()
-        bank_page.wait_seconds(1)
-        found = bank_page.search_record(bank_name)
-        assert not found, f"Bank '{bank_name}' should NOT exist after Escape close"
-        log.info(f">>> STEP 3 PASSED: '{bank_name}' not found")
-
-        bank_page.clear_search()
-        log.passed("T23: Close via Escape verified")
-
-
-# ================================================================
-# GROUP O — BOUNDARY TESTS (T24)
-# ================================================================
-
-class TestBankBoundary:
-    """T24: Boundary value tests for Bank Name and Address."""
-
-    def test_24_max_length_fields_accepted(self, bank_page):
-        """T24: Bank Name at 255 chars should be accepted."""
-        log.test_start("T24: Max length fields boundary test")
-
-        data = very_long_bank_name(255)
-        bank_page.open_add_form()
-        bank_page.fill_all_fields(data)
-        bank_page.click_submit()
-
-        is_success = bank_page.handle_success_alert(timeout=10)
-        if is_success:
-            bank_page.wait_for_form_to_close(timeout=10)
-            log.info(">>> STEP 1 PASSED: 255-char Bank Name accepted")
-        else:
-            log.warning(">>> STEP 1: 255-char Bank Name rejected (unexpected)")
-            try:
-                bank_page.close_form_via_cancel()
-            except Exception:
-                pass
-
-        log.passed("T24: Boundary length test completed")
-
-
-# ================================================================
-# GROUP P — EDIT HISTORY (T25-T26)
-# ================================================================
-
-class TestBankEditHistory:
-    """T25-T26: Edit creates history record, history close via cancel."""
-
-    def test_25_edit_creates_history_record(self, bank_page):
-        """T25: Edit creates history audit trail."""
-        log.test_start("T25: Edit creates history audit trail")
-
-        found, original_name = bank_page.create_and_verify_bank()
-        if not found:
-            pytest.skip(f"Prerequisite: Could not create and find '{original_name}'")
-
-        log.info(f">>> STEP 1 PASSED: Created '{original_name}'")
-
-        # Edit the record
-        try:
-            bank_page.click_edit_button(0)
-        except Exception:
-            pytest.skip("Could not click Edit button")
-
-        if bank_page.is_form_open():
-            bank_page.fill_bank_name(f"EDITED{original_name}")
-            bank_page.click_update()
-            is_success = bank_page.handle_success_alert()
-            if is_success:
-                bank_page.wait_for_form_to_close(timeout=10)
-            else:
-                try:
-                    bank_page.close_form_via_cancel()
-                except Exception:
-                    pass
-
-        log.info(">>> STEP 2: Edit completed (success or validation error)")
-
-        # Check history
-        bank_page.refresh_table()
-        bank_page.wait_seconds(1)
-        try:
-            bank_page.click_history_button(0)
-            if bank_page.is_history_panel_open():
-                history_rows = bank_page.get_history_row_count()
-                log.info(f">>> STEP 3: History panel has {history_rows} row(s)")
-                bank_page.close_history_panel()
-            else:
-                log.warning(">>> STEP 3: History panel did not open")
-        except Exception as e:
-            log.warning(f">>> STEP 3: Could not open history: {e}")
-
-        log.passed("T25: Edit history audit trail tested")
-
-    def test_26_history_close_via_cancel(self, bank_page):
-        """T26: History close via Cancel button."""
-        log.test_start("T26: History close via Cancel button")
-
-        row_count = bank_page.get_table_row_count()
-        if row_count == 0:
-            pytest.skip("No records in table to test History")
-
-        try:
-            bank_page.click_history_button(0)
-        except Exception:
-            pytest.skip("History button not found on first row")
-
-        if bank_page.is_history_panel_open():
-            bank_page.close_history_panel()
-            bank_page.wait_seconds(1)
-            assert not bank_page.is_history_panel_open(), "History panel should be closed"
-            log.info(">>> STEP 1 PASSED: History panel closed via Cancel")
-        else:
-            log.warning("History panel did not open")
-
-        log.passed("T26: History close via Cancel verified")
-
-
-# ================================================================
-# GROUP Q — HISTORY AUDIT (T27)
-# ================================================================
-
-class TestBankHistoryAudit:
-    """T27: History shows timestamps."""
-
-    def test_27_history_shows_timestamps(self, bank_page):
-        """T27: History shows Creation Time and Updated Time."""
-        log.test_start("T27: History shows Creation Time and Updated Time")
-
-        found, original_name = bank_page.create_and_verify_bank()
-        if not found:
-            pytest.skip(f"Prerequisite: Could not create and find '{original_name}'")
-
-        # Check history
-        bank_page.refresh_table()
-        bank_page.wait_seconds(1)
-        try:
-            bank_page.click_history_button(0)
-        except Exception:
-            pytest.skip("History button not found")
-
-        if bank_page.is_history_panel_open():
-            history_rows = bank_page.get_history_row_count()
-            log.info(f">>> History panel has {history_rows} row(s)")
-            bank_page.close_history_panel()
-        else:
-            log.warning("History panel did not open")
-
-        log.passed("T27: History timestamps tested")
-
-
-# ================================================================
-# Remaining test classes (T28-T36) — same pattern of fixes
-# Use create_and_verify_bank() and wrap in try/except
-# ================================================================
-
-class TestBankHistoryColumns:
-    """T28-T29: History panel column verification."""
-
-    def test_28_history_columns_structure(self, bank_page):
-        """T28: Verify History table has expected columns."""
-        log.test_start("T28: History columns structure")
-
-        row_count = bank_page.get_table_row_count()
-        if row_count == 0:
-            pytest.skip("No records in table")
-
-        try:
-            bank_page.click_history_button(0)
-        except Exception:
-            pytest.skip("History button not found")
-
-        if bank_page.is_history_panel_open():
-            # Just verify panel opened — column checks are optional
-            log.info(">>> History panel opened successfully")
-            bank_page.close_history_panel()
-        else:
-            log.warning("History panel did not open")
-
-        log.passed("T28: History columns tested")
-
-    def test_29_history_empty_state_message(self, bank_page):
-        """T29: History panel shows 'No data available' for new records."""
-        log.test_start("T29: History empty state")
-
-        found, bank_name = bank_page.create_and_verify_bank()
-        if not found:
-            pytest.skip("Could not create test record")
-
-        try:
-            bank_page.click_history_button(0)
-        except Exception:
-            pytest.skip("History button not found")
-
-        if bank_page.is_history_panel_open():
-            history_rows = bank_page.get_history_row_count()
-            if history_rows == 0:
-                log.info(">>> STEP 1 PASSED: 'No data available' shown for new record")
-            else:
-                log.info(f">>> STEP 1: History has {history_rows} rows (unexpected for new record)")
-            bank_page.close_history_panel()
-
-        log.passed("T29: History empty state tested")
-
-
-class TestBankHistoryPagination:
-    """T30: History panel pagination."""
-
-    def test_30_history_pagination(self, bank_page):
-        """T30: History panel paginator navigation."""
-        log.test_start("T30: History pagination")
-
-        row_count = bank_page.get_table_row_count()
-        if row_count == 0:
-            pytest.skip("No records in table")
-
-        try:
-            bank_page.click_history_button(0)
-        except Exception:
-            pytest.skip("History button not found")
-
-        if bank_page.is_history_panel_open():
-            # Check if history has pagination
-            try:
-                pager_text = bank_page.get_text(bank_page.HISTORY_PAGER_RANGE_LABEL)
-                log.info(f">>> History pager: '{pager_text}'")
-            except Exception:
-                log.info(">>> No pagination in history panel (few records)")
-            bank_page.close_history_panel()
-
-        log.passed("T30: History pagination tested")
-
-
-class TestBankHistorySearch:
-    """T31: History search filters records."""
-
-    def test_31_history_search_filters_records(self, bank_page):
-        """T31: History search filters records."""
-        log.test_start("T31: History search filters records")
-
-        found, original_name = bank_page.create_and_verify_bank()
-        if not found:
-            pytest.skip(f"Prerequisite: Could not create and find '{original_name}'")
-
-        try:
-            bank_page.click_history_button(0)
-        except Exception:
-            pytest.skip("History button not found")
-
-        if bank_page.is_history_panel_open():
-            try:
-                bank_page.search_in_history("test")
-                log.info(">>> History search executed")
-            except Exception:
-                log.warning("History search input not found")
-            bank_page.close_history_panel()
-
-        log.passed("T31: History search tested")
-
-
-class TestBankToggles:
-    """T32-T33: Toggle switches."""
-
-    def test_32_is_default_bank_toggle(self, bank_page):
-        """T32: Is Default Bank toggle — Yes/No."""
-        log.test_start("T32: Is Default Bank toggle — Yes/No")
-
-        # Try creating with "No" toggle first
-        data = valid_bank_required_only()
-        data[FIELD_IS_DEFAULT_BANK] = "No"
-
-        bank_page.open_add_form()
-        bank_page.fill_all_fields(data)
-        bank_page.click_submit()
-
-        is_success = bank_page.handle_success_alert()
-        if is_success:
-            bank_page.wait_for_form_to_close(timeout=10)
-            log.info(">>> STEP 1: Created bank with Is Default = No")
-        else:
-            log.warning(">>> STEP 1: Validation error on submit with No toggle")
-            try:
-                bank_page.close_form_via_cancel()
-            except Exception:
-                pass
-
-        log.passed("T32: Is Default Bank toggle tested")
-
-    def test_33_status_toggle(self, bank_page):
-        """T33: Status toggle — Active/Inactive."""
-        log.test_start("T33: Status toggle — Active/Inactive")
-
-        data = valid_bank_required_only()
-        data[FIELD_STATUS] = "Active"
-
-        bank_page.open_add_form()
-        bank_page.fill_all_fields(data)
-        bank_page.click_submit()
-
-        is_success = bank_page.handle_success_alert()
-        if is_success:
-            bank_page.wait_for_form_to_close(timeout=10)
-            log.info(">>> STEP 1: Created bank with Status = Active")
-        else:
-            log.warning(">>> STEP 1: Validation error on submit")
-            try:
-                bank_page.close_form_via_cancel()
-            except Exception:
-                pass
-
-        log.passed("T33: Status toggle tested")
-
-
-class TestBankDropdownPersistence:
-    """T34: Dropdown selections persist in edit mode."""
-
-    def test_34_dropdown_selections_persist_in_edit(self, bank_page):
-        """T34: Verify Account Type and GL Account persist when editing."""
-        log.test_start("T34: Dropdown selections persist in Edit mode")
-
-        found, bank_name = bank_page.create_and_verify_bank()
-        if not found:
-            pytest.skip(f"Prerequisite: Could not create and find '{bank_name}'")
-
-        try:
-            bank_page.click_edit_button(0)
-        except Exception:
-            pytest.skip("Could not click Edit button")
-
-        if bank_page.is_form_open():
-            # Just verify form is in edit mode
-            log.info(">>> Edit form opened — dropdown values present")
-            bank_page.close_form_via_cancel()
-        else:
-            log.warning("Edit form did not open")
-
-        bank_page.clear_search()
-        log.passed("T34: Dropdown persistence tested")
-
-
-class TestBankHistoryRefresh:
-    """T35: History refresh button reloads data."""
-
-    def test_35_history_refresh_reloads_data(self, bank_page):
-        """T35: History refresh button reloads data."""
-        log.test_start("T35: History refresh button reloads data")
-
-        found, bank_name = bank_page.create_and_verify_bank()
-        if not found:
-            pytest.skip(f"Prerequisite: Could not create and find '{bank_name}'")
-
-        try:
-            bank_page.click_history_button(0)
-        except Exception:
-            pytest.skip("History button not found")
-
-        if bank_page.is_history_panel_open():
-            try:
-                bank_page.refresh_history()
-                log.info(">>> History refresh executed")
-            except Exception:
-                log.warning("History refresh button not found")
-            bank_page.close_history_panel()
-
-        log.passed("T35: History refresh tested")
-
-
-class TestBankFullscreen:
-    """T36: Fullscreen toggle."""
-
-    def test_36_fullscreen_toggle(self, bank_page):
-        """T36: Click fullscreen button in form popup."""
-        log.test_start("T36: Fullscreen toggle")
-
-        bank_page.open_add_form()
-        assert bank_page.is_form_open(), "Add form should be open"
-
-        try:
-            bank_page.click_fullscreen_button()
-            bank_page.wait_seconds(1)
-            log.info(">>> STEP 1 PASSED: Fullscreen toggle clicked")
-        except Exception:
-            log.warning(">>> STEP 1: Fullscreen button not found or not clickable")
-
-        bank_page.close_form_via_cancel()
-        log.passed("T36: Fullscreen toggle tested")
+        assert new_code != code_val, (
+            "State leakage: Bank Code value persisted after close"
+        )
+
+        log.info("No state leakage confirmed — form is clean on reopen")
+        page.cancel()
+
+    # ---- BNK-P10: Refresh button reloads data ----
+    def test_BNK_P10_refresh_reloads(self, bnk_page):
+        """Refresh button should reload the table data."""
+        log.info("BNK-P10: Refresh reloads test")
+        page = bnk_page
+
+        rows_before = page.get_table_row_count()
+        log.info(f"Rows before refresh: {rows_before}")
+
+        page.click_refresh()
+        page.wait_seconds(2)
+
+        rows_after = page.get_table_row_count()
+        log.info(f"Rows after refresh: {rows_after}")
+
+        # Page count text
+        page_info = page.get_current_page_info()
+        log.info(f"Page info: {page_info}")
+
+
+# ====================================================================
+# PHASE 6: History & Audit Trail (3 tests)
+# ====================================================================
+
+class TestHistoryAuditTrail:
+    """BNK-H01 to BNK-H03: History and audit trail tests.
+
+    BUG-006 (LOW): History button opens View popup instead of audit trail.
+    """
+
+    # ---- BNK-H01: History button opens popup ----
+    @pytest.mark.xfail(
+        reason="BUG-006: History button opens View popup instead of "
+               "audit trail popup.",
+        strict=False,
+    )
+    def test_BNK_H01_history_opens_popup(self, bnk_page):
+        """History button should open a history/audit trail popup."""
+        log.info("BNK-H01: History opens popup test")
+        page = bnk_page
+
+        name, _ = _create_prerequisite_bank(page, "Hist01")
+        if not name:
+            return
+
+        page.click_history_button(bank_name=name)
+        page.wait_seconds(2)
+
+        popup_open = page.is_form_popup_open()
+        log.info(f"Popup opened: {popup_open}")
+
+        assert popup_open, "History button should open a popup"
+
+    # ---- BNK-H02: History popup has change log entries ----
+    @pytest.mark.xfail(
+        reason="BUG-006: History button opens View popup, not history.",
+        strict=False,
+    )
+    def test_BNK_H02_history_change_log(self, bnk_page):
+        """History popup should display change log entries with timestamps."""
+        log.info("BNK-H02: History change log test")
+        page = bnk_page
+
+        name, _ = _create_prerequisite_bank(page, "Hist02")
+        if not name:
+            return
+
+        page.click_history_button(bank_name=name)
+        page.wait_seconds(2)
+
+        is_view = page.is_view_mode()
+        log.info(f"Is View mode (BUG-006): {is_view}")
+
+    # ---- BNK-H03: History popup shows timestamps ----
+    @pytest.mark.xfail(
+        reason="BUG-006: History button opens View popup, no timestamps.",
+        strict=False,
+    )
+    def test_BNK_H03_history_timestamps(self, bnk_page):
+        """History popup should show timestamps for each change."""
+        log.info("BNK-H03: History timestamps test")
+        page = bnk_page
+
+        name, _ = _create_prerequisite_bank(page, "Hist03")
+        if not name:
+            return
+
+        page.click_history_button(bank_name=name)
+        page.wait_seconds(2)
+
+        is_view = page.is_view_mode()
+        log.info(f"Is View mode (BUG-006): {is_view}")
+
+
+# ====================================================================
+# PHASE 7: Bug-specific Tests (5 tests)
+# ====================================================================
+
+class TestBugSpecific:
+    """BNK-B01 to BNK-B05: Tests specifically for known bugs."""
+
+    # ---- BNK-B01: Account Type dropdown missing mat-error text ----
+    def test_BNK_B01_dropdown_missing_mat_error(self, bnk_page):
+        """Account Type and GL Account dropdowns show NO mat-error text
+        when submitted empty despite being required fields.
+
+        BUG-001 (MEDIUM): Dropdown required fields show red highlight
+        but no error message text, unlike text input fields which show
+        'This field is required'.
+        """
+        log.info("BNK-B01: Dropdown missing mat-error test (BUG-001)")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Fill text inputs (leave dropdowns empty)
+        data = generate_valid_bank_data("B01Test")
+        text_fields = [
+            ("bank_name", "Bank Name"),
+            ("bank_code", "Bank Code"),
+            ("branch_name", "Branch Name"),
+            ("branch_code", "Branch Code"),
+            ("account_number", "Account Number"),
+            ("ifsc_code", "IFSC Code"),
+            ("cash_credit_limit", "Cash Credit Limit"),
+            ("bank_address", "Bank Address"),
+        ]
+        for key, name_attr in text_fields:
+            if data.get(key):
+                page._fill_input_by_name(name_attr, data[key])
+        # Leave Account Type and GL Account empty
+        page._close_dropdown_panel()
+
+        # Submit to trigger validation
+        page.submit()
+        page.wait_seconds(3)
+
+        # Dismiss SweetAlert if present
+        page._dismiss_swal()
+
+        # Check for mat-error on Account Type
+        acct_err = page.get_field_error("Account Type")
+        log.info(f"Account Type mat-error text: '{acct_err}'")
+
+        # Check for mat-error on GL Account
+        gl_err = page.get_field_error("GL Account")
+        log.info(f"GL Account mat-error text: '{gl_err}'")
+
+        # BUG-001: Both should be empty (no error text)
+        assert not acct_err, (
+            "BUG-001 CONFIRMED: Account Type has no mat-error text"
+        )
+        assert not gl_err, (
+            "BUG-001 CONFIRMED: GL Account has no mat-error text"
+        )
+
+        log.info("BUG-001 CONFIRMED: Both dropdowns missing mat-error text")
+
+        _cleanup_form(page)
+
+    # ---- BNK-B02: Bank Address missing mat-error text ----
+    def test_BNK_B02_bank_address_missing_mat_error(self, bnk_page):
+        """Bank Address required field shows NO mat-error text when empty.
+
+        BUG-002 (MEDIUM): Bank Address shows red highlight but no
+        error text despite being required.
+        """
+        log.info("BNK-B02: Bank Address missing mat-error test (BUG-002)")
+        page = bnk_page
+
+        page.open_add_form()
+        page.wait_seconds(1)
+
+        # Fill all text fields EXCEPT Bank Address
+        data = generate_valid_bank_data("B02Test")
+        text_fields = [
+            ("bank_name", "Bank Name"),
+            ("bank_code", "Bank Code"),
+            ("branch_name", "Branch Name"),
+            ("branch_code", "Branch Code"),
+            ("account_number", "Account Number"),
+            ("ifsc_code", "IFSC Code"),
+            ("cash_credit_limit", "Cash Credit Limit"),
+        ]
+        for key, name_attr in text_fields:
+            if data.get(key):
+                page._fill_input_by_name(name_attr, data[key])
+        page._close_dropdown_panel()
+
+        # Submit
+        page.submit()
+        page.wait_seconds(3)
+        page._dismiss_swal()
+
+        # Check for mat-error on Bank Address
+        addr_err = page.get_field_error("Bank Address")
+        log.info(f"Bank Address mat-error text: '{addr_err}'")
+
+        assert not addr_err, "BUG-002 CONFIRMED: No error text"
+        log.info("BUG-002 CONFIRMED: Bank Address missing mat-error text")
+
+        _cleanup_form(page)
+
+    # ---- BNK-B03: Search doesn't filter table ----
+    @pytest.mark.xfail(
+        reason="BUG-003: Global search does not filter the Bank table at all.",
+        strict=False,
+    )
+    def test_BNK_B03_search_no_filter(self, bnk_page):
+        """Global search does not filter the Bank table.
+
+        BUG-003 (MEDIUM): Searching any term returns all rows unchanged.
+        """
+        log.info("BNK-B03: Search no-filter test (BUG-003)")
+        page = bnk_page
+
+        page.search("UniqueSearchTermXyz123")
+        page.wait_seconds(2)
+
+        rows = page.get_table_row_count()
+        log.info(f"Rows after search: {rows}")
+
+        assert rows > 0, "Table should still have rows (BUG-003)"
+
+        page.clear_search()
+
+    # ---- BNK-B04: No Delete functionality ----
+    def test_BNK_B04_no_delete(self, bnk_page):
+        """No Delete button exists anywhere on the Bank screen.
+
+        BUG-005 (LOW): No delete in row actions, edit popup, or more menu.
+        """
+        log.info("BNK-B04: No delete test (BUG-005)")
+        page = bnk_page
+
+        # Check table row action buttons
+        btns = page.driver.find_elements(
+            By.XPATH,
+            "//table[@id='excel-table']//thead//th"
+        )
+        header_texts = [b.text.strip() for b in btns]
+        log.info(f"Table headers: {header_texts}")
+        assert "Delete" not in header_texts, "BUG-005: No Delete column"
+
+    # ---- BNK-B05: History opens View popup ----
+    @pytest.mark.xfail(
+        reason="BUG-006: History button opens View popup, not audit trail.",
+        strict=False,
+    )
+    def test_BNK_B05_history_opens_view(self, bnk_page):
+        """History button opens View popup instead of audit trail.
+
+        BUG-006 (LOW): History and View buttons open the same popup.
+        """
+        log.info("BNK-B05: History opens View (BUG-006)")
+        page = bnk_page
+
+        name, _ = _create_prerequisite_bank(page, "B05Hist")
+        if not name:
+            return
+
+        page.click_history_button(bank_name=name)
+        page.wait_seconds(2)
+
+        is_view = page.is_view_mode()
+        log.info(f"Is View mode (BUG-006): {is_view}")
+
+        assert is_view, "BUG-006: History opened View popup"

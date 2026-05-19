@@ -58,7 +58,7 @@ from selenium.common.exceptions import (
 )
 from common.base_page import BasePage
 from common.logger import log
-from config import RHYTHMERP_BASE_URL, EXPLICIT_WAIT
+from config import RHYTHMERP_BASE_URL, EXPLICIT_WAIT, RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
 
 # Global list to track every submission for reporting
 EGD_SUBMISSIONS = []
@@ -264,12 +264,24 @@ class EntityGroupDefinitionPage(BasePage):
     def _is_listing_page_loaded(self):
         """Check if the listing page (table or add button) is loaded."""
         try:
-            tables = self.driver.find_elements(By.CSS_SELECTOR, "table#excel-table")
-            if tables:
-                return True
+            # Check for EGD table (no ID — use mat-mdc-table or excel-table)
+            tables = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "table#excel-table, table.mat-mdc-table"
+            )
+            for t in tables:
+                try:
+                    if t.is_displayed():
+                        return True
+                except Exception:
+                    pass
             add_btns = self.driver.find_elements(By.CSS_SELECTOR, "button.erp-add-btn")
-            if add_btns:
-                return True
+            for btn in add_btns:
+                try:
+                    if btn.is_displayed():
+                        return True
+                except Exception:
+                    pass
         except Exception:
             pass
         return False
@@ -541,17 +553,18 @@ class EntityGroupDefinitionPage(BasePage):
         """Fill the Entity Group Definition add/edit form.
 
         Args:
-            data: dict with keys:
-                - entity_group (str): Entity Group Name
+            data: dict with keys (both key variants supported):
+                - entity_group_name OR entity_group (str): Entity Group Name
                 - level (int|str|float): Level value
         """
         log.info("Filling Entity Group Definition form...")
 
-        # Entity Group Name
-        if data.get("entity_group") is not None:
+        # Entity Group Name — support both key names
+        name_value = data.get("entity_group_name") or data.get("entity_group")
+        if name_value is not None:
             self.type_text(
                 self.ENTITY_GROUP_INPUT,
-                str(data["entity_group"]),
+                str(name_value),
                 clear_first=True,
             )
 
@@ -643,7 +656,15 @@ class EntityGroupDefinitionPage(BasePage):
         self.wait_seconds(1)
 
     def close_popup(self):
-        """Click the X (close) icon on the form header."""
+        """Click the X (close) icon on the form header.
+        FIX-3: Checks if popup is already closed before attempting (BUG-008
+        causes auto-close after submit).
+        """
+        # FIX-3: If popup is already closed, nothing to do
+        if self.is_form_closed():
+            log.info("Popup already closed — nothing to do")
+            return
+
         log.info("Closing popup via X button...")
         try:
             close_btns = self.driver.find_elements(
@@ -669,7 +690,10 @@ class EntityGroupDefinitionPage(BasePage):
         except Exception:
             pass
         log.warning("X button not found, trying Cancel instead")
-        self.cancel()
+        try:
+            self.cancel()
+        except Exception:
+            log.warning("Cancel also failed — popup may already be closed")
 
     # ==============================================================
     #  High-level create / edit / search helpers
@@ -727,13 +751,19 @@ class EntityGroupDefinitionPage(BasePage):
         EGD_SUBMISSIONS.append({"name": new_name, "level": new_data.get("level"), "action": "edit"})
         return new_name
 
-    def search_entity_group(self, name):
-        """Search for an Entity Group Definition by name.
-        Uses the table-level Search input and button.
-        Returns True if found in the table.
+    def _scan_current_page_for_name(self, name):
+        """Check if a name appears in the CURRENT page of the table.
+        Does NOT search or paginate — just scans visible rows.
+        Returns True if a partial case-insensitive match is found.
         """
-        log.info(f"Searching for: {name}")
-        # Clear any previous search
+        names = self.get_all_entity_group_names()
+        return any(name.strip().lower() in n.lower() for n in names)
+
+    def _do_search(self, name):
+        """Fill the search input and click the Search button.
+        Low-level helper — does NOT call is_entity_group_in_table().
+        """
+        # Fill search input
         try:
             search_inputs = self.driver.find_elements(
                 By.CSS_SELECTOR,
@@ -772,7 +802,15 @@ class EntityGroupDefinitionPage(BasePage):
             pass
 
         self.wait_seconds(3)
-        found = self.is_entity_group_in_table(name)
+
+    def search_entity_group(self, name):
+        """Search for an Entity Group Definition by name.
+        Uses the table-level Search input and button.
+        Returns True if found in the table.
+        """
+        log.info(f"Searching for: {name}")
+        self._do_search(name)
+        found = self._scan_current_page_for_name(name)
         log.info(f"Search result for '{name}': {'Found' if found else 'Not found'}")
         return found
 
@@ -1107,10 +1145,31 @@ class EntityGroupDefinitionPage(BasePage):
 
     def is_entity_group_in_table(self, name):
         """Check if an Entity Group with the given name appears in the table.
-        Checks current page only — may need to search or paginate first.
+        FIX-2: Uses search first to handle pagination — the record may be
+        on a different page. Falls back to current-page scan if search
+        input is not available.
         """
-        names = self.get_all_entity_group_names()
-        return any(name.strip().lower() in n.lower() for n in names)
+        # FIX-2: Try search first to bring record to current page
+        try:
+            search_inputs = self.driver.find_elements(
+                By.CSS_SELECTOR, "input[placeholder='Search']"
+            )
+            has_search = False
+            for si in search_inputs:
+                try:
+                    if si.is_displayed():
+                        has_search = True
+                        break
+                except Exception:
+                    continue
+            if has_search:
+                self._do_search(name)
+                # Don't clear search — we want the record visible
+        except Exception:
+            pass
+
+        # Now check current page
+        return self._scan_current_page_for_name(name)
 
     def verify_record_in_table(self, name, level=None):
         """Verify a record exists in the table by name (and optionally level).
@@ -1234,17 +1293,186 @@ class EntityGroupDefinitionPage(BasePage):
             log.warning(f"Edit button not found for: {egd_name}")
 
     # ==============================================================
+    #  FIX-4: Search-then-click View/Edit (pagination-safe)
+    # ==============================================================
+
+    def click_view_button_by_name(self, egd_name):
+        """Search for the record first, then click View.
+        FIX-4: Brings the record to the current page via search
+        before clicking the View button.
+
+        Returns True if view button was clicked, False otherwise.
+        """
+        log.info(f"FIX-4: Search-then-click View for: {egd_name}")
+        # Search to bring the record to the current page
+        self.search_entity_group(egd_name)
+        self.wait_seconds(1)
+        # Now click the View button
+        try:
+            self.click_view_button(egd_name)
+            return True
+        except Exception:
+            log.warning(f"View button not found for '{egd_name}' after search")
+            return False
+
+    def click_edit_button_by_name(self, egd_name):
+        """Search for the record first, then click Edit.
+        FIX-4: Brings the record to the current page via search
+        before clicking the Edit button.
+
+        Returns True if edit button was clicked, False otherwise.
+        """
+        log.info(f"FIX-4: Search-then-click Edit for: {egd_name}")
+        # Search to bring the record to the current page
+        self.search_entity_group(egd_name)
+        self.wait_seconds(1)
+        # Now click the Edit button
+        try:
+            self.click_edit_button(egd_name)
+            return True
+        except Exception:
+            log.warning(f"Edit button not found for '{egd_name}' after search")
+            return False
+
+    # ==============================================================
+    #  Individual field fill helpers
+    # ==============================================================
+
+    def _fill_name(self, name):
+        """Fill only the Entity Group Name field."""
+        log.info(f"Filling Entity Group Name: '{name}'")
+        self.type_text(
+            self.ENTITY_GROUP_INPUT,
+            str(name),
+            clear_first=True,
+        )
+
+    def _fill_level(self, level):
+        """Fill only the Level field."""
+        log.info(f"Filling Level: '{level}'")
+        self.js_type_text(
+            self.LEVEL_INPUT,
+            str(level),
+            clear_first=True,
+        )
+
+    # ==============================================================
+    #  Form value reader (alias with entity_group_name key)
+    # ==============================================================
+
+    def get_form_values(self):
+        """Read all form field values from the currently open popup.
+        Returns a dict with keys: entity_group_name, level.
+        (Alias for get_form_field_values with the key name that tests expect.)
+        """
+        raw = self.get_form_field_values()
+        return {
+            "entity_group_name": raw.get("entity_group", ""),
+            "level": raw.get("level", ""),
+        }
+
+    # ==============================================================
+    #  Sort column
+    # ==============================================================
+
+    def click_sort_column(self, column_name):
+        """Click a column header to sort by that column.
+
+        Args:
+            column_name: Display name of the column header.
+                         e.g. "Entity Group Name", "Level"
+        """
+        log.info(f"Clicking sort on column: {column_name}")
+        # Try matching column header by text
+        try:
+            headers = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "table.mat-mdc-table th, table.mat-mdc-table thead td"
+            )
+            for header in headers:
+                try:
+                    if column_name.lower() in header.text.strip().lower():
+                        self.driver.execute_script(
+                            "arguments[0].scrollIntoView({block:'center'});"
+                            "arguments[0].click();",
+                            header,
+                        )
+                        self.wait_seconds(1)
+                        log.info(f"Sort clicked on: {header.text.strip()}")
+                        return
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        # Fallback: click by cdk-column class
+        col_map = {
+            "entity group": "cdk-column-entity_group",
+            "level": "cdk-column-level",
+        }
+        for key, col_class in col_map.items():
+            if key in column_name.lower():
+                try:
+                    header = self.driver.find_element(
+                        By.CSS_SELECTOR,
+                        f"table.mat-mdc-table th.{col_class}"
+                    )
+                    self.driver.execute_script(
+                        "arguments[0].scrollIntoView({block:'center'});"
+                        "arguments[0].click();",
+                        header,
+                    )
+                    self.wait_seconds(1)
+                    log.info(f"Sort clicked via column class: {col_class}")
+                    return
+                except Exception:
+                    pass
+        log.warning(f"Could not find sort column: {column_name}")
+
+    # ==============================================================
+    #  Pagination info
+    # ==============================================================
+
+    def get_pagination_info(self):
+        """Read the pagination range text (e.g. '1-10 of 25').
+
+        Returns:
+            str: The pagination info text, or '' if not found.
+        """
+        try:
+            info_elements = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                ".mat-mdc-paginator-range-label, .mat-paginator-range-label"
+            )
+            for el in info_elements:
+                try:
+                    if el.is_displayed():
+                        return el.text.strip()
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return ""
+
+    # ==============================================================
     #  Filter panel
     # ==============================================================
 
     def open_filter_panel(self):
-        """Open the filter panel."""
+        """Open the filter panel.
+
+        Returns:
+            bool: True if filter panel opened, False otherwise.
+        """
         log.info("Opening filter panel...")
         try:
             self.click_with_retry(self.FILTER_TOGGLE)
             self.wait_seconds(1)
+            # Check if panel is now visible
+            return self.is_displayed(self.FILTER_PANEL, timeout=3)
         except Exception:
             log.warning("Filter toggle button not found")
+            return False
 
     def is_filter_panel_open(self):
         """Check if the filter panel is currently visible."""

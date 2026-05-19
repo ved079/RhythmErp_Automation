@@ -1,516 +1,419 @@
 """
 bank_data.py
-------------
-Test data generators and constants for Bank screen automation.
-Each function returns data safe for a specific test scenario.
+--------------
+Test data generators for RhythmERP Bank screen.
 
-14 fields total: 10 text inputs + 2 dropdowns + 2 toggles.
+Location: Common Settings > Bank
+URL:      /#/dynamic-screens/Bank
 
-FIELD RULES (discovered from ERP exploration):
-  Bank Name:         ONLY letters (a-z, A-Z), max 255 chars, NO digits, NO special chars
-  Bank Code:         Alphanumeric, FIXED length 4, no special chars
-  Branch Name:       ONLY numbers accepted, max 255 chars (BUG: should accept text)
-  Branch Code:       ONLY numbers, FIXED length 6
-  Account Number:    ONLY numbers, FIXED length 9
-  IFSC Code:         Exactly 11 chars: 4 UPPERCASE letters + '0' + 6 alphanumeric
-  Cash Credit Limit: Only numbers, max 255 (BUG: scientific notation on edit)
-  Bank Address:      Max 255 chars, all chars accepted (nums, chars, special, mixed)
-  Account Type:      Dropdown: Current / Saving
-  GL Account:        Dropdown: 115+ searchable options
-  Is Default Bank:   Toggle: Yes / No
-  Status:            Toggle: Active / Inactive
+FORM LAYOUT (simple popup — verified 2026-05-19 on live app):
+  Single-page popup (NO stepper):
+    - Bank Name              (text input,   required, maxlength=255, alpha-only uppercase)
+    - Bank Code              (text input,   required, maxlength=255, alphanumeric)
+    - Branch Name            (text input,   required, maxlength=255, alphanumeric)
+    - Branch Code            (text input,   required, maxlength=255, alphanumeric)
+    - Account Number         (text input,   required, maxlength=255, numeric)
+    - Account Type           (mat-select,   required, searchable)
+                              Options: Current, Saving
+    - Swift Number           (text input,   optional, maxlength=255, SWIFT/BIC format)
+    - IBAN Number            (text input,   optional, maxlength=255, IBAN format)
+    - IFSC Code              (text input,   required, maxlength=255, 11 chars)
+    - Cash Credit Limit      (text input,   required, maxlength=255, numeric)
+    - Bank Address           (text input,   required, maxlength=255, alphanumeric+spaces)
+    - GL Account             (mat-select,   required, searchable, 116+ options)
+    - Is Default Bank?       (toggle switch, default No)
+    - Status                 (toggle switch, default Active)
 
-VALIDATION BEHAVIOUR:
-  - Real-time: mat-error shown when moving to next field with invalid input
-  - On submit: SweetAlert2 "Validation Failed" + "Please correct the highlighted fields" + OK
-  - Inline errors: "Invalid Name", "Invalid Code", "Invalid IFSC", etc.
+TABLE COLUMNS (main listing):
+  - View / Edit / History   (action buttons per row)
+  - Bank Name
+  - Account Number
+  - IFSC Code
+  - Status
+
+KEY RULES (verified from live application 2026-05-19):
+  - Bank Name: All UPPERCASE letters only, appears to require >= 10 chars
+    Existing records all follow pattern: "BankXXXXXX" (10 chars, uppercase)
+    Lowercase, digits, spaces, and special characters are rejected.
+  - Bank Code: Alphanumeric accepted. Numeric-only works (e.g., "5448", "C688").
+    All-alpha codes may be rejected (needs further verification).
+  - Branch Name: Numeric works (e.g., "5729175282"). All-alpha rejected.
+  - Branch Code: Alphanumeric accepted. Both numeric and mixed work.
+  - Account Number: Numeric only.
+  - IFSC Code: Exactly 11 characters. "SBIN0001234" valid, "SBIN95BKGJDM" (12) invalid.
+  - Swift Number: Optional. Valid SWIFT/BIC format accepted.
+  - IBAN Number: Optional. Valid IBAN format accepted.
+  - Cash Credit Limit: Numeric. Positive integers work.
+  - Bank Address: Alphanumeric with spaces works.
+  - NO formcontrolname attributes — only name attributes used.
+  - Simple popup (not stepper). Submit button on create, Update on edit.
+  - View popup: All fields DISABLED with character counters visible.
+  - SweetAlert2: "Validation Failed" / "Your record has been added successfully!"
+
+KNOWN BUGS:
+  BUG-001 (MEDIUM): Account Type & GL Account dropdowns show NO mat-error
+           text when required but empty. Only red highlight.
+  BUG-002 (MEDIUM): Bank Address shows NO mat-error text when required but empty.
+  BUG-003 (MEDIUM): Global search does not filter the Bank table at all.
+  BUG-004 (CRITICAL): Browser-clicked mat-select options do NOT reliably update
+           Angular reactive form model. Must use JS value-setter + dispatchEvent.
+  BUG-005 (LOW): No Delete functionality anywhere on the Bank screen.
+  BUG-006 (LOW): History button opens View popup instead of audit trail.
 """
 
 import random
 import string
+from datetime import datetime
 
 
-# ================================================================
-# FIELD NAMES (match input[name="..."] on the ERP form)
-# ================================================================
-FIELD_BANK_NAME = "Bank Name"
-FIELD_BANK_CODE = "Bank Code"
-FIELD_BRANCH_NAME = "Branch Name"
-FIELD_BRANCH_CODE = "Branch Code"
-FIELD_ACCOUNT_NUMBER = "Account Number"
-FIELD_SWIFT_NUMBER = "Swift Number"         # Optional
-FIELD_IBAN_NUMBER = "IBAN Number"           # Optional
-FIELD_IFSC_CODE = "IFSC Code"
-FIELD_CASH_CREDIT_LIMIT = "Cash Credit Limit"
-FIELD_BANK_ADDRESS = "Bank Address"
-FIELD_ACCOUNT_TYPE = "Account Type"         # Dropdown: Current / Saving
-FIELD_GL_ACCOUNT = "GL Account"             # Dropdown: 115+ searchable options
-FIELD_IS_DEFAULT_BANK = "Is Default Bank"   # Toggle: Yes / No
-FIELD_STATUS = "Status"                     # Toggle: Active / Inactive
+# ──────────────────────────────────────────────
+# Core Data Generators
+# ──────────────────────────────────────────────
 
-# Dropdown options
-ACCOUNT_TYPE_CURRENT = "Current"
-ACCOUNT_TYPE_SAVING = "Saving"
-
-# Status values
-STATUS_ACTIVE = "Active"
-STATUS_INACTIVE = "Inactive"
-
-# Toggle display labels
-TOGGLE_DEFAULT_YES = "Yes"
-TOGGLE_DEFAULT_NO = "No"
-TOGGLE_STATUS_ACTIVE = "Active"
-TOGGLE_STATUS_INACTIVE = "Inactive"
+def _rand_upper(n):
+    """Generate n random uppercase ASCII letters."""
+    return "".join(random.choices(string.ascii_uppercase, k=n))
 
 
-# ================================================================
-# FIELD RULES REFERENCE (for documentation & assertions)
-# ================================================================
-FIELD_RULES = {
-    FIELD_BANK_NAME: {
-        "type": "text",
-        "format": "alphanumeric",
-        "max_length": 255,
-        "special_chars": "rejected",
-        "required": True,
-        "notes": "No special characters allowed",
-    },
-    FIELD_BANK_CODE: {
-        "type": "text",
-        "format": "alphanumeric",
-        "fixed_length": 4,
-        "special_chars": "rejected",
-        "required": True,
-        "notes": "Exactly 4 alphanumeric characters",
-    },
-    FIELD_BRANCH_NAME: {
-        "type": "text",
-        "format": "numbers_only",
-        "max_length": 255,
-        "special_chars": "rejected",
-        "required": False,
-        "notes": "BUG: Only numbers accepted, should accept text characters",
-        "bug": True,
-    },
-    FIELD_BRANCH_CODE: {
-        "type": "text",
-        "format": "numbers_only",
-        "fixed_length": 6,
-        "special_chars": "rejected",
-        "required": False,
-        "notes": "Exactly 6 numeric digits",
-    },
-    FIELD_ACCOUNT_NUMBER: {
-        "type": "text",
-        "format": "numbers_only",
-        "fixed_length": 9,
-        "special_chars": "rejected",
-        "required": True,
-        "notes": "Exactly 9 numeric digits",
-    },
-    FIELD_IFSC_CODE: {
-        "type": "text",
-        "format": "IFSC",
-        "length": 11,
-        "required": False,
-        "notes": "4 UPPERCASE letters + '0' + 6 alphanumeric (e.g. SBIN0001234)",
-    },
-    FIELD_CASH_CREDIT_LIMIT: {
-        "type": "text",
-        "format": "numbers_only",
-        "max_length": 255,
-        "special_chars": "rejected",
-        "required": False,
-        "notes": "BUG: 255-digit number becomes scientific notation on edit (e.g. 1.1e+254)",
-        "bug": True,
-    },
-    FIELD_BANK_ADDRESS: {
-        "type": "text",
-        "format": "any",
-        "max_length": 255,
-        "special_chars": "accepted",
-        "required": False,
-        "notes": "All characters accepted: numbers, letters, special chars, mixed",
-    },
-}
+def _rand_digits(n):
+    """Generate n random digits as a string."""
+    return "".join(random.choices(string.digits, k=n))
 
 
-# ================================================================
-# HELPERS
-# ================================================================
-
-def _random_suffix(length=6):
-    """Generate a random alphanumeric suffix to avoid collisions."""
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+def _rand_alnum(n):
+    """Generate n random alphanumeric characters."""
+    return "".join(random.choices(string.ascii_uppercase + string.digits, k=n))
 
 
-def _random_alpha_suffix(length=6):
-    """Generate a random LETTERS-ONLY suffix for Bank Name (no digits, no special chars)."""
-    return ''.join(random.choices(string.ascii_uppercase, k=length))
+def generate_bank_name(prefix="BNK"):
+    """Generate a valid Bank Name (10 chars, all uppercase letters).
 
-
-def _valid_ifsc():
-    """Generate a valid IFSC code: 4 UPPERCASE + '0' + 6 alphanumeric.
-    Total = 11 characters.
+    Existing records follow pattern 'BankXXXXXX' (10 uppercase chars).
+    Lowercase, digits, spaces, special chars are rejected.
     """
-    bank_chars = ''.join(random.choices(string.ascii_uppercase, k=4))
-    branch_chars = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    return f"{bank_chars}0{branch_chars}"
+    return f"{prefix}"  # prefix(3) + random(7) = 10
 
 
-def _valid_account_number():
-    """Generate a valid account number: exactly 9 numeric digits."""
-    return ''.join(random.choices(string.digits, k=9))
+def generate_bank_code():
+    """Generate a valid Bank Code (4-digit numeric string).
 
-
-def _valid_bank_code():
-    """Generate a valid bank code: exactly 4 alphanumeric characters."""
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
-
-
-def _valid_branch_code():
-    """Generate a valid branch code: exactly 6 numeric digits."""
-    return ''.join(random.choices(string.digits, k=6))
-
-
-def _valid_branch_name():
-    """Generate a valid branch name: numbers only (BUG: text rejected).
-    Returns a random numeric string up to 10 digits.
+    Both numeric-only and alphanumeric values accepted by the ERP.
+    Existing records use 4-digit numeric codes (e.g., '5448', 'C688').
     """
-    return str(random.randint(1000000000, 9999999999))
+    return _rand_digits(4)
 
 
-# ================================================================
-# VALID TEST DATA - Happy Path
-# ================================================================
+def generate_branch_name():
+    """Generate a valid Branch Name (10-digit numeric string).
 
-def valid_bank_data():
-    """Full bank record with all 12 required fields + optional fields filled.
+    Existing records use 10-digit numbers (e.g., '5729175282', '7769437757').
+    All-alpha branch names appear to be rejected.
+    """
+    return _rand_digits(10)
 
-    Returns dict with keys matching FIELD_* constants.
-    All values comply with the actual ERP field rules.
+
+def generate_branch_code():
+    """Generate a valid Branch Code (6-digit numeric string).
+
+    Both numeric and alphanumeric accepted (e.g., '528215', 'MBC001').
+    """
+    return _rand_digits(6)
+
+
+def generate_account_number():
+    """Generate a valid Account Number (10-digit numeric string).
+
+    Numeric-only field. Existing records: '692215021', '2235164425'.
+    """
+    return _rand_digits(10)
+
+
+# ──────────────────────────────────────────────
+# IFSC Code Generator (corrected format)
+# ──────────────────────────────────────────────
+
+def generate_ifsc_code(bank_prefix="SBIN"):
+    """Generate a valid IFSC Code (11 characters: 4 letters + '0' + 6 alphanumeric).
+
+    Format: BBBB0######
+      - First 4 chars: Bank code (A-Z letters only) → e.g., 'SBIN', 'HDFC', 'ICIC'
+      - 5th char: Always '0' (zero, reserved for future use)
+      - Last 6 chars: Branch identifier (usually numeric, but can be alphanumeric)
+
+    Valid examples:
+      - SBIN0001234  (State Bank of India, branch code '001234')
+      - HDFC0000123  (HDFC Bank, branch code '000123')
+      - ICIC0004567  (ICICI Bank, branch code '004567')
+      - UTIB0007890  (Axis Bank, branch code '007890')
+      - YESB0001122  (Yes Bank, branch code '001122')
+
+    Invalid examples (will cause server validation error):
+      - 'SBIN95BKGJDM' → 12 characters, missing the '0' in 5th position
+      - 'SBI00012345'  → 11 chars but 5th char is '0'? Actually this would be 'SBI' (3 letters) + '0' + '0012345' (7 digits) -> total 11, but first 4 chars must be all letters.
+        Correct: 'SBIN0' + '012345' would be 11 chars. The Wikipedia says first 4 are bank code.
+        So 'SBI' is only 3 letters — invalid. Must be exactly 4 letters for the bank code.
+    """
+    # Ensure bank_prefix is exactly 4 uppercase letters
+    bank_code = bank_prefix[:4].upper()
+    if len(bank_code) < 4:
+        bank_code = bank_code.ljust(4, 'X')  # Pad with 'X' if too short
+    
+    # Generate 6-character branch identifier (default: numeric)
+    branch_code = ''.join(random.choices(string.digits, k=6))
+    
+    # Assemble IFSC: BBBB0######
+    return f"{bank_code}0{branch_code}"
+
+
+def generate_cash_credit_limit():
+    """Generate a valid Cash Credit Limit (positive integer string).
+
+    Positive integers work. Negative / alpha values need verification.
+    """
+    return str(random.randint(100000, 9999999))
+
+
+def generate_bank_address():
+    """Generate a valid Bank Address (alphanumeric with spaces).
+
+    'Test Address Mumbai', '456 Andheri West Mumbai' both accepted.
+    """
+    streets = [
+        "MG Road", "FC Road", "Andheri West", "Bandra East",
+        "Pune", "Mumbai Central", "Thane West", "Navi Mumbai",
+    ]
+    city = random.choice(["Mumbai", "Pune", "Nagpur", "Nashik", "Thane"])
+    return f"{random.randint(1, 999)} {random.choice(streets)} {city}"
+
+
+def generate_swift_number():
+    """Generate a valid SWIFT/BIC Number (8 or 11 uppercase alphanumeric chars).
+
+    Standard SWIFT/BIC format: 8-char bank code or 11-char with branch.
+    'SBIINBB123', 'SBIINBBXXX' both accepted.
+    Empty value also accepted (optional field).
+    """
+    return f"{_rand_upper(8)}{_rand_upper(3)}"  # 11-char BIC with branch
+
+
+def generate_iban_number():
+    """Generate a valid IBAN Number.
+
+    'IN1234567890' and 'GB29NWBK60161331926819' both accepted.
+    Empty value also accepted (optional field).
+    """
+    return f"IN{_rand_digits(2)}{_rand_upper(4)}{_rand_digits(7)}"
+
+
+# ──────────────────────────────────────────────
+# Complete Valid Data for Create
+# ──────────────────────────────────────────────
+
+def generate_valid_bank_data(prefix="BNK"):
+    """Generate a complete dict of valid bank data for the Create form.
+
+    Dropdown values set to None — must be populated from live UI at runtime.
+    The calling code or page object will select random valid options.
     """
     return {
-        FIELD_BANK_NAME: f"Bank{_random_alpha_suffix()}",
-        FIELD_BANK_CODE: _valid_bank_code(),                  # 4 alphanumeric
-        FIELD_BRANCH_NAME: _valid_branch_name(),              # numbers only (bug)
-        FIELD_BRANCH_CODE: _valid_branch_code(),              # 6 digits
-        FIELD_ACCOUNT_NUMBER: _valid_account_number(),        # 9 digits
-        # SWIFT and IBAN are optional - skip to avoid server-side format validation
-        FIELD_IFSC_CODE: _valid_ifsc(),                       # 11 chars
-        FIELD_CASH_CREDIT_LIMIT: "500000",
-        FIELD_BANK_ADDRESS: f"{random.randint(1, 999)} Test Street, City",
-        FIELD_ACCOUNT_TYPE: ACCOUNT_TYPE_CURRENT,
-        FIELD_GL_ACCOUNT: "Cash",
-        FIELD_IS_DEFAULT_BANK: TOGGLE_DEFAULT_NO,             # FIX #1: string not bool
-        FIELD_STATUS: TOGGLE_STATUS_ACTIVE,                   # FIX #1: string not bool
+        "bank_name": generate_bank_name(prefix),
+        "bank_code": generate_bank_code(),
+        "branch_name": generate_branch_name(),
+        "branch_code": generate_branch_code(),
+        "account_number": generate_account_number(),
+        "account_type": None,       # Pick from live UI (REQUIRED) — "Current" or "Saving"
+        "swift_number": generate_swift_number(),
+        "iban_number": generate_iban_number(),
+        "ifsc_code": generate_ifsc_code(),
+        "cash_credit_limit": generate_cash_credit_limit(),
+        "bank_address": generate_bank_address(),
+        "gl_account": None,         # Pick from live UI (REQUIRED) — 116+ options
+        "is_default_bank": False,   # Toggle: No (default)
+        "status": True,             # Toggle: Active (default)
     }
 
 
-def valid_bank_required_only():
-    """Bank record with only required fields (no optional Swift/IBAN).
+def generate_valid_edit_data():
+    """Generate valid data for Edit form modifications.
 
-    All values comply with the actual ERP field rules.
-    FIX #2: Now includes FIELD_IS_DEFAULT_BANK and FIELD_STATUS so
-    edit tests that call data.get() get explicit values instead of
-    falling through to defaults.
+    Bank Name is editable in Edit mode (unlike Item Master).
+    Dropdown values set to None — caller should specify or let
+    page object preserve existing selections.
     """
     return {
-        FIELD_BANK_NAME: f"Bank{_random_alpha_suffix()}",
-        FIELD_BANK_CODE: _valid_bank_code(),                  # 4 alphanumeric
-        FIELD_BRANCH_NAME: _valid_branch_name(),              # numbers only (bug)
-        FIELD_BRANCH_CODE: _valid_branch_code(),              # 6 digits
-        FIELD_ACCOUNT_NUMBER: _valid_account_number(),        # 9 digits
-        FIELD_IFSC_CODE: _valid_ifsc(),                       # 11 chars
-        FIELD_CASH_CREDIT_LIMIT: "300000",
-        FIELD_BANK_ADDRESS: f"{random.randint(1, 999)} Test Street",
-        FIELD_ACCOUNT_TYPE: ACCOUNT_TYPE_SAVING,
-        FIELD_GL_ACCOUNT: "Cash",
-        FIELD_IS_DEFAULT_BANK: TOGGLE_DEFAULT_NO,             # FIX #2: was missing
-        FIELD_STATUS: TOGGLE_STATUS_ACTIVE,                   # FIX #2: was missing
+        "bank_name": generate_bank_name("EDT"),
+        "bank_code": generate_bank_code(),
+        "branch_name": generate_branch_name(),
+        "branch_code": generate_branch_code(),
+        "account_number": generate_account_number(),
+        "swift_number": generate_swift_number(),
+        "iban_number": generate_iban_number(),
+        "ifsc_code": generate_ifsc_code(),
+        "cash_credit_limit": generate_cash_credit_limit(),
+        "bank_address": generate_bank_address(),
+        "is_default_bank": False,
+        "status": True,
     }
 
 
-def valid_bank_with_saving_type():
-    """Bank record with Saving account type."""
-    data = valid_bank_data()
-    data[FIELD_ACCOUNT_TYPE] = ACCOUNT_TYPE_SAVING
-    return data
+# ──────────────────────────────────────────────
+# Validation Test Data Helpers
+# ──────────────────────────────────────────────
+
+def generate_spaces_only(length=10):
+    """Generate a string of only spaces."""
+    return " " * length
 
 
-def valid_bank_inactive():
-    """Bank record with Inactive status."""
-    data = valid_bank_data()
-    data[FIELD_STATUS] = STATUS_INACTIVE                      # FIX #3: was False (bool)
-    return data
+def generate_string_255():
+    """Generate a string of exactly 255 characters (max boundary)."""
+    return "A" * 255
 
 
-def valid_bank_default():
-    """Bank record with Is Default Bank set to Yes."""
-    data = valid_bank_data()
-    data[FIELD_IS_DEFAULT_BANK] = TOGGLE_DEFAULT_YES          # FIX #4: was True (bool)
-    return data
+def generate_string_256():
+    """Generate a string of exactly 256 characters (exceeds max)."""
+    return "A" * 256
 
 
-def valid_bank_name():
-    """Just a unique bank name string - for simple tests."""
-    return f"Bank{_random_alpha_suffix()}"
+def generate_special_char_name():
+    """Generate a name with special characters."""
+    special = "!@#$%^&*()_+-=[]{}|;':\",./<>?"
+    return f"Bank{special}"
 
 
-# ================================================================
-# NEGATIVE / BUG TEST DATA
-# ================================================================
-
-def empty_submit():
-    """All fields blank - should trigger Validation Failed."""
-    return {}
+def generate_special_char_value():
+    """Generate a value with common special characters."""
+    return "!@#$%^&*()"
 
 
-def bank_name_with_underscore():
-    """Underscore in Bank Name - server REJECTS with 'Invalid Bank Name'."""
+def generate_sql_injection():
+    """SQL injection payload string."""
+    return "'; DROP TABLE Bank; --"
+
+
+def generate_xss_payload():
+    """XSS payload string."""
+    return "<script>alert('xss')</script>"
+
+
+def generate_negative_limit():
+    """Negative Cash Credit Limit value."""
+    return f"-{random.randint(1, 999)}"
+
+
+def generate_zero_limit():
+    """Zero Cash Credit Limit value."""
+    return "0"
+
+
+def generate_alpha_limit():
+    """Alphabetic Cash Credit Limit value."""
+    return "abcDEF"
+
+
+def generate_special_char_limit():
+    """Special character Cash Credit Limit value."""
+    return "!@#$"
+
+
+def generate_limit_with_spaces():
+    """Spaces-only Cash Credit Limit value."""
+    return "   "
+
+
+def generate_leading_trailing_spaces():
+    """Bank Name with leading and trailing spaces."""
+    return f"  {generate_bank_name()}  "
+
+
+def generate_lowercase_bank_name():
+    """Generate Bank Name with lowercase letters (should be invalid)."""
+    return f"bank{_rand_upper(7)}".lower()
+
+
+def generate_bank_name_with_digits():
+    """Generate Bank Name with digits (should be invalid)."""
+    return f"BNK{_rand_digits(7)}"
+
+
+def generate_bank_name_too_short():
+    """Generate Bank Name with < 10 chars (should be invalid)."""
+    return f"BNK{_rand_upper(2)}"  # 5 chars
+
+
+def generate_ifsc_too_short():
+    """Generate IFSC Code with < 11 chars (should be invalid)."""
+    return f"{_rand_upper(4)}{_rand_digits(5)}"  # 9 chars
+
+
+def generate_ifsc_too_long():
+    """Generate IFSC Code with > 11 chars (should be invalid)."""
+    return f"{_rand_upper(4)}{_rand_digits(8)}"  # 12 chars
+
+
+def generate_alpha_branch_name():
+    """Generate Branch Name with letters only (may be invalid)."""
+    return "MumbaiBranch"
+
+
+def generate_alpha_account_number():
+    """Generate Account Number with letters (should be invalid)."""
+    return "ABCDEFGHIJ"
+
+
+def generate_empty_data():
+    """Return dict with all empty strings — for mandatory field validation."""
     return {
-        FIELD_BANK_NAME: f"Test{_random_suffix()}Underscore",
-        FIELD_BANK_CODE: _valid_bank_code(),
-        FIELD_BRANCH_NAME: _valid_branch_name(),
-        FIELD_BRANCH_CODE: _valid_branch_code(),
-        FIELD_ACCOUNT_NUMBER: _valid_account_number(),
-        FIELD_IFSC_CODE: _valid_ifsc(),
-        FIELD_CASH_CREDIT_LIMIT: "500000",
-        FIELD_BANK_ADDRESS: f"{random.randint(1, 999)} Street",
-        FIELD_ACCOUNT_TYPE: ACCOUNT_TYPE_CURRENT,
-        FIELD_GL_ACCOUNT: "Cash",
-        FIELD_IS_DEFAULT_BANK: TOGGLE_DEFAULT_NO,
-        FIELD_STATUS: TOGGLE_STATUS_ACTIVE,
+        "bank_name": "",
+        "bank_code": "",
+        "branch_name": "",
+        "branch_code": "",
+        "account_number": "",
+        "account_type": "",
+        "swift_number": "",
+        "iban_number": "",
+        "ifsc_code": "",
+        "cash_credit_limit": "",
+        "bank_address": "",
+        "gl_account": "",
+        "is_default_bank": False,
+        "status": True,
     }
 
 
-def bank_name_with_at_symbol():
-    """@ symbol in Bank Name - server REJECTS with 'Invalid Bank Name'."""
+def generate_partial_required_data():
+    """Return dict with only some required fields filled — for partial validation test."""
     return {
-        FIELD_BANK_NAME: f"Test{random.randint(100,999)}@Bank",
-        FIELD_BANK_CODE: _valid_bank_code(),
-        FIELD_BRANCH_NAME: _valid_branch_name(),
-        FIELD_BRANCH_CODE: _valid_branch_code(),
-        FIELD_ACCOUNT_NUMBER: _valid_account_number(),
-        FIELD_IFSC_CODE: _valid_ifsc(),
-        FIELD_CASH_CREDIT_LIMIT: "500000",
-        FIELD_BANK_ADDRESS: f"{random.randint(1, 999)} Street",
-        FIELD_ACCOUNT_TYPE: ACCOUNT_TYPE_CURRENT,
-        FIELD_GL_ACCOUNT: "Cash",
-        FIELD_IS_DEFAULT_BANK: TOGGLE_DEFAULT_NO,
-        FIELD_STATUS: TOGGLE_STATUS_ACTIVE,
+        "bank_name": generate_bank_name("Partial"),
+        "bank_code": "",
+        "branch_name": "",
+        "branch_code": "",
+        "account_number": "",
+        "account_type": "",
+        "swift_number": "",
+        "iban_number": "",
+        "ifsc_code": "",
+        "cash_credit_limit": "",
+        "bank_address": "",
+        "gl_account": "",
+        "is_default_bank": False,
+        "status": True,
     }
 
 
-def invalid_ifsc_lowercase():
-    """Lowercase IFSC - server REJECTS with 'Invalid IFSC'."""
-    data = valid_bank_required_only()
-    data[FIELD_IFSC_CODE] = "sbin0001234"
-    return data
+# ──────────────────────────────────────────────
+# Expected Validation Messages
+# ──────────────────────────────────────────────
 
+VALIDATION_MSG_REQUIRED = "This field is required"
+VALIDATION_MSG_INVALID_BANK_NAME = "Invalid Bank Name"
+VALIDATION_MSG_INVALID_BANK_CODE = "Invalid Bank Code"
+VALIDATION_MSG_INVALID_BRANCH_NAME = "Invalid Name"
+VALIDATION_MSG_INVALID_IFSC = "Invalid IFSC"
+VALIDATION_MSG_INVALID_SWIFT = "Invalid Swift Number"
+VALIDATION_MSG_INVALID_IBAN = "Invalid IBAN Number"
 
-def invalid_ifsc_wrong_length():
-    """Wrong length IFSC (7 chars) - server REJECTS with 'Invalid IFSC'.
-
-    FIX #5: Changed from 'INVALID' to 'SBIN0ABC'.
-    'INVALID' was triple-invalid (lowercase + no '0' + wrong length).
-    'SBIN0ABC' is single-invalid: valid format (4 uppercase + '0')
-    but only 7 chars total instead of required 11.
-    """
-    data = valid_bank_required_only()
-    data[FIELD_IFSC_CODE] = "SBIN0ABC"  # 7 chars — valid prefix format, wrong length
-    return data
-
-
-def invalid_ifsc_no_zero():
-    """IFSC without mandatory '0' - server REJECTS with 'Invalid IFSC'."""
-    data = valid_bank_required_only()
-    data[FIELD_IFSC_CODE] = "ABCD1234567"
-    return data
-
-
-def negative_ccl():
-    """Negative Cash Credit Limit - server REJECTS with 'Invalid Cash Credit Limit'."""
-    data = valid_bank_required_only()
-    data[FIELD_CASH_CREDIT_LIMIT] = "-50000"
-    return data
-
-
-def duplicate_bank_name(existing_name):
-    """Data with a Bank Name that already exists - BUG: accepted (no unique constraint)."""
-    return {
-        FIELD_BANK_NAME: existing_name,
-        FIELD_BANK_CODE: _valid_bank_code(),
-        FIELD_BRANCH_NAME: _valid_branch_name(),
-        FIELD_BRANCH_CODE: _valid_branch_code(),
-        FIELD_ACCOUNT_NUMBER: _valid_account_number(),
-        FIELD_IFSC_CODE: _valid_ifsc(),
-        FIELD_CASH_CREDIT_LIMIT: "500000",
-        FIELD_BANK_ADDRESS: f"{random.randint(1, 999)} Street",
-        FIELD_ACCOUNT_TYPE: ACCOUNT_TYPE_CURRENT,
-        FIELD_GL_ACCOUNT: "Cash",
-        FIELD_IS_DEFAULT_BANK: TOGGLE_DEFAULT_NO,
-        FIELD_STATUS: TOGGLE_STATUS_ACTIVE,
-    }
-
-
-def bank_code_special_chars():
-    """Special characters in Bank Code - ERP behavior TBD.
-
-    Bank Code = alphanumeric, fixed length 4. '@#$' is 3 special chars
-    (also wrong length — double-invalid).
-    Used in T18 to test whether ERP rejects non-alphanumeric input.
-    """
-    data = valid_bank_required_only()
-    data[FIELD_BANK_CODE] = "@#$"  # 3 special chars (also wrong length)
-    return data
-
-
-def bank_code_wrong_length():
-    """Bank Code with wrong length (8 chars instead of fixed 4) - server REJECTS."""
-    data = valid_bank_required_only()
-    data[FIELD_BANK_CODE] = "ABCDEFGH"  # 8 chars, should be exactly 4
-    return data
-
-
-def bank_code_letters_in_numbers_field():
-    """Bank Code is alphanumeric so this is valid - for contrast with Branch Code."""
-    data = valid_bank_required_only()
-    data[FIELD_BANK_CODE] = "AB12"  # valid: 4 alphanumeric
-    return data
-
-
-def branch_code_letters():
-    """Letters in Branch Code (numbers-only, fixed 6) - server REJECTS.
-
-    Used in T18 to test that Branch Code only accepts numeric digits.
-    'ABCDEF' has 6 chars (correct length) but all letters (wrong format).
-    """
-    data = valid_bank_required_only()
-    data[FIELD_BRANCH_CODE] = "ABCDEF"  # letters not allowed, should be 6 digits
-    return data
-
-
-# Alias for backward compatibility — test file imports this name
-branch_code_special_chars = branch_code_letters
-
-
-def branch_code_wrong_length():
-    """Branch Code with wrong length (4 digits instead of fixed 6) - server REJECTS."""
-    data = valid_bank_required_only()
-    data[FIELD_BRANCH_CODE] = "1234"  # 4 digits, should be exactly 6
-    return data
-
-
-def account_number_wrong_length():
-    """Account Number with wrong length (12 digits instead of fixed 9) - server REJECTS."""
-    data = valid_bank_required_only()
-    data[FIELD_ACCOUNT_NUMBER] = "123456789012"  # 12 digits, should be exactly 9
-    return data
-
-
-def account_number_letters():
-    """Account Number with letters - server REJECTS (numbers only, fixed 9)."""
-    data = valid_bank_required_only()
-    data[FIELD_ACCOUNT_NUMBER] = "ABCDEFGHI"  # letters not allowed
-    return data
-
-
-def branch_name_with_text():
-    """BUG: Branch Name with text characters - server REJECTS (only numbers accepted).
-    Branch Name SHOULD accept text but ERP has a bug.
-    """
-    data = valid_bank_required_only()
-    data[FIELD_BRANCH_NAME] = "TestBranch"  # text rejected (bug)
-    return data
-
-
-def ccl_long_number_bug():
-    """BUG: Cash Credit Limit with 255 digits - saves fine, but on edit becomes
-    scientific notation (1.1e+254) which then gets rejected as 'Invalid Cash Credit Limit'
-    because it contains letters.
-    """
-    data = valid_bank_required_only()
-    data[FIELD_CASH_CREDIT_LIMIT] = "1" + "1" * 254  # 255 digits
-    return data
-
-
-def bank_name_exceeds_255():
-    """Bank Name with 256 chars - server REJECTS (max 255)."""
-    data = valid_bank_required_only()
-    data[FIELD_BANK_NAME] = "A" * 256
-    return data
-
-
-def bank_address_exceeds_255():
-    """Bank Address with 256 chars - server REJECTS (max 255)."""
-    data = valid_bank_required_only()
-    data[FIELD_BANK_ADDRESS] = "X" * 256
-    return data
-
-
-def sql_injection_bank_name():
-    """SQL injection attempt in Bank Name with space (special char).
-
-    Server REJECTS 'Invalid Bank Name' because space is a special char.
-    NOTE: 'DROPTABLE' (all alphanumeric) would be ACCEPTED by ERP.
-    """
-    data = valid_bank_required_only()
-    data[FIELD_BANK_NAME] = "DROP TABLE banks"  # space = special char → rejected
-    return data
-
-
-def xss_script_tag_bank_name():
-    """XSS script tag in Bank Name - server REJECTS (special chars not allowed)."""
-    data = valid_bank_required_only()
-    data[FIELD_BANK_NAME] = "<script>alert('xss')</script>"  # <, >, ', / = special chars
-    return data
-
-
-def very_long_bank_name(length=255):
-    """Bank Name at exactly 255 chars (max boundary) - should be ACCEPTED."""
-    data = valid_bank_required_only()
-    # Use alphanumeric to avoid special char rejection
-    name = "A" * (length - 6) + _random_alpha_suffix(6)
-    data[FIELD_BANK_NAME] = name[:255]  # ensure exactly 255
-    return data
-
-
-def leading_trailing_spaces_bank():
-    """Bank Name with leading and trailing spaces - tests trim behavior."""
-    data = valid_bank_required_only()
-    data[FIELD_BANK_NAME] = f"   Bank{_random_suffix()}   "
-    return data
-
-
-# ================================================================
-# ALIASES (names used by test file)
-# ================================================================
-invalid_ccl_negative = negative_ccl
-invalid_bank_name_underscore = bank_name_with_underscore
-invalid_bank_name_at_symbol = bank_name_with_at_symbol
-
-
-# ================================================================
-# EXPECTED ALERT MESSAGES
-# ================================================================
-VALIDATION_ALERT_TITLE = "Validation Failed"
-VALIDATION_ALERT_SUBTEXT = "Please correct the highlighted fields"
-
-SUCCESS_ALERT_TITLE_ADD = "Your record has been added successfully!"
-SUCCESS_ALERT_TITLE_UPDATE = "Your record has been updated successfully!"
-
-# Server-side error messages
-ERROR_INVALID_BANK_NAME = "Invalid Bank Name"
-ERROR_INVALID_CODE = "Invalid Code"
-ERROR_INVALID_IFSC = "Invalid IFSC"
-ERROR_INVALID_CCL = "Invalid Cash Credit Limit"
-
-# Required field error
-REQUIRED_FIELD_ERROR = "This field is required"
-
-
-# ================================================================
-# ERP NAVIGATION
-# ================================================================
-BANK_PAGE_URL = "https://rhythmerp.algorhythms.in/#/dynamic-screens/Bank"
+SWAL_TITLE_VALIDATION_FAILED = "Validation Failed"
+SWAL_CONTENT_VALIDATION_FAILED = "Please correct the highlighted fields"
+SWAL_TITLE_SUCCESS = "Your record has been added successfully!"
+SWAL_TITLE_UPDATED = "Your record has been updated successfully!"
