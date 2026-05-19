@@ -1,4 +1,4 @@
-﻿"""
+"""
 conftest.py - UOM Common Settings (RhythmERP)
 """
 
@@ -13,6 +13,7 @@ sys.path.insert(0, PROJECT_ROOT)
 from common.logger import log
 from common.browser_utils import get_driver
 from pages.login_screens.Login_Screens_.login_page import LoginPage
+from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
 from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHYTHMERP_FACILITY
 from pages.common_settings.cs_report_generator import CSReportStore, generate_cs_report
 
@@ -73,8 +74,13 @@ def logged_in_driver(driver):
 
     login_page.wait_for_login_complete()
     log.info("RhythmERP login successful!")
+    start_screenshot_broadcast(driver)
+    start_screenshot_broadcast(driver)
+    log.info("RhythmERP login successful!")
 
     yield driver
+
+    stop_screenshot_broadcast()
 
 
 # ================================================================

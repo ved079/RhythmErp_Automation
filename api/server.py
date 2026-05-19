@@ -188,3 +188,82 @@ async def get_test_cases(module: str = None):
         return {"error": f"Module '{module}' not found"}
     
     return data
+
+# ─── AUTH & USER MANAGEMENT ──────────────────────────────────
+import hashlib
+import secrets
+from datetime import datetime
+from fastapi import HTTPException, Header
+from pydantic import BaseModel as _BM
+
+USERS_PATH = PROJECT_ROOT / "api" / "users.json"
+_sessions: dict[str, dict] = {}  # token → {user_id, email, name, role, expires}
+
+def _hash_password(pw: str) -> str:
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+def _load_users() -> dict:
+    if not USERS_PATH.exists():
+        USERS_PATH.write_text('{"next_id":1,"users":[]}', encoding="utf-8")
+    with open(USERS_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def _save_users(data: dict):
+    with open(USERS_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+def _get_user_by_token(token: str | None) -> dict | None:
+    if not token:
+        return None
+    session = _sessions.get(token)
+    if not session:
+        return None
+    return {"id": session["user_id"], "email": session["email"], "name": session["name"], "role": session["role"]}
+
+class LoginRequest(_BM):
+    email: str
+    password: str
+
+class CreateUserRequest(_BM):
+    email: str
+    name: str
+    password: str
+    role: str = "tester"
+    moduleAccess: list[str] = []
+
+class UpdateUserRequest(_BM):
+    name: str | None = None
+    email: str | None = None
+    role: str | None = None
+    status: str | None = None
+    moduleAccess: list[str] | None = None
+
+@app.post("/api/auth/login")
+def auth_login(req: LoginRequest):
+    """Login with email + password. Returns a session token."""
+    data = _load_users()
+    user = None
+    for u in data["users"]:
+        if u["email"].lower() == req.email.lower():
+            user = u
+            break
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if user["status"] != "active":
+        raise HTTPException(status_code=403, detail="Account is deactivated")
+    if user["password"] != _hash_password(req.password):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    # Update last login
+    now = datetime.now().strftime("%d %b %Y, %I:%M %p")
+    user["lastLogin"] = now
+    _save_users(data)
+
+    # Create session
+    token = secrets.token_hex(32)
+    _sessions[token] = {
+        "user_id": user["id"],
+        "email": user["email"],
+        "name": user["name"],
+        "role": user["role"],
+    }

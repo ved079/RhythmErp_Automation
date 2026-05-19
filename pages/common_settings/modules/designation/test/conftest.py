@@ -26,6 +26,7 @@ from config import (
     RHYTHMERP_PASSWORD,
 )
 from pages.login_screens.Login_Screens_.login_page import LoginPage
+from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
 from pages.common_settings.modules.designation.designation_page import DesignationPage
 from pages.common_settings.modules.designation.des_report_generator import des_report
 
@@ -97,6 +98,8 @@ def driver():
     driver = get_driver()
     driver.maximize_window()
     yield driver
+
+    stop_screenshot_broadcast()
     log.info("Ending Designation Test Session")
     driver.quit()
 
@@ -128,6 +131,9 @@ def logged_in_driver(driver):
 
     # Wait for login complete
     login_page.wait_for_login_complete()
+    log.info("RhythmERP login successful!")
+    start_screenshot_broadcast(driver)
+    start_screenshot_broadcast(driver)
     log.info("Login successful — dashboard loaded")
 
     return driver
@@ -205,3 +211,4 @@ def pytest_collection_modifyitems(items):
     ]
     items.sort(key=lambda item: class_order.index(item.cls.__name__)
                if item.cls and item.cls.__name__ in class_order else 999)
+

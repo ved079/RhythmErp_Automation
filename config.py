@@ -32,6 +32,9 @@ RHYTHMERP_FORGOT_PASSWORD_URL = f"{RHYTHMERP_BASE_URL}/#/authentication/forgot-p
 RHYTHMERP_EMAIL = "test@gmail.com"
 RHYTHMERP_PASSWORD = "Test@2526270"
 RHYTHMERP_FACILITY = ""  # blank text dropdown — click by index
+NEW_RHYTHMERP_EMAIL = "kedar@1"
+NEW_RHYTHMERP_PASSWORD = "Neo@123456789"
+NEW_RHYTHMERP_FACILITY = ""
 
 
 

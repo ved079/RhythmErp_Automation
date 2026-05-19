@@ -14,6 +14,7 @@ Fixtures:
 import os
 import sys
 import pytest
+from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
 
 # Ensure project root is in Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

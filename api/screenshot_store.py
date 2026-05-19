@@ -1,19 +1,24 @@
-"""Global store for the active Selenium driver — used by screenshot API."""
+﻿import os, time
 
-_driver = None
+_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'screenshots', 'live.b64')
+_last_mtime = 0
+_last_data = None
 
-def set_driver(driver):
-    global _driver
-    _driver = driver
-
-def get_driver():
-    return _driver
-
-def take_screenshot() -> str | None:
-    """Returns base64 PNG string or None if no driver active."""
-    if _driver is None:
-        return None
+def take_screenshot():
+    """Returns base64 screenshot string, or None if no screenshot available."""
+    global _last_mtime, _last_data
     try:
-        return _driver.get_screenshot_as_base64()
-    except Exception:
-        return None
+        if not os.path.exists(_FILE):
+            return None
+        mtime = os.path.getmtime(_FILE)
+        if mtime == _last_mtime and _last_data:
+            return _last_data
+        with open(_FILE, 'r') as f:
+            data = f.read().strip()
+        if data:
+            _last_mtime = mtime
+            _last_data = data
+            return data
+    except:
+        pass
+    return None

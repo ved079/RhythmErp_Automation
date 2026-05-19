@@ -166,6 +166,10 @@ const FOLDER_TO_SIDEBAR: Record<string, string> = {
   quality_parameter_master: "quality-parameter-def",
   services_master: "services-master",
   item_category: "item-category",
+  item_group: "item-group",
+  entity_group: "entity-group",
+  role_creation: "role-creation",
+  user_creation: "user-creation",
 };
 
 export function folderToSidebarId(folderName: string): string {
@@ -177,7 +181,7 @@ export function sidebarToFolderMapping(sidebarId: string): { module: string; sub
   for (const [folder, id] of Object.entries(FOLDER_TO_SIDEBAR)) {
     if (id === sidebarId) {
       // Determine if it's a top-level module or sub-module
-      const topModules = ["login_screens", "access_screen", "company_onboarding", "common_settings", "commodity_settings"];
+      const topModules = ["login_screens", "company_onboarding", "common_settings", "commodity_settings"];
       if (topModules.includes(folder)) {
         return { module: folder, subModule: null };
       }
@@ -186,9 +190,13 @@ export function sidebarToFolderMapping(sidebarId: string): { module: string; sub
       if (commonSubs.includes(folder)) {
         return { module: "common_settings", subModule: folder };
       }
-      const commoditySubs = ["crop_master", "item_master", "quality_parameter_master", "services_master", "item_category"];
+      const commoditySubs = ["crop_master", "item_master", "quality_parameter_master", "services_master", "item_category", "item_group"];
       if (commoditySubs.includes(folder)) {
         return { module: "commodity_settings", subModule: folder };
+      }
+      const accessSubs = ["entity_group", "role_creation", "user_creation"];
+      if (accessSubs.includes(folder)) {
+        return { module: "access_screen", subModule: folder };
       }
       return { module: folder, subModule: null };
     }

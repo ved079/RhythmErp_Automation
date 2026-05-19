@@ -278,20 +278,44 @@ const ALL_SIDEBAR_MODULES: SidebarModule[] = [
   {
     id: 'commodity-settings',
     label: 'Commodity Settings',
-    children: [
-      { id: 'crop-master', label: 'Crop Master', badge: '📝 No tests', badgeType: 'none' as const },
-      { id: 'commodity-quality-param', label: 'Commodity Quality Param', badge: '📝 No tests', badgeType: 'none' as const },
-      { id: 'quality-parameter-def', label: 'Quality Parameter Def', badge: '📝 No tests', badgeType: 'none' as const },
+                children: [
+      {
+        id: 'commodity-attributes-group',
+        label: 'Commodity Attributes',
+        defaultExpanded: true,
+        children: [
+          { id: 'item-attribute', label: 'Item Attribute', badge: '📝 No tests', badgeType: 'none' as const },
+        ],
+      },
+      { id: 'quality-parameter-def', label: 'Quality Parameter Master', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'commodity-quality-param', label: 'Commodity Quality Parameter', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'commodity-base-rate', label: 'Commodity Base Rate', badge: '📝 No tests', badgeType: 'none' as const },
-      { id: 'commodity-master', label: 'Commodity Master', badge: '📝 No tests', badgeType: 'none' as const },
-      { id: 'item-master', label: 'Item Master', badge: '📝 No tests', badgeType: 'none' as const },
-      { id: 'services-master', label: 'Services Master', badge: '📝 No tests', badgeType: 'none' as const },
-      { id: 'item-category', label: 'Item Category', badge: '📝 No tests', badgeType: 'none' as const },
-      { id: 'item-group', label: 'Item Group', badge: '📝 No tests', badgeType: 'none' as const },
+      {
+        id: 'commodity-master-group',
+        label: 'Commodity Master',
+        defaultExpanded: true,
+        children: [
+          { id: 'item-master', label: 'Item Master', badge: '📝 No tests', badgeType: 'none' as const },
+          { id: 'crop-master', label: 'Crop Master', badge: '📝 No tests', badgeType: 'none' as const },
+          { id: 'services-master', label: 'Services Master', badge: '📝 No tests', badgeType: 'none' as const },
+          { id: 'item-category', label: 'Item Category', badge: '📝 No tests', badgeType: 'none' as const },
+          { id: 'item-group', label: 'Item Group', badge: '📝 No tests', badgeType: 'none' as const },
+        ],
+      },
     ],
   },
-  { id: 'finance-settings', label: 'Finance Settings' },
-  { id: 'access', label: 'Access' },
+    {
+    id: 'access',
+    label: 'Access',
+    defaultExpanded: true,
+    children: [
+      { id: 'entity-group', label: 'Entity Group Definition', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'role-creation', label: 'Role Creation Screen', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'role-screen-link', label: 'Role Screen Link', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'user-creation', label: 'User Creation Screen', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'screen-api-link', label: 'Screen API Link', badge: '📝 No tests', badgeType: 'none' as const },
+    ],
+  },
   { id: 'my-tickets', label: 'My Tickets' },
 ]
 
@@ -317,20 +341,19 @@ function buildSidebarModules(apiModules: ApiModule[]): SidebarModule[] {
     }
   }
 
-  // Update badges with real counts
-  for (const mod of sidebar) {
-    if (mod.children) {
-      for (const child of mod.children) {
-        const count = testCounts[child.id]
-        if (count !== undefined) {
-          if (count > 0) {
-            child.badge = `${count} tests`
-            child.badgeType = 'success'
-          }
-          // else keep "📝 No tests"
-        }
+  // Update badges with real counts (recursive for nested groups)
+  function updateBadges(items: SidebarModule[]) {
+    for (const item of items) {
+      const count = testCounts[item.id]
+      if (count !== undefined && count > 0) {
+        item.badge = `${count} tests`
+        item.badgeType = 'success'
       }
+      if (item.children) updateBadges(item.children)
     }
+  }
+  for (const mod of sidebar) {
+    if (mod.children) updateBadges(mod.children)
   }
 
   return sidebar
@@ -1046,9 +1069,13 @@ function OperationsTab({ testGroups, testCasesModule }: { testGroups: TestClassG
   const testSpecGroups = testGroups
   const [searchVal, setSearchVal] = useState('')
   const [filter, setFilter] = useState<'all' | 'passed' | 'failed' | 'bug' | 'not-run'>('all')
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    new Set(testSpecGroups.map((g) => g.className))
-  )
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+    // Auto-expand all groups when testSpecGroups changes
+  useEffect(() => {
+    if (testSpecGroups.length > 0) {
+      setExpandedGroups(new Set(testSpecGroups.map((g) => g.className)))
+    }
+  }, [testSpecGroups])
   const [expandedTests, setExpandedTests] = useState<Set<string>>(new Set())
 
   const toggleGroup = useCallback((name: string) => {
@@ -1615,6 +1642,27 @@ function LiveExecutionTab({
   const prevRunningTestIdRef = useRef<string | null>(null)
   const stepTimerRef = useRef<NodeJS.Timeout | null>(null)
 
+  const [consoleHeight, setConsoleHeight] = useState(220)
+  const isResizingRef = useRef(false)
+  const resizeStartRef = useRef({ y: 0, h: 0 })
+  const handleConsoleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    isResizingRef.current = true
+    resizeStartRef.current = { y: e.clientY, h: consoleHeight }
+    const onMove = (ev: MouseEvent) => {
+      if (!isResizingRef.current) return
+      const delta = resizeStartRef.current.y - ev.clientY
+      setConsoleHeight(Math.max(120, Math.min(500, resizeStartRef.current.h + delta)))
+    }
+    const onUp = () => {
+      isResizingRef.current = false
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [consoleHeight])
+
   const runningTest = tests.find((t) => t.status === 'running')
   const runningTestId = runningTest?.id || null
 
@@ -1714,158 +1762,168 @@ function LiveExecutionTab({
   const completedCount = passedCount + failedCount
   const progressPercent = tests.length > 0 ? Math.round((completedCount / tests.length) * 100) : 0
 
-  return (
+﻿  return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Top Bar */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 shrink-0 bg-gray-50/50 dark:bg-gray-800/30">
-        <Button
-          variant="ghost"
-          onClick={onBack}
-          className="h-8 text-[13px] gap-1.5 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100 cursor-pointer px-2"
-        >
-          <ArrowLeft className="size-3.5" />
+      {/* ── Top Bar ── */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 bg-slate-900/80 backdrop-blur-sm shrink-0">
+        <Button variant="ghost" onClick={onBack} className="h-8 text-[13px] gap-1.5 text-slate-400 hover:text-white hover:bg-white/5 cursor-pointer px-2.5 rounded-lg">
+          <ArrowLeft className="size-4" />
           Test Runner
         </Button>
-        <Separator orientation="vertical" className="h-5 mx-1" />
+        <div className="w-px h-5 bg-white/10" />
         {isRunning ? (
           <>
-            <div className="flex items-center gap-2 flex-1 max-w-sm">
-              <Progress value={progressPercent} className="h-2 flex-1" />
-              <span className="text-[12px] text-blue-600 dark:text-blue-400 font-medium whitespace-nowrap">
-                {completedCount}/{tests.length} ({progressPercent}%)
+            <div className="flex items-center gap-3 flex-1">
+              <Progress value={progressPercent} className="h-2 flex-1 [&>div]:bg-gradient-to-r [&>div]:from-emerald-500 [&>div]:to-emerald-400" />
+              <span className="text-[13px] text-slate-300 font-semibold tabular-nums min-w-[80px]">
+                {completedCount}/{tests.length}
+                <span className="text-slate-500 ml-1">({progressPercent}%)</span>
               </span>
             </div>
             <div className="flex-1" />
-            <Button onClick={onStop} className="bg-red-500 hover:bg-red-600 text-white h-8 text-[13px] gap-1.5 cursor-pointer">
+            <Button onClick={onStop} className="bg-red-500/90 hover:bg-red-500 text-white h-8 text-[13px] gap-1.5 cursor-pointer rounded-lg shadow-lg shadow-red-500/20">
               <Square className="size-3.5" />
               Stop
             </Button>
           </>
         ) : completedCount > 0 ? (
           <>
-            <span className="text-[12px] text-gray-500 dark:text-gray-400">
-              Run complete — <span className="text-green-600 dark:text-green-400 font-medium">{passedCount} passed</span>, <span className="text-red-500 dark:text-red-400 font-medium">{failedCount} failed</span>
+            <span className="text-[13px] text-slate-400">
+              Run complete — <span className="text-emerald-400 font-semibold">{passedCount} passed</span>, <span className="text-red-400 font-semibold">{failedCount} failed</span>
             </span>
             <div className="flex-1" />
             {failedCount > 0 && (
-              <Button onClick={onRerunFailed} className="bg-orange-500 hover:bg-orange-600 text-white h-8 text-[13px] gap-1.5 cursor-pointer mr-2">
+              <Button onClick={onRerunFailed} className="bg-amber-500/90 hover:bg-amber-500 text-white h-8 text-[13px] gap-1.5 cursor-pointer rounded-lg shadow-lg shadow-amber-500/20 mr-2">
                 <RotateCcw className="size-3.5" />
                 Rerun Failed ({failedCount})
               </Button>
             )}
-            <Button onClick={onBack} className="bg-[#1976d2] hover:bg-[#1565c0] text-white h-8 text-[13px] gap-1.5 cursor-pointer">
+            <Button onClick={onBack} className="bg-blue-500/90 hover:bg-blue-500 text-white h-8 text-[13px] gap-1.5 cursor-pointer rounded-lg shadow-lg shadow-blue-500/20">
               <RotateCcw className="size-3.5" />
               New Run
             </Button>
           </>
         ) : (
           <>
-            <span className="text-[12px] text-gray-400 dark:text-gray-500">No test running</span>
+            <span className="text-[13px] text-slate-500">No test running</span>
             <div className="flex-1" />
           </>
         )}
-        <div className="flex items-center gap-3 text-[12px] ml-2">
-          <span className="flex items-center gap-1 text-green-600 dark:text-green-400"><CheckCircle2 className="size-3" /> {passedCount}</span>
-          <span className="flex items-center gap-1 text-red-500 dark:text-red-400"><XCircle className="size-3" /> {failedCount}</span>
+        <div className="flex items-center gap-2 ml-2">
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[12px] font-medium tabular-nums">
+            <CheckCircle2 className="size-3.5" /> {passedCount}
+          </span>
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 text-red-400 text-[12px] font-medium tabular-nums">
+            <XCircle className="size-3.5" /> {failedCount}
+          </span>
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* ── Main Content ── */}
       <div className="flex-1 overflow-hidden flex flex-col">
-        <div className="flex-1 px-4 pt-3 pb-2 min-h-0 flex gap-3">
+        <div className="flex-1 px-4 pt-3 pb-2 min-h-0 flex gap-4">
           {/* Step Progress Panel */}
           {isRunning && runningTest && runningSteps.length > 0 && (
-            <div className="w-72 shrink-0 flex flex-col bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/80">
-                <div className="flex items-center gap-2">
-                  <ClipboardList className="size-3.5 text-blue-600 dark:text-blue-400" />
-                  <span className="text-[12px] font-semibold text-gray-700 dark:text-gray-200">Test Steps</span>
+            <div className="w-72 shrink-0 flex flex-col rounded-xl bg-slate-900 border border-white/[0.06] shadow-2xl shadow-black/40 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] bg-gradient-to-r from-blue-500/10 to-purple-500/10">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-6 h-6 rounded-md bg-blue-500/20 flex items-center justify-center">
+                    <ClipboardList className="size-3.5 text-blue-400" />
+                  </div>
+                  <span className="text-[13px] font-semibold text-slate-200">Test Steps</span>
                 </div>
-                <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium tabular-nums">
-                  {Math.min(currentStepIndex + 1, runningSteps.length)} of {runningSteps.length}
+                <span className="text-[11px] text-blue-400 font-semibold tabular-nums px-2 py-0.5 rounded-full bg-blue-500/10">
+                  {Math.min(currentStepIndex + 1, runningSteps.length)}/{runningSteps.length}
                 </span>
               </div>
-              <div className="flex-1 overflow-auto p-2.5">
-                <div className="space-y-1">
-                  {runningSteps.map((step, idx) => {
-                    const isCompleted = idx < currentStepIndex
-                    const isCurrent = idx === currentStepIndex
-                    return (
-                      <div
-                        key={idx}
-                        className={`flex items-start gap-2 px-3 py-2 rounded-md text-[12px] transition-all ${
-                          isCompleted
-                            ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
-                            : isCurrent
-                              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-medium ring-1 ring-blue-200 dark:ring-blue-800'
-                              : 'text-gray-400 dark:text-gray-500'
-                        }`}
-                      >
-                        {isCompleted ? (
-                          <CheckCircle2 className="size-3.5 text-green-500 shrink-0 mt-0.5" />
-                        ) : isCurrent ? (
-                          <Loader2 className="size-3.5 text-blue-500 shrink-0 mt-0.5 animate-spin" />
-                        ) : (
-                          <Circle className="size-3.5 text-gray-300 dark:text-gray-600 shrink-0 mt-0.5" />
-                        )}
-                        <span className={`flex-1 leading-tight ${isCompleted ? 'line-through opacity-70' : ''}`}>{step}</span>
-                        {isCurrent && <span className="text-[10px] text-blue-500 dark:text-blue-400 whitespace-nowrap shrink-0">Running</span>}
-                        {isCompleted && <span className="text-[10px] text-green-500 dark:text-green-400 whitespace-nowrap shrink-0">Done</span>}
-                      </div>
-                    )
-                  })}
-                </div>
+              <div className="flex-1 overflow-auto p-3 space-y-1.5">
+                {runningSteps.map((step, idx) => {
+                  const isCompleted = idx < currentStepIndex
+                  const isCurrent = idx === currentStepIndex
+                  return (
+                    <div key={idx} className={
+                      'flex items-start gap-2 px-3 py-2 rounded-lg text-[12px] transition-all duration-200 ' +
+                      (isCompleted
+                        ? 'bg-emerald-500/[0.07] text-emerald-300/80'
+                        : isCurrent
+                          ? 'bg-blue-500/[0.12] text-blue-200 ring-1 ring-blue-500/30 shadow-lg shadow-blue-500/5'
+                          : 'text-slate-600 hover:text-slate-500')
+                    }>
+                      <span className="text-[10px] font-mono tabular-nums mt-0.5 w-4 shrink-0 text-right opacity-40">{idx + 1}</span>
+                      {isCompleted ? (
+                        <CheckCircle2 className="size-4 text-emerald-400/70 shrink-0 mt-0.5" />
+                      ) : isCurrent ? (
+                        <Loader2 className="size-4 text-blue-400 shrink-0 mt-0.5 animate-spin" />
+                      ) : (
+                        <Circle className="size-3.5 text-slate-700 shrink-0 mt-1" />
+                      )}
+                      <span className="flex-1 leading-relaxed">{step}</span>
+                      {isCurrent && (
+                        <span className="text-[10px] text-blue-400 font-medium shrink-0 mt-0.5 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                          Run
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
-              <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/80">
-                <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 mb-1.5">
+              <div className="px-4 py-3 border-t border-white/[0.06] bg-slate-900/50">
+                <div className="flex items-center justify-between text-[11px] text-slate-500 mb-2">
                   <span>Progress</span>
-                  <span className="font-medium text-gray-700 dark:text-gray-200 tabular-nums">
+                  <span className="font-semibold text-slate-300 tabular-nums">
                     {Math.round(((currentStepIndex + 1) / runningSteps.length) * 100)}%
                   </span>
                 </div>
-                <Progress value={((currentStepIndex + 1) / runningSteps.length) * 100} className="h-1.5 bg-gray-200 dark:bg-gray-700" />
+                <Progress value={((currentStepIndex + 1) / runningSteps.length) * 100} className="h-2 bg-slate-800 [&>div]:bg-gradient-to-r [&>div]:from-blue-500 [&>div]:to-cyan-400" />
               </div>
             </div>
           )}
 
           {/* Live Browser View */}
-          <div className="flex-1 min-w-0">
-            <div className="h-full rounded-lg border-2 border-gray-700 dark:border-gray-600 overflow-hidden flex flex-col bg-white dark:bg-gray-900">
-              {/* Chrome top bar */}
-              <div className="bg-gray-200 dark:bg-gray-700 px-3 py-1.5 flex items-center gap-2 shrink-0">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-red-400" />
-                  <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                  <div className="w-3 h-3 rounded-full bg-green-400" />
+          <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex-1 rounded-xl border border-white/[0.08] overflow-hidden flex flex-col shadow-2xl shadow-black/30 bg-slate-900 min-h-0">
+              {/* Chrome bar */}
+              <div className="bg-slate-800 px-4 py-2 flex items-center gap-3 shrink-0 border-b border-white/[0.04]">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-[#ff5f57]" />
+                  <div className="w-3 h-3 rounded-full bg-[#febc2e]" />
+                  <div className="w-3 h-3 rounded-full bg-[#28c840]" />
                 </div>
                 <div className="flex-1 flex items-center justify-center">
-                  <div className="bg-white dark:bg-gray-800 rounded-md px-3 py-0.5 flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 min-w-[300px]">
-                    <Globe className="size-3 text-gray-400 dark:text-gray-500" />
-                    <span className="truncate">
-                      {isRunning ? `https://rhythmerp.com — ${runningTest?.name || 'Running...'}` : 'https://rhythmerp.com'}
+                  <div className="bg-slate-900/80 rounded-lg px-4 py-1 flex items-center gap-2 text-[11px] text-slate-500 border border-white/[0.06] max-w-md w-full">
+                    <Globe className="size-3.5 text-slate-600 shrink-0" />
+                    <span className="truncate text-center">
+                      {isRunning ? 'https://rhythmerp.com — ' + (runningTest?.name || 'Running...') : 'https://rhythmerp.com'}
                     </span>
                   </div>
                 </div>
-                <MoreHorizontal className="size-4 text-gray-500 dark:text-gray-400" />
+                <MoreHorizontal className="size-4 text-slate-600" />
               </div>
 
-              {/* Browser Content */}
-              <div className="flex-1 overflow-hidden relative" style={{ minHeight: 0 }}>
+              {/* Browser content */}
+              <div className="flex-1 overflow-hidden relative bg-slate-950">
                 {isRunning && runningTest ? (
                   <LiveScreencast isRunning={isRunning} />
                 ) : completedCount > 0 ? (
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gray-50 dark:bg-gray-800">
-                    <CheckCircle2 className="size-12 text-green-500" />
-                    <p className="text-[15px] font-medium text-gray-700 dark:text-gray-200">Run Complete</p>
-                    <p className="text-[13px] text-gray-500 dark:text-gray-400">{passedCount} passed, {failedCount} failed</p>
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+                    <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
+                      <CheckCircle2 className="size-8 text-emerald-400" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[15px] font-semibold text-slate-200">Run Complete</p>
+                      <p className="text-[13px] text-slate-500 mt-1">{passedCount} passed, {failedCount} failed</p>
+                    </div>
                   </div>
                 ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-gray-50 dark:bg-gray-800">
-                    <div className="w-20 h-20 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                      <Play className="size-8 text-gray-400 dark:text-gray-500 ml-0.5" />
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-4">
+                    <div className="w-20 h-20 rounded-full bg-slate-800 flex items-center justify-center border border-white/[0.06]">
+                      <Play className="size-8 text-slate-600 ml-1" />
                     </div>
-                    <p className="text-[14px] text-gray-500 dark:text-gray-400 font-medium">No test running</p>
-                    <p className="text-[12px] text-gray-400 dark:text-gray-500">Go to Test Runner, select tests and click Run</p>
+                    <div className="text-center">
+                      <p className="text-[14px] text-slate-500 font-medium">No test running</p>
+                      <p className="text-[12px] text-slate-600 mt-1">Go to Test Runner, select tests and click Run</p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1874,11 +1932,11 @@ function LiveExecutionTab({
             {/* Currently running info */}
             {isRunning && runningTest && (
               <div className="flex items-center gap-3 mt-2 px-1">
-                <span className="text-[12px] text-gray-500 dark:text-gray-400">
-                  Currently: <span className="font-medium text-gray-700 dark:text-gray-200">{runningTest.id}</span> — {runningTest.name}
+                <span className="text-[12px] text-slate-500">
+                  Currently: <span className="font-medium text-slate-300">{runningTest.id}</span> — {runningTest.name}
                 </span>
-                <Separator orientation="vertical" className="h-3" />
-                <span className="text-[12px] text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                <div className="w-px h-3 bg-slate-700" />
+                <span className="text-[12px] text-blue-400 flex items-center gap-1.5">
                   <Loader2 className="size-3 animate-spin" />
                   Running...
                 </span>
@@ -1887,30 +1945,36 @@ function LiveExecutionTab({
           </div>
         </div>
 
-        {/* Console Output */}
-        <div className="shrink-0 border-t border-gray-700 flex flex-col" style={{ height: '220px' }}>
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-[#1e1e2e] border-b border-gray-700 shrink-0">
-            <Terminal className="size-3.5 text-green-400" />
-            <span className="text-[11px] font-medium text-gray-400">LIVE CONSOLE</span>
-            <span className="text-[10px] text-gray-600 ml-auto font-mono">pytest</span>
+        {/* Console resize handle */}
+        <div
+          className="shrink-0 h-1.5 bg-slate-800 cursor-row-resize hover:bg-blue-500/50 active:bg-blue-500/50 transition-colors flex items-center justify-center group"
+          onMouseDown={handleConsoleResizeStart}
+        >
+          <div className="w-8 h-0.5 rounded-full bg-slate-600 group-hover:bg-blue-400 transition-colors" />
+        </div>
+
+        {/* Console */}
+        <div className="shrink-0 flex flex-col border-t border-white/[0.06]" style={{ height: consoleHeight }}>
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border-b border-white/[0.06] shrink-0">
+            <Terminal className="size-3.5 text-emerald-400" />
+            <span className="text-[12px] font-semibold text-slate-300 tracking-wide">LIVE CONSOLE</span>
+            <span className="text-[10px] text-slate-600 ml-auto font-mono bg-slate-800 px-1.5 py-0.5 rounded">pytest</span>
           </div>
-          <div className="flex-1 bg-[#1a1a2e] overflow-auto p-2">
-            <div className="space-y-0">
+          <div className="flex-1 bg-slate-950 overflow-auto p-3">
+            <div className="space-y-px">
               {consoleLines.map((line, i) => (
-                <div
-                  key={i}
-                  className={`text-[11px] font-mono leading-4 ${
-                    line.includes('PASSED') || line.includes('✅')
-                      ? 'text-green-400'
-                      : line.includes('FAILED') || line.includes('❌') || line.includes('ERROR')
-                        ? 'text-red-400'
-                        : line.includes('Running') || line.includes('Navigating') || line.includes('Clicking')
-                          ? 'text-yellow-300'
-                          : line.startsWith('>')
-                            ? 'text-blue-300'
-                            : 'text-gray-400'
-                  }`}
-                >
+                <div key={i} className={
+                  'text-xs font-mono leading-5 ' +
+                  (line.includes('PASSED') || line.includes('passed')
+                    ? 'text-emerald-400'
+                    : line.includes('FAILED') || line.includes('ERROR') || line.includes('failed')
+                      ? 'text-red-400'
+                      : line.includes('Running') || line.includes('Navigating') || line.includes('Clicking') || line.includes('Typing')
+                        ? 'text-amber-300'
+                        : line.startsWith('>')
+                          ? 'text-blue-400'
+                          : 'text-slate-500')
+                }>
                   {line}
                 </div>
               ))}
@@ -1922,6 +1986,8 @@ function LiveExecutionTab({
     </div>
   )
 }
+
+
 // ─── SCHEDULE RUNS TAB (Feature 5) ────────────────────────
 function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sidebarModules: SidebarModule[] }) {
   const [runs, setRuns] = useState<ScheduledRun[]>([])
@@ -2869,7 +2935,7 @@ export default function Home() {
   const [sidebarModules, setSidebarModules] = useState<SidebarModule[]>(ALL_SIDEBAR_MODULES)
   const [apiModules, setApiModules] = useState<ApiModule[]>([])
   const [selectedModule, setSelectedModule] = useState<string>('dashboard')
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(['common-settings']))
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = useState('operations')
   const [consoleOpen, setConsoleOpen] = useState(false)
   const [testChecks, setTestChecks] = useState<Set<string>>(new Set())
@@ -2879,6 +2945,29 @@ export default function Home() {
   const [isRunning, setIsRunning] = useState(false)
   const [runningProgress, setRunningProgress] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sidebar-width')
+      return saved ? Number(saved) : 240
+    }
+    return 240
+  })
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+  e.preventDefault()
+  const startX = e.clientX
+  const startWidth = sidebarWidth
+  const onMouseMove = (ev: MouseEvent) => {
+    const newWidth = Math.max(180, Math.min(400, startWidth + (ev.clientX - startX)))
+    setSidebarWidth(newWidth)
+  }
+  const onMouseUp = () => {
+    document.removeEventListener('mousemove', onMouseMove)
+    document.removeEventListener('mouseup', onMouseUp)
+    localStorage.setItem('sidebar-width', String(sidebarWidth))
+  }
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onMouseUp)
+}, [sidebarWidth])
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false)
   const [quickSearch, setQuickSearch] = useState('')
 
@@ -3069,6 +3158,9 @@ export default function Home() {
         if (mod.id === id) return { label: mod.label, parent: null }
         for (const child of mod.children ?? []) {
           if (child.id === id) return { label: child.label, parent: mod.label }
+          for (const grand of child.children ?? []) {
+            if (grand.id === id) return { label: grand.label, parent: child.label }
+          }
         }
       }
       return { label: id, parent: null }
@@ -3454,11 +3546,10 @@ export default function Home() {
       <div className="flex flex-1 overflow-hidden">
         {/* ─── SIDEBAR ──────────────────────────────────── */}
         <div
-          className={`shrink-0 transition-all duration-200 ease-in-out overflow-hidden h-full h-full ${
-            sidebarOpen ? 'w-60' : 'w-0'
-          }`}
+          className="shrink-0 overflow-hidden h-full"
+          style={{ width: sidebarOpen ? sidebarWidth : 0 }}
         >
-        <aside className="w-60 bg-[#e8f5e9] dark:bg-[#1a2e1a] border-r border-[#c8e6c9] dark:border-[#2d4a2d] flex flex-col h-full">
+        <aside className="bg-[#e8f5e9] dark:bg-[#1a2e1a] border-r border-[#c8e6c9] dark:border-[#2d4a2d] flex flex-col h-full" style={{ width: sidebarWidth }}>
           <div className="px-3 py-2.5 border-b border-[#c8e6c9] dark:border-[#2d4a2d] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Search className="size-3.5 text-gray-500 dark:text-gray-400" />
@@ -3494,6 +3585,14 @@ export default function Home() {
           </div>
         </aside>
         </div>
+
+        {/* ─── RESIZE HANDLE ────────────────────────────── */}
+        {sidebarOpen && (
+          <div
+            onMouseDown={handleResizeStart}
+            className="w-1 cursor-col-resize bg-transparent hover:bg-green-400/40 active:bg-green-400/60 transition-colors shrink-0 relative z-10"
+          />
+        )}
 
         {/* ─── MAIN CONTENT ─────────────────────────────── */}
         <main className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900 relative">

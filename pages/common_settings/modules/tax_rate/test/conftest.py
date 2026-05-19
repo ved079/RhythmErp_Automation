@@ -19,6 +19,7 @@ from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHY
 from pages.common_settings.cs_report_generator import CSReportStore, generate_cs_report
 from pages.common_settings.modules.tax_rate.tax_rate_page import TaxRatePage
 from pages.login_screens.Login_Screens_.login_page import LoginPage
+from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
 
 
 # ================================================================
@@ -81,8 +82,13 @@ def logged_in_driver(driver):
 
     login_page.wait_for_login_complete()
     log.info("RhythmERP login successful!")
+    start_screenshot_broadcast(driver)
+    start_screenshot_broadcast(driver)
+    log.info("RhythmERP login successful!")
 
     yield driver
+
+    stop_screenshot_broadcast()
 
 
 # ================================================================

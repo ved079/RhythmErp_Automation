@@ -1,1 +1,1 @@
-ÿþ
+# CBR test package

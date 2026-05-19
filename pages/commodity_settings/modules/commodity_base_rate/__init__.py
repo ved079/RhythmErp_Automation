@@ -1,1 +1,1 @@
-ÿþ
+# Commodity Base Rate module

@@ -34,6 +34,7 @@ from config import (
     RHYTHMERP_PASSWORD,
 )
 from pages.login_screens.Login_Screens_.login_page import LoginPage
+from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
 from pages.commodity_settings.modules.crop_master.crop_master_page import CropMasterPage
 from pages.commodity_settings.modules.crop_master.cm_report_generator import cm_report
 
@@ -131,6 +132,8 @@ def driver():
     driver = get_driver()
     driver.maximize_window()
     yield driver
+
+    stop_screenshot_broadcast()
     log.separator()
     log.info("CLOSING BROWSER...")
     log.separator()
@@ -170,6 +173,9 @@ def logged_in_driver(driver):
 
     # Wait for login complete
     login_page.wait_for_login_complete()
+    log.info("RhythmERP login successful!")
+    start_screenshot_broadcast(driver)
+    start_screenshot_broadcast(driver)
     log.info("RhythmERP login successful!")
 
     return driver
@@ -247,3 +253,4 @@ def pytest_collection_modifyitems(items):
     ]
     items.sort(key=lambda item: class_order.index(item.cls.__name__)
                if item.cls and item.cls.__name__ in class_order else 999)
+

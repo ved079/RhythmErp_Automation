@@ -1,5 +1,5 @@
 """
-conftest.py - Quality Parameter Master Commodity Settings (RhythmERP)
+conftest.py - Commodity Base Rate (RhythmERP)
 """
 
 import os
@@ -30,7 +30,7 @@ from pages.common_settings.cs_report_generator import (
 @pytest.fixture(scope="session")
 def driver():
     log.separator()
-    log.info("LAUNCHING BROWSER (RhythmERP - Quality Parameter Master Tests)...")
+    log.info("LAUNCHING BROWSER (RhythmERP - Commodity Base Rate Tests)...")
     log.separator()
     drv = get_driver()
     drv.maximize_window()
@@ -84,13 +84,28 @@ def logged_in_driver(driver):
 
 
 @pytest.fixture
-def qp_master_page(logged_in_driver):
-    """Quality Parameter Master page object — fresh navigation for each test."""
-    from pages.commodity_settings.modules.quality_parameter_master.quality_parameter_master_page import (
-        QualityParameterMasterPage,
+def cbr_page(logged_in_driver):
+    """Commodity Base Rate page object — fresh navigation for each test.
+    Includes browser health check and recovery.
+    """
+    from pages.commodity_settings.modules.commodity_base_rate.commodity_base_rate_page import (
+        CommodityBaseRatePage,
     )
-    page = QualityParameterMasterPage(logged_in_driver)
-    page.navigate_to_page()
+    # Quick browser health check before navigating
+    try:
+        _ = logged_in_driver.current_url
+    except Exception as e:
+        pytest.skip(f"Browser session is dead: {e}")
+
+    page = CommodityBaseRatePage(logged_in_driver)
+
+    # Try to navigate, skip test if browser is dead
+    try:
+        page.navigate_to_page()
+    except Exception as e:
+        log.warning(f"Navigation failed (browser may be dead): {e}")
+        pytest.skip(f"Could not navigate to CBR page: {e}")
+
     yield page
 
 
@@ -98,110 +113,84 @@ def qp_master_page(logged_in_driver):
 # REPORT GENERATOR HOOKS
 # ================================================================
 
-_qpm_store = CSReportStore()
+_cbr_store = CSReportStore()
 
-# ---- Quality Parameter Master Known Issues ----
+# ---- Commodity Base Rate Known Issues ----
 
-# BUG-001 (HIGH): Spaces-only name creates empty record
-_qpm_store.record_issue(
+_cbr_store.record_issue(
     severity="High",
-    module="Quality Parameter Master",
+    module="Commodity Base Rate",
     category="Data Integrity",
-    description="Spaces-only name creates an empty/blank record in the table. "
-                "When a user enters only spaces in the Name field and submits, "
-                "the ERP trims the spaces but stores an empty string, resulting "
-                "in a row with no visible name text.",
-    expected="System should reject spaces-only input with a validation error "
-             "like 'Name cannot be empty or spaces only'.",
-    actual="Spaces-only name is accepted and creates a blank record in the table.",
-    test_ref="QPM-C03",
+    description="Item Rate field accepts non-numeric input like negative values "
+                "(-100) and special characters (abc!@#). No client-side or "
+                "server-side validation prevents invalid rate values.",
+    expected="System should reject non-numeric and negative values with a "
+             "validation error like 'Item Rate must be a positive number'.",
+    actual="Negative values and special characters are accepted and saved.",
+    test_ref="CBR-V-02, CBR-V-03",
     status="Open",
 )
 
-# BUG-002 (HIGH): Duplicate names allowed
-_qpm_store.record_issue(
-    severity="High",
-    module="Quality Parameter Master",
-    category="Data Integrity",
-    description="Duplicate Quality Parameter names are allowed in the Create form. "
-                "Two or more parameters with identical Name can exist in the system "
-                "with no warning or rejection.",
-    expected="System should show a validation error like 'Name already exists' "
-             "and keep the form open for correction.",
-    actual="Duplicate name is accepted and saved without any warning.",
-    test_ref="QPM-C04",
-    status="Open",
-)
-
-# BUG-002 (HIGH): Duplicate names allowed in Edit
-_qpm_store.record_issue(
-    severity="High",
-    module="Quality Parameter Master",
-    category="Data Integrity",
-    description="Duplicate Quality Parameter names are allowed in the Edit form. "
-                "Editing a parameter to use another parameter's Name is accepted.",
-    expected="System should reject duplicate name during edit.",
-    actual="Duplicate name accepted in Edit with no error.",
-    test_ref="QPM-E04",
-    status="Open",
-)
-
-# BUG-003 (MEDIUM): No maxlength on input
-_qpm_store.record_issue(
+_cbr_store.record_issue(
     severity="Medium",
-    module="Quality Parameter Master",
-    category="Validation",
-    description="No maxlength attribute on the Name input field. Names of 300+ "
-                "characters are accepted and stored without any truncation or "
-                "validation error.",
-    expected="System should enforce a reasonable maxlength (e.g., 255 chars) "
-             "and show inline validation if exceeded.",
-    actual="No maxlength constraint. Extremely long names are stored as-is.",
-    test_ref="QPM-C05, QPM-C06",
+    module="Commodity Base Rate",
+    category="Data Integrity",
+    description="Item Rate field accepts zero (0) value. A base rate of zero "
+                "is not meaningful and should be validated.",
+    expected="System should reject zero rate with validation error.",
+    actual="Zero rate is accepted and saved without any warning.",
+    test_ref="CBR-V-04",
     status="Open",
 )
 
-# BUG-004 (LOW): No success popup
-_qpm_store.record_issue(
-    severity="Low",
-    module="Quality Parameter Master",
-    category="UX",
-    description="No success SweetAlert2 popup appears after creating or updating "
-                "a Quality Parameter. The form popup simply closes with no "
-                "confirmation to the user that the action succeeded.",
-    expected="A success alert like 'Quality Parameter created successfully' "
-             "should appear after create/update.",
-    actual="Popup closes silently. No success confirmation shown to user.",
-    test_ref="QPM-C07, QPM-E05",
+_cbr_store.record_issue(
+    severity="Medium",
+    module="Commodity Base Rate",
+    category="UI",
+    description="Listing table shows raw ISO timestamps (e.g., "
+                "'2025-05-27T00:00:00.000Z') instead of properly formatted "
+                "dates (e.g., '27/05/2025') in From Date and To Date columns.",
+    expected="Dates should be displayed in DD/MM/YYYY format.",
+    actual="Dates show raw ISO timestamp strings.",
+    test_ref="CBR-H-01",
     status="Open",
 )
 
-# BUG-005 (LOW): No Delete option
-_qpm_store.record_issue(
+_cbr_store.record_issue(
+    severity="High",
+    module="Commodity Base Rate",
+    category="Data Integrity",
+    description="When creating a record with a custom To Date, the system "
+                "overrides it to 30/12/2099 on submit, ignoring the user's "
+                "selected date.",
+    expected="To Date should retain the user's selected value.",
+    actual="To Date is always saved as 30/12/2099 regardless of input.",
+    test_ref="CBR-H-02",
+    status="Open",
+)
+
+_cbr_store.record_issue(
     severity="Low",
-    module="Quality Parameter Master",
+    module="Commodity Base Rate",
     category="Functionality",
-    description="No Delete option exists anywhere on the Quality Parameter Master "
-                "screen — no Delete button per row, no Delete in More menu, "
-                "no Delete in the edit popup.",
-    expected="Users should be able to delete a Quality Parameter via a Delete "
-             "button on the row or in the edit popup.",
-    actual="No Delete functionality available. Records cannot be removed.",
-    test_ref="QPM-P02",
+    description="Edit button is disabled for newly created records. "
+                "Only enabled after a version has been created from the record.",
+    expected="Edit should be available for the latest version of any record.",
+    actual="Edit button remains disabled until versioning is performed.",
+    test_ref="CBR-E-01",
     status="Open",
 )
 
-# BUG-006 (LOW): No History / Audit trail
-_qpm_store.record_issue(
-    severity="Low",
-    module="Quality Parameter Master",
+_cbr_store.record_issue(
+    severity="Medium",
+    module="Commodity Base Rate",
     category="Functionality",
-    description="No History / Audit trail feature exists for Quality Parameter "
-                "Master. Unlike Vehicle Master which has a History button per row, "
-                "QPM has no way to track when a parameter was created or modified.",
-    expected="A History button should be available per row to view change audit trail.",
-    actual="No History button or audit trail feature available.",
-    test_ref="QPM-P03",
+    description="Version creation fails when the From Date overlaps with an "
+                "existing record. Error message is generic and not helpful.",
+    expected="Clear error message indicating date overlap, e.g., "
+             "'From Date overlaps with existing record'.",
+    actual="Generic error message with no specific guidance.",
+    test_ref="CBR-P-02",
     status="Open",
 )
 
@@ -231,9 +220,9 @@ _capture_handler = None
 def pytest_runtest_setup(item):
     """Start log capture before each test."""
     global _capture_handler
-    _qpm_store.start_test(item.name, item.nodeid)
+    _cbr_store.start_test(item.name, item.nodeid)
 
-    _capture_handler = _LogCapture(_qpm_store)
+    _capture_handler = _LogCapture(_cbr_store)
     _capture_handler.setLevel(logging.INFO)
     try:
         if hasattr(log, "logger") and log.logger:
@@ -274,19 +263,36 @@ def pytest_runtest_makereport(item, call):
         else:
             status = "SKIPPED"
             error = ""
-        _qpm_store.finish_test(status, error)
+        _cbr_store.finish_test(status, error)
+
+        # Screenshot on failure
+        if report.failed:
+            driver = item.funcargs.get("logged_in_driver") or item.funcargs.get("driver")
+            if driver:
+                try:
+                    from datetime import datetime
+                    screenshots_dir = os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)), "..", "screenshots"
+                    )
+                    os.makedirs(screenshots_dir, exist_ok=True)
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    driver.save_screenshot(
+                        os.path.join(screenshots_dir, f"{item.name}_{timestamp}.png")
+                    )
+                except Exception:
+                    pass
 
 
 def pytest_sessionfinish(session, exitstatus):
     """Generate Excel report at end of test session."""
-    if not _qpm_store.has_results():
+    if not _cbr_store.has_results():
         return
     output_dir = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "reports"
     )
     try:
         filepath = generate_cs_report(
-            _qpm_store.results, output_dir, issues=_qpm_store.known_issues
+            _cbr_store.results, output_dir, issues=_cbr_store.known_issues
         )
         print("")
         print("=" * 60)

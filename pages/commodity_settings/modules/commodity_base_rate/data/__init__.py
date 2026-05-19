@@ -1,1 +1,1 @@
-ÿþ
+# CBR data package

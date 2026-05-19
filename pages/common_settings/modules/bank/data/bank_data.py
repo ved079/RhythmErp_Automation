@@ -7,7 +7,7 @@ Each function returns data safe for a specific test scenario.
 14 fields total: 10 text inputs + 2 dropdowns + 2 toggles.
 
 FIELD RULES (discovered from ERP exploration):
-  Bank Name:         Alphanumeric, max 255 chars, no special chars
+  Bank Name:         ONLY letters (a-z, A-Z), max 255 chars, NO digits, NO special chars
   Bank Code:         Alphanumeric, FIXED length 4, no special chars
   Branch Name:       ONLY numbers accepted, max 255 chars (BUG: should accept text)
   Branch Code:       ONLY numbers, FIXED length 6
@@ -144,6 +144,11 @@ def _random_suffix(length=6):
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
 
+def _random_alpha_suffix(length=6):
+    """Generate a random LETTERS-ONLY suffix for Bank Name (no digits, no special chars)."""
+    return ''.join(random.choices(string.ascii_uppercase, k=length))
+
+
 def _valid_ifsc():
     """Generate a valid IFSC code: 4 UPPERCASE + '0' + 6 alphanumeric.
     Total = 11 characters.
@@ -186,7 +191,7 @@ def valid_bank_data():
     All values comply with the actual ERP field rules.
     """
     return {
-        FIELD_BANK_NAME: f"Bank{_random_suffix()}",
+        FIELD_BANK_NAME: f"Bank{_random_alpha_suffix()}",
         FIELD_BANK_CODE: _valid_bank_code(),                  # 4 alphanumeric
         FIELD_BRANCH_NAME: _valid_branch_name(),              # numbers only (bug)
         FIELD_BRANCH_CODE: _valid_branch_code(),              # 6 digits
@@ -211,7 +216,7 @@ def valid_bank_required_only():
     falling through to defaults.
     """
     return {
-        FIELD_BANK_NAME: f"Bank{_random_suffix()}",
+        FIELD_BANK_NAME: f"Bank{_random_alpha_suffix()}",
         FIELD_BANK_CODE: _valid_bank_code(),                  # 4 alphanumeric
         FIELD_BRANCH_NAME: _valid_branch_name(),              # numbers only (bug)
         FIELD_BRANCH_CODE: _valid_branch_code(),              # 6 digits
@@ -249,7 +254,7 @@ def valid_bank_default():
 
 def valid_bank_name():
     """Just a unique bank name string - for simple tests."""
-    return f"Bank{_random_suffix()}"
+    return f"Bank{_random_alpha_suffix()}"
 
 
 # ================================================================
@@ -466,7 +471,7 @@ def very_long_bank_name(length=255):
     """Bank Name at exactly 255 chars (max boundary) - should be ACCEPTED."""
     data = valid_bank_required_only()
     # Use alphanumeric to avoid special char rejection
-    name = "A" * (length - 6) + _random_suffix(6)
+    name = "A" * (length - 6) + _random_alpha_suffix(6)
     data[FIELD_BANK_NAME] = name[:255]  # ensure exactly 255
     return data
 

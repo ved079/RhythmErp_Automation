@@ -1,5 +1,17 @@
 """
-conftest.py - Quality Parameter Master Commodity Settings (RhythmERP)
+conftest.py - Commodity Quality Parameter (RhythmERP)
+-----------------------------------------------------
+Pytest fixtures and report generation hooks for CQP automation.
+
+Location: Commodity Settings > Commodity Master > Commodity Quality Parameter
+URL:      /#/dynamic-screens/Commodity%20Quality%20Parameter
+
+Known Issues recorded in CSReportStore:
+  BUG-001 : Version & History buttons mis-classed (both use tbl-fav-edit)
+  BUG-002 : Duplicate Item Names in dropdown (no dedup)
+  BUG-003 : Dates displayed as raw ISO strings
+  BUG-004 : History popup always shows "No data available"
+  BUG-005 : To Date auto-populates sentinel 30/12/2099
 """
 
 import os
@@ -30,7 +42,7 @@ from pages.common_settings.cs_report_generator import (
 @pytest.fixture(scope="session")
 def driver():
     log.separator()
-    log.info("LAUNCHING BROWSER (RhythmERP - Quality Parameter Master Tests)...")
+    log.info("LAUNCHING BROWSER (RhythmERP - CQP Tests)...")
     log.separator()
     drv = get_driver()
     drv.maximize_window()
@@ -84,12 +96,12 @@ def logged_in_driver(driver):
 
 
 @pytest.fixture
-def qp_master_page(logged_in_driver):
-    """Quality Parameter Master page object — fresh navigation for each test."""
-    from pages.commodity_settings.modules.quality_parameter_master.quality_parameter_master_page import (
-        QualityParameterMasterPage,
+def cqp_page(logged_in_driver):
+    """CQP page object — fresh navigation for each test."""
+    from pages.commodity_settings.modules.commodity_quality_parameter.commodity_quality_parameter_page import (
+        CommodityQualityParameterPage,
     )
-    page = QualityParameterMasterPage(logged_in_driver)
+    page = CommodityQualityParameterPage(logged_in_driver)
     page.navigate_to_page()
     yield page
 
@@ -98,110 +110,94 @@ def qp_master_page(logged_in_driver):
 # REPORT GENERATOR HOOKS
 # ================================================================
 
-_qpm_store = CSReportStore()
+_cqp_store = CSReportStore()
 
-# ---- Quality Parameter Master Known Issues ----
+# ---- CQP Known Issues ----
 
-# BUG-001 (HIGH): Spaces-only name creates empty record
-_qpm_store.record_issue(
-    severity="High",
-    module="Quality Parameter Master",
-    category="Data Integrity",
-    description="Spaces-only name creates an empty/blank record in the table. "
-                "When a user enters only spaces in the Name field and submits, "
-                "the ERP trims the spaces but stores an empty string, resulting "
-                "in a row with no visible name text.",
-    expected="System should reject spaces-only input with a validation error "
-             "like 'Name cannot be empty or spaces only'.",
-    actual="Spaces-only name is accepted and creates a blank record in the table.",
-    test_ref="QPM-C03",
-    status="Open",
-)
-
-# BUG-002 (HIGH): Duplicate names allowed
-_qpm_store.record_issue(
-    severity="High",
-    module="Quality Parameter Master",
-    category="Data Integrity",
-    description="Duplicate Quality Parameter names are allowed in the Create form. "
-                "Two or more parameters with identical Name can exist in the system "
-                "with no warning or rejection.",
-    expected="System should show a validation error like 'Name already exists' "
-             "and keep the form open for correction.",
-    actual="Duplicate name is accepted and saved without any warning.",
-    test_ref="QPM-C04",
-    status="Open",
-)
-
-# BUG-002 (HIGH): Duplicate names allowed in Edit
-_qpm_store.record_issue(
-    severity="High",
-    module="Quality Parameter Master",
-    category="Data Integrity",
-    description="Duplicate Quality Parameter names are allowed in the Edit form. "
-                "Editing a parameter to use another parameter's Name is accepted.",
-    expected="System should reject duplicate name during edit.",
-    actual="Duplicate name accepted in Edit with no error.",
-    test_ref="QPM-E04",
-    status="Open",
-)
-
-# BUG-003 (MEDIUM): No maxlength on input
-_qpm_store.record_issue(
+# BUG-001: Version & History buttons mis-classed
+_cqp_store.record_issue(
     severity="Medium",
-    module="Quality Parameter Master",
-    category="Validation",
-    description="No maxlength attribute on the Name input field. Names of 300+ "
-                "characters are accepted and stored without any truncation or "
-                "validation error.",
-    expected="System should enforce a reasonable maxlength (e.g., 255 chars) "
-             "and show inline validation if exceeded.",
-    actual="No maxlength constraint. Extremely long names are stored as-is.",
-    test_ref="QPM-C05, QPM-C06",
+    module="Commodity Quality Parameter",
+    category="CSS Class",
+    description="Version (folder-plus) and History (clock) icons both use "
+                "CSS class 'tbl-fav-edit' instead of distinct classes. "
+                "Only the View button has a unique class (tbl-fav-eye).",
+    expected="Each action button type should have its own distinct CSS class.",
+    actual="Version and History share 'tbl-fav-edit' with Edit button.",
+    test_ref="CQP-C10, CQP-H01",
     status="Open",
 )
 
-# BUG-004 (LOW): No success popup
-_qpm_store.record_issue(
-    severity="Low",
-    module="Quality Parameter Master",
-    category="UX",
-    description="No success SweetAlert2 popup appears after creating or updating "
-                "a Quality Parameter. The form popup simply closes with no "
-                "confirmation to the user that the action succeeded.",
-    expected="A success alert like 'Quality Parameter created successfully' "
-             "should appear after create/update.",
-    actual="Popup closes silently. No success confirmation shown to user.",
-    test_ref="QPM-C07, QPM-E05",
+# BUG-002: Duplicate Item Names in dropdown
+_cqp_store.record_issue(
+    severity="High",
+    module="Commodity Quality Parameter",
+    category="Data Integrity",
+    description="The Item Name dropdown contains duplicate entries "
+                "(e.g., 'Soyabean' appears 4+ times). No deduplication is performed.",
+    expected="Dropdown should show unique Item Names only.",
+    actual="Multiple identical Item Name entries visible in dropdown.",
+    test_ref="CQP-D01",
     status="Open",
 )
 
-# BUG-005 (LOW): No Delete option
-_qpm_store.record_issue(
-    severity="Low",
-    module="Quality Parameter Master",
-    category="Functionality",
-    description="No Delete option exists anywhere on the Quality Parameter Master "
-                "screen — no Delete button per row, no Delete in More menu, "
-                "no Delete in the edit popup.",
-    expected="Users should be able to delete a Quality Parameter via a Delete "
-             "button on the row or in the edit popup.",
-    actual="No Delete functionality available. Records cannot be removed.",
-    test_ref="QPM-P02",
+# BUG-003: Dates displayed as raw ISO strings
+_cqp_store.record_issue(
+    severity="Medium",
+    module="Commodity Quality Parameter",
+    category="UI/UX",
+    description="From Date and To Date columns show raw ISO timestamps "
+                "(e.g., '2026-05-18T17:57:17.975438Z') instead of "
+                "human-readable formatted dates (e.g., '18/05/2026').",
+    expected="Dates should be displayed in DD/MM/YYYY or similar readable format.",
+    actual="Dates displayed as raw ISO 8601 timestamp strings.",
+    test_ref="CQP-P02, CQP-P04, CQP-P05",
     status="Open",
 )
 
-# BUG-006 (LOW): No History / Audit trail
-_qpm_store.record_issue(
+# BUG-004: History always empty
+_cqp_store.record_issue(
+    severity="High",
+    module="Commodity Quality Parameter",
+    category="Data Integrity",
+    description="The History popup always shows 'No data available' even for "
+                "Effective records. History tracking may not be properly "
+                "implemented for this screen.",
+    expected="History popup should show version history for records with changes.",
+    actual="History popup is always empty regardless of record status.",
+    test_ref="CQP-H02",
+    status="Open",
+)
+
+# BUG-005: To Date auto-populates sentinel
+_cqp_store.record_issue(
     severity="Low",
-    module="Quality Parameter Master",
-    category="Functionality",
-    description="No History / Audit trail feature exists for Quality Parameter "
-                "Master. Unlike Vehicle Master which has a History button per row, "
-                "QPM has no way to track when a parameter was created or modified.",
-    expected="A History button should be available per row to view change audit trail.",
-    actual="No History button or audit trail feature available.",
-    test_ref="QPM-P03",
+    module="Commodity Quality Parameter",
+    category="UI/UX",
+    description="After selecting an Item Name, the To Date field auto-fills "
+                "to 30/12/2099 which is a sentinel value for 'indefinite'. "
+                "This is not clearly communicated to the user.",
+    expected="Either leave To Date empty for user input, or show a tooltip/label "
+             "explaining the sentinel value.",
+    actual="To Date auto-populates to 30/12/2099 without explanation.",
+    test_ref="CQP-F01",
+    status="Open",
+)
+
+# BUG-008: Detail grid input name attrs have trailing tab characters
+_cqp_store.record_issue(
+    severity="High",
+    module="Commodity Quality Parameter",
+    category="Data Integrity",
+    description="Detail grid text inputs (Min Quality Value, Max Quality Value, "
+                "Multiplier) have trailing tab characters in their name attribute. "
+                "E.g. name=\"Min Quality Value\\t\" instead of name=\"Min Quality Value\". "
+                "This causes CSS attribute selectors like input[name='Min Quality Value'] "
+                "to FAIL — the selector requires an exact match but the actual name "
+                "has an invisible tab character appended.",
+    expected="Input name attributes should not have trailing whitespace/tabs.",
+    actual="name attr includes trailing tab character (e.g., \"Min Quality Value\\t\").",
+    test_ref="CQP-C02, CQP-C06, CQP-C07",
     status="Open",
 )
 
@@ -231,9 +227,9 @@ _capture_handler = None
 def pytest_runtest_setup(item):
     """Start log capture before each test."""
     global _capture_handler
-    _qpm_store.start_test(item.name, item.nodeid)
+    _cqp_store.start_test(item.name, item.nodeid)
 
-    _capture_handler = _LogCapture(_qpm_store)
+    _capture_handler = _LogCapture(_cqp_store)
     _capture_handler.setLevel(logging.INFO)
     try:
         if hasattr(log, "logger") and log.logger:
@@ -274,19 +270,19 @@ def pytest_runtest_makereport(item, call):
         else:
             status = "SKIPPED"
             error = ""
-        _qpm_store.finish_test(status, error)
+        _cqp_store.finish_test(status, error)
 
 
 def pytest_sessionfinish(session, exitstatus):
     """Generate Excel report at end of test session."""
-    if not _qpm_store.has_results():
+    if not _cqp_store.has_results():
         return
     output_dir = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "reports"
     )
     try:
         filepath = generate_cs_report(
-            _qpm_store.results, output_dir, issues=_qpm_store.known_issues
+            _cqp_store.results, output_dir, issues=_cqp_store.known_issues
         )
         print("")
         print("=" * 60)
