@@ -1,4 +1,4 @@
-/**
+﻿/**
  * API helper — all calls to the FastAPI backend go through the Next.js proxy.
  * This avoids CORS issues since the proxy runs server-side.
  */
@@ -170,7 +170,9 @@ const FOLDER_TO_SIDEBAR: Record<string, string> = {
   commodity_quality_parameter: "commodity-quality-param",
   item_attribute: "item-attribute",
   commodity_base_rate: "commodity-base-rate",
+    entity_group_definition: "entity-group",
   entity_group: "entity-group",
+    role_creation_screen: "role-creation",
   role_creation: "role-creation",
   user_creation: "user-creation",
 };
@@ -197,9 +199,9 @@ export function sidebarToFolderMapping(sidebarId: string): { module: string; sub
       if (commoditySubs.includes(folder)) {
         return { module: "commodity_settings", subModule: folder };
       }
-      const accessSubs = ["entity_group", "role_creation", "user_creation"];
+      const accessSubs = ["entity_group", "entity_group_definition", "role_creation", "role_creation_screen", "user_creation"];
       if (accessSubs.includes(folder)) {
-        return { module: "access_screen", subModule: folder };
+        return { module: "access", subModule: folder };
       }
       return { module: folder, subModule: null };
     }

@@ -216,7 +216,8 @@ function getTestsForSidebarModule(
   }
 
   // Get tests list
-  const apiTests = subModule ? subModule.tests : apiMod.sub_modules.flatMap((s) => s.tests)
+  const allApiTests = subModule ? subModule.tests : apiMod.sub_modules.flatMap((s) => s.tests)
+  const apiTests = [...new Map(allApiTests.map(t => [t.name, t])).values()]
   if (apiTests.length === 0) return empty
 
   // Group tests by their test file name (extract class name from file)
@@ -1274,9 +1275,7 @@ function OperationsTab({ testGroups, testCasesModule }: { testGroups: TestClassG
                             ) : (
                               <ChevronRight className="size-3 text-gray-400 dark:text-gray-500 shrink-0" />
                             )}
-                            <span className="text-[11px] text-gray-400 dark:text-gray-500 font-mono w-8 shrink-0">
-                              {test.id}
-                            </span>
+
                             <span className="text-[12px] text-gray-700 dark:text-gray-200 flex-1 text-left">
                               {test.description}
                             </span>
@@ -3001,6 +3000,8 @@ export default function Home() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = useState('operations')
   const [consoleOpen, setConsoleOpen] = useState(false)
+  // Hash routing - read initial state from URL hash
+  const [hashReady, setHashReady] = useState(false)
   const [testChecks, setTestChecks] = useState<Set<string>>(new Set())
   const [tests, setTests] = useState<TestItem[]>(initialTests)
   const [currentTestGroups, setCurrentTestGroups] = useState<TestClassGroup[]>(testSpecGroups)
@@ -3214,6 +3215,29 @@ export default function Home() {
     })
   }, [])
 
+  // --- Hash routing: init from URL hash ---
+  useEffect(() => {
+    const readHash = () => {
+      const h = window.location.hash.slice(1)
+      if (h) {
+        const [mod, tab] = h.split('/')
+        if (mod && mod !== 'dashboard') setSelectedModule(mod)
+        if (tab) setActiveTab(tab)
+      }
+      setHashReady(true)
+    }
+    readHash()
+    window.addEventListener('hashchange', readHash)
+    return () => window.removeEventListener('hashchange', readHash)
+  }, [])
+
+  // Write hash on module/tab change
+  useEffect(() => {
+    if (!hashReady) return
+    const hash = selectedModule === 'dashboard' ? '' : activeTab === 'operations' ? selectedModule : selectedModule + '/' + activeTab
+    window.location.hash = hash
+  }, [selectedModule, activeTab, hashReady])
+
   const handleSelectModule = useCallback((id: string) => {
     setSelectedModule(id)
     const found = (() => {
@@ -3232,7 +3256,7 @@ export default function Home() {
     setActiveTab('operations')
     setTestChecks(new Set())
 
-    // Load real tests from API data for this sub-module
+  // Load real tests from API data for this sub-module
         // Try real test cases from Excel data first
     const moduleKey = id.toLowerCase().replace(" ", "_").replace("-", "_")
     if (allTestCases[moduleKey]) {
