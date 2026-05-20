@@ -1,25 +1,78 @@
 """
 company_onboarding_page.py
----------------------
+--------------------------
 Page Object Model for RhythmERP Company Onboarding screen.
 
+Location: Master Setup > Company Onboarding
+URL:      /#/dynamic-screens/Company%20Onboarding
+
+STEPPER LAYOUT (6 steps):
+  Step 1 = Company Details
+           - Company Name       (input, header, name='Company Name')
+           - Entity Group       (mat-select, header)
+           - Parent Name        (mat-select, header)
+           - Company Linked     (mat-select multi, header)
+           - Company Code       (input, maxlength=4, required, name='Company Code')
+           - Company Short Name (input, name='Company Short Name')
+           - Contact Name       (input, name='Contact Name')
+           - Company Background (textarea, name='Company Background')
+           - Email              (input, name='Email ')
+           - Mobile Number      (input, name='Mobile Number')
+           - PAN                (input, name='PAN')
+           - GSTIN              (input, name='GSTIN')
+           - CIN                (input, name='CIN')
+           - Password           (input, name='Password')
+           - Plan Type          (mat-select)
+           - Authentication Type(mat-select)
+           - 2FA Toggle         (slide-toggle)
+  Step 2 = Promoters
+           - Name               (input, name='Name')
+           - Remark             (textarea, name='Remark')
+  Step 3 = Address
+           - Address Type       (mat-select)
+           - Country            (mat-select)
+           - State              (mat-select, cascading)
+           - District           (mat-select, cascading)
+           - Taluka             (mat-select, cascading)
+           - Address            (input, name='Address')
+           - Pin Code           (input, name='Pin Code')
+  Step 4 = Business Details
+           - Business Model              (input)
+           - Market Linkages             (input)
+           - Line of Business            (input)
+           - Additional Business Activities (input)
+  Step 5 = Infrastructure
+           - Infrastructure Type (mat-select)
+           - Infrastructure Location (input)
+           - Ownership Type      (mat-select)
+  Step 6 = Configuration
+           - Base Currency       (mat-select, required)
+
+POPUP FOOTER:
+  Cancel button  -> Closes dialog without saving
+  Submit button  -> Submits the entire 6-step form
+
 KEY DESIGN DECISION:
-  Never send Keys.ESCAPE anywhere except click_cancel_or_dismiss_dialog.
+  Never send Keys.ESCAPE anywhere.
   Use backdrop click + JS removal for overlay panels.
 """
 
 import time
 import random
+import copy
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException
+from selenium.common.exceptions import (
+    TimeoutException,
+    ElementClickInterceptedException,
+    NoSuchElementException,
+)
 from common.base_page import BasePage
 from common.logger import log
 from config import RHYTHMERP_BASE_URL
-
 
 CO_SUBMISSIONS = []
 
@@ -27,17 +80,21 @@ CO_SUBMISSIONS = []
 class CompanyOnboardingPage(BasePage):
     PAGE_URL = f"{RHYTHMERP_BASE_URL}/#/dynamic-screens/Company%20Onboarding"
 
-    # ---- Toolbar ----
+    # ================================================================
+    # LOCATORS — Toolbar
+    # ================================================================
     ADD_BUTTON = ("css", "button.erp-add-btn")
     REFRESH_BUTTON = ("css", "button[mattooltip='REFRESH'], div[mattooltip='REFRESH'] button")
 
-    # ---- Header fields (outside stepper) ----
+    # ================================================================
+    # LOCATORS — Step 1: Company Details (header + step fields)
+    # ================================================================
     COMPANY_NAME_INPUT = ("css", "input[name='Company Name']")
     ENTITY_GROUP_SELECT = ("xpath", "//mat-label[contains(.,'Entity Group')]/ancestor::mat-form-field//mat-select")
     PARENT_NAME_SELECT = ("xpath", "//mat-label[contains(.,'Parent Name')]/ancestor::mat-form-field//mat-select")
     COMPANY_LINKED_SELECT = ("xpath", "//mat-label[contains(.,'Company Linked')]/ancestor::mat-form-field//mat-select")
 
-    # ---- Step 1 fields ----
+    COMPANY_CODE_INPUT = ("css", "input[name='Company Code']")
     COMPANY_SHORT_NAME_INPUT = ("css", "input[name='Company Short Name']")
     CONTACT_NAME_INPUT = ("css", "input[name='Contact Name']")
     COMPANY_BACKGROUND_INPUT = ("css", "textarea[name='Company Background']")
@@ -52,16 +109,16 @@ class CompanyOnboardingPage(BasePage):
     AUTH_TYPE_SELECT = ("xpath", "//mat-label[contains(.,'Authentication Type')]/ancestor::mat-form-field//mat-select")
     TWO_FA_TOGGLE = ("css", "app-slide-toggle-v2:not(.readonly) .slider")
 
-    # ---- Next / Back ----
-    NEXT_BUTTON_XPATH = (
-        "//mat-dialog-container//button[@matsteppernext or @matStepperNext]"
-        " | //mat-stepper//button[@matsteppernext or @matStepperNext]"
-        " | //mat-dialog-container//button[normalize-space(.)='Next']"
-    )
-    STEP1_NEXT_BUTTON = ("xpath", NEXT_BUTTON_XPATH)
-    STEP2_BACK_BUTTON = ("css", "form.step-form button[matstepperprevious]")
+    # ================================================================
+    # LOCATORS — Step 2: Promoters
+    # ================================================================
+    PROMOTER_NAME_INPUT = ("xpath", "//app-dynamic-details//input[@name='Name']")
+    STEP_REMARK_INPUT = ("xpath", "//app-dynamic-details//textarea[@name='Remark']")
+    ADD_ROW_BUTTON = ("css", "button[mat-icon-button][color='primary']")
 
-    # ---- Step 3: Address details ----
+    # ================================================================
+    # LOCATORS — Step 3: Address
+    # ================================================================
     ADDRESS_TYPE_SELECT = ("xpath", "//app-dynamic-details//mat-label[contains(.,'Address Type')]/ancestor::mat-form-field//mat-select")
     COUNTRY_SELECT = ("xpath", "//app-dynamic-details//mat-label[contains(.,'Country')]/ancestor::mat-form-field//mat-select")
     STATE_SELECT = ("xpath", "//app-dynamic-details//mat-label[contains(.,'State')]/ancestor::mat-form-field//mat-select")
@@ -70,32 +127,50 @@ class CompanyOnboardingPage(BasePage):
     ADDRESS_INPUT = ("xpath", "//app-dynamic-details//input[@name='Address']")
     PIN_CODE_INPUT = ("xpath", "//app-dynamic-details//input[@name='Pin Code']")
 
-    # ---- Step 2: Promoters ----
-    PROMOTER_NAME_INPUT = ("xpath", "//app-dynamic-details//input[@name='Name']")
-    STEP_REMARK_INPUT = ("xpath", "//app-dynamic-details//textarea[@name='Remark']")
-    ADD_ROW_BUTTON = ("css", "button[mat-icon-button][color='primary']")
-
-    # ---- Step 3: Business Details ----
+    # ================================================================
+    # LOCATORS — Step 4: Business Details
+    # ================================================================
     BUSINESS_MODEL_INPUT = ("xpath", "//app-dynamic-details//mat-label[normalize-space(.)='Business Model']/ancestor::mat-form-field//input")
     MARKET_LINKAGES_INPUT = ("xpath", "//app-dynamic-details//mat-label[normalize-space(.)='Market Linkages']/ancestor::mat-form-field//input")
     LINE_OF_BUSINESS_INPUT = ("xpath", "//app-dynamic-details//mat-label[normalize-space(.)='Line of Business']/ancestor::mat-form-field//input")
     ADDITIONAL_BUSINESS_INPUT = ("xpath", "//app-dynamic-details//mat-label[contains(.,'Additional Business Activities')]/ancestor::mat-form-field//input")
 
-    # ---- Step 4: Infrastructure ----
+    # ================================================================
+    # LOCATORS — Step 5: Infrastructure
+    # ================================================================
     INFRA_TYPE_SELECT = ("xpath", "//app-dynamic-details//mat-label[normalize-space(.)='Infrastructure Type']/ancestor::mat-form-field//mat-select")
     INFRA_LOCATION_INPUT = ("xpath", "//app-dynamic-details//input[@name='Infrastructure Location']")
     INFRA_OWNERSHIP_SELECT = ("xpath", "//app-dynamic-details//mat-label[normalize-space(.)='Ownership Type']/ancestor::mat-form-field//mat-select")
 
+    # ================================================================
+    # LOCATORS — Step 6: Configuration
+    # ================================================================
+    BASE_CURRENCY_SELECT = ("xpath", "//mat-label[contains(.,'Base Currency')]/ancestor::mat-form-field//mat-select")
 
-    # ---- Table & Search ----
+    # ================================================================
+    # LOCATORS — Step navigation
+    # ================================================================
+    NEXT_BUTTON_XPATH = (
+        "//mat-dialog-container//button[@matsteppernext or @matStepperNext]"
+        " | //mat-stepper//button[@matsteppernext or @matStepperNext]"
+        " | //mat-dialog-container//button[normalize-space(.)='Next']"
+    )
+    BACK_BUTTON_CSS = ("css", "form.step-form button[matstepperprevious], button[matstepperprevious]")
+
+    # ================================================================
+    # LOCATORS — Table & Search
+    # ================================================================
     SEARCH_BUTTON = ('css', 'button.search-btn')
     SEARCH_INPUT = ('css', '.erp-search-wrapper input')
     TABLE_COMPANY_NAMES = ('css', 'td.cdk-column-name')
     PAGINATOR_LABEL = ('css', '.mat-mdc-paginator-range-label')
-    REFRESH_BUTTON_HEADER = ('xpath', "//button[*[contains(@class,'material-icons') and text()='refresh']]")
-    # ---- Dialog footer ----
+
+    # ================================================================
+    # LOCATORS — Dialog footer
+    # ================================================================
     CANCEL_BUTTON = ("xpath", "//div[@class='popup-footer']//button[contains(.,'Cancel')]")
     SUBMIT_BUTTON = ("xpath", "//div[@class='popup-footer']//button[contains(.,'Submit')]")
+    UPDATE_BUTTON = ("xpath", "//div[@class='popup-footer']//button[contains(.,'Update')]")
 
     # ================================================================
     # Navigation & toolbar
@@ -118,7 +193,7 @@ class CompanyOnboardingPage(BasePage):
         self.wait_seconds(2)
 
     # ================================================================
-    # Overlay cleanup
+    # Overlay cleanup — NEVER use Keys.ESCAPE
     # ================================================================
     def _force_close_panels(self):
         """Remove ALL select overlay panes from the DOM via JS. Keeps dialog backdrop."""
@@ -151,8 +226,6 @@ class CompanyOnboardingPage(BasePage):
                     pass
         except Exception:
             pass
-
-        # Quick check if anything remains
         remaining = self.driver.find_elements(
             By.CSS_SELECTOR,
             "div.cdk-overlay-backdrop:not(.cdk-overlay-dark-backdrop), "
@@ -173,7 +246,7 @@ class CompanyOnboardingPage(BasePage):
                 if btn.is_displayed() and btn.is_enabled():
                     self.driver.execute_script(
                         "arguments[0].scrollIntoView({block:'center'}); arguments[0].click();",
-                        btn
+                        btn,
                     )
                     clicked = True
                     break
@@ -185,18 +258,118 @@ class CompanyOnboardingPage(BasePage):
         log.info("Added new row via + button")
 
     # ================================================================
-    # Fill Step 1 (Company Details)
+    # Step navigation
     # ================================================================
+    def _click_next(self):
+        """Find Next button and click it via JS directly."""
+        self._force_close_panels()
+        btn_element = None
+        try:
+            btn_element = WebDriverWait(self.driver, 5).until(
+                EC.visibility_of_element_located((By.XPATH, self.NEXT_BUTTON_XPATH))
+            )
+        except Exception:
+            pass
+        if btn_element is None:
+            candidates = self.driver.find_elements(
+                By.XPATH,
+                "//button[@matsteppernext or @matStepperNext]"
+                " | //button[normalize-space(.)='Next']",
+            )
+            for c in candidates:
+                try:
+                    if c.is_displayed() and c.is_enabled():
+                        btn_element = c
+                        break
+                except Exception:
+                    continue
+        if btn_element is None:
+            raise Exception("Next button not found")
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView({block:'center'}); arguments[0].click();",
+            btn_element,
+        )
+        log.info("Clicked Next button")
 
+    def go_to_step2(self):
+        """Step 1 -> Step 2 (Promoters)."""
+        if not self.is_add_form_open():
+            raise Exception("Dialog closed before clicking Next")
+        log.info("  Next: Step 1 -> Step 2 (Promoters)")
+        self._click_next()
+        self.wait_seconds(0.8)
+
+    def go_to_step3(self):
+        """Step 2 (Promoters) -> Step 3 (Address)."""
+        log.info("  Next: Step 2 -> Step 3 (Address)")
+        self._click_next()
+        self.wait_seconds(0.8)
+
+    def go_to_step4(self):
+        """Step 3 (Address) -> Step 4 (Business Details)."""
+        log.info("  Next: Step 3 -> Step 4 (Business Details)")
+        self._click_next()
+        self.wait_seconds(0.8)
+
+    def go_to_step5(self):
+        """Step 4 (Business) -> Step 5 (Infrastructure)."""
+        log.info("  Next: Step 4 -> Step 5 (Infrastructure)")
+        self._click_next()
+        self.wait_seconds(0.8)
+
+    def go_to_step6(self):
+        """Step 5 (Infrastructure) -> Step 6 (Configuration)."""
+        log.info("  Next: Step 5 -> Step 6 (Configuration)")
+        self._click_next()
+        self.wait_seconds(0.8)
+
+    def go_back_to_step1(self):
+        """Click back button multiple times to reach Step 1."""
+        back_selectors = [
+            ("css", "form.step-form button[matstepperprevious]"),
+            ("css", "button[matstepperprevious]"),
+            ("xpath", "//button[@matstepperprevious or @matStepperPrevious]"),
+        ]
+        for i in range(5):
+            clicked = False
+            for strategy, path in back_selectors:
+                try:
+                    btns = self.driver.find_elements(strategy, path)
+                    for btn in btns:
+                        try:
+                            self.driver.execute_script(
+                                "arguments[0].scrollIntoView({block:'center'}); arguments[0].click();",
+                                btn,
+                            )
+                            log.info(f"  Clicked back button ({i + 1}/5)")
+                            self.wait_seconds(1)
+                            clicked = True
+                            break
+                        except Exception:
+                            continue
+                    if clicked:
+                        break
+                except Exception:
+                    continue
+            if not clicked:
+                log.info(f"  No back button found at attempt {i + 1}, stopping")
+                break
+        self.wait_seconds(1)
+
+    # ================================================================
+    # Fill Step 1: Company Details
+    # ================================================================
     def _idx(self, locator, index):
         """Wrap locator with 1-based XPath index."""
         strategy, path = locator
         return (strategy, f"({path})[{index}]")
+
     def fill_company_details(self, data):
-        log.info("Filling Company Details...")
+        log.info("Filling Company Details (Step 1)...")
 
         field_map = {
             "company_name": self.COMPANY_NAME_INPUT,
+            "company_code": self.COMPANY_CODE_INPUT,
             "company_short_name": self.COMPANY_SHORT_NAME_INPUT,
             "contact_name": self.CONTACT_NAME_INPUT,
             "company_background": self.COMPANY_BACKGROUND_INPUT,
@@ -234,9 +407,7 @@ class CompanyOnboardingPage(BasePage):
             self.wait_seconds(0.3)
             self._select_mat_option(self.AUTH_TYPE_SELECT, str(data["auth_type"]))
 
-        # Clean up any open panels
         self._force_close_panels()
-
         log.info("Company Details filled")
 
         errors = self.driver.find_elements(
@@ -248,95 +419,23 @@ class CompanyOnboardingPage(BasePage):
                 log.warning(f"Validation errors after fill: {texts}")
 
     # ================================================================
-    # Step navigation â€” OPTIMIZED: JS click directly, no fallback chain
+    # Fill Step 2: Promoters
     # ================================================================
-    def _click_next(self):
-        """
-        Find Next button and click it via JS directly.
-        No normal click attempt (always gets intercepted by overlay).
-        No 10s wait on primary locator (always times out).
-        """
+    def fill_promoters(self, promoter, row_index=1):
+        log.info(f"Filling Promoters row {row_index}...")
         self._force_close_panels()
-
-        btn_element = None
-        # Short 5s timeout instead of 10s
-        try:
-            btn_element = WebDriverWait(self.driver, 5).until(
-                EC.visibility_of_element_located((By.XPATH, self.NEXT_BUTTON_XPATH))
-            )
-        except Exception:
-            pass
-
-        # Quick DOM fallback scan
-        if btn_element is None:
-            candidates = self.driver.find_elements(
-                By.XPATH,
-                "//button[@matsteppernext or @matStepperNext]"
-                " | //button[normalize-space(.)='Next']",
-            )
-            for c in candidates:
-                try:
-                    if c.is_displayed() and c.is_enabled():
-                        btn_element = c
-                        break
-                except Exception:
-                    continue
-
-        if btn_element is None:
-            raise Exception("Next button not found")
-
-        # JS click directly â€” skip normal click entirely
-        self.driver.execute_script(
-            "arguments[0].scrollIntoView({block:'center'}); arguments[0].click();",
-            btn_element,
-        )
-        log.info("Clicked Next button")
-
-    def go_to_step2(self):
-        """Step 1 -> Step 2 (Promoters)."""
-        if not self.is_add_form_open():
-            raise Exception("Dialog closed before clicking Next")
-        log.info("  Next: Step 1 -> Step 2 (Promoters)")
-        self._click_next()
-        self.wait_seconds(0.8)
-
-    def go_to_step3(self):
-        """Step 2 (Promoters) -> Step 3 (Business Details)."""
-        log.info("  Next: Step 2 -> Step 3 (Business Details)")
-        self._click_next()
-        self.wait_seconds(0.8)
-
-    def go_to_step4(self):
-        """Step 3 (Business) -> Step 4 (Infrastructure)."""
-        log.info("  Next: Step 3 -> Step 4 (Infrastructure)")
-        self._click_next()
-        self.wait_seconds(0.8)
-
-    def go_to_address_step(self, company_data):
-        """Navigate: Promoters -> Address -> Business -> Infrastructure."""
-        self.click_next_button("2", "3", "Address")
-        self.fill_address_details(company_data)
-        self.click_next_button("3", "4", "Business Activities")
-        self.fill_business_details(company_data)
-        self.click_next_button("4", "5", "Infrastructure Details")
-        self.fill_infrastructure(company_data)
-        self.click_next_button("5", "6", "Submit")
-
-    def go_back_to_step1(self):
-        self.click(self.STEP2_BACK_BUTTON)
-        self.wait_seconds(1)
+        name_loc = ("xpath", f"(//app-dynamic-details//input[@name='Name'])[{row_index}]")
+        remark_loc = ("xpath", f"(//app-dynamic-details//textarea[@name='Remark'])[{row_index}]")
+        self.type_text(name_loc, promoter.get("name", "Mr Test Promoter"), clear_first=True)
+        self.type_text(remark_loc, promoter.get("remark", "Test remark."), clear_first=True)
+        self.wait_seconds(0.3)
+        log.info(f"Promoters row {row_index} filled")
 
     # ================================================================
-    # Fill Address Details
+    # Fill Step 3: Address Details
     # ================================================================
-
     def _select_random_from_dropdown(self, select_locator, label_name, exclude=None):
-        """
-        Open a mat-select dropdown, read ALL options from the UI,
-        pick one randomly, click it, and return the selected text.
-        Bulletproof against case mismatches and missing options.
-        """
-        # Open dropdown
+        """Open a mat-select dropdown, pick one randomly, click it, return selected text."""
         try:
             self.click(select_locator)
         except Exception:
@@ -347,16 +446,13 @@ class CompanyOnboardingPage(BasePage):
             self.click(trigger)
         self.wait_seconds(0.5)
 
-        # Wait for options to appear
         WebDriverWait(self.driver, 5).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "div[role='listbox'] mat-option"))
         )
 
-        # Read all available options from UI
         options = self.driver.find_elements(By.CSS_SELECTOR, "div[role='listbox'] mat-option")
         option_texts = [t for t in [opt.text.strip() for opt in options] if t and not t.startswith("Select") and t != "No results found"]
 
-        # Fallback for newer Angular Material
         if not option_texts:
             options = self.driver.find_elements(By.CSS_SELECTOR, "div[role='listbox'] [role='option']")
             option_texts = [opt.text.strip() for opt in options if opt.text.strip() and opt.text.strip() != "No results found"]
@@ -364,21 +460,18 @@ class CompanyOnboardingPage(BasePage):
         if not option_texts:
             raise Exception(f"No options found in '{label_name}' dropdown")
 
-        # Exclude already-used options
         if exclude:
             option_texts = [t for t in option_texts if t not in exclude]
             if not option_texts:
                 raise Exception(f"No remaining options in {label_name} after excluding {exclude}")
 
-        # Pick random
         selected = random.choice(option_texts)
 
-        # Click using JS (avoids interception issues)
         for opt in options:
             if opt.text.strip() == selected:
                 self.driver.execute_script(
                     "arguments[0].scrollIntoView({block:'center'}); arguments[0].click();",
-                    opt
+                    opt,
                 )
                 break
 
@@ -386,12 +479,8 @@ class CompanyOnboardingPage(BasePage):
         log.info(f"Random '{label_name}' selected: '{selected}'")
         return selected
 
-
     def _fill_address_location_with_retry(self, row_index=1, max_attempts=15):
-        """
-        Select State -> District -> Taluka with retry logic.
-        If Taluka has no options, retry with different random selections.
-        """
+        """Select State -> District -> Taluka with retry logic."""
         for attempt in range(1, max_attempts + 1):
             log.info(f"Address location attempt {attempt}/{max_attempts}")
             try:
@@ -411,10 +500,8 @@ class CompanyOnboardingPage(BasePage):
     def fill_address_details(self, data, row_index=1):
         self._force_close_panels()
         log.info(f"Filling Address Details row {row_index}...")
-        # Random address type: Registered or Corporate
         addr_types = ["Registered Address", "Corporate Address"]
         if data.get("address_type"):
-            # Use data-provided type but swap if it conflicts with row 1
             chosen_type = data["address_type"]
         else:
             chosen_type = random.choice(addr_types)
@@ -429,7 +516,6 @@ class CompanyOnboardingPage(BasePage):
         self.type_text(self._idx(self.ADDRESS_INPUT, row_index), address_text, clear_first=True)
         pin = str(random.randint(110000, 899999))
         self.type_text(self._idx(self.PIN_CODE_INPUT, row_index), pin, clear_first=True)
-        # Store address record
         if "addresses" not in data:
             data["addresses"] = []
         while len(data["addresses"]) < row_index:
@@ -443,18 +529,8 @@ class CompanyOnboardingPage(BasePage):
         }
         log.info(f"Address Details row {row_index} filled")
 
-    def fill_promoters(self, promoter, row_index=1):
-        log.info(f"Filling Promoters row {row_index}...")
-        self._force_close_panels()
-        name_loc = ("xpath", f"(//app-dynamic-details//input[@name=\'Name\'])[{row_index}]")
-        remark_loc = ("xpath", f"(//app-dynamic-details//textarea[@name=\'Remark\'])[{row_index}]")
-        self.type_text(name_loc, promoter.get("name", "Mr Test Promoter"), clear_first=True)
-        self.type_text(remark_loc, promoter.get("remark", "Test remark."), clear_first=True)
-        self.wait_seconds(0.3)
-        log.info(f"Promoters row {row_index} filled")
-
     # ================================================================
-    # Fill Step 3: Business Details
+    # Fill Step 4: Business Details
     # ================================================================
     def fill_business_details(self, data, row_index=1):
         log.info(f"Filling Business Details row {row_index}...")
@@ -469,6 +545,9 @@ class CompanyOnboardingPage(BasePage):
         self.wait_seconds(0.5)
         log.info(f"Business Details row {row_index} filled")
 
+    # ================================================================
+    # Fill Step 5: Infrastructure
+    # ================================================================
     def fill_infrastructure(self, data, row_index=1):
         log.info(f"Filling Infrastructure row {row_index}...")
         self._force_close_panels()
@@ -483,7 +562,6 @@ class CompanyOnboardingPage(BasePage):
         self.wait_seconds(0.3)
         ownership = self._select_random_from_dropdown(self._idx(self.INFRA_OWNERSHIP_SELECT, row_index), "Ownership Type")
         self.wait_seconds(0.5)
-        # Store infrastructure record
         if "infrastructure" not in data:
             data["infrastructure"] = []
         while len(data["infrastructure"]) < row_index:
@@ -495,7 +573,28 @@ class CompanyOnboardingPage(BasePage):
         }
         log.info(f"Infrastructure row {row_index} filled")
 
+    # ================================================================
+    # Fill Step 6: Configuration
+    # ================================================================
+    def fill_configuration(self, data, row_index=1):
+        """Fill the Configuration step (Base Currency dropdown)."""
+        log.info("Filling Configuration (Step 6)...")
+        self._force_close_panels()
+        base_currency = data.get("base_currency", "")
+        if base_currency:
+            self._select_mat_option(self.BASE_CURRENCY_SELECT, base_currency)
+            log.info(f"Base Currency selected: {base_currency}")
+        else:
+            # Pick first available option from live UI
+            selected = self._select_random_from_dropdown(self.BASE_CURRENCY_SELECT, "Base Currency")
+            data["base_currency"] = selected
+            log.info(f"Base Currency auto-selected: {selected}")
+        self.wait_seconds(0.5)
+        log.info("Configuration step filled")
 
+    # ================================================================
+    # Table & Search
+    # ================================================================
     def search_company(self, company_name):
         """Search for a company in the table. Uses pure JS to avoid stale elements."""
         try:
@@ -531,8 +630,6 @@ class CompanyOnboardingPage(BasePage):
             if self.is_displayed(self.SEARCH_INPUT, timeout=3):
                 self.type_text(self.SEARCH_INPUT, '', clear_first=True)
                 self.wait_seconds(0.5)
-                # Press Escape to close search
-                from selenium.webdriver.common.keys import Keys
                 self.driver.find_element(By.CSS_SELECTOR, '.erp-search-wrapper input').send_keys(Keys.ESCAPE)
                 self.wait_seconds(0.5)
         except Exception:
@@ -546,6 +643,9 @@ class CompanyOnboardingPage(BasePage):
         self.clear_search()
         return found
 
+    # ================================================================
+    # Submit / Cancel
+    # ================================================================
     def submit(self):
         log.info("Submitting form...")
         self._force_close_panels()
@@ -558,6 +658,17 @@ class CompanyOnboardingPage(BasePage):
         self.click(self.CANCEL_BUTTON)
         self.wait_seconds(1)
 
+    def click_cancel_or_dismiss_dialog(self):
+        """Dismiss any open dialog — Cancel button or JS close."""
+        try:
+            if self.is_displayed(self.CANCEL_BUTTON, timeout=2):
+                self.click(self.CANCEL_BUTTON)
+                return
+        except Exception:
+            pass
+        ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+        self.wait_seconds(0.5)
+
     # ================================================================
     # One-call creation
     # ================================================================
@@ -565,14 +676,16 @@ class CompanyOnboardingPage(BasePage):
         log.info(f"Creating company: {company_data.get('company_name', 'N/A')}")
         self.open_add_form()
         self.fill_company_details(company_data)
-        # Step 2: Promoters (random 1-4 rows)
+
+        # Step 2: Promoters
         self.go_to_step2()
         promoters = company_data.get("promoters", [])
         for idx, promoter in enumerate(promoters, 1):
             if idx > 1:
                 self.add_row()
             self.fill_promoters(promoter, row_index=idx)
-        # Step 3: Address (fixed 2 rows)
+
+        # Step 3: Address
         self.go_to_step3()
         num_addr = company_data.get("num_addresses", 1)
         addr_types = random.sample(["Registered Address", "Corporate Address"], min(num_addr, 2))
@@ -581,20 +694,27 @@ class CompanyOnboardingPage(BasePage):
                 self.add_row()
             company_data["address_type"] = addr_types[(idx - 1) % len(addr_types)]
             self.fill_address_details(company_data, row_index=idx)
-        # Step 4: Business Activities (random 1-4 rows)
+
+        # Step 4: Business Activities
         self.go_to_step4()
         num_biz = company_data.get("num_business_rows", 1)
         for idx in range(1, num_biz + 1):
             if idx > 1:
                 self.add_row()
             self.fill_business_details(company_data, row_index=idx)
-        # Step 5: Infrastructure (random 1-4 rows)
-        self._click_next()
+
+        # Step 5: Infrastructure
+        self.go_to_step5()
         num_infra = company_data.get("num_infra_rows", 1)
         for idx in range(1, num_infra + 1):
             if idx > 1:
                 self.add_row()
             self.fill_infrastructure(company_data, row_index=idx)
+
+        # Step 6: Configuration (Base Currency)
+        self.go_to_step6()
+        self.fill_configuration(company_data)
+
         success = True
         error_msg = ""
         try:
@@ -613,8 +733,7 @@ class CompanyOnboardingPage(BasePage):
         except Exception as e:
             success = False
             error_msg = str(e)
-        # Store submission record
-        import copy
+
         CO_SUBMISSIONS.append({
             "data": copy.deepcopy(company_data),
             "status": "PASSED" if success else "FAILED",
@@ -623,14 +742,13 @@ class CompanyOnboardingPage(BasePage):
         log.info(f"Company submission recorded: {'PASSED' if success else 'FAILED'}")
 
     def create_bulk_companies(self, companies_list, on_progress=None):
-        import time as _time
         total = len(companies_list)
         results = []
         for i, comp in enumerate(companies_list, 1):
             name = comp.get("company_name", f"Company_{i}")
             log.info(f"[{i}/{total}] Creating: {name}")
             result = {"index": i, "company_name": name, "status": "passed", "error": ""}
-            start_time = _time.time()
+            start_time = time.time()
             try:
                 self.create_company(comp)
                 result["status"] = "passed"
@@ -638,7 +756,7 @@ class CompanyOnboardingPage(BasePage):
                 result["status"] = "failed"
                 result["error"] = str(e)
                 log.failed(f"Failed: {name} - {e}")
-            elapsed = _time.time() - start_time
+            elapsed = time.time() - start_time
             result["duration"] = round(elapsed, 1)
             log.info(f"  [{i}/{total}] {name} -> {result['status'].upper()} ({elapsed:.1f}s)")
             try:
@@ -668,16 +786,13 @@ class CompanyOnboardingPage(BasePage):
         return self.is_displayed(self.COMPANY_NAME_INPUT, timeout=5)
 
     def is_step2_visible(self):
-        """Check if Address Details step is visible."""
+        """Check if Step 3 (Address) is visible — misnomer kept for backward compat."""
         return self.is_displayed(self.ADDRESS_INPUT, timeout=5)
 
     def is_dialog_closed(self):
         return not self.is_displayed(self.COMPANY_NAME_INPUT, timeout=60)
 
     def get_success_message(self, timeout=30):
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
         try:
             wait = WebDriverWait(self.driver, timeout)
             title_el = wait.until(
@@ -693,7 +808,7 @@ class CompanyOnboardingPage(BasePage):
                     confirm_btn.click()
                     log.info("SweetAlert confirm button clicked")
                 except Exception:
-                    log.warning("Could not click SweetAlert confirm, waiting for auto-dismiss")
+                    log.warning("Could not click SweetAlert confirm")
                     try:
                         WebDriverWait(self.driver, 5).until(
                             EC.invisibility_of_element_located((By.CSS_SELECTOR, "#swal2-title"))
@@ -741,7 +856,6 @@ class CompanyOnboardingPage(BasePage):
             )
             self.click(trigger)
         self.wait_seconds(0.3)
-
         for opt in option_texts:
             opt_loc = (
                 "xpath",
@@ -752,7 +866,6 @@ class CompanyOnboardingPage(BasePage):
             self.click(opt_loc)
             self.wait_seconds(0.2)
             log.info(f"Multi-select: '{opt}'")
-
         self._close_select_panel()
 
     def _enable_2fa_toggle(self):
@@ -762,12 +875,68 @@ class CompanyOnboardingPage(BasePage):
             self.click(self.TWO_FA_TOGGLE)
             self.wait_seconds(0.3)
 
-    def click_cancel_or_dismiss_dialog(self):
+    # ================================================================
+    # Validation helpers (for test assertions)
+    # ================================================================
+    def has_invalid_fields(self):
+        """Check if any form fields have .mat-form-field-invalid class."""
         try:
-            if self.is_displayed(self.CANCEL_BUTTON, timeout=2):
-                self.click(self.CANCEL_BUTTON)
-                return
+            invalid = self.driver.find_elements(
+                By.CSS_SELECTOR, ".mat-form-field-invalid"
+            )
+            return len(invalid) > 0
+        except Exception:
+            return False
+
+    def get_mat_error_text(self):
+        """Get all visible mat-error text messages."""
+        errors = []
+        try:
+            error_els = self.driver.find_elements(
+                By.CSS_SELECTOR, "mat-error, .mat-mdc-form-field-error"
+            )
+            for el in error_els:
+                try:
+                    if el.is_displayed() and el.text.strip():
+                        errors.append(el.text.strip())
+                except Exception:
+                    continue
         except Exception:
             pass
-        ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
-        self.wait_seconds(0.5)
+        return errors
+
+    def is_validation_alert_present(self, timeout=5):
+        """Check if a SweetAlert2 validation alert is visible."""
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, ".swal2-container"))
+            )
+            return True
+        except Exception:
+            return False
+
+    def get_swal_title(self):
+        """Get the SweetAlert2 title text."""
+        try:
+            title_el = self.driver.find_element(By.CSS_SELECTOR, "#swal2-title")
+            return title_el.text.strip()
+        except Exception:
+            return ""
+
+    def handle_validation_warning(self, timeout=5):
+        """Handle SweetAlert2 validation warning and return title."""
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, ".swal2-container"))
+            )
+            self.wait_seconds(0.5)
+            title = self.get_swal_title()
+            try:
+                confirm = self.driver.find_element(By.CSS_SELECTOR, ".swal2-confirm")
+                self.driver.execute_script("arguments[0].click();", confirm)
+                self.wait_seconds(0.5)
+            except Exception:
+                pass
+            return title
+        except Exception:
+            return ""

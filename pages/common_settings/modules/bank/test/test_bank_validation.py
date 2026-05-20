@@ -123,14 +123,10 @@ def _create_prerequisite_bank(page, prefix="PreReq"):
         page.force_close_form_popup()
     except Exception:
         pass
-        # Search the name to bring it into view in the table
     name = result.get("bank_name", "")
     if name:
         page.search(name)
         page.wait_seconds(2)
-        page.clear_search()
-        page.wait_seconds(1)
-    name = result.get("bank_name", "")
     log.info(f"Prerequisite bank created: {name}")
     return name, data
 
@@ -189,7 +185,7 @@ class TestCreateFormValidations:
         log.info("BNK-C02: Valid create test (happy path)")
         page = bnk_page
 
-        data = generate_valid_bank_data("ValidCRSWS")
+        data = generate_valid_bank_data("ValidC")
         result = page.create_bank(data)
         name = result.get("bank_name", "")
 
@@ -203,7 +199,7 @@ class TestCreateFormValidations:
             page.wait_seconds(2)
         found = page.is_bank_in_table(name)
 
-        assert found, f"Created bank '{name}' not found in table after refresh"
+        assert found, f"Created bank '{name}' not found in table after search"
         log.info(f"Bank created and found in table: {name}")
 
     # ---- BNK-C03: Bank Name — alpha-only uppercase validation ----

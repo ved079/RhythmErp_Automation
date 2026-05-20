@@ -1,5 +1,5 @@
 """
-conftest.py - Role Creation Screen (RhythmERP - Access)
+conftest.py - Role Creation Screen (RhythmERP)
 """
 
 import os
@@ -15,6 +15,7 @@ sys.path.insert(0, PROJECT_ROOT)
 from common.logger import log
 from common.browser_utils import get_driver
 from pages.login_screens.Login_Screens_.login_page import LoginPage
+from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
 from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
 from pages.common_settings.cs_report_generator import (
     CSReportStore,
@@ -73,17 +74,22 @@ def logged_in_driver(driver):
 
     login_page.wait_for_login_complete()
     log.info("RhythmERP login successful!")
+    start_screenshot_broadcast(driver)
+    start_screenshot_broadcast(driver)
+    log.info("RhythmERP login successful!")
 
     yield driver
+
+    stop_screenshot_broadcast()
 
 
 @pytest.fixture
 def rc_page(logged_in_driver):
-    """Role Creation Screen page object — fresh navigation for each test."""
-    from pages.access.modules.role_creation_screen.role_creation_screen_page import (
-        RoleCreationScreenPage,
+    """Role Creation page object — fresh navigation for each test."""
+    from pages.access.modules.role_creation_screen.role_creation_page import (
+        RoleCreationPage,
     )
-    page = RoleCreationScreenPage(logged_in_driver)
+    page = RoleCreationPage(logged_in_driver)
     page.navigate_to_page()
     yield page
 
@@ -94,117 +100,123 @@ def rc_page(logged_in_driver):
 
 _rc_store = CSReportStore()
 
-# ---- Role Creation Screen Known Issues ----
+# ---- Role Creation Known Issues ----
+# These are populated from the Role Creation Master Spec exploration.
 
-# BUG-001 (HIGH): Duplicate Role Name accepted silently
-_rc_store.record_issue(
-    severity="High",
-    module="Role Creation Screen",
-    category="Data Integrity",
-    description="Duplicate Role Names are accepted silently. When a user enters a "
-                "Role Name that already exists and submits, the form closes without "
-                "any error or success message. The duplicate is NOT created, but the "
-                "user has no feedback about why the submission was rejected.",
-    expected="System should show a validation error like 'Role Name already exists' "
-             "and keep the form open for correction.",
-    actual="Form closes silently with no error message. Duplicate is not created, "
-           "but user receives no feedback.",
-    test_ref="RC-D01, RC-D02, RC-D03",
-    status="Confirmed",
-)
-
-# BUG-002 (HIGH): Spaces-only Role Name accepted without validation
+# BUG-001 (HIGH): Spaces-only Role Name accepted as valid (ng-valid)
 _rc_store.record_issue(
     severity="High",
     module="Role Creation Screen",
     category="Validation",
-    description="Spaces-only Role Name is accepted without showing any validation "
-                "error text. When a user enters only spaces in the Role Name field "
-                "and submits, the form stays open but shows no mat-error message. "
-                "The .mat-form-field-invalid CSS class is applied but no text error "
-                "is visible to the user.",
-    expected="System should reject spaces-only input with a visible validation error "
-             "like 'Role Name cannot be empty or spaces only'.",
-    actual="No mat-error text is shown. The field is highlighted as invalid via CSS "
-           "class but the user cannot tell what is wrong.",
-    test_ref="RC-C04",
+    description="Spaces-only Role Name is accepted as valid (ng-valid class set). "
+                "The system does not validate against whitespace-only input in the "
+                "Role Name field. A name consisting entirely of spaces passes client-side "
+                "validation and can be submitted.",
+    expected="System should trigger a validation error like 'This field is required' "
+             "or 'Spaces-only input is not allowed' and keep the form open.",
+    actual="CONFIRMED: Spaces-only input accepted as ng-valid. Form can be submitted.",
+    test_ref="RC-C03",
     status="Confirmed",
 )
 
-# BUG-003 (MEDIUM): Inconsistent SweetAlert after successful create
+# BUG-002 (HIGH): Special characters accepted in Role Name
 _rc_store.record_issue(
-    severity="Medium",
+    severity="High",
     module="Role Creation Screen",
-    category="UX",
-    description="SweetAlert confirmation after successful creation is inconsistent. "
-                "The first role creation in a session typically shows 'Role created' "
-                "SweetAlert, but subsequent creations may not show any confirmation.",
-    expected="System should consistently show a success SweetAlert after every "
-             "successful role creation.",
-    actual="Success SweetAlert is shown inconsistently — sometimes yes, sometimes no.",
-    test_ref="RC-P01",
+    category="Input Validation",
+    description="Special characters such as !@#$%^&*() are accepted in the Role Name "
+                "field and saved to the database. No input sanitization or validation "
+                "is performed on the Role Name field.",
+    expected="System should reject special characters with a validation error.",
+    actual="CONFIRMED: Special characters accepted and saved.",
+    test_ref="RC-C05",
     status="Confirmed",
 )
 
-# BUG-004 (MEDIUM): No maxlength on Role Name
+# BUG-003 (CRITICAL): SQL injection strings accepted
 _rc_store.record_issue(
-    severity="Medium",
+    severity="Critical",
     module="Role Creation Screen",
-    category="Validation",
-    description="No maxlength attribute on the Role Name input field. Names of 256+ "
-                "characters may be accepted and stored without any truncation or "
-                "validation error.",
-    expected="System should enforce a reasonable maxlength (e.g., 255 chars) "
-             "and show inline validation if exceeded.",
-    actual="No maxlength attribute found. Very long names are accepted.",
+    category="Security",
+    description="SQL injection strings such as '; DROP TABLE roles; -- are accepted "
+                "in the Role Name field and saved to the database. This is a critical "
+                "security vulnerability that could allow data exfiltration or destruction.",
+    expected="System should reject or sanitize SQL injection input.",
+    actual="CONFIRMED: SQL injection strings accepted and saved.",
     test_ref="RC-C06",
     status="Confirmed",
 )
 
-# BUG-005 (LOW): Special characters / SQL injection / XSS not sanitized
+# BUG-004 (CRITICAL): XSS payloads accepted
 _rc_store.record_issue(
-    severity="Low",
+    severity="Critical",
     module="Role Creation Screen",
     category="Security",
-    description="Special characters, SQL injection strings, and XSS payloads are "
-                "accepted in the Role Name field without any sanitization. Examples "
-                "include '!@#$%^&*()', '1; DROP TABLE; --', and "
-                "'<script>alert(xss)</script>'. While these may be stored safely "
-                "by the backend, the lack of input sanitization is a security concern.",
-    expected="System should sanitize or reject potentially dangerous input strings.",
-    actual="All special characters, SQL injection, and XSS strings are accepted "
-           "and stored as-is.",
-    test_ref="RC-C07, RC-C08, RC-C09",
+    description="XSS payloads such as <script>alert('xss')</script> are accepted "
+                "in the Role Name field and saved to the database. This is a critical "
+                "security vulnerability that could allow cross-site scripting attacks.",
+    expected="System should reject or sanitize XSS payloads.",
+    actual="CONFIRMED: XSS payloads accepted and saved.",
+    test_ref="RC-C07",
     status="Confirmed",
 )
 
-# BUG-006 (LOW): No Delete option
+# BUG-005 (HIGH): Duplicate Role Names allowed
+_rc_store.record_issue(
+    severity="High",
+    module="Role Creation Screen",
+    category="Data Integrity",
+    description="Duplicate Role Names are ALLOWED in the system. Two or more roles "
+                "with identical Role Name can coexist with no warning. Case-insensitive "
+                "duplicates are also allowed.",
+    expected="System should show a validation error like 'Role Name already exists' "
+             "and keep the form open for correction.",
+    actual="CONFIRMED: No uniqueness validation. Duplicate names accepted.",
+    test_ref="RC-D01, RC-D02",
+    status="Confirmed",
+)
+
+# BUG-006 (MEDIUM): No client maxlength — 500-char name silently fails
+_rc_store.record_issue(
+    severity="Medium",
+    module="Role Creation Screen",
+    category="Validation",
+    description="No maxlength attribute on Role Name input. 500-character names pass "
+                "client-side validation (ng-valid) but are silently rejected server-side "
+                "with no error message shown to the user. The form just stays open with "
+                "no feedback.",
+    expected="Client should enforce maxlength or show a clear server-side error.",
+    actual="CONFIRMED: No maxlength. Server silently rejects with no error shown.",
+    test_ref="RC-C08",
+    status="Confirmed",
+)
+
+# BUG-007 (LOW): No visible mat-error text on required field validation
+_rc_store.record_issue(
+    severity="Low",
+    module="Role Creation Screen",
+    category="Validation UX",
+    description="When required field validation triggers, only a red outline appears "
+                "on the invalid field. No visible mat-error text is displayed to guide "
+                "the user on what needs to be corrected.",
+    expected="Should display 'This field is required' inline error text.",
+    actual="CONFIRMED: Only red outline, no error text visible.",
+    test_ref="RC-C01",
+    status="Confirmed",
+)
+
+# BUG-008 (LOW): No Delete option anywhere on screen
 _rc_store.record_issue(
     severity="Low",
     module="Role Creation Screen",
     category="Functionality",
     description="No Delete option exists anywhere on the Role Creation Screen — "
-                "no Delete button per row, no Delete in More menu, no Delete in "
-                "the edit popup.",
-    expected="Users should be able to delete a Role record via a Delete button.",
+                "no Delete button per row, no Delete in More menu, no Delete in the "
+                "edit popup. Records cannot be removed once created.",
+    expected="Users should be able to delete a Role Creation record via a Delete "
+             "button on the row or in the edit popup.",
     actual="No Delete functionality available. Records cannot be removed.",
-    test_ref="RC-P04",
-    status="Confirmed",
-)
-
-# BUG-007 (MEDIUM): Empty submit shows no mat-error text
-_rc_store.record_issue(
-    severity="Medium",
-    module="Role Creation Screen",
-    category="Validation",
-    description="When submitting the form with all required fields empty, the "
-                "fields are marked with .mat-form-field-invalid CSS class but "
-                "no mat-error text is displayed. The user cannot tell what is "
-                "wrong with their submission.",
-    expected="System should show clear validation error messages for each "
-             "required field, e.g., 'Role Name is required'.",
-    actual="Fields are highlighted as invalid (red border) but no error text appears.",
-    test_ref="RC-C01",
+    test_ref="RC-P02",
     status="Confirmed",
 )
 

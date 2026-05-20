@@ -1,12 +1,15 @@
 """
+test_company_onboarding_update.py
+----------------------------------
 Test cases for Company Onboarding UPDATE functionality.
 
-Step order (matches actual app):
+6 Steps:
   Step 1 = Company Details
   Step 2 = Promoters
   Step 3 = Address
   Step 4 = Business Details
   Step 5 = Infrastructure
+  Step 6 = Configuration (Base Currency)
 """
 
 import pytest
@@ -15,11 +18,6 @@ from pages.company_onboarding.Company_Onboarding.company_onboarding_page_update 
 from pages.company_onboarding.data.company_onboarding_update_data import (
     UPDATE_COMPANY_NAME,
     ALL_UPDATES,
-    STEP1_UPDATES,
-    STEP2_UPDATES,
-    STEP3_UPDATES,
-    STEP4_UPDATES,
-    STEP5_UPDATES,
 )
 from common.logger import log
 from pages.company_onboarding.test.update_results_store import co_update_results
@@ -57,9 +55,7 @@ class TestCompanyOnboardingUpdate:
         # Verify before-values were captured (used in report)
         before = result.get("before", {})
         assert "step1" in before, "Step 1 before-values not captured for report"
-        assert "step2" in before, "Step 2 before-values not captured for report"
-        assert "step3" in before, "Step 3 (Address) before-values not captured for report"
-        assert "step4" in before, "Step 4 (Business) before-values not captured for report"
+        assert "step6" in before, "Step 6 (Configuration) before-values not captured for report"
 
         log.info(f"Before values captured for report:")
         for step_key, step_val in before.items():

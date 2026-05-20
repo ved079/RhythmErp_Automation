@@ -1242,20 +1242,35 @@ class BankPage(BasePage):
                 ".edit_pop_up.override_edit_pop_up.popup-mode",
             )
 
-            # Text inputs
-            inputs = popup.find_elements(By.CSS_SELECTOR, "input[type='text']")
-            for inp in inputs:
-                name = inp.get_attribute("name")
-                if name:
-                    values[name] = inp.get_attribute("value") or ""
+            # Text inputs — use JS to reliably read Angular Material values
+            # (Selenium find_elements can miss Angular-rendered inputs)
+            js = """
+                var popup = document.querySelector('.edit_pop_up.override_edit_pop_up.popup-mode');
+                if (!popup) return {};
+                var result = {};
+                var inputs = popup.querySelectorAll('input');
+                for (var i = 0; i < inputs.length; i++) {
+                    var inp = inputs[i];
+                    var name = inp.getAttribute('name');
+                    if (name && inp.type === 'text') {
+                        result[name] = inp.value || '';
+                    }
+                }
+                return result;
+            """
+            input_values = self.driver.execute_script(js)
+            if input_values:
+                values.update(input_values)
 
             # Dropdowns (mat-select trigger text)
             form_fields = popup.find_elements(By.CSS_SELECTOR, "mat-form-field")
             for ff in form_fields:
-                label = ff.find_element(By.CSS_SELECTOR, "mat-label")
+                label = ff.find_elements(By.CSS_SELECTOR, "mat-label")
+                if not label:
+                    continue
                 select = ff.find_elements(By.CSS_SELECTOR, "mat-select")
                 if select:
-                    label_text = label.text.strip() if label else ""
+                    label_text = label[0].text.strip()
                     trigger = select[0].find_elements(
                         By.CSS_SELECTOR, ".mat-select-trigger, .mat-mdc-select-trigger"
                     )
@@ -1265,10 +1280,10 @@ class BankPage(BasePage):
             # Toggles
             toggles = popup.find_elements(By.CSS_SELECTOR, "app-slide-toggle-v2")
             for tc in toggles:
-                main_label = tc.find_element(By.CSS_SELECTOR, ".main-label")
+                main_label = tc.find_elements(By.CSS_SELECTOR, ".main-label")
                 sw = tc.find_elements(By.CSS_SELECTOR, ".switch-wrapper input[type='checkbox']")
                 if main_label:
-                    values[main_label.text.strip()] = (
+                    values[main_label[0].text.strip()] = (
                         sw[0].is_selected() if sw else None
                     )
 
@@ -1434,7 +1449,6 @@ class BankPage(BasePage):
         log.info(f"Searching for: {text}")
         try:
             # Step 1: Click the search icon to reveal the input
-            # The search container toggles between icon-only and input+button
             try:
                 toggle_btn = self.driver.find_element(
                     By.CSS_SELECTOR,
@@ -1445,7 +1459,7 @@ class BankPage(BasePage):
             except Exception:
                 pass  # Input may already be visible
 
-            # Step 2: Now find the search input (it exists after clicking icon)
+            # Step 2: Find the search input
             search_input = self.driver.find_element(
                 By.CSS_SELECTOR, "input#erpSearchInput"
             )
@@ -1461,7 +1475,7 @@ class BankPage(BasePage):
             """
             self.driver.execute_script(js, search_input, str(text))
 
-            # Step 3: Click the search submit button (has class 'search-btn')
+            # Step 3: Click the search submit button
             search_btn = self.driver.find_element(
                 By.CSS_SELECTOR, "button.search-btn[aria-label='Search']"
             )

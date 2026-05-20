@@ -91,7 +91,7 @@ def generate_bank_name(prefix="BNK"):
     Existing records follow pattern 'BankXXXXXX' (10 uppercase chars).
     Lowercase, digits, spaces, special chars are rejected.
     """
-    return f"{prefix}"  # prefix(3) + random(7) = 10
+    return f"{prefix}{_rand_upper(7)}"  # prefix(3) + random(7) = 10
 
 
 def generate_bank_code():

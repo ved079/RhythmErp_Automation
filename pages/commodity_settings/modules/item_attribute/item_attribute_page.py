@@ -134,7 +134,7 @@ class ItemAttributePage(BasePage):
     # ==============================================================
     #  LOCATORS - Toolbar
     # ==============================================================
-    ADD_BUTTON = ("css", "divattooltip='ADD'] button")
+    ADD_BUTTON = ("css", "button.erp-add-btn")
     SEARCH_TOGGLE = ("css", "button.search-btn, button[aria-label='Search']")
     REFRESH_BUTTON = ("css", "buttonattooltip='Refresh']")
 
@@ -285,7 +285,6 @@ class ItemAttributePage(BasePage):
         """
         log.info(f"Navigating to {self.display_name} page...")
         self.navigate_to(self.PAGE_URL)
-        self.driver.refresh()
         self._wait_for_page_ready()
 
     def _wait_for_page_ready(self):
@@ -301,12 +300,12 @@ class ItemAttributePage(BasePage):
             log.warning(f"{self.display_name} table not found, page may be empty")
 
         try:
-            WebDriverWait(self.driver, 10).until(
+            WebDriverWait(self.driver, 20).until(
                 EC.presence_of_element_located(
                     (By.CSS_SELECTOR, "ul.tbl-export-btn")
                 )
             )
-            self.wait_seconds(1)
+            self.wait_seconds(2)
             log.info(f"{self.display_name} toolbar ready")
         except TimeoutException:
             log.warning("Toolbar not found, ADD button may be delayed")
@@ -355,7 +354,7 @@ class ItemAttributePage(BasePage):
         # Strategy 1: divattooltip='ADD'] button
         try:
             btn = self.driver.find_element(
-                By.CSS_SELECTOR, "divattooltip='ADD'] button"
+                By.CSS_SELECTOR, "button.erp-add-btn"
             )
             if btn.is_displayed():
                 self.driver.execute_script(
@@ -410,7 +409,7 @@ class ItemAttributePage(BasePage):
         for attempt in range(3):
             try:
                 add_container = self.driver.find_elements(
-                    By.CSS_SELECTOR, "divattooltip='ADD']"
+                    By.CSS_SELECTOR, "button.erp-add-btn"
                 )
                 if add_container and add_container[0].is_displayed():
                     return

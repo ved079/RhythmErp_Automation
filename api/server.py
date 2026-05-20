@@ -91,11 +91,13 @@ def stream_run(run_id: str):
     )
 
 
+from typing import Optional
+
 class StartRunRequest(BaseModel):
     module: str
-    sub_module: str = None
-    tests: list[str] = None
-    env_url: str = None
+    sub_module: Optional[str] = None
+    tests: Optional[list[str]] = None
+    env_url: Optional[str] = None
 
 
 @app.post("/api/runs/start")
@@ -172,7 +174,7 @@ import json
 
 TEST_CASES_PATH = PROJECT_ROOT / "api" / "test_cases.json"
 
-@app.get("/test-cases")
+@app.get("/api/test-cases")
 async def get_test_cases(module: str = None):
     """Return all test cases, optionally filtered by module key."""
     if not TEST_CASES_PATH.exists():

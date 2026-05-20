@@ -102,6 +102,8 @@ import {
   CalendarClock,
   Timer,
   Ticket,
+  Maximize2,
+  Monitor,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────
@@ -1556,7 +1558,7 @@ function TestRunnerTab({
 }
 
 // ─── LIVE SCREENCAST ─────────────────────────────────────
-function LiveScreencast({ isRunning }: { isRunning: boolean }) {
+function LiveScreencast({ isRunning, onScreenshotReady }: { isRunning: boolean; onScreenshotReady?: (src: string, active: boolean) => void }) {
   const [imgSrc, setImgSrc] = useState<string>('')
   const [active, setActive] = useState(false)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -1572,10 +1574,13 @@ function LiveScreencast({ isRunning }: { isRunning: boolean }) {
         const res = await fetch('/api/proxy?path=screenshot')
         const data = await res.json()
         if (data.active && data.screenshot) {
-          setImgSrc(`data:image/png;base64,${data.screenshot}`)
+          const src = `data:image/png;base64,${data.screenshot}`
+          setImgSrc(src)
           setActive(true)
+          onScreenshotReady?.(src, true)
         } else {
           setActive(false)
+          onScreenshotReady?.('', false)
         }
       } catch {
         setActive(false)
@@ -1642,6 +1647,22 @@ function LiveExecutionTab({
   const prevRunningTestIdRef = useRef<string | null>(null)
   const stepTimerRef = useRef<NodeJS.Timeout | null>(null)
 
+
+  const [tvPopupOpen, setTvPopupOpen] = useState(false)
+  const [tvImgSrc, setTvImgSrc] = useState<string>('')
+  const [tvActive, setTvActive] = useState(false)
+  const handleScreenshotReady = useCallback((src: string, active: boolean) => {
+    setTvImgSrc(src)
+    setTvActive(active)
+  }, [])
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && tvPopupOpen) setTvPopupOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [tvPopupOpen])
   const [consoleHeight, setConsoleHeight] = useState(220)
   const isResizingRef = useRef(false)
   const resizeStartRef = useRef({ y: 0, h: 0 })
@@ -1763,6 +1784,7 @@ function LiveExecutionTab({
   const progressPercent = tests.length > 0 ? Math.round((completedCount / tests.length) * 100) : 0
 
 ﻿  return (
+    <>
     <div className="flex flex-col h-full min-h-0">
       {/* ── Top Bar ── */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 bg-slate-900/80 backdrop-blur-sm shrink-0">
@@ -1898,13 +1920,24 @@ function LiveExecutionTab({
                     </span>
                   </div>
                 </div>
+                {isRunning && runningTest && (
+                  <button
+                    onClick={() => setTvPopupOpen(true)}
+                    className="flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                    title="Pop-out TV Screen"
+                  >
+                    <Monitor className="size-3.5" />
+                    <span>TV Screen</span>
+                    <Maximize2 className="size-3" />
+                  </button>
+                )}
                 <MoreHorizontal className="size-4 text-slate-600" />
               </div>
 
               {/* Browser content */}
               <div className="flex-1 overflow-hidden relative bg-slate-950">
                 {isRunning && runningTest ? (
-                  <LiveScreencast isRunning={isRunning} />
+                  <LiveScreencast isRunning={isRunning} onScreenshotReady={handleScreenshotReady} />
                 ) : completedCount > 0 ? (
                   <div className="w-full h-full flex flex-col items-center justify-center gap-3">
                     <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
@@ -1984,11 +2017,41 @@ function LiveExecutionTab({
         </div>
       </div>
     </div>
+
+      {/* TV Screen Popup */}
+      {tvPopupOpen && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setTvPopupOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-[90vw] h-[85vh] rounded-2xl overflow-hidden border-[3px] border-gray-600 flex flex-col bg-black"
+            onClick={(e) => e.stopPropagation()}
+            style={{ boxShadow: "0 0 0 1px rgba(255,255,255,0.08), 0 0 80px rgba(0,0,0,0.8)" }}
+          >
+            <div className="shrink-0 bg-gradient-to-b from-gray-800 to-gray-900 px-4 py-2 flex items-center justify-between border-b border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-red-500" /><div className="w-3 h-3 rounded-full bg-yellow-500" /><div className="w-3 h-3 rounded-full bg-green-500" /></div>
+                {tvActive && <div className="flex items-center gap-1.5 bg-red-600/80 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full"><span className="w-2 h-2 rounded-full bg-white animate-pulse" />LIVE</div>}
+              </div>
+              <div className="flex-1 max-w-[600px] mx-4"><div className="bg-gray-800/80 rounded-lg px-4 py-1 flex items-center gap-2 text-[12px] text-gray-400 border border-gray-700"><Globe className="size-3.5" /><span className="truncate">https://rhythmerp.com - {runningTest?.name || "Running..."}</span></div></div>
+              <button onClick={() => setTvPopupOpen(false)} className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[12px] font-medium text-gray-300 hover:bg-gray-700 hover:text-white transition-colors cursor-pointer"><X className="size-4" /><span>Close</span></button>
+            </div>
+            <div className="flex-1 relative bg-black overflow-hidden">
+              {tvActive && tvImgSrc ? <img src={tvImgSrc} alt="TV view" className="w-full h-full object-contain" /> : <div className="w-full h-full flex flex-col items-center justify-center gap-3"><Loader2 className="size-10 text-green-400 animate-spin" /><p className="text-[14px] text-gray-500">Connecting...</p></div>}
+            </div>
+            <div className="shrink-0 h-3 bg-gradient-to-t from-gray-800 to-gray-900 border-t border-gray-700 rounded-b-2xl" />
+            {isRunning && runningTest && <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/70 text-white px-5 py-2 rounded-full flex items-center gap-3 text-[12px] border border-white/10"><Loader2 className="size-3.5 animate-spin text-blue-400" /><span className="font-medium">{runningTest.id}</span><span className="text-gray-400">-</span><span className="text-gray-300">{runningTest.name}</span></div>}
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
 
 // ─── SCHEDULE RUNS TAB (Feature 5) ────────────────────────
+
 function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sidebarModules: SidebarModule[] }) {
   const [runs, setRuns] = useState<ScheduledRun[]>([])
   const [showForm, setShowForm] = useState(false)

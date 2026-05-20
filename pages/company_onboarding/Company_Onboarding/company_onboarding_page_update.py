@@ -1,13 +1,16 @@
 """
+company_onboarding_page_update.py
+----------------------------------
 Update page object for Company Onboarding.
 Inherits from CompanyOnboardingPage.
 
 Step order (matches actual app):
-  Step 1 = Company Details
+  Step 1 = Company Details  (including Company Code)
   Step 2 = Promoters
   Step 3 = Address
   Step 4 = Business Details
   Step 5 = Infrastructure
+  Step 6 = Configuration   (Base Currency)
 """
 
 from selenium.webdriver.common.by import By
@@ -22,9 +25,7 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
     # ================================================================
 
     def _read_text_field(self, locator):
-        """Read input value using pure JS document.querySelector.
-        Angular reactive forms: get_attribute('value') returns null,
-        but document.querySelector(...).value always works."""
+        """Read input value using pure JS document.querySelector."""
         try:
             if locator[0] == "css":
                 val = self.driver.execute_script(
@@ -47,11 +48,12 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
             return ""
 
     def read_all_step_values(self):
-        """Walk through all 5 steps reading ALL field values."""
+        """Walk through all 6 steps reading ALL field values."""
         values = {}
         try:
             values["step1"] = {"1": {
                 "company_name":       self._read_text_field(self.COMPANY_NAME_INPUT),
+                "company_code":       self._read_text_field(self.COMPANY_CODE_INPUT),
                 "company_short_name": self._read_text_field(self.COMPANY_SHORT_NAME_INPUT),
                 "contact_name":       self._read_text_field(self.CONTACT_NAME_INPUT),
                 "company_background": self._read_text_field(self.COMPANY_BACKGROUND_INPUT),
@@ -67,6 +69,7 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
             log.info(f"  Read Step 1: {values['step1']}")
         except Exception as e:
             log.warning(f"Could not read Step 1: {e}")
+
         self._click_next()
         self.wait_seconds(1)
         try:
@@ -77,6 +80,7 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
             log.info(f"  Read Step 2 (Promoters): {values['step2']}")
         except Exception as e:
             log.warning(f"Could not read Step 2: {e}")
+
         self._click_next()
         self.wait_seconds(1)
         try:
@@ -92,6 +96,7 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
             log.info(f"  Read Step 3 (Address): {values['step3']}")
         except Exception as e:
             log.warning(f"Could not read Step 3 (Address): {e}")
+
         self._click_next()
         self.wait_seconds(1)
         try:
@@ -104,6 +109,7 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
             log.info(f"  Read Step 4 (Business): {values['step4']}")
         except Exception as e:
             log.warning(f"Could not read Step 4 (Business): {e}")
+
         self._click_next()
         self.wait_seconds(1)
         try:
@@ -115,17 +121,28 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
             log.info(f"  Read Step 5 (Infrastructure): {values['step5']}")
         except Exception as e:
             log.warning(f"Could not read Step 5 (Infrastructure): {e}")
+
+        self._click_next()
+        self.wait_seconds(1)
+        try:
+            values["step6"] = {"1": {
+                "base_currency": self._read_select_value(self.BASE_CURRENCY_SELECT),
+            }}
+            log.info(f"  Read Step 6 (Configuration): {values['step6']}")
+        except Exception as e:
+            log.warning(f"Could not read Step 6 (Configuration): {e}")
+
         return values
 
     def _navigate_back_to_step1(self):
-        """Click the back/previous button 4 times to reach Step 1."""
+        """Click the back/previous button 5 times to reach Step 1."""
         log.info("Navigating back to Step 1...")
         back_selectors = [
             ("css", "form.step-form button[matstepperprevious]"),
             ("css", "button[matstepperprevious]"),
             ("xpath", "//button[@matstepperprevious or @matStepperPrevious]"),
         ]
-        for i in range(4):
+        for i in range(5):
             clicked = False
             for strategy, path in back_selectors:
                 try:
@@ -136,7 +153,7 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
                                 "arguments[0].scrollIntoView({block:'center'}); arguments[0].click();",
                                 btn,
                             )
-                            log.info(f"  Clicked back button ({i + 1}/4) via {strategy}: {path}")
+                            log.info(f"  Clicked back button ({i + 1}/5)")
                             self.wait_seconds(1)
                             clicked = True
                             break
@@ -162,6 +179,7 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
             "contact_name":  self.CONTACT_NAME_INPUT,
             "email":         self.EMAIL_INPUT,
             "mobile_number": self.MOBILE_NUMBER_INPUT,
+            "company_code":  self.COMPANY_CODE_INPUT,
         }
         log.info(f"Applying Step 1 updates: {list(updates.keys())}")
         for key, value in updates.items():
@@ -176,11 +194,9 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
             if row_data.get("promoter_name"):
                 loc = ("xpath", f"(//app-dynamic-details//input[@name='Name'])[{row_idx}]")
                 self.type_text(loc, str(row_data["promoter_name"]), clear_first=True)
-                log.info(f"  Updated promoter_name = '{row_data['promoter_name']}'")
             if row_data.get("promoter_remark"):
                 loc = ("xpath", f"(//app-dynamic-details//textarea[@name='Remark'])[{row_idx}]")
                 self.type_text(loc, str(row_data["promoter_remark"]), clear_first=True)
-                log.info(f"  Updated promoter_remark = '{row_data['promoter_remark']}'")
 
     def _apply_step3_updates(self, updates):
         """Step 3 = Address."""
@@ -189,11 +205,9 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
             if row_data.get("address"):
                 loc = ("xpath", f"(//app-dynamic-details//input[@name='Address'])[{row_idx}]")
                 self.type_text(loc, str(row_data["address"]), clear_first=True)
-                log.info(f"  Updated address = '{row_data['address']}'")
             if row_data.get("pin_code"):
                 loc = ("xpath", f"(//app-dynamic-details//input[@name='Pin Code'])[{row_idx}]")
                 self.type_text(loc, str(row_data["pin_code"]), clear_first=True)
-                log.info(f"  Updated pin_code = '{row_data['pin_code']}'")
 
     def _apply_step4_updates(self, updates):
         """Step 4 = Business Details."""
@@ -202,11 +216,9 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
             if row_data.get("business_model"):
                 loc = self._idx(self.BUSINESS_MODEL_INPUT, row_idx)
                 self.type_text(loc, str(row_data["business_model"]), clear_first=True)
-                log.info(f"  Updated business_model = '{row_data['business_model']}'")
             if row_data.get("market_linkages"):
                 loc = self._idx(self.MARKET_LINKAGES_INPUT, row_idx)
                 self.type_text(loc, str(row_data["market_linkages"]), clear_first=True)
-                log.info(f"  Updated market_linkages = '{row_data['market_linkages']}'")
 
     def _apply_step5_updates(self, updates):
         """Step 5 = Infrastructure."""
@@ -215,7 +227,16 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
             if row_data.get("infra_location"):
                 loc = self._idx(self.INFRA_LOCATION_INPUT, row_idx)
                 self.type_text(loc, str(row_data["infra_location"]), clear_first=True)
-                log.info(f"  Updated infra_location = '{row_data['infra_location']}'")
+
+    def _apply_step6_updates(self, updates):
+        """Step 6 = Configuration (Base Currency)."""
+        log.info(f"Applying Step 6 updates (Configuration): {list(updates.keys())}")
+        base_currency = updates.get("1", updates)
+        if isinstance(base_currency, dict):
+            base_currency = base_currency.get("base_currency", "")
+        if base_currency:
+            self._select_mat_option(self.BASE_CURRENCY_SELECT, str(base_currency))
+            log.info(f"  Updated base_currency = '{base_currency}'")
 
     # ================================================================
     # Click Edit button for a company row
@@ -237,7 +258,6 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
         found_row = None
         for row_sel in row_selectors:
             rows = self.driver.find_elements(By.CSS_SELECTOR, row_sel)
-            log.info(f"  Row selector '{row_sel}' found {len(rows)} rows")
             for row in rows:
                 try:
                     cells = row.find_elements(By.CSS_SELECTOR, "td")
@@ -245,7 +265,6 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
                         cell_text = (cell.text or "").strip()
                         if company_name.strip().lower() in cell_text.lower():
                             found_row = row
-                            log.info(f"  Found company in cell: '{cell_text}'")
                             break
                     if found_row:
                         break
@@ -287,13 +306,6 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
             except Exception:
                 continue
 
-        all_btns = found_row.find_elements(By.CSS_SELECTOR, "button")
-        for i, btn in enumerate(all_btns):
-            try:
-                tt = btn.get_attribute("mattooltip") or btn.get_attribute("aria-label") or ""
-                log.info(f"  Row button {i}: tooltip='{tt}' text='{btn.text}' classes='{btn.get_attribute('class')}'")
-            except Exception:
-                pass
         raise Exception(f"Edit button not found for: {company_name}")
 
     # ================================================================
@@ -320,16 +332,16 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
             apply_map = {
                 1: self._apply_step1_updates, 2: self._apply_step2_updates,
                 3: self._apply_step3_updates, 4: self._apply_step4_updates,
-                5: self._apply_step5_updates,
+                5: self._apply_step5_updates, 6: self._apply_step6_updates,
             }
-            for step_num in range(1, 6):
+            for step_num in range(1, 7):
                 step_data = all_updates.get(step_num)
                 if not step_data:
-                    if step_num < 5:
+                    if step_num < 6:
                         self._click_next()
                     continue
                 apply_map[step_num](step_data)
-                if step_num < 5:
+                if step_num < 6:
                     self._click_next()
 
             self.wait_seconds(1)
@@ -338,7 +350,6 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
             msg = self.get_success_message(timeout=60)
             self.wait_seconds(3)
 
-            # Re-open edit to read after values
             log.info("Re-opening edit to read after-update values...")
             self.navigate_to_page()
             self.wait_seconds(2)
@@ -353,8 +364,6 @@ class CompanyOnboardingUpdatePage(CompanyOnboardingPage):
                     pass
             else:
                 log.warning("Could not re-find company for after-read")
-
-
 
             if msg and "Validation Failed" in str(msg):
                 log.warning(f"Server validation failed: {msg}")

@@ -2668,5 +2668,900 @@
         "date": "2026-05-14"
       }
     ]
+  },
+  "commodity_quality_param": {
+    "label": "Commodity Quality Parameter",
+    "tests": [
+      {
+        "id": "1",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Submit with all fields empty — should show validation warning.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "2",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Create with valid header + detail data — should succeed.",
+        "steps": "Verifies creation by searching for the record in the listing.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "3",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Submit with header filled but detail row empty — should fail.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "4",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Submit without selecting Item Name — should fail.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "5",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Submit without selecting Transaction Type — should fail.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "6",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Create with Is Rate/Percentage toggle set to Yes.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "7",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Create with Is Rate/Percentage toggle set to No (default).",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "8",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Clicking Cancel should close the form without saving.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "9",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Clicking X button should close the form without saving.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "10",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Click Version button — should create a new version of the record.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "11",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Revision Status field accepts free text.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "12",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Verify date picker fields are interactive.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "13",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Item Name dropdown should be populated with options.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "14",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Transaction Type dropdown should have all 8 options.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "15",
+        "screenName": "Commodity Quality Parameter",
+        "description": "View popup should have fields in read-only mode.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "16",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Edit popup should show fields pre-populated with existing data.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "17",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Edit with valid new data — should succeed.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "18",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Verify whether a success SweetAlert appears after edit.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "19",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Edit with an empty required field — should be blocked.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "20",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Search with partial Item Name — should find matching records.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "21",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Search for non-existent text — should return no results.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "22",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Apply filter by Transaction Type.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "23",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Clear All filters should reset the table.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "24",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Clicking Refresh should reload the table data.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "25",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Paginator should be visible on the listing page.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "26",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Sort by Item Name column.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "27",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Sort by Transaction Type column.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "28",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Sort by From Date column.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "29",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Sort by To Date column.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "30",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Sort by Revision Status column.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "31",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Items per page dropdown should be functional.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "32",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Navigate to next/previous page if multiple pages exist.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "33",
+        "screenName": "Commodity Quality Parameter",
+        "description": "After selecting Item Name, To Date should auto-fill to 30/12/2099.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "34",
+        "screenName": "Commodity Quality Parameter",
+        "description": "From Date should default to the current date.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "35",
+        "screenName": "Commodity Quality Parameter",
+        "description": "History popup should open when clicking the clock icon.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "36",
+        "screenName": "Commodity Quality Parameter",
+        "description": "History popup should contain rows for existing records.",
+        "steps": "BUG-004: History always empty — test documents behavior.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "37",
+        "screenName": "Commodity Quality Parameter",
+        "description": "Search within the history popup.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "38",
+        "screenName": "Commodity Quality Parameter",
+        "description": "History popup should close properly.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "39",
+        "screenName": "Commodity Quality Parameter",
+        "description": "History popup should have a fullscreen toggle.",
+        "steps": "1. Navigate to Commodity Quality Parameter\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      }
+    ]
+  },
+  "commodity_base_rate": {
+    "label": "Commodity Base Rate",
+    "tests": [
+      {
+        "id": "1",
+        "screenName": "Commodity Base Rate",
+        "description": "Create record with Common pricing type.",
+        "steps": "1. Navigate to Commodity Base Rate\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "2",
+        "screenName": "Commodity Base Rate",
+        "description": "Create record with Supplier pricing type.",
+        "steps": "1. Navigate to Commodity Base Rate\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "3",
+        "screenName": "Commodity Base Rate",
+        "description": "Create record with multiple grid rows.",
+        "steps": "1. Navigate to Commodity Base Rate\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "4",
+        "screenName": "Commodity Base Rate",
+        "description": "Submit with empty required fields — should be blocked.",
+        "steps": "1. Navigate to Commodity Base Rate\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "5",
+        "screenName": "Commodity Base Rate",
+        "description": "Negative Item Rate — should be rejected. BUG-001.",
+        "steps": "1. Navigate to Commodity Base Rate\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "6",
+        "screenName": "Commodity Base Rate",
+        "description": "Special chars in Item Rate — should be rejected. BUG-001.",
+        "steps": "1. Navigate to Commodity Base Rate\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "7",
+        "screenName": "Commodity Base Rate",
+        "description": "Zero Item Rate — should be rejected. BUG-002.",
+        "steps": "1. Navigate to Commodity Base Rate\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "8",
+        "screenName": "Commodity Base Rate",
+        "description": "Edit latest version of a record.",
+        "steps": "BUG-005: Edit may be disabled for new records.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "9",
+        "screenName": "Commodity Base Rate",
+        "description": "Search for an existing record.",
+        "steps": "1. Navigate to Commodity Base Rate\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "10",
+        "screenName": "Commodity Base Rate",
+        "description": "Sort by column headers.",
+        "steps": "1. Navigate to Commodity Base Rate\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "11",
+        "screenName": "Commodity Base Rate",
+        "description": "View record detail (read-only popup).",
+        "steps": "1. Navigate to Commodity Base Rate\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "12",
+        "screenName": "Commodity Base Rate",
+        "description": "Version creation (fork from existing record).",
+        "steps": "BUG-006: May fail with same From Date.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "13",
+        "screenName": "Commodity Base Rate",
+        "description": "History popup for a record.",
+        "steps": "1. Navigate to Commodity Base Rate\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "14",
+        "screenName": "Commodity Base Rate",
+        "description": "Verify ISO date format in listing (BUG-003).",
+        "steps": "Listing should show formatted dates, not ISO timestamps.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "15",
+        "screenName": "Commodity Base Rate",
+        "description": "Verify To Date override behavior (BUG-004).",
+        "steps": "To Date should retain user's selected value.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      }
+    ]
+  },
+  "item_attribute": {
+    "label": "Item Attribute",
+    "tests": [
+      {
+        "id": "1",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-C01: Create attribute with all required fields filled.",
+        "steps": "Should succeed and close the form.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "2",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-C02: Create attribute without Name (required).",
+        "steps": "Should show validation error.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "3",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-C03: Create attribute with only spaces in Name.",
+        "steps": "Should show validation error.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "4",
+        "screenName": "Item Attribute",
+        "description": "IA1-C04: Create Item Attribute 1 without Base UOM (required).",
+        "steps": "Only applies to Item Attribute 1 which has Base UOM.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "5",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-C05: Create attribute with special characters in Name.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "6",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-C06: SQL injection attempt in Name field.",
+        "steps": "Tests input sanitization.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "7",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-C07: XSS payload in Name field.",
+        "steps": "Tests input sanitization.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "8",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-C08: Create attribute with extremely long Name (256 chars).",
+        "steps": "Server rejects names > 255 chars with \"Failed to save record\" popup.\nBUG-004: No maxlength/client-side validation on Name field.\nBUG-005: Generic error message instead of specific field error.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "9",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-C08a: Create attribute with valid Name but 256-char Description.",
+        "steps": "Server rejects descriptions > 255 chars with \"Failed to save record\" popup.\nBUG-004: No maxlength/client-side validation on Description field.\nBUG-005: Generic error message instead of specific field error.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "10",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-C09: Create attribute with unicode characters in Name.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "11",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-C10: Create attribute with purely numeric Name.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "12",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-D01: Create two attributes with same Name.",
+        "steps": "BUG-001: Currently ALLOWED — test documents this behavior.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "13",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-D02: Create attributes with same Name but different case.",
+        "steps": "Tests case-sensitivity of Name uniqueness.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "14",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-D03: Edit an attribute to have the same Name as another.",
+        "steps": "Tests if duplicate check works during edit.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "15",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-E01: Edit form should be pre-populated with existing data.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "16",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-E02: Edit — change the Name field.",
+        "steps": "Name IS editable in Edit mode (not readonly).",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "17",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-E03: Edit — change the Description field.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "18",
+        "screenName": "Item Attribute",
+        "description": "IA1-E04: Edit Item Attribute 1 — change Base UOM dropdown.",
+        "steps": "Only applies to Item Attribute 1.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "19",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-E05: Edit — toggle Status from Active to Inactive.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "20",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-E06: Cancel in Edit mode returns to listing page.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "21",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-S01: Search for an existing attribute by name.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "22",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-S02: Search for a non-existent attribute name.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "23",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-S03: Search with partial attribute name.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "24",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-S04: Search should be case-insensitive.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "25",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-S05: Clicking Refresh should clear search and show all items.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "26",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-V01: View mode - all fields should be read-only/disabled.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "27",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-V02: View mode - only Cancel button should be visible.",
+        "steps": "No Submit or Update button in View mode.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "28",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-V03: Cancel in View mode returns to listing page.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "29",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-V04: History popup opens for an attribute.",
+        "steps": "History button uses cdk-column-archive.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "30",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-V05: History popup should contain at least one row.",
+        "steps": "BUG-003: History may show \"No data available\".",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "31",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-T01: Create attribute with Status Active (default ON).",
+        "steps": "Should create successfully and show Active in table.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "32",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-T02: Create attribute with Status Inactive (toggle OFF).",
+        "steps": "Should create successfully and show Inactive in table.",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "33",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-T03: Verify Status toggle defaults to Active (ON) in Create mode.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      },
+      {
+        "id": "34",
+        "screenName": "Item Attribute",
+        "description": "IA{N}-T04: Cancel in Create mode closes the form without saving.",
+        "steps": "1. Navigate to Item Attribute\n2. Execute test scenario\n3. Verify expected outcome",
+        "expected": "Expected behavior as per test scenario",
+        "actual": "",
+        "status": "TODO",
+        "date": ""
+      }
+    ]
   }
 }

@@ -167,6 +167,9 @@ const FOLDER_TO_SIDEBAR: Record<string, string> = {
   services_master: "services-master",
   item_category: "item-category",
   item_group: "item-group",
+  commodity_quality_parameter: "commodity-quality-param",
+  item_attribute: "item-attribute",
+  commodity_base_rate: "commodity-base-rate",
   entity_group: "entity-group",
   role_creation: "role-creation",
   user_creation: "user-creation",
@@ -190,7 +193,7 @@ export function sidebarToFolderMapping(sidebarId: string): { module: string; sub
       if (commonSubs.includes(folder)) {
         return { module: "common_settings", subModule: folder };
       }
-      const commoditySubs = ["crop_master", "item_master", "quality_parameter_master", "services_master", "item_category", "item_group"];
+      const commoditySubs = ["crop_master", "item_master", "quality_parameter_master", "services_master", "item_category", "item_group", "commodity_quality_parameter", "commodity_base_rate", "item_attribute"];
       if (commoditySubs.includes(folder)) {
         return { module: "commodity_settings", subModule: folder };
       }
@@ -225,8 +228,7 @@ export interface TestCaseModule {
 export type TestCasesData = Record<string, TestCaseModule>
 
 export async function fetchTestCases(): Promise<TestCasesData> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
-  const res = await fetch(`${baseUrl}/test-cases`)
+  const res = await fetch(`${PROXY}?path=test-cases`)
   if (!res.ok) throw new Error('Failed to fetch test cases')
   return res.json()
 }
