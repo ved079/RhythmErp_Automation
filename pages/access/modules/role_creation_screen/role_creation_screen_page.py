@@ -5,6 +5,10 @@ RhythmERP  https://rhythmerp.algorhythms.in/#/master-setup/Rolecreationscreen
 Form fields:
   - role_name    (input, required)
   - entity_type  (mat-select, required – dropdown of Entity Group names)
+
+Create button: Submit
+Edit button:   Update
+Row actions:   eye (view) | edit (edit) | clock (history)
 """
 
 from selenium.webdriver.common.by import By
@@ -21,11 +25,11 @@ class RoleCreationScreenPage(BasePage):
     PAGE_URL = "/#/master-setup/Rolecreationscreen"
 
     # ── Locators – Toolbar / Buttons ───────────────────────────────────
-    BTN_ADD = (By.XPATH, "//button[contains(.,'Add') or contains(.,'add')]")
-    BTN_SAVE = (By.XPATH, "//button[contains(.,'Save') or contains(.,'save')]")
+    BTN_ADD = (By.XPATH, "//button[contains(@class,'erp-add-btn') or contains(.,'Add Role')]")
+    BTN_SUBMIT = (By.XPATH, "//button[contains(.,'Submit') or contains(.,'submit')]")
     BTN_CANCEL = (By.XPATH, "//button[contains(.,'Cancel') or contains(.,'cancel')]")
-    BTN_UPDATE = (By.XPATH, "//button[contains(.,'Update') or contains(.,'update')]")
-    BTN_CLOSE = (By.XPATH, "//button[contains(.,'Close') or contains(.,'close')]")
+    BTN_UPDATE = (By.XPATH, "//button[contains(.,'Update') or contains(.,'update') and contains(@class,'mat-primary')]")
+    BTN_CLOSE_ICON = (By.XPATH, "//button[contains(@class,'mat-mdc-icon-button')]//mat-icon[text()='close']/ancestor::button")
     BTN_YES_CONFIRM = (By.XPATH,
                        "//button[contains(@class,'swal2-confirm') or contains(.,'Yes')]")
     BTN_NO_CANCEL = (By.XPATH,
@@ -37,7 +41,6 @@ class RoleCreationScreenPage(BasePage):
     INPUT_ROLE_NAME = (By.CSS_SELECTOR, "input[formcontrolname='role_name']")
     SELECT_ENTITY_TYPE = (By.CSS_SELECTOR, "mat-select[formcontrolname='entity_type']")
     MAT_OPTION = (By.CSS_SELECTOR, "mat-option")
-    MAT_OPTION_TEXT = (By.CSS_SELECTOR, "mat-option .mdc-list-item__primary-text")
 
     # ── Locators – Validation Messages ─────────────────────────────────
     MSG_REQUIRED = (By.XPATH,
@@ -54,33 +57,30 @@ class RoleCreationScreenPage(BasePage):
     # ── Locators – Table ───────────────────────────────────────────────
     TABLE_ROWS = (By.XPATH,
                   "//table//tbody/tr[not(contains(@class,'example-detail-row'))]")
-    TABLE_HEADER_CELLS = (By.XPATH, "//table//thead/tr/th")
     TABLE_NO_DATA = (By.XPATH,
                      "//table//tbody//td[contains(@class,'no-data') or "
                      "contains(text(),'No data') or contains(text(),'No record')]")
     SEARCH_INPUT = (By.XPATH,
                     "//input[@placeholder='Search' or contains(@class,'search') or "
-                    "@matinput and contains(@placeholder,'search')]")
+                    "(@matinput and contains(@placeholder,'search'))]")
 
-    # ── Locators – View / Edit / History dialog ────────────────────────
-    DIALOG_CONTAINER = (By.XPATH, "//mat-dialog-container")
+    # ── Locators – Row Action Buttons (feather icons) ──────────────────
+    #   eye  = view,  edit = edit,  clock = history
+    ROW_VIEW_BTN = (By.XPATH, "//app-feather-icons[@icon='eye']/ancestor::button")
+    ROW_EDIT_BTN = (By.XPATH, "//app-feather-icons[@icon='edit']/ancestor::button")
+    ROW_HISTORY_BTN = (By.XPATH, "//app-feather-icons[@icon='clock']/ancestor::button")
+
+    # ── Locators – Edit Popup ──────────────────────────────────────────
+    EDIT_POPUP = (By.XPATH, "//div[contains(@class,'edit_pop_up')]")
     VIEW_DIALOG = (By.XPATH, "//mat-dialog-container")
     HISTORY_DIALOG = (By.XPATH,
                       "//mat-dialog-container[contains(.,'History') or "
-                      "contains(.,'history')]")
+                      "contains(.,'history') or contains(.,'Audit')]")
     HISTORY_TABLE_ROWS = (By.XPATH,
                           "//mat-dialog-container//table//tbody/tr")
 
     # ── Locators – Backdrop / Overlay ──────────────────────────────────
     CDK_OVERLAY = (By.XPATH, "//div[contains(@class,'cdk-overlay-backdrop')]")
-
-    # ── Locators – Sort headers ────────────────────────────────────────
-    SORT_HEADER = (By.XPATH, "//th[contains(@class,'mat-sort-header')]")
-
-    # ── Pagination ─────────────────────────────────────────────────────
-    PAGINATION_INFO = (By.XPATH,
-                       "//div[contains(@class,'mat-paginator') or "
-                       "contains(@class,'paginator')]")
 
     # ==================================================================
     #  CONSTRUCTOR
@@ -94,19 +94,17 @@ class RoleCreationScreenPage(BasePage):
     #  NAVIGATION
     # ==================================================================
     def navigate_to_role_creation_screen(self):
-        """Open the Role Creation Screen page."""
         base = self.driver.current_url.split("#")[0]
         self.driver.get(f"{base}{self.PAGE_URL}")
         self.wait.until(
             EC.presence_of_element_located(
-                (By.XPATH, "//table | //button[contains(.,'Add')]")))
+                (By.XPATH, "//table | //button[contains(@class,'erp-add-btn')]")))
         self._force_close_panels()
 
     # ==================================================================
     #  FORCE-CLOSE  (never Keys.ESCAPE)
     # ==================================================================
     def _force_close_panels(self):
-        """Click any open backdrop, then remove lingering CDK overlays via JS."""
         try:
             backdrops = self.driver.find_elements(*self.CDK_OVERLAY)
             for bd in backdrops:
@@ -115,7 +113,6 @@ class RoleCreationScreenPage(BasePage):
                     break
         except Exception:
             pass
-        # JS cleanup
         self.driver.execute_script(
             "document.querySelectorAll('.cdk-overlay-backdrop.show').forEach(e=>e.click());"
             "document.querySelectorAll('.cdk-overlay-connected-position-bounding-flex').forEach(e=>e.remove());"
@@ -137,43 +134,34 @@ class RoleCreationScreenPage(BasePage):
         field.send_keys(name)
 
     def select_entity_type_by_index(self, index: int = 0):
-        """Select entity type from dropdown by 0-based index."""
         select = self.wait.until(EC.element_to_be_clickable(self.SELECT_ENTITY_TYPE))
         select.click()
-        # Wait for options panel to appear
         options = self.wait.until(
             EC.presence_of_all_elements_located(self.MAT_OPTION))
         if index < len(options):
             options[index].click()
         else:
             options[0].click()
-        # Small pause for selection to register
         self.wait_seconds(0.5)
 
     def select_entity_type_by_text(self, text: str):
-        """Select entity type from dropdown by visible text (partial match)."""
         select = self.wait.until(EC.element_to_be_clickable(self.SELECT_ENTITY_TYPE))
         select.click()
-        # Wait for options panel
         self.wait.until(EC.presence_of_all_elements_located(self.MAT_OPTION))
-        # Find matching option
         matching = self.driver.find_elements(
-            By.XPATH,
-            f"//mat-option[contains(.,'{text}')]"
-        )
+            By.XPATH, f"//mat-option[contains(.,'{text}')]")
         if matching:
             matching[0].click()
         else:
-            # Fallback to first option
             options = self.driver.find_elements(*self.MAT_OPTION)
             if options:
                 options[0].click()
         self.wait_seconds(0.5)
 
-    def click_save_button(self):
-        save_btn = self.wait.until(EC.element_to_be_clickable(self.BTN_SAVE))
-        self.driver.execute_script("arguments[0].scrollIntoView(true);", save_btn)
-        save_btn.click()
+    def click_submit_button(self):
+        submit_btn = self.wait.until(EC.element_to_be_clickable(self.BTN_SUBMIT))
+        self.driver.execute_script("arguments[0].scrollIntoView(true);", submit_btn)
+        submit_btn.click()
 
     def click_update_button(self):
         update_btn = self.wait.until(EC.element_to_be_clickable(self.BTN_UPDATE))
@@ -185,28 +173,25 @@ class RoleCreationScreenPage(BasePage):
         cancel_btn.click()
 
     def create_role(self, name: str, entity_type_index: int = 0):
-        """Full flow: Add → fill name → select entity type → Save."""
+        """Full flow: Add → fill name → select entity type → Submit."""
         self.click_add_button()
         self.fill_role_name(name)
         self.select_entity_type_by_index(entity_type_index)
-        self.click_save_button()
+        self.click_submit_button()
 
     # ==================================================================
     #  SWEET ALERT HELPERS
     # ==================================================================
     def confirm_sweet_alert_yes(self):
-        yes_btn = self.wait.until(
-            EC.element_to_be_clickable(self.BTN_YES_CONFIRM))
+        yes_btn = self.wait.until(EC.element_to_be_clickable(self.BTN_YES_CONFIRM))
         yes_btn.click()
 
     def dismiss_sweet_alert_no(self):
-        no_btn = self.wait.until(
-            EC.element_to_be_clickable(self.BTN_NO_CANCEL))
+        no_btn = self.wait.until(EC.element_to_be_clickable(self.BTN_NO_CANCEL))
         no_btn.click()
 
     def click_sweet_alert_ok(self):
-        ok_btn = self.wait.until(
-            EC.element_to_be_clickable(self.BTN_OK_SWEET))
+        ok_btn = self.wait.until(EC.element_to_be_clickable(self.BTN_OK_SWEET))
         ok_btn.click()
 
     # ==================================================================
@@ -217,8 +202,7 @@ class RoleCreationScreenPage(BasePage):
         return el.text.strip()
 
     def get_required_field_error(self) -> str:
-        el = self.wait.until(
-            EC.visibility_of_element_located(self.MSG_REQUIRED))
+        el = self.wait.until(EC.visibility_of_element_located(self.MSG_REQUIRED))
         return el.text.strip()
 
     def get_all_required_errors(self) -> list:
@@ -263,11 +247,12 @@ class RoleCreationScreenPage(BasePage):
             return False
 
     def get_row_index_by_role_name(self, role_name: str) -> int:
-        """Return 1-based row index, or -1 if not found."""
+        """Return 1-based row index, or -1 if not found.
+        Name is in column 1 (0-indexed)."""
         rows = self.driver.find_elements(*self.TABLE_ROWS)
         for idx, row in enumerate(rows, start=1):
             cells = row.find_elements(By.TAG_NAME, "td")
-            if cells and role_name.lower() in cells[0].text.lower():
+            if len(cells) >= 2 and role_name.lower() in cells[1].text.lower():
                 return idx
         return -1
 
@@ -277,39 +262,40 @@ class RoleCreationScreenPage(BasePage):
         return cell.text.strip()
 
     # ==================================================================
-    #  ROW  ACTION  BUTTONS  (View / Edit / History / Delete)
+    #  ROW  ACTION  BUTTONS  (eye / edit / clock)
     # ==================================================================
-    def _click_row_action(self, row_idx: int, action: str):
-        """Click action button in a specific row. action = view|edit|history|delete"""
-        btn = self.driver.find_element(
-            By.XPATH,
-            f"//table//tbody/tr[{row_idx}]//button[contains(@mattooltip,'{action.capitalize()}') "
-            f"or contains(@title,'{action.capitalize()}') "
-            f"or contains(@aria-label,'{action.capitalize()}') "
-            f"or contains(@data-action,'{action.lower()}') "
-            f"or contains(@class,'{action.lower()}')]"
-        )
-        self.driver.execute_script("arguments[0].scrollIntoView(true);", btn)
-        btn.click()
+    def _get_row_action_btns(self, row_idx: int):
+        """Return list of action button elements for a specific row."""
+        row = self.driver.find_element(
+            By.XPATH, f"//table//tbody/tr[{row_idx}]")
+        return row.find_elements(By.CSS_SELECTOR, "button.tblActnBtn")
 
     def click_view_button(self, row_idx: int):
         self._force_close_panels()
-        self._click_row_action(row_idx, "view")
+        btns = self._get_row_action_btns(row_idx)
+        assert len(btns) >= 1, f"No action buttons found in row {row_idx}"
+        # 1st button = eye (view)
+        self.driver.execute_script("arguments[0].scrollIntoView(true);", btns[0])
+        btns[0].click()
         self.wait.until(EC.visibility_of_element_located(self.VIEW_DIALOG))
 
     def click_edit_button(self, row_idx: int):
         self._force_close_panels()
-        self._click_row_action(row_idx, "edit")
-        self.wait.until(EC.visibility_of_element_located(self.INPUT_ROLE_NAME))
+        btns = self._get_row_action_btns(row_idx)
+        assert len(btns) >= 2, f"No edit button found in row {row_idx}"
+        # 2nd button = edit
+        self.driver.execute_script("arguments[0].scrollIntoView(true);", btns[1])
+        btns[1].click()
+        self.wait.until(EC.visibility_of_element_located(self.EDIT_POPUP))
 
     def click_history_button(self, row_idx: int):
         self._force_close_panels()
-        self._click_row_action(row_idx, "history")
+        btns = self._get_row_action_btns(row_idx)
+        assert len(btns) >= 3, f"No history button found in row {row_idx}"
+        # 3rd button = clock (history)
+        self.driver.execute_script("arguments[0].scrollIntoView(true);", btns[2])
+        btns[2].click()
         self.wait.until(EC.visibility_of_element_located(self.HISTORY_DIALOG))
-
-    def click_delete_button(self, row_idx: int):
-        self._force_close_panels()
-        self._click_row_action(row_idx, "delete")
 
     # ==================================================================
     #  VIEW  DIALOG
@@ -328,13 +314,23 @@ class RoleCreationScreenPage(BasePage):
         return el.text.strip()
 
     def close_view_dialog(self):
-        close_btn = self.wait.until(
-            EC.element_to_be_clickable(self.BTN_CLOSE))
-        close_btn.click()
+        # Try Close text button first
+        try:
+            close_btn = self.driver.find_element(
+                By.XPATH, "//mat-dialog-container//button[contains(.,'Close')]")
+            close_btn.click()
+        except Exception:
+            # Try X icon button
+            try:
+                close_btn = self.driver.find_element(
+                    By.XPATH, "//mat-dialog-container//button[mat-icon[text()='close']]")
+                close_btn.click()
+            except Exception:
+                pass
         self._force_close_panels()
 
     # ==================================================================
-    #  EDIT  DIALOG  –  field value readers
+    #  EDIT  POPUP
     # ==================================================================
     def get_role_name_field_value(self) -> str:
         field = self.wait.until(
@@ -342,7 +338,6 @@ class RoleCreationScreenPage(BasePage):
         return field.get_attribute("value").strip()
 
     def get_selected_entity_type(self) -> str:
-        """Return the currently selected entity type text."""
         try:
             select = self.wait.until(
                 EC.visibility_of_element_located(self.SELECT_ENTITY_TYPE))
@@ -358,6 +353,27 @@ class RoleCreationScreenPage(BasePage):
             EC.visibility_of_element_located(self.INPUT_ROLE_NAME))
         return field.get_attribute("readonly") is not None or \
                field.get_attribute("disabled") is not None
+
+    def is_edit_popup_open(self) -> bool:
+        try:
+            el = self.wait.until(
+                EC.visibility_of_element_located(self.EDIT_POPUP))
+            return el.is_displayed()
+        except Exception:
+            return False
+
+    def close_edit_popup(self):
+        """Close the edit popup via Cancel or X button."""
+        try:
+            cancel_btn = self.driver.find_element(*self.BTN_CANCEL)
+            cancel_btn.click()
+        except Exception:
+            try:
+                close_btn = self.driver.find_element(*self.BTN_CLOSE_ICON)
+                close_btn.click()
+            except Exception:
+                pass
+        self._force_close_panels()
 
     # ==================================================================
     #  HISTORY  DIALOG
@@ -376,10 +392,7 @@ class RoleCreationScreenPage(BasePage):
             return False
 
     def close_history_dialog(self):
-        close_btn = self.wait.until(
-            EC.element_to_be_clickable(self.BTN_CLOSE))
-        close_btn.click()
-        self._force_close_panels()
+        self.close_view_dialog()  # Same close approach
 
     # ==================================================================
     #  SEARCH
@@ -410,7 +423,7 @@ class RoleCreationScreenPage(BasePage):
     # ==================================================================
     def is_save_button_enabled(self) -> bool:
         try:
-            btn = self.driver.find_element(*self.BTN_SAVE)
+            btn = self.driver.find_element(*self.BTN_SUBMIT)
             return btn.is_enabled()
         except Exception:
             return False
@@ -447,7 +460,6 @@ class RoleCreationScreenPage(BasePage):
             lambda d: len(d.find_elements(*self.TABLE_ROWS)) >= min_rows)
 
     def wait_for_success_and_dismiss(self) -> str:
-        """Wait for SweetAlert success, read title, click OK, return title."""
         title = self.get_sweet_alert_title()
         self.click_sweet_alert_ok()
         return title

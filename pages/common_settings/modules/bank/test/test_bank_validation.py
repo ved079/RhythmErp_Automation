@@ -189,7 +189,7 @@ class TestCreateFormValidations:
         log.info("BNK-C02: Valid create test (happy path)")
         page = bnk_page
 
-        data = generate_valid_bank_data("ValidC")
+        data = generate_valid_bank_data("ValidCRSWS")
         result = page.create_bank(data)
         name = result.get("bank_name", "")
 

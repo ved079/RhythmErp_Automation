@@ -1433,10 +1433,23 @@ class BankPage(BasePage):
         """Type text into the search input and click search."""
         log.info(f"Searching for: {text}")
         try:
+            # Step 1: Click the search icon to reveal the input
+            # The search container toggles between icon-only and input+button
+            try:
+                toggle_btn = self.driver.find_element(
+                    By.CSS_SELECTOR,
+                    "button.erp-outline-btn[aria-label='Search']:not(.search-btn)"
+                )
+                self.driver.execute_script("arguments[0].click();", toggle_btn)
+                self.wait_seconds(1)
+            except Exception:
+                pass  # Input may already be visible
+
+            # Step 2: Now find the search input (it exists after clicking icon)
             search_input = self.driver.find_element(
-                By.CSS_SELECTOR,
-                ".erp-search-wrapper input, input#erpSearchInput",
+                By.CSS_SELECTOR, "input#erpSearchInput"
             )
+
             # Use JS value-setter for Angular compatibility
             js = """
                 var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
@@ -1448,23 +1461,32 @@ class BankPage(BasePage):
             """
             self.driver.execute_script(js, search_input, str(text))
 
-            # Click search submit button
-            wrapper = self.driver.find_element(
-                By.CSS_SELECTOR, ".erp-search-wrapper"
+            # Step 3: Click the search submit button (has class 'search-btn')
+            search_btn = self.driver.find_element(
+                By.CSS_SELECTOR, "button.search-btn[aria-label='Search']"
             )
-            search_btn = wrapper.find_element(By.TAG_NAME, "button")
             search_btn.click()
             self.wait_seconds(2)
         except Exception as e:
             log.error(f"Search failed: {e}")
 
     def clear_search(self):
-        """Clear the search input and refresh."""
+        """Clear the search input and click search to restore all rows."""
         log.info("Clearing search...")
         try:
+            # Ensure search input is visible
+            try:
+                toggle_btn = self.driver.find_element(
+                    By.CSS_SELECTOR,
+                    "button.erp-outline-btn[aria-label='Search']:not(.search-btn)"
+                )
+                self.driver.execute_script("arguments[0].click();", toggle_btn)
+                self.wait_seconds(1)
+            except Exception:
+                pass
+
             search_input = self.driver.find_element(
-                By.CSS_SELECTOR,
-                ".erp-search-wrapper input, input#erpSearchInput",
+                By.CSS_SELECTOR, "input#erpSearchInput"
             )
             js = """
                 var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
@@ -1472,14 +1494,13 @@ class BankPage(BasePage):
                 ).set;
                 nativeInputValueSetter.call(arguments[0], '');
                 arguments[0].dispatchEvent(new Event('input', {bubbles: true}));
+                arguments[0].dispatchEvent(new Event('change', {bubbles: true}));
             """
             self.driver.execute_script(js, search_input)
-
-            # Click search to clear
-            wrapper = self.driver.find_element(
-                By.CSS_SELECTOR, ".erp-search-wrapper"
+            # Click search to submit empty = show all
+            search_btn = self.driver.find_element(
+                By.CSS_SELECTOR, "button.search-btn[aria-label='Search']"
             )
-            search_btn = wrapper.find_element(By.TAG_NAME, "button")
             search_btn.click()
             self.wait_seconds(2)
         except Exception as e:

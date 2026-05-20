@@ -1,133 +1,137 @@
 """
-Role Creation Screen – Test Data Generators
-RhythmERP  https://rhythmerp.algorhythms.in/#/master-setup/Rolecreationscreen
+role_creation_screen_data.py
+-----------------------------
+Test data generators for RhythmERP Role Creation Screen.
+
+Location: Access > Role Creation Screen
+URL:      /#/master-setup/Rolecreationscreen
+
+FORM LAYOUT (Simple 2-field popup — NOT a stepper):
+  - Role Name           (text input, required, formcontrolname='role_name')
+  - Entity Group Name   (mat-select, required, formcontrolname='entity_type',
+                         searchable, populated from Entity Group Definition)
+
+KEY RULES:
+  - Role Name is a plain editable text input (NOT readonly, NOT auto-generated)
+  - Duplicate Role Name is silently rejected (form closes, no error shown) — BUG-001
+  - Spaces-only Role Name is silently rejected — BUG-002
+  - No maxlength on Role Name field — BUG-004
+  - Special characters, SQL injection, XSS strings accepted — BUG-005
+  - Entity Group Name dropdown reads values from Entity Group Definition table
+  - Dropdown values are read dynamically at runtime (never hardcode)
+
+KNOWN BUGS:
+  BUG-001 (HIGH)  : Duplicate Role Name accepted silently (no error shown)
+  BUG-002 (HIGH)  : Spaces-only name accepted without validation error text
+  BUG-003 (MEDIUM): Inconsistent SweetAlert after successful create
+  BUG-004 (MEDIUM): No maxlength on Role Name
+  BUG-005 (LOW)   : Special chars / SQL injection / XSS not sanitized
+  BUG-006 (LOW)   : No Delete option
+  BUG-007 (MEDIUM): Empty submit shows .mat-form-field-invalid but no mat-error text
 """
 
 import random
 import string
-import time
+from datetime import datetime
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  UNIQUE  SUFFIX  –  avoids collisions across runs
-# ══════════════════════════════════════════════════════════════════════
-def _ts() -> str:
-    """Compact timestamp suffix:  YYMMDDHHmmss"""
-    return time.strftime("%y%m%d%H%M%S")
+# ──────────────────────────────────────────────
+# Core Data Generators
+# ──────────────────────────────────────────────
+
+def generate_role_name(prefix="AutoRole"):
+    """Generate a random role name with prefix and timestamp for uniqueness."""
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    rand = random.randint(100, 999)
+    return f"{prefix}_{timestamp}_{rand}"
 
 
-def _rand(n: int = 4) -> str:
-    """Random alphanumeric suffix of length *n*."""
-    return "".join(random.choices(string.ascii_uppercase + string.digits, k=n))
+# ──────────────────────────────────────────────
+# Complete Valid Data for Create
+# ──────────────────────────────────────────────
 
-
-# ══════════════════════════════════════════════════════════════════════
-#  CREATE  PHASE  DATA
-# ══════════════════════════════════════════════════════════════════════
-def valid_role_name() -> str:
-    """Auto-generated unique role name for happy-path creation."""
-    return f"AutoRole_{_ts()}_{_rand()}"
-
-
-def valid_role_description() -> str:
-    return f"Automated test role – {_ts()}"
-
-
-def valid_role_code() -> str:
-    return f"RC{_ts()}"
-
-
-def create_payload(name: str = "", description: str = "", code: str = "") -> dict:
-    """Return a dict with all fields populated if not overridden."""
+def generate_valid_role_data(name_prefix="AutoRole"):
+    """Generate a complete dict of valid role data for Create form.
+    entity_group_name is set to None — must be populated from live UI at runtime.
+    """
     return {
-        "name": name or valid_role_name(),
-        "description": description or valid_role_description(),
-        "code": code or valid_role_code(),
+        "role_name": generate_role_name(name_prefix),
+        "entity_group_name": None,  # Pick from live UI (REQUIRED)
     }
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  DUPLICATE  PHASE  DATA
-# ══════════════════════════════════════════════════════════════════════
-def duplicate_name_exact(base: str) -> str:
-    """Return the same name – exact duplicate attempt."""
-    return base
+# ──────────────────────────────────────────────
+# Validation Test Data Helpers
+# ──────────────────────────────────────────────
+
+def generate_string_255():
+    """Generate a string of exactly 255 characters (max boundary for Name)."""
+    return "A" * 255
 
 
-def duplicate_name_case_flipped(base: str) -> str:
-    """Flip case of every character (case-insensitive dupe check)."""
-    return base.swapcase()
+def generate_string_256():
+    """Generate a string of exactly 256 characters (exceeds max for Name)."""
+    return "A" * 256
 
 
-def duplicate_name_with_spaces(base: str) -> str:
-    """Add leading / trailing spaces and double internal spaces."""
-    return f"  {base.replace(' ', '  ')}  "
+def generate_spaces_only(length=10):
+    """Generate a string of only spaces (for Name validation test)."""
+    return " " * length
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  EDIT  PHASE  DATA
-# ══════════════════════════════════════════════════════════════════════
-def edited_role_name(base: str) -> str:
-    return f"{base}_Edited"
+def generate_special_char_name():
+    """Generate a name with special characters."""
+    special = "!@#$%^&*()"
+    return f"TestRole{special}"
 
 
-def edited_role_description(base: str) -> str:
-    return f"{base}_DescEdited"
+def generate_sql_injection_name():
+    """Generate a SQL injection string for Name field."""
+    return "1; DROP TABLE roles; --"
 
 
-def edited_role_code(base: str) -> str:
-    return f"{base}_CE"
+def generate_xss_name():
+    """Generate an XSS string for Name field."""
+    return "<script>alert('xss')</script>"
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  SEARCH  PHASE  DATA
-# ══════════════════════════════════════════════════════════════════════
-def search_exact_name(base: str) -> str:
-    return base
+def generate_duplicate_name_data(existing_name):
+    """Return valid data using an existing name — for duplicate name test."""
+    return {
+        "role_name": existing_name,
+        "entity_group_name": None,  # Pick from live UI
+    }
 
 
-def search_partial_name(base: str) -> str:
-    """First 5 chars of *base* for partial match."""
-    return base[:5] if len(base) >= 5 else base
+def generate_case_variant_name(existing_name):
+    """Return the existing name in different case for case-insensitive test."""
+    return existing_name.upper() if existing_name.islower() else existing_name.lower()
 
 
-def search_nonexistent_name() -> str:
-    return f"ZZZ_NO_MATCH_{_rand()}"
+def generate_name_with_spaces(existing_name):
+    """Return the existing name with leading/trailing spaces."""
+    return f"  {existing_name}  "
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  BOUNDARY  /  INVALID  DATA
-# ══════════════════════════════════════════════════════════════════════
-def empty_string() -> str:
-    return ""
+def generate_empty_data():
+    """Return dict with all empty strings — for mandatory field validation."""
+    return {
+        "role_name": "",
+        "entity_group_name": "",
+    }
 
 
-def whitespace_only() -> str:
-    return "   "
+def generate_name_only_data(name="TestRoleOnly"):
+    """Return dict with only Role Name filled — for partial field validation."""
+    return {
+        "role_name": name,
+        "entity_group_name": "",
+    }
 
 
-def max_length_name(n: int = 255) -> str:
-    return "A" * n
-
-
-def special_chars_name() -> str:
-    return f"Role_{_rand()}@#$%"
-
-
-def sql_injection_name() -> str:
-    return f"Role_{_rand()}' OR 1=1--"
-
-
-def xss_name() -> str:
-    return f"<script>alert('{_rand()}')</script>"
-
-
-# ══════════════════════════════════════════════════════════════════════
-#  PHASE  TAGS  (for report grouping)
-# ══════════════════════════════════════════════════════════════════════
-PHASE_C = "C"   # Create
-PHASE_D = "D"   # Duplicate
-PHASE_E = "E"   # Edit
-PHASE_S = "S"   # Search
-PHASE_P = "P"   # Popup / UI
-PHASE_H = "H"   # History
+def generate_valid_edit_data(name_prefix="EditRole"):
+    """Generate valid data for Edit form — only fields we want to change."""
+    return {
+        "role_name": generate_role_name(name_prefix),
+        "entity_group_name": None,  # Pick from live UI or keep existing
+    }
