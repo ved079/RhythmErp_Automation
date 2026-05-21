@@ -9,37 +9,35 @@ URL:      /#/dynamic-screens/Farmer/Farmer
 FORM LAYOUT (MULTI-STEP STEPPER — varies by Farmer Category):
 
   Step 0 — Farmer Details (ALWAYS VISIBLE):
-    UNIVERSAL FIELDS (fill upper visible fields first, then scroll-down):
-      - Farmer Name             (text input,   REQUIRED, maxlength=255)
-      - Email                   (text input,   optional, maxlength=255)
-      - Phone Number            (text input,   REQUIRED, maxlength=255)
-      - Date Of Birth           (datepicker,   optional, format DD/MM/YYYY)
-      - Age                     (number input, READONLY — auto-calculated from DOB)
-      - Gender                  (mat-select,   optional)
-      - Category                (mat-select,   optional)
-      - Religion                (mat-select,   optional)
-      - Password                (text input,   REQUIRED, maxlength=255)
-      - Farmer Category         (mat-select MULTI, optional) ← DETERMINES STEPPER TABS
-      - Land Classification     (mat-select,   optional)
-    Non-universal fields:
-      - Party Reference         (mat-select,   optional)
-      - Photo Upload            (file upload,  optional)
-      - Is Member of This FPC   (toggle switch, default OFF)
+    - Party Reference         (mat-select,   optional)
+    - Farmer Name             (text input,   REQUIRED, maxlength=255)
+    - Email                   (text input,   optional, maxlength=255)
+    - Phone Number            (text input,   REQUIRED, maxlength=255)
+    - Date Of Birth           (datepicker,   optional, format DD/MM/YYYY)
+    - Age                     (number input, READONLY — auto-calculated from DOB)
+    - Gender                  (mat-select,   optional)
+    - Category                (mat-select,   optional)
+    - Religion                (mat-select,   optional)
+    - Password                (text input,   REQUIRED, maxlength=255)
+    - Photo Upload            (file upload,  optional)
+    - Farmer Category         (mat-select MULTI, optional) ← DETERMINES STEPPER TABS
+    - Land Classification     (mat-select,   optional)
+    - Is Member of This FPC   (toggle switch, default OFF)
 
   Farmer Category determines stepper tabs:
-    Walk-in Farmer → 3 tabs (Current Address, Permanent Address, Bank Details)
-    FPC Member → 6 tabs (Current Address, Permanent Address, Land Details,
-        Crop Details, KYC Details, Bank Details)
     Borrower Farmer → 13 tabs (Current Address, Permanent Address, Family Details,
         Other Details, Land Details, Crop Details, KYC Details, Vehicle Details,
         Income Details, Bank Details, Irrigation Details, Award Details, Loan Details)
+    FPC Member → 6 tabs (Current Address, Permanent Address, Land Details,
+        Crop Details, KYC Details, Bank Details)
+    Walk-in Farmer → 3 tabs (Current Address, Permanent Address, Bank Details)
 
-  Address Tabs (Current/Permanent) — TABLE/GRID ROW with:
-    - Country* (mat-select, required, cascading) ← ALWAYS "India"
-    - State* (mat-select, required, cascading, depends on Country)
-    - District* (mat-select, required, cascading, depends on State)
-    - Taluka* (mat-select, required, cascading, depends on District)
-    - Village (mat-select, optional, cascading, depends on Taluka)
+  Address Tabs (Current/Permanent) — TABLE ROW with:
+    - Country* (mat-select, required, cascading)
+    - State* (mat-select, required, cascading)
+    - District* (mat-select, required, cascading)
+    - Taluka* (mat-select, required, cascading)
+    - Village (mat-select, optional, cascading)
     - Pin Code (text input, maxlength=255)
     - Address* (text input, required, maxlength=255)
     - Address2 (text input, optional, maxlength=255)
@@ -47,11 +45,6 @@ FORM LAYOUT (MULTI-STEP STEPPER — varies by Farmer Category):
   Bank Details Tab:
     - Bank Name, Branch, IFSC Code, Account Type (Current/Saving),
       Account Holder Name, Account Number, Bank Proof (Cancelled Cheque/Passbook)
-
-KEY BUSINESS RULES:
-  - Country MUST ALWAYS be "India" — other countries lack cascading data
-  - Fill upper/visible fields first, then scroll down for lower fields
-  - Farmer Category must be filled LAST in Step 0 (triggers stepper tabs)
 
 KNOWN BUGS:
   BUG-F01 (High):   No Of Owner required but no asterisk shown
@@ -132,14 +125,10 @@ def generate_account_number():
 
 def generate_valid_farmer_step0(category="Walk-in Farmer"):
     """Generate a complete dict of valid farmer data for Step 0.
-
-    UNIVERSAL FIELDS are listed first (upper visible fields that
-    should be filled before scrolling down).
-    Dropdown values set to None — will be populated from live UI at runtime.
-    Farmer Category is filled LAST because it triggers stepper tab creation.
+    Dropdown values set to None — must be populated from live UI at runtime.
     """
     return {
-        # === UNIVERSAL FIELDS (upper visible — fill first) ===
+        "party_reference": None,       # Pick from live UI (optional)
         "farmer_name": generate_farmer_name(),
         "email": generate_email(),
         "phone_number": generate_phone_number(),
@@ -149,28 +138,24 @@ def generate_valid_farmer_step0(category="Walk-in Farmer"):
         "category": None,               # Pick from live UI (social category)
         "religion": None,               # Pick from live UI
         "password": generate_password(),
+        "photo_path": None,             # File path for upload (optional)
         "farmer_category": category,    # "Borrower Farmer", "FPC Member", "Walk-in Farmer"
         "land_classification": None,    # Pick from live UI
-        # === NON-UNIVERSAL FIELDS (may need scrolling) ===
-        "party_reference": None,       # Pick from live UI (optional)
-        "photo_path": None,            # File path for upload (optional)
         "is_member_of_fpc": False,      # Toggle switch, default OFF
     }
 
 
 def generate_valid_address_data():
     """Generate valid data for an address table row.
-
-    Country is ALWAYS forced to "India" in the code (other countries
-    lack cascading data). State/District/Taluka will pick first valid
-    option from the UI since they depend on the previous selection.
+    Country is ALWAYS "India" (business rule — other countries lack cascading data).
+    State/District/Taluka are set to None to pick the first valid option from live UI.
     """
     return {
-        "country": "India",    # ALWAYS India — forced in code, other countries lack cascading data
-        "state": None,         # Pick first valid from live UI (REQUIRED, depends on Country)
-        "district": None,      # Pick first valid from live UI (REQUIRED, depends on State)
-        "taluka": None,        # Pick first valid from live UI (REQUIRED, depends on District)
-        "village": None,       # Pick first valid from live UI (optional, depends on Taluka)
+        "country": "India",     # ALWAYS India (business rule, hardcoded in farmer_page.py)
+        "state": None,          # Pick first valid from live UI (REQUIRED, depends on Country)
+        "district": None,       # Pick first valid from live UI (REQUIRED, depends on State)
+        "taluka": None,         # Pick first valid from live UI (REQUIRED, depends on District)
+        "village": None,        # Pick first valid from live UI (optional, depends on Taluka)
         "pin_code": generate_pin_code(),
         "address": generate_address(),
         "address2": "",
@@ -180,7 +165,7 @@ def generate_valid_address_data():
 def generate_valid_bank_data():
     """Generate valid data for Bank Details tab."""
     return {
-        "bank_name": f"Test Bank {random.randint(100, 999)}",
+        "bank_name": f"Test Bank",
         "branch": f"Branch {random.choice(['Pune', 'Mumbai', 'Nashik', 'Dhule'])}",
         "ifsc_code": generate_ifsc_code(),
         "account_type": None,           # Pick from live UI: Current/Saving

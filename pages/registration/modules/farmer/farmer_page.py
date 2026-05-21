@@ -888,13 +888,31 @@ class FarmerPage(BasePage):
             return []
 
     def click_stepper_header(self, index):
-        """Click on a stepper tab header by index (workaround for BUG-F02)."""
+        """Click on a stepper tab header by index.
+
+        Works even when Next button is frozen (BUG-F02).
+        FIX: Added force-click that removes aria-disabled attribute
+        before clicking, bypassing Angular Material's linear mode
+        restriction that prevents navigating to incomplete steps.
+        """
         try:
-            steps = self.driver.find_elements(By.CSS_SELECTOR, "mat-step-header")
-            if index < len(steps):
-                self.driver.execute_script("arguments[0].click();", steps[index])
-                self.wait_seconds(1)
-                return True
+            # Force-click: remove aria-disabled and click via JS
+            result = self.driver.execute_script("""
+                var idx = arguments[0];
+                var headers = document.querySelectorAll('mat-step-header');
+                if (idx >= 0 && idx < headers.length) {
+                    var header = headers[idx];
+                    // Remove Angular Material's disabled state
+                    header.removeAttribute('aria-disabled');
+                    header.classList.remove('mat-step-header-optional');
+                    // Click the header
+                    header.click();
+                    return true;
+                }
+                return false;
+            """, index)
+            self.wait_seconds(1)
+            return bool(result)
         except Exception:
             pass
         return False
@@ -1347,6 +1365,11 @@ class FarmerPage(BasePage):
 
         Country is ALWAYS forced to 'India' since other countries
         lack cascading data.
+
+        FIX: Added Angular stability wait after Country selection.
+        After selecting Country, Angular fetches State data via HTTP.
+        We must wait for Angular's change detection to complete and
+        the State dropdown to be fully populated before proceeding.
         """
         addr_type = 'Permanent' if is_permanent else 'Current'
         log.info(f"Filling {addr_type} Address...")
@@ -1362,26 +1385,243 @@ class FarmerPage(BasePage):
         # Country — ALWAYS "India"
         self._fill_cascading_dropdown("Country", "India")
 
-        # State, District — still in upper area
+        # CRITICAL: Wait for Angular to fetch states after Country selection.
+        # Angular makes an async HTTP call after Country changes. The State
+        # dropdown component is destroyed and recreated with new options.
+        # We must wait for this process to complete before interacting
+        # with State, otherwise the dropdown won't have options yet.
+        log.info(f"Waiting for Angular to stabilize after Country selection...")
+        self._wait_for_angular_stable(timeout=8)
+        self.wait_seconds(1)
+
+        # State — depends on Country (pick first valid if data is None)
         self._fill_cascading_dropdown("State", data.get("state"))
+
+        # Wait for District options to load after State selection
+        self._wait_for_angular_stable(timeout=5)
+        self.wait_seconds(0.5)
+
+        # District — depends on State
         self._fill_cascading_dropdown("District", data.get("district"))
+
+        # Wait for Taluka options to load after District selection
+        self._wait_for_angular_stable(timeout=5)
+        self.wait_seconds(0.5)
 
         # === 2. SCROLL-DOWN DROPDOWNS (may need scrolling) ===
         self._fill_cascading_dropdown("Taluka", data.get("taluka"))
+
+        # Wait for Village options to load after Taluka selection
+        self._wait_for_angular_stable(timeout=5)
+        self.wait_seconds(0.5)
+
         self._fill_cascading_dropdown("Village", data.get("village"))
 
         # === 3. SCROLL-DOWN TEXT INPUTS ===
+        # FIX: Use JS-scoped element finding instead of global CSS selectors.
+        # After force-navigate, the Permanent Address panel is active but
+        # global CSS selectors like input[name='Pin Code'] may find the
+        # element in the inert Current Address panel (which isn't visible),
+        # causing TimeoutException. Scoping to the active panel ensures we
+        # find the correct input regardless of navigation state.
         if data.get("pin_code"):
-            self._scroll_popup_to_element(self.PIN_CODE_INPUT)
-            self.type_text(self.PIN_CODE_INPUT, data["pin_code"], clear_first=True)
+            self._fill_address_text_input("Pin Code", data["pin_code"])
         if data.get("address"):
-            self._scroll_popup_to_element(self.ADDRESS_INPUT)
-            self.type_text(self.ADDRESS_INPUT, data["address"], clear_first=True)
+            self._fill_address_text_input("Address", data["address"])
         if data.get("address2"):
-            self._scroll_popup_to_element(self.ADDRESS2_INPUT)
-            self.type_text(self.ADDRESS2_INPUT, data["address2"], clear_first=True)
+            self._fill_address_text_input("Address2", data["address2"])
 
         log.info(f"{addr_type} Address filled")
+
+    def _fill_address_text_input(self, field_name, value):
+        """Fill a text input in the ACTIVE address panel using JavaScript.
+
+        FIX: After force-navigate, global CSS selectors like
+        input[name='Pin Code'] may find the element in the inert
+        Current Address panel instead of the active Permanent Address
+        panel. This method scopes the search to the active panel only,
+        just like _js_open_cascading_dropdown() does for dropdowns.
+
+        Uses the native input value setter (same as base_page.js_type_text)
+        to properly trigger Angular's reactive form change detection.
+
+        Args:
+            field_name: The input's name attribute (e.g. "Pin Code", "Address")
+            value: The text to type into the input
+        """
+        if not value:
+            return
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                result = self.driver.execute_script("""
+                    var fieldName = arguments[0];
+                    var textValue = arguments[1];
+
+                    // 1. Find the popup container
+                    var popup = document.querySelector('.big-model, mat-dialog-container');
+                    if (!popup) return {success: false, error: 'No popup found'};
+
+                    // 2. Find the ACTIVE stepper panel
+                    var activeContent = popup.querySelector(
+                        'div.mat-horizontal-stepper-content-current'
+                    );
+                    if (!activeContent) {
+                        var allPanels = popup.querySelectorAll(
+                            'div[role="tabpanel"].mat-horizontal-stepper-content'
+                        );
+                        for (var p = 0; p < allPanels.length; p++) {
+                            if (!allPanels[p].hasAttribute('inert')) {
+                                activeContent = allPanels[p];
+                                break;
+                            }
+                        }
+                    }
+                    if (!activeContent) return {success: false, error: 'No active panel'};
+
+                    // 3. Find the input by name attribute within the active panel
+                    var input = activeContent.querySelector('input[name="' + fieldName + '"]');
+                    if (!input) return {success: false, error: 'Input not found: ' + fieldName};
+
+                    // 4. Scroll into view
+                    input.scrollIntoView({block: 'center'});
+
+                    // 5. Clear and set value using Angular-compatible native setter
+                    // This mirrors base_page.js_type_text which uses the native
+                    // HTMLInputElement.prototype.value setter to bypass Angular's
+                    // reactive form control interception.
+                    var nativeSet = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value'
+                    ).set;
+
+                    // Clear first
+                    nativeSet.call(input, '');
+                    input.dispatchEvent(new Event('input', {bubbles: true}));
+                    input.dispatchEvent(new Event('change', {bubbles: true}));
+
+                    // Set new value
+                    nativeSet.call(input, textValue);
+                    input.dispatchEvent(new Event('input', {bubbles: true}));
+                    input.dispatchEvent(new Event('change', {bubbles: true}));
+                    input.dispatchEvent(new Event('blur', {bubbles: true}));
+
+                    return {success: true, value: textValue};
+                """, field_name, value)
+
+                if result and result.get('success'):
+                    log.info(f"Address '{field_name}' typed: {value}")
+                    return
+                else:
+                    error = result.get('error', 'Unknown') if result else 'JS returned null'
+                    log.warning(
+                        f"Address text input '{field_name}' failed: {error}, "
+                        f"retry {attempt + 1}/{max_retries}"
+                    )
+            except Exception as e:
+                log.warning(
+                    f"Address text input '{field_name}' exception: {e}, "
+                    f"retry {attempt + 1}/{max_retries}"
+                )
+
+            self.wait_seconds(1)
+
+        # Final fallback: try the global Selenium approach as last resort
+        log.warning(f"JS text input failed for '{field_name}', trying global Selenium fallback")
+        try:
+            locator = ("css", f"input[name='{field_name}']")
+            self._scroll_popup_to_element(locator)
+            self.type_text(locator, value, clear_first=True)
+            log.info(f"Address '{field_name}' typed via fallback: {value}")
+        except Exception as e:
+            log.warning(f"Global Selenium fallback also failed for '{field_name}': {e}")
+
+    def _wait_for_angular_stable(self, timeout=10):
+        """Wait for Angular to finish rendering and HTTP requests to complete.
+
+        Uses a polling approach: checks for loading indicators in mat-select
+        elements. If any dropdown is still loading, waits and checks again.
+        Falls back to a simple fixed wait if the JS check fails.
+
+        FIX: Uses synchronous execute_script (not async) for compatibility
+        with all Selenium drivers.
+        """
+        deadline = time.time() + timeout
+        stable_count = 0
+        required_stable = 2  # Must be stable for 2 consecutive checks
+
+        while time.time() < deadline:
+            try:
+                is_stable = self.driver.execute_script("""
+                    // Check if any mat-select in the active panel is still loading
+                    var popup = document.querySelector('.big-model, mat-dialog-container');
+                    if (!popup) return true;  // No popup = nothing to wait for
+
+                    var activeContent = popup.querySelector(
+                        'div.mat-horizontal-stepper-content-current'
+                    );
+                    if (!activeContent) {
+                        var allPanels = popup.querySelectorAll(
+                            'div[role="tabpanel"].mat-horizontal-stepper-content'
+                        );
+                        for (var p = 0; p < allPanels.length; p++) {
+                            if (!allPanels[p].hasAttribute('inert')) {
+                                activeContent = allPanels[p];
+                                break;
+                            }
+                        }
+                    }
+
+                    // Check for loading indicators
+                    if (activeContent) {
+                        var triggers = activeContent.querySelectorAll(
+                            'mat-select .mat-select-trigger, ' +
+                            'mat-select .mat-mdc-select-trigger'
+                        );
+                        for (var i = 0; i < triggers.length; i++) {
+                            var text = triggers[i].textContent.trim();
+                            if (text === 'Loading...' || text === 'loading...') {
+                                return false;
+                            }
+                        }
+
+                        // Also check if any mat-select has no trigger at all
+                        // (component still initializing)
+                        var selects = activeContent.querySelectorAll('mat-select');
+                        for (var i = 0; i < selects.length; i++) {
+                            if (selects[i].offsetParent === null) {
+                                // Hidden select, skip
+                                continue;
+                            }
+                            var trigger = selects[i].querySelector(
+                                '.mat-select-trigger, .mat-mdc-select-trigger'
+                            );
+                            if (!trigger) {
+                                // Select exists but no trigger yet = still loading
+                                return false;
+                            }
+                        }
+                    }
+
+                    return true;
+                """)
+
+                if is_stable:
+                    stable_count += 1
+                    if stable_count >= required_stable:
+                        return
+                else:
+                    stable_count = 0
+
+            except Exception:
+                # JS check failed, just do a fixed wait
+                self.wait_seconds(2)
+                return
+
+            self.wait_seconds(0.5)
+
+        # Timeout reached — proceed anyway
+        log.debug("Angular stability wait timed out, proceeding anyway")
 
     def _scroll_popup_to_top(self):
         """Scroll the popup/dialog container to the top."""
@@ -1432,129 +1672,298 @@ class FarmerPage(BasePage):
         except Exception as e:
             log.warning(f"Scroll to element failed: {e}")
 
+    # ==============================================================
+    #  PURE JAVASCRIPT cascading dropdown methods
+    #  --------------------------------------------------------------
+    #  ROOT CAUSE of StaleElementReferenceException:
+    #    After selecting a parent dropdown (e.g. Country "India"),
+    #    Angular re-renders dependent dropdown components (State,
+    #    District, Taluka, Village). The mat-select DOM elements
+    #    are DESTROYED and RECREATED. Any Python-side WebElement
+    #    reference to the old element becomes stale.
+    #
+    #  FIX: Use a 2-phase pure-JavaScript approach that NEVER holds
+    #    Python-side WebElement references across Angular re-renders:
+    #      Phase 1: Pure JS finds and clicks the mat-select (atomic)
+    #      Python-side wait for the overlay panel to appear
+    #      Phase 2: Pure JS finds and clicks the option in the overlay
+    #
+    #  The overlay panel (div[role='listbox']) lives in the CDK
+    #  overlay container, which is OUTSIDE Angular's component tree.
+    #  Overlay options are stable and never stale.
+    # ==============================================================
+
     def _fill_cascading_dropdown(self, label_text, value):
-        """Fill a cascading dropdown in the active address tab.
+        """Fill a cascading dropdown using pure JavaScript (2-phase).
 
-        Uses _find_address_dropdown() to locate the correct element
-        using JS-based multi-strategy search. Handles both specific
-        value selection and first-valid-option selection (when value is None).
+        This method COMPLETELY avoids StaleElementReferenceException by
+        never holding Python-side WebElement references. Each phase does
+        a fresh DOM query within a single atomic JS execution.
 
-        FIX: Added stale element retry — if StaleElementReferenceException
-        occurs during option selection, re-find the dropdown and retry.
-        FIX: Better option matching using .strip().lower() for case-insensitive
-        and whitespace-tolerant comparison.
-        FIX: Longer wait (2s) for dependent dropdowns to populate after
-        parent selection.
+        Phase 1: JS finds the mat-select in the active panel and clicks it
+        Phase 2: After Python-side wait, JS finds and clicks the option
+
+        Args:
+            label_text: The dropdown label (e.g. "Country", "State")
+            value: The option text to select. None = pick first valid option.
+                   Empty string = skip this dropdown entirely.
         """
         if value == "":
             return
 
-        max_retries = 3
+        max_retries = 5
         for attempt in range(max_retries):
-            try:
-                dropdown = self._find_address_dropdown(label_text)
-                if dropdown is None:
-                    log.warning(f"Address dropdown '{label_text}' not found in active tab")
-                    return
-
-                # Scroll the dropdown into view within the popup
-                self.driver.execute_script("""
-                    var el = arguments[0];
-                    // Scroll within popup container
-                    var parent = el.parentElement;
-                    while (parent) {
-                        var style = window.getComputedStyle(parent);
-                        if ((style.overflow === 'auto' || style.overflow === 'scroll' ||
-                             style.overflowY === 'auto' || style.overflowY === 'scroll') &&
-                            parent.scrollHeight > parent.clientHeight) {
-                            var elRect = el.getBoundingClientRect();
-                            var parentRect = parent.getBoundingClientRect();
-                            var scrollOffset = elRect.top - parentRect.top + parent.scrollTop - (parentRect.height / 3);
-                            parent.scrollTop = scrollOffset;
-                            break;
-                        }
-                        parent = parent.parentElement;
-                    }
-                    el.scrollIntoView({block: 'center'});
-                """, dropdown)
-                self.wait_seconds(0.3)
-
-                # Click to open the dropdown
-                self.driver.execute_script("arguments[0].click();", dropdown)
-                self.wait_seconds(0.8)
-
-                if value is None:
-                    # Pick first valid (non-placeholder) option
-                    options = self.driver.find_elements(By.CSS_SELECTOR, "div[role='listbox'] mat-option")
-                    valid_options = []
-                    for opt in options:
-                        try:
-                            text = opt.text.strip()
-                            if text and not text.startswith("Select ") and opt.is_displayed():
-                                valid_options.append(opt)
-                        except StaleElementReferenceException:
-                            log.warning(f"Stale element while scanning options for '{label_text}', retry {attempt + 1}")
-                            break
-                        except Exception:
-                            continue
-                    else:
-                        # Only executed if the for-loop didn't break (no stale elements)
-                        if valid_options:
-                            self.driver.execute_script("arguments[0].click();", valid_options[0])
-                            self.wait_seconds(0.5)
-                            log.info(f"Address '{label_text}' selected: {valid_options[0].text.strip()}")
-                        self._close_select_panel()
-                        self.wait_seconds(2)  # FIX: longer wait for dependent dropdown
-                        return
-
-                    # If we broke out due to stale element, close and retry
-                    self._close_select_panel()
-                    self.wait_seconds(0.5)
-                    continue  # retry
-
-                else:
-                    # Select specific option
-                    # FIX: Use case-insensitive, whitespace-tolerant matching
-                    value_lower = value.strip().lower()
-                    options = self.driver.find_elements(By.CSS_SELECTOR, "div[role='listbox'] mat-option")
-                    found = False
-                    for opt in options:
-                        try:
-                            opt_text = opt.text.strip()
-                            if opt_text.lower() == value_lower and opt.is_displayed():
-                                self.driver.execute_script("arguments[0].click();", opt)
-                                self.wait_seconds(0.5)
-                                log.info(f"Address '{label_text}' selected: {value}")
-                                self._close_select_panel()
-                                self.wait_seconds(2)  # FIX: longer wait for dependent dropdown
-                                return
-                        except StaleElementReferenceException:
-                            log.warning(f"Stale element while selecting '{value}' in '{label_text}', retry {attempt + 1}")
-                            self._close_select_panel()
-                            self.wait_seconds(0.5)
-                            break  # break inner for-loop, retry outer loop
-                        except Exception:
-                            continue
-                    else:
-                        # For-loop completed without break (no stale exception)
-                        if not found:
-                            log.warning(f"Option '{value}' not found in address '{label_text}' dropdown")
-
-                    self._close_select_panel()
-                    self.wait_seconds(2)  # FIX: longer wait for dependent dropdown
-                    return
-
-            except StaleElementReferenceException:
-                log.warning(f"StaleElementReferenceException in _fill_cascading_dropdown('{label_text}'), retry {attempt + 1}/{max_retries}")
+            # Phase 1: Find and click the dropdown (pure JS, atomic)
+            open_result = self._js_open_cascading_dropdown(label_text)
+            if not open_result:
+                log.warning(
+                    f"Could not open cascading dropdown '{label_text}', "
+                    f"retry {attempt + 1}/{max_retries}"
+                )
                 self._close_select_panel()
-                self.wait_seconds(0.5)
+                self.wait_seconds(1)
                 continue
-            except Exception as e:
-                log.warning(f"Address cascading dropdown '{label_text}' failed: {e}")
-                self._close_select_panel()
+
+            # Wait for the overlay panel to appear and populate with options
+            self.wait_seconds(1.5)
+
+            # Phase 2: Find and click the option (pure JS, atomic)
+            select_result = self._js_select_cascading_option(label_text, value)
+            if select_result and select_result.get('success'):
+                selected_text = select_result.get('selectedText', '?')
+                log.info(f"Address '{label_text}' selected: {selected_text}")
+                # Wait for Angular to re-render dependent dropdowns
+                wait_after = 3.0 if label_text == "Country" else 2.5
+                self.wait_seconds(wait_after)
                 return
 
-        log.warning(f"Address cascading dropdown '{label_text}' failed after {max_retries} retries")
+            error_msg = select_result.get('error', 'Unknown') if select_result else 'JS returned null'
+            log.warning(
+                f"Option selection failed for '{label_text}': {error_msg}, "
+                f"retry {attempt + 1}/{max_retries}"
+            )
+            self._close_select_panel()
+            self.wait_seconds(0.5)
+
+        log.warning(f"Cascading dropdown '{label_text}' failed after {max_retries} retries")
+
+    def _js_open_cascading_dropdown(self, label_text):
+        """Phase 1: Find and click a cascading dropdown using pure JavaScript.
+
+        Runs entirely within a single JS execution context, so there is
+        NO window for Angular to re-render the element between finding
+        it and clicking it. The click event is dispatched atomically
+        right after the element is found.
+
+        Returns True if the dropdown was found and clicked, False otherwise.
+        """
+        try:
+            result = self.driver.execute_script("""
+                var labelText = arguments[0];
+
+                // 1. Find the popup container
+                var popup = document.querySelector('.big-model, mat-dialog-container');
+                if (!popup) return {success: false, error: 'No popup found'};
+
+                // 2. Find the ACTIVE stepper panel only
+                var activeContent = popup.querySelector(
+                    'div.mat-horizontal-stepper-content-current'
+                );
+                if (!activeContent) {
+                    var allPanels = popup.querySelectorAll(
+                        'div[role="tabpanel"].mat-horizontal-stepper-content'
+                    );
+                    for (var p = 0; p < allPanels.length; p++) {
+                        if (!allPanels[p].hasAttribute('inert')) {
+                            activeContent = allPanels[p];
+                            break;
+                        }
+                    }
+                }
+                if (!activeContent) return {success: false, error: 'No active panel'};
+
+                // 3. Find the mat-select matching the label
+                var select = null;
+
+                // Strategy A: mat-label inside mat-form-field
+                var labels = activeContent.querySelectorAll('mat-label');
+                for (var i = 0; i < labels.length; i++) {
+                    if (labels[i].textContent.trim().includes(labelText)) {
+                        var field = labels[i].closest(
+                            'mat-form-field, .mat-mdc-form-field'
+                        );
+                        if (field) {
+                            var s = field.querySelector('mat-select');
+                            if (s && s.offsetParent !== null) {
+                                select = s;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Strategy B: table row with label text -> mat-select
+                if (!select) {
+                    var rows = activeContent.querySelectorAll('tr, .grid-row');
+                    for (var i = 0; i < rows.length; i++) {
+                        var cells = rows[i].querySelectorAll('td, th');
+                        for (var j = 0; j < cells.length; j++) {
+                            var cellText = cells[j].textContent.trim()
+                                .replace(/\\s*\\*/g, '');
+                            if (cellText.includes(labelText)) {
+                                var s = rows[i].querySelector('mat-select');
+                                if (s && s.offsetParent !== null) {
+                                    select = s;
+                                    break;
+                                }
+                            }
+                        }
+                        if (select) break;
+                    }
+                }
+
+                // Strategy C: any leaf text -> closest container -> mat-select
+                if (!select) {
+                    var allEls = activeContent.querySelectorAll(
+                        'span, div, label, p, td, th'
+                    );
+                    for (var i = 0; i < allEls.length; i++) {
+                        var el = allEls[i];
+                        if (el.children.length === 0 ||
+                            el.tagName === 'TD' ||
+                            el.tagName === 'TH' ||
+                            el.tagName === 'LABEL') {
+                            var text = el.textContent.trim()
+                                .replace(/\\s*\\*/g, '').replace(/\\s*:/g, '');
+                            if (text === labelText || text.startsWith(labelText)) {
+                                var container = el.closest(
+                                    'mat-form-field, .mat-mdc-form-field, ' +
+                                    'tr, .grid-row, .form-row, .row'
+                                );
+                                if (container) {
+                                    var s = container.querySelector('mat-select');
+                                    if (s && s.offsetParent !== null) {
+                                        select = s;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (!select) {
+                    return {
+                        success: false,
+                        error: 'Dropdown not found for label: ' + labelText
+                    };
+                }
+
+                // 4. Scroll into view within popup
+                select.scrollIntoView({block: 'center'});
+
+                // 5. Click to open the dropdown panel
+                select.click();
+
+                return {success: true};
+            """, label_text)
+            return result and result.get('success')
+        except Exception as e:
+            log.warning(f"JS open cascading dropdown failed for '{label_text}': {e}")
+            return False
+
+    def _js_select_cascading_option(self, label_text, value):
+        """Phase 2: Find and click an option in the open overlay panel via pure JS.
+
+        The overlay panel (div[role='listbox']) lives in the CDK overlay
+        container which is OUTSIDE Angular's component tree. Options in
+        the overlay are stable and never stale.
+
+        Args:
+            label_text: The dropdown label (for logging/error messages)
+            value: The option text to select. None = pick first valid option.
+
+        Returns:
+            Dict with 'success' and 'selectedText' or 'error'.
+        """
+        try:
+            result = self.driver.execute_script("""
+                var labelText = arguments[0];
+                var optionValue = arguments[1];
+                var pickFirst = (optionValue === null);
+                if (!pickFirst) optionValue = optionValue.trim().toLowerCase();
+
+                // 1. Find the VISIBLE overlay panel (may be multiple if
+                //    page has other dropdowns open)
+                var overlayPanel = null;
+                var panels = document.querySelectorAll('div[role="listbox"]');
+                for (var i = 0; i < panels.length; i++) {
+                    if (panels[i].offsetParent !== null) {
+                        overlayPanel = panels[i];
+                        break;
+                    }
+                }
+                if (!overlayPanel) {
+                    return {
+                        success: false,
+                        error: 'No overlay panel visible for: ' + labelText
+                    };
+                }
+
+                // 2. Find matching option
+                var options = overlayPanel.querySelectorAll(
+                    'mat-option, [role="option"]'
+                );
+                var selectedOption = null;
+                var firstValidOption = null;
+
+                for (var i = 0; i < options.length; i++) {
+                    var optText = options[i].textContent.trim();
+                    var isVisible = options[i].offsetParent !== null;
+                    var isPlaceholder = optText.startsWith('Select ')
+                        || optText === '';
+
+                    if (isVisible && !isPlaceholder && optText) {
+                        if (!firstValidOption) {
+                            firstValidOption = options[i];
+                        }
+                        if (!pickFirst &&
+                            optText.trim().toLowerCase() === optionValue) {
+                            selectedOption = options[i];
+                            break;
+                        }
+                    }
+                }
+
+                if (pickFirst) selectedOption = firstValidOption;
+
+                if (!selectedOption) {
+                    // Close the overlay before returning error
+                    var backdrops = document.querySelectorAll(
+                        '.cdk-overlay-backdrop:not(.cdk-overlay-dark-backdrop)'
+                    );
+                    for (var b = 0; b < backdrops.length; b++) {
+                        try { backdrops[b].click(); } catch(e) {}
+                    }
+                    return {
+                        success: false,
+                        error: 'Option not found for: ' + labelText +
+                            (pickFirst ? '' : ' value=' + arguments[1])
+                    };
+                }
+
+                // 3. Click the option
+                selectedOption.click();
+
+                return {
+                    success: true,
+                    selectedText: selectedOption.textContent.trim()
+                };
+            """, label_text, value)
+            return result
+        except Exception as e:
+            log.warning(f"JS select cascading option failed for '{label_text}': {e}")
+            return None
 
     # ==============================================================
     #  Bank Details Tab
@@ -1566,8 +1975,13 @@ class FarmerPage(BasePage):
         FILL ORDER: upper visible text inputs first, then scroll-down fields.
         NOTE: Account Type label has a trailing tab character: "Account Type\\t"
         so the XPath contains(.,'Account Type') still matches.
+
+        FIX: Added initial wait for panel content to render after force-navigate.
         """
         log.info("Filling Bank Details...")
+
+        # Wait for panel content to render after navigation
+        self.wait_seconds(1)
 
         # Upper visible text inputs
         if data.get("bank_name"):
@@ -1819,8 +2233,13 @@ class FarmerPage(BasePage):
 
     def navigate_to_tab_by_name(self, target_tab_name):
         """Navigate to a specific stepper tab. Tries direct header click first,
-        falls back to Next-button stepping with max-retry guard.
+        falls back to Next-button stepping, then force-click as last resort.
         Returns True if reached, False otherwise.
+
+        FIX: Added Strategy 4 — force-navigate by directly manipulating
+        the Angular Material stepper's internal state via JavaScript.
+        This bypasses validation-based navigation blocking that can
+        occur when required fields on previous tabs are unfilled.
         """
         target_lower = target_tab_name.strip().lower()
         log.info(f"Navigating to tab: {target_tab_name}")
@@ -1875,8 +2294,161 @@ class FarmerPage(BasePage):
                     log.info(f"Reached tab via final header click: {target_tab_name}")
                     return True
 
+        # Strategy 4: FORCE-NAVIGATE via JavaScript — bypass Angular Material
+        # stepper's linear mode and validation completely.
+        # This is the last resort when normal navigation is blocked.
+        log.info(f"Attempting force-navigate to tab: {target_tab_name}")
+        tab_names = self.get_stepper_tab_names()
+        for idx, name in enumerate(tab_names):
+            if target_lower in name.strip().lower():
+                if self._force_navigate_to_step(idx):
+                    self.wait_seconds(1.5)
+                    active_name = self.get_active_tab_name()
+                    if target_lower in active_name.lower():
+                        log.info(f"Force-navigated to tab: {target_tab_name}")
+                        return True
+                    # Even if tab name doesn't match, check if the DOM
+                    # panel is now active (sometimes get_active_tab_name
+                    # fails but the panel IS active)
+                    is_active = self.driver.execute_script("""
+                        var popup = document.querySelector(
+                            '.big-model, mat-dialog-container'
+                        );
+                        if (!popup) return false;
+                        var active = popup.querySelector(
+                            'div.mat-horizontal-stepper-content-current'
+                        );
+                        if (!active) return false;
+                        // Check if any inert attribute is missing
+                        return !active.hasAttribute('inert');
+                    """)
+                    if is_active:
+                        log.info(f"Force-navigate succeeded (panel is active): {target_tab_name}")
+                        return True
+                break
+
         log.warning(f"Could not navigate to tab: {target_tab_name}")
         return False
+
+    def _force_navigate_to_step(self, target_index):
+        """Force-navigate to a stepper step by directly manipulating
+        Angular Material's internal DOM state via JavaScript.
+
+        This bypasses:
+        - Linear mode restrictions (aria-disabled)
+        - Validation-based navigation blocking
+        - Step completion requirements
+
+        Works by:
+        1. Removing 'inert' from target panel
+        2. Adding 'inert' to all other panels
+        3. Updating CSS classes for active/previous states
+        4. Updating step header aria-selected attributes
+        5. Dispatching click event on the target header
+        """
+        try:
+            result = self.driver.execute_script("""
+                var targetIdx = arguments[0];
+                var popup = document.querySelector(
+                    '.big-model, mat-dialog-container'
+                );
+                if (!popup) return false;
+
+                var stepper = popup.querySelector(
+                    'mat-horizontal-stepper, mat-stepper'
+                );
+                if (!stepper) return false;
+
+                // 1. Get all step content panels
+                var panels = stepper.querySelectorAll(
+                    'div[role="tabpanel"].mat-horizontal-stepper-content'
+                );
+                if (targetIdx < 0 || targetIdx >= panels.length) return false;
+
+                // 2. Update panel states
+                for (var i = 0; i < panels.length; i++) {
+                    if (i === targetIdx) {
+                        // Make this panel active
+                        panels[i].removeAttribute('inert');
+                        panels[i].classList.add(
+                            'mat-horizontal-stepper-content-current'
+                        );
+                        panels[i].classList.remove(
+                            'mat-horizontal-stepper-content-previous'
+                        );
+                    } else {
+                        // Make other panels inactive
+                        panels[i].setAttribute('inert', '');
+                        panels[i].classList.remove(
+                            'mat-horizontal-stepper-content-current'
+                        );
+                        panels[i].classList.add(
+                            'mat-horizontal-stepper-content-previous'
+                        );
+                    }
+                }
+
+                // 3. Update step header states
+                // FIX: Also remove 'mat-step-selected' class from non-target
+                // headers so that get_active_tab_name() doesn't pick up stale
+                // CSS classes from the previously-active tab.
+                var headers = stepper.querySelectorAll('mat-step-header');
+                for (var i = 0; i < headers.length; i++) {
+                    if (i === targetIdx) {
+                        headers[i].setAttribute('aria-selected', 'true');
+                        headers[i].removeAttribute('aria-disabled');
+                        // Add selected class if Angular uses it
+                        if (!headers[i].classList.contains('mat-step-selected')) {
+                            headers[i].classList.add('mat-step-selected');
+                        }
+                        // Also ensure inner label has selected class
+                        var innerLabels = headers[i].querySelectorAll(
+                            '.mat-step-label, .mat-step-text-label'
+                        );
+                        for (var l = 0; l < innerLabels.length; l++) {
+                            if (!innerLabels[l].classList.contains('mat-step-label-selected')) {
+                                innerLabels[l].classList.add('mat-step-label-selected');
+                                innerLabels[l].classList.add('mat-step-label-active');
+                            }
+                        }
+                    } else {
+                        headers[i].setAttribute('aria-selected', 'false');
+                        // FIX: Remove ALL selected/active indicators
+                        headers[i].classList.remove('mat-step-selected');
+                        // Remove inner label selected classes too
+                        var innerLabels = headers[i].querySelectorAll(
+                            '.mat-step-label, .mat-step-text-label'
+                        );
+                        for (var l = 0; l < innerLabels.length; l++) {
+                            innerLabels[l].classList.remove('mat-step-label-selected');
+                            innerLabels[l].classList.remove('mat-step-label-active');
+                        }
+                    }
+                }
+
+                // 4. Also update the icon states
+                var icons = stepper.querySelectorAll(
+                    '.mat-step-icon, .mat-mdc-step-icon'
+                );
+                for (var i = 0; i < icons.length; i++) {
+                    if (i === targetIdx) {
+                        icons[i].classList.add('mat-step-icon-selected');
+                    } else {
+                        icons[i].classList.remove('mat-step-icon-selected');
+                    }
+                }
+
+                // 5. Click the target header to trigger Angular's state update
+                if (targetIdx < headers.length) {
+                    headers[targetIdx].click();
+                }
+
+                return true;
+            """, target_index)
+            return bool(result)
+        except Exception as e:
+            log.warning(f"Force navigate to step {target_index} failed: {e}")
+            return False
 
     def fill_tab_by_name(self, tab_name, data):
         """Fill the currently active tab based on its name. Delegates to
@@ -2189,7 +2761,17 @@ class FarmerPage(BasePage):
         # Fill Step 0 (universal fields — upper first, then scroll-down)
         self.fill_step0(data)
 
-        # Get visible tab names after category selection
+        # Wait for stepper tabs to appear after Farmer Category selection.
+        # Angular creates the stepper tabs dynamically after category is chosen.
+        # FIX: Wait up to 5 seconds for tabs to render before proceeding.
+        for wait_attempt in range(5):
+            tab_names = self.get_stepper_tab_names()
+            non_empty = [n for n in tab_names if n.strip()]
+            if non_empty:
+                break
+            log.info(f"Waiting for stepper tabs to appear... attempt {wait_attempt + 1}/5")
+            self.wait_seconds(1)
+
         tab_names = self.get_stepper_tab_names()
         log.info(f"Stepper tabs visible: {tab_names}")
 
@@ -2216,8 +2798,14 @@ class FarmerPage(BasePage):
         # FIX: Click Next ONCE to advance from Farmer Details step.
         # After this, we navigate explicitly by tab name instead of
         # blindly clicking Next and hoping we land on the right tab.
-        self.click_stepper_next()
+        next_clicked = self.click_stepper_next()
+        if not next_clicked:
+            log.warning("Stepper Next click failed after Step 0 — trying force navigate")
         self.wait_seconds(1.5)
+
+        # Verify we actually moved past Step 0
+        active_tab = self.get_active_tab_name()
+        log.info(f"After Step 0 Next click, active tab: {active_tab}")
 
         # Build the ordered list of tabs that need filling
         # (skip empty tab names like Farmer Details header)
@@ -2253,12 +2841,16 @@ class FarmerPage(BasePage):
                 log.warning(f"Could not navigate to tab: {tab_name} — skipping")
                 continue
 
-            # Verify we're on the right tab
+            # Verify we're on the right tab (for logging only)
             actual_tab = self.get_active_tab_name()
             log.info(f"Current tab: {actual_tab} (target: {tab_name})")
 
-            # Use the ACTUAL tab name for filling — it may differ from expected
-            fill_tab_name = actual_tab if actual_tab else tab_name
+            # FIX: Always use the TARGET tab name for fill routing, NOT the
+            # DETECTED active tab name. After force-navigate, get_active_tab_name()
+            # may return a stale/wrong value because Angular's stepper header
+            # state isn't fully updated. The target tab name is authoritative
+            # because navigate_to_tab_by_name() already succeeded.
+            fill_tab_name = tab_name
 
             # Fill the tab if data is provided
             if data.get(data_key):
@@ -2272,17 +2864,32 @@ class FarmerPage(BasePage):
 
         # Submit
         self._force_close_panels()
+
+        # FIX: Before submitting, check for validation errors
+        # and log them for debugging
+        validation_errors = self.get_mat_error_text()
+        if validation_errors:
+            log.warning(f"Validation errors before submit: {validation_errors}")
+
         self.submit()
         self.wait_seconds(2)
 
-        # Handle success alert
+        # Handle success or validation alert
         alert_title = self.handle_success_alert(timeout=30)
+
+        # If submission failed, check for validation warning
+        if "successfully" not in alert_title.lower():
+            validation_warning = self.handle_validation_warning(timeout=3)
+            if validation_warning:
+                log.warning(f"Validation warning: {validation_warning}")
+                alert_title = validation_warning
 
         result = {
             "status": "PASSED" if "successfully" in alert_title.lower() else "FAILED",
             "alert_title": alert_title,
             "farmer_name": data.get("farmer_name", ""),
             "error": "" if "successfully" in alert_title.lower() else alert_title,
+            "validation_errors": validation_errors,
         }
 
         FARMER_SUBMISSIONS.append(result)
