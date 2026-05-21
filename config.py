@@ -29,11 +29,11 @@ RHYTHMERP_FORGOT_PASSWORD_URL = f"{RHYTHMERP_BASE_URL}/#/authentication/forgot-p
 # ============================================================
 # RHYTHMERP LOGIN CREDENTIALS
 # ============================================================
-RHYTHMERP_EMAIL = "test@gmail.com"
-RHYTHMERP_PASSWORD = "Test@2526270"
+RHYTHMERP_EMAIL = "Rular@admin.com"
+RHYTHMERP_PASSWORD = "Rular@12345678"
 RHYTHMERP_FACILITY = ""  # blank text dropdown — click by index
-NEW_RHYTHMERP_EMAIL = "kedar@1"
-NEW_RHYTHMERP_PASSWORD = "Neo@123456789"
+NEW_RHYTHMERP_EMAIL = "Rular@admin.com"
+NEW_RHYTHMERP_PASSWORD = "Rular@12345678"
 NEW_RHYTHMERP_FACILITY = ""
 
 
@@ -57,13 +57,13 @@ FP_OLD_PASSWORDS = [
 # ============================================================
 # RHYTHMERP FORGOT PASSWORD CREDENTIALS
 # ============================================================
-RHYTHMERP_FP_EMAIL = "vedant@rhythmflows.com"
-RHYTHMERP_FP_USERNAME = "test@gmail.com"
+RHYTHMERP_FP_EMAIL = "Rular@admin.com"
+RHYTHMERP_FP_USERNAME = "Rular@admin.com"
 RHYTHMERP_FP_TENANT = ""  # blank text — click by index
-RHYTHMERP_FP_CURRENT_PASSWORD = "Test@1315378"
+RHYTHMERP_FP_CURRENT_PASSWORD = "Rular@12345678"
 RHYTHMERP_FP_NEW_PASSWORD = ""
 RHYTHMERP_FP_ALT_PASSWORD = ""
-RHYTHMERP_FP_DEFAULT_PASSWORD = "Test@2526270"   # cleanup target — reset back after tests
+RHYTHMERP_FP_DEFAULT_PASSWORD = "Rular@12345678"   # cleanup target — reset back after tests
 RHYTHMERP_FP_OLD_PASSWORDS = ["", "", ""]
 
 
