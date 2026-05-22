@@ -47,6 +47,14 @@ class LoginPage(BasePage):
     FACILITY_LABEL = ("xpath", "//mat-label[contains(.,'Facility') or contains(.,'Tenant')]")
 
     # ================================================================
+    # SPEED CONFIG
+    # ================================================================
+    _FAST_WAIT = 3        # default wait for most operations
+    _OVERLAY_WAIT = 3     # wait for overlay open/close
+    _CLICK_WAIT = 2       # button locators
+    _INPUT_WAIT = 5       # email/password field visibility
+
+    # ================================================================
     # PAGE ACTIONS
     # ================================================================
 
@@ -67,8 +75,8 @@ class LoginPage(BasePage):
     def wait_for_page_load(self):
         """Wait for login page elements to be fully loaded."""
         try:
-            self.wait_for_visible(self.EMAIL_INPUT, timeout=EXPLICIT_WAIT)
-            self.wait_for_visible(self.PASSWORD_INPUT, timeout=EXPLICIT_WAIT)
+            self.wait_for_visible(self.EMAIL_INPUT, timeout=self._INPUT_WAIT)
+            self.wait_for_visible(self.PASSWORD_INPUT, timeout=self._INPUT_WAIT)
             log.info("Login page elements are visible")
         except Exception:
             log.error("Login page did not load properly")
@@ -89,13 +97,11 @@ class LoginPage(BasePage):
         """Select a facility from the Angular Material mat-select dropdown by name."""
         log.step(3, f"Selecting facility: {facility_name}")
 
-        # Ensure no leftover overlay before opening
         self.dismiss_open_overlays()
 
         self.click(self.FACILITY_SELECT_TRIGGER)
 
-        # Wait for panel to open
-        WebDriverWait(self.driver, 10).until(
+        WebDriverWait(self.driver, self._OVERLAY_WAIT).until(
             EC.presence_of_element_located(
                 (By.CSS_SELECTOR, "mat-option")
             )
@@ -107,7 +113,7 @@ class LoginPage(BasePage):
         )
 
         try:
-            self.wait_for_visible(option_locator, timeout=10)
+            self.wait_for_visible(option_locator, timeout=self._OVERLAY_WAIT)
             self.click(option_locator)
             log.info(f"Selected facility: {facility_name}")
         except Exception:
@@ -116,12 +122,11 @@ class LoginPage(BasePage):
                 "xpath",
                 f"//div[@role='option' and contains(.,'{facility_name}')]"
             )
-            self.wait_for_visible(fallback_locator, timeout=5)
+            self.wait_for_visible(fallback_locator, timeout=2)
             self.click(fallback_locator)
             log.info(f"Selected facility (fallback): {facility_name}")
 
-        # Wait for the dropdown overlay to fully close before returning
-        self.wait_for_overlay_gone(timeout=10)
+        self.wait_for_overlay_gone(timeout=self._OVERLAY_WAIT)
 
     def select_facility_by_index(self, index=0):
         """Select facility by index (for blank/invisible text dropdowns).
@@ -133,21 +138,19 @@ class LoginPage(BasePage):
         """
         log.step(3, f"Selecting facility by index: {index}")
 
-        # Ensure no leftover overlay before opening
         self.dismiss_open_overlays()
 
         self.click(self.FACILITY_SELECT_TRIGGER)
 
-        # Wait for mat-option elements to appear inside the overlay pane
         try:
-            options = WebDriverWait(self.driver, 10).until(
+            options = WebDriverWait(self.driver, self._OVERLAY_WAIT).until(
                 EC.presence_of_all_elements_located(
                     (By.CSS_SELECTOR, "div.cdk-overlay-pane mat-option")
                 )
             )
         except Exception:
             log.warning("cdk-overlay-pane mat-option not found, trying panel fallback...")
-            options = WebDriverWait(self.driver, 10).until(
+            options = WebDriverWait(self.driver, self._OVERLAY_WAIT).until(
                 EC.presence_of_all_elements_located(
                     (By.CSS_SELECTOR, ".mat-mdc-select-panel mat-option")
                 )
@@ -158,14 +161,10 @@ class LoginPage(BasePage):
                 f"Index {index} out of range — only {len(options)} option(s) found"
             )
 
-        # JS-click the option directly (avoids any overlay interception)
         self.driver.execute_script("arguments[0].click();", options[index])
         log.info(f"Selected facility option at index {index}")
 
-        # Wait for the dropdown overlay to fully close before returning.
-        # This is the critical step that prevents the panel from blocking
-        # the Login button click that follows.
-        self.wait_for_overlay_gone(timeout=10)
+        self.wait_for_overlay_gone(timeout=self._OVERLAY_WAIT)
 
     def click_login(self):
         """Click the Login button.
@@ -175,15 +174,14 @@ class LoginPage(BasePage):
         """
         log.step(4, "Clicking Login button")
 
-        # Ensure no overlay is blocking the button
         self.dismiss_open_overlays()
 
         try:
-            if self.is_displayed(self.LOGIN_BUTTON, timeout=5):
+            if self.is_displayed(self.LOGIN_BUTTON, timeout=self._CLICK_WAIT):
                 self.click(self.LOGIN_BUTTON)
-            elif self.is_displayed(self.LOGIN_BUTTON_CSS, timeout=3):
+            elif self.is_displayed(self.LOGIN_BUTTON_CSS, timeout=2):
                 self.click(self.LOGIN_BUTTON_CSS)
-            elif self.is_displayed(self.LOGIN_BUTTON_GENERIC, timeout=3):
+            elif self.is_displayed(self.LOGIN_BUTTON_GENERIC, timeout=2):
                 self.click(self.LOGIN_BUTTON_GENERIC)
             else:
                 log.error("Login button not found!")
@@ -224,8 +222,8 @@ class LoginPage(BasePage):
 
     def is_page_loaded(self):
         """Check if login page is fully loaded."""
-        email_visible = self.is_displayed(self.EMAIL_INPUT, timeout=10)
-        password_visible = self.is_displayed(self.PASSWORD_INPUT, timeout=5)
+        email_visible = self.is_displayed(self.EMAIL_INPUT, timeout=self._INPUT_WAIT)
+        password_visible = self.is_displayed(self.PASSWORD_INPUT, timeout=3)
         is_loaded = email_visible and password_visible
         log.info(f"Login page loaded: {is_loaded}")
         return is_loaded
@@ -245,7 +243,7 @@ class LoginPage(BasePage):
         except Exception:
             return False
 
-    def is_error_message_displayed(self, timeout=5):
+    def is_error_message_displayed(self, timeout=3):
         return self.is_displayed(self.ERROR_MESSAGE, timeout=timeout)
 
     def get_error_message_text(self):
@@ -254,7 +252,7 @@ class LoginPage(BasePage):
         except Exception:
             return ""
 
-    def wait_for_login_complete(self, timeout=20, login_url=None):
+    def wait_for_login_complete(self, timeout=10, login_url=None):
         """Wait for login to complete (URL changes away from login page)."""
         log.info("Waiting for login to complete...")
         check_url = (login_url or LOGIN_URL).lower()
@@ -270,7 +268,7 @@ class LoginPage(BasePage):
             self.take_screenshot("login_not_completed")
             return False
 
-    def is_dashboard_visible(self, timeout=15):
+    def is_dashboard_visible(self, timeout=8):
         """Check if redirected to dashboard/main page."""
         try:
             WebDriverWait(self.driver, timeout).until(
@@ -297,7 +295,7 @@ class LoginPage(BasePage):
         facilities = []
         self.dismiss_open_overlays()
         self.click(self.FACILITY_SELECT_TRIGGER)
-        time.sleep(0.5)
+        time.sleep(0.3)
         try:
             options = self.find_elements(("css", "mat-option"))
             for option in options:
@@ -307,7 +305,7 @@ class LoginPage(BasePage):
         except Exception:
             log.warning("Could not read facility options")
         ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
-        self.wait_for_overlay_gone(timeout=5)
+        self.wait_for_overlay_gone(timeout=3)
         return facilities
 
     def clear_all_fields(self):

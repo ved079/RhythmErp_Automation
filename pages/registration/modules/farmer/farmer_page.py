@@ -1355,6 +1355,80 @@ class FarmerPage(BasePage):
         except Exception as e:
             log.warning(f"Debug DOM dump failed: {e}")
 
+    def _debug_dump_active_panel_inputs(self, target_field_name=""):
+        """Dump input elements in the active stepper panel for debugging.
+
+        Called when _fill_address_text_input fails to help diagnose
+        why the input wasn't found or the value didn't stick.
+        """
+        try:
+            result = self.driver.execute_script("""
+                var targetField = arguments[0] || '';
+                var output = [];
+                var popup = document.querySelector('.big-model, mat-dialog-container');
+                if (!popup) return 'No popup found';
+
+                // Find active panel
+                var activeContent = popup.querySelector(
+                    'div.mat-horizontal-stepper-content-current'
+                );
+                if (!activeContent) {
+                    var allPanels = popup.querySelectorAll(
+                        'div[role="tabpanel"].mat-horizontal-stepper-content'
+                    );
+                    for (var p = 0; p < allPanels.length; p++) {
+                        if (!allPanels[p].hasAttribute('inert')) {
+                            activeContent = allPanels[p];
+                            break;
+                        }
+                    }
+                }
+                if (!activeContent) return 'No active panel found';
+
+                output.push('Active panel class: ' + activeContent.className.substring(0, 100));
+                output.push('Active panel inert: ' + activeContent.hasAttribute('inert'));
+
+                // List all inputs in the active panel
+                var inputs = activeContent.querySelectorAll('input[name]');
+                output.push('Inputs in active panel: ' + inputs.length);
+                for (var i = 0; i < inputs.length; i++) {
+                    var name = inputs[i].getAttribute('name');
+                    var val = inputs[i].value;
+                    var visible = inputs[i].offsetParent !== null;
+                    var isTarget = (name === targetField || name === targetField + '\\t');
+                    output.push(
+                        '  [' + i + '] name="' + name + '" value="' + val.substring(0, 30) +
+                        '" visible=' + visible + (isTarget ? ' <-- TARGET' : '')
+                    );
+                }
+
+                // Also check ALL panels for the target field
+                if (targetField) {
+                    var allPanels = popup.querySelectorAll(
+                        'div[role="tabpanel"].mat-horizontal-stepper-content'
+                    );
+                    output.push('\\nAll panels with "' + targetField + '" input:');
+                    for (var p = 0; p < allPanels.length; p++) {
+                        var input = allPanels[p].querySelector(
+                            'input[name="' + targetField + '"], input[name="' + targetField + '\\t"]'
+                        );
+                        if (input) {
+                            output.push(
+                                '  panel[' + p + '] has it: inert=' +
+                                allPanels[p].hasAttribute('inert') +
+                                ' class=' + allPanels[p].className.includes('current') +
+                                ' input.value="' + input.value.substring(0, 30) + '"'
+                            );
+                        }
+                    }
+                }
+
+                return output.join('\\n');
+            """, target_field_name)
+            log.info(f"ACTIVE PANEL INPUT DUMP:\n{result}")
+        except Exception as e:
+            log.warning(f"Active panel input dump failed: {e}")
+
     def _fill_address_row(self, data, is_permanent=False):
         """Fill an address table row with cascading dropdowns.
 
@@ -1424,6 +1498,19 @@ class FarmerPage(BasePage):
         # element in the inert Current Address panel (which isn't visible),
         # causing TimeoutException. Scoping to the active panel ensures we
         # find the correct input regardless of navigation state.
+
+        # CRITICAL: Force-close any leftover mat-select overlay panels before
+        # typing text inputs. After cascading dropdown selection, the mat-select
+        # overlay panel may still be open (or fading out), which intercepts
+        # clicks and blocks text input focus. This is the #1 cause of
+        # Permanent Address Pin Code / Address not being filled.
+        self._force_close_panels()
+        self.wait_seconds(0.5)
+
+        # Scroll popup to bottom to make text inputs visible
+        self._scroll_popup_to_bottom()
+        self.wait_seconds(0.3)
+
         if data.get("pin_code"):
             self._fill_address_text_input("Pin Code", data["pin_code"])
         if data.get("address"):
@@ -1445,12 +1532,202 @@ class FarmerPage(BasePage):
         Uses the native input value setter (same as base_page.js_type_text)
         to properly trigger Angular's reactive form change detection.
 
+        V2 FIX: Added value VERIFICATION after setting. In some cases,
+        the native setter succeeds but Angular's change detection resets
+        the value (especially after force-navigate when Angular's form
+        state is out of sync with the DOM). This method now:
+          1. Sets the value via native setter
+          2. Reads it back to verify it stuck
+          3. If not, tries focus+click+type simulation
+          4. Logs diagnostics if all approaches fail
+
         Args:
             field_name: The input's name attribute (e.g. "Pin Code", "Address")
             value: The text to type into the input
         """
         if not value:
             return
+
+        # Close any leftover overlay panels that might block input focus
+        self._force_close_panels()
+        self.wait_seconds(0.3)
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            # --- Strategy A: Native setter (fast, works for most cases) ---
+            try:
+                result = self.driver.execute_script("""
+                    var fieldName = arguments[0];
+                    var textValue = arguments[1];
+
+                    // 1. Find the popup container
+                    var popup = document.querySelector('.big-model, mat-dialog-container');
+                    if (!popup) return {success: false, error: 'No popup found'};
+
+                    // 2. Find the ACTIVE stepper panel
+                    var activeContent = popup.querySelector(
+                        'div.mat-horizontal-stepper-content-current'
+                    );
+                    if (!activeContent) {
+                        var allPanels = popup.querySelectorAll(
+                            'div[role="tabpanel"].mat-horizontal-stepper-content'
+                        );
+                        for (var p = 0; p < allPanels.length; p++) {
+                            if (!allPanels[p].hasAttribute('inert')) {
+                                activeContent = allPanels[p];
+                                break;
+                            }
+                        }
+                    }
+                    if (!activeContent) return {success: false, error: 'No active panel'};
+
+                    // 3. Find the input by name attribute within the active panel
+                    var input = activeContent.querySelector('input[name="' + fieldName + '"]');
+                    if (!input) return {success: false, error: 'Input not found: ' + fieldName};
+
+                    // 4. Scroll into view and focus
+                    input.scrollIntoView({block: 'center'});
+                    input.focus();
+
+                    // 5. Clear and set value using Angular-compatible native setter
+                    var nativeSet = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value'
+                    ).set;
+
+                    // Clear first
+                    nativeSet.call(input, '');
+                    input.dispatchEvent(new Event('input', {bubbles: true}));
+                    input.dispatchEvent(new Event('change', {bubbles: true}));
+
+                    // Set new value
+                    nativeSet.call(input, textValue);
+                    input.dispatchEvent(new Event('input', {bubbles: true}));
+                    input.dispatchEvent(new Event('change', {bubbles: true}));
+                    input.dispatchEvent(new Event('blur', {bubbles: true}));
+
+                    // 6. VERIFY: Read back the value to confirm it stuck
+                    var actualValue = input.value;
+                    return {
+                        success: actualValue === textValue,
+                        value: actualValue,
+                        expected: textValue,
+                        verified: actualValue === textValue
+                    };
+                """, field_name, value)
+
+                if result and result.get('success'):
+                    log.info(f"Address '{field_name}' typed: {value}")
+                    return
+                elif result and not result.get('verified'):
+                    # Value was set but didn't stick — Angular may have reset it
+                    log.warning(
+                        f"Address '{field_name}' value verification FAILED: "
+                        f"expected='{result.get('expected')}', "
+                        f"actual='{result.get('value')}' "
+                        f"(attempt {attempt + 1}/{max_retries})"
+                    )
+                else:
+                    error = result.get('error', 'Unknown') if result else 'JS returned null'
+                    log.warning(
+                        f"Address text input '{field_name}' failed: {error}, "
+                        f"retry {attempt + 1}/{max_retries}"
+                    )
+            except Exception as e:
+                log.warning(
+                    f"Address text input '{field_name}' exception: {e}, "
+                    f"retry {attempt + 1}/{max_retries}"
+                )
+
+            self.wait_seconds(1)
+
+            # --- Strategy B: Focus + click + character-by-character simulation ---
+            # If native setter doesn't stick, try Selenium send_keys on the
+            # JS-found element. This triggers Angular's full event pipeline.
+            if attempt == max_retries - 1:
+                try:
+                    log.info(f"Trying send_keys strategy for '{field_name}'...")
+                    element = self.driver.execute_script("""
+                        var fieldName = arguments[0];
+                        var popup = document.querySelector('.big-model, mat-dialog-container');
+                        if (!popup) return null;
+                        var activeContent = popup.querySelector(
+                            'div.mat-horizontal-stepper-content-current'
+                        );
+                        if (!activeContent) {
+                            var allPanels = popup.querySelectorAll(
+                                'div[role="tabpanel"].mat-horizontal-stepper-content'
+                            );
+                            for (var p = 0; p < allPanels.length; p++) {
+                                if (!allPanels[p].hasAttribute('inert')) {
+                                    activeContent = allPanels[p];
+                                    break;
+                                }
+                            }
+                        }
+                        if (!activeContent) return null;
+                        var input = activeContent.querySelector('input[name="' + fieldName + '"]');
+                        if (input) {
+                            input.scrollIntoView({block: 'center'});
+                            input.focus();
+                        }
+                        return input;
+                    """, field_name)
+                    if element:
+                        element.clear()
+                        element.send_keys(value)
+                        self.wait_seconds(0.3)
+                        # Verify
+                        actual = element.get_attribute('value')
+                        if actual == value:
+                            log.info(f"Address '{field_name}' typed via send_keys: {value}")
+                            return
+                        else:
+                            log.warning(
+                                f"Address '{field_name}' send_keys verification failed: "
+                                f"expected='{value}', actual='{actual}'"
+                            )
+                except Exception as e:
+                    log.warning(f"Address '{field_name}' send_keys strategy failed: {e}")
+
+        # Final fallback: try the global Selenium approach as last resort
+        log.warning(f"All strategies failed for '{field_name}', trying global Selenium fallback")
+        try:
+            locator = ("css", f"input[name='{field_name}']")
+            self._scroll_popup_to_element(locator)
+            self.type_text(locator, value, clear_first=True)
+            log.info(f"Address '{field_name}' typed via fallback: {value}")
+        except Exception as e:
+            log.warning(f"Global Selenium fallback also failed for '{field_name}': {e}")
+            # Diagnostic: dump what inputs exist in the active panel
+            self._debug_dump_active_panel_inputs(field_name)
+
+    def _fill_active_panel_text_input(self, field_name, value):
+        """Fill a text input in the ACTIVE stepper panel using JavaScript.
+
+        This is a generalized version of _fill_address_text_input() that works
+        for ANY tab's text inputs, not just address tabs. It scopes the search
+        to the currently active stepper panel, avoiding the common bug where
+        global CSS selectors find elements in inert/inactive panels.
+
+        Works for fields where the input's name attribute matches exactly:
+          - input[name='Member Name'], input[name='Pincode'], etc.
+
+        For fields with trailing TAB chars in name attr (like 'No of Childrens\\t'),
+        use _fill_active_panel_text_input_contains() instead.
+
+        V2 FIX: Added value verification and send_keys fallback, same as
+        _fill_address_text_input().
+
+        Args:
+            field_name: The input's name attribute (e.g. "Member Name", "Pincode")
+            value: The text to type into the input
+        """
+        if not value:
+            return
+
+        # Close any leftover overlay panels
+        self._force_close_panels()
+        self.wait_seconds(0.2)
 
         max_retries = 3
         for attempt in range(max_retries):
@@ -1484,13 +1761,11 @@ class FarmerPage(BasePage):
                     var input = activeContent.querySelector('input[name="' + fieldName + '"]');
                     if (!input) return {success: false, error: 'Input not found: ' + fieldName};
 
-                    // 4. Scroll into view
+                    // 4. Scroll into view and focus
                     input.scrollIntoView({block: 'center'});
+                    input.focus();
 
                     // 5. Clear and set value using Angular-compatible native setter
-                    // This mirrors base_page.js_type_text which uses the native
-                    // HTMLInputElement.prototype.value setter to bypass Angular's
-                    // reactive form control interception.
                     var nativeSet = Object.getOwnPropertyDescriptor(
                         window.HTMLInputElement.prototype, 'value'
                     ).set;
@@ -1506,35 +1781,240 @@ class FarmerPage(BasePage):
                     input.dispatchEvent(new Event('change', {bubbles: true}));
                     input.dispatchEvent(new Event('blur', {bubbles: true}));
 
-                    return {success: true, value: textValue};
-                """, field_name, value)
+                    // 6. VERIFY: Read back the value to confirm it stuck
+                    var actualValue = input.value;
+                    return {
+                        success: actualValue === textValue,
+                        value: actualValue,
+                        expected: textValue
+                    };
+                """, field_name, str(value))
 
                 if result and result.get('success'):
-                    log.info(f"Address '{field_name}' typed: {value}")
+                    log.info(f"Panel text '{field_name}' typed: {value}")
                     return
+                elif result and result.get('value') != result.get('expected'):
+                    log.warning(
+                        f"Panel text '{field_name}' verification failed: "
+                        f"expected='{result.get('expected')}', "
+                        f"actual='{result.get('value')}' "
+                        f"(attempt {attempt + 1}/{max_retries})"
+                    )
                 else:
                     error = result.get('error', 'Unknown') if result else 'JS returned null'
                     log.warning(
-                        f"Address text input '{field_name}' failed: {error}, "
+                        f"Panel text input '{field_name}' failed: {error}, "
                         f"retry {attempt + 1}/{max_retries}"
                     )
             except Exception as e:
                 log.warning(
-                    f"Address text input '{field_name}' exception: {e}, "
+                    f"Panel text input '{field_name}' exception: {e}, "
                     f"retry {attempt + 1}/{max_retries}"
                 )
 
             self.wait_seconds(1)
 
-        # Final fallback: try the global Selenium approach as last resort
-        log.warning(f"JS text input failed for '{field_name}', trying global Selenium fallback")
+            # --- Strategy B: send_keys fallback on last retry ---
+            if attempt == max_retries - 1:
+                try:
+                    log.info(f"Trying send_keys strategy for panel text '{field_name}'...")
+                    element = self.driver.execute_script("""
+                        var fieldName = arguments[0];
+                        var popup = document.querySelector('.big-model, mat-dialog-container');
+                        if (!popup) return null;
+                        var activeContent = popup.querySelector(
+                            'div.mat-horizontal-stepper-content-current'
+                        );
+                        if (!activeContent) {
+                            var allPanels = popup.querySelectorAll(
+                                'div[role="tabpanel"].mat-horizontal-stepper-content'
+                            );
+                            for (var p = 0; p < allPanels.length; p++) {
+                                if (!allPanels[p].hasAttribute('inert')) {
+                                    activeContent = allPanels[p];
+                                    break;
+                                }
+                            }
+                        }
+                        if (!activeContent) return null;
+                        var input = activeContent.querySelector('input[name="' + fieldName + '"]');
+                        if (input) {
+                            input.scrollIntoView({block: 'center'});
+                            input.focus();
+                        }
+                        return input;
+                    """, field_name)
+                    if element:
+                        element.clear()
+                        element.send_keys(str(value))
+                        self.wait_seconds(0.3)
+                        actual = element.get_attribute('value')
+                        if actual == str(value):
+                            log.info(f"Panel text '{field_name}' typed via send_keys: {value}")
+                            return
+                except Exception as e:
+                    log.warning(f"Panel text '{field_name}' send_keys strategy failed: {e}")
+
+        # Final fallback: try the global Selenium approach
+        log.warning(f"JS panel text input failed for '{field_name}', trying global fallback")
         try:
             locator = ("css", f"input[name='{field_name}']")
-            self._scroll_popup_to_element(locator)
             self.type_text(locator, value, clear_first=True)
-            log.info(f"Address '{field_name}' typed via fallback: {value}")
         except Exception as e:
-            log.warning(f"Global Selenium fallback also failed for '{field_name}': {e}")
+            log.warning(f"Global fallback also failed for '{field_name}': {e}")
+
+    def _fill_active_panel_text_input_contains(self, field_name_partial, value):
+        """Fill a text input in the ACTIVE panel where the name attribute
+        contains the given substring. Used for fields with trailing TAB
+        characters in their name attribute (e.g. 'No of Childrens\\t').
+
+        Args:
+            field_name_partial: Substring to match in the name attribute
+            value: The text to type into the input
+        """
+        if not value:
+            return
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                result = self.driver.execute_script("""
+                    var fieldNamePartial = arguments[0];
+                    var textValue = arguments[1];
+
+                    var popup = document.querySelector('.big-model, mat-dialog-container');
+                    if (!popup) return {success: false, error: 'No popup found'};
+
+                    var activeContent = popup.querySelector(
+                        'div.mat-horizontal-stepper-content-current'
+                    );
+                    if (!activeContent) {
+                        var allPanels = popup.querySelectorAll(
+                            'div[role="tabpanel"].mat-horizontal-stepper-content'
+                        );
+                        for (var p = 0; p < allPanels.length; p++) {
+                            if (!allPanels[p].hasAttribute('inert')) {
+                                activeContent = allPanels[p];
+                                break;
+                            }
+                        }
+                    }
+                    if (!activeContent) return {success: false, error: 'No active panel'};
+
+                    // Find input whose name CONTAINS the partial string
+                    var inputs = activeContent.querySelectorAll('input[name]');
+                    var input = null;
+                    for (var i = 0; i < inputs.length; i++) {
+                        var n = inputs[i].getAttribute('name') || '';
+                        if (n.indexOf(fieldNamePartial) >= 0) {
+                            input = inputs[i];
+                            break;
+                        }
+                    }
+                    if (!input) return {success: false, error: 'Input not found containing: ' + fieldNamePartial};
+
+                    input.scrollIntoView({block: 'center'});
+
+                    var nativeSet = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value'
+                    ).set;
+                    nativeSet.call(input, '');
+                    input.dispatchEvent(new Event('input', {bubbles: true}));
+                    input.dispatchEvent(new Event('change', {bubbles: true}));
+
+                    nativeSet.call(input, textValue);
+                    input.dispatchEvent(new Event('input', {bubbles: true}));
+                    input.dispatchEvent(new Event('change', {bubbles: true}));
+                    input.dispatchEvent(new Event('blur', {bubbles: true}));
+
+                    return {success: true, value: textValue};
+                """, field_name_partial, str(value))
+
+                if result and result.get('success'):
+                    log.info(f"Panel text '{field_name_partial}' typed: {value}")
+                    return
+                else:
+                    error = result.get('error', 'Unknown') if result else 'JS returned null'
+                    log.warning(
+                        f"Panel text input contains '{field_name_partial}' failed: {error}, "
+                        f"retry {attempt + 1}/{max_retries}"
+                    )
+            except Exception as e:
+                log.warning(
+                    f"Panel text input contains '{field_name_partial}' exception: {e}, "
+                    f"retry {attempt + 1}/{max_retries}"
+                )
+
+            self.wait_seconds(1)
+
+        log.warning(f"All retries failed for '{field_name_partial}'")
+
+    def _fill_active_panel_date_input(self, date_value):
+        """Fill a datepicker input in the ACTIVE stepper panel.
+
+        Scopes to the active panel to avoid matching the Step 0 DOB input.
+        The datepicker input has placeholder='DD/MM/YYYY' but NO name attribute,
+        so we find it by placeholder within the active panel.
+
+        Args:
+            date_value: Date string in DD/MM/YYYY format
+        """
+        if not date_value:
+            return
+
+        try:
+            result = self.driver.execute_script("""
+                var dateValue = arguments[0];
+
+                var popup = document.querySelector('.big-model, mat-dialog-container');
+                if (!popup) return {success: false, error: 'No popup found'};
+
+                var activeContent = popup.querySelector(
+                    'div.mat-horizontal-stepper-content-current'
+                );
+                if (!activeContent) {
+                    var allPanels = popup.querySelectorAll(
+                        'div[role="tabpanel"].mat-horizontal-stepper-content'
+                    );
+                    for (var p = 0; p < allPanels.length; p++) {
+                        if (!allPanels[p].hasAttribute('inert')) {
+                            activeContent = allPanels[p];
+                            break;
+                        }
+                    }
+                }
+                if (!activeContent) return {success: false, error: 'No active panel'};
+
+                // Find datepicker input by placeholder within active panel
+                var dateInput = activeContent.querySelector(
+                    'input[placeholder="DD/MM/YYYY"]'
+                );
+                if (!dateInput) return {success: false, error: 'Date input not found in active panel'};
+
+                dateInput.scrollIntoView({block: 'center'});
+
+                var nativeSet = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value'
+                ).set;
+                nativeSet.call(dateInput, '');
+                dateInput.dispatchEvent(new Event('input', {bubbles: true}));
+                dateInput.dispatchEvent(new Event('change', {bubbles: true}));
+
+                nativeSet.call(dateInput, dateValue);
+                dateInput.dispatchEvent(new Event('input', {bubbles: true}));
+                dateInput.dispatchEvent(new Event('change', {bubbles: true}));
+                dateInput.dispatchEvent(new Event('blur', {bubbles: true}));
+
+                return {success: true, value: dateValue};
+            """, date_value)
+
+            if result and result.get('success'):
+                log.info(f"Panel date input typed: {date_value}")
+            else:
+                error = result.get('error', 'Unknown') if result else 'JS returned null'
+                log.warning(f"Panel date input failed: {error}")
+        except Exception as e:
+            log.warning(f"Panel date input exception: {e}")
 
     def _wait_for_angular_stable(self, timeout=10):
         """Wait for Angular to finish rendering and HTTP requests to complete.
@@ -1634,6 +2114,27 @@ class FarmerPage(BasePage):
                 var scrollables = popup.querySelectorAll('[style*="overflow"], .mat-stepper-content, .cdk-step-content');
                 for (var i = 0; i < scrollables.length; i++) {
                     scrollables[i].scrollTop = 0;
+                }
+            }
+        """)
+        self.wait_seconds(0.3)
+
+    def _scroll_popup_to_bottom(self):
+        """Scroll the popup/dialog container to the bottom.
+
+        Used before filling text inputs (Pin Code, Address) that are
+        at the bottom of the address form and may not be visible in
+        the popup's scrollable area.
+        """
+        self.driver.execute_script("""
+            var popup = document.querySelector('.big-model, mat-dialog-container, .cdk-dialog-container');
+            if (popup) {
+                // Scroll the popup itself to bottom
+                popup.scrollTop = popup.scrollHeight;
+                // Also scroll any inner scrollable containers to bottom
+                var scrollables = popup.querySelectorAll('[style*="overflow"], .mat-stepper-content, .cdk-step-content');
+                for (var i = 0; i < scrollables.length; i++) {
+                    scrollables[i].scrollTop = scrollables[i].scrollHeight;
                 }
             }
         """)
@@ -2010,35 +2511,65 @@ class FarmerPage(BasePage):
     # ==============================================================
 
     def fill_family_details(self, data):
-        """Fill the Family Details tab (table row — uses same pattern as Address)."""
+        """Fill the Family Details tab (table row — uses JS-scoped element finding).
+
+        FIX: All text inputs and dropdowns in Family Details must be scoped
+        to the ACTIVE panel because Angular Material renders ALL tab contents
+        in the DOM simultaneously. Global CSS selectors like input[name='Address']
+        find elements in inert address panels, causing TimeoutException.
+
+        Uses _fill_active_panel_text_input() for text inputs (same JS-scoping
+        pattern as _fill_address_text_input() for address tabs) and
+        _fill_cascading_dropdown() for dropdowns (already panel-scoped via JS).
+
+        Key field name differences from address tabs:
+          - Pincode (not 'Pin Code') — input[name='Pincode']
+          - Address — same name as address tabs but in different panel
+          - No of Childrens — name attr has trailing TAB char, use contains()
+          - Date Of Birth — 2nd datepicker in the form, must scope to panel
+        """
         log.info("Filling Family Details...")
 
+        # Text inputs — use JS-scoped finding to avoid matching inactive panels
         if data.get("member_name"):
-            self.type_text(self.FAMILY_MEMBER_NAME_INPUT, data["member_name"], clear_first=True)
+            self._fill_active_panel_text_input("Member Name", data["member_name"])
         if data.get("phone_number"):
-            self.type_text(self.FAMILY_PHONE_INPUT, data["phone_number"], clear_first=True)
+            self._fill_active_panel_text_input("Phone Number", data["phone_number"])
+
+        # Date Of Birth — must scope to active panel's datepicker
         if data.get("date_of_birth"):
-            try:
-                dob_input = self.find_visible_element(self.FAMILY_DOB_INPUT, timeout=3)
-                if dob_input:
-                    dob_input.clear()
-                    dob_input.send_keys(data["date_of_birth"])
-                    self.wait_seconds(0.5)
-            except Exception:
-                log.warning("Family DOB input not found, skipping")
+            self._fill_active_panel_date_input(data["date_of_birth"])
+
+        # Age is READONLY — auto-calculated from DOB, skip
+
+        # Dropdowns — _fill_cascading_dropdown() already scopes to active panel
         self._fill_dropdown_if_provided(self.FAMILY_GENDER_SELECT, data.get("gender"))
         self._fill_dropdown_if_provided(self.EDUCATION_OF_FARMER_FAMILY_SELECT, data.get("education_of_farmer_family"))
         self._fill_dropdown_if_provided(self.RELATIONSHIP_SELECT, data.get("relationship"))
+
+        # Is Member Staying With Farmer toggle
+        # (skip unless data explicitly requests it)
+
+        # Pincode — note: name='Pincode' (not 'Pin Code' like address tabs)
         if data.get("pincode"):
-            self.type_text(self.FAMILY_PINCODE_INPUT, data["pincode"], clear_first=True)
+            self._fill_active_panel_text_input("Pincode", data["pincode"])
+
+        # Address — same name as address tab fields but in Family Details panel
         if data.get("address"):
-            self.type_text(self.FAMILY_ADDRESS_INPUT, data["address"], clear_first=True)
+            self._fill_active_panel_text_input("Address", data["address"])
+
+        # More dropdowns
         self._fill_dropdown_if_provided(self.MARITAL_STATUS_SELECT, data.get("marital_status"))
+
+        # No of Childrens — name attr has trailing TAB char
         if data.get("no_of_childrens"):
-            self.type_text(self.NO_OF_CHILDRENS_INPUT, data["no_of_childrens"], clear_first=True)
+            self._fill_active_panel_text_input_contains("No of Childrens", data["no_of_childrens"])
+
         self._fill_dropdown_if_provided(self.MEMBER_ANNUAL_INCOME_SELECT, data.get("member_annual_income"))
+
+        # Off Farm Income
         if data.get("off_farm_income"):
-            self.type_text(self.OFF_FARM_INCOME_INPUT, data["off_farm_income"], clear_first=True)
+            self._fill_active_panel_text_input("Off Farm Income", data["off_farm_income"])
 
         log.info("Family Details filled")
 
@@ -2064,41 +2595,47 @@ class FarmerPage(BasePage):
 
         FILL ORDER: upper text inputs first, then scroll-down fields.
         NOTE: No Of Owner is REQUIRED but has no asterisk (BUG-F01).
+
+        FIX: Uses _fill_active_panel_text_input_contains() for ALL fields because
+        Land/Crop number field name attributes have trailing TAB chars (\t).
+        This avoids the global CSS selector matching wrong panels.
         """
         log.info("Filling Land Details...")
 
         # Upper visible text inputs
+        # NOTE: Farm Name also exists in Crop Details — use contains() to scope
         if data.get("farm_name"):
-            self.type_text(self.FARM_NAME_INPUT, data["farm_name"], clear_first=True)
+            self._fill_active_panel_text_input("Farm Name", data["farm_name"])
+        # No Of Owner — name has trailing TAB, BUG-F01: required but no asterisk
         if data.get("no_of_owner"):
-            self.type_text(self.NO_OF_OWNER_INPUT, data["no_of_owner"], clear_first=True)
+            self._fill_active_panel_text_input_contains("No Of Owner", data["no_of_owner"])
         if data.get("total_land_on_document_hectare"):
-            self.type_text(self.TOTAL_LAND_ON_DOCUMENT_INPUT, data["total_land_on_document_hectare"], clear_first=True)
+            self._fill_active_panel_text_input_contains("Total Land On Document", data["total_land_on_document_hectare"])
         if data.get("individual_land_holding_hectare"):
-            self.type_text(self.INDIVIDUAL_LAND_HOLDING_INPUT, data["individual_land_holding_hectare"], clear_first=True)
+            self._fill_active_panel_text_input_contains("Individual Land Holding", data["individual_land_holding_hectare"])
 
-        # Middle text inputs
+        # Middle text inputs — name attrs have trailing TAB chars
         if data.get("gat_number"):
-            self.type_text(self.GAT_NUMBER_INPUT, data["gat_number"], clear_first=True)
+            self._fill_active_panel_text_input_contains("Gat Number", data["gat_number"])
         if data.get("land_coordinate"):
-            self.type_text(self.LAND_COORDINATE_INPUT, data["land_coordinate"], clear_first=True)
+            self._fill_active_panel_text_input_contains("Land Coordinate", data["land_coordinate"])
 
-        # Scroll-down text inputs
+        # Scroll-down text inputs — name attrs have trailing TAB chars
         if data.get("total_land_in_hectare"):
-            self.type_text(self.TOTAL_LAND_IN_HECTARE_INPUT, data["total_land_in_hectare"], clear_first=True)
+            self._fill_active_panel_text_input_contains("Total Land In hectare", data["total_land_in_hectare"])
         if data.get("total_cultivation_land_in_hectare"):
-            self.type_text(self.TOTAL_CULTIVATION_LAND_HECTARE_INPUT, data["total_cultivation_land_in_hectare"], clear_first=True)
+            self._fill_active_panel_text_input_contains("Total Cultivation Land In hectare", data["total_cultivation_land_in_hectare"])
         if data.get("total_cultivation_land_in_acreage"):
-            self.type_text(self.TOTAL_CULTIVATION_LAND_ACREAGE_INPUT, data["total_cultivation_land_in_acreage"], clear_first=True)
+            self._fill_active_panel_text_input_contains("Total Cultivation Land in acreage", data["total_cultivation_land_in_acreage"])
 
         # Dropdowns
         self._fill_dropdown_if_provided(self.LAND_OWNERSHIP_SELECT, data.get("land_ownership"))
 
         # Bottom text inputs
         if data.get("latitude"):
-            self.type_text(self.LATITUDE_INPUT, data["latitude"], clear_first=True)
+            self._fill_active_panel_text_input("Latitude(Lat)", data["latitude"])
         if data.get("longitude"):
-            self.type_text(self.LONGITUDE_INPUT, data["longitude"], clear_first=True)
+            self._fill_active_panel_text_input("Longitude(Log)", data["longitude"])
 
         log.info("Land Details filled")
 
@@ -2107,27 +2644,27 @@ class FarmerPage(BasePage):
     # ==============================================================
 
     def fill_crop_details(self, data):
-        """Fill the Crop Details tab."""
+        """Fill the Crop Details tab.
+
+        FIX: Uses panel-scoped methods for all fields. Farm Name also exists
+        in Land Details tab, and number field name attrs have trailing TAB chars.
+        """
         log.info("Filling Crop Details...")
 
+        # Farm Name — also exists in Land Details, must scope to active panel
         if data.get("farm_name"):
-            try:
-                crop_farm_input = self.find_visible_element(self.CROP_FARM_NAME_INPUT, timeout=3)
-                if crop_farm_input:
-                    crop_farm_input.clear()
-                    crop_farm_input.send_keys(data["farm_name"])
-            except Exception:
-                log.warning("Crop Farm Name input not found")
+            self._fill_active_panel_text_input("Farm Name", data["farm_name"])
         self._fill_dropdown_if_provided(self.CROP_SELECT, data.get("crop"))
         self._fill_dropdown_if_provided(self.SEASON_SELECT, data.get("season"))
+        # Number fields — name attrs have trailing TAB chars
         if data.get("cultivation_land_in_hectare"):
-            self.type_text(self.CULTIVATION_LAND_HECTARE_INPUT, data["cultivation_land_in_hectare"], clear_first=True)
+            self._fill_active_panel_text_input_contains("Cultivation Land In hectare", data["cultivation_land_in_hectare"])
         if data.get("expected_yield_projection"):
-            self.type_text(self.EXPECTED_YIELD_INPUT, data["expected_yield_projection"], clear_first=True)
+            self._fill_active_panel_text_input_contains("Expected Yield projection", data["expected_yield_projection"])
         if data.get("actual_produce"):
-            self.type_text(self.ACTUAL_PRODUCE_INPUT, data["actual_produce"], clear_first=True)
+            self._fill_active_panel_text_input_contains("Actual Produce", data["actual_produce"])
         if data.get("cultivation_land_in_acreage"):
-            self.type_text(self.CULTIVATION_LAND_ACREAGE_INPUT, data["cultivation_land_in_acreage"], clear_first=True)
+            self._fill_active_panel_text_input_contains("Cultivation Land In acreage", data["cultivation_land_in_acreage"])
 
         log.info("Crop Details filled")
 
@@ -2232,100 +2769,81 @@ class FarmerPage(BasePage):
     # ==============================================================
 
     def navigate_to_tab_by_name(self, target_tab_name):
-        """Navigate to a specific stepper tab. Tries direct header click first,
-        falls back to Next-button stepping, then force-click as last resort.
-        Returns True if reached, False otherwise.
+        """Navigate to a specific stepper tab. Returns True if reached.
 
-        FIX: Added Strategy 4 — force-navigate by directly manipulating
-        the Angular Material stepper's internal state via JavaScript.
-        This bypasses validation-based navigation blocking that can
-        occur when required fields on previous tabs are unfilled.
+        SPEED FIX: Angular Material's linear stepper blocks header clicks and
+        Next-button navigation when required fields on previous tabs aren't
+        filled. Strategies 1-3 (header click, Next stepping, retry) all fail
+        in this case, wasting 60+ seconds before reaching Strategy 4
+        (force-navigate) which always works.
+
+        New approach: Try quick header click first (fast path for adjacent
+        tabs that Angular allows). If that fails, skip straight to
+        force-navigate instead of wasting time on Next-button stepping.
         """
         target_lower = target_tab_name.strip().lower()
         log.info(f"Navigating to tab: {target_tab_name}")
 
-        # Strategy 1: Find the tab index and click the header directly
+        # Find the target tab index
         tab_names = self.get_stepper_tab_names()
+        target_idx = -1
         for idx, name in enumerate(tab_names):
             if target_lower in name.strip().lower():
-                current_idx = self.get_current_step_index()
-                if current_idx == idx:
-                    log.info(f"Already on tab: {target_tab_name}")
-                    return True
-                # Click the header directly — works even when Next is frozen (BUG-F02)
-                if self.click_stepper_header(idx):
-                    self.wait_seconds(1)
-                    # Verify we landed on the right tab using get_active_tab_name()
-                    active_name = self.get_active_tab_name()
-                    if target_lower in active_name.lower():
-                        log.info(f"Reached tab via header click: {target_tab_name}")
-                        return True
+                target_idx = idx
+                break
 
-        # Strategy 2: Step forward with Next button (max = number of tabs)
-        max_steps = len(tab_names) if tab_names else 5
-        for attempt in range(max_steps):
+        if target_idx < 0:
+            log.warning(f"Tab not found in stepper headers: {target_tab_name}")
+            return False
+
+        # Fast path: Check if already on this tab
+        current_idx = self.get_current_step_index()
+        if current_idx == target_idx:
+            log.info(f"Already on tab: {target_tab_name}")
+            return True
+
+        # Quick attempt: Direct header click (works for adjacent tabs
+        # that Angular's linear mode allows, takes ~1 second)
+        if self.click_stepper_header(target_idx):
+            self.wait_seconds(0.8)
             active_name = self.get_active_tab_name()
             if target_lower in active_name.lower():
-                log.info(f"Reached tab via Next stepping: {target_tab_name}")
+                log.info(f"Reached tab via header click: {target_tab_name}")
                 return True
-            # If we've gone past the target, break
-            tab_names = self.get_stepper_tab_names()
-            found_target_idx = -1
-            for idx, name in enumerate(tab_names):
-                if target_lower in name.strip().lower():
-                    found_target_idx = idx
-                    break
-            current_idx = self.get_current_step_index()
-            if found_target_idx >= 0 and current_idx > found_target_idx:
-                log.warning(f"Overshot tab: {target_tab_name} (at idx {current_idx}, target idx {found_target_idx})")
-                break
-            if not self.click_stepper_next():
-                break
-            self.wait_seconds(1)
 
-        # Strategy 3: Final attempt — direct header click with retry
-        tab_names = self.get_stepper_tab_names()
-        for idx, name in enumerate(tab_names):
-            if target_lower in name.strip().lower():
-                self.click_stepper_header(idx)
-                self.wait_seconds(1)
-                active_name = self.get_active_tab_name()
-                if target_lower in active_name.lower():
-                    log.info(f"Reached tab via final header click: {target_tab_name}")
+        # FAST PATH: Skip Next-button stepping and go straight to
+        # force-navigate. After filling a tab with required fields,
+        # Angular blocks normal navigation to subsequent tabs. The
+        # Next-button stepping wastes 30-60 seconds per tab before
+        # failing. Force-navigate always works and takes ~2 seconds.
+        log.info(f"Quick header click failed, force-navigating to tab: {target_tab_name}")
+        if self._force_navigate_to_step(target_idx):
+            self.wait_seconds(1.5)
+            # Verify via active tab name
+            active_name = self.get_active_tab_name()
+            if target_lower in active_name.lower():
+                log.info(f"Force-navigated to tab: {target_tab_name}")
+                return True
+            # Even if tab name doesn't match, check if the DOM
+            # panel is now active (sometimes get_active_tab_name
+            # fails but the panel IS active)
+            try:
+                is_active = self.driver.execute_script("""
+                    var popup = document.querySelector(
+                        '.big-model, mat-dialog-container'
+                    );
+                    if (!popup) return false;
+                    var active = popup.querySelector(
+                        'div.mat-horizontal-stepper-content-current'
+                    );
+                    if (!active) return false;
+                    return !active.hasAttribute('inert');
+                """)
+                if is_active:
+                    log.info(f"Force-navigate succeeded (panel is active): {target_tab_name}")
                     return True
-
-        # Strategy 4: FORCE-NAVIGATE via JavaScript — bypass Angular Material
-        # stepper's linear mode and validation completely.
-        # This is the last resort when normal navigation is blocked.
-        log.info(f"Attempting force-navigate to tab: {target_tab_name}")
-        tab_names = self.get_stepper_tab_names()
-        for idx, name in enumerate(tab_names):
-            if target_lower in name.strip().lower():
-                if self._force_navigate_to_step(idx):
-                    self.wait_seconds(1.5)
-                    active_name = self.get_active_tab_name()
-                    if target_lower in active_name.lower():
-                        log.info(f"Force-navigated to tab: {target_tab_name}")
-                        return True
-                    # Even if tab name doesn't match, check if the DOM
-                    # panel is now active (sometimes get_active_tab_name
-                    # fails but the panel IS active)
-                    is_active = self.driver.execute_script("""
-                        var popup = document.querySelector(
-                            '.big-model, mat-dialog-container'
-                        );
-                        if (!popup) return false;
-                        var active = popup.querySelector(
-                            'div.mat-horizontal-stepper-content-current'
-                        );
-                        if (!active) return false;
-                        // Check if any inert attribute is missing
-                        return !active.hasAttribute('inert');
-                    """)
-                    if is_active:
-                        log.info(f"Force-navigate succeeded (panel is active): {target_tab_name}")
-                        return True
-                break
+            except Exception:
+                pass
 
         log.warning(f"Could not navigate to tab: {target_tab_name}")
         return False
@@ -2554,19 +3072,53 @@ class FarmerPage(BasePage):
     # ==============================================================
 
     def handle_success_alert(self, timeout=60):
-        """Handle SweetAlert2 success alert. Returns alert title text."""
+        """Handle SweetAlert2 success alert. Returns alert title text.
+
+        FIX: After Submit, the browser session may die (InvalidSessionIdException)
+        if the form submission triggers a page navigation. Also, SweetAlert2
+        may auto-dismiss or have a different DOM structure. This method now
+        handles both cases gracefully instead of crashing.
+
+        V2 FIX: Reduced default timeout from 60s to 30s for create_farmer
+        calls. When validation fails with inline mat-error (not SweetAlert),
+        the old 60s wait was wasting time. Now also checks for inline
+        validation errors when no SweetAlert appears.
+        """
         try:
             WebDriverWait(self.driver, timeout).until(
                 EC.visibility_of_element_located((By.CSS_SELECTOR, ".swal2-container"))
             )
             self.wait_seconds(1)
+        except (TimeoutException, InvalidSessionIdException):
+            # No SweetAlert appeared — check for inline validation errors
+            inline_errors = self.get_mat_error_text()
+            if inline_errors:
+                error_summary = "; ".join(inline_errors[:5])
+                log.warning(f"No SweetAlert, but inline validation errors found: {error_summary}")
+                return f"VALIDATION_ERRORS: {error_summary}"
+            log.warning("No SweetAlert2 alert appeared (timeout or session died)")
+            return ""
+
+        # Try to read the title — may fail if alert auto-dismissed or session died
+        try:
             title = self.driver.find_element(By.CSS_SELECTOR, "#swal2-title").text.strip()
+        except Exception as e:
+            log.warning(f"Could not read swal2-title: {e}")
+            # Try alternative selectors
+            try:
+                container = self.driver.find_element(By.CSS_SELECTOR, ".swal2-container")
+                title = container.text.strip()
+            except Exception:
+                title = ""
+
+        # Try to click confirm button
+        try:
             self._swal2_confirm_click()
             self.wait_seconds(1)
-            return title
-        except TimeoutException:
-            log.warning("No SweetAlert2 success alert found")
-            return ""
+        except (InvalidSessionIdException, Exception) as e:
+            log.warning(f"Could not click swal2 confirm: {e}")
+
+        return title
 
     def handle_validation_warning(self, timeout=5):
         """Handle SweetAlert2 validation warning. Returns alert title text."""
@@ -2574,11 +3126,20 @@ class FarmerPage(BasePage):
             WebDriverWait(self.driver, timeout).until(
                 EC.visibility_of_element_located((By.CSS_SELECTOR, ".swal2-container"))
             )
-            title = self.driver.find_element(By.CSS_SELECTOR, "#swal2-title").text.strip()
-            self._swal2_confirm_click()
-            self.wait_seconds(0.5)
+            try:
+                title = self.driver.find_element(By.CSS_SELECTOR, "#swal2-title").text.strip()
+            except Exception:
+                try:
+                    title = self.driver.find_element(By.CSS_SELECTOR, ".swal2-container").text.strip()
+                except Exception:
+                    title = ""
+            try:
+                self._swal2_confirm_click()
+                self.wait_seconds(0.5)
+            except Exception:
+                pass
             return title
-        except TimeoutException:
+        except (TimeoutException, InvalidSessionIdException):
             return ""
 
     def _swal2_confirm_click(self):
@@ -2875,7 +3436,10 @@ class FarmerPage(BasePage):
         self.wait_seconds(2)
 
         # Handle success or validation alert
-        alert_title = self.handle_success_alert(timeout=30)
+        # V2 FIX: Reduced timeout from 30s to 15s. If SweetAlert doesn't appear
+        # in 15s, it's almost certainly a validation failure. The old 30s wait
+        # was wasting time on every failed submission.
+        alert_title = self.handle_success_alert(timeout=15)
 
         # If submission failed, check for validation warning
         if "successfully" not in alert_title.lower():
@@ -2884,6 +3448,15 @@ class FarmerPage(BasePage):
                 log.warning(f"Validation warning: {validation_warning}")
                 alert_title = validation_warning
 
+            # V2 FIX: If STILL no useful error message, check for inline
+            # mat-error again (Angular may show them after Submit click)
+            if not alert_title or alert_title == "":
+                post_submit_errors = self.get_mat_error_text()
+                if post_submit_errors:
+                    error_summary = "; ".join(post_submit_errors[:5])
+                    log.warning(f"Post-submit validation errors: {error_summary}")
+                    alert_title = f"VALIDATION_ERRORS: {error_summary}"
+
         result = {
             "status": "PASSED" if "successfully" in alert_title.lower() else "FAILED",
             "alert_title": alert_title,
@@ -2891,6 +3464,14 @@ class FarmerPage(BasePage):
             "error": "" if "successfully" in alert_title.lower() else alert_title,
             "validation_errors": validation_errors,
         }
+
+        # V2 FIX: Log the result clearly for debugging
+        if result["status"] == "FAILED":
+            log.warning(
+                f"Create FAILED for '{data.get('farmer_name', '?')}': "
+                f"alert='{alert_title}', "
+                f"pre-submit_errors={validation_errors}"
+            )
 
         FARMER_SUBMISSIONS.append(result)
         return result
