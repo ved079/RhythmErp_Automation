@@ -8,12 +8,12 @@ URL:      /#/dynamic-screens/Agent
 
 FORM LAYOUT (multi-step STEPPER popup):
 
-  Step 1 — Universal:
+  Step 1 - Universal:
     - Agent Name             (text input,   required)
     - Phone Number           (text input,   required)
     - Email                  (text input,   required)
 
-  Step 2 — Address Details (click "Next" to advance):
+  Step 2 - Address Details (click "Next" to advance):
     - Add Row button         (to add address rows)
     For EACH row:
     - Address Type           (mat-select,   required, searchable)
@@ -26,11 +26,11 @@ FORM LAYOUT (multi-step STEPPER popup):
     - Pin Code               (text input,   required)
     - GST                    (text input,   optional)
 
-  Step 3 — Payment Details (click "Next"):
+  Step 3 - Payment Details (click "Next"):
     - Payment Terms          (mat-select,   optional)
     - Preferred Payment Method (mat-select, optional)
 
-  Step 4 — Bank Details (click "Next"):
+  Step 4 - Bank Details (click "Next"):
     - Add Row button         (to add bank rows)
     For EACH row:
     - Bank Name              (text input,   required)
@@ -42,11 +42,11 @@ FORM LAYOUT (multi-step STEPPER popup):
     - Bank Proof             (file upload,  required)
     - Attachment             (file upload,  optional)
 
-  Step 5 — Submit (click "Submit" on the last step or footer)
+  Step 5 - Submit (click "Submit" on the last step or footer)
 
 KEY RULES:
-  - Multi-step STEPPER form — must click "Next" / "Back" to navigate steps
-  - Angular Material UI — use execute_script for reading/writing input values
+  - Multi-step STEPPER form - must click "Next" / "Back" to navigate steps
+  - Angular Material UI - use execute_script for reading/writing input values
   - Address and Bank Details are repeatable rows (add multiple)
   - State depends on Country, District depends on State (cascading dropdowns)
   - SweetAlert2 for success/validation popups
@@ -82,7 +82,7 @@ class AgentPage(BasePage):
     PAGE_URL = f"{RHYTHMERP_BASE_URL}/#/dynamic-screens/Agent"
 
     # ==============================================================
-    #  LOCATORS — Toolbar
+    #  LOCATORS - Toolbar
     # ==============================================================
     ADD_BUTTON = ("css", "button.erp-add-btn")
     SEARCH_TOGGLE = ("css", "button.search-btn, button[aria-label='Search']")
@@ -90,13 +90,13 @@ class AgentPage(BasePage):
     MORE_BUTTON = ("css", "button[mattooltip='More']")
 
     # ==============================================================
-    #  LOCATORS — Search bar
+    #  LOCATORS - Search bar
     # ==============================================================
     SEARCH_INPUT = ("css", ".erp-search-wrapper input, input#erpSearchInput")
     SEARCH_SUBMIT = ("css", "button.search-btn")
 
     # ==============================================================
-    #  LOCATORS — Table (main listing)
+    #  LOCATORS - Table (main listing)
     # ==============================================================
     TABLE = ("css", "table#excel-table")
     TABLE_ROWS = ("css", "table#excel-table tbody tr")
@@ -107,7 +107,7 @@ class AgentPage(BasePage):
     )
 
     # ==============================================================
-    #  LOCATORS — Form popup (stepper)
+    #  LOCATORS - Form popup (stepper)
     # ==============================================================
     FORM_POPUP = (
         "css",
@@ -119,7 +119,7 @@ class AgentPage(BasePage):
     )
 
     # ==============================================================
-    #  LOCATORS — Stepper navigation
+    #  LOCATORS - Stepper navigation
     # ==============================================================
     NEXT_BUTTON = (
         "xpath",
@@ -143,13 +143,13 @@ class AgentPage(BasePage):
     )
 
     # ==============================================================
-    #  LOCATORS — Stepper step indicators
+    #  LOCATORS - Stepper step indicators
     # ==============================================================
     STEPPER_STEPS = ("css", "mat-horizontal-stepper mat-step-header")
     ACTIVE_STEP = ("css", "mat-horizontal-stepper mat-step-header[aria-selected='true']")
 
     # ==============================================================
-    #  LOCATORS — SweetAlert2
+    #  LOCATORS - SweetAlert2
     # ==============================================================
     SWAL_TITLE = ("css", "#swal2-title")
     SWAL_HTML = ("css", ".swal2-html-container")
@@ -158,7 +158,7 @@ class AgentPage(BasePage):
     SWAL_CONTAINER = ("css", ".swal2-container")
 
     # ==============================================================
-    #  LOCATORS — Validation errors
+    #  LOCATORS - Validation errors
     # ==============================================================
     MAT_ERROR = ("css", "mat-error, .mat-mdc-form-field-error")
     FIELD_ERROR = (
@@ -168,7 +168,7 @@ class AgentPage(BasePage):
     )
 
     # ==============================================================
-    #  LOCATORS — Dropdown overlay
+    #  LOCATORS - Dropdown overlay
     # ==============================================================
     DROPDOWN_PANEL = (
         "css",
@@ -184,7 +184,7 @@ class AgentPage(BasePage):
     )
 
     # ==============================================================
-    #  LOCATORS — Pagination
+    #  LOCATORS - Pagination
     # ==============================================================
     PAGINATION_NEXT = ("css", "button[aria-label='Next page'], button.mat-mdc-paginator-navigation-next")
     PAGINATION_PREV = ("css", "button[aria-label='Previous page'], button.mat-mdc-paginator-navigation-previous")
@@ -229,7 +229,7 @@ class AgentPage(BasePage):
         return self.is_displayed(self.TABLE, timeout=10)
 
     # ==============================================================
-    #  Overlay cleanup — NEVER use Keys.ESCAPE
+    #  Overlay cleanup - NEVER use Keys.ESCAPE
     # ==============================================================
 
     def _force_close_panels(self):
@@ -439,42 +439,20 @@ class AgentPage(BasePage):
     # ==============================================================
 
     def click_next(self):
-        """Click the Next button to go to the next stepper step."""
+        """Click the Next button on the current stepper step."""
         log.info("Clicking Next button...")
-        self._force_close_panels()
-        try:
-            btn = self.driver.find_element(
-                By.XPATH,
-                "//div[@class='popup-footer']//button[contains(.,'Next')]"
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});"
-                "arguments[0].click();",
-                btn,
-            )
-            self.wait_seconds(1.5)
-            log.info("Next clicked")
-        except Exception as e:
-            log.warning(f"Next button not found: {e}")
+        next_btn = self.driver.find_element(By.CSS_SELECTOR, "button.mat-stepper-next")
+        self.driver.execute_script("arguments[0].click();", next_btn)
+        self.wait_seconds(2)
+        log.info("Next clicked")
 
     def click_back(self):
-        """Click the Back button to go to the previous stepper step."""
+        """Click the Back button on the current stepper step."""
         log.info("Clicking Back button...")
-        self._force_close_panels()
-        try:
-            btn = self.driver.find_element(
-                By.XPATH,
-                "//div[@class='popup-footer']//button[contains(.,'Back')]"
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});"
-                "arguments[0].click();",
-                btn,
-            )
-            self.wait_seconds(1.5)
-            log.info("Back clicked")
-        except Exception as e:
-            log.warning(f"Back button not found: {e}")
+        back_btn = self.driver.find_element(By.CSS_SELECTOR, "button.mat-stepper-previous")
+        self.driver.execute_script("arguments[0].click();", back_btn)
+        self.wait_seconds(2)
+        log.info("Back clicked")
 
     def get_active_step_index(self):
         """Get the current active stepper step index (0-based)."""
@@ -527,7 +505,7 @@ class AgentPage(BasePage):
         return "Clicked" in str(result)
 
     # ==============================================================
-    #  Form filling — JS value-setter for Angular compatibility
+    #  Form filling - JS value-setter for Angular compatibility
     # ==============================================================
 
     def _fill_input_by_name(self, name_attr, value, row_index=None):
@@ -538,11 +516,6 @@ class AgentPage(BasePage):
             value: Value to set.
             row_index: Optional row index (0-based) for repeatable rows.
         """
-        row_selector = ""
-        if row_index is not None:
-            # Target specific row in a repeatable section
-            row_selector = f"/*[{row_index}]//"
-
         js = f"""
             var popup = document.querySelector(
                 '.edit_pop_up.override_edit_pop_up.popup-mode'
@@ -563,7 +536,7 @@ class AgentPage(BasePage):
         """
         result = self.driver.execute_script(js, str(value))
         if "OK" not in str(result):
-            log.warning(f"Input not filled: {name_attr} — {result}")
+            log.warning(f"Input not filled: {name_attr} - {result}")
 
     def _fill_input_by_placeholder(self, placeholder_text, value):
         """Fill an input field by its placeholder text using JS value-setter."""
@@ -595,7 +568,7 @@ class AgentPage(BasePage):
         self._fill_input_by_name(name_attr, "", row_index=row_index)
 
     # ==============================================================
-    #  Dropdown selection — JS approach (Angular Material)
+    #  Dropdown selection - JS approach (Angular Material)
     # ==============================================================
 
     def _open_dropdown_by_label(self, label_text):
@@ -622,7 +595,7 @@ class AgentPage(BasePage):
         self.wait_seconds(1.5)
         if "Opened" in str(result):
             return True
-        log.warning(f"Dropdown not opened: {label_text} — {result}")
+        log.warning(f"Dropdown not opened: {label_text} - {result}")
         return False
 
     def _open_dropdown_by_placeholder(self, placeholder_text):
@@ -640,7 +613,6 @@ class AgentPage(BasePage):
                     return 'Opened';
                 }}
             }}
-            // Also check mat-form-field appearance
             var formFields = popup.querySelectorAll('mat-form-field');
             for (var j = 0; j < formFields.length; j++) {{
                 var matSelect = formFields[j].querySelector('mat-select');
@@ -690,7 +662,7 @@ class AgentPage(BasePage):
         self.wait_seconds(1)
         if "Selected" in str(result):
             return True
-        log.warning(f"Option not selected: {option_text} — {result}")
+        log.warning(f"Option not selected: {option_text} - {result}")
         return False
 
     def _select_option_contains(self, partial_text):
@@ -716,7 +688,6 @@ class AgentPage(BasePage):
 
     def _search_and_select_option(self, search_text, exact_match=False):
         """Type search text in dropdown filter, then select the matching option."""
-        # Type search text in the dropdown search input
         try:
             search_input = self.driver.find_element(
                 By.CSS_SELECTOR,
@@ -729,7 +700,6 @@ class AgentPage(BasePage):
         except Exception:
             pass
 
-        # Now select
         if exact_match:
             return self._select_option_by_text(search_text)
         else:
@@ -749,12 +719,53 @@ class AgentPage(BasePage):
         """
         return self.driver.execute_script(js) or []
 
-    def select_dropdown_by_label(self, label_text, option_text):
-        """Open dropdown by label and select option by exact text."""
-        log.info(f"Selecting '{label_text}': {option_text}")
-        self._open_dropdown_by_label(label_text)
-        self._select_option_by_text(option_text)
-        self._close_dropdown_panel()
+    def select_dropdown_by_label(self, label_text, option_text, index=0):
+        """Select a mat-select dropdown by its <mat-label> text, then pick an option.
+        
+        Works for app-dropdown-v2 components where the label is in <mat-label>
+        and there's no placeholder attribute on the mat-select.
+        
+        Args:
+            label_text: The visible label text (e.g., "Country", "State")
+            option_text: The option to select (e.g., "India", "Maharashtra")
+            index: Which matching dropdown (0-based) if multiple have same label
+        """
+        log.info(f"Selecting dropdown by label '{label_text}': {option_text}")
+        
+        # Find all mat-labels matching the text
+        labels = self.driver.find_elements(By.XPATH, f"//mat-label[normalize-space()='{label_text}']")
+        
+        if len(labels) <= index:
+            log.warning(f"[WARNING] Label '{label_text}' not found (found {len(labels)}, index={index})")
+            return False
+        
+        # Get the specific label, walk up to mat-form-field, then find mat-select inside
+        label_el = labels[index]
+        form_field = label_el.find_element(By.XPATH, "./ancestor::mat-form-field")
+        mat_select = form_field.find_element(By.CSS_SELECTOR, "mat-select")
+        
+        # Click to open the dropdown
+        self.driver.execute_script("arguments[0].click();", mat_select)
+        self.wait_seconds(1)
+        
+        # Find and click the option
+        options = self.driver.find_elements(By.XPATH, f"//mat-option//span[normalize-space()='{option_text}']/ancestor::mat-option")
+        if not options:
+            # Try broader match
+            options = self.driver.find_elements(By.XPATH, f"//mat-option[contains(., '{option_text}')]")
+        
+        if options:
+            self.driver.execute_script("arguments[0].click();", options[0])
+            log.info(f"Selected '{option_text}' from '{label_text}'")
+            self.wait_seconds(1)
+            return True
+        else:
+            log.warning(f"[WARNING] Option '{option_text}' not found in '{label_text}' dropdown")
+            # Close the dropdown panel by pressing Escape
+            from selenium.webdriver.common.keys import Keys
+            mat_select.send_keys(Keys.ESCAPE)
+            return False
+        
 
     def select_dropdown_by_placeholder(self, placeholder_text, option_text):
         """Open dropdown by placeholder and select option by exact text."""
@@ -822,7 +833,6 @@ class AgentPage(BasePage):
             for (var i = 0; i < buttons.length; i++) {
                 if (buttons[i].textContent.trim().toLowerCase().indexOf('add row') > -1 ||
                     buttons[i].textContent.trim().toLowerCase().indexOf('add') > -1) {
-                    // Check if this is in the address section context
                     var parent = buttons[i].closest('mat-tab-content, .mat-tab-body-active, [ng-reflect-label]');
                     if (parent) {
                         buttons[i].click();
@@ -830,7 +840,6 @@ class AgentPage(BasePage):
                     }
                 }
             }
-            // Fallback: find any button with "+" icon in the form
             var addButtons = popup.querySelectorAll('button mat-icon');
             for (var j = 0; j < addButtons.length; j++) {
                 if (addButtons[j].textContent.trim() === 'add' ||
@@ -848,14 +857,11 @@ class AgentPage(BasePage):
     def click_add_bank_row(self):
         """Click the Add Row button in the Bank Details section."""
         log.info("Clicking Add Bank Row button...")
-        # Navigate to Bank Details step first
-        # Try to find and click add row in bank section
         js = """
             var popup = document.querySelector(
                 '.edit_pop_up.override_edit_pop_up.popup-mode'
             );
             if (!popup) return 'No popup';
-            // Look for all "Add" or "+" buttons
             var buttons = popup.querySelectorAll('button');
             var addButtons = [];
             for (var i = 0; i < buttons.length; i++) {
@@ -864,7 +870,6 @@ class AgentPage(BasePage):
                     addButtons.push(buttons[i]);
                 }
             }
-            // Try the last add button (likely bank section)
             if (addButtons.length > 0) {
                 addButtons[addButtons.length - 1].click();
                 return 'Clicked last add button';
@@ -876,7 +881,7 @@ class AgentPage(BasePage):
         log.info(f"Add bank row: {result}")
 
     # ==============================================================
-    #  Form fill — Step 1: Universal
+    #  Form fill - Step 1: Universal
     # ==============================================================
 
     def fill_universal_step(self, data):
@@ -893,44 +898,38 @@ class AgentPage(BasePage):
         self.wait_seconds(0.5)
 
     # ==============================================================
-    #  Form fill — Step 2: Address Details
+    #  Form fill - Step 2: Address Details
     # ==============================================================
 
-    def fill_address_step(self, data, row_index=0):
-        """Fill Step 2 (Address Details) for a specific row.
+    def fill_address_step_required(self):
+        """Fill the required Address fields (cascading dropdowns + inputs) on Step 0."""
+        log.info("Filling required Address fields (cascading)...")
+        
+        # Cascading dropdowns — each selection populates the next
+        self.select_dropdown_by_label("Country", "India")
+        self.wait_seconds(1.5)  # wait for State to populate
+        
+        self.select_dropdown_by_label("State", "Maharashtra")
+        self.wait_seconds(1.5)  # wait for District to populate
+        
+        # For District, you need to know a valid district name in Maharashtra
+        # Try "Pune" — adjust if different in your ERP
+        self.select_dropdown_by_label("District", "Pune")
+        self.wait_seconds(1.5)  # wait for Taluka to populate
+        
+        # For Taluka, pick a valid taluka in Pune district
+        # Try "Haveli" or whatever exists — adjust as needed
+        self.select_dropdown_by_label("Taluka", "Haveli")
+        self.wait_seconds(1.5)
+        
+        # Text inputs — use name attribute
+        self._fill_input_by_name("Address", "123 Test Street, Pune")
+        self._fill_input_by_name("Pin Code", "411001")
+        
+        log.info("Required Address fields filled")
 
-        Args:
-            data: Dict with address fields.
-            row_index: Row index (0 for first row).
-        """
-        log.info(f"Filling Address Details (row {row_index})...")
-
-        if data.get("address_type"):
-            self.select_dropdown_by_placeholder("Address Type", data["address_type"])
-        if data.get("country"):
-            self.select_dropdown_by_placeholder("Country", data["country"])
-            self.wait_seconds(1)
-        if data.get("state"):
-            self.select_dropdown_by_placeholder("State", data["state"])
-            self.wait_seconds(1)
-        if data.get("district"):
-            self.select_dropdown_by_placeholder("District", data["district"])
-            self.wait_seconds(1)
-        if data.get("taluka"):
-            self.select_dropdown_by_placeholder("Taluka", data["taluka"])
-        if data.get("village"):
-            self.select_dropdown_by_placeholder("Village", data["village"])
-        if data.get("address"):
-            self._fill_input_by_name("Address", data["address"], row_index=row_index)
-        if data.get("pin_code"):
-            self._fill_input_by_name("Pin Code", data["pin_code"], row_index=row_index)
-        if data.get("gst"):
-            self._fill_input_by_name("GST", data["gst"], row_index=row_index)
-
-        self.wait_seconds(0.5)
-
-    # ==============================================================
-    #  Form fill — Step 3: Payment Details
+        # ==============================================================
+    #  Form fill - Step 3: Payment Details
     # ==============================================================
 
     def fill_payment_step(self, data):
@@ -947,7 +946,7 @@ class AgentPage(BasePage):
         self.wait_seconds(0.5)
 
     # ==============================================================
-    #  Form fill — Step 4: Bank Details
+    #  Form fill - Step 4: Bank Details
     # ==============================================================
 
     def fill_bank_detail_step(self, data, row_index=0):
@@ -973,12 +972,11 @@ class AgentPage(BasePage):
             )
         if data.get("account_number"):
             self._fill_input_by_name("Account Number", data["account_number"], row_index=row_index)
-        # Bank Proof and Attachment are file uploads — handled separately
 
         self.wait_seconds(0.5)
 
     # ==============================================================
-    #  Form fill — Complete all steps
+    #  Form fill - Complete all steps
     # ==============================================================
 
     def fill_agent_form(self, data):
@@ -1076,7 +1074,7 @@ class AgentPage(BasePage):
             result["agent_name"] = data.get("agent_name", "")
             log.info(f"Agent created successfully: {result['agent_name']}")
         elif swal_title and "validation" in swal_title.lower():
-            result["error"] = f"{swal_title} — validation failed"
+            result["error"] = f"{swal_title} - validation failed"
             log.warning(f"Validation failed: {result['error']}")
             self._dismiss_swal()
         else:
@@ -1331,7 +1329,6 @@ class AgentPage(BasePage):
         """Search for a record in the Agent table."""
         log.info(f"Searching for: {search_text}")
         try:
-            # Toggle search if needed
             search_toggle = self.driver.find_elements(
                 By.CSS_SELECTOR, "button.search-btn, button[aria-label='Search']"
             )
@@ -1344,7 +1341,6 @@ class AgentPage(BasePage):
                 except Exception:
                     continue
 
-            # Type in search input
             search_input = self.driver.find_element(
                 By.CSS_SELECTOR,
                 ".erp-search-wrapper input, input#erpSearchInput"
@@ -1353,7 +1349,6 @@ class AgentPage(BasePage):
             search_input.send_keys(search_text)
             self.wait_seconds(0.5)
 
-            # Click search submit
             search_submit = self.driver.find_elements(
                 By.CSS_SELECTOR, "button.search-btn"
             )
@@ -1374,11 +1369,11 @@ class AgentPage(BasePage):
         """Check if an agent name exists in the table rows."""
         js = f"""
             var rows = document.querySelectorAll('table#excel-table tbody tr');
-            for (var i = 0; i < rows.length; i++) {
-                if (rows[i].textContent.indexOf('{agent_name}') > -1) {
+            for (var i = 0; i < rows.length; i++) {{
+                if (rows[i].textContent.indexOf('{agent_name}') > -1) {{
                     return true;
-                }
-            }
+                }}
+            }}
             return false;
         """
         return self.driver.execute_script(js)
@@ -1407,14 +1402,13 @@ class AgentPage(BasePage):
         log.info(f"Clicking Edit for: {agent_name}")
         js = f"""
             var rows = document.querySelectorAll('table#excel-table tbody tr');
-            for (var i = 0; i < rows.length; i++) {
-                if (rows[i].textContent.indexOf('{agent_name}') > -1) {
+            for (var i = 0; i < rows.length; i++) {{
+                if (rows[i].textContent.indexOf('{agent_name}') > -1) {{
                     var editBtn = rows[i].querySelector('td:nth-child(2) button');
                     if (editBtn) {{
                         editBtn.click();
                         return 'Clicked edit';
                     }}
-                    // Try any button with edit icon
                     var buttons = rows[i].querySelectorAll('button');
                     for (var j = 0; j < buttons.length; j++) {{
                         if (buttons[j].textContent.trim().toLowerCase().indexOf('edit') > -1) {{
@@ -1422,8 +1416,8 @@ class AgentPage(BasePage):
                             return 'Clicked edit (text match)';
                         }}
                     }}
-                }
-            }
+                }}
+            }}
             return 'Not found';
         """
         result = self.driver.execute_script(js)
@@ -1435,17 +1429,66 @@ class AgentPage(BasePage):
         log.info(f"Clicking View for: {agent_name}")
         js = f"""
             var rows = document.querySelectorAll('table#excel-table tbody tr');
-            for (var i = 0; i < rows.length; i++) {
-                if (rows[i].textContent.indexOf('{agent_name}') > -1) {
+            for (var i = 0; i < rows.length; i++) {{
+                if (rows[i].textContent.indexOf('{agent_name}') > -1) {{
                     var viewBtn = rows[i].querySelector('td:nth-child(1) button');
                     if (viewBtn) {{
                         viewBtn.click();
                         return 'Clicked view';
                     }}
-                }
-            }
+                }}
+            }}
             return 'Not found';
         """
         result = self.driver.execute_script(js)
         self.wait_seconds(2)
         log.info(f"View button: {result}")
+
+    def dump_address_fields(self):
+        """Dump ALL input/select fields in the popup, regardless of container."""
+        js = """
+            var results = [];
+            var inputs = document.querySelectorAll('.cdk-overlay-pane input, .mat-mdc-dialog input');
+            for (var i = 0; i < inputs.length; i++) {
+                results.push({
+                    tag: 'input',
+                    name: inputs[i].getAttribute('name') || '',
+                    placeholder: inputs[i].getAttribute('placeholder') || '',
+                    formControlName: inputs[i].getAttribute('formcontrolname') || '',
+                    type: inputs[i].getAttribute('type') || '',
+                    visible: inputs[i].offsetParent !== null
+                });
+            }
+            var selects = document.querySelectorAll('.cdk-overlay-pane mat-select, .mat-mdc-dialog mat-select');
+            for (var i = 0; i < selects.length; i++) {
+                results.push({
+                    tag: 'mat-select',
+                    placeholder: selects[i].getAttribute('placeholder') || '',
+                    formControlName: selects[i].getAttribute('formcontrolname') || '',
+                    visible: selects[i].offsetParent !== null
+                });
+            }
+            return JSON.stringify(results, null, 2);
+        """
+        result = self.driver.execute_script(js)
+        log.info(f"ADDRESS FIELDS: {result}")
+        return result
+
+
+    def dump_popup_structure(self):
+        """Dump the popup's top-level DOM class names to understand the container structure."""
+        js = """
+            var dialog = document.querySelector('.cdk-overlay-pane');
+            if (!dialog) return 'No .cdk-overlay-pane found';
+            var children = [];
+            for (var i = 0; i < dialog.children.length; i++) {
+                children.push({
+                    tag: dialog.children[i].tagName,
+                    class: dialog.children[i].className.substring(0, 120)
+                });
+            }
+            return JSON.stringify(children, null, 2);
+        """
+        result = self.driver.execute_script(js)
+        log.info(f"POPUP STRUCTURE: {result}")
+        return result

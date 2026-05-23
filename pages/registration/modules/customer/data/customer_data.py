@@ -180,8 +180,8 @@ def generate_valid_customer_data(name_prefix="AutoCust"):
         "status": True,                     # Active (default)
         "is_tds_applicable": False,         # No (default)
         # Step 0: Additional Details
-        "contact_person_name": f"Contact_{datetime.now().strftime('%H%M%S')}",
-        "office_number": f"020{random.randint(10000000, 99999999)}",
+        "contact_person_name": "Contact Person",
+        "office_number": "",
         "preferred_payment_method": None,   # Pick from live UI (optional)
         "gst_registration_type": None,      # Pick from live UI (optional)
         "payment_terms": None,              # Pick from live UI (optional)
@@ -218,11 +218,11 @@ def generate_valid_bank_row():
     Dropdown values set to None — must be populated from live UI at runtime.
     """
     return {
-        "bank_name": f"Bank_{datetime.now().strftime('%H%M%S')}",
-        "branch": f"Branch_{random.randint(100, 999)}",
+        "bank_name": "Bank",
+        "branch": "Branch",
         "ifsc_code": generate_ifsc_code(),
         "account_type": None,               # Pick from live UI (REQUIRED: Current/Saving)
-        "account_holder_name": f"Holder_{datetime.now().strftime('%H%M%S')}",
+        "account_holder_name": "Jason Holder",
         "account_number": generate_account_number(),
         "bank_proof": None,                 # Pick from live UI (REQUIRED: Cancelled Cheque/Passbook)
         "attachment": None,                 # File path (optional)

@@ -63,10 +63,10 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    log.step(3, "Selecting facility (blank - first option)")
-    login_page.select_facility_by_index(index=0)
+    # log.step(3, "Selecting facility (blank - first option)")
+    # login_page.select_facility_by_index(index=0)
 
-    login_page.wait_seconds(1)
+    login_page.wait_seconds(5)
 
     log.step(4, "Clicking Login button")
     login_page.click_login()

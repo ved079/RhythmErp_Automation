@@ -119,7 +119,7 @@ class SupplierPage(BasePage):
     # ==============================================================
     ADD_BUTTON = ("css", "button.erp-add-btn")
     SEARCH_TOGGLE = ("css", "button.search-btn, button[mattooltip='Search']")
-    SEARCH_INPUT = ("css", "input[placeholder='Search anything...'], input.search-bar-input")
+    SEARCH_INPUT = ("css", "#erpSearchInput, input.erp-search-input")
     REFRESH_BUTTON = ("css", "button[mattooltip='Refresh']")
     FILTER_BUTTON = ("css", "button.erp-outline-btn")
 
@@ -1900,6 +1900,47 @@ class SupplierPage(BasePage):
             log.warning(f"Edit not found for {company_name}, trying first row")
             self._click_first_menu_option("edit")
 
+    def click_view_first_row(self):
+        """Click View on the first row in the table (no creation needed)."""
+        log.info("Opening View for first row...")
+        self._click_first_menu_option("View")
+        self.wait_seconds(1)
+        if not self._is_form_popup_open():
+            self._wait_for_form_content(timeout=5)
+
+    def click_edit_first_row(self):
+        """Click Edit on the first row in the table (no creation needed)."""
+        log.info("Opening Edit for first row...")
+        self._click_first_menu_option("Edit")
+        self.wait_seconds(1)
+        if not self._is_form_popup_open():
+            self._wait_for_form_content(timeout=5)
+    
+    def get_first_row_name(self):
+        """Get the Company Name from the first row in the table."""
+        try:
+            cells = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "td.cdk-column-name, td.mat-column-name, "
+                "td.cdk-column-company_name, td.mat-column-company_name"
+            )
+            for cell in cells:
+                try:
+                    text = cell.text.strip()
+                    if text:
+                        return text
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return None
+
+    def click_history_first_row(self):
+        """Click History on the first row in the table (no creation needed)."""
+        log.info("Opening History for first row...")
+        self._click_first_menu_option("History")
+        self.wait_seconds(1)
+
     def _click_first_menu_option(self, option="view"):
         """Click the first 3-dot menu trigger, then select View/Edit/History."""
         try:
@@ -2038,7 +2079,7 @@ class SupplierPage(BasePage):
         """
         log.info(f"Searching for: {search_text}")
         try:
-            # Click search toggle
+            # Click search toggle to open the erp-search-container
             try:
                 toggle = self.driver.find_element(
                     By.CSS_SELECTOR, "button.search-btn, button[mattooltip='Search']"
@@ -2048,19 +2089,19 @@ class SupplierPage(BasePage):
             except Exception:
                 pass
 
-            # Clear and type in search input
+            # Clear and type in the erp search input
             try:
                 search_input = self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    "input[placeholder='Search anything...'], input.search-bar-input"
+                    By.CSS_SELECTOR, "#erpSearchInput, input.erp-search-input"
                 )
-                # Clear via JS
+                # Clear via JS + dispatch input event for Angular
                 self.driver.execute_script(
                     "arguments[0].value = '';"
                     "arguments[0].dispatchEvent(new Event('input', {bubbles: true}));",
                     search_input,
                 )
                 search_input.send_keys(search_text)
+                search_input.send_keys(Keys.ENTER)
                 self.wait_seconds(2)
             except Exception:
                 pass

@@ -29,8 +29,8 @@ class LoginPage(BasePage):
     PASSWORD_INPUT = ("css", "input[formcontrolname='password']")
 
     # --- Facility Dropdown ---
-    FACILITY_SELECT = ("css", "mat-select")
-    FACILITY_SELECT_TRIGGER = ("css", "mat-select .mat-mdc-select-trigger")
+    # FACILITY_SELECT = ("css", "mat-select")
+    # FACILITY_SELECT_TRIGGER = ("css", "mat-select .mat-mdc-select-trigger")
 
     # --- Login Button ---
     LOGIN_BUTTON = ("xpath", "//span[contains(@class,'mdc-button__label') and text()='Login']/ancestor::button")
@@ -44,7 +44,7 @@ class LoginPage(BasePage):
     # --- Labels ---
     EMAIL_LABEL = ("xpath", "//mat-label[contains(.,'Username') or contains(.,'Email')]")
     PASSWORD_LABEL = ("xpath", "//mat-label[contains(.,'Password')]")
-    FACILITY_LABEL = ("xpath", "//mat-label[contains(.,'Facility') or contains(.,'Tenant')]")
+    # FACILITY_LABEL = ("xpath", "//mat-label[contains(.,'Facility') or contains(.,'Tenant')]")
 
     # ================================================================
     # SPEED CONFIG
@@ -93,118 +93,111 @@ class LoginPage(BasePage):
         log.step(2, "Entering password")
         self.type_text(self.PASSWORD_INPUT, password, clear_first=True)
 
-    def select_facility(self, facility_name):
-        """Select a facility from the Angular Material mat-select dropdown by name."""
-        log.step(3, f"Selecting facility: {facility_name}")
+    def _dismiss_tenant_dropdown(self):
+        """Click on page background to dismiss tenant dropdown (backend bug workaround).
 
-        self.dismiss_open_overlays()
-
-        self.click(self.FACILITY_SELECT_TRIGGER)
-
-        WebDriverWait(self.driver, self._OVERLAY_WAIT).until(
-            EC.presence_of_element_located(
-                (By.CSS_SELECTOR, "mat-option")
-            )
-        )
-
-        option_locator = (
-            "xpath",
-            f"//mat-option[contains(.,'{facility_name}')]"
-        )
-
-        try:
-            self.wait_for_visible(option_locator, timeout=self._OVERLAY_WAIT)
-            self.click(option_locator)
-            log.info(f"Selected facility: {facility_name}")
-        except Exception:
-            log.warning("Primary option locator failed, trying fallback...")
-            fallback_locator = (
-                "xpath",
-                f"//div[@role='option' and contains(.,'{facility_name}')]"
-            )
-            self.wait_for_visible(fallback_locator, timeout=2)
-            self.click(fallback_locator)
-            log.info(f"Selected facility (fallback): {facility_name}")
-
-        self.wait_for_overlay_gone(timeout=self._OVERLAY_WAIT)
-
-    def select_facility_by_index(self, index=0):
-        """Select facility by index (for blank/invisible text dropdowns).
-
-        Used when mat-option text is empty or not visible due to UI bug.
-        Options render inside cdk-overlay-pane (appended to body).
-        Waits for the overlay to fully close before returning so the
-        next action (e.g. click_login) is never blocked by the open panel.
+        When a user has only one tenant, the dropdown shouldn't appear but does
+        due to a backend bug. Clicking outside the dropdown dismisses it so the
+        login button becomes clickable.
         """
-        log.step(3, f"Selecting facility by index: {index}")
-
-        self.dismiss_open_overlays()
-
-        self.click(self.FACILITY_SELECT_TRIGGER)
-
         try:
-            options = WebDriverWait(self.driver, self._OVERLAY_WAIT).until(
-                EC.presence_of_all_elements_located(
-                    (By.CSS_SELECTOR, "div.cdk-overlay-pane mat-option")
-                )
-            )
+            body = self.driver.find_element(By.TAG_NAME, "body")
+            self.driver.execute_script("arguments[0].click();", body)
+            time.sleep(0.5)
+            log.info("Clicked outside to dismiss tenant dropdown")
         except Exception:
-            log.warning("cdk-overlay-pane mat-option not found, trying panel fallback...")
-            options = WebDriverWait(self.driver, self._OVERLAY_WAIT).until(
-                EC.presence_of_all_elements_located(
-                    (By.CSS_SELECTOR, ".mat-mdc-select-panel mat-option")
-                )
-            )
+            pass
 
-        if index >= len(options):
-            raise Exception(
-                f"Index {index} out of range — only {len(options)} option(s) found"
-            )
+    # def select_facility(self, facility_name):
+    #     """Select a facility from the Angular Material mat-select dropdown by name."""
+    #     log.step(3, f"Selecting facility: {facility_name}")
+    #
+    #     self.dismiss_open_overlays()
+    #
+    #     self.click(self.FACILITY_SELECT_TRIGGER)
+    #
+    #     WebDriverWait(self.driver, self._OVERLAY_WAIT).until(
+    #         EC.presence_of_element_located(
+    #             (By.CSS_SELECTOR, "mat-option")
+    #         )
+    #     )
+    #
+    #     option_locator = (
+    #         "xpath",
+    #         f"//mat-option[contains(.,'{facility_name}')]"
+    #     )
+    #
+    #     try:
+    #         self.wait_for_visible(option_locator, timeout=self._OVERLAY_WAIT)
+    #         self.click(option_locator)
+    #         log.info(f"Selected facility: {facility_name}")
+    #     except Exception:
+    #         log.warning("Primary option locator failed, trying fallback...")
+    #         fallback_locator = (
+    #             "xpath",
+    #             f"//div[@role='option' and contains(.,'{facility_name}')]"
+    #         )
+    #         self.wait_for_visible(fallback_locator, timeout=2)
+    #         self.click(fallback_locator)
+    #         log.info(f"Selected facility (fallback): {facility_name}")
+    #
+    #     self.wait_for_overlay_gone(timeout=self._OVERLAY_WAIT)
 
-        self.driver.execute_script("arguments[0].click();", options[index])
-        log.info(f"Selected facility option at index {index}")
+    # def select_facility_by_index(self, index=0):
+    #     """Select facility by index (for blank/invisible text dropdowns).
+    #
+    #     Used when mat-option text is empty or not visible due to UI bug.
+    #     Options render inside cdk-overlay-pane (appended to body).
+    #     Waits for the overlay to fully close before returning so the
+    #     next action (e.g. click_login) is never blocked by the open panel.
+    #     """
+    #     log.step(3, f"Selecting facility by index: {index}")
+    #
+    #     self.dismiss_open_overlays()
+    #
+    #     self.click(self.FACILITY_SELECT_TRIGGER)
+    #
+    #     try:
+    #         options = WebDriverWait(self.driver, self._OVERLAY_WAIT).until(
+    #             EC.presence_of_all_elements_located(
+    #                 (By.CSS_SELECTOR, "div.cdk-overlay-pane mat-option")
+    #             )
+    #         )
+    #     except Exception:
+    #         log.warning("cdk-overlay-pane mat-option not found, trying panel fallback...")
+    #         options = WebDriverWait(self.driver, self._OVERLAY_WAIT).until(
+    #             EC.presence_of_all_elements_located(
+    #                 (By.CSS_SELECTOR, ".mat-mdc-select-panel mat-option")
+    #             )
+    #         )
+    #
+    #     if index >= len(options):
+    #         raise Exception(
+    #             f"Index {index} out of range — only {len(options)} option(s) found"
+    #         )
+    #
+    #     self.driver.execute_script("arguments[0].click();", options[index])
+    #     log.info(f"Selected facility option at index {index}")
+    #
+    #     self.wait_for_overlay_gone(timeout=self._OVERLAY_WAIT)
 
-        self.wait_for_overlay_gone(timeout=self._OVERLAY_WAIT)
+
 
     def click_login(self):
-        """Click the Login button.
-
-        Dismisses any open CDK overlay (e.g. a still-animating mat-select
-        panel) before attempting the click, so it never gets intercepted.
-        """
-        log.step(4, "Clicking Login button")
-
-        self.dismiss_open_overlays()
-
+        """Click the Login button twice to handle tenant dropdown backend bug."""
+        login_btn = self.driver.find_element(*self.LOGIN_BUTTON)
+        login_btn.click()
+        # Second click — tenant dropdown animation sometimes swallows the first click
+        self.wait_seconds(1)
         try:
-            if self.is_displayed(self.LOGIN_BUTTON, timeout=self._CLICK_WAIT):
-                self.click(self.LOGIN_BUTTON)
-            elif self.is_displayed(self.LOGIN_BUTTON_CSS, timeout=2):
-                self.click(self.LOGIN_BUTTON_CSS)
-            elif self.is_displayed(self.LOGIN_BUTTON_GENERIC, timeout=2):
-                self.click(self.LOGIN_BUTTON_GENERIC)
-            else:
-                log.error("Login button not found!")
-                self.take_screenshot("login_button_not_found")
-                raise Exception("Login button not found on login page")
-        except Exception as e:
-            log.error(f"Failed to click Login button: {e}")
-            self.take_screenshot("login_click_failed")
-            raise
-
-    def login(self, email, password, facility):
-        """Complete login flow."""
-        log.info("Starting login flow...")
-        self.load()
-        self.enter_email(email)
-        self.enter_password(password)
-        self.select_facility(facility)
-        self.click_login()
+            login_btn.click()
+        except Exception:
+            pass  # If first click already logged in, second will fail — that's fine
 
     def login_default(self):
         """Login using default PACS credentials from config."""
-        from config import PACS_EMAIL, PACS_PASSWORD, PACS_FACILITY
-        self.login(PACS_EMAIL, PACS_PASSWORD, PACS_FACILITY)
+        from config import PACS_EMAIL, PACS_PASSWORD
+        self.login(PACS_EMAIL, PACS_PASSWORD)
 
     def login_rhythmerp(self):
         """Login using RhythmERP credentials from config."""
@@ -213,7 +206,7 @@ class LoginPage(BasePage):
         self.load_url(RHYTHMERP_LOGIN_URL)
         self.enter_email(RHYTHMERP_EMAIL)
         self.enter_password(RHYTHMERP_PASSWORD)
-        self.select_facility_by_index(index=0)
+        self._dismiss_tenant_dropdown()
         self.click_login()
 
     # ================================================================
@@ -234,8 +227,8 @@ class LoginPage(BasePage):
     def is_password_field_displayed(self):
         return self.is_displayed(self.PASSWORD_INPUT)
 
-    def is_facility_dropdown_displayed(self):
-        return self.is_displayed(self.FACILITY_SELECT)
+    # def is_facility_dropdown_displayed(self):
+    #     return self.is_displayed(self.FACILITY_SELECT)
 
     def is_login_button_enabled(self):
         try:
@@ -281,32 +274,32 @@ class LoginPage(BasePage):
     def is_still_on_login_page(self):
         return "signin" in self.driver.current_url.lower()
 
-    def get_selected_facility(self):
-        try:
-            selected_text = self.get_text(
-                ("css", "mat-select .mat-mdc-select-value-text span")
-            )
-            return selected_text.strip()
-        except Exception:
-            return ""
+    # def get_selected_facility(self):
+    #     try:
+    #         selected_text = self.get_text(
+    #             ("css", "mat-select .mat-mdc-select-value-text span")
+    #         )
+    #         return selected_text.strip()
+    #     except Exception:
+    #         return ""
 
-    def get_all_facilities(self):
-        """Open dropdown and return all available options."""
-        facilities = []
-        self.dismiss_open_overlays()
-        self.click(self.FACILITY_SELECT_TRIGGER)
-        time.sleep(0.3)
-        try:
-            options = self.find_elements(("css", "mat-option"))
-            for option in options:
-                text = option.text.strip()
-                if text:
-                    facilities.append(text)
-        except Exception:
-            log.warning("Could not read facility options")
-        ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
-        self.wait_for_overlay_gone(timeout=3)
-        return facilities
+    # def get_all_facilities(self):
+    #     """Open dropdown and return all available options."""
+    #     facilities = []
+    #     self.dismiss_open_overlays()
+    #     self.click(self.FACILITY_SELECT_TRIGGER)
+    #     time.sleep(0.3)
+    #     try:
+    #         options = self.find_elements(("css", "mat-option"))
+    #         for option in options:
+    #             text = option.text.strip()
+    #             if text:
+    #                 facilities.append(text)
+    #     except Exception:
+    #         log.warning("Could not read facility options")
+    #     ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+    #     self.wait_for_overlay_gone(timeout=3)
+    #     return facilities
 
     def clear_all_fields(self):
         self.clear_field(self.EMAIL_INPUT)

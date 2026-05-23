@@ -80,15 +80,14 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(SP_LOGIN_PASSWORD)
 
-    log.step(3, f"Selecting facility (index {SP_LOGIN_FACILITY_INDEX} — RuralLife Producer Company)")
-    login_page.select_facility_by_index(index=SP_LOGIN_FACILITY_INDEX)
+    # Dismiss tenant dropdown (backend bug: shows even for single-tenant users)
+    login_page._dismiss_tenant_dropdown()
+    
 
-    login_page.wait_seconds(1)
-
-    log.step(4, "Clicking Login button")
+    log.step(3, "Clicking Login button")
+    login_page.click_login()
     login_page.click_login()
     login_page.wait_seconds(3)
-
     login_page.wait_for_login_complete()
     log.info("RhythmERP login successful (Rular@admin)!")
     start_screenshot_broadcast(driver)

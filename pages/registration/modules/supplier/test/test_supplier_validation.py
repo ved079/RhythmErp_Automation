@@ -696,27 +696,21 @@ class TestEditFormValidations:
 
     # ---- SP-E01: Edit no Update button ----
     
+    # ---- SP-E01: Edit no Update button ----
     def test_SP_E01_edit_no_update_button(self, sp_page):
-        """Open Edit popup — BUG-005: no Update button."""
+        """Open Edit popup — Update button should exist (BUG-005 fixed)."""
         log.info("SP-E01: Edit no Update button test")
         page = sp_page
 
-        company_name, create_result = _create_prerequisite_supplier(page)
-
-        if create_result["status"] != "PASSED":
-            pytest.skip("Prerequisite supplier creation failed")
-
-        # Search and click Edit
-        page.search_supplier(company_name)
-        page.wait_seconds(2)
-        page.click_edit_button_by_name(company_name)
+        # Use first row in table — no need to create a new supplier
+        page.click_edit_first_row()
         page.wait_seconds(1)
 
         # Check for Update button
         has_update = page.has_update_button()
 
         assert has_update, (
-            "BUG-005 CONFIRMED: No Update button in Edit mode — cannot save edits"
+            "BUG-005: No Update button in Edit mode — cannot save edits"
         )
 
         try:
@@ -725,21 +719,14 @@ class TestEditFormValidations:
             page.force_close_form_popup()
 
     # ---- SP-E02: Edit pre-populated fields ----
+    # ---- SP-E02: Edit pre-populated fields ----
     def test_SP_E02_edit_prepopulated(self, sp_page):
         """Edit popup shows fields pre-populated with existing data."""
         log.info("SP-E02: Edit pre-populated fields test")
         page = sp_page
 
-        data = generate_valid_supplier_data("EditPre")
-        data["step1"]["company_name"] = f"EditPreTest_{int(time.time())}"
-        company_name, create_result = _create_prerequisite_supplier(page, data)
-
-        if create_result["status"] != "PASSED":
-            pytest.skip("Prerequisite supplier creation failed")
-
-        page.search_supplier(company_name)
-        page.wait_seconds(2)
-        page.click_edit_button_by_name(company_name)
+        # Use first row in table — no need to create a new supplier
+        page.click_edit_first_row()
         page.wait_seconds(1)
 
         form_values = page.get_form_field_values()
@@ -756,20 +743,16 @@ class TestEditFormValidations:
             page.force_close_form_popup()
 
     # ---- SP-E03: Edit Company Name special chars ----
+    # ---- SP-E03: Edit Company Name special chars ----
+    # ---- SP-E03: Edit Company Name special chars ----
     @pytest.mark.xfail(reason=KnownBugs.BUG_001, strict=False)
     def test_SP_E03_edit_company_name_special_chars(self, sp_page):
         """Edit to special chars in Company Name — BUG-001: accepted."""
         log.info("SP-E03: Edit Company Name special chars test")
         page = sp_page
 
-        company_name, create_result = _create_prerequisite_supplier(page)
-
-        if create_result["status"] != "PASSED":
-            pytest.skip("Prerequisite supplier creation failed")
-
-        page.search_supplier(company_name)
-        page.wait_seconds(2)
-        page.click_edit_button_by_name(company_name)
+        # Use first row in table — no need to create a new supplier
+        page.click_edit_first_row()
         page.wait_seconds(1)
 
         # Try to change Company Name to special chars
@@ -785,32 +768,33 @@ class TestEditFormValidations:
             if page.has_update_button():
                 page.click_update()
                 page.wait_seconds(2)
-
-            log.info("Edit with special chars attempted")
+                # Dismiss SweetAlert2 after Update
+                page.handle_success_alert(timeout=5)
+                page.wait_seconds(0.5)
+                log.info("Edit with special chars — Update succeeded (BUG-001)")
+            else:
+                log.info("No Update button found")
+                page.cancel()
         except Exception as e:
             log.warning(f"Edit special chars test exception: {e}")
+            try:
+                page.cancel()
+            except Exception:
+                pass
 
-        try:
-            page.cancel()
-        except Exception:
-            page.force_close_form_popup()
+        # Don't try cancel/close — popup already closed after Update
         page.click_refresh()
         page.wait_seconds(2)
 
     # ---- SP-E04: Edit Email to invalid ----
+    # ---- SP-E04: Edit Email to invalid ----
     def test_SP_E04_edit_invalid_email(self, sp_page):
-        """Edit email to invalid format — BUG-002: no validation."""
+        """Edit email to invalid format — ERP now validates."""
         log.info("SP-E04: Edit invalid email test")
         page = sp_page
 
-        company_name, create_result = _create_prerequisite_supplier(page)
-
-        if create_result["status"] != "PASSED":
-            pytest.skip("Prerequisite supplier creation failed")
-
-        page.search_supplier(company_name)
-        page.wait_seconds(2)
-        page.click_edit_button_by_name(company_name)
+        # Use first row in table — no need to create a new supplier
+        page.click_edit_first_row()
         page.wait_seconds(1)
 
         # Change email to invalid
@@ -825,15 +809,20 @@ class TestEditFormValidations:
             if page.has_update_button():
                 page.click_update()
                 page.wait_seconds(2)
-
-            log.info("Edit with invalid email attempted")
+                # Dismiss SweetAlert2 after Update
+                page.handle_success_alert(timeout=5)
+                page.wait_seconds(0.5)
+                log.info("Edit with invalid email — Update attempted")
+            else:
+                log.info("No Update button found")
+                page.cancel()
         except Exception as e:
             log.warning(f"Edit invalid email test exception: {e}")
+            try:
+                page.cancel()
+            except Exception:
+                pass
 
-        try:
-            page.cancel()
-        except Exception:
-            page.force_close_form_popup()
         page.click_refresh()
         page.wait_seconds(2)
 
@@ -846,46 +835,32 @@ class TestSearchFilter:
     """SP-S01 to SP-S05: Search edge cases."""
 
     # ---- SP-S01: Search exact match ----
+    # ---- SP-S01: Search exact match ----
     def test_SP_S01_search_exact(self, sp_page):
         """Search for exact Company Name — should find the supplier."""
         log.info("SP-S01: Search exact match test")
         page = sp_page
 
-        data = generate_valid_supplier_data("SearchEx")
-        result = page.create_supplier(data)
-        company_name = data["step1"]["company_name"]
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-        page.wait_seconds(2)
-
-        if result["status"] != "PASSED":
-            pytest.skip("Prerequisite supplier creation failed")
+        # Use first row's name — no need to create a new supplier
+        company_name = page.get_first_row_name()
+        if not company_name:
+            pytest.skip("No suppliers in table to search")
 
         found = page.search_supplier(company_name)
         assert found, f"Exact search failed for: {company_name}"
         log.info(f"Exact search found: {company_name}")
 
     # ---- SP-S02: Search partial match ----
+    # ---- SP-S02: Search partial match ----
     def test_SP_S02_search_partial(self, sp_page):
         """Search with partial Company Name — should find matching suppliers."""
         log.info("SP-S02: Search partial match test")
         page = sp_page
 
-        data = generate_valid_supplier_data("SearchPar")
-        result = page.create_supplier(data)
-        company_name = data["step1"]["company_name"]
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-        page.wait_seconds(2)
-
-        if result["status"] != "PASSED":
-            pytest.skip("Prerequisite supplier creation failed")
+        # Use first row's name — no need to create a new supplier
+        company_name = page.get_first_row_name()
+        if not company_name:
+            pytest.skip("No suppliers in table to search")
 
         # Search with partial name (first 10 chars)
         partial = company_name[:10]
@@ -893,24 +868,18 @@ class TestSearchFilter:
         assert found, f"Partial search failed for: {partial}"
         log.info(f"Partial search found with: {partial}")
 
+
+    # ---- SP-S03: Search case insensitive ----
     # ---- SP-S03: Search case insensitive ----
     def test_SP_S03_search_case_insensitive(self, sp_page):
         """Search with different case — should find the supplier."""
         log.info("SP-S03: Search case insensitive test")
         page = sp_page
 
-        data = generate_valid_supplier_data("SearchCI")
-        result = page.create_supplier(data)
-        company_name = data["step1"]["company_name"]
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-        page.wait_seconds(2)
-
-        if result["status"] != "PASSED":
-            pytest.skip("Prerequisite supplier creation failed")
+        # Use first row's name — no need to create a new supplier
+        company_name = page.get_first_row_name()
+        if not company_name:
+            pytest.skip("No suppliers in table to search")
 
         found = page.search_supplier(company_name.lower())
         log.info(f"Case insensitive search result: found={found}")
@@ -982,27 +951,14 @@ class TestPopupUIBehaviors:
             page.force_close_form_popup()
 
     # ---- SP-P02: View popup readonly ----
+    # ---- SP-P02: View popup readonly ----
     def test_SP_P02_view_popup_readonly(self, sp_page):
         """View popup shows all fields disabled/read-only."""
         log.info("SP-P02: View popup readonly test")
         page = sp_page
 
-        data = generate_valid_supplier_data("ViewSP")
-        result = page.create_supplier(data)
-        company_name = data["step1"]["company_name"]
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-        page.wait_seconds(2)
-
-        if result["status"] != "PASSED":
-            pytest.skip("Prerequisite supplier creation failed")
-
-        page.search_supplier(company_name)
-        page.wait_seconds(2)
-        page.click_view_button_by_name(company_name)
+        # Use first row in table — no need to create a new supplier
+        page.click_view_first_row()
         page.wait_seconds(1)
 
         is_readonly = page.verify_view_popup_read_only()
