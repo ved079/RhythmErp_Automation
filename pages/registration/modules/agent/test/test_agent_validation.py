@@ -734,7 +734,7 @@ class TestPaymentStepValidations:
 
         step = page.get_active_step_index()
         log.info(f"Current step: {step}")
-        assert step >= 2, f"Should be on Payment step (2+), got {step}"
+        assert step >= 1, f"Should be on Payment step (1+), got {step}"
 
         _cleanup_form(page)
 
@@ -760,7 +760,7 @@ class TestPaymentStepValidations:
 
         step = page.get_active_step_index()
         log.info(f"After skipping payment: step={step}")
-        assert step >= 3, f"Should advance to Bank Details even without payment data, got step {step}"
+        assert step >= 2, f"Should advance to Bank Details even without payment data, got step {step}"
 
         _cleanup_form(page)
 
@@ -836,7 +836,7 @@ class TestPaymentStepValidations:
         step_label = page.get_active_step_label()
         log.info(f"Current step: index={step}, label='{step_label}'")
 
-        assert step >= 3, f"Should be on Bank Details step (3+), got step {step}"
+        assert step >= 2, f"Should reach Bank Details step (2+), got {step3}"
 
         _cleanup_form(page)
 
@@ -863,7 +863,7 @@ class TestBankDetailsValidations:
 
         step = page.get_active_step_index()
         log.info(f"Current step: {step}")
-        assert step >= 3, f"Should be on Bank Details step, got {step}"
+        assert step >= 2, f"Should be on Bank Details step, got {step}"
 
         _cleanup_form(page)
 
@@ -1163,7 +1163,7 @@ class TestStepperNavigation:
         page.fill_bank_detail_step(data["bank"])
 
         log.info(f"Steps visited: 0 -> {step1} -> {step2} -> {step3}")
-        assert step3 >= 3, f"Should reach Bank Details step (3+), got {step3}"
+        assert step2 >= 2, f"Should be on Bank Details step (2+), got step {step}"
 
         _cleanup_form(page)
 

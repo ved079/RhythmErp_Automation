@@ -901,32 +901,42 @@ class AgentPage(BasePage):
     #  Form fill - Step 2: Address Details
     # ==============================================================
 
-    def fill_address_step_required(self):
-        """Fill the required Address fields (cascading dropdowns + inputs) on Step 0."""
-        log.info("Filling required Address fields (cascading)...")
+    def fill_address_step(self, addr_data=None):
+        """Fill the required Address fields (cascading dropdowns + inputs) on Step 0.
+        
+        Args:
+            addr_data: Optional dict with address data. The cascading dropdowns
+                    (Country/State/District/Taluka) are always filled with defaults
+                    since they require specific valid combinations. Text fields
+                    (Address, Pin Code) use values from addr_data if provided.
+        """
+        log.info("Filling Address step (cascading dropdowns + inputs)...")
         
         # Cascading dropdowns — each selection populates the next
         self.select_dropdown_by_label("Country", "India")
-        self.wait_seconds(1.5)  # wait for State to populate
+        self.wait_seconds(1.5)
         
         self.select_dropdown_by_label("State", "Maharashtra")
-        self.wait_seconds(1.5)  # wait for District to populate
+        self.wait_seconds(1.5)
         
-        # For District, you need to know a valid district name in Maharashtra
-        # Try "Pune" — adjust if different in your ERP
         self.select_dropdown_by_label("District", "Pune")
-        self.wait_seconds(1.5)  # wait for Taluka to populate
+        self.wait_seconds(1.5)
         
-        # For Taluka, pick a valid taluka in Pune district
-        # Try "Haveli" or whatever exists — adjust as needed
         self.select_dropdown_by_label("Taluka", "Haveli")
         self.wait_seconds(1.5)
         
-        # Text inputs — use name attribute
-        self._fill_input_by_name("Address", "123 Test Street, Pune")
-        self._fill_input_by_name("Pin Code", "411001")
+        # Text inputs — use addr_data if provided, else defaults
+        address_text = "123 Test Street, Pune"
+        pin_code = "411001"
         
-        log.info("Required Address fields filled")
+        if addr_data and isinstance(addr_data, dict):
+            address_text = addr_data.get("address", addr_data.get("Address", address_text))
+            pin_code = addr_data.get("pin_code", addr_data.get("Pin Code", pin_code))
+        
+        self._fill_input_by_name("Address", address_text)
+        self._fill_input_by_name("Pin Code", pin_code)
+        
+        log.info("Address step filled")
 
         # ==============================================================
     #  Form fill - Step 3: Payment Details
