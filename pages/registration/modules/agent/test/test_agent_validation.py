@@ -695,7 +695,7 @@ class TestAddressStepValidations:
 
         data = generate_valid_agent_data("NavA10")
         page.fill_universal_step(data)
-        page.fill_address_step_required()  # NEW: fills cascading dropdowns + inputs
+        page.fill_address_step()# NEW: fills cascading dropdowns + inputs
         page.click_next()
         page.wait_seconds(1.5)
 
@@ -1090,7 +1090,7 @@ class TestStepperNavigation:
         """
         step_count = page.driver.execute_script(js)
         log.info(f"Total stepper steps: {step_count}")
-        assert step_count >= 4, f"Expected at least 4 steps, got {step_count}"
+        assert step_count >= 3, f"Expected at least 3 steps, got {step_count}"
 
         _cleanup_form(page)
 
@@ -1138,7 +1138,7 @@ class TestStepperNavigation:
 
     # ---- AGT-N04: Navigate forward through all steps ----
     def test_AGT_N04_navigate_all_steps(self, agt_page):
-        """Navigate through all 4 steps with valid data."""
+        """Navigate through all 3 steps with valid data."""
         log.info("AGT-N04: Navigate all steps test")
         page = agt_page
 
@@ -1146,27 +1146,30 @@ class TestStepperNavigation:
         page.wait_seconds(1)
 
         data = generate_valid_agent_data("NavN04")
-        page.fill_universal_step(data)
 
-        page.click_next()
+        # Step 0: Fill Universal + Address (both on same step)
+        page.fill_universal_step(data)
+        page.fill_address_step()
+        page.wait_seconds(1)
+
+        page.click_next()  # Step 0 -> Step 1 (Payment)
         page.wait_seconds(1.5)
         step1 = page.get_active_step_index()
-        page.fill_address_step(data["address"])
+        log.info(f"After 1st Next: step={step1}")
 
-        page.click_next()
+        # Step 1: Payment is optional, skip it
+        page.click_next()  # Step 1 -> Step 2 (Bank)
         page.wait_seconds(1.5)
         step2 = page.get_active_step_index()
+        log.info(f"After 2nd Next: step={step2}")
 
-        page.click_next()
-        page.wait_seconds(1.5)
-        step3 = page.get_active_step_index()
+        # Step 2: Fill Bank Details
         page.fill_bank_detail_step(data["bank"])
 
-        log.info(f"Steps visited: 0 -> {step1} -> {step2} -> {step3}")
-        assert step2 >= 2, f"Should be on Bank Details step (2+), got step {step}"
+        log.info(f"Steps visited: 0 -> {step1} -> {step2}")
+        assert step2 >= 2, f"Should reach Bank Details step (2+), got {step2}"
 
         _cleanup_form(page)
-
     # ---- AGT-N05: Cancel closes form from any step ----
     def test_AGT_N05_cancel_from_step(self, agt_page):
         """Cancel button should close the form from any step."""
@@ -1346,7 +1349,7 @@ class TestBugSpecific:
 
     # ---- AGT-X02: Form field values preserved after Next/Back ----
     def test_AGT_X02_values_preserved_next_back(self, agt_page):
-        """Values entered on Universal step should persist after Next/Back."""
+        """Values entered on Step 0 should persist after Next/Back."""
         log.info("AGT-X02: Values preserved after Next/Back test")
         page = agt_page
 
@@ -1354,15 +1357,18 @@ class TestBugSpecific:
         page.wait_seconds(1)
 
         data = generate_valid_agent_data("PresX02")
+
+        # Step 0: Fill Universal + Address (both required to advance)
         page.fill_universal_step(data)
+        page.fill_address_step()
         page.wait_seconds(0.5)
 
         values_before = page.get_form_field_values()
 
-        page.click_next()
+        page.click_next()  # Step 0 -> Step 1 (Payment)
         page.wait_seconds(1.5)
 
-        page.click_back()
+        page.click_back()  # Step 1 -> Step 0 (Address Details)
         page.wait_seconds(1.5)
 
         values_after = page.get_form_field_values()

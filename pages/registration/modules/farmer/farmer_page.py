@@ -930,53 +930,84 @@ class FarmerPage(BasePage):
           1. Upper visible text inputs (no scroll needed)
           2. Upper visible dropdowns (may need scroll)
           3. Farmer Category LAST (triggers stepper tab creation)
+
+        FIX: Upgraded to use _fill_input_by_name_js() for Angular-compatible
+        text input filling and _fill_dropdown_if_provided() with label_text
+        for more robust dropdown selection. Uses _set_toggle_if_provided()
+        for data-key-driven toggle handling.
         """
         log.info("Filling Step 0: Farmer Details...")
 
         # === 1. UPPER VISIBLE TEXT INPUTS (no scroll needed) ===
+        # FIX: Use _fill_input_by_name_js() for Angular form model sync
         if data.get("farmer_name"):
-            self.type_text(self.FARMER_NAME_INPUT, data["farmer_name"], clear_first=True)
+            self._fill_input_by_name_js("Farmer Name", data["farmer_name"])
         if data.get("email"):
-            self.type_text(self.EMAIL_INPUT, data["email"], clear_first=True)
+            self._fill_input_by_name_js("Email", data["email"])
         if data.get("phone_number"):
-            self.type_text(self.PHONE_NUMBER_INPUT, data["phone_number"], clear_first=True)
+            self._fill_input_by_name_js("Phone Number", data["phone_number"])
         if data.get("password"):
-            self.type_text(self.PASSWORD_INPUT, data["password"], clear_first=True)
+            self._fill_input_by_name_js("Password", data["password"])
         if data.get("date_of_birth"):
             self.type_text(self.DATE_OF_BIRTH_INPUT, data["date_of_birth"], clear_first=True)
             self.wait_seconds(0.5)
 
         # === 2. SCROLL-DOWN DROPDOWNS (may need scrolling into view) ===
-        self._fill_dropdown_if_provided(self.GENDER_SELECT, data.get("gender"))
-        self._fill_dropdown_if_provided(self.CATEGORY_SELECT, data.get("category"))
-        self._fill_dropdown_if_provided(self.RELIGION_SELECT, data.get("religion"))
-        self._fill_dropdown_if_provided(self.LAND_CLASSIFICATION_SELECT, data.get("land_classification"))
+        # FIX: Pass label_text for label-based selection fallback
+        self._fill_dropdown_if_provided(self.GENDER_SELECT, data.get("gender"), label_text="Gender")
+        self._fill_dropdown_if_provided(self.CATEGORY_SELECT, data.get("category"), label_text="Category")
+        self._fill_dropdown_if_provided(self.RELIGION_SELECT, data.get("religion"), label_text="Religion")
+        self._fill_dropdown_if_provided(self.LAND_CLASSIFICATION_SELECT, data.get("land_classification"), label_text="Land Classification")
 
         # === 3. FARMER CATEGORY LAST — it triggers stepper tab creation ===
         if data.get("farmer_category"):
             self._select_farmer_category(data["farmer_category"])
 
         # Toggle switch (bottom of form)
-        if data.get("is_member_of_fpc") is not None:
-            self._set_toggle_to(self.IS_MEMBER_TOGGLE, data["is_member_of_fpc"])
+        # FIX: Use data-key-driven toggle helper
+        self._set_toggle_if_provided(data, "is_member_of_fpc", self.IS_MEMBER_TOGGLE, "Is Member of FPC")
 
         log.info("Step 0 filled successfully")
 
-    def _fill_dropdown_if_provided(self, locator, value):
+    def _fill_dropdown_if_provided(self, locator, value, label_text=None, exclude=None):
         """Fill a mat-select dropdown if a value is provided.
-        If value is None, pick the first valid option (non-placeholder).
+
+        FIX: Extended to support data-key-driven pattern with optional
+        label-based selection. When label_text is provided, uses
+        _select_mat_option_by_label() for more robust element finding.
+
+        If value is None, pick a random valid option (non-placeholder).
         If value is empty string, skip.
+        If value is a string, select that specific option.
+
+        Args:
+            locator: Locator tuple for the mat-select element.
+            value: Value from data dict (None=random, ''=skip, str=specific).
+            label_text: Optional mat-label text for label-based selection.
+            exclude: Optional list of option texts to exclude from random.
         """
         if value is None:
             # Pick a random non-placeholder option
-            self._select_random_from_dropdown(locator)
+            self._select_random_from_dropdown(locator, exclude=exclude)
         elif value == "":
             return  # Skip empty strings
         else:
-            self._select_mat_option(locator, value)
+            if label_text:
+                # Use label-based selection (more robust)
+                self._select_mat_option_by_label(label_text, value)
+            else:
+                self._select_mat_option(locator, value)
 
     def _select_mat_option(self, dropdown_locator, option_text):
-        """Select a specific option in a mat-select dropdown using JS click."""
+        """Select a specific option in a mat-select dropdown using JS click.
+
+        FIX (BUG-001 WORKAROUND): After clicking an option, re-find the
+        mat-select trigger element and fire
+        `dispatchEvent(new Event('change', {bubbles: true}))` to force
+        Angular's reactive form model to register the selection. Without
+        this, Angular may not detect the JS-clicked option and show
+        silent validation errors on Submit.
+        """
         try:
             dropdown = self.find_clickable_element(dropdown_locator, timeout=5)
             self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", dropdown)
@@ -991,7 +1022,10 @@ class FarmerPage(BasePage):
                     if opt.text.strip() == option_text and opt.is_displayed():
                         self.driver.execute_script("arguments[0].click();", opt)
                         self.wait_seconds(0.5)
+                        # BUG-001 WORKAROUND: Force Angular reactive form update
+                        self._dispatch_change_event(dropdown_locator)
                         self._close_select_panel()
+                        log.info(f"Selected option '{option_text}' (with BUG-001 workaround)")
                         return
                 except Exception:
                     continue
@@ -1003,8 +1037,49 @@ class FarmerPage(BasePage):
             log.warning(f"Dropdown selection failed: {e}")
             self._close_select_panel()
 
-    def _select_random_from_dropdown(self, dropdown_locator):
-        """Select the first valid non-placeholder option from a dropdown."""
+    def _dispatch_change_event(self, dropdown_locator):
+        """BUG-001 WORKAROUND: Re-find the mat-select trigger and fire a
+        `change` event with `bubbles: true` so Angular's reactive form
+        model picks up the JS-clicked selection.
+
+        This is the same pattern used in customer_page.py and agent_page.py.
+        Without it, Angular may not register the selection, causing
+        silent validation failures on Submit even though the dropdown
+        appears visually selected.
+        """
+        try:
+            # Re-find the dropdown element (may have gone stale)
+            trigger = self.find_clickable_element(dropdown_locator, timeout=3)
+            if trigger:
+                self.driver.execute_script("""
+                    var el = arguments[0];
+                    // Find the mat-select trigger inside the form field
+                    var trigger = el.tagName === 'MAT-SELECT' ? el : el.querySelector('mat-select');
+                    if (trigger) {
+                        trigger.dispatchEvent(new Event('change', {bubbles: true}));
+                    }
+                    // Also dispatch on the value accessor
+                    el.dispatchEvent(new Event('change', {bubbles: true}));
+                """, trigger)
+        except Exception as e:
+            log.debug(f"BUG-001 dispatchEvent failed (non-critical): {e}")
+
+    def _select_random_from_dropdown(self, dropdown_locator, exclude=None):
+        """Select a random valid non-placeholder option from a dropdown.
+
+        FIX: Changed from picking the first option to random.choice() for
+        better test coverage. Added `exclude` parameter to skip specific
+        options (e.g., duplicates like BUG-F07 Dairy). Added comprehensive
+        placeholder filtering and BUG-001 dispatchEvent workaround.
+
+        Args:
+            dropdown_locator: Locator tuple for the mat-select element.
+            exclude: Optional list of option texts to skip (e.g., ['Dairy']).
+        """
+        import random as _random
+        if exclude is None:
+            exclude = []
+
         try:
             dropdown = self.find_clickable_element(dropdown_locator, timeout=5)
             self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", dropdown)
@@ -1017,15 +1092,29 @@ class FarmerPage(BasePage):
             for opt in options:
                 try:
                     text = opt.text.strip()
-                    if text and not text.startswith("Select ") and opt.is_displayed():
-                        valid_options.append(opt)
+                    # Filter out placeholders, empty options, "No results found", and excluded items
+                    if not text:
+                        continue
+                    if text.startswith("Select ") or text.startswith("Choose "):
+                        continue
+                    if text.lower() in ("no results found", "no data found"):
+                        continue
+                    if text in exclude:
+                        continue
+                    if opt.is_displayed():
+                        valid_options.append((opt, text))
                 except Exception:
                     continue
 
             if valid_options:
-                chosen = valid_options[0]  # Pick first valid option for consistency
-                self.driver.execute_script("arguments[0].click();", chosen)
+                chosen_opt, chosen_text = _random.choice(valid_options)
+                self.driver.execute_script("arguments[0].click();", chosen_opt)
                 self.wait_seconds(0.5)
+                # BUG-001 WORKAROUND: Force Angular reactive form update
+                self._dispatch_change_event(dropdown_locator)
+                log.info(f"Random dropdown option selected: '{chosen_text}'")
+            else:
+                log.warning("No valid options found in dropdown for random selection")
 
             self._close_select_panel()
         except Exception as e:
@@ -1057,19 +1146,308 @@ class FarmerPage(BasePage):
             log.warning(f"Farmer Category selection failed: {e}")
             self._close_select_panel()
 
+    def _is_toggle_on(self, toggle_element):
+        """Multi-strategy check if a toggle switch is currently ON.
+
+        FIX: Upgraded from single-strategy (checkbox.is_selected) to
+        multi-strategy detection matching the customer_page.py pattern.
+        Angular Material toggle switches may use different internal
+        representations depending on the component library version.
+
+        Strategies (in order):
+          1. Inner checkbox input — is_selected()
+          2. CSS class 'active' on the switch wrapper
+          3. CSS class 'checked' or 'mat-checked' on the slide-toggle
+          4. aria-checked='true' attribute
+          5. Slider position class (e.g., 'mat-slide-toggle-checked')
+        """
+        try:
+            # Strategy 1: Inner checkbox
+            try:
+                checkbox = toggle_element.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
+                if checkbox.is_selected():
+                    return True
+            except Exception:
+                pass
+
+            # Strategy 2: 'active' class on switch wrapper
+            classes = toggle_element.get_attribute("class") or ""
+            if "active" in classes.split():
+                return True
+
+            # Strategy 3: 'checked' / 'mat-checked' on slide-toggle
+            try:
+                slide_toggle = toggle_element.find_element(
+                    By.CSS_SELECTOR, "mat-slide-toggle, .mat-slide-toggle"
+                )
+                slide_classes = slide_toggle.get_attribute("class") or ""
+                if "mat-checked" in slide_classes or "mat-slide-toggle-checked" in slide_classes:
+                    return True
+            except Exception:
+                pass
+
+            # Strategy 4: aria-checked
+            try:
+                aria = toggle_element.get_attribute("aria-checked")
+                if aria == "true":
+                    return True
+            except Exception:
+                pass
+
+            # Strategy 5: Check parent element for checked class
+            try:
+                parent = toggle_element.find_element(By.XPATH, "..")
+                parent_classes = parent.get_attribute("class") or ""
+                if "checked" in parent_classes.split():
+                    return True
+            except Exception:
+                pass
+
+        except Exception:
+            pass
+        return False
+
     def _set_toggle_to(self, toggle_locator, desired_state):
-        """Set a toggle switch to the desired state (True=ON, False=OFF)."""
+        """Set a toggle switch to the desired state (True=ON, False=OFF).
+
+        FIX: Now uses multi-strategy _is_toggle_on() for reliable state
+        detection instead of only checkbox.is_selected(). This handles
+        Angular Material toggle variants that may not have a visible
+        checkbox input.
+        """
         try:
             toggle = self.find_visible_element(toggle_locator, timeout=5)
-            checkbox = toggle.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
-            current_state = checkbox.is_selected()
+            current_state = self._is_toggle_on(toggle)
 
             if current_state != desired_state:
                 self.driver.execute_script("arguments[0].click();", toggle)
                 self.wait_seconds(0.5)
+                # Verify the toggle changed
+                new_state = self._is_toggle_on(toggle)
+                if new_state != desired_state:
+                    # Retry with JS direct click on the switch element
+                    try:
+                        switch = toggle.find_element(By.CSS_SELECTOR, ".switch, .slide-toggle, .mat-slide-toggle-bar")
+                        self.driver.execute_script("arguments[0].click();", switch)
+                        self.wait_seconds(0.3)
+                    except Exception:
+                        pass
                 log.info(f"Toggle set to {'ON' if desired_state else 'OFF'}")
         except Exception as e:
             log.warning(f"Toggle switch failed: {e}")
+
+    def _set_toggle_if_provided(self, data, key, toggle_locator, label_name="Toggle"):
+        """Data-key-driven toggle helper — only sets if key exists in data dict.
+
+        FIX: New method following customer_page.py pattern. Uses
+        _is_toggle_on() for reliable state detection.
+
+        Args:
+            data: Data dict containing the toggle key.
+            key: Key name in data dict (e.g., 'is_member_of_fpc').
+            toggle_locator: Locator tuple for the toggle element.
+            label_name: Human-readable name for logging.
+        """
+        if key not in data:
+            return  # Key not provided — skip
+        desired_state = data[key]
+        try:
+            self._set_toggle_to(toggle_locator, desired_state)
+            log.info(f"{label_name} set to {'ON' if desired_state else 'OFF'}")
+        except Exception as e:
+            log.warning(f"{label_name} toggle failed: {e}")
+
+    # ==============================================================
+    #  Label-Based Dropdown Selection
+    #  FIX: New method following customer_page.py pattern — finds dropdown
+    #  by mat-label text instead of relying on hardcoded XPath locators.
+    # ==============================================================
+
+    def _select_mat_option_by_label(self, label_text, option_text, scope="popup"):
+        """Select a mat-select dropdown option by its mat-label text.
+
+        FIX: New method following customer_page.py pattern. Finds the
+        dropdown by searching for a mat-label containing `label_text`,
+        then clicks the associated mat-select and selects `option_text`.
+
+        This is more robust than hardcoded XPath locators because:
+        - It works even when Angular reorders DOM elements
+        - It scopes to the active panel when scope='panel'
+        - It applies BUG-001 dispatchEvent workaround
+
+        Args:
+            label_text: Text to search for in mat-label (e.g., 'Gender').
+            option_text: Option text to select (e.g., 'Male').
+            scope: 'popup' = search whole popup, 'panel' = active panel only.
+        """
+        log.info(f"Label-based select: label='{label_text}', option='{option_text}'")
+        try:
+            # Step 1: Find the mat-select by label text
+            select_el = self.driver.execute_script("""
+                var labelText = arguments[0];
+                var scopeMode = arguments[1];
+                var popup = document.querySelector('.big-model, mat-dialog-container');
+                if (!popup) return null;
+
+                var searchRoot = popup;
+                if (scopeMode === 'panel') {
+                    var activeContent = popup.querySelector(
+                        'div.mat-horizontal-stepper-content-current'
+                    );
+                    if (!activeContent) {
+                        var allPanels = popup.querySelectorAll(
+                            'div[role="tabpanel"].mat-horizontal-stepper-content'
+                        );
+                        for (var p = 0; p < allPanels.length; p++) {
+                            if (!allPanels[p].hasAttribute('inert')) {
+                                activeContent = allPanels[p];
+                                break;
+                            }
+                        }
+                    }
+                    if (activeContent) searchRoot = activeContent;
+                }
+
+                var labels = searchRoot.querySelectorAll('mat-label');
+                for (var i = 0; i < labels.length; i++) {
+                    if (labels[i].textContent.trim().includes(labelText)) {
+                        var field = labels[i].closest('mat-form-field, .mat-mdc-form-field');
+                        if (field) {
+                            var select = field.querySelector('mat-select');
+                            if (select && select.offsetParent !== null) return select;
+                        }
+                    }
+                }
+                return null;
+            """, label_text, scope)
+
+            if not select_el:
+                log.warning(f"Label-based dropdown not found: '{label_text}'")
+                return
+
+            # Step 2: Click to open
+            self.driver.execute_script("""
+                arguments[0].scrollIntoView({block:'center'});
+                arguments[0].click();
+            """, select_el)
+            self.wait_seconds(0.8)
+
+            # Step 3: Find and click the option
+            options = self.driver.find_elements(By.CSS_SELECTOR, "div[role='listbox'] mat-option")
+            for opt in options:
+                try:
+                    if opt.text.strip() == option_text and opt.is_displayed():
+                        self.driver.execute_script("arguments[0].click();", opt)
+                        self.wait_seconds(0.5)
+                        # BUG-001 WORKAROUND
+                        self.driver.execute_script("""
+                            arguments[0].dispatchEvent(new Event('change', {bubbles: true}));
+                        """, select_el)
+                        self._close_select_panel()
+                        log.info(f"Label-based select succeeded: '{label_text}' -> '{option_text}'")
+                        return
+                except Exception:
+                    continue
+
+            self._close_select_panel()
+            log.warning(f"Option '{option_text}' not found for label '{label_text}'")
+        except Exception as e:
+            log.warning(f"Label-based dropdown selection failed: {e}")
+            self._close_select_panel()
+
+    def _fill_input_by_name_js(self, field_name, value, scope="popup"):
+        """Fill a text input using JS nativeInputValueSetter + dispatchEvent.
+
+        FIX: New method following agent_page.py pattern. Uses
+        `Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set`
+        to set the value, then fires `input` and `change` events with
+        `bubbles: true` so Angular's reactive form model detects the change.
+
+        This is more reliable than `send_keys()` for Angular Material forms
+        because it bypasses the browser's input event buffering and directly
+        notifies Angular's change detection.
+
+        Args:
+            field_name: HTML name attribute of the input (e.g., 'Farmer Name').
+            value: Value to set.
+            scope: 'popup' = search whole popup, 'panel' = active panel only.
+        """
+        if not value:
+            return
+        log.info(f"JS fill input: name='{field_name}', value='{str(value)[:50]}...'")
+        try:
+            result = self.driver.execute_script("""
+                var fieldName = arguments[0];
+                var val = arguments[1];
+                var scopeMode = arguments[2];
+                var popup = document.querySelector('.big-model, mat-dialog-container');
+                if (!popup) return false;
+
+                var searchRoot = popup;
+                if (scopeMode === 'panel') {
+                    var activeContent = popup.querySelector(
+                        'div.mat-horizontal-stepper-content-current'
+                    );
+                    if (!activeContent) {
+                        var allPanels = popup.querySelectorAll(
+                            'div[role="tabpanel"].mat-horizontal-stepper-content'
+                        );
+                        for (var p = 0; p < allPanels.length; p++) {
+                            if (!allPanels[p].hasAttribute('inert')) {
+                                activeContent = allPanels[p];
+                                break;
+                            }
+                        }
+                    }
+                    if (activeContent) searchRoot = activeContent;
+                }
+
+                // Try exact name match first, then contains (for TAB char fields)
+                var inputs = searchRoot.querySelectorAll('input[name="' + fieldName + '"]');
+                if (inputs.length === 0) {
+                    // Fallback: search by contains (handles trailing TAB chars)
+                    var allInputs = searchRoot.querySelectorAll('input[name]');
+                    for (var i = 0; i < allInputs.length; i++) {
+                        var name = allInputs[i].getAttribute('name') || '';
+                        if (name.indexOf(fieldName) === 0 && allInputs[i].offsetParent !== null) {
+                            inputs = [allInputs[i]];
+                            break;
+                        }
+                    }
+                }
+
+                if (inputs.length === 0) return false;
+
+                // Find the visible input (not in inert panel)
+                var targetInput = null;
+                for (var j = 0; j < inputs.length; j++) {
+                    if (inputs[j].offsetParent !== null) {
+                        targetInput = inputs[j];
+                        break;
+                    }
+                }
+                if (!targetInput && inputs.length > 0) {
+                    targetInput = inputs[0];
+                }
+                if (!targetInput) return false;
+
+                // Use nativeInputValueSetter for Angular compatibility
+                var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value'
+                ).set;
+                nativeInputValueSetter.call(targetInput, val);
+                targetInput.dispatchEvent(new Event('input', {bubbles: true}));
+                targetInput.dispatchEvent(new Event('change', {bubbles: true}));
+
+                return true;
+            """, field_name, str(value), scope)
+
+            if result:
+                log.info(f"JS fill succeeded: '{field_name}'")
+            else:
+                log.warning(f"JS fill failed: input '{field_name}' not found")
+        except Exception as e:
+            log.warning(f"JS fill input failed: {e}")
 
     # ==============================================================
     #  Address Tabs: Fill Current/Permanent Address
@@ -2477,29 +2855,34 @@ class FarmerPage(BasePage):
         NOTE: Account Type label has a trailing tab character: "Account Type\\t"
         so the XPath contains(.,'Account Type') still matches.
 
-        FIX: Added initial wait for panel content to render after force-navigate.
+        FIX: Uses _fill_active_panel_text_input() for ALL text inputs instead
+        of global type_text(). After force-navigate, global CSS selectors like
+        input[name='Bank Name'] may find elements in inert address panels,
+        AND send_keys() doesn't trigger Angular's reactive form change detection.
+        The panel-scoped JS method uses nativeInputValueSetter + dispatchEvent
+        to properly register values with Angular's form model.
         """
         log.info("Filling Bank Details...")
 
         # Wait for panel content to render after navigation
         self.wait_seconds(1)
 
-        # Upper visible text inputs
+        # Upper visible text inputs — FIX: panel-scoped + Angular-synced
         if data.get("bank_name"):
-            self.type_text(self.BANK_NAME_INPUT, data["bank_name"], clear_first=True)
+            self._fill_active_panel_text_input("Bank Name", data["bank_name"])
         if data.get("branch"):
-            self.type_text(self.BRANCH_INPUT, data["branch"], clear_first=True)
+            self._fill_active_panel_text_input("Branch", data["branch"])
         if data.get("ifsc_code"):
-            self.type_text(self.IFSC_CODE_INPUT, data["ifsc_code"], clear_first=True)
+            self._fill_active_panel_text_input("IFSC Code", data["ifsc_code"])
 
         # Dropdowns (may need scroll)
         self._fill_dropdown_if_provided(self.ACCOUNT_TYPE_SELECT, data.get("account_type"))
 
-        # Lower text inputs
+        # Lower text inputs — FIX: panel-scoped + Angular-synced
         if data.get("account_holder_name"):
-            self.type_text(self.ACCOUNT_HOLDER_NAME_INPUT, data["account_holder_name"], clear_first=True)
+            self._fill_active_panel_text_input("Account Holder Name", data["account_holder_name"])
         if data.get("account_number"):
-            self.type_text(self.ACCOUNT_NUMBER_INPUT, data["account_number"], clear_first=True)
+            self._fill_active_panel_text_input("Account Number", data["account_number"])
 
         # More dropdowns
         self._fill_dropdown_if_provided(self.BANK_PROOF_SELECT, data.get("bank_proof"))
@@ -2531,19 +2914,26 @@ class FarmerPage(BasePage):
         log.info("Filling Family Details...")
 
         # Text inputs — use JS-scoped finding to avoid matching inactive panels
+        # FIX: Data keys now match generate_valid_family_data() output:
+        #   'family_phone_number' (not 'phone_number')
+        #   'family_dob' (not 'date_of_birth')
+        #   'family_gender' (not 'gender')
+        #   'family_pincode' (not 'pincode')
+        #   'family_address' (not 'address')
         if data.get("member_name"):
             self._fill_active_panel_text_input("Member Name", data["member_name"])
-        if data.get("phone_number"):
-            self._fill_active_panel_text_input("Phone Number", data["phone_number"])
+        if data.get("family_phone_number"):
+            self._fill_active_panel_text_input("Phone Number", data["family_phone_number"])
 
         # Date Of Birth — must scope to active panel's datepicker
-        if data.get("date_of_birth"):
-            self._fill_active_panel_date_input(data["date_of_birth"])
+        if data.get("family_dob"):
+            self._fill_active_panel_date_input(data["family_dob"])
 
         # Age is READONLY — auto-calculated from DOB, skip
 
         # Dropdowns — _fill_cascading_dropdown() already scopes to active panel
-        self._fill_dropdown_if_provided(self.FAMILY_GENDER_SELECT, data.get("gender"))
+        # FIX: Use 'family_gender' key (not 'gender')
+        self._fill_dropdown_if_provided(self.FAMILY_GENDER_SELECT, data.get("family_gender"))
         self._fill_dropdown_if_provided(self.EDUCATION_OF_FARMER_FAMILY_SELECT, data.get("education_of_farmer_family"))
         self._fill_dropdown_if_provided(self.RELATIONSHIP_SELECT, data.get("relationship"))
 
@@ -2551,12 +2941,14 @@ class FarmerPage(BasePage):
         # (skip unless data explicitly requests it)
 
         # Pincode — note: name='Pincode' (not 'Pin Code' like address tabs)
-        if data.get("pincode"):
-            self._fill_active_panel_text_input("Pincode", data["pincode"])
+        # FIX: Use 'family_pincode' key (not 'pincode')
+        if data.get("family_pincode"):
+            self._fill_active_panel_text_input("Pincode", data["family_pincode"])
 
         # Address — same name as address tab fields but in Family Details panel
-        if data.get("address"):
-            self._fill_active_panel_text_input("Address", data["address"])
+        # FIX: Use 'family_address' key (not 'address')
+        if data.get("family_address"):
+            self._fill_active_panel_text_input("Address", data["family_address"])
 
         # More dropdowns
         self._fill_dropdown_if_provided(self.MARITAL_STATUS_SELECT, data.get("marital_status"))
@@ -2609,10 +3001,13 @@ class FarmerPage(BasePage):
         # No Of Owner — name has trailing TAB, BUG-F01: required but no asterisk
         if data.get("no_of_owner"):
             self._fill_active_panel_text_input_contains("No Of Owner", data["no_of_owner"])
-        if data.get("total_land_on_document_hectare"):
-            self._fill_active_panel_text_input_contains("Total Land On Document", data["total_land_on_document_hectare"])
-        if data.get("individual_land_holding_hectare"):
-            self._fill_active_panel_text_input_contains("Individual Land Holding", data["individual_land_holding_hectare"])
+        # FIX: Data key names now match generate_valid_land_data() output:
+        #   data key 'total_land_on_document' (not 'total_land_on_document_hectare')
+        #   data key 'individual_land_holding' (not 'individual_land_holding_hectare')
+        if data.get("total_land_on_document"):
+            self._fill_active_panel_text_input_contains("Total Land On Document", data["total_land_on_document"])
+        if data.get("individual_land_holding"):
+            self._fill_active_panel_text_input_contains("Individual Land Holding", data["individual_land_holding"])
 
         # Middle text inputs — name attrs have trailing TAB chars
         if data.get("gat_number"):
@@ -2621,12 +3016,15 @@ class FarmerPage(BasePage):
             self._fill_active_panel_text_input_contains("Land Coordinate", data["land_coordinate"])
 
         # Scroll-down text inputs — name attrs have trailing TAB chars
+        # FIX: Data keys now match generate_valid_land_data() output:
+        #   'total_cultivation_land_hectare' (not 'total_cultivation_land_in_hectare')
+        #   'total_cultivation_land_acreage' (not 'total_cultivation_land_in_acreage')
         if data.get("total_land_in_hectare"):
             self._fill_active_panel_text_input_contains("Total Land In hectare", data["total_land_in_hectare"])
-        if data.get("total_cultivation_land_in_hectare"):
-            self._fill_active_panel_text_input_contains("Total Cultivation Land In hectare", data["total_cultivation_land_in_hectare"])
-        if data.get("total_cultivation_land_in_acreage"):
-            self._fill_active_panel_text_input_contains("Total Cultivation Land in acreage", data["total_cultivation_land_in_acreage"])
+        if data.get("total_cultivation_land_hectare"):
+            self._fill_active_panel_text_input_contains("Total Cultivation Land In hectare", data["total_cultivation_land_hectare"])
+        if data.get("total_cultivation_land_acreage"):
+            self._fill_active_panel_text_input_contains("Total Cultivation Land in acreage", data["total_cultivation_land_acreage"])
 
         # Dropdowns
         self._fill_dropdown_if_provided(self.LAND_OWNERSHIP_SELECT, data.get("land_ownership"))
@@ -2652,19 +3050,22 @@ class FarmerPage(BasePage):
         log.info("Filling Crop Details...")
 
         # Farm Name — also exists in Land Details, must scope to active panel
-        if data.get("farm_name"):
-            self._fill_active_panel_text_input("Farm Name", data["farm_name"])
+        if data.get("crop_farm_name"):
+            self._fill_active_panel_text_input("Farm Name", data["crop_farm_name"])
         self._fill_dropdown_if_provided(self.CROP_SELECT, data.get("crop"))
         self._fill_dropdown_if_provided(self.SEASON_SELECT, data.get("season"))
         # Number fields — name attrs have trailing TAB chars
-        if data.get("cultivation_land_in_hectare"):
-            self._fill_active_panel_text_input_contains("Cultivation Land In hectare", data["cultivation_land_in_hectare"])
+        # FIX: Data keys now match generate_valid_crop_data() output:
+        #   'cultivation_land_hectare' (not 'cultivation_land_in_hectare')
+        #   'cultivation_land_acreage' (not 'cultivation_land_in_acreage')
+        if data.get("cultivation_land_hectare"):
+            self._fill_active_panel_text_input_contains("Cultivation Land In hectare", data["cultivation_land_hectare"])
         if data.get("expected_yield_projection"):
             self._fill_active_panel_text_input_contains("Expected Yield projection", data["expected_yield_projection"])
         if data.get("actual_produce"):
             self._fill_active_panel_text_input_contains("Actual Produce", data["actual_produce"])
-        if data.get("cultivation_land_in_acreage"):
-            self._fill_active_panel_text_input_contains("Cultivation Land In acreage", data["cultivation_land_in_acreage"])
+        if data.get("cultivation_land_acreage"):
+            self._fill_active_panel_text_input_contains("Cultivation Land In acreage", data["cultivation_land_acreage"])
 
         log.info("Crop Details filled")
 
@@ -2673,12 +3074,16 @@ class FarmerPage(BasePage):
     # ==============================================================
 
     def fill_kyc_details(self, data):
-        """Fill the KYC Details tab."""
+        """Fill the KYC Details tab.
+
+        FIX: Uses _fill_active_panel_text_input() for KYC Number instead
+        of global type_text() for Angular form model sync.
+        """
         log.info("Filling KYC Details...")
 
         self._fill_dropdown_if_provided(self.KYC_DOCUMENT_SELECT, data.get("kyc_document"))
         if data.get("kyc_number"):
-            self.type_text(self.KYC_NUMBER_INPUT, data["kyc_number"], clear_first=True)
+            self._fill_active_panel_text_input("KYC Number", data["kyc_number"])
 
         log.info("KYC Details filled")
 
@@ -2702,15 +3107,18 @@ class FarmerPage(BasePage):
     def fill_income_details(self, data):
         """Fill the Income Details tab.
         NOTE: Exact Amount accepts 0 and . prefix (BUG-F06).
+
+        FIX: Uses _fill_active_panel_text_input() for Exact Amount instead
+        of global type_text() for Angular form model sync.
         """
         log.info("Filling Income Details...")
 
         self._fill_dropdown_if_provided(self.SOURCE_OF_INCOME_SELECT, data.get("source_of_income"))
         self._fill_dropdown_if_provided(self.INCOME_BRACKET_SELECT, data.get("income_bracket"))
         if data.get("exact_amount"):
-            self.type_text(self.EXACT_AMOUNT_INPUT, data["exact_amount"], clear_first=True)
+            self._fill_active_panel_text_input("Exact Amount", data["exact_amount"])
 
-        log.info("Income Details filled")
+    log.info("Income Details filled")
 
     # ==============================================================
     #  Irrigation Details Tab (Borrower Farmer only)
@@ -2730,13 +3138,20 @@ class FarmerPage(BasePage):
     # ==============================================================
 
     def fill_award_details(self, data):
-        """Fill the Award Details tab."""
+        """Fill the Award Details tab.
+
+        FIX: Uses _fill_active_panel_text_input() for Name and Year instead
+        of global type_text() for Angular form model sync.
+        NOTE: 'Name' is a common field name — panel-scoping prevents matching
+        the wrong element in an inert panel.
+        """
         log.info("Filling Award Details...")
 
-        if data.get("name"):
-            self.type_text(self.AWARD_NAME_INPUT, data["name"], clear_first=True)
-        if data.get("year"):
-            self.type_text(self.AWARD_YEAR_INPUT, data["year"], clear_first=True)
+        # FIX: Data keys match generate_valid_award_data() output
+        if data.get("award_name"):
+            self._fill_active_panel_text_input("Name", data["award_name"])
+        if data.get("award_year"):
+            self._fill_active_panel_text_input("Year", data["award_year"])
 
         log.info("Award Details filled")
 
@@ -2747,20 +3162,27 @@ class FarmerPage(BasePage):
     def fill_loan_details(self, data):
         """Fill the Loan Details tab.
         NOTE: Sanctioned Amount & Present Outstanding Amount accept 0/. prefix (BUG-F06).
+
+        FIX: Uses _fill_active_panel_text_input() for ALL text inputs instead
+        of global type_text() for Angular form model sync. 'Purpose Of Loan'
+        and other fields have name attrs with trailing TAB chars, so use
+        _fill_active_panel_text_input_contains() for those.
         """
         log.info("Filling Loan Details...")
 
         if data.get("loan_name"):
-            self.type_text(self.LOAN_NAME_INPUT, data["loan_name"], clear_first=True)
+            self._fill_active_panel_text_input("Loan Name", data["loan_name"])
         self._fill_dropdown_if_provided(self.FACILITY_TYPE_SELECT, data.get("facility_type"))
         if data.get("purpose_of_loan"):
-            self.type_text(self.PURPOSE_OF_LOAN_INPUT, data["purpose_of_loan"], clear_first=True)
-        if data.get("availed_from"):
-            self.type_text(self.AVAILED_FROM_INPUT, data["availed_from"], clear_first=True)
+            self._fill_active_panel_text_input_contains("Purpose Of Loan", data["purpose_of_loan"])
+        # FIX: Data key 'availed_from_date' to match generator
+        if data.get("availed_from_date"):
+            # 'Availed From' is a datepicker — use panel-scoped date input
+            self._fill_active_panel_date_input(data["availed_from_date"])
         if data.get("sanctioned_amount"):
-            self.type_text(self.SANCTIONED_AMOUNT_INPUT, data["sanctioned_amount"], clear_first=True)
+            self._fill_active_panel_text_input_contains("Sanctioned Amount", data["sanctioned_amount"])
         if data.get("present_outstanding_amount"):
-            self.type_text(self.PRESENT_OUTSTANDING_INPUT, data["present_outstanding_amount"], clear_first=True)
+            self._fill_active_panel_text_input_contains("Present Outstanding Amount", data["present_outstanding_amount"])
 
         log.info("Loan Details filled")
 

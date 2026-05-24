@@ -1,0 +1,78 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+
+// GET /api/schedules
+export async function GET() {
+  try {
+    const runs = await db.scheduledRun.findMany({
+      orderBy: { createdAt: 'desc' },
+    })
+
+    const mapped = runs.map((r) => ({
+      ...r,
+      frequency: r.frequency === 'one_time' ? 'one-time' : r.frequency,
+      testSelection: r.testSelection,
+      selectedTestIds: r.selectedTestIds ? JSON.parse(r.selectedTestIds) : undefined,
+    }))
+
+    return NextResponse.json(mapped)
+  } catch (error) {
+    console.error('[Schedules] GET error:', error)
+    return NextResponse.json({ error: 'Failed to fetch scheduled runs' }, { status: 500 })
+  }
+}
+
+// POST /api/schedules
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { moduleId, moduleName, frequency, scheduledTime, testSelection, selectedTestIds, enabled, createdBy } = body
+
+    if (!moduleId || !moduleName || !scheduledTime || !createdBy) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    const freqMap: Record<string, string> = {
+      'one-time': 'one_time',
+      'one_time': 'one_time',
+      'daily': 'daily',
+      'weekly': 'weekly',
+    }
+    const dbFrequency = freqMap[frequency] || 'one_time'
+
+    const validSelections = ['all', 'priority', 'selected']
+    const dbSelection = validSelections.includes(testSelection) ? testSelection : 'all'
+
+    const run = await db.scheduledRun.create({
+      data: {
+        moduleId,
+        moduleName,
+        frequency: dbFrequency,
+        scheduledTime: new Date(scheduledTime),
+        testSelection: dbSelection,
+        selectedTestIds: selectedTestIds ? JSON.stringify(selectedTestIds) : null,
+        enabled: enabled !== undefined ? enabled : true,
+        createdBy,
+      },
+    })
+
+    await db.notification.create({
+      data: {
+        type: 'schedule',
+        title: 'New schedule created',
+        message: `Schedule created for ${moduleName} (${frequency})`,
+      },
+    })
+
+    const mapped = {
+      ...run,
+      frequency: run.frequency === 'one_time' ? 'one-time' : run.frequency,
+      selectedTestIds: run.selectedTestIds ? JSON.parse(run.selectedTestIds) : undefined,
+    }
+
+    return NextResponse.json(mapped, { status: 201 })
+  } catch (error) {
+    console.error('[Schedules] POST error:', error)
+    return NextResponse.json({ error: 'Failed to create scheduled run' }, { status: 500 })
+  }
+}

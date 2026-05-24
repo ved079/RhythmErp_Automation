@@ -431,11 +431,20 @@ FIELD_METADATA = {
 #  Core Data Generators
 # ==============================================================
 
+import string
+
 def generate_farmer_name(prefix="AutoFarmer"):
-    """Generate a random farmer name with prefix and timestamp for uniqueness."""
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    rand = random.randint(100, 999)
-    return f"{prefix}_{timestamp}_{rand}"
+    """Generate a random farmer name with only letters (no numbers or special chars)."""
+    # Keep only alphabetic characters in prefix
+    clean_prefix = ''.join(char for char in prefix if char.isalpha())
+    
+    if not clean_prefix:
+        clean_prefix = "AutoFarmer"
+    
+    # Generate random letters instead of timestamp and numbers
+    random_suffix = ''.join(random.choices(string.ascii_letters, k=8))
+    
+    return f"{clean_prefix}{random_suffix}"
 
 
 def generate_phone_number():

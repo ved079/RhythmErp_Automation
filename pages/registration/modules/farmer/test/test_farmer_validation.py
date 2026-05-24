@@ -312,7 +312,7 @@ class TestCreateFormValidations:
         page.fill_step0(data)
         page.wait_seconds(1)
 
-        values = page.get_form_field_values_step1() if hasattr(page, 'get_form_field_values_step1') else {}
+        values = page.get_form_field_values_step0() if hasattr(page, 'get_form_field_values_step0') else {}
         log.info("Name 256 chars entered — checking truncation behavior")
 
         try:

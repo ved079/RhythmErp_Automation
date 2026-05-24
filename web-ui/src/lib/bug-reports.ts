@@ -1,5 +1,5 @@
 // ─── Bug Report Types & Helpers ─────────────────────────
-// Shared between user panel and admin panel via localStorage
+// All data now lives in SQLite via API routes (not localStorage)
 
 export interface Reply {
   id: string
@@ -23,140 +23,113 @@ export interface BugReport {
   createdAt: string
   updatedAt: string
   replies: Reply[]
-  assignedTo?: string
-  assignedToName?: string
+  assignedTo?: string | null
+  assignedToName?: string | null
   readByUser: boolean
   readByAdmin: boolean
 }
 
-const STORAGE_KEY = 'rhythmerp-bug-reports'
+// ─── Bug Report API Calls ──────────────────────────────
 
-export function getBugReports(): BugReport[] {
-  if (typeof window === 'undefined') return []
+export async function getBugReports(): Promise<BugReport[]> {
   try {
-    const data = localStorage.getItem(STORAGE_KEY)
-    if (!data) return []
-    const reports: BugReport[] = JSON.parse(data)
-    // Migrate old records that lack new fields
-    let migrated = false
-    for (const r of reports) {
-      if (!Array.isArray(r.replies)) { r.replies = []; migrated = true }
-      if (typeof r.readByUser !== 'boolean') { r.readByUser = true; migrated = true }
-      if (typeof r.readByAdmin !== 'boolean') { r.readByAdmin = true; migrated = true }
-    }
-    if (migrated) localStorage.setItem(STORAGE_KEY, JSON.stringify(reports))
-    return reports
+    const res = await fetch('/api/bugs')
+    if (!res.ok) return []
+    const data = await res.json()
+    return data.map((r: Record<string, unknown>) => ({
+      ...r,
+      assignedTo: r.assignedTo || undefined,
+      assignedToName: r.assignedToName || undefined,
+      replies: Array.isArray(r.replies) ? r.replies : [],
+    }))
   } catch {
     return []
   }
 }
 
-export function addBugReport(report: Omit<BugReport, 'id' | 'status' | 'createdAt' | 'updatedAt' | 'replies' | 'readByUser' | 'readByAdmin'>): BugReport {
-  const reports = getBugReports()
-  const newReport: BugReport = {
-    ...report,
-    id: `BR-${String(reports.length + 1).padStart(3, '0')}`,
-    status: 'open',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    replies: [],
-    readByUser: true,
-    readByAdmin: false,
-  }
-  reports.unshift(newReport) // newest first
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(reports))
-  // Add notification
-  addNotification({
-    type: 'schedule',
-    title: 'New bug report filed',
-    message: `${report.reporterName} filed ${newReport.id} for ${report.testDescription}`,
-    ticketId: newReport.id,
+export async function addBugReport(report: Omit<BugReport, 'id' | 'status' | 'createdAt' | 'updatedAt' | 'replies' | 'readByUser' | 'readByAdmin'>): Promise<BugReport> {
+  const res = await fetch('/api/bugs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(report),
   })
-  return newReport
+  if (!res.ok) throw new Error('Failed to create bug report')
+  return res.json()
 }
 
-export function updateBugReportStatus(id: string, status: BugReport['status']): BugReport | null {
-  const reports = getBugReports()
-  const idx = reports.findIndex((r) => r.id === id)
-  if (idx < 0) return null
-  const oldStatus = reports[idx].status
-  reports[idx] = { ...reports[idx], status, updatedAt: new Date().toISOString(), readByUser: false }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(reports))
-  // Add notification if status changed
-  if (oldStatus !== status) {
-    addNotification({
-      type: 'status_change',
-      title: `Status updated`,
-      message: `${id} status changed to ${status}`,
-      ticketId: id,
+export async function updateBugReportStatus(id: string, status: BugReport['status']): Promise<BugReport | null> {
+  try {
+    const res = await fetch(`/api/bugs/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
     })
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
   }
-  return reports[idx]
 }
 
-export function getOpenBugCount(): number {
-  return getBugReports().filter((r) => r.status === 'open').length
+export async function getOpenBugCount(): Promise<number> {
+  const reports = await getBugReports()
+  return reports.filter((r) => r.status === 'open').length
 }
 
-export function addReplyToReport(reportId: string, reply: Omit<Reply, 'id' | 'createdAt'>): BugReport | null {
-  const reports = getBugReports()
-  const idx = reports.findIndex((r) => r.id === reportId)
-  if (idx < 0) return null
-  const newReply: Reply = {
-    ...reply,
-    id: `reply-${Date.now()}`,
-    createdAt: new Date().toISOString(),
-  }
-  reports[idx] = {
-    ...reports[idx],
-    replies: [...reports[idx].replies, newReply],
-    updatedAt: new Date().toISOString(),
-    readByUser: reply.authorRole === 'admin' ? false : reports[idx].readByUser,
-    readByAdmin: reply.authorRole === 'user' ? false : reports[idx].readByAdmin,
-  }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(reports))
-  // Add notification
-  if (reply.authorRole === 'admin') {
-    addNotification({
-      type: 'reply',
-      title: 'Admin replied',
-      message: `Admin replied to ${reportId}`,
-      ticketId: reportId,
+export async function addReplyToReport(reportId: string, reply: Omit<Reply, 'id' | 'createdAt'>): Promise<BugReport | null> {
+  try {
+    const res = await fetch(`/api/bugs/${reportId}/replies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reply),
     })
-  } else {
-    addNotification({
-      type: 'reply',
-      title: 'User followed up',
-      message: `User replied to ${reportId}`,
-      ticketId: reportId,
-    })
+    if (!res.ok) return null
+    // Re-fetch the full bug report to get updated replies + read flags
+    const reportRes = await fetch(`/api/bugs`)
+    if (!reportRes.ok) return null
+    const allReports = await reportRes.json()
+    return allReports.find((r: BugReport) => r.id === reportId) || null
+  } catch {
+    return null
   }
-  return reports[idx]
 }
 
-export function markReportReadByUser(reportId: string): void {
-  const reports = getBugReports()
-  const idx = reports.findIndex((r) => r.id === reportId)
-  if (idx < 0) return
-  reports[idx] = { ...reports[idx], readByUser: true }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(reports))
+export async function markReportReadByUser(reportId: string): Promise<void> {
+  try {
+    await fetch(`/api/bugs/${reportId}/read`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: 'user' }),
+    })
+  } catch {
+    // silent fail
+  }
 }
 
-export function markReportReadByAdmin(reportId: string): void {
-  const reports = getBugReports()
-  const idx = reports.findIndex((r) => r.id === reportId)
-  if (idx < 0) return
-  reports[idx] = { ...reports[idx], readByAdmin: true }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(reports))
+export async function markReportReadByAdmin(reportId: string): Promise<void> {
+  try {
+    await fetch(`/api/bugs/${reportId}/read`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: 'admin' }),
+    })
+  } catch {
+    // silent fail
+  }
 }
 
-export function assignReport(reportId: string, assignedTo: string, assignedToName: string): BugReport | null {
-  const reports = getBugReports()
-  const idx = reports.findIndex((r) => r.id === reportId)
-  if (idx < 0) return null
-  reports[idx] = { ...reports[idx], assignedTo, assignedToName, updatedAt: new Date().toISOString() }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(reports))
-  return reports[idx]
+export async function assignReport(reportId: string, assignedTo: string, assignedToName: string): Promise<BugReport | null> {
+  try {
+    const res = await fetch(`/api/bugs/${reportId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignedTo, assignedToName }),
+    })
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
+  }
 }
 
 // ─── Notification Types & Helpers ──────────────────────────
@@ -165,53 +138,56 @@ export interface Notification {
   type: 'status_change' | 'reply' | 'schedule' | 'run_complete'
   title: string
   message: string
-  ticketId?: string
+  ticketId?: string | null
   createdAt: string
   read: boolean
 }
 
-const NOTIF_STORAGE_KEY = 'rhythmerp-notifications'
-
-export function getNotifications(): Notification[] {
-  if (typeof window === 'undefined') return []
+export async function getNotifications(): Promise<Notification[]> {
   try {
-    const data = localStorage.getItem(NOTIF_STORAGE_KEY)
-    return data ? JSON.parse(data) : []
+    const res = await fetch('/api/notifications')
+    if (!res.ok) return []
+    return res.json()
   } catch {
     return []
   }
 }
 
-export function addNotification(notification: Omit<Notification, 'id' | 'createdAt' | 'read'>): Notification {
-  const notifications = getNotifications()
-  const newNotif: Notification = {
-    ...notification,
-    id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    createdAt: new Date().toISOString(),
-    read: false,
+export async function addNotification(notification: Omit<Notification, 'id' | 'createdAt' | 'read'>): Promise<Notification> {
+  const res = await fetch('/api/notifications', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(notification),
+  })
+  if (!res.ok) throw new Error('Failed to create notification')
+  return res.json()
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  try {
+    await fetch(`/api/notifications/${id}`, { method: 'PATCH' })
+  } catch {
+    // silent fail
   }
-  notifications.unshift(newNotif)
-  // Keep only last 50
-  if (notifications.length > 50) notifications.length = 50
-  localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifications))
-  return newNotif
 }
 
-export function markNotificationRead(id: string): void {
-  const notifications = getNotifications()
-  const idx = notifications.findIndex((n) => n.id === id)
-  if (idx < 0) return
-  notifications[idx] = { ...notifications[idx], read: true }
-  localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifications))
+export async function markAllNotificationsRead(): Promise<void> {
+  try {
+    await fetch('/api/notifications/read-all', { method: 'PATCH' })
+  } catch {
+    // silent fail
+  }
 }
 
-export function markAllNotificationsRead(): void {
-  const notifications = getNotifications()
-  localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifications.map((n) => ({ ...n, read: true }))))
-}
-
-export function getUnreadNotificationCount(): number {
-  return getNotifications().filter((n) => !n.read).length
+export async function getUnreadNotificationCount(): Promise<number> {
+  try {
+    const res = await fetch('/api/notifications/unread-count')
+    if (!res.ok) return 0
+    const data = await res.json()
+    return data.count || 0
+  } catch {
+    return 0
+  }
 }
 
 // ─── Scheduled Run Types & Helpers ──────────────────────────
@@ -226,51 +202,49 @@ export interface ScheduledRun {
   enabled: boolean
   createdBy: string
   createdAt: string
-  lastRunAt?: string
+  lastRunAt?: string | null
 }
 
-const SCHED_STORAGE_KEY = 'rhythmerp-scheduled-runs'
-
-export function getScheduledRuns(): ScheduledRun[] {
-  if (typeof window === 'undefined') return []
+export async function getScheduledRuns(): Promise<ScheduledRun[]> {
   try {
-    const data = localStorage.getItem(SCHED_STORAGE_KEY)
-    return data ? JSON.parse(data) : []
+    const res = await fetch('/api/schedules')
+    if (!res.ok) return []
+    return res.json()
   } catch {
     return []
   }
 }
 
-export function addScheduledRun(run: Omit<ScheduledRun, 'id' | 'createdAt'>): ScheduledRun {
-  const runs = getScheduledRuns()
-  const newRun: ScheduledRun = {
-    ...run,
-    id: `sched-${Date.now()}`,
-    createdAt: new Date().toISOString(),
-  }
-  runs.push(newRun)
-  localStorage.setItem(SCHED_STORAGE_KEY, JSON.stringify(runs))
-  // Add notification
-  addNotification({
-    type: 'schedule',
-    title: 'New schedule created',
-    message: `Schedule created for ${run.moduleName} (${run.frequency})`,
+export async function addScheduledRun(run: Omit<ScheduledRun, 'id' | 'createdAt'>): Promise<ScheduledRun> {
+  const res = await fetch('/api/schedules', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(run),
   })
-  return newRun
+  if (!res.ok) throw new Error('Failed to create scheduled run')
+  return res.json()
 }
 
-export function updateScheduledRun(id: string, updates: Partial<ScheduledRun>): ScheduledRun | null {
-  const runs = getScheduledRuns()
-  const idx = runs.findIndex((r) => r.id === id)
-  if (idx < 0) return null
-  runs[idx] = { ...runs[idx], ...updates }
-  localStorage.setItem(SCHED_STORAGE_KEY, JSON.stringify(runs))
-  return runs[idx]
+export async function updateScheduledRun(id: string, updates: Partial<ScheduledRun>): Promise<ScheduledRun | null> {
+  try {
+    const res = await fetch(`/api/schedules/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    })
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
+  }
 }
 
-export function deleteScheduledRun(id: string): void {
-  const runs = getScheduledRuns()
-  localStorage.setItem(SCHED_STORAGE_KEY, JSON.stringify(runs.filter((r) => r.id !== id)))
+export async function deleteScheduledRun(id: string): Promise<void> {
+  try {
+    await fetch(`/api/schedules/${id}`, { method: 'DELETE' })
+  } catch {
+    // silent fail
+  }
 }
 
 // ─── SLA Helper ──────────────────────────────────────────
@@ -301,7 +275,6 @@ export function getSLAStatus(priority: BugReport['priority'], createdAt: string,
 
   // Check percentage remaining
   const totalMs = deadline.getTime() - new Date(createdAt).getTime()
-  const elapsedMs = now.getTime() - new Date(createdAt).getTime()
   const pctRemaining = (diffMs / totalMs) * 100
 
   const hours = Math.floor(diffMs / (1000 * 60 * 60))

@@ -1,0 +1,71 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+
+// POST /api/bugs/[id]/replies
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const body = await req.json()
+    const { authorName, authorRole, message } = body
+
+    if (!authorName || !message) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    const existing = await db.bugReport.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json({ error: 'Bug report not found' }, { status: 404 })
+    }
+
+    const dbRole = authorRole === 'admin' ? 'admin' : 'user'
+
+    const reply = await db.reply.create({
+      data: {
+        bugReportId: id,
+        authorName,
+        authorRole: dbRole,
+        message,
+      },
+    })
+
+    const updateData: Record<string, unknown> = {}
+    if (authorRole === 'admin') {
+      updateData.readByUser = false
+    } else {
+      updateData.readByAdmin = false
+    }
+
+    await db.bugReport.update({
+      where: { id },
+      data: updateData,
+    })
+
+    if (authorRole === 'admin') {
+      await db.notification.create({
+        data: {
+          type: 'reply',
+          title: 'Admin replied',
+          message: `Admin replied to ${id}`,
+          ticketId: id,
+        },
+      })
+    } else {
+      await db.notification.create({
+        data: {
+          type: 'reply',
+          title: 'User followed up',
+          message: `User replied to ${id}`,
+          ticketId: id,
+        },
+      })
+    }
+
+    return NextResponse.json(reply, { status: 201 })
+  } catch (error) {
+    console.error('[BugReport Replies] POST error:', error)
+    return NextResponse.json({ error: 'Failed to add reply' }, { status: 500 })
+  }
+}

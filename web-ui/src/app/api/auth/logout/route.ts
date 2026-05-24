@@ -6,9 +6,7 @@ export async function POST(request: NextRequest) {
     const token = request.cookies.get('session_token')?.value
 
     if (token) {
-      await db.session.deleteMany({
-        where: { token },
-      })
+      await db.session.deleteMany({ where: { token } })
     }
 
     const response = NextResponse.json({ message: 'Logged out' })

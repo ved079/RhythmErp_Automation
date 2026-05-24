@@ -16,6 +16,7 @@ import {
   addScheduledRun,
   deleteScheduledRun,
   updateScheduledRun,
+  addNotification,
   getSLAStatus,
   type BugReport,
   type Notification as NotifType,
@@ -2064,13 +2065,13 @@ function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sideb
 
   // Load runs
   useEffect(() => {
-    const loadRuns = () => setRuns(getScheduledRuns())
+    const loadRuns = async () => setRuns(await getScheduledRuns())
     loadRuns()
   }, [])
 
   // Countdown timer
   useEffect(() => {
-    const tick = () => {
+    const tick = async () => {
       const now = new Date()
       const newCountdown: Record<string, string> = {}
       for (const run of runs) {
@@ -2081,9 +2082,9 @@ function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sideb
           newCountdown[run.id] = 'Due now!'
           // Trigger mock execution for demo
           if (diff > -2000) {
-            updateScheduledRun(run.id, { lastRunAt: new Date().toISOString(), enabled: false })
-            addNotification({ type: 'run_complete', title: 'Scheduled run completed', message: `Scheduled run for ${run.moduleName} completed (mock)` })
-            setRuns(getScheduledRuns())
+            await updateScheduledRun(run.id, { lastRunAt: new Date().toISOString(), enabled: false })
+            await addNotification({ type: 'run_complete', title: 'Scheduled run completed', message: `Scheduled run for ${run.moduleName} completed (mock)` })
+            setRuns(await getScheduledRuns())
             toast.success(`Scheduled run for ${run.moduleName} completed!`)
           }
         } else {
@@ -2100,7 +2101,7 @@ function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sideb
     return () => clearInterval(interval)
   }, [runs])
 
-  const handleAddRun = useCallback(() => {
+  const handleSave = useCallback(async () => {
     let scheduledTimeStr = ''
     if (frequency === 'one-time' && scheduledDate && scheduledTime) {
       scheduledTimeStr = new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
@@ -2125,7 +2126,7 @@ function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sideb
     const mod = sidebarModules.find((m) => m.id === moduleId) || sidebarModules.find((m) => m.children?.some((c) => c.id === moduleId))
     const modName = mod?.label || moduleId
 
-    addScheduledRun({
+  await addScheduledRun({
       moduleId,
       moduleName: modName,
       frequency,
@@ -2134,20 +2135,20 @@ function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sideb
       enabled: true,
       createdBy: userName,
     })
-    setRuns(getScheduledRuns())
+    setRuns(await getScheduledRuns())
     setShowForm(false)
     toast.success(`Scheduled run created for ${modName}`)
   }, [moduleId, frequency, scheduledDate, scheduledTime, weeklyDay, testSelection, userName])
 
-  const handleDelete = useCallback((id: string) => {
-    deleteScheduledRun(id)
-    setRuns(getScheduledRuns())
+  const handleDelete = useCallback(async (id: string) => {
+    await deleteScheduledRun(id)
+    setRuns(await getScheduledRuns())
     toast.success('Schedule deleted')
   }, [])
 
-  const handleToggle = useCallback((id: string, enabled: boolean) => {
-    updateScheduledRun(id, { enabled: !enabled })
-    setRuns(getScheduledRuns())
+  const handleToggle = useCallback(async (id: string, enabled: boolean) => {
+    await updateScheduledRun(id, { enabled: !enabled })
+    setRuns(await getScheduledRuns())
   }, [])
 
   const formatDate = (iso: string) => {
@@ -2366,8 +2367,8 @@ function ReportToAdminDialog({
 
   const handleSend = useCallback(() => {
     setSending(true)
-    setTimeout(() => {
-      addBugReport({
+    setTimeout(async () => {
+      await addBugReport({
         testId,
         testDescription,
         moduleName,
@@ -3051,9 +3052,9 @@ export default function Home() {
 
   // Poll notifications every 2s
   useEffect(() => {
-    const poll = () => {
-      setUnreadCount(getUnreadNotificationCount())
-      setNotifications(getNotifications())
+    const poll = async () => {
+      setUnreadCount(await getUnreadNotificationCount())
+      setNotifications(await getNotifications())
     }
     poll()
     const interval = setInterval(poll, 2000)
@@ -3084,8 +3085,8 @@ export default function Home() {
       .catch(() => console.error('Failed to fetch test cases'))
   }, [])
 
-  const handleMarkAllRead = useCallback(() => {
-    markAllNotificationsRead()
+  const handleMarkAllRead = useCallback(async () => {
+    await markAllNotificationsRead()
     setUnreadCount(0)
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
   }, [])

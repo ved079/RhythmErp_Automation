@@ -31,9 +31,6 @@ async function proxyRequest(req: NextRequest) {
     });
     clearTimeout(timeout);
 
-    console.log(`[Proxy] Response: ${res.status}`);
-
-    // If SSE stream, forward it directly
     const ct = res.headers.get("content-type") || "";
     if (ct.includes("text/event-stream")) {
       return new NextResponse(res.body, {

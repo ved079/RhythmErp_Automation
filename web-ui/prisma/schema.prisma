@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,22 +7,157 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  admin
+  qa_lead
+  tester
+  viewer
+  client
+}
+
+enum UserStatus {
+  active
+  inactive
+}
+
+enum BugPriority {
+  low
+  medium
+  high
+}
+
+enum BugStatus {
+  open
+  in_progress
+  fixed
+}
+
+enum ReplyAuthorRole {
+  user
+  admin
+}
+
+enum NotificationType {
+  status_change
+  reply
+  schedule
+  run_complete
+}
+
+enum Frequency {
+  one_time
+  daily
+  weekly
+}
+
+enum TestSelection {
+  all
+  priority
+  selected
+}
+
+enum RunStatus {
+  pending
+  running
+  completed
+  failed
+  stopped
+}
+
 model User {
-  id        String    @id @default(cuid())
-  email     String    @unique
-  password  String
-  name      String
-  role      String    @default("admin")
-  sessions  Session[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  password     String
+  role         UserRole   @default(tester)
+  status       UserStatus @default(active)
+  moduleAccess String     @default("[]")
+  lastLogin    DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  sessions     Session[]
 }
 
 model Session {
   id        String   @id @default(cuid())
   token     String   @unique
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model BugReport {
+  id              String      @id @default(cuid())
+  testId          String
+  testDescription String
+  moduleName      String
+  error           String
+  userNote        String
+  priority        BugPriority @default(medium)
+  status          BugStatus   @default(open)
+  reporterName    String
+  reporterEmail   String
+  assignedTo      String?
+  assignedToName  String?
+  readByUser      Boolean     @default(true)
+  readByAdmin     Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  replies         Reply[]
+}
+
+model Reply {
+  id          String          @id @default(cuid())
+  bugReportId String
+  authorName  String
+  authorRole  ReplyAuthorRole @default(user)
+  message     String
+  createdAt   DateTime        @default(now())
+  bugReport   BugReport       @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
+
+  @@index([bugReportId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType @default(run_complete)
+  title     String
+  message   String
+  ticketId  String?
+  userId    String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+}
+
+model ScheduledRun {
+  id              String        @id @default(cuid())
+  moduleId        String
+  moduleName      String
+  frequency       Frequency     @default(one_time)
+  scheduledTime   DateTime
+  testSelection   TestSelection @default(all)
+  selectedTestIds String?
+  enabled         Boolean       @default(true)
+  createdBy       String
+  createdAt       DateTime      @default(now())
+  lastRunAt       DateTime?
+}
+
+model RunHistory {
+  id          String    @id @default(cuid())
+  moduleId    String
+  moduleName  String
+  passed      Int       @default(0)
+  failed      Int       @default(0)
+  total       Int       @default(0)
+  duration    String    @default("")
+  rate        Float     @default(0)
+  results     String?
+  status      RunStatus @default(pending)
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  createdBy   String?
 }

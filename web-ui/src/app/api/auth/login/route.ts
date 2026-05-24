@@ -26,21 +26,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
-    // Clean up old sessions for this user
     await db.session.deleteMany({
       where: { userId: user.id },
     })
 
-    // Create new session
     const token = crypto.randomBytes(32).toString('hex')
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
 
     await db.session.create({
-      data: {
-        token,
-        userId: user.id,
-        expiresAt,
-      },
+      data: { token, userId: user.id, expiresAt },
     })
 
     const response = NextResponse.json({
@@ -53,7 +47,7 @@ export async function POST(request: NextRequest) {
       secure: false,
       sameSite: 'lax',
       path: '/',
-      maxAge: 7 * 24 * 60 * 60, // 7 days
+      maxAge: 7 * 24 * 60 * 60,
     })
 
     return response

@@ -291,15 +291,19 @@ export default function AdminPage() {
   // Load bug reports from localStorage
   useEffect(() => {
     if (!bugReportsLoaded) {
-      setBugReports(getBugReports())
-      setBugReportsLoaded(true)
+      (async () => {
+        setBugReports(await getBugReports())
+        setBugReportsLoaded(true)
+      })()
     }
   }, [bugReportsLoaded])
 
   // Refresh bug reports when section becomes active
   useEffect(() => {
     if (activeSection === 'bug-reports') {
-      setBugReports(getBugReports())
+      (async () => {
+        setBugReports(await getBugReports())
+      })()
     }
   }, [activeSection])
 
@@ -659,9 +663,9 @@ export default function AdminPage() {
             {activeSection === 'bug-reports' && (
               <AdminBugReports
                 reports={bugReports}
-                onUpdateStatus={(id, status) => {
-                  updateBugReportStatus(id, status)
-                  setBugReports(getBugReports())
+                onUpdateStatus={async (id, status) => {
+                  await updateBugReportStatus(id, status)
+                  setBugReports(await getBugReports())
                 }}
               />
             )}
@@ -1340,13 +1344,15 @@ function AdminBugReports({
   // Mark reports as read by admin when expanded
   useEffect(() => {
     if (expandedId) {
-      markReportReadByAdmin(expandedId)
+      (async () => {
+        await markReportReadByAdmin(expandedId)
+      })()
     }
   }, [expandedId])
 
-  const handleSendReply = useCallback((reportId: string) => {
+  const handleSendReply = useCallback(async (reportId: string) => {
     if (!replyText.trim()) return
-    const updated = addReplyToReport(reportId, { authorName: 'Admin', authorRole: 'admin', message: replyText.trim() })
+    const updated = await addReplyToReport(reportId, { authorName: 'Admin', authorRole: 'admin', message: replyText.trim() })
     if (updated) {
       setLocalReports((prev) => prev.map((r) => r.id === reportId ? { ...r, replies: updated.replies, updatedAt: updated.updatedAt } : r))
     }

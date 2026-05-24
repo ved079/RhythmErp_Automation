@@ -63,8 +63,8 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    log.step(3, "Selecting facility (blank - first option)")
-    login_page.select_facility_by_index(index=0)
+    # log.step(3, "Selecting facility (blank - first option)")
+    # login_page.select_facility_by_index(index=0)
 
     login_page.wait_seconds(1)
 
@@ -74,7 +74,6 @@ def logged_in_driver(driver):
 
     login_page.wait_for_login_complete()
     log.info("RhythmERP login successful!")
-    start_screenshot_broadcast(driver)
     start_screenshot_broadcast(driver)
 
     yield driver
