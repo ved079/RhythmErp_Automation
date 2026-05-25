@@ -1,8 +1,5 @@
 """
-conftest.py — Tax Rate Common Settings (RhythmERP)
-====================================================
-Overrides logged_in_driver to use RHYTHMERP credentials.
-Inherits driver from root conftest.
+conftest.py - Tax Authority Common Settings (RhythmERP)
 """
 
 import os
@@ -10,48 +7,62 @@ import sys
 import logging
 import pytest
 
-# ── PATH SETUP ── (5 ".." → Pacs_Automation/)
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", ".."))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
 from common.logger import log
-from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHYTHMERP_FACILITY
-from pages.common_settings.cs_report_generator import CSReportStore, generate_cs_report
-from pages.common_settings.modules.tax_rate.tax_rate_page import TaxRatePage
+from common.browser_utils import get_driver
 from pages.login_screens.Login_Screens_.login_page import LoginPage
 from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
+from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
+from pages.common_settings.cs_report_generator import CSReportStore, generate_cs_report
+
+
+def pytest_configure(config):
+    """Register custom pytest markers for Tax Rate tests."""
+    config.addinivalue_line(
+        "markers", "smoke: Critical path tests — must pass for build acceptance (7 tests)"
+    )
+    config.addinivalue_line(
+        "markers", "sanity: Full functional validation of every test case (20 tests)"
+    )
+    config.addinivalue_line(
+        "markers", "regression: Complete regression suite covering all 20 tests"
+    )
+    config.addinivalue_line(
+        "markers", "bug: Tests verifying known open bugs (5 tests)"
+    )
+    config.addinivalue_line(
+        "markers", "ui: UI/popup/form/table/visual behaviour tests (12 tests)"
+    )
 
 
 # ================================================================
 # FIXTURES
 # ================================================================
 
-@pytest.fixture(scope="function")
-def tr_page(logged_in_driver):
-    """
-    Fresh TaxRatePage instance per test.
-    Navigates to Tax Rate page and ensures clean state.
-    """
-    page = TaxRatePage(logged_in_driver)
-    page.navigate_to_page()
-    page.force_cleanup_all()
-    yield page
+@pytest.fixture(scope="session")
+def driver():
+    log.separator()
+    log.info("LAUNCHING BROWSER (RhythmERP - Tax Authority Tests)...")
+    log.separator()
+    drv = get_driver()
+    drv.maximize_window()
+    yield drv
+    log.separator()
+    log.info("CLOSING BROWSER...")
+    log.separator()
     try:
-        page.force_cleanup_all()
+        drv.quit()
     except Exception:
         pass
 
-
-# ================================================================
-# OVERRIDE: logged_in_driver with RHYTHMERP credentials
-# (root conftest uses PACS credentials — wrong for Tax Rate)
-# ================================================================
 
 @pytest.fixture(scope="session")
 def logged_in_driver(driver):
     """Driver with completed RhythmERP login session."""
     log.separator()
-    log.info("LOGGING INTO RHYTHMERP (Tax Rate tests)...")
+    log.info("LOGGING INTO RHYTHMERP...")
     log.separator()
 
     login_page = LoginPage(driver)
@@ -66,18 +77,13 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    if RHYTHMERP_FACILITY:
-        log.step(3, "Selecting facility: " + str(RHYTHMERP_FACILITY))
-        login_page.select_facility(RHYTHMERP_FACILITY)
-    else:
-        log.step(3, "Selecting facility (blank - first option)")
-        login_page.select_facility(" ")
+    log.step(3, "Selecting facility (blank - first option)")
+    login_page.select_facility_by_index(index=0)
 
     login_page.wait_seconds(1)
 
     log.step(4, "Clicking Login button")
-    login_button = ("xpath", "//button[contains(.,'Login')]")
-    login_page.click(login_button)
+    login_page.click_login()
     login_page.wait_seconds(3)
 
     login_page.wait_for_login_complete()
@@ -91,83 +97,120 @@ def logged_in_driver(driver):
     stop_screenshot_broadcast()
 
 
+@pytest.fixture
+def tax_authority_page(logged_in_driver):
+    """
+    Tax Authority page object — fresh navigation for each test.
+
+    Setup:
+      1. Hard-refresh the browser to clear any leftover state from the
+         previous test (overlays, open popups, stale Angular state).
+      2. Navigate to the Tax Authority screen.
+      3. If navigation fails, do one more hard-refresh + retry before
+         raising — this handles the case where a previous test left the
+         browser in a partially broken state.
+
+    Teardown:
+      Hard-refresh after every test so the next test always starts
+      from a clean browser state.  Wait long enough for Angular to
+      fully settle before the next fixture setup runs.
+    """
+    from tax_authority.tax_authority_page import TaxAuthorityPage
+
+    # --- Pre-test hard refresh to wipe leftover state ---
+    try:
+        logged_in_driver.refresh()
+        import time
+        time.sleep(2)
+    except Exception as e:
+        log.warning(f"Pre-test refresh failed (non-fatal): {e}")
+
+    page = TaxAuthorityPage(logged_in_driver)
+
+    # --- Navigate with one retry ---
+    try:
+        page.navigate_to_tax_authority()
+    except Exception as first_err:
+        log.warning(
+            f"First navigation attempt failed: {first_err!r} — "
+            "retrying after hard refresh..."
+        )
+        try:
+            logged_in_driver.refresh()
+            page.wait_seconds(3)
+            page.navigate_to_tax_authority()
+        except Exception as second_err:
+            log.error(f"Navigation failed after retry: {second_err!r}")
+            raise
+
+    yield page
+
+    # --- Post-test teardown: hard refresh + settle ---
+    try:
+        logged_in_driver.refresh()
+        page.wait_seconds(2)
+        log.info("Post-test hard refresh complete")
+    except Exception as e:
+        log.warning(f"Post-test refresh failed (non-fatal): {e}")
+
+
 # ================================================================
 # REPORT GENERATOR HOOKS
 # ================================================================
 
 _cs_store = CSReportStore()
 
+# ---- Tax Authority Known Issues ----
 _cs_store.record_issue(
     severity="High",
-    module="Tax Rate",
-    category="Security",
-    description="SQL injection accepted in Tax Rate Name field. Input like "
-                "'DROP TABLE tax;--' is accepted and stored as-is without sanitization. "
-                "The value appears in the list table.",
-    expected="System should reject or sanitize SQL injection payloads.",
-    actual="SQL injection payload accepted and stored in database.",
-    test_ref="TR-T11",
+    module="Tax Authority",
+    category="UX",
+    description="No success SweetAlert after successful record creation. "
+                "Form closes silently without any confirmation message.",
+    expected="System should show 'Your record has been added successfully!' "
+             "SweetAlert with OK button after successful create/update.",
+    actual="Form closes silently after Submit/Update. No success toast or "
+           "SweetAlert is displayed. User cannot confirm the save operation.",
+    test_ref="C05, E04",
     status="Open",
 )
 
 _cs_store.record_issue(
     severity="Medium",
-    module="Tax Rate",
-    category="Functionality",
-    description="Edit button is permanently disabled for ALL records (disabled=true). "
-                "Users must use the Version button (folder icon) to create a new version "
-                "of the record instead of directly editing.",
-    expected="Edit button should be enabled for records that can be modified.",
-    actual="Edit button disabled=true on all rows. Version button provides alternative.",
-    test_ref="TR-T24",
+    module="Tax Authority",
+    category="Validation",
+    description="Missing mat-error messages for Tax Type and Country dropdowns "
+                "on empty form submit. Only Tax Name shows 'This field is required'.",
+    expected="All 3 required fields should show 'This field is required' "
+             "mat-error below the field on empty submit.",
+    actual="Only Tax Name shows mat-error. Tax Type and Country have ng-invalid "
+           "class but no visible error message text is rendered.",
+    test_ref="C01",
     status="Open",
 )
 
 _cs_store.record_issue(
     severity="Low",
-    module="Tax Rate",
-    category="UX",
-    description="No visible success SweetAlert2 popup after record creation or versioning. "
-                "The form closes silently with no user feedback.",
-    expected="Success alert should appear confirming the operation.",
-    actual="Form closes silently after success. No alert shown.",
-    test_ref="TR-T01, TR-T02",
-    status="Open",
-)
-
-_cs_store.record_issue(
-    severity="Info",
-    module="Tax Rate",
-    category="Technical",
-    description="From Date and To Date inputs have name=null (no name attribute). "
-                "Fields must be located via mat-label traversal instead of input[name=...].",
-    expected="Date inputs should have name attributes for reliable automation.",
-    actual="name=null on both date inputs. Requires mat-label based selection.",
-    test_ref="TR-T16, TR-T17, TR-T18",
-    status="Open",
-)
-
-_cs_store.record_issue(
-    severity="Info",
-    module="Tax Rate",
-    category="Data Integrity",
-    description="HSN Number '7133100' appears twice in the dropdown options, "
-                "inherited from HSN SAC master data duplication.",
-    expected="Each HSN Number should appear exactly once.",
-    actual="'7133100' appears twice in HSN Number dropdown options.",
-    test_ref="TR-T21",
-    status="Open",
-)
-
-_cs_store.record_issue(
-    severity="Medium",
-    module="Tax Rate",
+    module="Tax Authority",
     category="Validation",
-    description="Duplicate Tax Rate record shows generic 'Validation Failed' message "
-                "instead of a specific duplicate error.",
-    expected="Specific message like 'Tax Rate Name already exists'.",
-    actual="Generic 'Validation Failed' for all validation errors.",
-    test_ref="N/A",
+    description="No maxlength restriction on Tax Name field.",
+    expected="Tax Name should have a reasonable max-length limit.",
+    actual="maxlength=-1 (unlimited). Extremely long strings (200+ characters) "
+           "may be accepted without warning.",
+    test_ref="—",
+    status="Open",
+)
+
+_cs_store.record_issue(
+    severity="Low",
+    module="Tax Authority",
+    category="Consistency",
+    description="ADD button has no mattooltip attribute, unlike other Common Settings "
+                "modules (Bank, Error Code Mst) which have mattooltip='ADD'.",
+    expected="ADD button should have mattooltip='ADD' for consistency.",
+    actual="ADD button has no mattooltip. Requires different locator strategy "
+           "(//button[mat-icon[text()='add']] instead of //button[contains(@class,'erp-add-btn')]).",
+    test_ref="—",
     status="Open",
 )
 
@@ -227,19 +270,19 @@ def pytest_runtest_teardown(item, nextitem):
 
 @pytest.hookimpl(hookwrapper=True, trylast=True)
 def pytest_runtest_makereport(item, call):
-    """Capture test result (pass/fail) and finalize for report."""
+    """Capture test result (pass/fail) and finalise for report."""
     outcome = yield
-    report = outcome.get_result()
+    report  = outcome.get_result()
     if call.when == "call":
         if report.passed:
             status = "PASSED"
-            error = ""
+            error  = ""
         elif report.failed:
             status = "FAILED"
-            error = str(report.longrepr) if report.longrepr else ""
+            error  = str(report.longrepr) if report.longrepr else ""
         else:
             status = "SKIPPED"
-            error = ""
+            error  = ""
         _cs_store.finish_test(status, error)
 
 
@@ -247,10 +290,13 @@ def pytest_sessionfinish(session, exitstatus):
     """Generate Excel report at end of test session."""
     if not _cs_store.has_results():
         return
-    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "reports")
+    output_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "reports"
+    )
     try:
-        filepath = generate_cs_report(_cs_store.results, output_dir,
-                                       issues=_cs_store.known_issues)
+        filepath = generate_cs_report(
+            _cs_store.results, output_dir, issues=_cs_store.known_issues
+        )
         print("")
         print("=" * 60)
         print("  REPORT GENERATED: " + filepath)

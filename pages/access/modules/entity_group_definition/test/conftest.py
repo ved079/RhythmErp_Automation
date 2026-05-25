@@ -22,6 +22,15 @@ from pages.common_settings.cs_report_generator import (
 )
 
 
+def pytest_configure(config):
+    """Register custom pytest markers for Entity Group Definition tests."""
+    config.addinivalue_line("markers", "smoke: Core critical-path tests (create happy path, required field validation, edit pre-populated, search)")
+    config.addinivalue_line("markers", "sanity: Full suite -- all 35 Entity Group Definition tests")
+    config.addinivalue_line("markers", "regression: Full suite -- all 35 Entity Group Definition tests")
+    config.addinivalue_line("markers", "bug: Tests targeting confirmed bugs (BUG-001 through BUG-008)")
+    config.addinivalue_line("markers", "ui: Popup behavior, view/edit form, cancel/close, SweetAlert2, refresh, pagination, sort, filter panel, mat-error")
+
+
 # ================================================================
 # FIXTURES
 # ================================================================

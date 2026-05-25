@@ -1,8 +1,17 @@
 """
 Error Code Mst — Validation Tests
 ===================================
-22 tests across 5 classes covering all form, view, edit, history, and table behaviors.
+22 tests across 5 classes, 0 xfail:
+  - TestCreateFormValidations (8 tests): C01-C08
+  - TestViewFormBehaviors (3 tests): V01-V03
+  - TestEditFormValidations (5 tests): E01-E05
+  - TestHistoryValidations (3 tests): H01-H03
+  - TestTableOperations (3 tests): T01-T03
 Module: Error Code Mst (4 fields — 1 dropdown, 2 text, 1 toggle).
+
+Marker counts: smoke=4, sanity=22, regression=22, bug=3, ui=18
+Known bugs: C06 (duplicate create accepted), C08 (no max-length on Code),
+            E05 (duplicate edit accepted)
 """
 
 import time
@@ -41,6 +50,9 @@ from common.logger import log
 class TestCreateFormValidations:
     """Tests for create form submission and field validation."""
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_C01_empty_form_submit_shows_validation_failed(self, ecm_page):
         """C01: Submit empty form → SweetAlert2 'Validation Failed'."""
         log.info("C01: Empty form submit shows Validation Failed")
@@ -52,6 +64,9 @@ class TestCreateFormValidations:
         assert VALIDATION_FAILED_TITLE in title, f"Expected 'Validation Failed', got '{title}'"
         ecm_page.accept_sweetalert()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_C02_submit_without_dropdown_shows_validation(self, ecm_page):
         """C02: Fill Code, skip dropdown → Validation Failed, dropdown highlighted."""
         log.info("C02: Submit without dropdown shows validation")
@@ -65,6 +80,9 @@ class TestCreateFormValidations:
         ecm_page.accept_sweetalert()
         ecm_page.cancel()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_C03_submit_without_code_shows_validation(self, ecm_page):
         """C03: Select dropdown, skip Code → Validation Failed, Code highlighted."""
         log.info("C03: Submit without code shows validation")
@@ -79,6 +97,9 @@ class TestCreateFormValidations:
         ecm_page.accept_sweetalert()
         ecm_page.cancel()
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_C04_create_valid_record_all_fields(self, ecm_page):
         """C04: Fill all 4 fields → form closes, record found in table."""
         log.info("C04: Create valid record with all fields")
@@ -88,6 +109,8 @@ class TestCreateFormValidations:
         time.sleep(1)
         assert ecm_page.is_code_in_table(data["code"]), "Created record not found in table"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_C05_create_record_without_description(self, ecm_page):
         """C05: Skip Description (optional) → record created successfully."""
         log.info("C05: Create record without description")
@@ -97,6 +120,10 @@ class TestCreateFormValidations:
         time.sleep(1)
         assert ecm_page.is_code_in_table(data["code"]), "Created record not found in table"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_C06_duplicate_record_shows_validation(self, ecm_page):
         """C06: Create with existing Error Code Type + Code → Validation Failed.
         BUG: Server may accept duplicate without error.
@@ -129,6 +156,8 @@ class TestCreateFormValidations:
             # Verify both records exist
             assert ecm_page.is_code_in_table(data["code"]), "Duplicate not found in table"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_C07_create_with_toggle_quantity(self, ecm_page):
         """C07: Toggle Is Qty/Amt to Quantity → table shows 'Yes'."""
         log.info("C07: Create with toggle quantity")
@@ -138,6 +167,10 @@ class TestCreateFormValidations:
         time.sleep(1)
         assert ecm_page.is_code_in_table(data["code"]), "Record not found in table"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_C08_special_characters_in_code(self, ecm_page):
         """C08: Code with special chars TEST@#$%^&*() → record created."""
         log.info("C08: Special characters in code")
@@ -155,6 +188,10 @@ class TestCreateFormValidations:
 class TestViewFormBehaviors:
     """Tests for view form — all fields disabled, only Cancel button."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_V01_view_form_fields_disabled(self, ecm_page):
         """V01: Click View → all fields disabled, no Submit/Update button."""
         log.info("V01: View form fields are disabled")
@@ -179,6 +216,9 @@ class TestViewFormBehaviors:
         assert ecm_page.is_form_open(), "Form popup should be open"
         ecm_page.cancel()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_V02_view_form_displays_correct_data(self, ecm_page):
         """V02: View shows exact same values as table row."""
         log.info("V02: View form displays correct data")
@@ -197,6 +237,9 @@ class TestViewFormBehaviors:
         assert data["code"] == values["code"], \
             f"Code mismatch: expected '{data['code']}', got '{values['code']}'"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_V03_view_form_cancel_closes_popup(self, ecm_page):
         """V03: Open View → Cancel → popup closes, table visible."""
         log.info("V03: View form cancel closes popup")
@@ -223,6 +266,9 @@ class TestViewFormBehaviors:
 class TestEditFormValidations:
     """Tests for edit form — Update button, fields enabled, data pre-filled."""
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_E01_edit_form_has_update_button(self, ecm_page):
         """E01: Click Edit → Update button present (not Submit)."""
         log.info("E01: Edit form has Update button")
@@ -240,6 +286,9 @@ class TestEditFormValidations:
         assert ecm_page.is_form_open(), "Form should be open"
         ecm_page.cancel()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_E02_edit_form_fields_are_enabled(self, ecm_page):
         """E02: Edit mode → all fields are editable (enabled)."""
         log.info("E02: Edit form fields are enabled")
@@ -257,6 +306,9 @@ class TestEditFormValidations:
         assert ecm_page.is_edit_mode(), "Should be in edit mode with enabled fields"
         ecm_page.cancel()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_E03_edit_form_pre_filled_with_data(self, ecm_page):
         """E03: Edit → form shows existing values from the row."""
         log.info("E03: Edit form pre-filled with data")
@@ -277,6 +329,9 @@ class TestEditFormValidations:
             f"Type not pre-filled: expected '{data['error_code_type']}', got '{values['error_code_type']}'"
         ecm_page.cancel()
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_E04_edit_update_changes_table(self, ecm_page):
         """E04: Edit Code → Update → table row updated with new Code."""
         log.info("E04: Edit update changes table")
@@ -298,6 +353,10 @@ class TestEditFormValidations:
         # Verify new code exists and old code gone
         assert ecm_page.is_code_in_table(new_code), f"Updated code '{new_code}' not found in table"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_E05_edit_duplicate_shows_validation(self, ecm_page):
         """E05: Edit to use another row's Error Code Type + Code → Validation Failed.
         BUG: Server may accept duplicate via edit without error.
@@ -345,6 +404,9 @@ class TestEditFormValidations:
 class TestHistoryValidations:
     """Tests for history popup — open, content, cancel."""
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_H01_history_popup_opens(self, ecm_page):
         """H01: Click History → popup opens with 'Error Code Mst History' title."""
         log.info("H01: History popup opens")
@@ -361,6 +423,9 @@ class TestHistoryValidations:
         assert ecm_page.is_history_popup_open(), "History popup should be open"
         ecm_page.close_history_popup()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_H02_history_popup_shows_table_or_no_data(self, ecm_page):
         """H02: History on new record → shows 'No Data Available' (no history yet)."""
         log.info("H02: History shows table or no data message")
@@ -378,6 +443,9 @@ class TestHistoryValidations:
         # Either is acceptable — we just verify popup opened correctly
         assert history["row_count"] >= 0, "Should have row count"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_H03_history_popup_cancel_closes(self, ecm_page):
         """H03: Open History → Cancel → popup closes."""
         log.info("H03: History popup cancel closes")
@@ -405,6 +473,10 @@ class TestHistoryValidations:
 class TestTableOperations:
     """Tests for table display, columns, and toggle default."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_T01_new_record_appears_in_table(self, ecm_page):
         """T01: Create record → new row with correct Code in table."""
         log.info("T01: New record appears in table")
@@ -414,6 +486,9 @@ class TestTableOperations:
         time.sleep(1)
         assert ecm_page.is_code_in_table(data["code"]), "Created record not found in table"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_T02_table_columns_match_form_fields(self, ecm_page):
         """T02: Create with all fields → table row shows all 4 column values."""
         log.info("T02: Table columns match form fields")
@@ -445,6 +520,9 @@ class TestTableOperations:
         assert "Yes" in qty_text, \
             f"Is Qty/Amt column should show 'Yes' for quantity toggle, got '{qty_text}'"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_T03_toggle_default_shows_no_in_table(self, ecm_page):
         """T03: Create without toggling → Is Qty/Amt column shows 'No'."""
         log.info("T03: Toggle default shows No in table")

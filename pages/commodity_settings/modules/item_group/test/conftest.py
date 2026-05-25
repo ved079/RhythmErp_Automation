@@ -32,6 +32,27 @@ from pages.common_settings.cs_report_generator import (
 
 
 # ================================================================
+# PYTEST MARKERS
+# ================================================================
+
+def pytest_configure(config):
+    """Register custom pytest markers for test categorization.
+
+    Usage examples:
+        pytest test_item_group_validation.py -v -m smoke
+        pytest test_item_group_validation.py -v -m "smoke or sanity"
+        pytest test_item_group_validation.py -v -m "sanity and not bug"
+        pytest test_item_group_validation.py -v -m "not bug"
+        pytest test_item_group_validation.py -v -m ui
+    """
+    config.addinivalue_line("markers", "smoke: Critical path tests — must-pass for build acceptance")
+    config.addinivalue_line("markers", "sanity: Core functionality tests — validates key features end-to-end")
+    config.addinivalue_line("markers", "regression: Full regression suite — all tests including edge cases")
+    config.addinivalue_line("markers", "bug: Bug-tracking tests — related to known/confirmed bugs")
+    config.addinivalue_line("markers", "ui: UI/visual behavior tests — popup, view, layout checks")
+
+
+# ================================================================
 # FIXTURES
 # ================================================================
 

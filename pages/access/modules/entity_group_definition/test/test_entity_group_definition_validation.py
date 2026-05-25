@@ -3,18 +3,22 @@ test_entity_group_definition_validation.py
 -----------------------------------------------
 Comprehensive validation test suite for RhythmERP
 Entity Group Definition screen.
-35 test cases across 6 phases.
+35 test cases across 6 classes.
 
-Location: Access > Entity Group Definition
-URL:      /#/master-setup/entitygroupdefinition
+Marker Summary:
+  smoke      =  7  (C01, C02, C03, C04, E01, E02, S01)
+  sanity     = 35  (all tests)
+  regression = 35  (all tests)
+  bug        = 11  (C05–C11, E04, B01, B02, B03)
+  ui         = 18  (C01–C04, D01, D02, E01, E02, E04–E06, S04, P01–P05, B04)
 
-Phases:
-  1. Create Form Validations  (12 tests) -- EGD-C01 to EGD-C12
-  2. Dropdown Validations      (4 tests) -- EGD-D01 to EGD-D04
-  3. Edit Form Validations     (6 tests) -- EGD-E01 to EGD-E06
-  4. Search & Filter           (4 tests) -- EGD-S01 to EGD-S04
-  5. Pagination & Sort         (5 tests) -- EGD-P01 to EGD-P05
-  6. Bug Verification          (4 tests) -- EGD-B01 to EGD-B04
+Classes (6):
+  1. TestCreateFormValidations  (12 tests) -- EGD-C01 to EGD-C12
+  2. TestDropdownValidations    (4 tests) -- EGD-D01 to EGD-D04
+  3. TestEditFormValidations   (6 tests) -- EGD-E01 to EGD-E06
+  4. TestSearchFilter          (4 tests) -- EGD-S01 to EGD-S04
+  5. TestPaginationSort        (5 tests) -- EGD-P01 to EGD-P05
+  6. TestBugVerification       (4 tests) -- EGD-B01 to EGD-B04
 
 Known Behaviors (confirmed via ERP exploration):
   BUG-001 : Duplicate Entity Group Name accepted silently (no error shown)
@@ -116,6 +120,10 @@ class TestCreateFormValidations:
     """EGD-C01 to EGD-C12: Validation checks on the Create form."""
 
     # ---- EGD-C01: Submit with all fields empty ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_C01_empty_form(self, egd_page):
         """Submit with all fields empty -- should show validation warning."""
         log.info("EGD-C01: Empty form submit test")
@@ -152,6 +160,10 @@ class TestCreateFormValidations:
                 pass
 
     # ---- EGD-C02: Create with valid data (happy path) ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_C02_valid_create(self, egd_page):
         """Create with valid data -- should succeed.
 
@@ -184,6 +196,10 @@ class TestCreateFormValidations:
         )
 
     # ---- EGD-C03: Submit with name empty, level filled ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_C03_empty_name(self, egd_page):
         """Submit without Entity Group Name -- should fail."""
         log.info("EGD-C03: Empty name test")
@@ -218,6 +234,10 @@ class TestCreateFormValidations:
                 pass
 
     # ---- EGD-C04: Submit with level empty, name filled ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_C04_empty_level(self, egd_page):
         """Submit without Level -- should fail."""
         log.info("EGD-C04: Empty level test")
@@ -252,6 +272,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- EGD-C05: Spaces-only in both fields ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-002: Spaces-only name accepted without validation")
     @pytest.mark.xfail(
         reason="BUG-002: Spaces-only name accepted without validation",
         strict=False,
@@ -290,6 +313,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- EGD-C06: Duplicate name -- should show error ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-001: Duplicate Entity Group Name accepted silently")
     @pytest.mark.xfail(
         reason="BUG-001: Duplicate Entity Group Name accepted silently",
         strict=False,
@@ -333,6 +359,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- EGD-C07: Case variant name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-003: Case-insensitive duplicate NOT blocked")
     def test_EGD_C07_case_variant(self, egd_page):
         """Create with same name in different case -- test case sensitivity."""
         log.info("EGD-C07: Case variant name test")
@@ -364,6 +393,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- EGD-C08: Negative level ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-004: Level field accepts negative numbers")
     @pytest.mark.xfail(
         reason="BUG-004: Level field accepts negative numbers",
         strict=False,
@@ -403,6 +435,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- EGD-C09: Decimal level ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-005: Level field accepts decimal numbers")
     @pytest.mark.xfail(
         reason="BUG-005: Level field accepts decimal numbers",
         strict=False,
@@ -442,6 +477,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- EGD-C10: Special characters in name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-006: Special characters accepted in name")
     def test_EGD_C10_special_chars(self, egd_page):
         """Entity Group Name with special characters -- test behavior."""
         log.info("EGD-C10: Special characters test")
@@ -471,6 +509,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- EGD-C11: SQL injection in name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-007: SQL injection strings not sanitized")
     def test_EGD_C11_sql_injection(self, egd_page):
         """Entity Group Name with SQL injection -- test behavior."""
         log.info("EGD-C11: SQL injection test")
@@ -500,6 +541,8 @@ class TestCreateFormValidations:
                 pass
 
     # ---- EGD-C12: XSS payload in name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_EGD_C12_xss_payload(self, egd_page):
         """Entity Group Name with XSS payload -- test behavior."""
         log.info("EGD-C12: XSS payload test")
@@ -537,6 +580,9 @@ class TestDropdownValidations:
     """EGD-D01 to EGD-D04: Field behavior checks."""
 
     # ---- EGD-D01: Entity Group Name field accepts text ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_D01_name_field_text(self, egd_page):
         """Entity Group Name field should accept text input."""
         log.info("EGD-D01: Name field text input test")
@@ -571,6 +617,9 @@ class TestDropdownValidations:
                 pass
 
     # ---- EGD-D02: Level field accepts numeric input ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_D02_level_field_numeric(self, egd_page):
         """Level field should accept numeric input."""
         log.info("EGD-D02: Level field numeric input test")
@@ -605,6 +654,8 @@ class TestDropdownValidations:
                 pass
 
     # ---- EGD-D03: Unicode characters in name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_EGD_D03_unicode_name(self, egd_page):
         """Entity Group Name should handle unicode characters."""
         log.info("EGD-D03: Unicode name test")
@@ -634,6 +685,8 @@ class TestDropdownValidations:
                 pass
 
     # ---- EGD-D04: Zero level ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_EGD_D04_zero_level(self, egd_page):
         """Level with zero value -- test if accepted."""
         log.info("EGD-D04: Zero level test")
@@ -672,6 +725,10 @@ class TestEditFormValidations:
     """EGD-E01 to EGD-E06: Validation checks on the Edit form."""
 
     # ---- EGD-E01: View mode -- fields read-only ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_E01_view_read_only(self, egd_page):
         """View popup should have fields in read-only mode.
 
@@ -702,6 +759,10 @@ class TestEditFormValidations:
                 pass
 
     # ---- EGD-E02: Edit -- pre-populated fields ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_E02_edit_prepopulated(self, egd_page):
         """Edit popup should show fields pre-populated with existing data.
 
@@ -743,6 +804,8 @@ class TestEditFormValidations:
                 pass
 
     # ---- EGD-E03: Edit -- update with valid data ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_EGD_E03_valid_edit(self, egd_page):
         """Edit with valid new data -- should succeed."""
         log.info("EGD-E03: Valid edit test")
@@ -783,6 +846,10 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- EGD-E04: Edit -- no success popup ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-003/BUG-008: No success SweetAlert after submit")
+    @pytest.mark.ui
     def test_EGD_E04_edit_no_success_popup(self, egd_page):
         """Verify whether a success SweetAlert appears after edit."""
         log.info("EGD-E04: Edit no success popup test")
@@ -825,6 +892,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- EGD-E05: Edit -- empty required field ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_E05_edit_empty_field(self, egd_page):
         """Edit with an empty required field -- should be blocked."""
         log.info("EGD-E05: Edit empty field test")
@@ -886,6 +956,9 @@ class TestEditFormValidations:
                 pass
 
     # ---- EGD-E06: Cancel edit discards changes ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_E06_cancel_edit_discards(self, egd_page):
         """Clicking Cancel in edit mode should discard changes."""
         log.info("EGD-E06: Cancel edit discards test")
@@ -934,6 +1007,9 @@ class TestSearchFilter:
     """EGD-S01 to EGD-S04: Search and Filter checks."""
 
     # ---- EGD-S01: Search with partial text ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_EGD_S01_search_partial(self, egd_page):
         """Search with partial Entity Group Name -- should find matching records."""
         log.info("EGD-S01: Search partial test")
@@ -950,6 +1026,8 @@ class TestSearchFilter:
         log.info(f"Partial search for '{search_text}': found={found}")
 
     # ---- EGD-S02: Search with exact name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_EGD_S02_search_exact(self, egd_page):
         """Search with exact Entity Group Name -- should find the record.
 
@@ -968,6 +1046,8 @@ class TestSearchFilter:
         log.info(f"Exact search for '{name}': found={found}")
 
     # ---- EGD-S03: Search with non-existent text ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_EGD_S03_search_nonexistent(self, egd_page):
         """Search for non-existent text -- should return no results."""
         log.info("EGD-S03: Search nonexistent test")
@@ -983,6 +1063,9 @@ class TestSearchFilter:
         log.info(f"Correctly not found: {fake_name}")
 
     # ---- EGD-S04: Filter panel opens and closes ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_S04_filter_panel(self, egd_page):
         """Filter panel should open and close."""
         log.info("EGD-S04: Filter panel test")
@@ -1006,6 +1089,9 @@ class TestPaginationSort:
     """EGD-P01 to EGD-P05: Pagination and Sort checks."""
 
     # ---- EGD-P01: View button works after search ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_P01_view_after_search(self, egd_page):
         """View a record by first searching for it, then clicking View.
 
@@ -1035,6 +1121,9 @@ class TestPaginationSort:
             pass
 
     # ---- EGD-P02: Sort by Entity Group Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_P02_sort_name(self, egd_page):
         """Sort by Entity Group Name column."""
         log.info("EGD-P02: Sort by Entity Group Name test")
@@ -1052,6 +1141,9 @@ class TestPaginationSort:
         log.info(f"Sort: before='{first_before}', after='{first_after}'")
 
     # ---- EGD-P03: Sort by Level ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_P03_sort_level(self, egd_page):
         """Sort by Level column."""
         log.info("EGD-P03: Sort by Level test")
@@ -1062,6 +1154,9 @@ class TestPaginationSort:
         log.info("Level sort clicked")
 
     # ---- EGD-P04: Paginator displays ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_P04_paginator_displays(self, egd_page):
         """Paginator should be visible on the listing page."""
         log.info("EGD-P04: Paginator displays test")
@@ -1075,6 +1170,9 @@ class TestPaginationSort:
         log.info(f"Table has {row_count} rows")
 
     # ---- EGD-P05: Refresh button reloads data ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_P05_refresh_reloads(self, egd_page):
         """Clicking Refresh should reload the table data."""
         log.info("EGD-P05: Refresh reloads test")
@@ -1099,6 +1197,9 @@ class TestBugVerification:
     """EGD-B01 to EGD-B04: Verify known bug behaviors."""
 
     # ---- EGD-B01: No success alert after submit ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-003/BUG-008: No success SweetAlert after submit")
     @pytest.mark.xfail(
         reason="BUG-003/BUG-008: No success SweetAlert after submit -- popup just closes",
         strict=False,
@@ -1139,6 +1240,9 @@ class TestBugVerification:
             pass
 
     # ---- EGD-B02: Duplicate name silent failure ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-001: Duplicate Entity Group Name accepted silently")
     @pytest.mark.xfail(
         reason="BUG-001: Duplicate Entity Group Name accepted silently",
         strict=False,
@@ -1181,6 +1285,9 @@ class TestBugVerification:
                 pass
 
     # ---- EGD-B03: Spaces-only name accepted ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-002: Spaces-only name accepted without validation")
     @pytest.mark.xfail(
         reason="BUG-002: Spaces-only name accepted without validation",
         strict=False,
@@ -1216,6 +1323,9 @@ class TestBugVerification:
                 pass
 
     # ---- EGD-B04: Cancel discards data ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_EGD_B04_cancel_discards(self, egd_page):
         """Clicking Cancel should close the form without saving."""
         log.info("EGD-B04: Cancel discards data test")

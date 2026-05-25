@@ -12,6 +12,13 @@ Phases:
   5. Popup / Version / History  (3 tests) — CBR-P-01 to CBR-P-03
   6. Bug Verification           (2 tests) — CBR-H-01 to CBR-H-02
 
+Pytest Marker Summary:
+  smoke:       8 tests (critical path — create, search, view, version, edit)
+  sanity:      15 tests (core validation — build acceptance gate)
+  regression:  15 tests (full suite — all tests)
+  bug:         5 tests (known open bugs — BUG-001 to BUG-006)
+  ui:          6 tests (popups, view, sort, history, date picker)
+
 Known Bugs:
   BUG-001 (HIGH)  : Item Rate accepts non-numeric input
   BUG-002 (MEDIUM): Item Rate accepts zero value
@@ -20,8 +27,12 @@ Known Bugs:
   BUG-005 (LOW)   : Edit disabled for new records
   BUG-006 (MEDIUM): Version creation fails with same From Date
 
-Run:
-  pytest test_commodity_base_rate.py -v --tb=short
+Usage:
+  pytest test_commodity_base_rate.py -m smoke           #  8 critical path tests
+  pytest test_commodity_base_rate.py -m sanity           # 15 build acceptance tests
+  pytest test_commodity_base_rate.py -m regression       # 15 full suite
+  pytest test_commodity_base_rate.py -m bug              #  5 known bug tests
+  pytest test_commodity_base_rate.py -m ui               #  6 UI behavior tests
 """
 
 import os
@@ -61,6 +72,9 @@ from common.logger import log
 class TestCBRCreate:
     """CBR-C-01 to CBR-C-03: Create record tests."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CBR_C_01_create_common_pricing_record(self, cbr_page):
         """Create record with Common pricing type."""
         log.info("CBR-C-01: Create Common pricing record")
@@ -81,6 +95,9 @@ class TestCBRCreate:
         assert found, "Created Common record not found in listing table"
         log.info("Common pricing record created and verified")
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CBR_C_02_create_supplier_pricing_record(self, cbr_page):
         """Create record with Supplier pricing type."""
         log.info("CBR-C-02: Create Supplier pricing record")
@@ -101,6 +118,9 @@ class TestCBRCreate:
         assert found, "Created Supplier record not found in listing table"
         log.info("Supplier pricing record created and verified")
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CBR_C_03_create_multi_row_grid(self, cbr_page):
         """Create record with multiple grid rows."""
         log.info("CBR-C-03: Create multi-row grid record")
@@ -129,6 +149,9 @@ class TestCBRCreate:
 class TestCBRValidation:
     """CBR-V-01 to CBR-V-04: Validation tests."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CBR_V_01_validation_empty_required_fields(self, cbr_page):
         """Submit with empty required fields — should be blocked."""
         log.info("CBR-V-01: Empty required fields validation")
@@ -160,6 +183,9 @@ class TestCBRValidation:
             except Exception:
                 pass
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(
         reason=BUG_001,
         strict=False,
@@ -194,6 +220,9 @@ class TestCBRValidation:
             except Exception:
                 pass
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(
         reason=BUG_001,
         strict=False,
@@ -228,6 +257,9 @@ class TestCBRValidation:
             except Exception:
                 pass
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(
         reason=BUG_002,
         strict=False,
@@ -270,6 +302,9 @@ class TestCBRValidation:
 class TestCBREdit:
     """CBR-E-01: Edit record test."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CBR_E_01_edit_record(self, cbr_page):
         """Edit latest version of a record.
         BUG-005: Edit may be disabled for new records.
@@ -341,6 +376,9 @@ class TestCBREdit:
 class TestCBRSearch:
     """CBR-S-01 to CBR-S-02: Search and sort tests."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CBR_S_01_search_existing_record(self, cbr_page):
         """Search for an existing record."""
         log.info("CBR-S-01: Search existing record")
@@ -369,6 +407,9 @@ class TestCBRSearch:
         page.clear_search()
         page.wait_seconds(2)
 
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CBR_S_02_sort_by_column(self, cbr_page):
         """Sort by column headers."""
         log.info("CBR-S-02: Column sort test")
@@ -398,6 +439,10 @@ class TestCBRSearch:
 class TestCBRPopupVersion:
     """CBR-P-01 to CBR-P-03: Popup, version, and history tests."""
 
+    @pytest.mark.smoke
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CBR_P_01_view_record_detail(self, cbr_page):
         """View record detail (read-only popup)."""
         log.info("CBR-P-01: View record detail")
@@ -434,6 +479,10 @@ class TestCBRPopupVersion:
             except Exception:
                 pass
 
+    @pytest.mark.smoke
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CBR_P_02_version_creation(self, cbr_page):
         """Version creation (fork from existing record).
         BUG-006: May fail with same From Date.
@@ -490,6 +539,9 @@ class TestCBRPopupVersion:
         except Exception:
             pass
 
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CBR_P_03_history_popup(self, cbr_page):
         """History popup for a record."""
         log.info("CBR-P-03: History popup")
@@ -530,6 +582,10 @@ class TestCBRPopupVersion:
 class TestCBRHistoryBug:
     """CBR-H-01 to CBR-H-02: Bug verification tests."""
 
+    @pytest.mark.bug
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(
         reason=BUG_003,
         strict=False,
@@ -551,6 +607,10 @@ class TestCBRHistoryBug:
             f"Dates should be formatted as DD/MM/YYYY instead."
         )
 
+    @pytest.mark.bug
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(
         reason=BUG_004,
         strict=False,

@@ -2,7 +2,7 @@
 test_item_group_validation.py
 -----------------------------
 Comprehensive validation test suite for RhythmERP Item Group screen.
-37 test cases across 7 phases.
+39 test cases across 7 phases.
 
 Location: Commodity Settings > Commodity Master > Item Group
 URL:      /#/dynamic-screens/Item%20Group
@@ -33,6 +33,22 @@ Run:
   pytest test_item_group_validation.py -v --tb=short
   pytest test_item_group_validation.py -v -k "TestCreateForm" --tb=short
   pytest test_item_group_validation.py -v -k "IG-C03" --tb=short
+
+Marker-based run examples (requires conftest.py with pytest_configure):
+  pytest test_item_group_validation.py -v -m smoke
+  pytest test_item_group_validation.py -v -m "smoke or sanity"
+  pytest test_item_group_validation.py -v -m "sanity and not bug"
+  pytest test_item_group_validation.py -v -m "not bug"
+  pytest test_item_group_validation.py -v -m ui
+  pytest test_item_group_validation.py -v -m bug
+  pytest test_item_group_validation.py -v -m regression
+
+Marker Summary (39 tests across 7 classes):
+  smoke (12): C01, C02, E01, E02, S01, S03, P01, P02, P04, P07, P08, H01
+  sanity (39): All tests
+  regression (39): All tests
+  bug (8): C03, C04, C12, D01, D02, E03, E04, P03
+  ui (13): C07, E05, P01, P02, P03, P04, P05, P06, F01, F02, H01, H03, H05
 """
 
 import os
@@ -108,6 +124,9 @@ class TestCreateFormValidations:
     """
 
     # ---- IG-C01: Submit with empty Code ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_C01_empty_code(self, ig_page):
         """Submit with empty Code field — should be blocked."""
         log.info("IG-C01: Empty Code submit test")
@@ -147,6 +166,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- IG-C02: Create with valid Code + Description (happy path) ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_C02_valid_create(self, ig_page):
         """Create with valid Code and Description — should succeed."""
         log.info("IG-C02: Valid create test")
@@ -177,6 +199,9 @@ class TestCreateFormValidations:
         log.info(f"Item Group created and found in table: {code}")
 
     # ---- IG-C03: Spaces-only Code ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     @pytest.mark.xfail(
         reason="BUG: Spaces-only Code may be accepted — will fail until ERP is fixed",
         strict=False,
@@ -220,6 +245,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- IG-C04: Duplicate Code ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IG_C04_duplicate_code(self, ig_page):
         """Duplicate Code in Create — should be rejected.
         BEH-004: Duplicate Codes are currently allowed.
@@ -273,6 +301,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- IG-C05: Code at 255 char boundary ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_C05_code_255_chars(self, ig_page):
         """Code with exactly 255 chars — boundary test."""
         log.info("IG-C05: 255-char Code test")
@@ -306,6 +336,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- IG-C06: Code exceeds 255 chars (256) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_C06_code_256_chars(self, ig_page):
         """Code with 256 chars — should be rejected or truncated."""
         log.info("IG-C06: 256-char Code test")
@@ -339,6 +371,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- IG-C07: No success popup check ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IG_C07_no_success_popup(self, ig_page):
         """Verify whether a success SweetAlert appears after create.
         Documents current behavior.
@@ -375,6 +410,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- IG-C08: Special characters in Code ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_C08_special_chars_code(self, ig_page):
         """Special characters in Code — check if accepted or rejected."""
         log.info("IG-C08: Special chars in Code test")
@@ -407,6 +444,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- IG-C09: SQL injection in Code ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_C09_sql_injection_code(self, ig_page):
         """SQL injection string in Code — should be sanitized or rejected."""
         log.info("IG-C09: SQL injection Code test")
@@ -442,6 +481,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- IG-C10: XSS payload in Code ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_C10_xss_code(self, ig_page):
         """XSS payload in Code — should be sanitized or rejected."""
         log.info("IG-C10: XSS Code test")
@@ -474,6 +515,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- IG-C11: Unicode/international characters in Code ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_C11_unicode_code(self, ig_page):
         """Unicode/international characters in Code — check acceptance."""
         log.info("IG-C11: Unicode Code test")
@@ -506,6 +549,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- IG-C12: Code with leading/trailing spaces ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IG_C12_leading_trailing_spaces(self, ig_page):
         """Code with leading/trailing spaces — should be trimmed.
         BUG: Spaces may not be trimmed before storage.
@@ -566,6 +612,9 @@ class TestDuplicateValidations:
     """
 
     # ---- IG-D01: Duplicate Code — Create after Create ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IG_D01_duplicate_create(self, ig_page):
         """Create two Item Groups with identical Codes.
         BEH-004: Second create is accepted.
@@ -618,6 +667,9 @@ class TestDuplicateValidations:
         page.wait_seconds(2)
 
     # ---- IG-D02: Duplicate Code — Edit to existing Code ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IG_D02_duplicate_edit(self, ig_page):
         """Edit an Item Group to use another Item Group's Code.
         BEH-004: Duplicate Code allowed in Edit.
@@ -693,6 +745,9 @@ class TestEditFormValidations:
     """IG-E01 to IG-E05: Validation checks on the Edit form."""
 
     # ---- IG-E01: Edit — pre-populated fields ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_E01_edit_prepopulated(self, ig_page):
         """Edit popup should show Code and Description pre-populated."""
         log.info("IG-E01: Edit pre-populated fields test")
@@ -749,6 +804,9 @@ class TestEditFormValidations:
                 pass
 
     # ---- IG-E02: Edit — valid update ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_E02_valid_edit(self, ig_page):
         """Edit with valid new Code and Description — should succeed."""
         log.info("IG-E02: Valid edit test")
@@ -795,6 +853,9 @@ class TestEditFormValidations:
         log.info(f"Item Group updated and found in table: {edit_data['code']}")
 
     # ---- IG-E03: Edit — empty Code ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     @pytest.mark.xfail(
         reason="BUG: Edit form may allow empty Code submission — will fail until ERP is fixed",
         strict=False,
@@ -862,6 +923,9 @@ class TestEditFormValidations:
                 pass
 
     # ---- IG-E04: Edit — duplicate Code ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IG_E04_edit_duplicate_code(self, ig_page):
         """Edit Item Group to use another Item Group's Code.
         BEH-004: Duplicate Code allowed in Edit.
@@ -916,6 +980,9 @@ class TestEditFormValidations:
             log.info("Duplicate Code rejected in Edit — validation working")
 
     # ---- IG-E05: Edit — no success popup ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IG_E05_edit_no_success_popup(self, ig_page):
         """Verify whether a success SweetAlert appears after edit.
         Documents current behavior.
@@ -974,6 +1041,9 @@ class TestSearchFilter:
     """IG-S01 to IG-S05: Search and Filter edge cases."""
 
     # ---- IG-S01: Search with exact Code ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_S01_search_exact(self, ig_page):
         """Search with exact Item Group Code — should find it."""
         log.info("IG-S01: Search exact code")
@@ -999,6 +1069,8 @@ class TestSearchFilter:
         log.info(f"Exact search found: {data['code']}")
 
     # ---- IG-S02: Search with partial Code ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_S02_search_partial(self, ig_page):
         """Search with partial Item Group Code — should find it."""
         log.info("IG-S02: Search partial code")
@@ -1026,6 +1098,9 @@ class TestSearchFilter:
         log.info(f"Partial search found with: {partial}")
 
     # ---- IG-S03: Search with non-existent Code ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_S03_search_nonexistent(self, ig_page):
         """Search for non-existent code — should return no results."""
         log.info("IG-S03: Search nonexistent")
@@ -1041,6 +1116,8 @@ class TestSearchFilter:
         log.info(f"Correctly not found: {fake_code}")
 
     # ---- IG-S04: Search — clear search restores table ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_S04_clear_search_restores(self, ig_page):
         """After searching, clearing should restore full table."""
         log.info("IG-S04: Clear search restores table")
@@ -1081,6 +1158,8 @@ class TestSearchFilter:
         log.info("Table restored after clear search")
 
     # ---- IG-S05: Search — refresh resets search ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_S05_refresh_resets_search(self, ig_page):
         """Clicking Refresh after search should reset the search."""
         log.info("IG-S05: Refresh resets search")
@@ -1123,6 +1202,10 @@ class TestPopupUIBehaviors:
     """IG-P01 to IG-P08: Popup and UI behavior checks."""
 
     # ---- IG-P01: View mode — all fields read-only ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IG_P01_view_read_only(self, ig_page):
         """View popup should have all fields disabled/read-only."""
         log.info("IG-P01: View read-only test")
@@ -1171,6 +1254,10 @@ class TestPopupUIBehaviors:
                 pass
 
     # ---- IG-P02: Cancel closes the form ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IG_P02_cancel_closes_form(self, ig_page):
         """Clicking Cancel should close the Add form."""
         log.info("IG-P02: Cancel closes form test")
@@ -1187,6 +1274,10 @@ class TestPopupUIBehaviors:
         log.info("Cancel closed the form successfully")
 
     # ---- IG-P03: No Delete button ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_IG_P03_no_delete_button(self, ig_page):
         """Verify that no Delete option exists.
         BEH-003: No Delete button on this screen.
@@ -1239,6 +1330,10 @@ class TestPopupUIBehaviors:
             pass
 
     # ---- IG-P04: Add button opens form ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IG_P04_add_button_opens_form(self, ig_page):
         """Clicking ADD button should open the create form popup."""
         log.info("IG-P04: Add button opens form test")
@@ -1257,6 +1352,9 @@ class TestPopupUIBehaviors:
             pass
 
     # ---- IG-P05: Form heading text ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IG_P05_form_heading(self, ig_page):
         """Verify the form popup has a heading."""
         log.info("IG-P05: Form heading test")
@@ -1279,6 +1377,9 @@ class TestPopupUIBehaviors:
             pass
 
     # ---- IG-P06: Edit mode shows Update button ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IG_P06_edit_mode_update_button(self, ig_page):
         """Edit popup should show Update button instead of Submit."""
         log.info("IG-P06: Edit mode Update button test")
@@ -1316,6 +1417,9 @@ class TestPopupUIBehaviors:
                 pass
 
     # ---- IG-P07: Empty Description submit ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_P07_empty_description_submit(self, ig_page):
         """Submit with empty Description — should be blocked (both fields required)."""
         log.info("IG-P07: Empty Description submit test")
@@ -1350,6 +1454,9 @@ class TestPopupUIBehaviors:
                 pass
 
     # ---- IG-P08: Both fields empty submit ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_P08_both_empty_submit(self, ig_page):
         """Submit with both Code and Description empty — should be blocked."""
         log.info("IG-P08: Both fields empty submit test")
@@ -1392,6 +1499,9 @@ class TestFilterValidations:
     """IG-F01 to IG-F02: Filter panel tests."""
 
     # ---- IG-F01: Filter panel opens and closes ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IG_F01_filter_panel(self, ig_page):
         """Filter panel should open when Filters button is clicked."""
         log.info("IG-F01: Filter panel test")
@@ -1421,6 +1531,9 @@ class TestFilterValidations:
         page.click_refresh()
 
     # ---- IG-F02: Filter panel backdrop close ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IG_F02_filter_backdrop_close(self, ig_page):
         """Filter panel should close when backdrop is clicked."""
         log.info("IG-F02: Filter backdrop close test")
@@ -1456,6 +1569,10 @@ class TestHistoryValidations:
     """
 
     # ---- IG-H01: History button opens popup ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IG_H01_history_opens(self, ig_page):
         """Click History button — popup should open."""
         log.info("IG-H01: History opens test")
@@ -1492,6 +1609,8 @@ class TestHistoryValidations:
         page.wait_seconds(1)
 
     # ---- IG-H02: History popup has rows ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_H02_history_has_rows(self, ig_page):
         """History popup should show at least one entry after create."""
         log.info("IG-H02: History has rows test")
@@ -1527,6 +1646,9 @@ class TestHistoryValidations:
         page.wait_seconds(1)
 
     # ---- IG-H03: History popup can be closed ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IG_H03_history_closes(self, ig_page):
         """History popup should close when Cancel/Close is clicked."""
         log.info("IG-H03: History closes test")
@@ -1559,6 +1681,8 @@ class TestHistoryValidations:
         log.info("History popup closed successfully")
 
     # ---- IG-H04: History shows new entry after edit ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IG_H04_history_after_edit(self, ig_page):
         """After editing an Item Group, history should show a new entry."""
         log.info("IG-H04: History after edit test")
@@ -1619,6 +1743,9 @@ class TestHistoryValidations:
         page.wait_seconds(1)
 
     # ---- IG-H05: History popup heading contains "history" ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IG_H05_history_heading(self, ig_page):
         """History popup heading should contain the word 'history'."""
         log.info("IG-H05: History heading test")

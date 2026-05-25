@@ -9,7 +9,14 @@ Crop Master — 44 Automated Test Cases
   TestPopupUIBehaviors        (6 tests:  CM-P01 to CM-P06)
   TestHistoryValidations      (8 tests:  CM-H01 to CM-H08)
 
-Bug markers:
+Pytest Marker Summary:
+  smoke:      12 tests (critical path — create, search, view, toggle)
+  sanity:     44 tests (core validation — build acceptance gate)
+  regression: 44 tests (full suite — all tests)
+  bug:        10 tests (known open bugs — BUG-CM01 to BUG-CM09)
+  ui:         17 tests (popup behaviors, toggles, filter panels, button visibility)
+
+Bug markers (xfail):
   BUG-CM01: Blank name accepted on Create
   BUG-CM02: Duplicate name allowed
   BUG-CM03: Leading/trailing spaces not trimmed
@@ -19,6 +26,14 @@ Bug markers:
   BUG-CM07: No history entry on creation
   BUG-CM08: History sort doesn't work
   BUG-CM09: Blank name accepted on Edit
+
+Usage:
+  pytest test_crop_master_validation.py -m smoke           # 12 critical path tests
+  pytest test_crop_master_validation.py -m sanity           # 44 build acceptance tests
+  pytest test_crop_master_validation.py -m regression       # 44 full suite
+  pytest test_crop_master_validation.py -m bug              # 10 known bug tests
+  pytest test_crop_master_validation.py -m ui               # 17 UI behavior tests
+  pytest test_crop_master_validation.py -m "smoke and ui"  # tests in both categories
 """
 
 import os
@@ -72,6 +87,9 @@ def _record(test_id, test_name, category, status, error='', duration=0, details=
 class TestCreateFormValidations:
     """CM-C01 to CM-C15: Create form validation tests."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_empty_form_submit(self, crop_master_page):
         """CM-C01: Submit with all fields empty → Validation Failed."""
         t0 = time.time()
@@ -92,6 +110,9 @@ class TestCreateFormValidations:
             _record('CM-C01', 'Empty form submit', 'Create', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_only_name_filled(self, crop_master_page):
         """CM-C02: Submit with only Name filled → Success (Description optional)."""
         t0 = time.time()
@@ -104,6 +125,9 @@ class TestCreateFormValidations:
             _record('CM-C02', 'Only Name filled - Submit', 'Create', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM01, strict=False)
     def test_blank_name_spaces_only(self, crop_master_page):
         """CM-C03: Name with only spaces → Should be rejected (BUG-CM01)."""
@@ -119,6 +143,9 @@ class TestCreateFormValidations:
         assert result['status'] != 'PASSED', \
             "BUG-CM01: Spaces-only name was accepted (should be rejected)"
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM03, strict=False)
     def test_name_with_spaces(self, crop_master_page):
         """CM-C04: Leading/trailing spaces in Name → Should trim (BUG-CM03)."""
@@ -134,6 +161,9 @@ class TestCreateFormValidations:
         assert result['status'] != 'PASSED' or spaced_name.strip() == spaced_name, \
             "BUG-CM03: Leading/trailing spaces not trimmed"
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM02, strict=False)
     def test_duplicate_name_create(self, crop_master_page):
         """CM-C05: Duplicate name in Create → Should block (BUG-CM02)."""
@@ -153,6 +183,9 @@ class TestCreateFormValidations:
         assert result2['status'] != 'PASSED', \
             "BUG-CM02: Duplicate name accepted (should be blocked)"
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM06, strict=False)
     def test_special_chars_in_name(self, crop_master_page):
         """CM-C06: Special characters in Name → Should reject (BUG-CM06)."""
@@ -167,6 +200,9 @@ class TestCreateFormValidations:
         assert result['status'] != 'PASSED', \
             "BUG-CM06: Special characters accepted without sanitization"
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM05, strict=False)
     def test_very_long_name(self, crop_master_page):
         """CM-C07: 300 character name → Should reject (BUG-CM05)."""
@@ -181,6 +217,10 @@ class TestCreateFormValidations:
         assert result['status'] != 'PASSED', \
             "BUG-CM05: 300-char name accepted (no max length validation)"
 
+    @pytest.mark.bug
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM04, strict=False)
     def test_no_inline_errors(self, crop_master_page):
         """CM-C08: Check for per-field error messages → None found (BUG-CM04)."""
@@ -199,6 +239,9 @@ class TestCreateFormValidations:
         assert len(errors) > 0, \
             "BUG-CM04: No per-field inline error messages found"
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_create_active_status(self, crop_master_page):
         """CM-C09: Create with Active status (default)."""
         t0 = time.time()
@@ -218,6 +261,8 @@ class TestCreateFormValidations:
             _record('CM-C09', 'Create Active status', 'Create', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_create_inactive_status(self, crop_master_page):
         """CM-C10: Create with Inactive status."""
         t0 = time.time()
@@ -236,6 +281,8 @@ class TestCreateFormValidations:
             _record('CM-C10', 'Create Inactive status', 'Create', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_create_with_description(self, crop_master_page):
         """CM-C11: Create with Description filled → Success."""
         t0 = time.time()
@@ -248,6 +295,8 @@ class TestCreateFormValidations:
             _record('CM-C11', 'Create with Description', 'Create', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_create_without_description(self, crop_master_page):
         """CM-C12: Create with empty Description → Success (optional)."""
         t0 = time.time()
@@ -261,6 +310,8 @@ class TestCreateFormValidations:
             _record('CM-C12', 'Create without Description', 'Create', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_create_blank_description_spaces(self, crop_master_page):
         """CM-C13: Description with only spaces → Accepted (optional)."""
         t0 = time.time()
@@ -274,6 +325,8 @@ class TestCreateFormValidations:
             _record('CM-C13', 'Blank description (spaces)', 'Create', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_create_description_special_chars(self, crop_master_page):
         """CM-C14: Special characters in Description → Accepted."""
         t0 = time.time()
@@ -287,6 +340,9 @@ class TestCreateFormValidations:
             _record('CM-C14', 'Description with special chars', 'Create', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_create_valid_all_fields(self, crop_master_page):
         """CM-C15: Create valid crop with all fields → Success."""
         t0 = time.time()
@@ -312,6 +368,9 @@ class TestCreateFormValidations:
 class TestFileUpload:
     """CM-F01 to CM-F05: File upload tests."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_upload_png_file(self, crop_master_page):
         """CM-F01: Upload .png file → Success with file attached."""
         t0 = time.time()
@@ -329,6 +388,8 @@ class TestFileUpload:
         finally:
             cleanup_temp_file(png_file)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_upload_jpg_file(self, crop_master_page):
         """CM-F02: Upload .jpg file → Success."""
         t0 = time.time()
@@ -346,6 +407,8 @@ class TestFileUpload:
         finally:
             cleanup_temp_file(jpg_file)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_upload_pdf_file(self, crop_master_page):
         """CM-F03: Upload .pdf file → Success."""
         t0 = time.time()
@@ -363,6 +426,9 @@ class TestFileUpload:
         finally:
             cleanup_temp_file(pdf_file)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_upload_invalid_file_type(self, crop_master_page):
         """CM-F04: Upload .txt file (invalid) → Should not be accepted."""
         t0 = time.time()
@@ -383,6 +449,8 @@ class TestFileUpload:
         finally:
             cleanup_temp_file(txt_file)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_no_file_uploaded(self, crop_master_page):
         """CM-F05: No file uploaded → Success (file is optional)."""
         t0 = time.time()
@@ -404,6 +472,9 @@ class TestFileUpload:
 class TestEditFormValidations:
     """CM-E01 to CM-E05: Edit form validation tests."""
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM02, strict=False)
     def test_edit_duplicate_name(self, crop_master_page):
         """CM-E01: Edit to duplicate name → Should block (BUG-CM02)."""
@@ -429,6 +500,9 @@ class TestEditFormValidations:
         assert result['status'] != 'PASSED', \
             "BUG-CM02: Duplicate name accepted in Edit"
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM09, strict=False)
     def test_edit_blank_name(self, crop_master_page):
         """CM-E02: Edit Name to blank (spaces only) → Should reject (BUG-CM09)."""
@@ -447,6 +521,10 @@ class TestEditFormValidations:
         assert result['status'] != 'PASSED', \
             "BUG-CM09: Blank name accepted in Edit"
 
+    @pytest.mark.smoke
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_edit_pre_populated_fields(self, crop_master_page):
         """CM-E03: Edit popup shows pre-filled data."""
         t0 = time.time()
@@ -471,6 +549,9 @@ class TestEditFormValidations:
             _record('CM-E03', 'Edit pre-populated fields', 'Edit', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_edit_status_active_to_inactive(self, crop_master_page):
         """CM-E04: Edit status Active → Inactive."""
         t0 = time.time()
@@ -489,6 +570,9 @@ class TestEditFormValidations:
             _record('CM-E04', 'Edit status Active→Inactive', 'Edit', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_edit_status_inactive_to_active(self, crop_master_page):
         """CM-E05: Edit status Inactive → Active."""
         t0 = time.time()
@@ -515,6 +599,9 @@ class TestEditFormValidations:
 class TestSearchFilter:
     """CM-S01 to CM-S05: Search and filter tests."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_search_exact_match(self, crop_master_page):
         """CM-S01: Search with exact crop name → Find the crop."""
         t0 = time.time()
@@ -531,6 +618,9 @@ class TestSearchFilter:
             _record('CM-S01', 'Search exact match', 'Search', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_search_partial_match(self, crop_master_page):
         """CM-S02: Search with partial name → Find matching crops."""
         t0 = time.time()
@@ -549,6 +639,8 @@ class TestSearchFilter:
             _record('CM-S02', 'Search partial match', 'Search', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_search_nonexistent(self, crop_master_page):
         """CM-S03: Search for non-existent name → No results."""
         t0 = time.time()
@@ -560,6 +652,9 @@ class TestSearchFilter:
             _record('CM-S03', 'Search nonexistent', 'Search', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_filter_by_status(self, crop_master_page):
         """CM-S04: Filter panel opens with Status options."""
         t0 = time.time()
@@ -576,6 +671,9 @@ class TestSearchFilter:
             _record('CM-S04', 'Filter by Status', 'Search', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_filter_by_name_category(self, crop_master_page):
         """CM-S05: Filter panel shows Name options."""
         t0 = time.time()
@@ -600,6 +698,9 @@ class TestSearchFilter:
 class TestPopupUIBehaviors:
     """CM-P01 to CM-P06: Popup UI behavior tests."""
 
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_cancel_discards_data(self, crop_master_page):
         """CM-P01: Cancel on Add form discards data → Not saved in table."""
         t0 = time.time()
@@ -620,6 +721,9 @@ class TestPopupUIBehaviors:
             _record('CM-P01', 'Cancel discards data', 'Popup', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_x_close_discards_data(self, crop_master_page):
         """CM-P02: X button on Add form discards data."""
         t0 = time.time()
@@ -638,6 +742,10 @@ class TestPopupUIBehaviors:
             _record('CM-P02', 'X close discards data', 'Popup', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.smoke
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_view_shows_read_only(self, crop_master_page):
         """CM-P03: View popup fields are read-only."""
         t0 = time.time()
@@ -660,6 +768,9 @@ class TestPopupUIBehaviors:
             _record('CM-P03', 'View shows read-only', 'Popup', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_edit_has_update_button(self, crop_master_page):
         """CM-P04: Edit popup shows Update button."""
         t0 = time.time()
@@ -681,6 +792,9 @@ class TestPopupUIBehaviors:
             _record('CM-P04', 'Edit has Update button', 'Popup', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_history_popup_opens(self, crop_master_page):
         """CM-P05: History popup opens (may have 0 rows)."""
         t0 = time.time()
@@ -699,6 +813,10 @@ class TestPopupUIBehaviors:
             _record('CM-P05', 'History popup opens', 'Popup', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.smoke
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_status_toggle_works(self, crop_master_page):
         """CM-P06: Status toggle switches Active/Inactive."""
         t0 = time.time()
@@ -731,6 +849,9 @@ class TestPopupUIBehaviors:
 class TestHistoryValidations:
     """CM-H01 to CM-H08: History popup validation tests."""
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM07, strict=False)
     def test_history_after_create(self, crop_master_page):
         """CM-H01: History after crop creation → Should have 1+ rows (BUG-CM07)."""
@@ -749,6 +870,8 @@ class TestHistoryValidations:
         assert result['row_count'] > 0, \
             "BUG-CM07: No history entry after creation"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_history_after_edit(self, crop_master_page):
         """CM-H02: History row count after edit."""
         t0 = time.time()
@@ -770,6 +893,9 @@ class TestHistoryValidations:
             _record('CM-H02', 'History after edit', 'History', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_history_search_enter_key(self, crop_master_page):
         """CM-H03: History search works with Enter key."""
         t0 = time.time()
@@ -787,6 +913,9 @@ class TestHistoryValidations:
             _record('CM-H03', 'History search Enter key', 'History', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_history_search_no_match(self, crop_master_page):
         """CM-H04: Search with no-match shows empty."""
         t0 = time.time()
@@ -803,6 +932,9 @@ class TestHistoryValidations:
             _record('CM-H04', 'History search no match', 'History', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_history_columns(self, crop_master_page):
         """CM-H05: History table has expected columns."""
         t0 = time.time()
@@ -825,6 +957,9 @@ class TestHistoryValidations:
             _record('CM-H05', 'History columns', 'History', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_history_close_button(self, crop_master_page):
         """CM-H06: Close button closes history popup."""
         t0 = time.time()
@@ -848,6 +983,9 @@ class TestHistoryValidations:
             _record('CM-H06', 'History Close button', 'History', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_history_x_icon_close(self, crop_master_page):
         """CM-H07: X icon closes history popup."""
         t0 = time.time()
@@ -871,6 +1009,10 @@ class TestHistoryValidations:
             _record('CM-H07', 'History X icon close', 'History', 'FAILED', str(e), time.time()-t0)
             raise
 
+    @pytest.mark.bug
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM08, strict=False)
     def test_history_column_sort(self, crop_master_page):
         """CM-H08: Clicking column header sorts data → Rows should reorder (BUG-CM08)."""

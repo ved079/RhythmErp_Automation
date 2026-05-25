@@ -1847,27 +1847,35 @@ class FarmerPage(BasePage):
         self.wait_seconds(1)
 
         # State — depends on Country (pick first valid if data is None)
-        self._fill_cascading_dropdown("State", data.get("state"))
+                # FIX: Permanent address data uses "perm_" prefixed keys
+        state_val = data.get("perm_state") if is_permanent else None
+        if not state_val:
+            state_val = data.get("state")
+        self._fill_cascading_dropdown("State", state_val)
 
-        # Wait for District options to load after State selection
         self._wait_for_angular_stable(timeout=5)
         self.wait_seconds(0.5)
 
-        # District — depends on State
-        self._fill_cascading_dropdown("District", data.get("district"))
+        district_val = data.get("perm_district") if is_permanent else None
+        if not district_val:
+            district_val = data.get("district")
+        self._fill_cascading_dropdown("District", district_val)
 
-        # Wait for Taluka options to load after District selection
         self._wait_for_angular_stable(timeout=5)
         self.wait_seconds(0.5)
 
-        # === 2. SCROLL-DOWN DROPDOWNS (may need scrolling) ===
-        self._fill_cascading_dropdown("Taluka", data.get("taluka"))
+        taluka_val = data.get("perm_taluka") if is_permanent else None
+        if not taluka_val:
+            taluka_val = data.get("taluka")
+        self._fill_cascading_dropdown("Taluka", taluka_val)
 
-        # Wait for Village options to load after Taluka selection
         self._wait_for_angular_stable(timeout=5)
         self.wait_seconds(0.5)
 
-        self._fill_cascading_dropdown("Village", data.get("village"))
+        village_val = data.get("perm_village") if is_permanent else None
+        if not village_val:
+            village_val = data.get("village")
+        self._fill_cascading_dropdown("Village", village_val)
 
         # === 3. SCROLL-DOWN TEXT INPUTS ===
         # FIX: Use JS-scoped element finding instead of global CSS selectors.
@@ -1889,12 +1897,26 @@ class FarmerPage(BasePage):
         self._scroll_popup_to_bottom()
         self.wait_seconds(0.3)
 
-        if data.get("pin_code"):
-            self._fill_address_text_input("Pin Code", data["pin_code"])
-        if data.get("address"):
-            self._fill_address_text_input("Address", data["address"])
-        if data.get("address2"):
-            self._fill_address_text_input("Address2", data["address2"])
+                # FIX: Permanent address data uses "perm_" prefixed keys.
+        # When is_permanent=True, check perm_ keys first, then fall back
+        # to unprefixed keys for backward compatibility.
+        pin_code_val = data.get("perm_pin_code") if is_permanent else data.get("pin_code")
+        if not pin_code_val:
+            pin_code_val = data.get("pin_code")
+        if pin_code_val:
+            self._fill_address_text_input("Pin Code", pin_code_val)
+
+        address_val = data.get("perm_address") if is_permanent else data.get("address")
+        if not address_val:
+            address_val = data.get("address")
+        if address_val:
+            self._fill_address_text_input("Address", address_val)
+
+        address2_val = data.get("perm_address2") if is_permanent else data.get("address2")
+        if not address2_val:
+            address2_val = data.get("address2")
+        if address2_val:
+            self._fill_address_text_input("Address2", address2_val)
 
         log.info(f"{addr_type} Address filled")
 
@@ -3644,29 +3666,102 @@ class FarmerPage(BasePage):
             log.warning(f"View button not found for farmer: {farmer_name}")
 
     def search_item(self, search_text):
-        """Search for a farmer using the search input."""
+        """Search for a farmer using the search input.
+
+        FIX: Multiple search input strategies because the ERP's search
+        input CSS varies between screens. Try each selector in order.
+        """
         log.info(f"Searching for: {search_text}")
         try:
+            # Try opening search panel first
             search_toggle = self.driver.find_elements(By.CSS_SELECTOR, "button.search-btn")
             if search_toggle:
-                self.driver.execute_script("arguments[0].click();", search_toggle[0])
-                self.wait_seconds(0.5)
+                try:
+                    self.driver.execute_script("arguments[0].click();", search_toggle[0])
+                    self.wait_seconds(0.5)
+                except Exception:
+                    pass
 
-            search_input = self.driver.find_element(By.CSS_SELECTOR, "input#erpSearchInput, input[placeholder='Search']")
-            search_input.clear()
-            search_input.send_keys(search_text)
-            search_input.send_keys(Keys.ENTER)
-            self.wait_seconds(2)
+            # FIX: Try multiple search input selectors
+            search_selectors = [
+                "input#erpSearchInput",
+                "input[placeholder='Search']",
+                "input[formcontrolname='search']",
+                ".erp-search-wrapper input",
+                "input[type='search']",
+                "input[aria-label='Search']",
+            ]
+
+            search_input = None
+            for selector in search_selectors:
+                try:
+                    els = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    for el in els:
+                        if el.is_displayed():
+                            search_input = el
+                            break
+                    if search_input:
+                        break
+                except Exception:
+                    continue
+
+            if not search_input:
+                # Last resort: find ANY visible input on the page that looks like search
+                try:
+                    all_inputs = self.driver.find_elements(By.CSS_SELECTOR, "input[type='text'], input[type='search']")
+                    for inp in all_inputs:
+                        try:
+                            placeholder = inp.get_attribute("placeholder") or ""
+                            aria_label = inp.get_attribute("aria-label") or ""
+                            if ("search" in placeholder.lower() or
+                                "search" in aria_label.lower() or
+                                "erpSearchInput" in (inp.get_attribute("id") or "")):
+                                search_input = inp
+                                break
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+
+            if search_input:
+                search_input.clear()
+                search_input.send_keys(search_text)
+                search_input.send_keys(Keys.ENTER)
+                self.wait_seconds(2)
+                log.info(f"Search executed for: {search_text}")
+            else:
+                log.warning("Search input not found with any selector — skipping search")
+
         except Exception as e:
             log.warning(f"Search failed: {e}")
 
     def clear_search(self):
         """Clear the search input."""
         try:
-            search_input = self.driver.find_element(By.CSS_SELECTOR, "input#erpSearchInput, input[placeholder='Search']")
-            search_input.clear()
-            search_input.send_keys(Keys.ENTER)
-            self.wait_seconds(2)
+            search_selectors = [
+                "input#erpSearchInput",
+                "input[placeholder='Search']",
+                "input[formcontrolname='search']",
+                ".erp-search-wrapper input",
+                "input[type='search']",
+                "input[aria-label='Search']",
+            ]
+            search_input = None
+            for selector in search_selectors:
+                try:
+                    els = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    for el in els:
+                        if el.is_displayed():
+                            search_input = el
+                            break
+                    if search_input:
+                        break
+                except Exception:
+                    continue
+            if search_input:
+                search_input.clear()
+                search_input.send_keys(Keys.ENTER)
+                self.wait_seconds(2)
         except Exception:
             pass
 

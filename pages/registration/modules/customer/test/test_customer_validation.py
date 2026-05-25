@@ -28,6 +28,15 @@ Run:
   pytest test_customer_validation.py -v --tb=short
   pytest test_customer_validation.py -v -k "TestCreateForm" --tb=short
   pytest test_customer_validation.py -v -k "CU-C03" --tb=short
+
+Marker-based runs:
+  pytest test_customer_validation.py -v -m smoke          # 9 critical tests
+  pytest test_customer_validation.py -v -m sanity         # ~30 core feature tests
+  pytest test_customer_validation.py -v -m regression     # all 46 tests
+  pytest test_customer_validation.py -v -m bug            # 8 bug-tracking tests
+  pytest test_customer_validation.py -v -m ui             # 9 UI behavior tests
+  pytest test_customer_validation.py -v -m "smoke or sanity"  # broad but fast
+  pytest test_customer_validation.py -v -m "not bug"      # skip known-bug tests
 """
 
 import os
@@ -114,6 +123,9 @@ class TestCreateFormValidations:
     """
 
     # ---- CU-C01: Submit with all fields empty ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_C01_empty_submit(self, cu_page):
         """Submit with all fields empty — should be blocked.
         Expect: SweetAlert2 'Validation Failed' + mat-error
@@ -161,6 +173,9 @@ class TestCreateFormValidations:
             pass
 
     # ---- CU-C02: Valid create (happy path) ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_C02_valid_create(self, cu_page):
         """Create with valid data across all 3 steps — should succeed.
         Fill universal fields -> step0 -> next -> step1 address -> next
@@ -194,6 +209,8 @@ class TestCreateFormValidations:
                "will fail until ERP rejects it",
         strict=False,
     )
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_CU_C03_spaces_only_company_name(self, cu_page):
         """Company Name with spaces only — should be rejected."""
         log.info("CU-C03: Spaces-only Company Name test")
@@ -228,7 +245,8 @@ class TestCreateFormValidations:
                 pass
 
     # ---- CU-C04: Company Name 256 chars (over maxlength) ----
-    # ---- CU-C04: Company Name 256 chars (over maxlength) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_C04_company_name_256_chars(self, cu_page):
         """Company Name with 256 chars — should be auto-trimmed to 255
         by HTML maxlength attribute.
@@ -272,6 +290,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- CU-C05: Invalid email format ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_C05_invalid_email(self, cu_page):
         """Fill email with 'invalid-email' — expect mat-error 'Invalid Email'."""
         log.info("CU-C05: Invalid email format test")
@@ -322,6 +342,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- CU-C06: Email with no @ sign ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_C06_email_no_at(self, cu_page):
         """Fill email with 'testexample.com' — expect validation error."""
         log.info("CU-C06: Email with no @ sign test")
@@ -370,6 +392,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- CU-C07: Email with no domain ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_C07_email_no_domain(self, cu_page):
         """Fill email with 'test@' — expect validation error."""
         log.info("CU-C07: Email with no domain test")
@@ -418,6 +442,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- CU-C08: Special characters in Company Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_C08_special_chars_company_name(self, cu_page):
         """Fill Company Name with special characters — document behaviour:
         either accepted or validation error.
@@ -465,6 +491,7 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- CU-C09: SQL injection in Company Name ----
+    @pytest.mark.regression
     def test_CU_C09_sql_injection_company_name(self, cu_page):
         """Fill Company Name with SQL injection string — document:
         accepted or rejected.
@@ -514,6 +541,7 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- CU-C10: XSS payload in Company Name ----
+    @pytest.mark.regression
     def test_CU_C10_xss_payload_company_name(self, cu_page):
         """Fill Company Name with XSS payload — document:
         accepted or rejected, does it execute?
@@ -572,6 +600,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- CU-C11: Negative deposit value ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_C11_negative_deposite(self, cu_page):
         """Fill Deposite with negative number — should be rejected
         (deposit must be positive).
@@ -630,6 +660,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- CU-C12: Pin Code — header says required but HTML says optional (BUG-003) ----
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_CU_C12_pin_code_required_mismatch(self, cu_page):
         """Fill all fields except Pin Code — submit.
         BUG-003: Header says 'Pin Code *' but HTML says optional.
@@ -687,6 +719,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- CU-C13: Bank Name/Branch header says required but HTML says optional (BUG-004) ----
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_CU_C13_bank_fields_required_mismatch(self, cu_page):
         """Fill all required fields but leave Bank Name/Branch empty — submit.
         BUG-004: Headers show asterisks but HTML says optional.
@@ -745,6 +779,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- CU-C14: PAN Number with spaces ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_C14_pan_with_spaces(self, cu_page):
         """Fill PAN with leading/trailing spaces — document:
         accepted, trimmed, or error.
@@ -808,6 +844,8 @@ class TestCreateFormValidations:
         reason="BUG-002: Stepper allows advancing with empty required fields",
         strict=False,
     )
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_CU_C15_stepper_advances_empty(self, cu_page):
         """Open add form with no fields filled, click Next.
         BUG-002: Stepper ALLOWS advancement — confirmed.
@@ -860,6 +898,8 @@ class TestCreateFormValidations:
                 pass
 
     # ---- CU-C16: Partial required fields — only Company Name filled ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_C16_partial_company_name_only(self, cu_page):
         """Fill only Company Name, leave all other required fields empty —
         submit. Expect: Validation errors for remaining required fields.
@@ -909,6 +949,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- CU-C17: Stepper Back button ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_C17_stepper_back_button(self, cu_page):
         """Fill Step 0, click Next to go to Step 1, click Back.
         Expect: Return to Step 0, data preserved.
@@ -970,6 +1013,8 @@ class TestCreateFormValidations:
                 pass
 
     # ---- CU-C18: PAN Number with invalid format ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_C18_invalid_pan_format(self, cu_page):
         """Fill PAN with '1234567890' (numbers only) — document:
         accepted or rejected.
@@ -1017,6 +1062,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- CU-C19: Phone Number with alphabetic characters ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_C19_alpha_phone_number(self, cu_page):
         """Try typing letters in Phone Number (number input) — document:
         accepted or blocked by HTML5 number validation.
@@ -1057,6 +1104,7 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- CU-C20: Unicode/Emoji in Company Name ----
+    @pytest.mark.regression
     def test_CU_C20_unicode_emoji_company_name(self, cu_page):
         """Fill Company Name with emoji/unicode — document:
         accepted or rejected.
@@ -1148,6 +1196,9 @@ class TestDuplicateValidations:
     """
 
     # ---- CU-D01: Duplicate PAN Number — Create after Create ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_D01_duplicate_pan_create(self, cu_page):
         """Create customer 1 with valid PAN, then create customer 2
         with SAME PAN. Expect: Second create should be BLOCKED
@@ -1215,6 +1266,8 @@ class TestDuplicateValidations:
         page.wait_seconds(2)
 
     # ---- CU-D02: Duplicate Company Name — Create after Create ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_D02_duplicate_company_name_create(self, cu_page):
         """Create customer 1, then create customer 2 with SAME Company Name
         but different PAN. Document: Allowed or blocked?
@@ -1279,6 +1332,8 @@ class TestDuplicateValidations:
         page.wait_seconds(2)
 
     # ---- CU-D03: Duplicate email — Create after Create ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_D03_duplicate_email_create(self, cu_page):
         """Create customer with same email as existing customer.
         Document: Allowed or blocked?
@@ -1343,6 +1398,8 @@ class TestDuplicateValidations:
         page.wait_seconds(2)
 
         # ---- CU-D04: Duplicate PAN in Edit ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_D04_duplicate_pan_edit(self, cu_page):
         """Edit existing customer, change PAN to another customer's PAN.
         Expect: Should be blocked (unique PAN validation).
@@ -1408,6 +1465,9 @@ class TestEditFormValidations:
     """CU-E01 to CU-E05: Validation checks on the Edit form."""
 
     # ---- CU-E01: Edit — pre-populated fields ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_E01_edit_prepopulated(self, cu_page):
         """Edit popup should show fields pre-populated with original data."""
         log.info("CU-E01: Edit pre-populated fields test")
@@ -1435,6 +1495,9 @@ class TestEditFormValidations:
                 pass
 
     # ---- CU-E02: Edit — modify Company Name and save ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_E02_edit_modify_company_name(self, cu_page):
         """Edit customer, change Company Name, Update."""
         log.info("CU-E02: Edit modify Company Name test")
@@ -1472,6 +1535,8 @@ class TestEditFormValidations:
         log.info(f"Customer updated and found in table: {edit_data['company_name']}")
 
     # ---- CU-E03: Edit — clear required field and try to save ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_E03_edit_clear_required_field(self, cu_page):
         """Edit customer, clear Company Name, Update.
         Expect: Validation error.
@@ -1527,6 +1592,8 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- CU-E04: Edit — invalid email ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_E04_edit_invalid_email(self, cu_page):
         """Edit customer, change email to invalid format.
         Expect: 'Invalid Email' error.
@@ -1577,6 +1644,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- CU-E05: Edit — verify Update button instead of Submit ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_CU_E05_edit_update_button(self, cu_page):
         """Edit customer — verify button says 'Update' not 'Submit'."""
         log.info("CU-E05: Edit Update button verification")
@@ -1625,6 +1695,9 @@ class TestSearchFilter:
     """CU-S01 to CU-S05: Search and Filter edge cases."""
 
     # ---- CU-S01: Search by Company Name ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_S01_search_exact_company_name(self, cu_page):
         """Search by existing company name — verify result found."""
         log.info("CU-S01: Search by Company Name")
@@ -1651,6 +1724,8 @@ class TestSearchFilter:
         page.wait_seconds(2)
 
     # ---- CU-S02: Search with partial match ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_S02_search_partial_match(self, cu_page):
         """Search with partial company name — document:
         Does it find partial matches?
@@ -1688,6 +1763,8 @@ class TestSearchFilter:
         page.wait_seconds(2)
 
     # ---- CU-S03: Search with no results ---- (UNCHANGED)
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_S03_search_no_results(self, cu_page):
         """Search for non-existent string — expect
         'No results found' or 'No data to display'.
@@ -1747,6 +1824,7 @@ class TestSearchFilter:
         page.wait_seconds(2)
 
     # ---- CU-S04: Search with special characters ---- (UNCHANGED)
+    @pytest.mark.regression
     def test_CU_S04_search_special_chars(self, cu_page):
         """Search for '!@#$%' — document: handled gracefully or error."""
         log.info("CU-S04: Search with special characters")
@@ -1784,6 +1862,9 @@ class TestSearchFilter:
         page.wait_seconds(2)
 
     # ---- CU-S05: Search then clear ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CU_S05_search_then_clear(self, cu_page):
         """Search, get results, clear search, refresh —
         expect: All results return.
@@ -1855,6 +1936,10 @@ class TestPopupUIBehaviors:
     """CU-P01 to CU-P08: Popup and UI behavior tests."""
 
     # ---- CU-P01: Open and close Add form ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_CU_P01_open_close_add_form(self, cu_page):
         """Click Add, verify form opens. Click Cancel, verify form closes."""
         log.info("CU-P01: Open and close Add form")
@@ -1883,6 +1968,9 @@ class TestPopupUIBehaviors:
         log.info("Add form closed successfully after Cancel")
 
     # ---- CU-P02: Close via X button ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_CU_P02_close_via_x_button(self, cu_page):
         """Open form, click X close button — verify form closes."""
         log.info("CU-P02: Close via X button")
@@ -1916,6 +2004,8 @@ class TestPopupUIBehaviors:
         log.info("Form closed via X button")
 
     # ---- CU-P03: Fullscreen toggle ----
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_CU_P03_fullscreen_toggle(self, cu_page):
         """Open form, click fullscreen, verify popup expands.
         Click again, verify popup shrinks.
@@ -1999,6 +2089,9 @@ class TestPopupUIBehaviors:
                 pass
 
     # ---- CU-P04: No Delete option ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_CU_P04_no_delete_option(self, cu_page):
         """Check listing page for Delete button per row.
         Document: No delete option exists (if confirmed).
@@ -2041,6 +2134,9 @@ class TestPopupUIBehaviors:
                 "Customer screen has delete option"
             )
     # ---- CU-P05: Cancel mid-form ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_CU_P05_cancel_mid_form(self, cu_page):
         """Fill some fields, click Cancel.
         Reopen form, verify fields are empty (no state leakage).
@@ -2096,6 +2192,8 @@ class TestPopupUIBehaviors:
                 pass
 
     # ---- CU-P06: Double-click Submit ----
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_CU_P06_double_click_submit(self, cu_page):
         """Fill valid data, click Submit twice rapidly.
         Document: Does it create duplicate or handle gracefully?
@@ -2186,6 +2284,8 @@ class TestPopupUIBehaviors:
             log.info("Could not verify duplicate count after double-click")
 
     # ---- CU-P07: Stepper step headers clickable ----
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_CU_P07_stepper_step_headers_clickable(self, cu_page):
         """After filling Step 0 and clicking Next, click on Step 0 header.
         Verify: Can navigate back via header click.
@@ -2242,6 +2342,9 @@ class TestPopupUIBehaviors:
                 pass
 
     # ---- CU-P08: Address grid — add row ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_CU_P08_address_grid_add_row(self, cu_page):
         """On Step 1, click Add Row (+) button.
         Verify: Second empty row appears.
@@ -2333,6 +2436,8 @@ class TestBugSpecific:
                "Angular reactive form model — Submit fires 'Validation Failed'",
         strict=False,
     )
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_CU_B01_mat_select_form_model_not_synced(self, cu_page):
         """Open form, fill ALL fields including dropdowns via normal
         Selenium clicks. Submit. Expect: Validation Failed (because
@@ -2419,6 +2524,8 @@ class TestBugSpecific:
                "non-linear validation",
         strict=False,
     )
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_CU_B02_stepper_nonlinear_validation(self, cu_page):
         """Open form with all fields empty. Click Next twice.
         Verify: Reached Step 2 without any validation.
@@ -2464,6 +2571,8 @@ class TestBugSpecific:
                 pass
 
     # ---- CU-B03: BUG-003 — Pin Code required mismatch ----
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_CU_B03_pin_code_required_mismatch(self, cu_page):
         """Fill all fields including Pin Code = empty. Submit.
         Document: Does it require Pin Code or not?
@@ -2570,6 +2679,8 @@ class TestBugSpecific:
         page.wait_seconds(2)
 
     # ---- CU-B04: BUG-004 — Bank fields required mismatch ----
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_CU_B04_bank_fields_required_mismatch(self, cu_page):
         """Fill all fields but leave Bank Name empty. Submit.
         Document: Does it require Bank Name or not?

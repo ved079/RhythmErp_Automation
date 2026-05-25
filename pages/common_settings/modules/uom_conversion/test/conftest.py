@@ -18,6 +18,25 @@ from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHY
 from pages.common_settings.cs_report_generator import CSReportStore, generate_cs_report
 
 
+def pytest_configure(config):
+    """Register custom pytest markers for UOM Conversion tests."""
+    config.addinivalue_line(
+        "markers", "smoke: Critical path tests — must pass for build acceptance (6 tests)"
+    )
+    config.addinivalue_line(
+        "markers", "sanity: Full functional validation of every test case (22 tests)"
+    )
+    config.addinivalue_line(
+        "markers", "regression: Complete regression suite covering all 22 tests"
+    )
+    config.addinivalue_line(
+        "markers", "bug: Tests verifying known open bugs (6 tests)"
+    )
+    config.addinivalue_line(
+        "markers", "ui: UI/popup/dropdown/visual behaviour tests (13 tests)"
+    )
+
+
 # ================================================================
 # FIXTURES
 # ================================================================

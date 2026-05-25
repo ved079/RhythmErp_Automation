@@ -1,5 +1,5 @@
 """
-conftest.py — Error Code Mst Common Settings (RhythmERP)
+conftest.py - Error Code Mst Common Settings (RhythmERP)
 """
 
 import os
@@ -8,7 +8,8 @@ import logging
 import pytest
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
-sys.path.insert(0, PROJECT_ROOT)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 from common.logger import log
 from common.browser_utils import get_driver
@@ -99,6 +100,19 @@ def ecm_page(logged_in_driver):
         page.force_cleanup_all()
     except Exception:
         pass
+
+
+# ================================================================
+# PYTEST MARKERS
+# ================================================================
+
+def pytest_configure(config):
+    """Register custom pytest markers for Error Code Mst module."""
+    config.addinivalue_line("markers", "smoke: Core CRUD + critical path tests (4 tests)")
+    config.addinivalue_line("markers", "sanity: All 22 tests — full module sanity check")
+    config.addinivalue_line("markers", "regression: All 22 tests — full regression suite")
+    config.addinivalue_line("markers", "bug: Known bugs — duplicate create/edit accepted, no max-length on Code (3 tests)")
+    config.addinivalue_line("markers", "ui: UI interaction tests — alerts, view mode, edit mode, history popup, table columns (18 tests)")
 
 
 # ================================================================
@@ -253,6 +267,7 @@ def pytest_sessionfinish(session, exitstatus):
         return
     output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "reports")
     try:
+        os.makedirs(output_dir, exist_ok=True)
         filepath = generate_cs_report(_cs_store.results, output_dir,
                                        issues=_cs_store.known_issues)
         print("")
@@ -264,4 +279,3 @@ def pytest_sessionfinish(session, exitstatus):
         tb.print_exc()
         print("")
         print("  [WARNING] Report generation failed (see traceback above)")
-

@@ -14,7 +14,17 @@ Phases:
   5. View & History            (IA{N}-V01 to IA{N}-V05)  — 5 tests × 5 screens
   6. Toggle & UI Behaviors     (IA{N}-T01 to IA{N}-T04)  — 4 tests × 5 screens
 
-Total: ~34 tests × 5 screens = ~170 test executions
+Total: 34 tests × 5 screens = ~170 test executions
+
+PYTEST MARKERS:
+  smoke=6  |  sanity=34  |  regression=34  |  bug=4  |  ui=13
+
+  Usage:
+    pytest -m smoke                              # 6 critical-path tests
+    pytest -m "smoke or sanity"                   # 34 tests
+    pytest -m "not bug"                          # 30 non-bug tests
+    pytest -m ui                                  # 13 UI behavior tests
+    pytest -m regression                         # full suite (34)
 
 KEY RULES:
   - NEVER use Keys.ESCAPE (closes entire popup form!)
@@ -71,6 +81,9 @@ class TestCreateFormValidations:
     Parameterized across all 5 screens.
     """
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_C01_create_with_all_required_fields(self, ia_page, attr_num):
         """IA{N}-C01: Create attribute with all required fields filled.
@@ -107,6 +120,8 @@ class TestCreateFormValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_C02_create_empty_name(self, ia_page, attr_num):
         """IA{N}-C02: Create attribute without Name (required).
@@ -142,6 +157,8 @@ class TestCreateFormValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_C03_create_spaces_only_name(self, ia_page, attr_num):
         """IA{N}-C03: Create attribute with only spaces in Name.
@@ -178,6 +195,8 @@ class TestCreateFormValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1])
     def test_IA1_C04_create_missing_base_uom(self, ia_page, attr_num):
         """IA1-C04: Create Item Attribute 1 without Base UOM (required).
@@ -211,6 +230,9 @@ class TestCreateFormValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_C05_create_with_special_char_name(self, ia_page, attr_num):
         """IA{N}-C05: Create attribute with special characters in Name."""
@@ -238,6 +260,9 @@ class TestCreateFormValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_C06_create_sql_injection(self, ia_page, attr_num):
         """IA{N}-C06: SQL injection attempt in Name field.
@@ -268,6 +293,9 @@ class TestCreateFormValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_C07_create_xss_in_name(self, ia_page, attr_num):
         """IA{N}-C07: XSS payload in Name field.
@@ -298,6 +326,9 @@ class TestCreateFormValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_C08_create_long_name(self, ia_page, attr_num):
         """IA{N}-C08: Create attribute with extremely long Name (256 chars).
@@ -344,6 +375,9 @@ class TestCreateFormValidations:
             f"{prefix}-C08: Record should NOT be created with 256-char Name " \
             f"(before={count_before}, after={count_after})"
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_C08a_create_long_description(self, ia_page, attr_num):
         """IA{N}-C08a: Create attribute with valid Name but 256-char Description.
@@ -390,6 +424,8 @@ class TestCreateFormValidations:
             f"{prefix}-C08a: Record should NOT be created with 256-char Description " \
             f"(before={count_before}, after={count_after})"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_C09_create_unicode_name(self, ia_page, attr_num):
         """IA{N}-C09: Create attribute with unicode characters in Name."""
@@ -418,6 +454,8 @@ class TestCreateFormValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_C10_create_numeric_name(self, ia_page, attr_num):
         """IA{N}-C10: Create attribute with purely numeric Name."""
@@ -480,6 +518,10 @@ class TestDuplicateValidations:
         page.wait_seconds(2)
         return data.get("name", "")
 
+    @pytest.mark.smoke
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_D01_duplicate_name_allowed(self, ia_page, attr_num):
         """IA{N}-D01: Create two attributes with same Name.
@@ -537,6 +579,8 @@ class TestDuplicateValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_D02_duplicate_different_case(self, ia_page, attr_num):
         """IA{N}-D02: Create attributes with same Name but different case.
@@ -590,6 +634,8 @@ class TestDuplicateValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_D03_duplicate_name_edit(self, ia_page, attr_num):
         """IA{N}-D03: Edit an attribute to have the same Name as another.
@@ -676,6 +722,9 @@ class TestEditFormValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_E01_edit_prepopulated(self, ia_page, attr_num):
         """IA{N}-E01: Edit form should be pre-populated with existing data."""
@@ -701,6 +750,8 @@ class TestEditFormValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_E02_edit_change_name(self, ia_page, attr_num):
         """IA{N}-E02: Edit — change the Name field.
@@ -736,6 +787,8 @@ class TestEditFormValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_E03_edit_change_description(self, ia_page, attr_num):
         """IA{N}-E03: Edit — change the Description field."""
@@ -769,6 +822,8 @@ class TestEditFormValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1])
     def test_IA1_E04_edit_change_base_uom(self, ia_page, attr_num):
         """IA1-E04: Edit Item Attribute 1 — change Base UOM dropdown.
@@ -803,6 +858,8 @@ class TestEditFormValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_E05_edit_toggle_status(self, ia_page, attr_num):
         """IA{N}-E05: Edit — toggle Status from Active to Inactive."""
@@ -836,6 +893,9 @@ class TestEditFormValidations:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_E06_edit_cancel_returns(self, ia_page, attr_num):
         """IA{N}-E06: Cancel in Edit mode returns to listing page."""
@@ -888,6 +948,9 @@ class TestSearchFilter:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_S01_search_existing_item(self, ia_page, attr_num):
         """IA{N}-S01: Search for an existing attribute by name."""
@@ -910,6 +973,8 @@ class TestSearchFilter:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_S02_search_nonexistent_item(self, ia_page, attr_num):
         """IA{N}-S02: Search for a non-existent attribute name."""
@@ -928,6 +993,8 @@ class TestSearchFilter:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_S03_search_partial_name(self, ia_page, attr_num):
         """IA{N}-S03: Search with partial attribute name."""
@@ -950,6 +1017,8 @@ class TestSearchFilter:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_S04_search_case_insensitive(self, ia_page, attr_num):
         """IA{N}-S04: Search should be case-insensitive."""
@@ -983,6 +1052,8 @@ class TestSearchFilter:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_S05_refresh_clears_search(self, ia_page, attr_num):
         """IA{N}-S05: Clicking Refresh should clear search and show all items."""
@@ -1033,6 +1104,10 @@ class TestViewHistory:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_V01_view_all_fields_readonly(self, ia_page, attr_num):
         """IA{N}-V01: View mode - all fields should be read-only/disabled."""
@@ -1057,6 +1132,9 @@ class TestViewHistory:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_V02_view_only_cancel_button(self, ia_page, attr_num):
         """IA{N}-V02: View mode - only Cancel button should be visible.
@@ -1090,6 +1168,9 @@ class TestViewHistory:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_V03_view_cancel_returns(self, ia_page, attr_num):
         """IA{N}-V03: Cancel in View mode returns to listing page."""
@@ -1111,6 +1192,9 @@ class TestViewHistory:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_V04_history_popup_opens(self, ia_page, attr_num):
         """IA{N}-V04: History popup opens for an attribute.
@@ -1136,6 +1220,10 @@ class TestViewHistory:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_V05_history_has_data(self, ia_page, attr_num):
         """IA{N}-V05: History popup should contain at least one row.
@@ -1174,6 +1262,10 @@ class TestToggleUIBehaviors:
     Only 1 toggle exists: Status (Active/Inactive).
     """
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_T01_create_status_active(self, ia_page, attr_num):
         """IA{N}-T01: Create attribute with Status Active (default ON).
@@ -1203,6 +1295,9 @@ class TestToggleUIBehaviors:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_T02_create_status_inactive(self, ia_page, attr_num):
         """IA{N}-T02: Create attribute with Status Inactive (toggle OFF).
@@ -1232,6 +1327,9 @@ class TestToggleUIBehaviors:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_T03_toggle_default_is_active(self, ia_page, attr_num):
         """IA{N}-T03: Verify Status toggle defaults to Active (ON) in Create mode."""
@@ -1261,6 +1359,9 @@ class TestToggleUIBehaviors:
         page.click_refresh()
         page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     @pytest.mark.parametrize("attr_num", [1, 2, 3, 4, 5])
     def test_IA_T04_cancel_closes_form(self, ia_page, attr_num):
         """IA{N}-T04: Cancel in Create mode closes the form without saving."""

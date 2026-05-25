@@ -35,6 +35,36 @@ UC_LOGIN_FACILITY_INDEX = 0  # Agdi
 # FIXTURES
 # ================================================================
 
+# ================================================================
+# PYTEST MARKERS
+# ================================================================
+
+def pytest_configure(config):
+    """Register custom pytest markers for User Creation module."""
+    config.addinivalue_line(
+        "markers",
+        "smoke: Core CRUD + critical path tests (7 tests: C01, C02, E01, H01, P01, S01, D01)"
+    )
+    config.addinivalue_line(
+        "markers",
+        "sanity: All 42 tests — full module sanity check"
+    )
+    config.addinivalue_line(
+        "markers",
+        "regression: All 42 tests — full regression suite"
+    )
+    config.addinivalue_line(
+        "markers",
+        "bug: Known bugs — dup username silent fail, no maxlength, no email validation, "
+             "special chars UX, no sanitization, 1 mat-error, dup Manager (13 tests)"
+    )
+    config.addinivalue_line(
+        "markers",
+        "ui: UI interaction tests — form popups, toggles, view/edit mode, search, "
+            "dropdowns, cancel/close, SweetAlert2, history (42 tests)"
+    )
+
+
 @pytest.fixture(scope="session")
 def driver():
     log.separator()

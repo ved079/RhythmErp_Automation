@@ -120,6 +120,10 @@ class TestCreateFormValidations:
     """
 
     # ---- UC-C01: Submit with all fields empty ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_C01_empty_submit(self, uc_page):
         """Submit with all fields empty — should be blocked.
         BUG-006: Only 1 mat-error visible at a time.
@@ -163,6 +167,10 @@ class TestCreateFormValidations:
                 pass
 
     # ---- UC-C02: Create with valid data (happy path) ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_C02_valid_create(self, uc_page):
         """Create with valid data — should succeed."""
         log.info("UC-C02: Valid create test (happy path)")
@@ -194,6 +202,9 @@ class TestCreateFormValidations:
             pass
 
     # ---- UC-C03: Spaces-only Username ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_C03_spaces_only_username(self, uc_page):
         """Spaces-only Username — should be rejected.
         BUG-004: SweetAlert2 popup shows generic message.
@@ -236,6 +247,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- UC-C04: Special characters in Username ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_C04_special_chars_username(self, uc_page):
         """Special characters in Username — should be rejected.
         BUG-004: SweetAlert2 popup shows generic message instead of inline mat-error.
@@ -279,6 +293,14 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- UC-C05: SQL injection in Username ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
+    @pytest.mark.xfail(
+        reason="BUG-004: SQL injection in Username may be accepted by the system",
+        strict=False,
+    )
     def test_UC_C05_sql_injection_username(self, uc_page):
         """SQL injection in Username — should be rejected.
         BUG-004: SweetAlert2 popup may appear.
@@ -303,6 +325,14 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- UC-C06: XSS in Username ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
+    @pytest.mark.xfail(
+        reason="BUG-004: XSS payload in Username may be accepted by the system",
+        strict=False,
+    )
     def test_UC_C06_xss_username(self, uc_page):
         """XSS payload in Username — should be rejected.
         BUG-004: SweetAlert2 popup may appear.
@@ -325,6 +355,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- UC-C07: Numbers-only Username ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_C07_numbers_only_username(self, uc_page):
         """Numbers-only Username — check acceptance."""
         log.info("UC-C07: Numbers-only Username test")
@@ -344,6 +377,10 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- UC-C08: Very long Username (256 chars) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     @pytest.mark.xfail(
         reason="BUG-002: No client maxlength — 256-char name may silently fail",
         strict=False,
@@ -377,6 +414,10 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- UC-C09: Invalid email format ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_UC_C09_invalid_email(self, uc_page):
         """Invalid email format — should show validation error.
         BUG-003: No email format validation on blur.
@@ -399,6 +440,10 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- UC-C10: Email format validation on blur ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_UC_C10_email_format_on_blur(self, uc_page):
         """Type invalid email, tab out — check for inline validation.
         BUG-003: No email format validation on blur.
@@ -437,6 +482,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- UC-C11: Username with leading/trailing spaces ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_C11_leading_trailing_spaces(self, uc_page):
         """Username with leading/trailing spaces — should be trimmed or rejected.
         BUG-004: Spaces show SweetAlert2 popup.
@@ -458,6 +506,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- UC-C12: Unicode in Username ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_C12_unicode_username(self, uc_page):
         """Unicode characters in Username — check acceptance."""
         log.info("UC-C12: Unicode Username test")
@@ -477,6 +528,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- UC-C13: User Type dropdown shows options ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_C13_user_type_dropdown(self, uc_page):
         """User Type dropdown should open and show selectable options."""
         log.info("UC-C13: User Type dropdown test")
@@ -500,6 +554,10 @@ class TestCreateFormValidations:
                 pass
 
     # ---- UC-C14: Designation dropdown shows options ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_UC_C14_designation_dropdown(self, uc_page):
         """Designation dropdown should open and show options.
         BUG-005: May show duplicate 'Manager' option.
@@ -533,6 +591,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- UC-C15: Role dropdown depends on User Type ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_C15_role_dropdown_dynamic(self, uc_page):
         """Role dropdown should load options (may be dynamic based on User Type)."""
         log.info("UC-C15: Role dropdown dynamic test")
@@ -563,6 +624,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- UC-C16: Entity dropdown depends on User Type ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_C16_entity_dropdown_dynamic(self, uc_page):
         """Entity dropdown should load options (may be dynamic based on User Type)."""
         log.info("UC-C16: Entity dropdown dynamic test")
@@ -604,6 +668,10 @@ class TestDuplicateValidations:
     """
 
     # ---- UC-D01: Duplicate Username (exact) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     @pytest.mark.xfail(
         reason="BUG-001: Duplicate username silently fails, no error message",
         strict=False,
@@ -640,6 +708,10 @@ class TestDuplicateValidations:
         page.wait_seconds(2)
 
     # ---- UC-D02: Duplicate Email ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     @pytest.mark.xfail(
         reason="BUG-001b: Duplicate email causes silent failure — no error message, no record created",
         strict=False,
@@ -679,6 +751,10 @@ class TestDuplicateValidations:
         page.wait_seconds(2)
 
     # ---- UC-D03: Duplicate (case-insensitive username) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_UC_D03_duplicate_case_insensitive(self, uc_page):
         """Create user with same username in different case — test behavior."""
         log.info("UC-D03: Duplicate case-insensitive username test")
@@ -717,6 +793,10 @@ class TestEditFormValidations:
     """UC-E01 to UC-E06: Validation checks on the Edit form."""
 
     # ---- UC-E01: Edit with valid data ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_E01_edit_valid(self, uc_page):
         """Edit a user with valid new data — should succeed."""
         log.info("UC-E01: Edit with valid data test")
@@ -740,6 +820,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- UC-E02: Edit with empty First Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_E02_edit_empty_first_name(self, uc_page):
         """Clear First Name in Edit, click Update — should be blocked."""
         log.info("UC-E02: Edit with empty First Name test")
@@ -782,6 +865,10 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- UC-E03: Edit with special chars in First Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_UC_E03_edit_special_chars(self, uc_page):
         """Edit to special characters in First Name — check behavior."""
         log.info("UC-E03: Edit with special chars test")
@@ -805,6 +892,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- UC-E04: Edit pre-populated fields ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_E04_edit_prepopulated(self, uc_page):
         """Edit popup should show fields pre-populated with existing data."""
         log.info("UC-E04: Edit pre-populated fields test")
@@ -840,6 +930,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- UC-E05: Edit Email ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_E05_edit_email(self, uc_page):
         """Change email in Edit — should succeed."""
         log.info("UC-E05: Edit email test")
@@ -864,6 +957,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- UC-E06: Edit Username may be read-only ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_E06_edit_username_readonly(self, uc_page):
         """Username may be read-only in Edit mode — verify behavior."""
         log.info("UC-E06: Edit Username readonly test")
@@ -915,6 +1011,10 @@ class TestSearchFilter:
     """UC-S01 to UC-S05: Search and filter edge cases."""
 
     # ---- UC-S01: Search exact match ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_S01_search_exact(self, uc_page):
         """Search for an exact existing username."""
         log.info("UC-S01: Search exact match test")
@@ -939,6 +1039,9 @@ class TestSearchFilter:
         page.clear_search()
 
     # ---- UC-S02: Search partial match ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_S02_search_partial(self, uc_page):
         """Search with partial username — should find matching records."""
         log.info("UC-S02: Search partial match test")
@@ -966,6 +1069,9 @@ class TestSearchFilter:
         page.clear_search()
 
     # ---- UC-S03: Search case insensitive ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_S03_search_case_insensitive(self, uc_page):
         """Search with lowercase — should match case-insensitive."""
         log.info("UC-S03: Search case-insensitive test")
@@ -987,6 +1093,9 @@ class TestSearchFilter:
         page.clear_search()
 
     # ---- UC-S04: Search no results ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_S04_search_no_results(self, uc_page):
         """Search for non-existent username — should show empty or no-data."""
         log.info("UC-S04: Search no results test")
@@ -1002,6 +1111,9 @@ class TestSearchFilter:
         page.clear_search()
 
     # ---- UC-S05: Search special chars ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_S05_search_special_chars(self, uc_page):
         """Search for special characters — should not crash."""
         log.info("UC-S05: Search special chars test")
@@ -1025,6 +1137,10 @@ class TestPopupUIBehaviors:
     """UC-P01 to UC-P05: Popup and UI behavior tests."""
 
     # ---- UC-P01: Add form opens ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_P01_add_form_opens(self, uc_page):
         """Click ADD button — popup should open with all form fields."""
         log.info("UC-P01: Add form opens test")
@@ -1056,6 +1172,9 @@ class TestPopupUIBehaviors:
                 pass
 
     # ---- UC-P02: View popup readonly ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_P02_view_readonly(self, uc_page):
         """View popup should show disabled/readonly fields with Cancel only."""
         log.info("UC-P02: View popup readonly test")
@@ -1089,6 +1208,9 @@ class TestPopupUIBehaviors:
         page.wait_seconds(2)
 
     # ---- UC-P03: Cancel closes popup ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_P03_cancel_closes_popup(self, uc_page):
         """Open Add, click Cancel — popup should close without creating record."""
         log.info("UC-P03: Cancel closes popup test")
@@ -1112,6 +1234,9 @@ class TestPopupUIBehaviors:
         log.info("Cancel closed the popup — no record created")
 
     # ---- UC-P04: Close (X) button ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_P04_close_x_button(self, uc_page):
         """Open Add, click X — popup should close."""
         log.info("UC-P04: Close (X) button test")
@@ -1129,6 +1254,9 @@ class TestPopupUIBehaviors:
         log.info("X button closed the popup")
 
     # ---- UC-P05: SweetAlert2 success ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_P05_sweetalert_success(self, uc_page):
         """Create valid record — verify SweetAlert2 success message."""
         log.info("UC-P05: SweetAlert2 success test")
@@ -1154,6 +1282,10 @@ class TestHistoryAuditTrail:
     """UC-H01 to UC-H04: History popup and audit trail tests."""
 
     # ---- UC-H01: History popup opens and closes ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_H01_history_opens_and_closes(self, uc_page):
         """Click History button — popup should open. Then close it."""
         log.info("UC-H01: History popup opens and closes test")
@@ -1183,6 +1315,9 @@ class TestHistoryAuditTrail:
         page.wait_seconds(2)
 
     # ---- UC-H02: History for edited record ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_H02_history_edited(self, uc_page):
         """View history for an edited record — should show history entries."""
         log.info("UC-H02: History for edited record test")
@@ -1220,6 +1355,9 @@ class TestHistoryAuditTrail:
         page.wait_seconds(2)
 
     # ---- UC-H03: History popup has search input ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_H03_history_has_search(self, uc_page):
         """History popup should have a search input."""
         log.info("UC-H03: History has search input test")
@@ -1247,6 +1385,9 @@ class TestHistoryAuditTrail:
         page.wait_seconds(2)
 
     # ---- UC-H04: History popup shows at least one entry ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_UC_H04_history_has_entry(self, uc_page):
         """History popup should show at least one entry (the creation)."""
         log.info("UC-H04: History has at least one entry test")
@@ -1281,6 +1422,10 @@ class TestBugSpecific:
     """UC-B01 to UC-B03: Tests targeting specific known bugs."""
 
     # ---- UC-B01: BUG-001 — Duplicate username silent failure ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     @pytest.mark.xfail(
         reason="BUG-001: Duplicate username silently fails, no error message",
         strict=False,
@@ -1331,6 +1476,10 @@ class TestBugSpecific:
         page.wait_seconds(2)
 
     # ---- UC-B02: BUG-005 — Designation duplicate Manager ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_UC_B02_designation_duplicate_manager(self, uc_page):
         """Verify BUG-005: Designation dropdown has duplicate 'Manager' option."""
         log.info("UC-B02: BUG-005 — Designation duplicate Manager test")
@@ -1396,6 +1545,10 @@ class TestBugSpecific:
                 pass
 
     # ---- UC-B03: BUG-006 — Only 1 mat-error at a time ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_UC_B03_only_one_mat_error(self, uc_page):
         """Verify BUG-006: Only 1 mat-error visible at a time.
 

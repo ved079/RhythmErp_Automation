@@ -2,18 +2,27 @@
 test_vehicle_master_validation.py
 ---------------------------------
 Comprehensive validation test suite for RhythmERP Vehicle Master screen.
-43 test cases across 6 phases covering all bugs found during manual exploration.
+43 test cases across 6 classes covering all bugs found during manual exploration.
 
-Phases:
-  1. Create Form Validations  (15 tests) — VM-C01 to VM-C15
-  2. Dropdown Validations      (5 tests)  — VM-D01 to VM-D05
-  3. Edit Form Validations     (5 tests)  — VM-E01 to VM-E05
-  4. Search & Filter Edge Cases (5 tests) — VM-S01 to VM-S05
-  5. Popup & UI Behaviors      (5 tests)  — VM-P01 to VM-P05
-  6. History Validations       (8 tests)  — VM-H01 to VM-H08
+Classes:
+  1. TestCreateFormValidations  (15 tests) — VM-C01 to VM-C15
+  2. TestDropdownValidations     (5 tests) — VM-D01 to VM-D05
+  3. TestEditFormValidations     (5 tests) — VM-E01 to VM-E05
+  4. TestSearchFilter            (5 tests) — VM-S01 to VM-S05
+  5. TestPopupUIBehaviors        (5 tests) — VM-P01 to VM-P05
+  6. TestHistoryValidations      (8 tests) — VM-H01 to VM-H08
+
+Marker Summary:
+  smoke      : 11 tests (C01, C09, C12, D01, E01, E05, S01, P01, P03, H01, H06)
+  sanity     : 43 tests (all)
+  regression : 43 tests (all)
+  bug        : 16 tests (C04-C11, C15, E01-E04, S04, S05, H08)
+  ui         : 17 tests (C01, C15, D01-D05, P01-P05, H03, H05-H08)
 
 Run:
   pytest test_vehicle_master_validation.py -v --tb=short
+  pytest test_vehicle_master_validation.py -v -m smoke --tb=short
+  pytest test_vehicle_master_validation.py -v -m "smoke and bug" --tb=short
   pytest test_vehicle_master_validation.py -v -k "TestCreateForm" --tb=short
   pytest test_vehicle_master_validation.py -v -k "VM-C09" --tb=short
 """
@@ -85,6 +94,10 @@ class TestCreateFormValidations:
     """VM-C01 to VM-C15: Validation checks on the Create form."""
 
     # ---- VM-C01: Submit with all fields empty ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_VM_C01_empty_submit(self, vehicle_master_page):
         """Submit with all fields empty — should be blocked."""
         log.info("VM-C01: Empty submit test")
@@ -114,6 +127,8 @@ class TestCreateFormValidations:
             page.force_close_form_popup()
 
     # ---- VM-C02: Submit with only Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_VM_C02_name_only(self, vehicle_master_page):
         """Submit with only Name filled — should be blocked."""
         log.info("VM-C02: Name-only submit test")
@@ -139,6 +154,8 @@ class TestCreateFormValidations:
             page.force_close_form_popup()
 
     # ---- VM-C03: Submit with only Price ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_VM_C03_price_only(self, vehicle_master_page):
         """Submit with only Price filled — should be blocked."""
         log.info("VM-C03: Price-only submit test")
@@ -165,6 +182,9 @@ class TestCreateFormValidations:
             page.force_close_form_popup()
 
     # ---- VM-C04: Name with leading/trailing spaces ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_VM_C04_spaces_in_name(self, vehicle_master_page):
         """Name with leading/trailing spaces — should be trimmed or rejected.
         BUG FOUND: Spaces are NOT trimmed.
@@ -201,6 +221,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- VM-C05: Price = 0 ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_VM_C05_zero_price(self, vehicle_master_page):
         """Price = 0 — should be rejected.
         BUG FOUND: Zero price is accepted.
@@ -228,6 +251,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- VM-C06: Negative Price ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_VM_C06_negative_price(self, vehicle_master_page):
         """Negative Price — should be rejected.
         BUG FOUND: Negative price is accepted.
@@ -255,6 +281,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- VM-C07: Alphabets in Price ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_VM_C07_alpha_price(self, vehicle_master_page):
         """Alphabets in Price field — should be rejected.
         BUG FOUND: Alphabets accepted.
@@ -282,6 +311,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- VM-C08: Special characters in Price ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_VM_C08_special_chars_price(self, vehicle_master_page):
         """Special characters in Price — should be rejected."""
         log.info("VM-C08: Special chars in price test")
@@ -307,6 +339,10 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- VM-C09: Duplicate Name ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_VM_C09_duplicate_name(self, vehicle_master_page):
         """Duplicate Name — should be rejected.
         BUG FOUND: Duplicate name is allowed.
@@ -343,6 +379,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- VM-C10: Special characters in Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_VM_C10_special_chars_name(self, vehicle_master_page):
         """Special characters in Name — should be rejected or sanitized.
         BUG FOUND: Special chars accepted.
@@ -370,6 +409,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- VM-C11: Very long Name (256 chars) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_VM_C11_long_name(self, vehicle_master_page):
         """Name with 256 chars — should be rejected or truncated."""
         log.info("VM-C11: Very long name test")
@@ -395,6 +437,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- VM-C12: Without Vehicle Type dropdown ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_VM_C12_no_vehicle_type(self, vehicle_master_page):
         """Submit without selecting Vehicle Type — should be blocked."""
         log.info("VM-C12: No Vehicle Type selected test")
@@ -434,6 +479,8 @@ class TestCreateFormValidations:
             page.force_close_form_popup()
 
     # ---- VM-C13: Without Fuel Type dropdown ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_VM_C13_no_fuel_type(self, vehicle_master_page):
         """Submit without selecting Fuel Type — should be blocked."""
         log.info("VM-C13: No Fuel Type selected test")
@@ -472,6 +519,8 @@ class TestCreateFormValidations:
             page.force_close_form_popup()
 
     # ---- VM-C14: Decimal Price ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_VM_C14_decimal_price(self, vehicle_master_page):
         """Decimal Price value — check if accepted or rejected."""
         log.info("VM-C14: Decimal price test")
@@ -495,6 +544,10 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- VM-C15: Per-field inline error messages ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_VM_C15_inline_error_messages(self, vehicle_master_page):
         """Check if per-field inline error messages appear.
         BUG FOUND: No per-field inline error messages (UX issue).
@@ -543,6 +596,10 @@ class TestDropdownValidations:
     """VM-D01 to VM-D05: Dropdown behaviour checks."""
 
     # ---- VM-D01: Vehicle Type dropdown shows options ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_VM_D01_vehicle_type_options(self, vehicle_master_page):
         """Vehicle Type dropdown opens and shows options."""
         log.info("VM-D01: Vehicle Type dropdown options")
@@ -562,6 +619,9 @@ class TestDropdownValidations:
             page.force_close_form_popup()
 
     # ---- VM-D02: Fuel Type dropdown shows options ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_VM_D02_fuel_type_options(self, vehicle_master_page):
         """Fuel Type dropdown opens and shows options."""
         log.info("VM-D02: Fuel Type dropdown options")
@@ -581,6 +641,9 @@ class TestDropdownValidations:
             page.force_close_form_popup()
 
     # ---- VM-D03: Vehicle Type dropdown search ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_VM_D03_vehicle_type_search(self, vehicle_master_page):
         """Vehicle Type dropdown internal search filters options."""
         log.info("VM-D03: Vehicle Type dropdown search")
@@ -645,6 +708,9 @@ class TestDropdownValidations:
             page.force_close_form_popup()
 
     # ---- VM-D04: Fuel Type dropdown search ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_VM_D04_fuel_type_search(self, vehicle_master_page):
         """Fuel Type dropdown internal search filters options."""
         log.info("VM-D04: Fuel Type dropdown search")
@@ -705,6 +771,9 @@ class TestDropdownValidations:
             page.force_close_form_popup()
 
     # ---- VM-D05: Selecting option closes dropdown ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_VM_D05_select_closes_dropdown(self, vehicle_master_page):
         """Selecting an option closes the dropdown and shows value."""
         log.info("VM-D05: Select closes dropdown")
@@ -739,6 +808,10 @@ class TestEditFormValidations:
     """VM-E01 to VM-E05: Validation checks on the Edit form."""
 
     # ---- VM-E01: Edit with duplicate Name ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_VM_E01_edit_duplicate_name(self, vehicle_master_page):
         """Edit vehicle with an already existing Name.
         BUG FOUND: Duplicate name allowed in Edit.
@@ -786,6 +859,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- VM-E02: Edit with Price = 0 ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_VM_E02_edit_zero_price(self, vehicle_master_page):
         """Edit vehicle with Price = 0.
         BUG FOUND: Zero price accepted in Edit.
@@ -822,6 +898,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- VM-E03: Edit with negative Price ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_VM_E03_edit_negative_price(self, vehicle_master_page):
         """Edit vehicle with negative Price.
         BUG FOUND: Negative price accepted in Edit.
@@ -858,6 +937,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- VM-E04: Edit with alphabets in Price ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_VM_E04_edit_alpha_price(self, vehicle_master_page):
         """Edit vehicle with alphabets in Price field."""
         log.info("VM-E04: Edit alpha price")
@@ -890,6 +972,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- VM-E05: Edit — verify pre-populated fields ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_VM_E05_edit_prepopulated(self, vehicle_master_page):
         """Edit popup should show all fields pre-populated with existing data."""
         log.info("VM-E05: Edit pre-populated fields")
@@ -938,6 +1023,9 @@ class TestSearchFilter:
     """VM-S01 to VM-S05: Search and Filter edge cases."""
 
     # ---- VM-S01: Search with exact Name match ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_VM_S01_search_exact(self, vehicle_master_page):
         """Search with exact vehicle name — should find it."""
         log.info("VM-S01: Search exact name")
@@ -959,6 +1047,8 @@ class TestSearchFilter:
         log.info(f"Exact search found: {data['name']}")
 
     # ---- VM-S02: Search with partial Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_VM_S02_search_partial(self, vehicle_master_page):
         """Search with partial vehicle name — should find it."""
         log.info("VM-S02: Search partial name")
@@ -981,6 +1071,8 @@ class TestSearchFilter:
         log.info(f"Partial search found with: {partial}")
 
     # ---- VM-S03: Search with non-existent Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_VM_S03_search_nonexistent(self, vehicle_master_page):
         """Search for non-existent name — should return no results."""
         log.info("VM-S03: Search nonexistent")
@@ -996,6 +1088,9 @@ class TestSearchFilter:
         log.info(f"Correctly not found: {fake_name}")
 
     # ---- VM-S04: Filter by Vehicle Type ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_VM_S04_filter_vehicle_type(self, vehicle_master_page):
         """Apply filter by Vehicle Type category.
         CRITICAL BUG: Apply Filters button is completely non-functional.
@@ -1047,6 +1142,9 @@ class TestSearchFilter:
         page.wait_seconds(2)
 
     # ---- VM-S05: Filter by Fuel Type ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_VM_S05_filter_fuel_type(self, vehicle_master_page):
         """Apply filter by Fuel Type category.
         CRITICAL BUG: Apply Filters button is completely non-functional.
@@ -1091,6 +1189,10 @@ class TestPopupUIBehaviors:
     """VM-P01 to VM-P05: Popup and UI interaction checks."""
 
     # ---- VM-P01: Cancel closes form without creating ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_VM_P01_cancel_no_create(self, vehicle_master_page):
         """Cancel button closes form without creating a vehicle."""
         log.info("VM-P01: Cancel no create test")
@@ -1116,6 +1218,9 @@ class TestPopupUIBehaviors:
         log.info("Cancel correctly did not create a vehicle")
 
     # ---- VM-P02: X button closes form without creating ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_VM_P02_close_no_create(self, vehicle_master_page):
         """X button closes form without creating a vehicle."""
         log.info("VM-P02: Close no create test")
@@ -1140,6 +1245,10 @@ class TestPopupUIBehaviors:
         log.info("X close correctly did not create a vehicle")
 
     # ---- VM-P03: View popup shows read-only fields ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_VM_P03_view_readonly(self, vehicle_master_page):
         """View popup shows all fields in read-only mode."""
         log.info("VM-P03: View read-only test")
@@ -1168,6 +1277,9 @@ class TestPopupUIBehaviors:
         page.wait_seconds(0.5)
 
     # ---- VM-P04: Edit popup shows editable fields ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_VM_P04_edit_has_update(self, vehicle_master_page):
         """Edit popup shows editable fields with Update button."""
         log.info("VM-P04: Edit has Update button")
@@ -1196,6 +1308,9 @@ class TestPopupUIBehaviors:
         page.wait_seconds(0.5)
 
     # ---- VM-P05: History popup opens and shows records ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_VM_P05_history_opens(self, vehicle_master_page):
         """History popup opens and shows at least 1 record."""
         log.info("VM-P05: History opens test")
@@ -1231,6 +1346,9 @@ class TestHistoryValidations:
     """VM-H01 to VM-H08: History popup detailed checks."""
 
     # ---- VM-H01: History shows at least 1 row after creation ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_VM_H01_history_after_create(self, vehicle_master_page):
         """After creating a vehicle, history shows at least 1 row."""
         log.info("VM-H01: History after create")
@@ -1261,6 +1379,8 @@ class TestHistoryValidations:
             )
 
     # ---- VM-H02: History row count increases after edit ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_VM_H02_history_after_edit(self, vehicle_master_page):
         """After editing, history should have more rows than before."""
         log.info("VM-H02: History after edit")
@@ -1309,6 +1429,9 @@ class TestHistoryValidations:
             )
 
     # ---- VM-H03: History search works with Enter key ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_VM_H03_history_search_enter(self, vehicle_master_page):
         """History search works when pressing Enter after typing."""
         log.info("VM-H03: History search with Enter")
@@ -1343,6 +1466,8 @@ class TestHistoryValidations:
             )
 
     # ---- VM-H04: History search with no match ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_VM_H04_history_search_no_match(self, vehicle_master_page):
         """History search with non-matching text shows empty/no rows."""
         log.info("VM-H04: History search no match")
@@ -1379,6 +1504,9 @@ class TestHistoryValidations:
         )
 
     # ---- VM-H05: History columns are correct ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_VM_H05_history_columns(self, vehicle_master_page):
         """History table has the expected columns."""
         log.info("VM-H05: History columns")
@@ -1416,6 +1544,10 @@ class TestHistoryValidations:
             )
 
     # ---- VM-H06: History Close button works ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_VM_H06_history_close_button(self, vehicle_master_page):
         """History Close button closes the popup."""
         log.info("VM-H06: History Close button")
@@ -1444,6 +1576,9 @@ class TestHistoryValidations:
         log.info("History Close button works correctly")
 
     # ---- VM-H07: History X icon closes popup ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_VM_H07_history_x_icon(self, vehicle_master_page):
         """History X icon in header closes the popup."""
         log.info("VM-H07: History X icon close")
@@ -1473,6 +1608,10 @@ class TestHistoryValidations:
         log.info("History X icon closes popup correctly")
 
     # ---- VM-H08: History column sort ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_VM_H08_history_sort(self, vehicle_master_page):
         """Clicking a column header in History sorts the data.
         BUG FOUND: Column sorting doesn't reorder rows.
