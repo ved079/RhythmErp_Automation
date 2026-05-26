@@ -24,7 +24,7 @@ const priorityConfig = {
   sanity: { color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' },
 };
 
-export function TestRunnerTab({
+export const TestRunnerTab = React.memo(function TestRunnerTab({
   tests,
   testChecks,
   toggleTestCheck,

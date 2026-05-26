@@ -52,7 +52,7 @@ interface ResultsTabProps {
   onReportTest: (test: TestItem) => void
 }
 
-export function ResultsTab({
+export const ResultsTab = React.memo(function ResultsTab({
   tests,
   passedCount,
   failedCount,

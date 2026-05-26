@@ -16,7 +16,7 @@ interface OperationsTabProps {
   testCasesModule?: { label: string; tests: any[] };
 }
 
-export function OperationsTab({ testGroups, testCasesModule }: OperationsTabProps) {
+export const OperationsTab = React.memo(function OperationsTab({ testGroups, testCasesModule }: OperationsTabProps) {
   const testSpecGroups = testGroups;
   const [searchVal, setSearchVal] = useState('');
   const [filter, setFilter] = useState<'all' | 'passed' | 'failed' | 'bug' | 'not-run'>('all');

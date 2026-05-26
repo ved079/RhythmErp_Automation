@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { fetchModules, folderToSidebarId, sidebarToFolderMapping, startRun, fetchTestCases, type ApiModule, type ApiSubModule, type TestCasesData } from '@/lib/api'
 import { DashboardTab } from '@/components/dashboard/DashboardTab'
 import { ResultsTab } from '@/components/results/ResultsTab'
+import { ErrorBoundary } from '@/components/error-boundary/ErrorBoundary'
 import {
   addBugReport,
   getBugReports,
@@ -3227,64 +3228,74 @@ export default function Home() {
               {/* Tab Content */}
               <div className="flex-1 overflow-hidden min-h-0">
                 {activeTab === 'operations' && (
-                  <OperationsTab
-                    testGroups={currentTestGroups}
-                    testCasesModule={
-                      allTestCases[selectedModule?.toLowerCase().replace(' ', '_').replace('-', '_')]
-                    }
-                  />
+                  <ErrorBoundary>
+                    <OperationsTab
+                      testGroups={currentTestGroups}
+                      testCasesModule={
+                        allTestCases[selectedModule?.toLowerCase().replace(' ', '_').replace('-', '_')]
+                      }
+                    />
+                  </ErrorBoundary>
                 )}
             {activeTab === 'test-runner' && (
-              <TestRunnerTab
-                tests={tests}
-                testChecks={testChecks}
-                toggleTestCheck={toggleTestCheck}
-                isRunning={isRunning}
-                totalFailed={failedCount}
-                onRun={(selectedOnly) => {
-                  runTests(selectedOnly)
-                  setActiveTab('live-execution')
-                }}
-                onRunByPriority={runByPriority}
-                onRerunFailed={() => {
-                  const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id)
-                  if (failedIds.length > 0) {
-                    rerunTestIds(failedIds)
-                    runTests(true, failedIds)
+              <ErrorBoundary>
+                <TestRunnerTab
+                  tests={tests}
+                  testChecks={testChecks}
+                  toggleTestCheck={toggleTestCheck}
+                  isRunning={isRunning}
+                  totalFailed={failedCount}
+                  onRun={(selectedOnly) => {
+                    runTests(selectedOnly)
                     setActiveTab('live-execution')
-                  }
-                }}
-              />
+                  }}
+                  onRunByPriority={runByPriority}
+                  onRerunFailed={() => {
+                    const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id)
+                    if (failedIds.length > 0) {
+                      rerunTestIds(failedIds)
+                      runTests(true, failedIds)
+                      setActiveTab('live-execution')
+                    }
+                  }}
+                />
+              </ErrorBoundary>
             )}
             {activeTab === 'live-execution' && (
-              <LiveExecutionTab
-                tests={tests}
-                testGroups={currentTestGroups}
-                isRunning={isRunning}
-                runningProgress={runningProgress}
-                onStop={() => setIsRunning(false)}
-                onBack={() => setActiveTab('test-runner')}
-                onRerunFailed={() => {
-                  const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id)
-                  if (failedIds.length > 0) {
-                    rerunTestIds(failedIds)
-                    runTests(true, failedIds)
-                  }
-                }}
-              />
+              <ErrorBoundary>
+                <LiveExecutionTab
+                  tests={tests}
+                  testGroups={currentTestGroups}
+                  isRunning={isRunning}
+                  runningProgress={runningProgress}
+                  onStop={() => setIsRunning(false)}
+                  onBack={() => setActiveTab('test-runner')}
+                  onRerunFailed={() => {
+                    const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id)
+                    if (failedIds.length > 0) {
+                      rerunTestIds(failedIds)
+                      runTests(true, failedIds)
+                    }
+                  }}
+                />
+              </ErrorBoundary>
             )}
             {activeTab === 'results' && (
-              <ResultsTab
-                tests={tests}
-                passedCount={passedCount}
-                failedCount={failedCount}
-                totalCount={tests.length}
-                runHistory={runHistory}
-                onReportTest={handleReportTest}
-              />
+              <ErrorBoundary>
+                <ResultsTab
+                  tests={tests}
+                  passedCount={passedCount}
+                  failedCount={failedCount}
+                  totalCount={tests.length}
+                  runHistory={runHistory}
+                  onReportTest={handleReportTest}
+                />
+              </ErrorBoundary>
             )}
             {activeTab === 'schedule' && user && (
-              <ScheduleRunsTab userName={user.name} sidebarModules={sidebarModules} />
+              <ErrorBoundary>
+                <ScheduleRunsTab userName={user.name} sidebarModules={sidebarModules} />
+              </ErrorBoundary>
             )}
           </div>
               </div>
