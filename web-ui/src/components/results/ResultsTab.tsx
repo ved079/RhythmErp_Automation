@@ -316,4 +316,4 @@ export const ResultsTab = React.memo(function ResultsTab({
       </div>
     </div>
   )
-}
+});
