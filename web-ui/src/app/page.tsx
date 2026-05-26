@@ -1186,7 +1186,7 @@ export default function Home() {
 
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
-      {/*  HEADER  */}
+      {/* â”€â”€â”€ HEADER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <header className="h-12 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 shrink-0 z-10">
         <div className="flex items-center gap-3 flex-1">
           <Button
@@ -1297,9 +1297,9 @@ export default function Home() {
         </div>
       </header>
 
-      {/*  BODY  */}
+      {/* â”€â”€â”€ BODY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="flex flex-1 overflow-hidden">
-        {/*  SIDEBAR  */}
+        {/* â”€â”€â”€ SIDEBAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <div
           className="shrink-0 overflow-hidden h-full"
           style={{ width: sidebarOpen ? sidebarWidth : 0 }}
@@ -1341,7 +1341,7 @@ export default function Home() {
         </aside>
         </div>
 
-        {/*  RESIZE HANDLE  */}
+        {/* â”€â”€â”€ RESIZE HANDLE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         {sidebarOpen && (
           <div
             onMouseDown={handleResizeStart}
@@ -1349,7 +1349,7 @@ export default function Home() {
           />
         )}
 
-        {/*  MAIN CONTENT  */}
+        {/* â”€â”€â”€ MAIN CONTENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <main className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900 relative">
           {navToast && (
             <NavToast key={navToast.key} label={navToast.label} parent={navToast.parent} />
@@ -1382,17 +1382,17 @@ export default function Home() {
             </div>
           )}
 
-          {/*  DASHBOARD VIEW  */}
+          {/* â”€â”€ DASHBOARD VIEW â”€â”€ */}
           {selectedModule === 'dashboard' && (
             <DashboardTab onSelectModule={handleSelectModule} />
           )}
 
-          {/*  MY TICKETS VIEW  */}
+          {/* â”€â”€ MY TICKETS VIEW â”€â”€ */}
           {selectedModule === 'my-tickets' && user && (
             <div className='p-8 text-center text-gray-400 text-sm'>No tickets yet</div>
           )}
 
-          {/*  MODULE VIEW (module selected  tabs + content)  */}
+          {/* â”€â”€ MODULE VIEW (module selected â€” tabs + content) â”€â”€ */}
           {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && (
               <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               {/* Tab bar */}
@@ -1493,7 +1493,7 @@ export default function Home() {
         </main>
       </div>
 
-      {/*  CONSOLE PANEL  */}
+      {/* â”€â”€â”€ CONSOLE PANEL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {consoleOpen && (
         <div className="shrink-0 border-t border-gray-700 bg-[#1a1a2e] flex flex-col" style={{ height: '200px' }}>
           <div className="flex items-center justify-between px-4 py-1.5 bg-[#16162a] border-b border-gray-700">
@@ -1547,7 +1547,7 @@ export default function Home() {
         </button>
       )}
 
-      {/*  QUICK SWITCHER (Cmd+K)  */}
+      {/* â”€â”€â”€ QUICK SWITCHER (Cmd+K) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {quickSwitcherOpen && (
         <>
           {/* Backdrop */}
@@ -1682,7 +1682,7 @@ export default function Home() {
         </button>
       )}
 
-      {/*  Feature 1: Completion Summary Modal  */}
+      {/* â”€â”€â”€ Feature 1: Completion Summary Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <CompletionSummaryModal
         open={completionModalOpen}
         onClose={() => setCompletionModalOpen(false)}
@@ -1694,7 +1694,7 @@ export default function Home() {
         onNewRun={handleNewRun}
       />
 
-      {/*  Bug Report Dialog  */}
+      {/* â”€â”€â”€ Bug Report Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <ReportToAdminDialog
         open={reportDialogOpen}
         onClose={() => setReportDialogOpen(false)}
