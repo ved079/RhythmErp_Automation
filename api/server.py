@@ -1,11 +1,20 @@
 """FastAPI backend for Rhythm ERP Test Runner UI."""
 
 import os
+import re
+import json
+import secrets
+import hashlib
+import bcrypt
+from datetime import datetime, timedelta
 from pathlib import Path
-from fastapi import FastAPI
+from typing import Optional
+from fastapi import FastAPI, HTTPException, Depends, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, EmailStr
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
 
 from api.models import (
     ModuleListResponse, RunResponse, RunListResponse,
@@ -19,6 +28,11 @@ from api.screenshot_store import take_screenshot
 PROJECT_ROOT = Path(__file__).parent.parent
 
 app = FastAPI(title="Rhythm ERP Test API", version="1.0.0")
+
+# Rate limiting
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(429, _rate_limit_exceeded_handler)
 
 # CORS — allow the Next.js UI to call us
 app.add_middleware(
@@ -225,6 +239,22 @@ def _get_user_by_token(token: str | None) -> dict | None:
 class LoginRequest(_BM):
     email: str
     password: str
+    
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Email cannot be empty')
+        return v.strip().lower()
+    
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v):
+        if not v:
+            raise ValueError('Password cannot be empty')
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters')
+        return v
 
 class CreateUserRequest(_BM):
     email: str
@@ -232,6 +262,52 @@ class CreateUserRequest(_BM):
     password: str
     role: str = "tester"
     moduleAccess: list[str] = []
+    
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Email cannot be empty')
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError('Invalid email format')
+        return v.strip().lower()
+    
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v):
+        if not v:
+            raise ValueError('Password cannot be empty')
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters')
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'\d', v):
+            raise ValueError('Password must contain at least one number')
+        return v
+    
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Name cannot be empty')
+        if len(v) > 100:
+            raise ValueError('Name too long (max 100 characters)')
+        # Sanitize name to prevent XSS
+        sanitized = v.strip()
+        if any(char in sanitized for char in ['<', '>', '"', "'", '&']):
+            raise ValueError('Name contains invalid characters')
+        return sanitized
+    
+    @field_validator('role')
+    @classmethod
+    def validate_role(cls, v):
+        allowed_roles = ['admin', 'tester', 'viewer', 'manager']
+        if v not in allowed_roles:
+            raise ValueError(f'Role must be one of: {", ".join(allowed_roles)}')
+        return v
 
 class UpdateUserRequest(_BM):
     name: str | None = None
@@ -239,9 +315,54 @@ class UpdateUserRequest(_BM):
     role: str | None = None
     status: str | None = None
     moduleAccess: list[str] | None = None
+    
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        if v is not None:
+            if not v.strip():
+                raise ValueError('Email cannot be empty')
+            email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(email_pattern, v):
+                raise ValueError('Invalid email format')
+            return v.strip().lower()
+        return v
+    
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v):
+        if v is not None:
+            if not v.strip():
+                raise ValueError('Name cannot be empty')
+            if len(v) > 100:
+                raise ValueError('Name too long (max 100 characters)')
+            sanitized = v.strip()
+            if any(char in sanitized for char in ['<', '>', '"', "'", '&']):
+                raise ValueError('Name contains invalid characters')
+            return sanitized
+        return v
+    
+    @field_validator('role')
+    @classmethod
+    def validate_role(cls, v):
+        if v is not None:
+            allowed_roles = ['admin', 'tester', 'viewer', 'manager']
+            if v not in allowed_roles:
+                raise ValueError(f'Role must be one of: {", ".join(allowed_roles)}')
+        return v
+    
+    @field_validator('status')
+    @classmethod
+    def validate_status(cls, v):
+        if v is not None:
+            allowed_statuses = ['active', 'inactive']
+            if v not in allowed_statuses:
+                raise ValueError(f'Status must be one of: {", ".join(allowed_statuses)}')
+        return v
 
 @app.post("/api/auth/login")
-def auth_login(req: LoginRequest):
+@limiter.limit("5/minute")
+def auth_login(request: Request, req: LoginRequest):
     """Login with email + password. Returns a session token."""
     data = _load_users()
     user = None
@@ -253,7 +374,9 @@ def auth_login(req: LoginRequest):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if user["status"] != "active":
         raise HTTPException(status_code=403, detail="Account is deactivated")
-    if user["password"] != _hash_password(req.password):
+    
+    # Check password with bcrypt
+    if not bcrypt.checkpw(req.password.encode(), user["password"].encode()):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # Update last login
@@ -263,9 +386,13 @@ def auth_login(req: LoginRequest):
 
     # Create session
     token = secrets.token_hex(32)
+    expires = datetime.now() + timedelta(hours=24)
     _sessions[token] = {
         "user_id": user["id"],
         "email": user["email"],
         "name": user["name"],
         "role": user["role"],
+        "expires": expires.isoformat()
     }
+    
+    return {"token": token, "user": {"id": user["id"], "email": user["email"], "name": user["name"], "role": user["role"]}}
