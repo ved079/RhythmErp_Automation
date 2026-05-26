@@ -5,66 +5,83 @@
       "id": "usr-1",
       "email": "admin@rhythmerp.com",
       "name": "Admin",
-      "password": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+      "password": "$2b$12$xnzm8ECN8Jel/iFCih3anuqyrXORAI8pgc4J/G9.XAwLVCn6u8HYK",
       "role": "admin",
       "status": "active",
       "lastLogin": "16 May 2026, 10:00 AM",
-      "moduleAccess": ["all"],
+      "moduleAccess": [
+        "all"
+      ],
       "createdAt": "2026-05-01"
     },
     {
       "id": "usr-2",
       "email": "priya@rhythmerp.com",
       "name": "Priya Sharma",
-      "password": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+      "password": "$2b$12$xq8kH5Q.6cIyIk0pgrq4aOi.a.dAh9.yueJgKAeaqURT4F5ZZUAcW",
       "role": "qa_lead",
       "status": "active",
       "lastLogin": "16 May 2026, 09:15 AM",
-      "moduleAccess": ["all"],
+      "moduleAccess": [
+        "all"
+      ],
       "createdAt": "2026-05-01"
     },
     {
       "id": "usr-3",
       "email": "rahul@rhythmerp.com",
       "name": "Rahul Verma",
-      "password": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+      "password": "$2b$12$mMA3wFVblk4xGuWs9vfzKu85SDnUvg9wVaqTcAs4FwtoEMJnUGzBy",
       "role": "tester",
       "status": "active",
       "lastLogin": "15 May 2026, 04:30 PM",
-      "moduleAccess": ["tax-rate", "tax-authority", "hsn-sac", "bank"],
+      "moduleAccess": [
+        "tax-rate",
+        "tax-authority",
+        "hsn-sac",
+        "bank"
+      ],
       "createdAt": "2026-05-01"
     },
     {
       "id": "usr-4",
       "email": "amit@rhythmerp.com",
       "name": "Amit Patel",
-      "password": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+      "password": "$2b$12$ISepIp1tfeqVkXcgXyFIluvL8AGsNuw17VaxKsvp/JtM0hpT1ZwAm",
       "role": "tester",
       "status": "active",
       "lastLogin": "16 May 2026, 08:45 AM",
-      "moduleAccess": ["customer", "farmer", "company-onboarding"],
+      "moduleAccess": [
+        "customer",
+        "farmer",
+        "company-onboarding"
+      ],
       "createdAt": "2026-05-01"
     },
     {
       "id": "usr-5",
       "email": "sneha@rhythmerp.com",
       "name": "Sneha Gupta",
-      "password": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+      "password": "$2b$12$Es2F9eraviriDCylZrYhy.uOGrA5qZ4BnNU9s6iDwfmNHu/UOZs5.",
       "role": "tester",
       "status": "inactive",
       "lastLogin": "10 May 2026, 02:00 PM",
-      "moduleAccess": ["commodity-settings"],
+      "moduleAccess": [
+        "commodity-settings"
+      ],
       "createdAt": "2026-05-01"
     },
     {
       "id": "usr-6",
       "email": "client@rhythmerp.com",
       "name": "Client Viewer",
-      "password": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+      "password": "$2b$12$bUdOAQN5XlcQCJwwv5fdY.z0rJniomLu8Xm4O/pI3HpmXeP0yARJG",
       "role": "client",
       "status": "active",
       "lastLogin": "16 May 2026, 10:30 AM",
-      "moduleAccess": ["dashboard"],
+      "moduleAccess": [
+        "dashboard"
+      ],
       "createdAt": "2026-05-01"
     }
   ]
