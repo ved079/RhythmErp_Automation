@@ -1,6 +1,6 @@
 ﻿import React from 'react';
 
-export default function TestRunnerTab({
+export default React.memo(function TestRunnerTab({
   tests,
   testChecks,
   toggleTestCheck,
@@ -78,7 +78,7 @@ export default function TestRunnerTab({
           variant="outline"
           className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 h-9 text-[13px] gap-2 px-4 cursor-pointer"
         >
-          {allSelected ? 'âœ– Deselect All' : 'â˜‘ Select All'}
+          {allSelected ? '-œ– Deselect All' : '-˜‘ Select All'}
           <span className="text-[11px] opacity-60">({selectedRunnable}/{pendingCount})</span>
         </Button>
         <Button
@@ -167,10 +167,10 @@ export default function TestRunnerTab({
                   <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 flex-1">{group.name}</span>
                   <span className="text-[11px] text-gray-500 dark:text-gray-400">({group.tests.length})</span>
                   {groupPassed > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">{groupPassed} âœ…</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">{groupPassed} -œ…</span>
                   )}
                   {groupFailed > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">{groupFailed} âŒ</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">{groupFailed} -Œ</span>
                   )}
                   {groupPending > 0 && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">{groupPending} pending</span>
@@ -212,4 +212,4 @@ export default function TestRunnerTab({
   )
 }
 
-// â”€â”€â”€ LIVE SCREENCAST â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -”-”-” LIVE SCREENCAST -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”

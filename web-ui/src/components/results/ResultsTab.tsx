@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState, useMemo } from 'react'
 import { Progress } from '@/components/ui/progress'
@@ -52,7 +52,7 @@ interface ResultsTabProps {
   onReportTest: (test: TestItem) => void
 }
 
-export function ResultsTab({
+export default React.memo(function ResultsTab({
   tests,
   passedCount,
   failedCount,

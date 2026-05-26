@@ -139,7 +139,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => vo
 
         {/* Footer */}
         <p className="text-center text-[11px] text-gray-400 dark:text-gray-500 mt-6">
-          RhythmERP Automation Runner v1.0 â€” Internal QA Tool
+          RhythmERP Automation Runner v1.0 -” Internal QA Tool
         </p>
       </div>
     </div>
@@ -147,4 +147,4 @@ export default function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => vo
 }
 
 
-// â”€â”€â”€ OPERATIONS TAB (Test Specification View) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -”-”-” OPERATIONS TAB (Test Specification View) -”-”-”-”-”-”-”-”-”-”-”-”

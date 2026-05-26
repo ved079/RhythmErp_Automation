@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -93,7 +93,7 @@ import {
   Timer,
 } from 'lucide-react'
 
-// ─── Types ───────────────────────────────────────────────
+// -”-”-” Types -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 type TestPriority = 'smoke' | 'regression' | 'sanity'
 
 interface AuthUser {
@@ -160,25 +160,25 @@ interface SystemSetting {
   category: string
 }
 
-// ─── Mock Data ───────────────────────────────────────────
+// -”-”-” Mock Data -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 const initialTests: AdminTest[] = [
-  { id: 'T01', description: 'Create with all valid fields', className: 'TestCreate', status: 'active', priority: 'smoke', steps: 'Click Add → Fill Name, Tax Type, Tax Authority → Select From/To Date, Revision Status → Submit', expected: 'Record created successfully, SweetAlert2 success toast', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
-  { id: 'T02', description: 'Create with minimum fields', className: 'TestCreate', status: 'active', priority: 'smoke', steps: 'Click Add → Fill Tax Rate Name → Submit', expected: 'Record created with default values', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
-  { id: 'T03', description: 'Add HSN row in sub-table', className: 'TestSubTable', status: 'active', priority: 'regression', steps: 'Click Add → Fill fields → Go to "Define Tax Rate Details" tab → Click Add → Select HSN Number → Enter Tax Rate → Submit', expected: 'Sub-table row added, record created', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'failed', lastRun: '16 May 2026, 10:23 AM', error: 'SubTableAddButton not found in DOM' },
-  { id: 'T04', description: 'Update existing record name', className: 'TestEdit', status: 'active', priority: 'regression', steps: 'Search record → Click Edit → Change Name → Update', expected: 'Name updated, success alert', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
-  { id: 'T05', description: 'Update with blank name', className: 'TestEdit', status: 'active', priority: 'regression', steps: 'Search record → Click Edit → Clear Name → Update', expected: 'Validation error shown', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
-  { id: 'T06', description: 'Update non-existent record', className: 'TestEdit', status: 'active', priority: 'regression', steps: 'Search for non-existent name → Verify not in table', expected: 'Record not found', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
-  { id: 'T09', description: 'Submit with empty sub-table', className: 'TestSubTable', status: 'active', priority: 'regression', steps: 'Click Add → Fill header fields → Submit WITHOUT adding sub-table row', expected: 'Form should reject empty sub-table', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'failed', lastRun: '16 May 2026, 10:23 AM', error: 'Server accepts empty sub-table as success (wrong assertion)' },
-  { id: 'T10', description: 'Search existing record', className: 'TestSearch', status: 'active', priority: 'smoke', steps: 'Enter record name in search field → Verify record appears in table', expected: 'Matching record displayed in results', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
-  { id: 'T11', description: 'Search non-existent record', className: 'TestSearch', status: 'active', priority: 'regression', steps: 'Enter non-existent name → Verify "No records found" message', expected: 'No records displayed, empty state shown', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
-  { id: 'T17', description: 'View history of existing record', className: 'TestHistory', status: 'active', priority: 'sanity', steps: 'Click History icon → Verify popup opens with record history', expected: 'History popup displays with correct entries', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
-  { id: 'T18', description: 'Search within history popup', className: 'TestHistory', status: 'active', priority: 'sanity', steps: 'Open History popup → Enter search term → Verify filtered results', expected: 'History entries filtered correctly', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
-  { id: 'T24', description: 'Verify pagination controls', className: 'TestPagination', status: 'active', priority: 'sanity', steps: 'Navigate through page controls → Verify First, Prev, Next, Last buttons', expected: 'Pagination works correctly, correct records per page', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
-  { id: 'T31', description: 'Add new customer with valid fields', className: 'TestCreate', status: 'active', priority: 'smoke', steps: 'Click Add → Fill Customer Name, Contact, Email, Phone → Select Region → Submit', expected: 'Customer created successfully', moduleId: 'customer', moduleName: 'Customer', lastResult: 'passed', lastRun: '16 May 2026, 09:30 AM' },
-  { id: 'T32', description: 'Search customer by name', className: 'TestSearch', status: 'active', priority: 'regression', steps: 'Enter customer name → Verify in table', expected: 'Customer displayed', moduleId: 'customer', moduleName: 'Customer', lastResult: 'passed', lastRun: '16 May 2026, 09:30 AM' },
-  { id: 'T33', description: 'Delete existing customer', className: 'TestDelete', status: 'draft', priority: 'sanity', steps: 'Select customer → Click Delete → Confirm', expected: 'Customer removed', moduleId: 'customer', moduleName: 'Customer', lastResult: 'not-run', lastRun: '—' },
-  { id: 'T41', description: 'Verify farmer profile creation', className: 'TestCreate', status: 'active', priority: 'regression', steps: 'Navigate to Farmer → Click Add → Fill all required fields → Submit', expected: 'Farmer profile created', moduleId: 'farmer', moduleName: 'Farmer', lastResult: 'failed', lastRun: '16 May 2026, 09:15 AM', error: 'Village dropdown not populating' },
-  { id: 'T42', description: 'Upload farmer documents', className: 'TestUpload', status: 'draft', priority: 'sanity', steps: 'Open farmer profile → Go to Documents tab → Upload PDF', expected: 'Document uploaded successfully', moduleId: 'farmer', moduleName: 'Farmer', lastResult: 'not-run', lastRun: '—' },
+  { id: 'T01', description: 'Create with all valid fields', className: 'TestCreate', status: 'active', priority: 'smoke', steps: 'Click Add -†’ Fill Name, Tax Type, Tax Authority -†’ Select From/To Date, Revision Status -†’ Submit', expected: 'Record created successfully, SweetAlert2 success toast', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
+  { id: 'T02', description: 'Create with minimum fields', className: 'TestCreate', status: 'active', priority: 'smoke', steps: 'Click Add -†’ Fill Tax Rate Name -†’ Submit', expected: 'Record created with default values', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
+  { id: 'T03', description: 'Add HSN row in sub-table', className: 'TestSubTable', status: 'active', priority: 'regression', steps: 'Click Add -†’ Fill fields -†’ Go to "Define Tax Rate Details" tab -†’ Click Add -†’ Select HSN Number -†’ Enter Tax Rate -†’ Submit', expected: 'Sub-table row added, record created', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'failed', lastRun: '16 May 2026, 10:23 AM', error: 'SubTableAddButton not found in DOM' },
+  { id: 'T04', description: 'Update existing record name', className: 'TestEdit', status: 'active', priority: 'regression', steps: 'Search record -†’ Click Edit -†’ Change Name -†’ Update', expected: 'Name updated, success alert', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
+  { id: 'T05', description: 'Update with blank name', className: 'TestEdit', status: 'active', priority: 'regression', steps: 'Search record -†’ Click Edit -†’ Clear Name -†’ Update', expected: 'Validation error shown', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
+  { id: 'T06', description: 'Update non-existent record', className: 'TestEdit', status: 'active', priority: 'regression', steps: 'Search for non-existent name -†’ Verify not in table', expected: 'Record not found', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
+  { id: 'T09', description: 'Submit with empty sub-table', className: 'TestSubTable', status: 'active', priority: 'regression', steps: 'Click Add -†’ Fill header fields -†’ Submit WITHOUT adding sub-table row', expected: 'Form should reject empty sub-table', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'failed', lastRun: '16 May 2026, 10:23 AM', error: 'Server accepts empty sub-table as success (wrong assertion)' },
+  { id: 'T10', description: 'Search existing record', className: 'TestSearch', status: 'active', priority: 'smoke', steps: 'Enter record name in search field -†’ Verify record appears in table', expected: 'Matching record displayed in results', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
+  { id: 'T11', description: 'Search non-existent record', className: 'TestSearch', status: 'active', priority: 'regression', steps: 'Enter non-existent name -†’ Verify "No records found" message', expected: 'No records displayed, empty state shown', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
+  { id: 'T17', description: 'View history of existing record', className: 'TestHistory', status: 'active', priority: 'sanity', steps: 'Click History icon -†’ Verify popup opens with record history', expected: 'History popup displays with correct entries', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
+  { id: 'T18', description: 'Search within history popup', className: 'TestHistory', status: 'active', priority: 'sanity', steps: 'Open History popup -†’ Enter search term -†’ Verify filtered results', expected: 'History entries filtered correctly', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
+  { id: 'T24', description: 'Verify pagination controls', className: 'TestPagination', status: 'active', priority: 'sanity', steps: 'Navigate through page controls -†’ Verify First, Prev, Next, Last buttons', expected: 'Pagination works correctly, correct records per page', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
+  { id: 'T31', description: 'Add new customer with valid fields', className: 'TestCreate', status: 'active', priority: 'smoke', steps: 'Click Add -†’ Fill Customer Name, Contact, Email, Phone -†’ Select Region -†’ Submit', expected: 'Customer created successfully', moduleId: 'customer', moduleName: 'Customer', lastResult: 'passed', lastRun: '16 May 2026, 09:30 AM' },
+  { id: 'T32', description: 'Search customer by name', className: 'TestSearch', status: 'active', priority: 'regression', steps: 'Enter customer name -†’ Verify in table', expected: 'Customer displayed', moduleId: 'customer', moduleName: 'Customer', lastResult: 'passed', lastRun: '16 May 2026, 09:30 AM' },
+  { id: 'T33', description: 'Delete existing customer', className: 'TestDelete', status: 'draft', priority: 'sanity', steps: 'Select customer -†’ Click Delete -†’ Confirm', expected: 'Customer removed', moduleId: 'customer', moduleName: 'Customer', lastResult: 'not-run', lastRun: '-”' },
+  { id: 'T41', description: 'Verify farmer profile creation', className: 'TestCreate', status: 'active', priority: 'regression', steps: 'Navigate to Farmer -†’ Click Add -†’ Fill all required fields -†’ Submit', expected: 'Farmer profile created', moduleId: 'farmer', moduleName: 'Farmer', lastResult: 'failed', lastRun: '16 May 2026, 09:15 AM', error: 'Village dropdown not populating' },
+  { id: 'T42', description: 'Upload farmer documents', className: 'TestUpload', status: 'draft', priority: 'sanity', steps: 'Open farmer profile -†’ Go to Documents tab -†’ Upload PDF', expected: 'Document uploaded successfully', moduleId: 'farmer', moduleName: 'Farmer', lastResult: 'not-run', lastRun: '-”' },
 ]
 
 const initialModules: AdminModule[] = [
@@ -192,11 +192,11 @@ const initialModules: AdminModule[] = [
   { id: 'designation', label: 'Designation', parentId: 'common-settings', parentLabel: 'Common Settings', testCount: 5, sortOrder: 7, status: 'active' },
   { id: 'bank', label: 'Bank', parentId: 'common-settings', parentLabel: 'Common Settings', testCount: 12, sortOrder: 8, status: 'active' },
   { id: 'seasons', label: 'Seasons', parentId: 'common-settings', parentLabel: 'Common Settings', testCount: 7, sortOrder: 9, status: 'active' },
-  { id: 'hsn-sac', label: 'HSN SAC', parentId: 'common-settings', parentLabel: 'Common Settings', badge: '✅ 12/12', badgeType: 'success', testCount: 12, sortOrder: 10, status: 'active' },
-  { id: 'error-code-master', label: 'Error Code Master', parentId: 'common-settings', parentLabel: 'Common Settings', badge: '🔄 WIP', badgeType: 'wip', testCount: 0, sortOrder: 11, status: 'draft' },
-  { id: 'vehicle-master', label: 'Vehicle Master', parentId: 'common-settings', parentLabel: 'Common Settings', badge: '—', badgeType: 'none', testCount: 0, sortOrder: 12, status: 'active' },
-  { id: 'tax-authority', label: 'Tax Authority', parentId: 'common-settings', parentLabel: 'Common Settings', badge: '⚠️ 15/18', badgeType: 'warning', testCount: 18, sortOrder: 13, status: 'active' },
-  { id: 'tax-rate', label: 'Tax Rate', parentId: 'common-settings', parentLabel: 'Common Settings', badge: '⚠️ 17/20', badgeType: 'warning', testCount: 12, sortOrder: 14, status: 'active' },
+  { id: 'hsn-sac', label: 'HSN SAC', parentId: 'common-settings', parentLabel: 'Common Settings', badge: '-œ… 12/12', badgeType: 'success', testCount: 12, sortOrder: 10, status: 'active' },
+  { id: 'error-code-master', label: 'Error Code Master', parentId: 'common-settings', parentLabel: 'Common Settings', badge: 'ðŸ”„ WIP', badgeType: 'wip', testCount: 0, sortOrder: 11, status: 'draft' },
+  { id: 'vehicle-master', label: 'Vehicle Master', parentId: 'common-settings', parentLabel: 'Common Settings', badge: '-”', badgeType: 'none', testCount: 0, sortOrder: 12, status: 'active' },
+  { id: 'tax-authority', label: 'Tax Authority', parentId: 'common-settings', parentLabel: 'Common Settings', badge: '-š ï¸ 15/18', badgeType: 'warning', testCount: 18, sortOrder: 13, status: 'active' },
+  { id: 'tax-rate', label: 'Tax Rate', parentId: 'common-settings', parentLabel: 'Common Settings', badge: '-š ï¸ 17/20', badgeType: 'warning', testCount: 12, sortOrder: 14, status: 'active' },
   { id: 'commodity-settings', label: 'Commodity Settings', testCount: 118, sortOrder: 15, status: 'active' },
   { id: 'crop-master', label: 'Crop Master', parentId: 'commodity-settings', parentLabel: 'Commodity Settings', testCount: 20, sortOrder: 16, status: 'active' },
   { id: 'commodity-quality-param', label: 'Commodity Quality Param', parentId: 'commodity-settings', parentLabel: 'Commodity Settings', testCount: 9, sortOrder: 17, status: 'active' },
@@ -242,7 +242,7 @@ const initialSettings: SystemSetting[] = [
   { id: 's12', key: 'session_timeout', label: 'Session Timeout (hours)', value: '168', type: 'number', description: 'User session duration before automatic logout (default 168 = 7 days)', category: 'System' },
 ]
 
-// ─── Priority Config ────────────────────────────────────
+// -”-”-” Priority Config -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 const priorityConfig = {
   smoke: { icon: <Flame className="size-3" />, label: 'Smoke', color: 'text-orange-700 bg-orange-100 dark:text-orange-300 dark:bg-orange-900/40' },
   regression: { icon: <Activity className="size-3" />, label: 'Regression', color: 'text-blue-700 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/40' },
@@ -257,7 +257,7 @@ const roleConfig: Record<string, { label: string; color: string }> = {
   client: { label: 'Client', color: 'text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-900/40' },
 }
 
-// ─── ADMIN PAGE COMPONENT ────────────────────────────────
+// -”-”-” ADMIN PAGE COMPONENT -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 export default function AdminPage() {
   const router = useRouter()
   const [user, setUser] = useState<AuthUser | null>(null)
@@ -358,7 +358,7 @@ export default function AdminPage() {
     router.push('/')
   }, [router])
 
-  // ─── Filtered tests ────────────────────────────────
+  // -”-”-” Filtered tests -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
   const filteredTests = useMemo(() => {
     return tests.filter((t) => {
       const matchSearch = testSearch === '' || t.id.toLowerCase().includes(testSearch.toLowerCase()) || t.description.toLowerCase().includes(testSearch.toLowerCase()) || t.className.toLowerCase().includes(testSearch.toLowerCase())
@@ -377,14 +377,14 @@ export default function AdminPage() {
     return Array.from(modMap.entries()).sort((a, b) => a[1].localeCompare(b[1]))
   }, [tests])
 
-  // ─── CRUD handlers ─────────────────────────────────
+  // -”-”-” CRUD handlers -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
   const handleSaveTest = useCallback((testData: Partial<AdminTest>) => {
     if (editingTest) {
       setTests((prev) => prev.map((t) => t.id === editingTest.id ? { ...t, ...testData } : t))
     } else {
       const newId = `T${String(tests.length + 50).padStart(2, '0')}`
       const mod = modules.find((m) => m.id === (testData.moduleId || 'tax-rate'))
-      setTests((prev) => [...prev, { ...testData, id: newId, className: testData.className || 'TestNew', status: 'draft' as const, priority: testData.priority || 'sanity' as TestPriority, moduleId: testData.moduleId || 'tax-rate', moduleName: mod?.label || 'Unknown', lastResult: 'not-run' as const, lastRun: '—' } as AdminTest])
+      setTests((prev) => [...prev, { ...testData, id: newId, className: testData.className || 'TestNew', status: 'draft' as const, priority: testData.priority || 'sanity' as TestPriority, moduleId: testData.moduleId || 'tax-rate', moduleName: mod?.label || 'Unknown', lastResult: 'not-run' as const, lastRun: '-”' } as AdminTest])
     }
     setTestDialogOpen(false)
     setEditingTest(null)
@@ -431,7 +431,7 @@ export default function AdminPage() {
     setDeleteTarget(null)
   }, [deleteTarget])
 
-  // ─── Sidebar items ─────────────────────────────────
+  // -”-”-” Sidebar items -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
   const sidebarItems = [
     { id: 'overview', icon: LayoutDashboard, label: 'Overview' },
     { id: 'tests', icon: ClipboardList, label: 'Test Management' },
@@ -442,7 +442,7 @@ export default function AdminPage() {
     { id: 'settings', icon: Settings, label: 'Settings' },
   ]
 
-  // ─── Stats for overview ────────────────────────────
+  // -”-”-” Stats for overview -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
   const overviewStats = useMemo(() => {
     const activeTests = tests.filter((t) => t.status === 'active').length
     const totalModules = modules.filter((m) => !m.parentId).length
@@ -456,7 +456,7 @@ export default function AdminPage() {
     return { activeTests, totalModules, activeEnvs, activeUsers, failedTests, passRate, draftTests, totalTests: tests.length }
   }, [tests, modules, environments, users])
 
-  // ─── Loading ────────────────────────────────────────
+  // -”-”-” Loading -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-white dark:bg-gray-900">
@@ -476,7 +476,7 @@ export default function AdminPage() {
 
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
-      {/* ─── HEADER ─────────────────────────────────────── */}
+      {/* -”-”-” HEADER -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-” */}
       <header className="h-12 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 shrink-0 z-10">
         <div className="flex items-center gap-3 flex-1">
           <Button
@@ -538,9 +538,9 @@ export default function AdminPage() {
         </div>
       </header>
 
-      {/* ─── BODY ───────────────────────────────────────── */}
+      {/* -”-”-” BODY -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-” */}
       <div className="flex flex-1 overflow-hidden">
-        {/* ─── SIDEBAR ──────────────────────────────────── */}
+        {/* -”-”-” SIDEBAR -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-” */}
         <div className={`shrink-0 transition-all duration-200 ease-in-out overflow-hidden ${sidebarOpen ? 'w-60' : 'w-0'}`}>
           <aside className="w-60 bg-[#fef2f2] dark:bg-[#2a1a1a] border-r border-[#fecaca] dark:border-[#4a2a2a] flex flex-col h-full">
             <div className="px-3 py-2.5 border-b border-[#fecaca] dark:border-[#4a2a2a] flex items-center justify-between">
@@ -597,7 +597,7 @@ export default function AdminPage() {
           </aside>
         </div>
 
-        {/* ─── MAIN CONTENT ─────────────────────────────── */}
+        {/* -”-”-” MAIN CONTENT -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-” */}
         <main className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
           {/* Content */}
           <div className="flex-1 overflow-auto p-5">
@@ -619,7 +619,7 @@ export default function AdminPage() {
                 onPriorityFilterChange={setTestPriorityFilter}
                 onAddTest={() => { setEditingTest(null); setTestDialogOpen(true) }}
                 onEditTest={(t) => { setEditingTest(t); setTestDialogOpen(true) }}
-                onDeleteTest={(t) => { setDeleteTarget({ type: 'test', id: t.id, label: `${t.id} — ${t.description}` }); setDeleteDialogOpen(true) }}
+                onDeleteTest={(t) => { setDeleteTarget({ type: 'test', id: t.id, label: `${t.id} -” ${t.description}` }); setDeleteDialogOpen(true) }}
               />
             )}
             {activeSection === 'modules' && (
@@ -679,7 +679,7 @@ export default function AdminPage() {
         </main>
       </div>
 
-      {/* ─── DIALOGS ────────────────────────────────────── */}
+      {/* -”-”-” DIALOGS -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-” */}
       {/* Test Dialog */}
       <Dialog open={testDialogOpen} onOpenChange={setTestDialogOpen}>
         <DialogContent className="max-w-xl max-h-[85vh] overflow-auto">
@@ -741,7 +741,7 @@ export default function AdminPage() {
   )
 }
 
-// ─── ADMIN OVERVIEW ──────────────────────────────────────
+// -”-”-” ADMIN OVERVIEW -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 function AdminOverview({ stats, tests, environments }: { stats: ReturnType<typeof useMemo>; tests: AdminTest[]; environments: Environment[] }) {
   const recentFailures = tests.filter((t) => t.lastResult === 'failed').slice(0, 5)
   const draftTests = tests.filter((t) => t.status === 'draft')
@@ -845,7 +845,7 @@ function AdminOverview({ stats, tests, environments }: { stats: ReturnType<typeo
 // Temp workaround for modules total tests
 const modules_total_tests = 291
 
-// ─── STAT CARD ───────────────────────────────────────────
+// -”-”-” STAT CARD -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 function StatCard({ label, value, sub, color }: { label: string; value: number; sub: string; color: string }) {
   const colors: Record<string, string> = {
     green: 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-800/50',
@@ -870,7 +870,7 @@ function StatCard({ label, value, sub, color }: { label: string; value: number; 
   )
 }
 
-// ─── ADMIN TESTS VIEW ────────────────────────────────────
+// -”-”-” ADMIN TESTS VIEW -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 function AdminTests({
   tests, testSearch, testStatusFilter, testModuleFilter, testPriorityFilter,
   uniqueModules, onSearchChange, onStatusFilterChange, onModuleFilterChange,
@@ -1002,7 +1002,7 @@ function AdminTests({
   )
 }
 
-// ─── ADMIN MODULES VIEW ──────────────────────────────────
+// -”-”-” ADMIN MODULES VIEW -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 function AdminModules({
   modules, onAddModule, onEditModule, onDeleteModule, onMoveModule,
 }: {
@@ -1045,13 +1045,13 @@ function AdminModules({
             {[...parentModules, ...childModules].map((m, idx) => (
               <TableRow key={m.id} className={`${m.parentId ? 'bg-gray-50/50 dark:bg-gray-900/30' : ''} hover:bg-gray-50 dark:hover:bg-gray-800/50`}>
                 <TableCell className="text-[12px] text-gray-400 font-mono pl-6">
-                  {m.parentId && <span className="text-gray-300 dark:text-gray-600">└</span>}
+                  {m.parentId && <span className="text-gray-300 dark:text-gray-600">-””</span>}
                 </TableCell>
                 <TableCell className="text-[12px] font-mono text-gray-600 dark:text-gray-300">{m.id}</TableCell>
-                <TableCell className="text-[12px] font-medium text-gray-800 dark:text-gray-100">{m.parentId && <span className="text-gray-400 mr-2">↳</span>}{m.label}</TableCell>
-                <TableCell className="text-[11px] text-gray-500 dark:text-gray-400">{m.parentLabel || '—'}</TableCell>
+                <TableCell className="text-[12px] font-medium text-gray-800 dark:text-gray-100">{m.parentId && <span className="text-gray-400 mr-2">-†³</span>}{m.label}</TableCell>
+                <TableCell className="text-[11px] text-gray-500 dark:text-gray-400">{m.parentLabel || '-”'}</TableCell>
                 <TableCell className="text-[12px] text-center text-gray-600 dark:text-gray-300">{m.testCount}</TableCell>
-                <TableCell className="text-center text-[11px]">{m.badge || '—'}</TableCell>
+                <TableCell className="text-center text-[11px]">{m.badge || '-”'}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border-0 ${m.status === 'active' ? 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/30' : m.status === 'draft' ? 'text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30' : 'text-gray-400 bg-gray-100 dark:text-gray-500 dark:bg-gray-800'}`}>
                     {m.status}
@@ -1082,7 +1082,7 @@ function AdminModules({
   )
 }
 
-// ─── ADMIN ENVIRONMENTS VIEW ─────────────────────────────
+// -”-”-” ADMIN ENVIRONMENTS VIEW -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 function AdminEnvironments({
   environments, onAddEnv, onEditEnv, onDeleteEnv, onToggleEnv,
 }: {
@@ -1150,7 +1150,7 @@ function AdminEnvironments({
   )
 }
 
-// ─── ADMIN USERS VIEW ────────────────────────────────────
+// -”-”-” ADMIN USERS VIEW -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 function AdminUsers({
   users, modules, onAddUser, onEditUser, onDeleteUser, onToggleUser,
 }: {
@@ -1218,7 +1218,7 @@ function AdminUsers({
                     <span className="truncate">{u.moduleAccess.length} module{u.moduleAccess.length !== 1 ? 's' : ''}</span>
                   )}
                 </TableCell>
-                <TableCell className="text-[11px] text-gray-500 dark:text-gray-400">{u.lastLogin || '—'}</TableCell>
+                <TableCell className="text-[11px] text-gray-500 dark:text-gray-400">{u.lastLogin || '-”'}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">
                     <Button variant="ghost" size="icon" className="size-7 text-gray-400 hover:text-gray-600 cursor-pointer" onClick={() => onToggleUser(u.id)} title={u.status === 'active' ? 'Deactivate' : 'Activate'}>
@@ -1241,7 +1241,7 @@ function AdminUsers({
   )
 }
 
-// ─── ADMIN SETTINGS VIEW ─────────────────────────────────
+// -”-”-” ADMIN SETTINGS VIEW -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 function AdminSettings({
   settings, onUpdateSetting,
 }: {
@@ -1323,7 +1323,7 @@ function AdminSettings({
   )
 }
 
-// ─── ADMIN BUG REPORTS VIEW ──────────────────────────────
+// -”-”-” ADMIN BUG REPORTS VIEW -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 function AdminBugReports({
   reports,
   onUpdateStatus,
@@ -1474,26 +1474,26 @@ function AdminBugReports({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100">{report.id}</span>
-                      <span className="text-[12px] text-gray-400 dark:text-gray-500">—</span>
+                      <span className="text-[12px] text-gray-400 dark:text-gray-500">-”</span>
                       <span className="text-[12px] text-gray-700 dark:text-gray-200 truncate">{report.testDescription}</span>
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
                       <span className="font-mono">{report.testId}</span>
                       <span>in</span>
                       <span>{report.moduleName}</span>
-                      <span>•</span>
+                      <span>-¢</span>
                       <span>{report.reporterName}</span>
                     </div>
                   </div>
 
                   {/* SLA Badge */}
                   <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${sla.color}`}>
-                    {sla.label === 'Overdue' ? '⚠️' : sla.label === 'At Risk' ? '⏰' : '✅'} {sla.remaining}
+                    {sla.label === 'Overdue' ? '-š ï¸' : sla.label === 'At Risk' ? '-°' : '-œ…'} {sla.remaining}
                   </span>
 
                   {/* Priority badge */}
                   <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${pCfg.color}`}>
-                    {report.priority === 'high' ? '🔴' : report.priority === 'medium' ? '🟡' : '🟢'} {pCfg.label}
+                    {report.priority === 'high' ? 'ðŸ”´' : report.priority === 'medium' ? 'ðŸŸ¡' : 'ðŸŸ¢'} {pCfg.label}
                   </span>
 
                   {/* Status badge */}
@@ -1504,7 +1504,7 @@ function AdminBugReports({
                   {/* Replies count */}
                   {(report.replies?.length ?? 0) > 0 && (
                     <span className="text-[10px] text-gray-400 shrink-0 flex items-center gap-0.5">
-                      💬 {report.replies.length}
+                      ðŸ’¬ {report.replies.length}
                     </span>
                   )}
 
@@ -1541,7 +1541,7 @@ function AdminBugReports({
                     {/* SLA Detail */}
                     <div className="flex items-center gap-3">
                       <div className={`inline-flex items-center text-[11px] font-medium px-2 py-1 rounded-full ${sla.color}`}>
-                        {sla.label === 'Overdue' ? '⚠️' : sla.label === 'At Risk' ? '⏰' : '✅'} SLA: {sla.remaining}
+                        {sla.label === 'Overdue' ? '-š ï¸' : sla.label === 'At Risk' ? '-°' : '-œ…'} SLA: {sla.remaining}
                       </div>
                       <span className="text-[11px] text-gray-400">
                         Priority {report.priority}: {report.priority === 'high' ? '24h' : report.priority === 'medium' ? '48h' : '7 days'} resolution target
@@ -1561,7 +1561,7 @@ function AdminBugReports({
                             }`}>
                               <div className="flex items-center gap-2 mb-1">
                                 <span className={`text-[11px] font-semibold ${reply.authorRole === 'admin' ? 'text-red-700 dark:text-red-400' : 'text-blue-700 dark:text-blue-400'}`}>
-                                  {reply.authorRole === 'admin' ? '👤 Admin' : `🧑 ${reply.authorName}`}
+                                  {reply.authorRole === 'admin' ? 'ðŸ‘¤ Admin' : `ðŸ§‘ ${reply.authorName}`}
                                 </span>
                                 <span className="text-[10px] text-gray-400">{formatDate(reply.createdAt)}</span>
                               </div>
@@ -1637,7 +1637,7 @@ function AdminBugReports({
   )
 }
 
-// ─── FORMS ───────────────────────────────────────────────
+// -”-”-” FORMS -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 
 function TestForm({ test, modules, onSave, onCancel }: { test: AdminTest | null; modules: [string, string][]; onSave: (t: Partial<AdminTest>) => void; onCancel: () => void }) {
   const [id, setId] = useState(test?.id || '')
@@ -1702,8 +1702,8 @@ function TestForm({ test, modules, onSave, onCancel }: { test: AdminTest | null;
         </div>
       </div>
       <div className="space-y-1.5">
-        <Label className="text-[12px]">Test Steps (separated by →)</Label>
-        <textarea value={steps} onChange={(e) => setSteps(e.target.value)} rows={3} className="w-full px-3 py-2 text-[12px] rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-800 dark:text-gray-100 resize-none focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500" placeholder="Click Add → Fill fields → Submit" />
+        <Label className="text-[12px]">Test Steps (separated by -†’)</Label>
+        <textarea value={steps} onChange={(e) => setSteps(e.target.value)} rows={3} className="w-full px-3 py-2 text-[12px] rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-800 dark:text-gray-100 resize-none focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500" placeholder="Click Add -†’ Fill fields -†’ Submit" />
       </div>
       <div className="space-y-1.5">
         <Label className="text-[12px]">Expected Result</Label>
@@ -1743,13 +1743,13 @@ function ModuleForm({ module, onSave, onCancel }: { module: AdminModule | null; 
         <Input value={label} onChange={(e) => setLabel(e.target.value)} className="h-9 text-[12px]" placeholder="Tax Rate" />
       </div>
       <div className="space-y-1.5">
-        <Label className="text-[12px]">Parent Module (optional — leave empty for top-level)</Label>
+        <Label className="text-[12px]">Parent Module (optional -” leave empty for top-level)</Label>
         <Input value={parentId} onChange={(e) => setParentId(e.target.value)} className="h-9 text-[12px] font-mono" placeholder="common-settings" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label className="text-[12px]">Badge Text (optional)</Label>
-          <Input value={badge} onChange={(e) => setBadge(e.target.value)} className="h-9 text-[12px]" placeholder="✅ 12/12" />
+          <Input value={badge} onChange={(e) => setBadge(e.target.value)} className="h-9 text-[12px]" placeholder="-œ… 12/12" />
         </div>
         <div className="space-y-1.5">
           <Label className="text-[12px]">Status</Label>

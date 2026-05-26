@@ -41,7 +41,7 @@ export default function ReportToAdminDialog({
       setPriority('medium')
       onClose()
       toast.success(`Bug report sent to admin`, {
-        description: `${testId} â€” ${testDescription}`,
+        description: `${testId} -” ${testDescription}`,
         duration: 4000,
       })
     }, 500)
@@ -70,7 +70,7 @@ export default function ReportToAdminDialog({
           <div className="flex items-center gap-2 text-[12px]">
             <span className="text-gray-500 dark:text-gray-400 w-16 shrink-0">Test ID</span>
             <span className="font-mono font-semibold text-gray-800 dark:text-gray-100">{testId}</span>
-            <span className="text-gray-400 dark:text-gray-500">â€”</span>
+            <span className="text-gray-400 dark:text-gray-500">-”</span>
             <span className="text-gray-700 dark:text-gray-200">{testDescription}</span>
           </div>
           <div className="flex items-center gap-2 text-[12px]">
@@ -135,4 +135,4 @@ export default function ReportToAdminDialog({
   )
 }
 
-// â”€â”€â”€ COMPLETION SUMMARY MODAL (Feature 1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -”-”-” COMPLETION SUMMARY MODAL (Feature 1) -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”

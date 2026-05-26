@@ -61,4 +61,4 @@ export default function LiveScreencast({ isRunning, onScreenshotReady }: { isRun
   )
 }
 
-// â”€â”€â”€ LIVE EXECUTION TAB (Browser view + Console) â”€â”€â”€â”€â”€â”€â”€â”€
+// -”-”-” LIVE EXECUTION TAB (Browser view + Console) -”-”-”-”-”-”-”-”

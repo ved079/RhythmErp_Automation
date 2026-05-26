@@ -1,4 +1,4 @@
-// ─── Bug Report Types & Helpers ─────────────────────────
+﻿// -”-”-” Bug Report Types & Helpers -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 // All data now lives in SQLite via API routes (not localStorage)
 
 export interface Reply {
@@ -29,7 +29,7 @@ export interface BugReport {
   readByAdmin: boolean
 }
 
-// ─── Bug Report API Calls ──────────────────────────────
+// -”-”-” Bug Report API Calls -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 
 export async function getBugReports(): Promise<BugReport[]> {
   try {
@@ -132,7 +132,7 @@ export async function assignReport(reportId: string, assignedTo: string, assigne
   }
 }
 
-// ─── Notification Types & Helpers ──────────────────────────
+// -”-”-” Notification Types & Helpers -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 export interface Notification {
   id: string
   type: 'status_change' | 'reply' | 'schedule' | 'run_complete'
@@ -190,7 +190,7 @@ export async function getUnreadNotificationCount(): Promise<number> {
   }
 }
 
-// ─── Scheduled Run Types & Helpers ──────────────────────────
+// -”-”-” Scheduled Run Types & Helpers -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 export interface ScheduledRun {
   id: string
   moduleId: string
@@ -247,7 +247,7 @@ export async function deleteScheduledRun(id: string): Promise<void> {
   }
 }
 
-// ─── SLA Helper ──────────────────────────────────────────
+// -”-”-” SLA Helper -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 export function getSLADeadline(priority: BugReport['priority'], createdAt: string): Date {
   const created = new Date(createdAt)
   switch (priority) {
@@ -258,7 +258,7 @@ export function getSLADeadline(priority: BugReport['priority'], createdAt: strin
 }
 
 export function getSLAStatus(priority: BugReport['priority'], createdAt: string, status: BugReport['status']): { label: string; color: string; remaining: string; overdue: boolean } {
-  if (status === 'fixed') return { label: 'Resolved', color: 'text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/40', remaining: '—', overdue: false }
+  if (status === 'fixed') return { label: 'Resolved', color: 'text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/40', remaining: '-”', overdue: false }
 
   const deadline = getSLADeadline(priority, createdAt)
   const now = new Date()

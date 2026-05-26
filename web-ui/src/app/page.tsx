@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { ErrorBoundary } from '@/components/error-boundary/ErrorBoundary'
@@ -111,7 +111,7 @@ import {
   Monitor,
 } from 'lucide-react'
 
-// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//  Types 
 import type { TestPriority, SidebarModule, TestItem, TestSpecItem, TestClassGroup, AuthUser, RunSnapshot, ModuleHealth } from "../types/page"
 
 import LoginPage from '@/components/auth/LoginPage'
@@ -126,7 +126,7 @@ import { LiveExecutionTab } from '@/components/dashboard/LiveExecutionTab'
 import { ScheduleTab as ScheduleRunsTab } from '@/components/schedule/ScheduleTab'
 
 
-// â”€â”€â”€ Helper: get priority â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//  Helper: get priority 
 function getPriority(id: string): TestPriority {
   if (['T01', 'T02', 'T10'].includes(id)) return 'smoke'
   if (['T03', 'T04', 'T05', 'T06', 'T09', 'T11'].includes(id)) return 'regression'
@@ -141,7 +141,7 @@ function getStepsForTest(testId: string): string[] {
   return []
 }
 
-// â”€â”€â”€ Module Data (fetched from API) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//  Module Data (fetched from API) 
 
 // Full list of ALL sidebar modules (with or without tests).
 // API data enriches these with real test counts.
@@ -284,7 +284,7 @@ function buildSidebarModules(apiModules: ApiModule[]): SidebarModule[] {
   // Deep clone the master list
   const sidebar: SidebarModule[] = JSON.parse(JSON.stringify(ALL_SIDEBAR_MODULES))
 
-  // Build a lookup: sidebarId â†’ test count from API
+  // Build a lookup: sidebarId  test count from API
   const testCounts: Record<string, number> = {}
   for (const apiMod of apiModules) {
     for (const sub of apiMod.sub_modules) {
@@ -502,7 +502,7 @@ const bugRegistry = [
   { id: 'TR-005', desc: 'No success SweetAlert2 on form close', status: 'Known', tests: 'T01' },
 ]
 
-// â”€â”€â”€ Module Health Data (Feature 3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//  Module Health Data (Feature 3) 
 const moduleHealthData: ModuleHealth[] = [
   { moduleId: 'customer', moduleName: 'Customer', parentGroup: 'Standalone', passRate: 100, totalTests: 15, passedTests: 15, failedTests: 0, lastRun: '16 May 2026, 09:30 AM' },
   { moduleId: 'farmer', moduleName: 'Farmer', parentGroup: 'Standalone', passRate: 92, totalTests: 24, passedTests: 22, failedTests: 2, lastRun: '16 May 2026, 09:15 AM' },
@@ -530,7 +530,7 @@ const moduleHealthData: ModuleHealth[] = [
   { moduleId: 'access', moduleName: 'Access', parentGroup: 'Standalone', passRate: 0, totalTests: 0, passedTests: 0, failedTests: 0, lastRun: 'â€”' },
 ]
 
-// â”€â”€â”€ Initial Run History (Feature 5) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//  Initial Run History (Feature 5) 
 const initialRunHistory: RunSnapshot[] = [
   {
     id: 5,
@@ -604,7 +604,7 @@ const initialRunHistory: RunSnapshot[] = [
   },
 ]
 
-// â”€â”€â”€ Priority Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//  Priority Config 
 const priorityConfig = {
   smoke: { icon: <Flame className="size-3" />, label: 'ðŸ”¥ Smoke', color: 'text-orange-700 bg-orange-100 dark:text-orange-300 dark:bg-orange-900/40', dot: 'bg-orange-500' },
   regression: { icon: <Activity className="size-3" />, label: 'ðŸ”„ Regression', color: 'text-blue-700 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/40', dot: 'bg-blue-500' },
@@ -621,7 +621,7 @@ function PriorityBadge({ priority }: { priority?: TestPriority }) {
   )
 }
 
-// â”€â”€â”€ Sidebar Module Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//  Sidebar Module Component 
 function TestStatusIcon({ status, size = 4 }: { status: string; size?: number }) {
   const cls = `size-${size} shrink-0`
   switch (status) {
@@ -636,7 +636,7 @@ function TestStatusIcon({ status, size = 4 }: { status: string; size?: number })
   }
 }
 
-// â”€â”€â”€ LOGIN PAGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//  LOGIN PAGE 
 function NavToast({ label, parent }: { label: string; parent?: string | null }) {
   return (
     <div
@@ -658,7 +658,7 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
   )
 }
 
-// â”€â”€â”€ MAIN PAGE COMPONENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//  MAIN PAGE COMPONENT 
 export default function Home() {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
@@ -728,7 +728,7 @@ export default function Home() {
     return () => clearInterval(interval)
   }, [])
 
-  // â”€â”€â”€ Fetch real modules from API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  Fetch real modules from API 
   useEffect(() => {
     fetchModules()
       .then((mods) => {
@@ -1186,7 +1186,7 @@ export default function Home() {
 
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
-      {/* â”€â”€â”€ HEADER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/*  HEADER  */}
       <header className="h-12 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 shrink-0 z-10">
         <div className="flex items-center gap-3 flex-1">
           <Button
@@ -1297,9 +1297,9 @@ export default function Home() {
         </div>
       </header>
 
-      {/* â”€â”€â”€ BODY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/*  BODY  */}
       <div className="flex flex-1 overflow-hidden">
-        {/* â”€â”€â”€ SIDEBAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/*  SIDEBAR  */}
         <div
           className="shrink-0 overflow-hidden h-full"
           style={{ width: sidebarOpen ? sidebarWidth : 0 }}
@@ -1341,7 +1341,7 @@ export default function Home() {
         </aside>
         </div>
 
-        {/* â”€â”€â”€ RESIZE HANDLE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/*  RESIZE HANDLE  */}
         {sidebarOpen && (
           <div
             onMouseDown={handleResizeStart}
@@ -1349,7 +1349,7 @@ export default function Home() {
           />
         )}
 
-        {/* â”€â”€â”€ MAIN CONTENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/*  MAIN CONTENT  */}
         <main className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900 relative">
           {navToast && (
             <NavToast key={navToast.key} label={navToast.label} parent={navToast.parent} />
@@ -1382,17 +1382,17 @@ export default function Home() {
             </div>
           )}
 
-          {/* â”€â”€ DASHBOARD VIEW â”€â”€ */}
+          {/*  DASHBOARD VIEW  */}
           {selectedModule === 'dashboard' && (
             <DashboardTab onSelectModule={handleSelectModule} />
           )}
 
-          {/* â”€â”€ MY TICKETS VIEW â”€â”€ */}
+          {/*  MY TICKETS VIEW  */}
           {selectedModule === 'my-tickets' && user && (
             <div className='p-8 text-center text-gray-400 text-sm'>No tickets yet</div>
           )}
 
-          {/* â”€â”€ MODULE VIEW (module selected â€” tabs + content) â”€â”€ */}
+          {/*  MODULE VIEW (module selected  tabs + content)  */}
           {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && (
               <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               {/* Tab bar */}
@@ -1493,7 +1493,7 @@ export default function Home() {
         </main>
       </div>
 
-      {/* â”€â”€â”€ CONSOLE PANEL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/*  CONSOLE PANEL  */}
       {consoleOpen && (
         <div className="shrink-0 border-t border-gray-700 bg-[#1a1a2e] flex flex-col" style={{ height: '200px' }}>
           <div className="flex items-center justify-between px-4 py-1.5 bg-[#16162a] border-b border-gray-700">
@@ -1547,7 +1547,7 @@ export default function Home() {
         </button>
       )}
 
-      {/* â”€â”€â”€ QUICK SWITCHER (Cmd+K) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/*  QUICK SWITCHER (Cmd+K)  */}
       {quickSwitcherOpen && (
         <>
           {/* Backdrop */}
@@ -1682,7 +1682,7 @@ export default function Home() {
         </button>
       )}
 
-      {/* â”€â”€â”€ Feature 1: Completion Summary Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/*  Feature 1: Completion Summary Modal  */}
       <CompletionSummaryModal
         open={completionModalOpen}
         onClose={() => setCompletionModalOpen(false)}
@@ -1694,7 +1694,7 @@ export default function Home() {
         onNewRun={handleNewRun}
       />
 
-      {/* â”€â”€â”€ Bug Report Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/*  Bug Report Dialog  */}
       <ReportToAdminDialog
         open={reportDialogOpen}
         onClose={() => setReportDialogOpen(false)}

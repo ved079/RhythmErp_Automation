@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useMemo, useCallback } from 'react'
 import { Progress } from '@/components/ui/progress'
@@ -70,10 +70,10 @@ export function DashboardTab({ onSelectModule }: { onSelectModule: (moduleId: st
 
     for (const name of order) {
       const mods = groupMap.get(name)
-      if (mods) groups.push({ name, icon: name === 'Common Settings' ? '⚙️' : name === 'Commodity Settings' ? '📦' : '📁', modules: mods })
+      if (mods) groups.push({ name, icon: name === 'Common Settings' ? '-š™ï¸' : name === 'Commodity Settings' ? 'ðŸ“¦' : 'ðŸ“', modules: mods })
     }
     for (const [name, mods] of groupMap) {
-      if (!order.includes(name)) groups.push({ name, icon: '📁', modules: mods })
+      if (!order.includes(name)) groups.push({ name, icon: 'ðŸ“', modules: mods })
     }
     return groups
   }, [])

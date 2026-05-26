@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -55,7 +55,7 @@ interface ScheduleTabProps {
   sidebarModules: SidebarModule[]
 }
 
-export function ScheduleTab({ userName, sidebarModules }: ScheduleTabProps) {
+export default React.memo(function ScheduleTab({ userName, sidebarModules }: ScheduleTabProps) {
   const [scheduledRuns, setScheduledRuns] = useState<ScheduledRun[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedModule, setSelectedModule] = useState('')

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React from 'react'
 import { ChevronDown, CheckCircle2, XCircle, Loader2, Circle } from 'lucide-react'
@@ -13,7 +13,7 @@ interface SidebarModuleItemProps {
   toggleExpand: (id: string) => void
 }
 
-export function SidebarModuleItem({
+export default React.memo(function SidebarModuleItem({
   module,
   depth = 0,
   activeId,
@@ -87,7 +87,7 @@ export function SidebarModuleItem({
   )
 }
 
-export function TestStatusIcon({ status, size = 4 }: { status: string; size?: number }) {
+export default React.memo(function TestStatusIcon({ status, size = 4 }: { status: string; size?: number }) {
   const cls = `size-${size} shrink-0`
   switch (status) {
     case 'passed':

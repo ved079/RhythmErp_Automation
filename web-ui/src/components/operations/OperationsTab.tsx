@@ -1,6 +1,6 @@
 ﻿import React from 'react';
 
-export default function OperationsTab({ testGroups, testCasesModule }: { testGroups: TestClassGroup[]; testCasesModule?: { label: string; tests: any[] } }) {
+export default React.memo(function OperationsTab({ testGroups, testCasesModule }: { testGroups: TestClassGroup[]; testCasesModule?: { label: string; tests: any[] } }) {
   const testSpecGroups = testGroups
   const [searchVal, setSearchVal] = useState('')
   const [filter, setFilter] = useState<'all' | 'passed' | 'failed' | 'bug' | 'not-run'>('all')

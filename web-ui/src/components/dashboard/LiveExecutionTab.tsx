@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
@@ -40,7 +40,7 @@ interface TestClassGroup {
   tests: TestSpecItem[]
 }
 
-// ─── Live Browser Screenshot Component ────────────────────
+// -”-”-” Live Browser Screenshot Component -”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”-”
 function LiveBrowserView({
   onScreenshotReady,
 }: {
@@ -104,8 +104,8 @@ function LiveBrowserView({
   )
 }
 
-// ─── LIVE EXECUTION TAB (Browser view + Console) ────────
-export function LiveExecutionTab({
+// -”-”-” LIVE EXECUTION TAB (Browser view + Console) -”-”-”-”-”-”-”-”
+export default React.memo(function LiveExecutionTab({
   tests,
   testGroups,
   isRunning,
@@ -182,7 +182,7 @@ export function LiveExecutionTab({
       )
       if (t) {
         const stepsText = t.steps || t.description || ''
-        const arrowSteps = stepsText.split('→').map((s) => s.trim()).filter(Boolean)
+        const arrowSteps = stepsText.split('-†’').map((s) => s.trim()).filter(Boolean)
         if (arrowSteps.length > 1) return arrowSteps
         const numberedSteps = stepsText.split(/\d+\.\s+/).map((s) => s.trim()).filter(Boolean)
         if (numberedSteps.length > 1) return numberedSteps
@@ -210,7 +210,7 @@ export function LiveExecutionTab({
     for (const g of testSpecGroups) {
       const t = g.tests.find((x) => x.id === runningTestId)
       if (t) {
-        const arrowSteps = t.steps.split('→').map((s) => s.trim()).filter(Boolean)
+        const arrowSteps = t.steps.split('-†’').map((s) => s.trim()).filter(Boolean)
         if (arrowSteps.length > 0) return arrowSteps
       }
     }
@@ -271,7 +271,7 @@ export function LiveExecutionTab({
   return (
     <>
     <div className="flex flex-col h-full min-h-0">
-      {/* ── Top Bar ── */}
+      {/* -”-” Top Bar -”-” */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 bg-slate-900/80 backdrop-blur-sm shrink-0">
         <Button variant="ghost" onClick={onBack} className="h-8 text-[13px] gap-1.5 text-slate-400 hover:text-white hover:bg-white/5 cursor-pointer px-2.5 rounded-lg">
           <ArrowLeft className="size-4" />
@@ -323,12 +323,12 @@ export function LiveExecutionTab({
         )}
       </div>
 
-      {/* ── Browser View ── */}
+      {/* -”-” Browser View -”-” */}
       <div className="flex-1 min-h-0 bg-black">
         <LiveBrowserView onScreenshotReady={handleScreenshotReady} />
       </div>
 
-      {/* ── Console Resizer ── */}
+      {/* -”-” Console Resizer -”-” */}
       <div
         className="h-2.5 cursor-row-resize flex items-center justify-center bg-slate-900/50 hover:bg-slate-800 transition-colors shrink-0"
         onMouseDown={handleConsoleResizeStart}
@@ -336,7 +336,7 @@ export function LiveExecutionTab({
         <div className="w-8 h-0.5 bg-slate-600 rounded-full" />
       </div>
 
-      {/* ── Console Panel ── */}
+      {/* -”-” Console Panel -”-” */}
       <div style={{ height: consoleHeight }} className="flex flex-col bg-slate-950 shrink-0">
         <div className="flex items-center justify-between px-3 py-2 border-t border-white/5 bg-slate-900/50">
           <div className="flex items-center gap-2 text-[11px] text-slate-400">
@@ -357,9 +357,9 @@ export function LiveExecutionTab({
         </div>
         <ScrollArea className="flex-1 p-3 font-mono text-[11px] leading-relaxed">
           {consoleLines.map((line, i) => {
-            const isError = line.toLowerCase().includes('failed') || line.toLowerCase().includes('error') || line.startsWith('❌')
-            const isSuccess = line.toLowerCase().includes('passed') || line.startsWith('✅')
-            const isStep = line.startsWith('▶') || line.startsWith('➤')
+            const isError = line.toLowerCase().includes('failed') || line.toLowerCase().includes('error') || line.startsWith('-Œ')
+            const isSuccess = line.toLowerCase().includes('passed') || line.startsWith('-œ…')
+            const isStep = line.startsWith('-–¶') || line.startsWith('-ž¤')
             return (
               <div
                 key={i}
@@ -375,7 +375,7 @@ export function LiveExecutionTab({
         </ScrollArea>
       </div>
 
-      {/* ── Current Step Indicator ── */}
+      {/* -”-” Current Step Indicator -”-” */}
       {isRunning && currentStepIndex >= 0 && runningSteps.length > 0 && (
         <div className="absolute bottom-[260px] left-1/2 -translate-x-1/2 px-4 py-2.5 bg-slate-900/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl max-w-[600px] w-[90%]">
           <div className="flex items-center gap-2 mb-1.5">
@@ -399,7 +399,7 @@ export function LiveExecutionTab({
       )}
     </div>
 
-    {/* ── Full-Screen TV Popup ── */}
+    {/* -”-” Full-Screen TV Popup -”-” */}
     {tvPopupOpen && tvImgSrc && (
       <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex items-center justify-center p-8">
         <div className="relative w-full h-full max-w-[90vw] max-h-[90vh]">
