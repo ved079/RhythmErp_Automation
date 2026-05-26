@@ -2,7 +2,18 @@
 test_season_validation.py
 --------------------------
 Season screen (Common Settings) test automation.
-18 test cases covering: validation, bugs, edit, view, cancel, search, history, boundary.
+18 test cases across 9 classes covering: create, validation, bugs, edit, view,
+cancel, search, history, boundary.
+
+Markers:
+  - smoke (4):     T1, T2, T7, T8
+  - sanity (18):   All tests
+  - regression (18): All tests
+  - bug (5):       T3, T4, T5, T6, T18
+  - ui (12):       T5, T7, T9-T18
+
+Known bugs: SQL injection (T3), XSS (T4), duplicate alert (T5),
+special chars (T6), no max-length (T18).
 
 Run:  pytest season/test/test_season_validation.py -v
 """
@@ -37,6 +48,9 @@ from pages.common_settings.modules.season.data.season_data import (
 class TestSeasonHappyPath:
     """T1, T2: Valid season creation."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_01_create_season_with_name_and_description(self, season_page):
         """T1: Create season with Name + Description — should succeed."""
         log.test_start("T1: Create season with Name + Description")
@@ -71,6 +85,9 @@ class TestSeasonHappyPath:
         log.info(f">>> STEP 3 PASSED: Submit clicked")
         log.info(f">>> STEP 4 PASSED: Record verified in table")
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_02_create_season_name_only_no_description(self, season_page):
         """T2: Create season with Name only (Description optional) — should succeed."""
         log.test_start("T2: Create season with Name only")
@@ -112,6 +129,9 @@ class TestSeasonHappyPath:
 class TestSeasonValidation:
     """T3-T6: Negative tests — SQL injection, XSS, special chars, duplicate."""
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_03_sql_injection_in_name(self, season_page):
         """T3: SQL injection in Name field — BUG: accepted and stored as-is."""
         log.test_start("T3: SQL injection in Name (BUG — accepted)")
@@ -150,6 +170,9 @@ class TestSeasonValidation:
         log.info(f">>> STEP 2 PASSED: SQL injection entered: {name}")
         log.info(f">>> STEP 3 PASSED: BUG — Record created with SQL injection payload")
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_04_xss_in_name(self, season_page):
         """T4: XSS script tag in Name — BUG: stored as raw HTML, visible in list."""
         log.test_start("T4: XSS in Name (BUG — stored as raw HTML)")
@@ -187,6 +210,10 @@ class TestSeasonValidation:
         log.info(f">>> STEP 2 PASSED: XSS payload entered: {name}")
         log.info(f">>> STEP 3 PASSED: BUG — Record created with XSS payload")
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_05_duplicate_season_name(self, season_page):
         """T5: Duplicate Season Name — should show Validation Failed alert."""
         log.test_start("T5: Duplicate Season Name (validation alert expected)")
@@ -234,6 +261,9 @@ class TestSeasonValidation:
 
         log.passed("T5: Duplicate name behavior verified")
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_06_special_characters_in_name(self, season_page):
         """T6: Special characters in Name — BUG: accepted without validation."""
         log.test_start("T6: Special characters in Name (BUG — accepted)")
@@ -279,6 +309,10 @@ class TestSeasonValidation:
 class TestSeasonEmptySubmit:
     """T7: Submit with all fields blank — should show Validation Failed."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_07_empty_submit_all_fields_blank(self, season_page):
         """T7: Submit with Name blank — should show Validation Failed alert."""
         log.test_start("T7: Empty submit — all fields blank")
@@ -325,6 +359,9 @@ class TestSeasonEmptySubmit:
 class TestSeasonEditFlow:
     """T8: Edit existing season record."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_08_edit_existing_season(self, season_page):
         """T8: Edit a season record — change Name and Description, verify update."""
         log.test_start("T8: Edit existing season")
@@ -400,6 +437,9 @@ class TestSeasonEditFlow:
 class TestSeasonViewMode:
     """T9: View mode — verify fields are disabled/read-only."""
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_09_view_mode_fields_disabled(self, season_page):
         """T9: Open View popup — verify all fields are disabled."""
         log.test_start("T9: View mode — verify fields disabled")
@@ -447,6 +487,9 @@ class TestSeasonViewMode:
 class TestSeasonSearch:
     """T10-T11: Search functionality on Season list page."""
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_10_search_existing_season(self, season_page):
         """T10: Search for an existing season by name - should find it."""
         log.test_start("T10: Search existing season by name")
@@ -484,6 +527,9 @@ class TestSeasonSearch:
         log.info(f">>> STEP 2 PASSED: Search returned results for '{name}'")
         log.info(f">>> STEP 3 PASSED: First result = '{first_name}'")
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_11_search_nonexistent_season(self, season_page):
         """T11: Search for a name that does not exist - should return 0 results."""
         log.test_start("T11: Search non-existent season name")
@@ -515,6 +561,9 @@ class TestSeasonSearch:
 class TestSeasonHistory:
     """T12-T14: History popup - open, search, close."""
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_12_history_popup_opens_with_data(self, season_page):
         """T12: Click History on a row - popup should open with data rows."""
         log.test_start("T12: History popup opens with data")
@@ -583,6 +632,9 @@ class TestSeasonHistory:
         log.info(f">>> STEP 4 PASSED: Title = '{title}'")
         log.info(f">>> STEP 5 PASSED: History has {history_rows - 1} data row(s)")
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_13_history_search_filters_records(self, season_page):
         """T13: Search inside History popup - should filter rows."""
         log.test_start("T13: History search filters records")
@@ -659,6 +711,9 @@ class TestSeasonHistory:
         log.info(f">>> STEP 4 PASSED: Filtered to {filtered_rows} result(s)")
         log.info(f">>> STEP 5 PASSED: First result = '{filtered_name}'")
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_14_history_close_via_cancel(self, season_page):
         """T14: Close History popup via Cancel button - popup should disappear."""
         log.test_start("T14: History close via Cancel button")
@@ -688,6 +743,9 @@ class TestSeasonHistory:
 class TestSeasonCancel:
     """T15-T16: Cancel button during Add and Edit flows."""
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_15_cancel_during_add_nothing_saved(self, season_page):
         """T15: Fill Add form and click Cancel - record should NOT be saved."""
         log.test_start("T15: Cancel during Add - nothing saved")
@@ -723,6 +781,9 @@ class TestSeasonCancel:
         log.info(f">>> STEP 3 PASSED: Form closed")
         log.info(f">>> STEP 4 PASSED: Record '{name}' not found in table")
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_16_cancel_during_edit_original_unchanged(self, season_page):
         """T16: Open Edit form, modify data, click Cancel - original should remain."""
         log.test_start("T16: Cancel during Edit - original unchanged")
@@ -790,6 +851,9 @@ class TestSeasonCancel:
 class TestSeasonBoundary:
     """T17-T18: Boundary tests - spaces, long names."""
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_17_leading_trailing_spaces_in_name(self, season_page):
         """T17: Name with leading/trailing spaces - test trim behavior."""
         log.test_start("T17: Leading/trailing spaces in name")
@@ -827,6 +891,10 @@ class TestSeasonBoundary:
         log.info(f">>> STEP 1 PASSED: Form submitted with '{raw_name}'")
         log.info(f">>> STEP 3 PASSED: Record found, trim behavior documented")
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_18_very_long_name(self, season_page):
         """T18: Very long name (200 chars) - test max-length behavior."""
         log.test_start("T18: Very long name (200 characters)")

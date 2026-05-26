@@ -3,12 +3,23 @@ test_tax_authority_validation.py
 --------------------------------
 Test suite for Tax Authority screen (Common Settings > RhythmERP).
 
-18 tests across 5 classes:
+18 test cases across 5 classes:
   - TestCreateFormValidations (C01-C08): Create form validation + positive tests
   - TestViewFormBehaviors (V01-V03): View form behavior checks
   - TestEditFormValidations (E01-E05): Edit form validation + positive tests
   - TestHistoryValidations (H01-H02): History popup checks
-  - TestTableOperations (implicit): Record appearance in table verified within create tests
+
+Marker Summary:
+  smoke      :  7 tests (C01, C05, E01, E03, E04, H01, V01)
+  sanity     : 18 tests (all)
+  regression : 18 tests (all)
+  bug        :  6 tests (C05, C07, C08, V01, E04, E05)
+  ui         : 12 tests (C01-C04, V01-V03, E01-E02, E04, H01-H02)
+
+Run:
+    pytest test_tax_authority_validation.py -v
+    pytest test_tax_authority_validation.py -v -m smoke --tb=short
+    pytest test_tax_authority_validation.py -v -m "smoke and bug" --tb=short
 """
 
 import pytest
@@ -23,6 +34,10 @@ from common.logger import log
 class TestCreateFormValidations:
     """Tests for the Add (Create) form validation behavior."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_empty_form_submit_shows_validation_failed(self, tax_authority_page):
         """C01: Submit form without filling any field should show Validation Failed."""
         log.info("C01: Empty form submit — expecting Validation Failed")
@@ -45,6 +60,9 @@ class TestCreateFormValidations:
 
         page.handle_validation_alert()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_submit_without_tax_name_shows_validation(self, tax_authority_page):
         """C02: Leave Tax Name empty, fill dropdowns, submit — should show Validation Failed."""
         log.info("C02: Submit without Tax Name — expecting Validation Failed")
@@ -62,6 +80,9 @@ class TestCreateFormValidations:
             "Expected 'Validation Failed' when Tax Name is empty"
         page.handle_validation_alert()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_submit_without_tax_type_shows_validation(self, tax_authority_page):
         """C03: Fill Tax Name and Country, skip Tax Type, submit — should show Validation Failed."""
         log.info("C03: Submit without Tax Type — expecting Validation Failed")
@@ -79,6 +100,9 @@ class TestCreateFormValidations:
             "Expected 'Validation Failed' when Tax Type is empty"
         page.handle_validation_alert()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_submit_without_country_shows_validation(self, tax_authority_page):
         """C04: Fill Tax Name and Tax Type, skip Country, submit — should show Validation Failed."""
         log.info("C04: Submit without Country — expecting Validation Failed")
@@ -96,6 +120,10 @@ class TestCreateFormValidations:
             "Expected 'Validation Failed' when Country is empty"
         page.handle_validation_alert()
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_create_valid_record_all_fields(self, tax_authority_page):
         """C05: Fill all 3 fields and Submit — record should be created successfully."""
         log.info("C05: Create valid record with all fields")
@@ -115,6 +143,8 @@ class TestCreateFormValidations:
         assert found, f"Expected to find '{tax_name}' in table after creation"
         page.clear_search()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_duplicate_record_shows_validation(self, tax_authority_page):
         """C06: Create record, then create again with same Tax Name — should show Validation Failed."""
         log.info("C06: Duplicate record — expecting Validation Failed")
@@ -133,6 +163,9 @@ class TestCreateFormValidations:
         result2 = page.create_record(dup_data)
         assert not result2, "Duplicate record creation should fail with Validation Failed"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_special_characters_in_tax_name(self, tax_authority_page):
         """C07: Tax Name with special characters — test if accepted or rejected."""
         log.info("C07: Special characters in Tax Name")
@@ -153,6 +186,9 @@ class TestCreateFormValidations:
             # Record rejected — server has validation for special chars
             log.info(f"Special characters rejected: '{tax_name}'")
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_very_long_tax_name(self, tax_authority_page):
         """C08: Very long Tax Name (200 chars) — tests max-length behavior."""
         log.info("C08: Very long Tax Name (200 chars)")
@@ -179,6 +215,11 @@ class TestCreateFormValidations:
 class TestViewFormBehaviors:
     """Tests for the View form behavior."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_view_form_fields_disabled(self, tax_authority_page):
         """V01: Click View on a row — all fields should be disabled, no Submit button."""
         log.info("V01: View form — all fields should be disabled")
@@ -197,6 +238,9 @@ class TestViewFormBehaviors:
 
         page.close_form_via_cancel()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_view_form_displays_correct_data(self, tax_authority_page):
         """V02: Create record, click View on it — form should show correct values."""
         log.info("V02: View form — displays correct data from table row")
@@ -228,6 +272,9 @@ class TestViewFormBehaviors:
         page.close_form_via_cancel()
         page.clear_search()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_view_form_cancel_closes_popup(self, tax_authority_page):
         """V03: Open View form, click Cancel — popup should close."""
         log.info("V03: View form — Cancel closes popup")
@@ -247,6 +294,10 @@ class TestViewFormBehaviors:
 class TestEditFormValidations:
     """Tests for the Edit form validation behavior."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_edit_form_has_update_button(self, tax_authority_page):
         """E01: Click Edit on a row — form should show Update button (not Submit)."""
         log.info("E01: Edit form — should have Update button")
@@ -264,6 +315,9 @@ class TestEditFormValidations:
 
         page.close_form_via_cancel()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_edit_form_fields_are_enabled(self, tax_authority_page):
         """E02: Click Edit on a row — all fields should be editable."""
         log.info("E02: Edit form — all fields should be enabled")
@@ -277,6 +331,9 @@ class TestEditFormValidations:
 
         page.close_form_via_cancel()
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_edit_form_pre_filled_with_data(self, tax_authority_page):
         """E03: Click Edit on a known row — form should be pre-filled with existing values."""
         log.info("E03: Edit form — pre-filled with existing data")
@@ -296,6 +353,11 @@ class TestEditFormValidations:
 
         page.close_form_via_cancel()
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_edit_update_changes_table(self, tax_authority_page):
         """E04: Edit a record's Tax Name, click Update — table should reflect the change."""
         log.info("E04: Edit update — table should change")
@@ -332,6 +394,9 @@ class TestEditFormValidations:
 
         page.clear_search()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_edit_duplicate_shows_validation(self, tax_authority_page):
         """E05: Edit to use existing Tax Name — should show Validation Failed.
         BUG: Server may accept duplicate without error.
@@ -378,6 +443,10 @@ class TestEditFormValidations:
 class TestHistoryValidations:
     """Tests for the History popup behavior."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_history_popup_opens(self, tax_authority_page):
         """H01: Click History on a row — history popup should open with correct title."""
         log.info("H01: History popup — should open with correct title")
@@ -396,6 +465,9 @@ class TestHistoryValidations:
 
         page.close_history_popup()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_history_popup_cancel_closes(self, tax_authority_page):
         """H02: Open History popup, click Cancel — popup should close."""
         log.info("H02: History popup — Cancel closes popup")

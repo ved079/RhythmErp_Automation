@@ -39,6 +39,36 @@ SP_LOGIN_FACILITY_INDEX = 0  # RuralLife Producer Company
 
 
 # ================================================================
+# PYTEST MARKERS REGISTRATION
+# ================================================================
+
+def pytest_configure(config):
+    """Register custom test markers for categorized test execution.
+
+    Usage:
+        pytest test_supplier_validation.py -m smoke              # Critical paths only (~10 min)
+        pytest test_supplier_validation.py -m sanity             # Targeted validation (~20 min)
+        pytest test_supplier_validation.py -m "smoke or sanity"  # Combined (~25 min)
+        pytest test_supplier_validation.py -m "not bug"          # Skip known-bug tests
+        pytest test_supplier_validation.py -m bug                # Known bug tracking only
+        pytest test_supplier_validation.py -m ui                 # Popup/toggle/behavior checks
+        pytest test_supplier_validation.py                       # Full regression (all 42 tests)
+    """
+    config.addinivalue_line(
+        "markers", "smoke: Critical happy-path tests — build not broken (~10-15 min)"
+    )
+    config.addinivalue_line(
+        "markers", "sanity: Targeted feature validation — specific checks (~20-30 min)"
+    )
+    config.addinivalue_line(
+        "markers", "bug: Known bug tracking tests (usually xfail) — confirm bugs exist or are fixed"
+    )
+    config.addinivalue_line(
+        "markers", "ui: Popup, toggle, close button, readonly behavior checks (~15-20 min)"
+    )
+
+
+# ================================================================
 # FIXTURES
 # ================================================================
 

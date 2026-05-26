@@ -11,11 +11,18 @@ URL:      /#/dynamic-screens/Commodity%20Quality%20Parameter
 Phases:
   1. Create Form Validations  (12 tests) — CQP-C01 to CQP-C12
   2. Dropdown Validations      (2 tests) — CQP-D01 to CQP-D02
-  3. Edit Form Validations     (5 tests) — CQP-E01 to CQP-E05
-  4. Search & Filter           (5 tests) — CQP-S01 to CQP-S05
-  5. Pagination & Sort         (8 tests) — CQP-P01 to CQP-P08
-  6. Form Behavior             (2 tests) — CQP-F01 to CQP-F02
-  7. History Validations       (5 tests) — CQP-H01 to CQP-H05
+  3. Edit Form Validations     (5 tests)  — CQP-E01 to CQP-E05
+  4. Search & Filter           (5 tests)  — CQP-S01 to CQP-S05
+  5. Pagination & Sort         (8 tests)  — CQP-P01 to CQP-P08
+  6. Form Behavior             (2 tests)  — CQP-F01 to CQP-F02
+  7. History Validations       (5 tests)  — CQP-H01 to CQP-H05
+
+Pytest Marker Summary:
+  smoke:      11 tests (critical path — create, search, view, dropdowns)
+  sanity:     39 tests (core validation — build acceptance gate)
+  regression: 39 tests (full suite — all tests)
+  bug:         4 tests (known open bugs — BUG-001 to BUG-007)
+  ui:         23 tests (popups, date pickers, sort, pagination, filter panels, history)
 
 Known Behaviors (confirmed via ERP exploration):
   BUG-001 : Version & History buttons mis-classed (both use tbl-fav-edit)
@@ -26,15 +33,13 @@ Known Behaviors (confirmed via ERP exploration):
   BUG-006 : Quality Parameter dropdown slow to load (2-3 sec)
   BUG-007 : Test/QA data in QP dropdown (no data cleanup)
 
-Bug Handling Decisions:
-  BUG-002: Mark as known bug — test PASSES documenting current behavior
-  BUG-004: Mark as known bug — test documents empty history
-  Spaces-only: Test expects rejection — may FAIL until ERP is fixed
-
-Run:
-  pytest test_commodity_quality_parameter_validation.py -v --tb=short
-  pytest test_commodity_quality_parameter_validation.py -v -k "TestCreateForm" --tb=short
-  pytest test_commodity_quality_parameter_validation.py -v -k "CQP-C01" --tb=short
+Usage:
+  pytest test_commodity_quality_parameter_validation.py -m smoke           # 11 critical path tests
+  pytest test_commodity_quality_parameter_validation.py -m sanity           # 39 build acceptance tests
+  pytest test_commodity_quality_parameter_validation.py -m regression       # 39 full suite
+  pytest test_commodity_quality_parameter_validation.py -m bug              #  4 known bug tests
+  pytest test_commodity_quality_parameter_validation.py -m ui               # 23 UI behavior tests
+  pytest test_commodity_quality_parameter_validation.py -m "smoke and ui"  # tests in both categories
 """
 
 import os
@@ -123,6 +128,9 @@ class TestCreateFormValidations:
     """
 
     # ---- CQP-C01: Submit with all fields empty ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_C01_empty_form(self, cqp_page):
         """Submit with all fields empty — should show validation warning."""
         log.info("CQP-C01: Empty form submit test")
@@ -159,6 +167,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- CQP-C02: Create with valid data (happy path) ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_C02_valid_create(self, cqp_page):
         """Create with valid header + detail data — should succeed.
         Verifies creation by searching for the record in the listing.
@@ -199,6 +210,8 @@ class TestCreateFormValidations:
         log.info(f"CQP-C02 PASSED: {item_name}")
 
     # ---- CQP-C03: Submit with header only, no detail row ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_C03_header_only(self, cqp_page):
         """Submit with header filled but detail row empty — should fail."""
         log.info("CQP-C03: Header only submit test")
@@ -235,6 +248,8 @@ class TestCreateFormValidations:
                 pass
 
     # ---- CQP-C04: Submit with missing Item Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_C04_missing_item_name(self, cqp_page):
         """Submit without selecting Item Name — should fail."""
         log.info("CQP-C04: Missing Item Name test")
@@ -275,6 +290,8 @@ class TestCreateFormValidations:
                 pass
 
     # ---- CQP-C05: Submit with missing Transaction Type ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_C05_missing_transaction_type(self, cqp_page):
         """Submit without selecting Transaction Type — should fail."""
         log.info("CQP-C05: Missing Transaction Type test")
@@ -315,6 +332,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- CQP-C06: Create with Is Rate/Percentage = Yes ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_C06_rate_percentage_yes(self, cqp_page):
         """Create with Is Rate/Percentage toggle set to Yes."""
         log.info("CQP-C06: Rate/Percentage = Yes test")
@@ -334,6 +354,9 @@ class TestCreateFormValidations:
         log.info("CQP with Rate/Percentage=Yes created successfully")
 
     # ---- CQP-C07: Create with Is Rate/Percentage = No ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_C07_rate_percentage_no(self, cqp_page):
         """Create with Is Rate/Percentage toggle set to No (default)."""
         log.info("CQP-C07: Rate/Percentage = No test")
@@ -352,6 +375,9 @@ class TestCreateFormValidations:
         log.info("CQP with Rate/Percentage=No created successfully")
 
     # ---- CQP-C08: Cancel form discards data ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_C08_cancel_discards(self, cqp_page):
         """Clicking Cancel should close the form without saving."""
         log.info("CQP-C08: Cancel discards data test")
@@ -386,6 +412,9 @@ class TestCreateFormValidations:
         log.info("Cancel discarded data correctly")
 
     # ---- CQP-C09: Close popup via X button ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_C09_close_x_button(self, cqp_page):
         """Clicking X button should close the form without saving."""
         log.info("CQP-C09: Close via X button test")
@@ -402,6 +431,9 @@ class TestCreateFormValidations:
         log.info("X button closed the form successfully")
 
     # ---- CQP-C10: Version button (folder-plus icon) ----
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(
         reason="BUG-001: Version button may not work correctly due to CSS class mis-assignment",
         strict=False,
@@ -436,6 +468,8 @@ class TestCreateFormValidations:
             log.warning("Version button click returned False")
 
     # ---- CQP-C11: Revision Status free text entry ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_C11_revision_status_text(self, cqp_page):
         """Revision Status field accepts free text."""
         log.info("CQP-C11: Revision Status free text test")
@@ -475,6 +509,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- CQP-C12: Date picker interaction ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_C12_date_picker_interaction(self, cqp_page):
         """Verify date picker fields are interactive."""
         log.info("CQP-C12: Date picker interaction test")
@@ -524,6 +561,9 @@ class TestDropdownValidations:
     """CQP-D01 to CQP-D02: Dropdown menu checks."""
 
     # ---- CQP-D01: Item Name dropdown populated & searchable ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_D01_item_name_dropdown(self, cqp_page):
         """Item Name dropdown should be populated with options."""
         log.info("CQP-D01: Item Name dropdown test")
@@ -573,6 +613,9 @@ class TestDropdownValidations:
                 pass
 
     # ---- CQP-D02: Transaction Type dropdown has all 8 options ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_D02_transaction_type_dropdown(self, cqp_page):
         """Transaction Type dropdown should have all 8 options."""
         log.info("CQP-D02: Transaction Type dropdown test")
@@ -635,6 +678,10 @@ class TestEditFormValidations:
     """CQP-E01 to CQP-E05: Validation checks on the Edit form."""
 
     # ---- CQP-E01: View mode — fields read-only ----
+    @pytest.mark.smoke
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_E01_view_read_only(self, cqp_page):
         """View popup should have fields in read-only mode."""
         log.info("CQP-E01: View read-only test")
@@ -659,6 +706,10 @@ class TestEditFormValidations:
                 pass
 
     # ---- CQP-E02: Edit — pre-populated fields ----
+    @pytest.mark.smoke
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_E02_edit_prepopulated(self, cqp_page):
         """Edit popup should show fields pre-populated with existing data."""
         log.info("CQP-E02: Edit pre-populated test")
@@ -700,6 +751,9 @@ class TestEditFormValidations:
                 pass
 
     # ---- CQP-E03: Edit — update with valid data ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_E03_valid_edit(self, cqp_page):
         """Edit with valid new data — should succeed."""
         log.info("CQP-E03: Valid edit test")
@@ -744,6 +798,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- CQP-E04: Edit — no success popup ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_E04_edit_no_success_popup(self, cqp_page):
         """Verify whether a success SweetAlert appears after edit."""
         log.info("CQP-E04: Edit no success popup test")
@@ -788,6 +845,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- CQP-E05: Edit — empty required field ----
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(
         reason="BUG: Edit form may allow empty required field submission",
         strict=False,
@@ -864,6 +924,9 @@ class TestSearchFilter:
     """CQP-S01 to CQP-S05: Search and Filter checks."""
 
     # ---- CQP-S01: Search with partial text ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_S01_search_partial(self, cqp_page):
         """Search with partial Item Name — should find matching records."""
         log.info("CQP-S01: Search partial test")
@@ -880,6 +943,9 @@ class TestSearchFilter:
             log.info("No records in table to search")
 
     # ---- CQP-S02: Search with non-existent text ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_S02_search_nonexistent(self, cqp_page):
         """Search for non-existent text — should return no results."""
         log.info("CQP-S02: Search nonexistent test")
@@ -895,6 +961,9 @@ class TestSearchFilter:
         log.info(f"Correctly not found: {fake_name}")
 
     # ---- CQP-S03: Filter by Transaction Type ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_S03_filter_transaction_type(self, cqp_page):
         """Apply filter by Transaction Type."""
         log.info("CQP-S03: Filter by Transaction Type test")
@@ -912,6 +981,9 @@ class TestSearchFilter:
             log.warning("Filter panel could not be opened")
 
     # ---- CQP-S04: Clear All filters ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_S04_clear_all_filters(self, cqp_page):
         """Clear All filters should reset the table."""
         log.info("CQP-S04: Clear All filters test")
@@ -936,6 +1008,8 @@ class TestSearchFilter:
             pass
 
     # ---- CQP-S05: Refresh button reloads data ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_S05_refresh_reloads(self, cqp_page):
         """Clicking Refresh should reload the table data."""
         log.info("CQP-S05: Refresh reloads test")
@@ -960,6 +1034,9 @@ class TestPaginationSort:
     """CQP-P01 to CQP-P08: Pagination and Sort checks."""
 
     # ---- CQP-P01: Paginator displays ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_P01_paginator_displays(self, cqp_page):
         """Paginator should be visible on the listing page."""
         log.info("CQP-P01: Paginator displays test")
@@ -974,6 +1051,9 @@ class TestPaginationSort:
         log.info(f"Table has {row_count} rows")
 
     # ---- CQP-P02: Sort by Item Name ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_P02_sort_item_name(self, cqp_page):
         """Sort by Item Name column."""
         log.info("CQP-P02: Sort by Item Name test")
@@ -993,6 +1073,9 @@ class TestPaginationSort:
         log.info(f"Sort Item Name: before='{first_before}', after='{first_after}'")
 
     # ---- CQP-P03: Sort by Transaction Type ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_P03_sort_transaction_type(self, cqp_page):
         """Sort by Transaction Type column."""
         log.info("CQP-P03: Sort by Transaction Type test")
@@ -1003,6 +1086,9 @@ class TestPaginationSort:
         log.info("Transaction Type sort clicked")
 
     # ---- CQP-P04: Sort by From Date ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_P04_sort_from_date(self, cqp_page):
         """Sort by From Date column."""
         log.info("CQP-P04: Sort by From Date test")
@@ -1013,6 +1099,9 @@ class TestPaginationSort:
         log.info("From Date sort clicked")
 
     # ---- CQP-P05: Sort by To Date ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_P05_sort_to_date(self, cqp_page):
         """Sort by To Date column."""
         log.info("CQP-P05: Sort by To Date test")
@@ -1023,6 +1112,9 @@ class TestPaginationSort:
         log.info("To Date sort clicked")
 
     # ---- CQP-P06: Sort by Revision Status ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_P06_sort_revision_status(self, cqp_page):
         """Sort by Revision Status column."""
         log.info("CQP-P06: Sort by Revision Status test")
@@ -1033,6 +1125,9 @@ class TestPaginationSort:
         log.info("Revision Status sort clicked")
 
     # ---- CQP-P07: Items per page selection ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_P07_items_per_page(self, cqp_page):
         """Items per page dropdown should be functional."""
         log.info("CQP-P07: Items per page test")
@@ -1051,6 +1146,9 @@ class TestPaginationSort:
         )
 
     # ---- CQP-P08: Navigate pages if multiple ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_P08_navigate_pages(self, cqp_page):
         """Navigate to next/previous page if multiple pages exist."""
         log.info("CQP-P08: Navigate pages test")
@@ -1081,6 +1179,10 @@ class TestFormBehavior:
     """CQP-F01 to CQP-F02: Form behavior checks."""
 
     # ---- CQP-F01: To Date auto-populates after Item selection ----
+    @pytest.mark.bug
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(
         reason="BUG-005: To Date auto-populates sentinel 30/12/2099 — documents behavior",
         strict=False,
@@ -1142,6 +1244,9 @@ class TestFormBehavior:
                 pass
 
     # ---- CQP-F02: From Date defaults to current date ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_F02_from_date_default(self, cqp_page):
         """From Date should default to the current date."""
         log.info("CQP-F02: From Date default test")
@@ -1182,6 +1287,9 @@ class TestHistoryValidations:
     """CQP-H01 to CQP-H05: History popup checks."""
 
     # ---- CQP-H01: Open history popup ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_H01_open_history(self, cqp_page):
         """History popup should open when clicking the clock icon."""
         log.info("CQP-H01: Open history popup test")
@@ -1204,6 +1312,10 @@ class TestHistoryValidations:
             page.wait_seconds(1)
 
     # ---- CQP-H02: History row count ----
+    @pytest.mark.bug
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(
         reason="BUG-004: History popup always shows 'No data available' — known bug",
         strict=False,
@@ -1240,6 +1352,9 @@ class TestHistoryValidations:
             log.warning("History popup did not open")
 
     # ---- CQP-H03: Search in history ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_H03_search_in_history(self, cqp_page):
         """Search within the history popup."""
         log.info("CQP-H03: Search in history test")
@@ -1265,6 +1380,9 @@ class TestHistoryValidations:
             log.warning("History popup did not open")
 
     # ---- CQP-H04: Close history popup ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_H04_close_history(self, cqp_page):
         """History popup should close properly."""
         log.info("CQP-H04: Close history popup test")
@@ -1290,6 +1408,9 @@ class TestHistoryValidations:
             log.warning("History popup did not open — cannot test closing")
 
     # ---- CQP-H05: History popup fullscreen toggle ----
+    @pytest.mark.ui
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_CQP_H05_history_fullscreen(self, cqp_page):
         """History popup should have a fullscreen toggle."""
         log.info("CQP-H05: History fullscreen toggle test")

@@ -32,6 +32,15 @@ Run:
   pytest test_agent_validation.py -v --tb=short
   pytest test_agent_validation.py -v -k "TestUniversal" --tb=short
   pytest test_agent_validation.py -v -k "AGT-U03" --tb=short
+
+Marker-based runs:
+  pytest test_agent_validation.py -v -m smoke          # ~15 critical tests
+  pytest test_agent_validation.py -v -m sanity         # ~40 core feature tests
+  pytest test_agent_validation.py -v -m regression     # all 55 tests
+  pytest test_agent_validation.py -v -m bug            # 7 bug-tracking tests
+  pytest test_agent_validation.py -v -m ui             # ~12 UI behavior tests
+  pytest test_agent_validation.py -v -m "smoke or sanity"  # broad but fast
+  pytest test_agent_validation.py -v -m "not bug"      # skip known-bug tests
 """
 
 import os
@@ -132,6 +141,9 @@ class TestUniversalStepValidations:
     """AGT-U01 to AGT-U15: Validation checks on Step 1 (Universal)."""
 
     # ---- AGT-U01: Submit with all fields empty on step 1 ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_U01_empty_submit(self, agt_page):
         """Submit with all Universal fields empty - should be blocked."""
         log.info("AGT-U01: Empty submit on Universal step")
@@ -159,6 +171,8 @@ class TestUniversalStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-U02: Agent Name - valid input ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_U02_agent_name_valid(self, agt_page):
         """Agent Name should accept alphanumeric values."""
         log.info("AGT-U02: Valid Agent Name test")
@@ -177,6 +191,8 @@ class TestUniversalStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-U03: Agent Name - special characters ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_U03_agent_name_special_chars(self, agt_page):
         """Agent Name with special characters - check behavior."""
         log.info("AGT-U03: Agent Name special chars test")
@@ -197,6 +213,8 @@ class TestUniversalStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-U04: Agent Name - spaces only ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_U04_agent_name_spaces_only(self, agt_page):
         """Agent Name with spaces only - should be rejected."""
         log.info("AGT-U04: Agent Name spaces only test")
@@ -217,6 +235,8 @@ class TestUniversalStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-U05: Agent Name - maxlength boundary ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_U05_agent_name_maxlength(self, agt_page):
         """Agent Name maxlength boundary (255/256 chars)."""
         log.info("AGT-U05: Agent Name maxlength test")
@@ -243,6 +263,8 @@ class TestUniversalStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-U06: Agent Name - leading/trailing spaces ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_U06_agent_name_leading_trailing_spaces(self, agt_page):
         """Test leading/trailing spaces in Agent Name."""
         log.info("AGT-U06: Leading/trailing spaces test")
@@ -262,6 +284,8 @@ class TestUniversalStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-U07: Phone Number - valid ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_U07_phone_number_valid(self, agt_page):
         """Phone Number should accept valid 10-digit Indian numbers."""
         log.info("AGT-U07: Valid Phone Number test")
@@ -282,6 +306,8 @@ class TestUniversalStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-U08: Phone Number - alphabetic (invalid) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_U08_phone_number_alpha(self, agt_page):
         """Phone Number with letters - should be rejected."""
         log.info("AGT-U08: Phone Number alpha test")
@@ -302,6 +328,8 @@ class TestUniversalStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-U09: Phone Number - too short ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_U09_phone_number_too_short(self, agt_page):
         """Phone Number too short - should be rejected."""
         log.info("AGT-U09: Phone Number too short test")
@@ -322,6 +350,8 @@ class TestUniversalStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-U10: Email - valid ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_U10_email_valid(self, agt_page):
         """Email should accept valid email addresses."""
         log.info("AGT-U10: Valid Email test")
@@ -342,6 +372,8 @@ class TestUniversalStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-U11: Email - invalid format ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_U11_email_invalid(self, agt_page):
         """Invalid email format - should show validation."""
         log.info("AGT-U11: Invalid Email test")
@@ -362,6 +394,8 @@ class TestUniversalStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-U12: Email - missing @ sign ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_U12_email_no_at_sign(self, agt_page):
         """Email without @ sign - should show validation."""
         log.info("AGT-U12: Email no @ sign test")
@@ -387,6 +421,8 @@ class TestUniversalStepValidations:
                "Verifying if accepted (BUG) or rejected (security).",
         strict=False,
     )
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_AGT_U13_sql_injection(self, agt_page):
         """SQL injection payload should be rejected."""
         log.info("AGT-U13: SQL injection test")
@@ -410,6 +446,8 @@ class TestUniversalStepValidations:
                "Verifying if accepted (BUG) or rejected (security).",
         strict=False,
     )
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_AGT_U14_xss_payload(self, agt_page):
         """XSS payload should be rejected."""
         log.info("AGT-U14: XSS payload test")
@@ -428,6 +466,8 @@ class TestUniversalStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-U15: Invalid -> valid -> next (error persistence) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_U15_invalid_then_valid_next(self, agt_page):
         """Fill invalid Agent Name, fix to valid, click Next - errors should clear."""
         log.info("AGT-U15: Invalid -> valid -> next test")
@@ -465,6 +505,10 @@ class TestAddressStepValidations:
     """AGT-A01 to AGT-A10: Validation checks on Step 2 (Address Details)."""
 
     # ---- AGT-A01: Navigate to Address step with valid Universal data ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_AGT_A01_navigate_to_address(self, agt_page):
         """Verify the form opens on Step 0 (Address Details) and confirm stepper structure."""
         log.info("AGT-A01: Verify Address Details is Step 0")
@@ -484,6 +528,8 @@ class TestAddressStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-A02: Address - valid data acceptance ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_A02_address_valid(self, agt_page):
         """Address fields should accept valid data."""
         log.info("AGT-A02: Valid Address data test")
@@ -507,6 +553,8 @@ class TestAddressStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-A03: Pin Code - valid 6 digits ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_A03_pin_code_valid(self, agt_page):
         """Pin Code should accept 6-digit values."""
         log.info("AGT-A03: Valid Pin Code test")
@@ -530,6 +578,8 @@ class TestAddressStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-A04: Pin Code - invalid (wrong length) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_A04_pin_code_invalid(self, agt_page):
         """Pin Code with wrong length - should show validation."""
         log.info("AGT-A04: Invalid Pin Code test")
@@ -556,6 +606,8 @@ class TestAddressStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-A05: GST - valid format ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_A05_gst_valid(self, agt_page):
         """GST field should accept valid GST format."""
         log.info("AGT-A05: Valid GST test")
@@ -578,6 +630,8 @@ class TestAddressStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-A06: GST - empty (optional field) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_A06_gst_empty_optional(self, agt_page):
         """Empty GST should be valid (optional field)."""
         log.info("AGT-A06: GST empty optional test")
@@ -602,6 +656,8 @@ class TestAddressStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-A07: Address - spaces only in required fields ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_A07_address_spaces_only(self, agt_page):
         """Spaces-only Address and Pin Code - should be rejected."""
         log.info("AGT-A07: Address spaces only test")
@@ -628,6 +684,9 @@ class TestAddressStepValidations:
 
         _cleanup_form(page)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_AGT_A08_back_to_universal(self, agt_page):
         """Clicking Back on Step 0 (first step) should not navigate away."""
         log.info("AGT-A08: Back button on first step test")
@@ -654,6 +713,8 @@ class TestAddressStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-A09: Maxlength on Address field ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_A09_address_maxlength(self, agt_page):
         """Address field maxlength boundary test."""
         log.info("AGT-A09: Address maxlength test")
@@ -685,6 +746,10 @@ class TestAddressStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-A10: Navigate to Payment step from Address ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_AGT_A10_navigate_to_payment(self, agt_page):
         """Fill all required Step 0 fields and navigate to Payment Details (Step 1)."""
         log.info("AGT-A10: Navigate to Payment step")
@@ -716,6 +781,8 @@ class TestPaymentStepValidations:
     """AGT-P01 to AGT-P05: Validation checks on Step 3 (Payment Details)."""
 
     # ---- AGT-P01: Navigate to Payment step ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_P01_navigate_to_payment(self, agt_page):
         """Verify Payment step loads after filling Universal + Address."""
         log.info("AGT-P01: Navigate to Payment step")
@@ -739,6 +806,8 @@ class TestPaymentStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-P02: Payment fields are optional ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_P02_payment_optional(self, agt_page):
         """Payment Terms and Preferred Payment Method should be optional."""
         log.info("AGT-P02: Payment fields optional test")
@@ -765,6 +834,9 @@ class TestPaymentStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-P03: Back from Payment to Address ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_P03_back_to_address(self, agt_page):
         """Back from Payment returns to Address step."""
         log.info("AGT-P03: Back to Address from Payment")
@@ -791,6 +863,9 @@ class TestPaymentStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-P04: Payment Terms dropdown options ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_AGT_P04_payment_terms_options(self, agt_page):
         """List available Payment Terms dropdown options."""
         log.info("AGT-P04: Payment Terms options test")
@@ -813,6 +888,8 @@ class TestPaymentStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-P05: Navigate to Bank Details from Payment ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_P05_navigate_to_bank(self, agt_page):
         """Navigate to Bank Details step from Payment."""
         log.info("AGT-P05: Navigate to Bank Details")
@@ -849,6 +926,8 @@ class TestBankDetailsValidations:
     """AGT-B01 to AGT-B10: Validation checks on Step 4 (Bank Details)."""
 
     # ---- AGT-B01: Navigate to Bank Details step ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_B01_navigate_to_bank(self, agt_page):
         """Verify Bank Details step loads correctly."""
         log.info("AGT-B01: Navigate to Bank Details step")
@@ -868,6 +947,8 @@ class TestBankDetailsValidations:
         _cleanup_form(page)
 
     # ---- AGT-B02: Bank Name - valid input ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_B02_bank_name_valid(self, agt_page):
         """Bank Name should accept valid text."""
         log.info("AGT-B02: Valid Bank Name test")
@@ -888,6 +969,8 @@ class TestBankDetailsValidations:
         _cleanup_form(page)
 
     # ---- AGT-B03: IFSC Code - valid 11 chars ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_B03_ifsc_code_valid(self, agt_page):
         """IFSC Code should accept valid 11-char format."""
         log.info("AGT-B03: Valid IFSC Code test")
@@ -909,6 +992,8 @@ class TestBankDetailsValidations:
         _cleanup_form(page)
 
     # ---- AGT-B04: IFSC Code - invalid (wrong length) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_B04_ifsc_code_invalid(self, agt_page):
         """IFSC Code with wrong length - should show validation."""
         log.info("AGT-B04: Invalid IFSC Code test")
@@ -933,6 +1018,8 @@ class TestBankDetailsValidations:
         _cleanup_form(page)
 
     # ---- AGT-B05: Account Number - valid ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_B05_account_number_valid(self, agt_page):
         """Account Number should accept valid numeric values."""
         log.info("AGT-B05: Valid Account Number test")
@@ -954,6 +1041,8 @@ class TestBankDetailsValidations:
         _cleanup_form(page)
 
     # ---- AGT-B06: Account Holder Name - valid ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_B06_account_holder_name_valid(self, agt_page):
         """Account Holder Name should accept valid text."""
         log.info("AGT-B06: Valid Account Holder Name test")
@@ -975,6 +1064,9 @@ class TestBankDetailsValidations:
         _cleanup_form(page)
 
     # ---- AGT-B07: Bank fields empty submit ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_B07_bank_fields_empty_submit(self, agt_page):
         """Submit with empty bank detail fields - should be blocked."""
         log.info("AGT-B07: Bank fields empty submit test")
@@ -1007,6 +1099,9 @@ class TestBankDetailsValidations:
         _cleanup_form(page)
 
     # ---- AGT-B08: Back from Bank Details to Payment ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_B08_back_to_payment(self, agt_page):
         """Back from Bank Details returns to Payment step."""
         log.info("AGT-B08: Back to Payment from Bank Details")
@@ -1028,6 +1123,9 @@ class TestBankDetailsValidations:
         _cleanup_form(page)
 
     # ---- AGT-B09: Account Type dropdown options ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_AGT_B09_account_type_options(self, agt_page):
         """List available Account Type dropdown options."""
         log.info("AGT-B09: Account Type options test")
@@ -1045,6 +1143,8 @@ class TestBankDetailsValidations:
         _cleanup_form(page)
 
     # ---- AGT-B10: Full bank details fill ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_B10_full_bank_details(self, agt_page):
         """Fill all bank detail fields with valid data."""
         log.info("AGT-B10: Full bank details fill test")
@@ -1074,6 +1174,10 @@ class TestStepperNavigation:
     """AGT-N01 to AGT-N05: Stepper navigation behavior."""
 
     # ---- AGT-N01: Step count verification ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_AGT_N01_step_count(self, agt_page):
         """Verify the Agent form has the expected number of stepper steps."""
         log.info("AGT-N01: Step count verification")
@@ -1095,6 +1199,9 @@ class TestStepperNavigation:
         _cleanup_form(page)
 
     # ---- AGT-N02: Step labels verification ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_AGT_N02_step_labels(self, agt_page):
         """Verify stepper step labels are present."""
         log.info("AGT-N02: Step labels verification")
@@ -1120,6 +1227,10 @@ class TestStepperNavigation:
         _cleanup_form(page)
 
     # ---- AGT-N03: Cannot skip to later steps without filling ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_AGT_N03_no_step_skip(self, agt_page):
         """Verify cannot skip to step 3+ without filling step 1."""
         log.info("AGT-N03: No step skip test")
@@ -1137,6 +1248,9 @@ class TestStepperNavigation:
         _cleanup_form(page)
 
     # ---- AGT-N04: Navigate forward through all steps ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_N04_navigate_all_steps(self, agt_page):
         """Navigate through all 3 steps with valid data."""
         log.info("AGT-N04: Navigate all steps test")
@@ -1171,6 +1285,10 @@ class TestStepperNavigation:
 
         _cleanup_form(page)
     # ---- AGT-N05: Cancel closes form from any step ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_AGT_N05_cancel_from_step(self, agt_page):
         """Cancel button should close the form from any step."""
         log.info("AGT-N05: Cancel from step test")
@@ -1196,6 +1314,9 @@ class TestCreateHappyPath:
     """AGT-C01 to AGT-C05: Create agent with valid data."""
 
     # ---- AGT-C01: Create with valid data (happy path) ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_C01_valid_create(self, agt_page):
         """Create agent with all valid data - should succeed."""
         log.info("AGT-C01: Valid create (happy path)")
@@ -1221,6 +1342,9 @@ class TestCreateHappyPath:
         )
 
     # ---- AGT-C02: Create with minimal data (no optional fields) ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_C02_minimal_create(self, agt_page):
         """Create agent with only required fields - should succeed."""
         log.info("AGT-C02: Minimal create test")
@@ -1243,6 +1367,8 @@ class TestCreateHappyPath:
         )
 
     # ---- AGT-C03: Form values reading via JS ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_C03_read_form_values(self, agt_page):
         """Verify get_form_field_values() reads all input values correctly."""
         log.info("AGT-C03: Read form values test")
@@ -1265,6 +1391,9 @@ class TestCreateHappyPath:
         _cleanup_form(page)
 
     # ---- AGT-C04: Duplicate Agent Name ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_C04_duplicate_agent_name(self, agt_page):
         """Create two agents with the same name - check behavior."""
         log.info("AGT-C04: Duplicate Agent Name test")
@@ -1297,6 +1426,9 @@ class TestCreateHappyPath:
         )
 
     # ---- AGT-C05: Refresh after create ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_AGT_C05_refresh_after_create(self, agt_page):
         """Create agent, refresh page, verify table still shows the record."""
         log.info("AGT-C05: Refresh after create test")
@@ -1323,6 +1455,8 @@ class TestBugSpecific:
     """AGT-X01 to AGT-X05: Bug verification and edge case tests."""
 
     # ---- AGT-X01: Angular Material value read via JS ----
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_AGT_X01_js_value_read(self, agt_page):
         """Verify execute_script reads Angular Material values correctly."""
         log.info("AGT-X01: JS value read test")
@@ -1348,6 +1482,8 @@ class TestBugSpecific:
         _cleanup_form(page)
 
     # ---- AGT-X02: Form field values preserved after Next/Back ----
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_AGT_X02_values_preserved_next_back(self, agt_page):
         """Values entered on Step 0 should persist after Next/Back."""
         log.info("AGT-X02: Values preserved after Next/Back test")
@@ -1384,6 +1520,9 @@ class TestBugSpecific:
         _cleanup_form(page)
 
     # ---- AGT-X03: Close and reopen form starts fresh ----
+    @pytest.mark.bug
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_AGT_X03_close_reopen_fresh(self, agt_page):
         """Closing and reopening the form should start with fresh values."""
         log.info("AGT-X03: Close reopen fresh test")
@@ -1407,6 +1546,8 @@ class TestBugSpecific:
         _cleanup_form(page)
 
     # ---- AGT-X04: Multiple rapid Next clicks ----
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_AGT_X04_rapid_next_clicks(self, agt_page):
         """Multiple rapid Next clicks should not crash the stepper."""
         log.info("AGT-X04: Rapid Next clicks test")
@@ -1434,6 +1575,8 @@ class TestBugSpecific:
         _cleanup_form(page)
 
     # ---- AGT-X05: Table row count changes after create ----
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_AGT_X05_table_count_after_create(self, agt_page):
         """Table row count should increase after creating a new agent."""
         log.info("AGT-X05: Table count after create test")

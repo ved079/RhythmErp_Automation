@@ -158,6 +158,19 @@ def designation_page(logged_in_driver):
 
 
 # ═══════════════════════════════════════════
+#  Pytest Markers
+# ═══════════════════════════════════════════
+
+def pytest_configure(config):
+    """Register custom pytest markers for Designation module."""
+    config.addinivalue_line("markers", "smoke: Core CRUD + critical path tests (8 tests)")
+    config.addinivalue_line("markers", "sanity: All 44 tests — full module sanity check")
+    config.addinivalue_line("markers", "regression: All 44 tests — full regression suite")
+    config.addinivalue_line("markers", "bug: Known bugs — dup name, no max-length, punctuation rejected, filters broken, history empty (7 tests)")
+    config.addinivalue_line("markers", "ui: UI interaction tests — alerts, toggle, view/edit mode, search, filter, popup, history (32 tests)")
+
+
+# ═══════════════════════════════════════════
 #  Report Generator Fixture
 # ═══════════════════════════════════════════
 
@@ -211,4 +224,3 @@ def pytest_collection_modifyitems(items):
     ]
     items.sort(key=lambda item: class_order.index(item.cls.__name__)
                if item.cls and item.cls.__name__ in class_order else 999)
-

@@ -31,6 +31,27 @@ TEST PHASES:
   N = Number field validations     — 7 tests
   H = History                      — 5 tests
   TOTAL: 47 tests
+
+Run:
+  pytest test_item_category_validation.py -v --tb=short
+  pytest test_item_category_validation.py -v -k "TestCreateForm" --tb=short
+  pytest test_item_category_validation.py -v -k "IC-C07" --tb=short
+
+Marker-based run examples (requires conftest.py with pytest_configure):
+  pytest test_item_category_validation.py -v -m smoke
+  pytest test_item_category_validation.py -v -m "smoke or sanity"
+  pytest test_item_category_validation.py -v -m "sanity and not bug"
+  pytest test_item_category_validation.py -v -m "not bug"
+  pytest test_item_category_validation.py -v -m ui
+  pytest test_item_category_validation.py -v -m bug
+  pytest test_item_category_validation.py -v -m regression
+
+Marker Summary (47 tests across 7 classes):
+  smoke (14): C01, C02, C03, C04, C05, C06, C07, V01, E01, E03, S01, S03, P01, H01
+  sanity (47): All tests
+  regression (47): All tests
+  bug (9): C09, C10, C11, C12, C13, N02, N04, N05, P03
+  ui (15): V01, V02, V03, V04, E02, P01, P02, P03, P04, P05, P06, P07, P08, H01, H03
 """
 
 import os
@@ -76,6 +97,9 @@ from pages.commodity_settings.modules.item_category.data.item_category_data impo
 class TestCreateFormValidations:
     """Tests for the Create (Add) form on Item Category."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_C01_empty_submit(self, ic_page):
         """IC-C01: Submit empty form — required field validation."""
         log.info("IC-C01: Submit empty form")
@@ -95,6 +119,9 @@ class TestCreateFormValidations:
             pass
         ic_page.force_close_form_popup()
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_C02_category_only(self, ic_page):
         """IC-C02: Submit with only Item Category filled — partial validation.
         Expected: Validation Failed for remaining required fields.
@@ -118,6 +145,9 @@ class TestCreateFormValidations:
             pass
         ic_page.force_close_form_popup()
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_C03_description_only(self, ic_page):
         """IC-C03: Submit with only Item Description filled — partial validation."""
         log.info("IC-C03: Submit with Item Description only")
@@ -139,6 +169,9 @@ class TestCreateFormValidations:
             pass
         ic_page.force_close_form_popup()
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_C04_level_only(self, ic_page):
         """IC-C04: Submit with only Level filled — partial validation."""
         log.info("IC-C04: Submit with Level only")
@@ -160,6 +193,9 @@ class TestCreateFormValidations:
             pass
         ic_page.force_close_form_popup()
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_C05_category_description_no_level(self, ic_page):
         """IC-C05: Submit with Category + Description but no Level — validation."""
         log.info("IC-C05: Submit with Category + Description, no Level")
@@ -181,6 +217,9 @@ class TestCreateFormValidations:
             pass
         ic_page.force_close_form_popup()
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_C06_category_level_no_description(self, ic_page):
         """IC-C06: Submit with Category + Level, no Description — should succeed (Description is optional)."""
         log.info("IC-C06: Submit with Category + Level, no Description (optional field)")
@@ -206,6 +245,9 @@ class TestCreateFormValidations:
         ic_page.click_refresh()
         ic_page.wait_seconds(2)
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_C07_valid_create(self, ic_page):
         """IC-C07: Create a valid Item Category record with all required fields.
         Happy path — should succeed.
@@ -231,6 +273,8 @@ class TestCreateFormValidations:
         ic_page.click_refresh()
         ic_page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_C08_special_chars_category(self, ic_page):
         """IC-C08: Create with special characters in Item Category name.
         Tests input sanitization — special chars may be accepted or rejected.
@@ -257,6 +301,9 @@ class TestCreateFormValidations:
         ic_page.click_refresh()
         ic_page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IC_C09_category_max_length(self, ic_page):
         """IC-C09: Create with very long Item Category name.
         Tests server-side length limit handling.
@@ -287,6 +334,9 @@ class TestCreateFormValidations:
         ic_page.click_refresh()
         ic_page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IC_C10_category_exceeds_length(self, ic_page):
         """IC-C10: Create with 256-char Item Category name — exceeds server max.
         Expected: "Failed to save record" (Type B popup).
@@ -318,6 +368,9 @@ class TestCreateFormValidations:
         ic_page.click_refresh()
         ic_page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IC_C11_duplicate_category(self, ic_page):
         """IC-C11: Create with duplicate Item Category name.
         Duplicates are ALLOWED — no uniqueness constraint.
@@ -364,6 +417,9 @@ class TestCreateFormValidations:
         ic_page.click_refresh()
         ic_page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IC_C12_sql_injection(self, ic_page):
         """IC-C12: Create with SQL injection string in Item Category.
         Tests input sanitization for SQL injection.
@@ -390,6 +446,9 @@ class TestCreateFormValidations:
         ic_page.click_refresh()
         ic_page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IC_C13_xss_attempt(self, ic_page):
         """IC-C13: Create with XSS attempt string in Item Category.
         Tests input sanitization for XSS attacks.
@@ -424,6 +483,10 @@ class TestCreateFormValidations:
 class TestViewValidations:
     """Tests for the View (read-only) mode on Item Category."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IC_V01_view_opens_readonly(self, ic_page):
         """IC-V01: View button opens read-only popup."""
         log.info("IC-V01: View opens read-only popup")
@@ -440,6 +503,9 @@ class TestViewValidations:
         ic_page.cancel()
         ic_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IC_V02_all_fields_readonly(self, ic_page):
         """IC-V02: All fields are disabled in View mode."""
         log.info("IC-V02: All fields disabled in View mode")
@@ -462,6 +528,9 @@ class TestViewValidations:
         ic_page.cancel()
         ic_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IC_V03_view_data_matches_table(self, ic_page):
         """IC-V03: View popup shows same data as table row."""
         log.info("IC-V03: View data matches table")
@@ -482,6 +551,9 @@ class TestViewValidations:
         ic_page.cancel()
         ic_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IC_V04_close_view_returns_to_table(self, ic_page):
         """IC-V04: Closing View popup returns to the table listing."""
         log.info("IC-V04: Close View returns to table")
@@ -506,6 +578,9 @@ class TestViewValidations:
 class TestEditFormValidations:
     """Tests for the Edit mode on Item Category."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_E01_edit_opens_editable(self, ic_page):
         """IC-E01: Edit button opens form with Update button."""
         log.info("IC-E01: Edit opens with Update button")
@@ -522,6 +597,9 @@ class TestEditFormValidations:
         ic_page.cancel()
         ic_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IC_E02_all_fields_editable(self, ic_page):
         """IC-E02: All fields are editable in Edit mode."""
         log.info("IC-E02: All fields editable in Edit mode")
@@ -543,6 +621,9 @@ class TestEditFormValidations:
         ic_page.cancel()
         ic_page.wait_seconds(1)
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_E03_edit_and_save(self, ic_page):
         """IC-E03: Edit and update a record successfully."""
         log.info("IC-E03: Edit and update record")
@@ -573,6 +654,8 @@ class TestEditFormValidations:
         ic_page.click_refresh()
         ic_page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_E04_edit_and_cancel(self, ic_page):
         """IC-E04: Edit and cancel — changes should not be saved."""
         log.info("IC-E04: Edit and cancel")
@@ -606,6 +689,8 @@ class TestEditFormValidations:
         ic_page.cancel()
         ic_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_E05_edit_empty_required(self, ic_page):
         """IC-E05: Edit — clear required field, submit -> validation."""
         log.info("IC-E05: Edit validation on empty required field")
@@ -638,6 +723,9 @@ class TestEditFormValidations:
 class TestSearchFilter:
     """Tests for search functionality on Item Category."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_S01_search_exact(self, ic_page):
         """IC-S01: Search for an existing record by exact name."""
         log.info("IC-S01: Search exact match")
@@ -653,6 +741,8 @@ class TestSearchFilter:
         found = ic_page.is_record_in_table(search_name)
         assert found, f"IC-S01: Should find record '{search_name}' after search"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_S02_search_partial(self, ic_page):
         """IC-S02: Search with partial name matches record."""
         log.info("IC-S02: Search partial match")
@@ -668,6 +758,9 @@ class TestSearchFilter:
         found = ic_page.is_record_in_table(partial)
         log.info(f"IC-S02: Partial search '{partial}' found={found}")
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_S03_search_no_match(self, ic_page):
         """IC-S03: Search for a non-existent record shows no results."""
         log.info("IC-S03: Search no match")
@@ -678,6 +771,8 @@ class TestSearchFilter:
         found = ic_page.is_record_in_table("ZZZ_NONEXISTENT_IC_99999")
         assert not found, "IC-S03: Should NOT find non-existent record"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_S04_clear_search(self, ic_page):
         """IC-S04: Clear search shows all records again."""
         log.info("IC-S04: Clear search")
@@ -695,6 +790,8 @@ class TestSearchFilter:
         assert count_after == count_before, \
             f"IC-S04: Record count should match after clear (before={count_before}, after={count_after})"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_S05_search_special_chars(self, ic_page):
         """IC-S05: Search with special characters does not crash."""
         log.info("IC-S05: Search special chars")
@@ -714,6 +811,10 @@ class TestSearchFilter:
 class TestPopupUIBehaviors:
     """Tests for popup and UI interactions on Item Category."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IC_P01_validation_popup_empty(self, ic_page):
         """IC-P01: Validation popup appears on empty submit."""
         log.info("IC-P01: Validation popup on empty submit")
@@ -730,6 +831,9 @@ class TestPopupUIBehaviors:
             pass
         ic_page.force_close_form_popup()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IC_P02_popup_title_message(self, ic_page):
         """IC-P02: Validation popup has correct title and message."""
         log.info("IC-P02: Popup title and message")
@@ -747,6 +851,10 @@ class TestPopupUIBehaviors:
             pass
         ic_page.force_close_form_popup()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_IC_P03_popup_ok_dismisses(self, ic_page):
         """IC-P03: Clicking OK on validation popup dismisses it."""
         log.info("IC-P03: OK dismisses validation popup")
@@ -767,6 +875,9 @@ class TestPopupUIBehaviors:
             pass
         ic_page.force_close_form_popup()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IC_P04_success_message(self, ic_page):
         """IC-P04: Success popup shows after valid create."""
         log.info("IC-P04: Success message after valid create")
@@ -790,6 +901,9 @@ class TestPopupUIBehaviors:
         ic_page.click_refresh()
         ic_page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IC_P05_cancel_no_save(self, ic_page):
         """IC-P05: Cancel after filling form does not save data."""
         log.info("IC-P05: Cancel does not save")
@@ -809,6 +923,9 @@ class TestPopupUIBehaviors:
         assert count_after == count_before, \
             f"IC-P05: Record count should not change after Cancel (before={count_before}, after={count_after})"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IC_P06_add_opens_empty_form(self, ic_page):
         """IC-P06: ADD button opens form with all fields empty."""
         log.info("IC-P06: ADD opens empty form")
@@ -825,6 +942,9 @@ class TestPopupUIBehaviors:
         ic_page.cancel()
         ic_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IC_P07_reopen_form_cleared(self, ic_page):
         """IC-P07: Reopening ADD form after cancel shows empty fields."""
         log.info("IC-P07: Reopen form is cleared")
@@ -845,6 +965,9 @@ class TestPopupUIBehaviors:
         ic_page.cancel()
         ic_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IC_P08_save_failure_popup(self, ic_page):
         """IC-P08: Save failure popup appears for invalid data on server side.
         Uses 256-char name to trigger server rejection.
@@ -877,6 +1000,8 @@ class TestPopupUIBehaviors:
 class TestNumberFieldValidations:
     """Tests for Level number field validations on Item Category."""
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_N01_positive_integer(self, ic_page):
         """IC-N01: Level accepts a positive integer value."""
         log.info("IC-N01: Positive integer Level")
@@ -901,6 +1026,9 @@ class TestNumberFieldValidations:
         ic_page.click_refresh()
         ic_page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IC_N02_negative_integer(self, ic_page):
         """IC-N02: Level accepts a negative integer value."""
         log.info("IC-N02: Negative integer Level")
@@ -928,6 +1056,8 @@ class TestNumberFieldValidations:
         ic_page.click_refresh()
         ic_page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_N03_zero_level(self, ic_page):
         """IC-N03: Level accepts zero value."""
         log.info("IC-N03: Zero Level")
@@ -955,6 +1085,9 @@ class TestNumberFieldValidations:
         ic_page.click_refresh()
         ic_page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IC_N04_decimal_level(self, ic_page):
         """IC-N04: Level does NOT accept decimal values — should truncate or reject."""
         log.info("IC-N04: Decimal Level")
@@ -984,6 +1117,9 @@ class TestNumberFieldValidations:
         ic_page.click_refresh()
         ic_page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IC_N05_leading_zeros_stripped(self, ic_page):
         """IC-N05: Leading zeros in Level are stripped on save.
         Input "007" should save as "7".
@@ -1028,6 +1164,8 @@ class TestNumberFieldValidations:
                 pass
             ic_page.force_close_form_popup()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_N06_large_number(self, ic_page):
         """IC-N06: Level accepts a very large number."""
         log.info("IC-N06: Large number Level")
@@ -1055,6 +1193,8 @@ class TestNumberFieldValidations:
         ic_page.click_refresh()
         ic_page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_N07_alpha_level(self, ic_page):
         """IC-N07: Level field does NOT accept alphabetic characters.
         Number input should prevent typing letters.
@@ -1085,6 +1225,10 @@ class TestNumberFieldValidations:
 class TestHistoryValidations:
     """Tests for History popup functionality on Item Category."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IC_H01_history_opens_popup(self, ic_page):
         """IC-H01: History button opens a popup."""
         log.info("IC-H01: History opens popup")
@@ -1100,6 +1244,8 @@ class TestHistoryValidations:
 
         ic_page.close_history_popup()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_H02_history_has_columns(self, ic_page):
         """IC-H02: History popup has table columns."""
         log.info("IC-H02: History has columns")
@@ -1115,6 +1261,9 @@ class TestHistoryValidations:
 
         ic_page.close_history_popup()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IC_H03_history_close_button(self, ic_page):
         """IC-H03: History popup can be closed via Close/Cancel button."""
         log.info("IC-H03: History close button")
@@ -1131,6 +1280,8 @@ class TestHistoryValidations:
         is_open = ic_page.is_history_popup_open()
         assert not is_open, "IC-H03: History popup should be closed"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_H04_history_after_edit(self, ic_page):
         """IC-H04: History popup accessible after editing a record."""
         log.info("IC-H04: History after edit")
@@ -1167,6 +1318,8 @@ class TestHistoryValidations:
 
         ic_page.close_history_popup()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IC_H05_history_new_record(self, ic_page):
         """IC-H05: History popup accessible for newly created record."""
         log.info("IC-H05: History for new record")

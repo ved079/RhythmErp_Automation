@@ -2,8 +2,7 @@
 test_uom_conversion_validation.py
 ---------------------------------
 Edge-case / validation tests for UOM Conversion.
-
-22 test cases across 6 groups:
+22 test cases across 1 class with 6 groups:
   A — Happy Path (Add)        : Tests 1-3
   B — Validation (Add)        : Tests 4-11
   C — Boundary / Bug          : Tests 12-14
@@ -11,8 +10,17 @@ Edge-case / validation tests for UOM Conversion.
   E — History                 : Tests 19-20
   F — Cancel Flow             : Tests 21-22
 
+Marker Summary:
+  smoke      :  6 tests (1, 4, 6, 15, 19, 21)
+  sanity     : 22 tests (all)
+  regression : 22 tests (all)
+  bug        :  6 tests (8, 9, 10, 11, 13, 14)
+  ui         : 13 tests (3, 4, 5, 6, 7, 8, 9, 16, 17, 19, 20, 21, 22)
+
 Run:
-    pytest pages/common_settings/modules/uom_conversion/test/test_uom_conversion_validation.py -v
+    pytest test_uom_conversion_validation.py -v
+    pytest test_uom_conversion_validation.py -v -m smoke --tb=short
+    pytest test_uom_conversion_validation.py -v -m "smoke and bug" --tb=short
 """
 
 import sys
@@ -45,6 +53,9 @@ class TestUOMConversionValidation:
     # Tests 1-3
     # ================================================================
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_add_valid_uom_conversion(self, logged_in_driver):
         """Test 1: Add a valid UOM conversion with a normal integer factor."""
         driver = logged_in_driver
@@ -69,6 +80,8 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_add_decimal_conversion_factor(self, logged_in_driver):
         """Test 2: Add with a decimal conversion factor — system accepts decimals."""
         driver = logged_in_driver
@@ -101,6 +114,9 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_add_same_source_and_target(self, logged_in_driver):
         """Test 3: Same UOM for source and target with factor = 1."""
         driver = logged_in_driver
@@ -141,6 +157,10 @@ class TestUOMConversionValidation:
     # Tests 4-11
     # ================================================================
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_add_without_source_uom(self, logged_in_driver):
         """Test 4: Submit with Source UOM empty — should show Pattern A alert."""
         driver = logged_in_driver
@@ -181,6 +201,9 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_add_without_target_uom(self, logged_in_driver):
         """Test 5: Submit with Target UOM empty — should show Pattern A alert."""
         driver = logged_in_driver
@@ -221,6 +244,10 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_add_without_conversion_factor(self, logged_in_driver):
         """Test 6: Submit with Conversion Factor empty — should show Pattern A + mat-error."""
         driver = logged_in_driver
@@ -262,6 +289,9 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_add_all_fields_empty(self, logged_in_driver):
         """Test 7: Submit with nothing filled — Pattern A + errors on all fields."""
         driver = logged_in_driver
@@ -302,6 +332,10 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_add_text_in_conversion_factor(self, logged_in_driver):
         """Test 8: Enter 'abc' as conversion factor — should show Pattern A + 'Invalid Conversion Factor'."""
         driver = logged_in_driver
@@ -341,6 +375,10 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_add_special_char_conversion_factor(self, logged_in_driver):
         """Test 9: Enter '@#$' as conversion factor — should show Pattern A + mat-error."""
         driver = logged_in_driver
@@ -380,6 +418,9 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_add_negative_conversion_factor(self, logged_in_driver):
         """Test 10: Enter negative conversion factor. OBSERVE — accepted or rejected?"""
         driver = logged_in_driver
@@ -408,6 +449,9 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_add_zero_conversion_factor(self, logged_in_driver):
         """Test 11: Enter 0 as conversion factor. OBSERVE — accepted or rejected?"""
         driver = logged_in_driver
@@ -436,6 +480,8 @@ class TestUOMConversionValidation:
     # Tests 12-14
     # ================================================================
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_conversion_factor_21_digits(self, logged_in_driver):
         """Test 12: 21-digit factor should save and display correctly."""
         driver = logged_in_driver
@@ -459,6 +505,9 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_conversion_factor_22_digits_bug(self, logged_in_driver):
         """Test 13: 22-digit factor — OBSERVE system behavior."""
         driver = logged_in_driver
@@ -503,6 +552,9 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_scientific_notation_not_editable(self, logged_in_driver):
         """Test 14: OBSERVE — create 22-digit record, check re-edit behavior."""
         driver = logged_in_driver
@@ -563,6 +615,9 @@ class TestUOMConversionValidation:
     # Tests 15-18
     # ================================================================
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_edit_valid_conversion_factor(self, logged_in_driver):
         """Test 15: Edit an existing record with a new valid factor — should succeed."""
         driver = logged_in_driver
@@ -611,6 +666,9 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_edit_clear_conversion_factor(self, logged_in_driver):
         """Test 16: Edit existing record, clear factor, Update — Pattern A + mat-error."""
         driver = logged_in_driver
@@ -658,6 +716,9 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_edit_source_uom_disabled_on_view(self, logged_in_driver):
         """Test 17: View popup — Source UOM and Target UOM dropdowns should be disabled."""
         driver = logged_in_driver
@@ -690,6 +751,8 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_cancel_edit_no_changes_saved(self, logged_in_driver):
         """Test 18: Open Edit, change factor, click Cancel — original value unchanged."""
         driver = logged_in_driver
@@ -746,6 +809,10 @@ class TestUOMConversionValidation:
     # Tests 19-20
     # ================================================================
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_history_shows_record(self, logged_in_driver):
         """Test 19: History popup opens and shows at least 1 row with data."""
         driver = logged_in_driver
@@ -785,6 +852,9 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_history_close_button(self, logged_in_driver):
         """Test 20: Open History popup, click Cancel to close."""
         driver = logged_in_driver
@@ -829,6 +899,10 @@ class TestUOMConversionValidation:
     # Tests 21-22
     # ================================================================
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_cancel_add_form(self, logged_in_driver):
         """Test 21: Fill Add form, click Cancel — no record created."""
         driver = logged_in_driver
@@ -866,6 +940,9 @@ class TestUOMConversionValidation:
             page.close_popup()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_cancel_edit_form(self, logged_in_driver):
         """Test 22: Open Edit, modify factor, click Cancel — changes not saved."""
         driver = logged_in_driver

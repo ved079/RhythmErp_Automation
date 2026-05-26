@@ -31,6 +31,20 @@ Run:
   pytest test_quality_parameter_master_validation.py -v --tb=short
   pytest test_quality_parameter_master_validation.py -v -k "TestCreateForm" --tb=short
   pytest test_quality_parameter_master_validation.py -v -k "QPM-C03" --tb=short
+
+MARKER BREAKDOWN (30 tests):
+  smoke      ( 7): C01, C02, C04, E01, E02, S01, P01
+  sanity     (25): smoke + C03, C05-C09, D01-D02, E03-E05, S02-S03, S05, P02-P05
+  regression (30): All tests
+  bug        (13): C03, C04, C05, C06, C07, D01, D02, D03, E04, E05, E06,
+                   P06, P07
+  ui         ( 8): P01, P02, P03, P04, P05, P06, P07, S04
+
+Usage:
+  pytest test_quality_parameter_master_validation.py -m smoke
+  pytest test_quality_parameter_master_validation.py -m "smoke or sanity"
+  pytest test_quality_parameter_master_validation.py -m "not bug"
+  pytest test_quality_parameter_master_validation.py -m ui
 """
 
 import os
@@ -108,6 +122,9 @@ class TestCreateFormValidations:
     """
 
     # ---- QPM-C01: Submit with empty Name ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_C01_empty_submit(self, qp_master_page):
         """Submit with empty Name field — should be blocked."""
         log.info("QPM-C01: Empty submit test")
@@ -144,6 +161,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- QPM-C02: Create with valid Name (happy path) ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_C02_valid_create(self, qp_master_page):
         """Create with valid Name — should succeed.
         BUG-004: No success SweetAlert after create.
@@ -179,6 +199,9 @@ class TestCreateFormValidations:
         log.info(f"QP created and found in table: {name}")
 
     # ---- QPM-C03: Spaces-only Name ----
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(
         reason="BUG-001: Spaces-only name accepted — will fail until ERP is fixed",
         strict=False,
@@ -229,6 +252,10 @@ class TestCreateFormValidations:
                 pass
 
     # ---- QPM-C04: Duplicate Name (in Create) ----
+    @pytest.mark.smoke
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_C04_duplicate_name(self, qp_master_page):
         """Duplicate Name in Create — should be rejected.
         BUG-002: Duplicate names are currently allowed.
@@ -278,6 +305,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- QPM-C05: Name at 255 char boundary ----
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_C05_name_255_chars(self, qp_master_page):
         """Name with exactly 255 chars — boundary test.
         Should be accepted if maxlength is 255, or rejected if less.
@@ -316,6 +346,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- QPM-C06: Name exceeds 255 chars (256) ----
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_C06_name_256_chars(self, qp_master_page):
         """Name with 256 chars — should be rejected or truncated.
         BUG-003: No maxlength on input, 256-char names accepted.
@@ -354,6 +387,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- QPM-C07: No success popup after create (BUG-004) ----
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_C07_no_success_popup(self, qp_master_page):
         """Verify that no success SweetAlert appears after create.
         BUG-004: No success popup — form just closes silently.
@@ -393,6 +429,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- QPM-C08: Special characters in Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_C08_special_chars_name(self, qp_master_page):
         """Special characters in Name — check if accepted or rejected.
         Documents current behavior.
@@ -429,6 +467,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- QPM-C09: SQL injection in Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_C09_sql_injection_name(self, qp_master_page):
         """SQL injection string in Name — should be sanitized or rejected."""
         log.info("QPM-C09: SQL injection name test")
@@ -464,6 +504,7 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- QPM-C10: XSS payload in Name ----
+    @pytest.mark.regression
     def test_QPM_C10_xss_name(self, qp_master_page):
         """XSS payload in Name — should be sanitized or rejected."""
         log.info("QPM-C10: XSS name test")
@@ -498,6 +539,7 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- QPM-C11: Unicode/international characters in Name ----
+    @pytest.mark.regression
     def test_QPM_C11_unicode_name(self, qp_master_page):
         """Unicode/international characters in Name — check acceptance."""
         log.info("QPM-C11: Unicode name test")
@@ -530,6 +572,7 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- QPM-C12: Name with leading/trailing spaces ----
+    @pytest.mark.regression
     def test_QPM_C12_leading_trailing_spaces(self, qp_master_page):
         """Name with leading/trailing spaces — should be trimmed.
         BUG: Spaces may not be trimmed before storage.
@@ -592,6 +635,9 @@ class TestDuplicateValidations:
     """
 
     # ---- QPM-D01: Duplicate name — Create after Create ----
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_D01_duplicate_create(self, qp_master_page):
         """Create two QPs with identical names.
         BUG-002: Second create is accepted.
@@ -640,6 +686,9 @@ class TestDuplicateValidations:
         page.wait_seconds(2)
 
     # ---- QPM-D02: Duplicate name — case-insensitive check ----
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_D02_duplicate_case_insensitive(self, qp_master_page):
         """Create QP with same name in different case.
         Tests if the duplicate check is case-insensitive.
@@ -692,6 +741,8 @@ class TestDuplicateValidations:
         page.wait_seconds(2)
 
     # ---- QPM-D03: Duplicate name — Edit to existing name ----
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_QPM_D03_duplicate_edit(self, qp_master_page):
         """Edit a QP to use another QP's name.
         BUG-002: Duplicate name allowed in Edit.
@@ -761,6 +812,9 @@ class TestEditFormValidations:
     """QPM-E01 to QPM-E06: Validation checks on the Edit form."""
 
     # ---- QPM-E01: Edit — pre-populated Name field ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_E01_edit_prepopulated(self, qp_master_page):
         """Edit popup should show the Name field pre-populated."""
         log.info("QPM-E01: Edit pre-populated fields test")
@@ -817,6 +871,9 @@ class TestEditFormValidations:
                 pass
 
     # ---- QPM-E02: Edit — valid update ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_E02_valid_edit(self, qp_master_page):
         """Edit with valid new Name — should succeed.
         BUG-004: No success alert after update.
@@ -867,6 +924,8 @@ class TestEditFormValidations:
         log.info(f"QP updated and found in table: {edit_data['name']}")
 
     # ---- QPM-E03: Edit — empty Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     @pytest.mark.xfail(
         reason="BUG: Edit form allows empty Name submission — will fail until ERP is fixed",
         strict=False,
@@ -931,6 +990,9 @@ class TestEditFormValidations:
                 pass
 
     # ---- QPM-E04: Edit — duplicate Name (same as D03 but via edit_qp) ----
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_E04_edit_duplicate_name(self, qp_master_page):
         """Edit QP to use another QP's Name.
         BUG-002: Duplicate name allowed in Edit.
@@ -979,6 +1041,9 @@ class TestEditFormValidations:
             log.info("Duplicate name rejected in Edit — validation working")
 
     # ---- QPM-E05: Edit — no success popup (BUG-004) ----
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_E05_edit_no_success_popup(self, qp_master_page):
         """Verify that no success SweetAlert appears after edit.
         BUG-004: No success popup after update.
@@ -1028,6 +1093,8 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- QPM-E06: Edit — spaces-only Name ----
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_QPM_E06_edit_spaces_only(self, qp_master_page):
         """Edit QP Name to spaces-only — should be rejected.
         BUG-001: Spaces-only name may be accepted.
@@ -1083,6 +1150,9 @@ class TestSearchFilter:
     """QPM-S01 to QPM-S05: Search and Filter edge cases."""
 
     # ---- QPM-S01: Search with exact Name ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_S01_search_exact(self, qp_master_page):
         """Search with exact QP name — should find it."""
         log.info("QPM-S01: Search exact name")
@@ -1104,6 +1174,8 @@ class TestSearchFilter:
         log.info(f"Exact search found: {data['name']}")
 
     # ---- QPM-S02: Search with partial Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_S02_search_partial(self, qp_master_page):
         """Search with partial QP name — should find it."""
         log.info("QPM-S02: Search partial name")
@@ -1127,6 +1199,8 @@ class TestSearchFilter:
         log.info(f"Partial search found with: {partial}")
 
     # ---- QPM-S03: Search with non-existent Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_S03_search_nonexistent(self, qp_master_page):
         """Search for non-existent name — should return no results."""
         log.info("QPM-S03: Search nonexistent")
@@ -1142,6 +1216,9 @@ class TestSearchFilter:
         log.info(f"Correctly not found: {fake_name}")
 
     # ---- QPM-S04: Filter panel opens and closes ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_QPM_S04_filter_panel(self, qp_master_page):
         """Filter panel should open when Filters button is clicked.
         Then close when backdrop or Close is clicked.
@@ -1178,6 +1255,8 @@ class TestSearchFilter:
         page.wait_seconds(2)
 
     # ---- QPM-S05: Name column sort ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_QPM_S05_column_sort(self, qp_master_page):
         """Click Name column header to toggle sort order.
         Verifies that the table still renders after sort.
@@ -1230,6 +1309,10 @@ class TestPopupUIBehaviors:
     """
 
     # ---- QPM-P01: Cancel closes form without creating ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_QPM_P01_cancel_no_create(self, qp_master_page):
         """Cancel button closes form without creating a QP."""
         log.info("QPM-P01: Cancel no create test")
@@ -1255,6 +1338,9 @@ class TestPopupUIBehaviors:
         log.info("Cancel correctly did not create a QP")
 
     # ---- QPM-P02: X button closes form without creating ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_QPM_P02_close_no_create(self, qp_master_page):
         """X button closes form without creating a QP."""
         log.info("QPM-P02: Close no create test")
@@ -1279,6 +1365,9 @@ class TestPopupUIBehaviors:
         log.info("X close correctly did not create a QP")
 
     # ---- QPM-P03: View popup shows read-only fields ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_QPM_P03_view_readonly(self, qp_master_page):
         """View popup shows the Name field in read-only mode."""
         log.info("QPM-P03: View read-only test")
@@ -1307,6 +1396,9 @@ class TestPopupUIBehaviors:
         page.wait_seconds(0.5)
 
     # ---- QPM-P04: Edit popup shows editable fields with Update ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_QPM_P04_edit_has_update(self, qp_master_page):
         """Edit popup shows editable Name field with Update button."""
         log.info("QPM-P04: Edit has Update button")
@@ -1355,6 +1447,9 @@ class TestPopupUIBehaviors:
         page.cancel()
 
     # ---- QPM-P05: Add form heading ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_QPM_P05_add_form_heading(self, qp_master_page):
         """Add form should show a heading indicating creation mode."""
         log.info("QPM-P05: Add form heading test")
@@ -1386,6 +1481,9 @@ class TestPopupUIBehaviors:
         page.cancel()
 
     # ---- QPM-P06: No Delete option (BUG-005) ----
+    @pytest.mark.bug
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_QPM_P06_no_delete_option(self, qp_master_page):
         """Verify that no Delete option exists on the QPM screen.
         BUG-005: No Delete option anywhere on screen.
@@ -1447,6 +1545,9 @@ class TestPopupUIBehaviors:
         )
 
     # ---- QPM-P07: No History/Audit trail (BUG-006) ----
+    @pytest.mark.bug
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_QPM_P07_no_history_option(self, qp_master_page):
         """Verify that no History/Audit trail feature exists.
         BUG-006: No History button or audit trail.

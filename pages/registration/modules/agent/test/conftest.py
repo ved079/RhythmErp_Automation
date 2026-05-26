@@ -24,6 +24,29 @@ from pages.common_settings.cs_report_generator import (
 
 
 # ================================================================
+# PYTEST MARKERS REGISTRATION
+# ================================================================
+
+def pytest_configure(config):
+    """Register custom markers for test categorization."""
+    config.addinivalue_line(
+        "markers", "smoke: Critical happy-path tests — must pass for build acceptance"
+    )
+    config.addinivalue_line(
+        "markers", "sanity: Core feature validation tests — key functionality checks"
+    )
+    config.addinivalue_line(
+        "markers", "regression: Full suite — all tests for regression coverage"
+    )
+    config.addinivalue_line(
+        "markers", "bug: Tests targeting known/confirmed bugs (often xfail)"
+    )
+    config.addinivalue_line(
+        "markers", "ui: Popup, dialog, form UI behavior and visual checks"
+    )
+
+
+# ================================================================
 # FIXTURES
 # ================================================================
 

@@ -58,12 +58,12 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    if RHYTHMERP_FACILITY:
-        log.step(3, "Selecting facility: " + str(RHYTHMERP_FACILITY))
-        login_page.select_facility(RHYTHMERP_FACILITY)
-    else:
-        log.step(3, "Selecting facility (blank - first option)")
-        login_page.select_facility(" ")
+    # if RHYTHMERP_FACILITY:
+    #     log.step(3, "Selecting facility: " + str(RHYTHMERP_FACILITY))
+    #     login_page.select_facility(RHYTHMERP_FACILITY)
+    # else:
+    #     log.step(3, "Selecting facility (blank - first option)")
+    #     login_page.select_facility(" ")
 
     login_page.wait_seconds(1)
 

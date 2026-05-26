@@ -96,6 +96,19 @@ def hsn_sac_page(logged_in_driver):
 
 
 # ================================================================
+# PYTEST MARKERS
+# ================================================================
+
+def pytest_configure(config):
+    """Register custom pytest markers for HSN SAC module."""
+    config.addinivalue_line("markers", "smoke: Core CRUD + critical path tests (4 tests)")
+    config.addinivalue_line("markers", "sanity: All 20 tests — full module sanity check")
+    config.addinivalue_line("markers", "regression: All 20 tests — full regression suite")
+    config.addinivalue_line("markers", "bug: Known bug — no duplicate HSN SAC number check (1 test)")
+    config.addinivalue_line("markers", "ui: UI interaction tests — alerts, view mode, search, history, cancel, table, refresh (15 tests)")
+
+
+# ================================================================
 # REPORT GENERATOR HOOKS
 # ================================================================
 

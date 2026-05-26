@@ -26,6 +26,19 @@ from pages.common_settings.cs_report_generator import (
 
 
 # ================================================================
+# PYTEST MARKERS
+# ================================================================
+
+def pytest_configure(config):
+    """Register custom pytest markers for test categorization."""
+    config.addinivalue_line("markers", "smoke: Critical path tests (create, search, view, toggle)")
+    config.addinivalue_line("markers", "sanity: Core validation tests — must pass for build acceptance")
+    config.addinivalue_line("markers", "regression: Full regression suite — all tests")
+    config.addinivalue_line("markers", "bug: Tests documenting known open bugs (BUG-001 to BUG-005)")
+    config.addinivalue_line("markers", "ui: UI-specific behavior tests (popups, toggles, button visibility)")
+
+
+# ================================================================
 # FIXTURES
 # ================================================================
 
@@ -282,4 +295,3 @@ def pytest_sessionfinish(session, exitstatus):
         tb.print_exc()
         print("")
         print("  [WARNING] Report generation failed (see traceback above)")
-

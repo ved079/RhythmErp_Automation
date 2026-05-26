@@ -1,12 +1,15 @@
 """
 test_hsn_sac_validation.py — HSN SAC Module Automated Tests
 ============================================================
-20 test cases across 5 classes:
+20 test cases across 5 classes, 0 xfail:
   - TestCreateFormValidations (6 tests): C01-C06
   - TestViewFormBehaviors (3 tests): V01-V03
   - TestEditFormValidations (5 tests): E01-E05
   - TestHistoryValidations (3 tests): H01-H03
   - TestTableOperations (3 tests): T01-T03
+
+Marker counts: smoke=4, sanity=20, regression=20, bug=1, ui=15
+Known bugs: C06 (no duplicate HSN SAC number check)
 """
 
 import time
@@ -36,6 +39,9 @@ from pages.common_settings.modules.hsn_sac.data.hsn_sac_data import (
 
 class TestCreateFormValidations:
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_C01_successful_creation(self, hsn_sac_page):
         """HSN-C01: Create HSN SAC with all 3 valid fields → success."""
         page = hsn_sac_page
@@ -47,6 +53,9 @@ class TestCreateFormValidations:
         assert result["status"] == "success", f"Create failed: {result['error']}"
         assert "added successfully" in result["message"].lower(), f"Unexpected message: {result['message']}"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_C02_empty_hsn_number(self, hsn_sac_page):
         """HSN-C02: Empty HSN SAC Number → Validation Failed."""
         page = hsn_sac_page
@@ -64,6 +73,9 @@ class TestCreateFormValidations:
         assert is_validation, "Expected 'Validation Failed' alert for empty HSN SAC Number"
         assert VALIDATION_FAILED_TITLE in warning, f"Unexpected warning: {warning}"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_C03_empty_hsn_type(self, hsn_sac_page):
         """HSN-C03: Empty HSN SAC Type → Validation Failed."""
         page = hsn_sac_page
@@ -82,6 +94,9 @@ class TestCreateFormValidations:
         assert is_validation, "Expected 'Validation Failed' alert for empty HSN SAC Type"
         assert VALIDATION_FAILED_TITLE in warning, f"Unexpected warning: {warning}"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_C04_empty_hsn_description(self, hsn_sac_page):
         """HSN-C04: Empty HSN SAC Description → Validation Failed."""
         page = hsn_sac_page
@@ -101,6 +116,9 @@ class TestCreateFormValidations:
         assert is_validation, "Expected 'Validation Failed' alert for empty HSN SAC Description"
         assert VALIDATION_FAILED_TITLE in warning, f"Unexpected warning: {warning}"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_C05_all_fields_empty(self, hsn_sac_page):
         """HSN-C05: Submit with all fields empty → Validation Failed."""
         page = hsn_sac_page
@@ -115,6 +133,10 @@ class TestCreateFormValidations:
         assert is_validation, "Expected 'Validation Failed' alert for all empty fields"
         assert VALIDATION_FAILED_TITLE in warning, f"Unexpected warning: {warning}"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_C06_duplicate_hsn_number(self, hsn_sac_page):
         """HSN-C06: Create with duplicate HSN SAC Number → check system behavior."""
         page = hsn_sac_page
@@ -140,6 +162,10 @@ class TestCreateFormValidations:
 
 class TestViewFormBehaviors:
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_V01_view_existing_record(self, hsn_sac_page):
         """HSN-V01: View existing record → all fields disabled, no Submit button."""
         page = hsn_sac_page
@@ -163,6 +189,9 @@ class TestViewFormBehaviors:
 
         page.close_popup()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_V02_close_view_via_cancel(self, hsn_sac_page):
         """HSN-V02: Close View popup via Cancel button."""
         page = hsn_sac_page
@@ -182,6 +211,9 @@ class TestViewFormBehaviors:
         time.sleep(1)
         assert page.is_form_closed(), "View popup should be closed after Cancel"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_V03_close_view_via_x_button(self, hsn_sac_page):
         """HSN-V03: Close View popup via X icon button."""
         page = hsn_sac_page
@@ -208,6 +240,9 @@ class TestViewFormBehaviors:
 
 class TestEditFormValidations:
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_E01_edit_hsn_number(self, hsn_sac_page):
         """HSN-E01: Edit HSN SAC Number → success."""
         page = hsn_sac_page
@@ -227,6 +262,8 @@ class TestEditFormValidations:
         assert "updated successfully" in result["message"].lower(), \
             f"Unexpected message: {result['message']}"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_E02_edit_hsn_description(self, hsn_sac_page):
         """HSN-E02: Edit HSN SAC Description → success."""
         page = hsn_sac_page
@@ -246,6 +283,8 @@ class TestEditFormValidations:
         assert "updated successfully" in result["message"].lower(), \
             f"Unexpected message: {result['message']}"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_E03_edit_hsn_type(self, hsn_sac_page):
         """HSN-E03: Edit HSN SAC Type → success."""
         page = hsn_sac_page
@@ -266,6 +305,8 @@ class TestEditFormValidations:
         assert "updated successfully" in result["message"].lower(), \
             f"Unexpected message: {result['message']}"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_E04_edit_all_fields(self, hsn_sac_page):
         """HSN-E04: Edit all 3 fields → success."""
         page = hsn_sac_page
@@ -283,6 +324,9 @@ class TestEditFormValidations:
         assert "updated successfully" in result["message"].lower(), \
             f"Unexpected message: {result['message']}"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_E05_edit_with_empty_required_field(self, hsn_sac_page):
         """HSN-E05: Clear Number and Update → Validation Failed."""
         page = hsn_sac_page
@@ -315,6 +359,9 @@ class TestEditFormValidations:
 
 class TestHistoryValidations:
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_H01_open_history_popup(self, hsn_sac_page):
         """HSN-H01: Open History popup → popup opens with correct title."""
         page = hsn_sac_page
@@ -333,6 +380,9 @@ class TestHistoryValidations:
 
         page.close_history_popup()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_H02_close_history_via_cancel(self, hsn_sac_page):
         """HSN-H02: Close History popup via Cancel → popup closes."""
         page = hsn_sac_page
@@ -352,6 +402,9 @@ class TestHistoryValidations:
         time.sleep(1)
         assert not page.is_history_popup_open(), "History popup should be closed"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_H03_history_data_check(self, hsn_sac_page):
         """HSN-H03: Check history data after creation (may be 0 rows)."""
         page = hsn_sac_page
@@ -375,6 +428,10 @@ class TestHistoryValidations:
 
 class TestTableOperations:
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_T01_search_existing_record(self, hsn_sac_page):
         """HSN-T01: Search for an existing record → found in table."""
         page = hsn_sac_page
@@ -393,6 +450,9 @@ class TestTableOperations:
         row_count = page.get_table_row_count()
         assert row_count >= 1, f"Expected at least 1 row after search, got {row_count}"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_T02_verify_table_columns(self, hsn_sac_page):
         """HSN-T02: Verify table has expected columns (View, Edit, History, Number, Type)."""
         page = hsn_sac_page
@@ -408,6 +468,9 @@ class TestTableOperations:
         else:
             assert True, "Table exists but no rows (acceptable)"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_T03_pagination_check(self, hsn_sac_page):
         """HSN-T03: Verify page loads and table is accessible."""
         page = hsn_sac_page

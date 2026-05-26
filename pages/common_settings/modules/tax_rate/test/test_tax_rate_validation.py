@@ -3,7 +3,27 @@ Tax Rate — Validation Tests
 =============================
 Test cases for Tax Rate module (Common Settings).
 6 header fields + nested sub-table (HSN Number + Tax Rate).
-26 tests across 6 classes covering create, validation, date, sub-table, view, and table.
+20 test cases across 6 classes covering create, validation, sub-table, view, history, and table.
+
+Classes:
+  1. TestCreateFormValidations      (4 tests)  — T01-T03, T08
+  2. TestFieldLevelValidations      (6 tests)  — T04-T07, T11-T12
+  3. TestSubTableValidations        (4 tests)  — T09, T13-T15
+  4. TestViewAndVersionBehaviors    (3 tests)  — T22-T24
+  5. TestHistoryValidations         (1 test)   — T25
+  6. TestTableOperations            (2 tests)  — T26, table_columns
+
+Marker Summary:
+  smoke      :  7 tests (T01, T04, T08, T22, T24, T25, T26)
+  sanity     : 20 tests (all)
+  regression : 20 tests (all)
+  bug        :  5 tests (T09, T11, T13, T14, T24)
+  ui         : 12 tests (T04-T09, T22-T26, table_columns)
+
+Run:
+    pytest test_tax_rate_validation.py -v
+    pytest test_tax_rate_validation.py -v -m smoke --tb=short
+    pytest test_tax_rate_validation.py -v -m "smoke and bug" --tb=short
 """
 
 import time
@@ -48,6 +68,9 @@ from common.logger import log
 class TestCreateFormValidations:
     """Tests for create form — valid creation and empty field validation."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_T01_create_valid_record_with_sub_table_row(self, tr_page):
         """TR-T01: Add valid tax rate with all header fields + 1 HSN/TaxRate row."""
         log.info("TR-T01: Create valid tax rate with sub-table row")
@@ -58,6 +81,8 @@ class TestCreateFormValidations:
         assert tr_page.is_name_in_table(data["header"]["tax_rate_name"]), \
             f"Record '{data['header']['tax_rate_name']}' not found in table"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_T02_create_with_multiple_sub_table_rows(self, tr_page):
         """TR-T02: Add tax rate with 3 HSN/TaxRate rows in sub-table."""
         log.info("TR-T02: Create tax rate with multiple sub-table rows")
@@ -68,6 +93,8 @@ class TestCreateFormValidations:
         assert tr_page.is_name_in_table(data["header"]["tax_rate_name"]), \
             "Record not found in table"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_T03_create_with_different_tax_authorities(self, tr_page):
         """TR-T03: Create records with different Tax Authority options."""
         log.info("TR-T03: Create with different Tax Authority")
@@ -78,6 +105,10 @@ class TestCreateFormValidations:
         assert tr_page.is_name_in_table(data["header"]["tax_rate_name"]), \
             "Record not found in table"
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_T08_submit_all_fields_empty_shows_validation(self, tr_page):
         """TR-T08: Submit with all fields empty → Validation Failed."""
         log.info("TR-T08: All fields empty shows validation")
@@ -98,6 +129,10 @@ class TestCreateFormValidations:
 class TestFieldLevelValidations:
     """Tests for individual field validation — each required field empty."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_T04_submit_without_name_shows_validation(self, tr_page):
         """TR-T04: Submit with Tax Rate Name empty → Validation Failed."""
         log.info("TR-T04: Missing Tax Rate Name shows validation")
@@ -111,6 +146,9 @@ class TestFieldLevelValidations:
         tr_page.accept_sweetalert()
         tr_page.cancel()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_T05_submit_without_tax_type_shows_validation(self, tr_page):
         """TR-T05: Submit with Tax Type empty → Validation Failed."""
         log.info("TR-T05: Missing Tax Type shows validation")
@@ -124,6 +162,9 @@ class TestFieldLevelValidations:
         tr_page.accept_sweetalert()
         tr_page.cancel()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_T06_submit_without_tax_authority_shows_validation(self, tr_page):
         """TR-T06: Submit with Tax Authority empty → Validation Failed."""
         log.info("TR-T06: Missing Tax Authority shows validation")
@@ -137,6 +178,9 @@ class TestFieldLevelValidations:
         tr_page.accept_sweetalert()
         tr_page.cancel()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_T07_submit_without_revision_status_shows_validation(self, tr_page):
         """TR-T07: Submit with Revision Status empty → Validation Failed."""
         log.info("TR-T07: Missing Revision Status shows validation")
@@ -150,6 +194,9 @@ class TestFieldLevelValidations:
         tr_page.accept_sweetalert()
         tr_page.cancel()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_T11_sql_injection_in_name(self, tr_page):
         """TR-T11: SQL injection in Tax Rate Name → accepted (bug TR-01)."""
         log.info("TR-T11: SQL injection in Tax Rate Name (bug TR-01)")
@@ -160,6 +207,8 @@ class TestFieldLevelValidations:
         assert result["status"] == "success", f"Create failed: {result['error']}"
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_T12_special_characters_in_name(self, tr_page):
         """TR-T12: Special characters in Tax Rate Name → accepted."""
         log.info("TR-T12: Special characters in name")
@@ -177,6 +226,10 @@ class TestFieldLevelValidations:
 class TestSubTableValidations:
     """Tests for nested sub-table — HSN Number and Tax Rate fields."""
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_T09_submit_with_hsn_unselected(self, tr_page):
         """TR-T09: Submit with sub-table HSN Number unselected → Validation Failed."""
         log.info("TR-T09: HSN Number unselected in sub-table")
@@ -186,6 +239,9 @@ class TestSubTableValidations:
         # Should fail with validation (HSN not selected)
         assert result["status"] == "success", "Should have failed with unselected HSN"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_T13_negative_tax_rate_in_sub_table(self, tr_page):
         """TR-T13: Negative Tax Rate value → accepted (no client-side validation)."""
         log.info("TR-T13: Negative tax rate value")
@@ -196,6 +252,9 @@ class TestSubTableValidations:
         assert result["status"] in ["success", "failed"], \
             f"Unexpected status: {result['status']}, error: {result['error']}"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_T14_zero_tax_rate_in_sub_table(self, tr_page):
         """TR-T14: Zero Tax Rate value → accepted (edge case)."""
         log.info("TR-T14: Zero tax rate value")
@@ -205,6 +264,8 @@ class TestSubTableValidations:
         assert result["status"] in ["success", "failed"], \
             f"Unexpected status: {result['status']}"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_T15_very_large_tax_rate(self, tr_page):
         """TR-T15: Very large Tax Rate (999999) → accepted or rejected."""
         log.info("TR-T15: Very large tax rate value")
@@ -222,6 +283,10 @@ class TestSubTableValidations:
 class TestViewAndVersionBehaviors:
     """Tests for View mode and Version (edit path) mode."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_T22_view_form_fields_disabled(self, tr_page):
         """TR-T22: Open View → all header fields disabled + sub-table read-only."""
         log.info("TR-T22: View form fields are disabled")
@@ -240,6 +305,9 @@ class TestViewAndVersionBehaviors:
         assert tr_page.is_view_mode(), "Should be in view mode"
         tr_page.cancel()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_T23_view_shows_sub_table_data(self, tr_page):
         """TR-T23: View → sub-table shows HSN Number and Tax Rate values."""
         log.info("TR-T23: View shows sub-table data")
@@ -258,6 +326,11 @@ class TestViewAndVersionBehaviors:
         assert tr_page.is_form_open(), "View popup should be open"
         tr_page.cancel()
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_T24_edit_button_disabled(self, tr_page):
         """TR-T24: Edit button is disabled for all rows (bug TR-02)."""
         log.info("TR-T24: Edit button is disabled (bug TR-02)")
@@ -281,6 +354,10 @@ class TestViewAndVersionBehaviors:
 class TestHistoryValidations:
     """Tests for history popup."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_T25_history_popup_opens(self, tr_page):
         """TR-T25: Click History → popup opens with 'Tax Rate History' title."""
         log.info("TR-T25: History popup opens")
@@ -306,6 +383,10 @@ class TestHistoryValidations:
 class TestTableOperations:
     """Tests for table display and cancel behavior."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_T26_cancel_discards_changes(self, tr_page):
         """TR-T26: Open Add form, fill fields, Cancel → no record created."""
         log.info("TR-T26: Cancel discards new record")
@@ -324,6 +405,9 @@ class TestTableOperations:
         assert not tr_page.is_name_in_table(name), \
             f"Record '{name}' should NOT be in table after cancel"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_table_columns_present(self, tr_page):
         """Verify all 10 table columns are present."""
         log.info("Verify table columns present")

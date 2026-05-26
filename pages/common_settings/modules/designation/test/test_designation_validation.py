@@ -1,19 +1,25 @@
 """
 Designation Screen — Automated Validation Test Suite
-
-44 tests across 6 phases:
-  C01-C15: Create Form Validations
-  S01-S06: Status Toggle Validations
-  E01-E05: Edit Form Validations
-  F01-F05: Search/Filter
-  P01-P05: Popup UI Behaviors
-  H01-H08: History Validations
+====================================================
+44 tests across 6 classes, 0 xfail:
+  - TestCreateFormValidations (15 tests): C01-C15
+  - TestStatusToggleValidations (6 tests): S01-S06
+  - TestEditFormValidations (5 tests): E01-E05
+  - TestSearchFilter (5 tests): F01-F05
+  - TestPopupUIBehaviors (5 tests): P01-P05
+  - TestHistoryValidations (8 tests): H01-H08
 
 Key Differences from Vehicle Master:
   - Status is a TOGGLE SWITCH (not dropdown)
   - Name has pattern validation ("Invalid Name" mat-error)
   - Only 3 fields: Name, Description, Status
   - No dropdowns at all
+
+Marker counts: smoke=8, sanity=44, regression=44, bug=7, ui=32
+Known bugs: C03 (spaces not trimmed), C08 (duplicate name accepted),
+            C09 (no max-length on Name), C10 (type='character' rejects punctuation),
+            E01 (edit duplicate accepted), F05 (Apply Filters non-functional),
+            H02 (history shows no data after creation)
 """
 
 import os
@@ -55,6 +61,10 @@ from pages.common_settings.modules.designation.data.designation_data import (
 class TestCreateFormValidations:
     """Tests for Designation create form validation behaviors."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_C01_all_fields_empty_submit(self, designation_page):
         """C01: Submit with all fields empty — should show validation error."""
         log.info("C01: All fields empty - Submit")
@@ -80,6 +90,9 @@ class TestCreateFormValidations:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_C02_only_name_filled_submit(self, designation_page):
         """C02: Submit with only Name filled — should succeed
         (Description is optional, Status defaults to Active)."""
@@ -92,6 +105,9 @@ class TestCreateFormValidations:
         assert result['status'] in ('PASSED', 'UNKNOWN'), \
             f"Name-only submission should succeed. Got: {result}"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_C03_name_with_leading_trailing_spaces(self, designation_page):
         """C03: Name with leading/trailing spaces.
         BUG: Spaces NOT trimmed — stored as-is.
@@ -113,6 +129,9 @@ class TestCreateFormValidations:
             # Spaces were accepted (BUG: not trimmed)
             log.info("Spaces preserved in name — BUG: not trimmed")
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_C04_name_spaces_only(self, designation_page):
         """C04: Name with only spaces — should trigger 'Invalid Name'."""
         log.info("C04: Spaces-only Name")
@@ -135,6 +154,9 @@ class TestCreateFormValidations:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_C05_name_special_chars(self, designation_page):
         """C05: Name with special chars @#$%^&* — triggers 'Invalid Name'."""
         log.info("C05: Special chars in Name")
@@ -161,6 +183,9 @@ class TestCreateFormValidations:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_C06_name_digits_only(self, designation_page):
         """C06: Name with digits only — triggers 'Invalid Name'."""
         log.info("C06: Digits-only Name")
@@ -178,6 +203,9 @@ class TestCreateFormValidations:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_C07_name_mixed_valid_invalid(self, designation_page):
         """C07: Name with mixed valid+invalid chars like 'Test@Name'
         — triggers 'Invalid Name'."""
@@ -195,6 +223,9 @@ class TestCreateFormValidations:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_C08_duplicate_name(self, designation_page):
         """C08: Duplicate Designation Name — BUG: allowed.
         System should block duplicate names but doesn't."""
@@ -211,6 +242,9 @@ class TestCreateFormValidations:
         )
         # We document the bug, test passes to record the behavior
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_C09_very_long_name_256(self, designation_page):
         """C09: 256-character name — no max length validation.
         Submit may silently fail (no success/error response)."""
@@ -231,6 +265,10 @@ class TestCreateFormValidations:
             f"BUG: no max length validation"
         )
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_C10_name_valid_punctuation(self, designation_page):
         """C10: Name with punctuation (dot, comma, hyphen, parens).
         type="character" only allows letters and spaces — punctuation
@@ -265,6 +303,9 @@ class TestCreateFormValidations:
             page.cancel()
             time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_C11_description_only_no_name(self, designation_page):
         """C11: Only Description filled (no Name) — should fail
         because Name is required."""
@@ -288,6 +329,8 @@ class TestCreateFormValidations:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_C12_special_chars_in_description(self, designation_page):
         """C12: Special characters in Description — should be accepted
         (Description has no validation)."""
@@ -301,6 +344,8 @@ class TestCreateFormValidations:
         assert result['status'] in ('PASSED', 'UNKNOWN'), \
             f"Special chars in Description should be accepted. Got: {result}"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_C13_very_long_description(self, designation_page):
         """C13: Very long Description — no max length validation."""
         log.info("C13: Very long Description")
@@ -316,6 +361,9 @@ class TestCreateFormValidations:
             f"No max length on Description"
         )
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_C14_inline_error_messages(self, designation_page):
         """C14: Per-field inline error messages — Designation HAS them.
         Unlike Vehicle Master, Designation shows 'Invalid Name' mat-error."""
@@ -343,6 +391,8 @@ class TestCreateFormValidations:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_C15_name_255_chars(self, designation_page):
         """C15: 255-character valid name — boundary test.
         Should succeed (no max length validation at 255)."""
@@ -368,6 +418,9 @@ class TestCreateFormValidations:
 class TestStatusToggleValidations:
     """Tests for the Status toggle switch (Active/Inactive)."""
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_S01_default_status_is_active(self, designation_page):
         """S01: Default Status on Add form is Active (toggle checked)."""
         log.info("S01: Default Status is Active")
@@ -387,6 +440,9 @@ class TestStatusToggleValidations:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_S02_toggle_to_inactive(self, designation_page):
         """S02: Toggle Status from Active to Inactive — verify display."""
         log.info("S02: Toggle to Inactive")
@@ -410,6 +466,10 @@ class TestStatusToggleValidations:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_S03_create_with_inactive_status(self, designation_page):
         """S03: Create designation with Inactive status and verify in table."""
         log.info("S03: Create with Inactive status")
@@ -434,6 +494,9 @@ class TestStatusToggleValidations:
         assert status == 'Inactive', \
             f"Expected 'Inactive' in table, got '{status}'"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_S04_toggle_state_in_edit_mode(self, designation_page):
         """S04: Edit mode shows correct toggle state."""
         log.info("S04: Toggle state in Edit mode")
@@ -471,6 +534,9 @@ class TestStatusToggleValidations:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_S05_toggle_disabled_in_view_mode(self, designation_page):
         """S05: View mode shows disabled toggle."""
         log.info("S05: Toggle disabled in View mode")
@@ -503,6 +569,9 @@ class TestStatusToggleValidations:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_S06_toggle_back_and_forth(self, designation_page):
         """S06: Toggle multiple times — state should stay consistent."""
         log.info("S06: Toggle back and forth")
@@ -556,6 +625,10 @@ class TestEditFormValidations:
             f"Failed to create test designation: {result}"
         return data['name']
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_E01_edit_duplicate_name(self, designation_page):
         """E01: Edit with duplicate Name — BUG: allowed."""
         log.info("E01: Edit duplicate Name")
@@ -588,6 +661,9 @@ class TestEditFormValidations:
                 f"Edit duplicate accepted — BUG: '{message}'"
             )
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_E02_edit_special_chars_name(self, designation_page):
         """E02: Edit with special chars in Name — triggers 'Invalid Name'."""
         log.info("E02: Edit special chars Name")
@@ -625,6 +701,10 @@ class TestEditFormValidations:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_E03_edit_pre_populated_fields(self, designation_page):
         """E03: Edit popup shows pre-filled data."""
         log.info("E03: Edit pre-populated fields")
@@ -658,6 +738,9 @@ class TestEditFormValidations:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_E04_edit_digits_only_name(self, designation_page):
         """E04: Edit with digits-only Name — triggers 'Invalid Name'."""
         log.info("E04: Edit digits-only Name")
@@ -685,6 +768,10 @@ class TestEditFormValidations:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_E05_edit_change_status_toggle(self, designation_page):
         """E05: Edit and change Status from Active to Inactive."""
         log.info("E05: Edit change Status toggle")
@@ -743,6 +830,9 @@ class TestSearchFilter:
         assert result['status'] in ('PASSED', 'UNKNOWN')
         return data['name']
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_F01_search_exact_match(self, designation_page):
         """F01: Search with exact designation name — should find it."""
         log.info("F01: Search exact match")
@@ -756,6 +846,8 @@ class TestSearchFilter:
         found = page.search_designation(name)
         assert found, f"Exact search should find '{name}'"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_F02_search_partial_match(self, designation_page):
         """F02: Search with partial name — should find matching records."""
         log.info("F02: Search partial match")
@@ -771,6 +863,8 @@ class TestSearchFilter:
         found = page.search_designation(partial)
         assert found, f"Partial search '{partial}' should find match"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_F03_search_no_match(self, designation_page):
         """F03: Search with non-existent name — should find nothing."""
         log.info("F03: Search no match")
@@ -779,6 +873,9 @@ class TestSearchFilter:
         found = page.search_designation('ZZZ NONEXISTENT QWERTY')
         assert not found, "Non-existent search should return no results"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_F04_filter_panel_opens(self, designation_page):
         """F04: Filter panel opens when Filter button clicked."""
         log.info("F04: Filter panel opens")
@@ -811,6 +908,10 @@ class TestSearchFilter:
         except Exception as e:
             log.warning(f"Filter panel test: {e}")
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_F05_apply_filters_non_functional(self, designation_page):
         """F05: Apply Filters button is non-functional — BUG."""
         log.info("F05: Apply Filters non-functional")
@@ -865,6 +966,10 @@ class TestSearchFilter:
 class TestPopupUIBehaviors:
     """Tests for popup open/close behaviors."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_P01_add_form_cancel(self, designation_page):
         """P01: Add form opens and closes via Cancel button."""
         log.info("P01: Add form Cancel")
@@ -878,6 +983,9 @@ class TestPopupUIBehaviors:
         assert not page._is_form_popup_open(), \
             "Form should close after Cancel"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_P02_add_form_close_x(self, designation_page):
         """P02: Add form closes via X icon in header."""
         log.info("P02: Add form close via X")
@@ -891,6 +999,9 @@ class TestPopupUIBehaviors:
         assert not page._is_form_popup_open(), \
             "Form should close after X click"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_P03_view_popup_read_only(self, designation_page):
         """P03: View popup is read-only — inputs disabled."""
         log.info("P03: View popup read-only")
@@ -918,6 +1029,9 @@ class TestPopupUIBehaviors:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_P04_edit_popup_has_update(self, designation_page):
         """P04: Edit popup has Update button (not Submit)."""
         log.info("P04: Edit has Update button")
@@ -945,6 +1059,9 @@ class TestPopupUIBehaviors:
         page.cancel()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_P05_inline_error_keeps_form_open(self, designation_page):
         """P05: Submit with inline 'Invalid Name' error keeps form open."""
         log.info("P05: Inline error keeps form open")
@@ -990,6 +1107,10 @@ class TestHistoryValidations:
         assert result['status'] in ('PASSED', 'UNKNOWN')
         return data['name']
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_H01_history_popup_opens(self, designation_page):
         """H01: History popup opens when History button clicked."""
         log.info("H01: History popup opens")
@@ -1011,6 +1132,9 @@ class TestHistoryValidations:
         page.close_history_popup()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_H02_history_no_data(self, designation_page):
         """H02: History shows no data — RhythmERP doesn't create
         history entries on designation creation."""
@@ -1037,6 +1161,9 @@ class TestHistoryValidations:
         page.close_history_popup()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_H03_history_close_via_cancel(self, designation_page):
         """H03: History popup closes via Cancel button."""
         log.info("H03: History close via Cancel")
@@ -1076,6 +1203,9 @@ class TestHistoryValidations:
         assert not page.is_history_popup_open(), \
             "History should close after Cancel"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_H04_history_close_via_x(self, designation_page):
         """H04: History popup closes via X/close icon."""
         log.info("H04: History close via X")
@@ -1111,6 +1241,9 @@ class TestHistoryValidations:
 
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_H05_history_search_input(self, designation_page):
         """H05: History popup has search input field."""
         log.info("H05: History search input")
@@ -1147,6 +1280,9 @@ class TestHistoryValidations:
         page.close_history_popup()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_H06_history_title(self, designation_page):
         """H06: History popup title contains 'Designation History'."""
         log.info("H06: History title")
@@ -1179,6 +1315,9 @@ class TestHistoryValidations:
         page.close_history_popup()
         time.sleep(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_H07_history_does_not_block_main(self, designation_page):
         """H07: Closing history popup returns to main table."""
         log.info("H07: History doesn't block main")
@@ -1201,6 +1340,8 @@ class TestHistoryValidations:
         assert page.is_page_loaded(), \
             "Main table should be accessible after closing history"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_H08_history_data_structure(self, designation_page):
         """H08: History data structure — check if rows/headers exist."""
         log.info("H08: History data structure")

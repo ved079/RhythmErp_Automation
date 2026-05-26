@@ -210,7 +210,7 @@ export function sidebarToFolderMapping(sidebarId: string): { module: string; sub
 
 }
 
-// ─── Test Cases Types & Fetch ──────────────────────────
+// --- Test Cases Types & Fetch --------------------------
 export interface TestCaseItem {
   id: string
   screenName: string

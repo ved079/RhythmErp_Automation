@@ -36,6 +36,21 @@ KNOWN BUGS:
   BUG-005 (MEDIUM): Duplicate Names ALLOWED — no uniqueness constraint.
   BUG-006 (MEDIUM): Generic "Failed to save record" error instead of specific message.
   BUG-007 (LOW)   : History popup shows "No data available".
+
+MARKER BREAKDOWN (50 tests):
+  smoke      (10): C01, C02, V01, E01, E03, P01, P02, S01, S05, T01
+  sanity     (41): All smoke + C03-C04, C07-C09, E02, E04-E05, V02-V05,
+                   S02-S04, P03-P10, T02-T04, F01, H01, H02, H04-H05
+  regression (50): All tests
+  bug        (13): C05, C06, C07, C08, C09, C10, C11, C12, C13, E05,
+                   F02, H01, H03
+  ui         (22): V01-V05, P01-P10, T01-T03, E05, F01, H02, H04
+
+Usage:
+  pytest test_services_master_validation.py -m smoke
+  pytest test_services_master_validation.py -m "smoke or sanity"
+  pytest test_services_master_validation.py -m "not bug"
+  pytest test_services_master_validation.py -m ui
 """
 
 import os
@@ -76,6 +91,9 @@ from pages.commodity_settings.modules.services_master.data.services_master_data 
 class TestCreateFormValidations:
     """Tests for the Create (Add) form on Services Master."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_C01_create_valid_service(self, sm_page):
         """SM-C01: Create a valid service record with all required fields.
         Happy path — should succeed.
@@ -103,6 +121,9 @@ class TestCreateFormValidations:
         sm_page.click_refresh()
         sm_page.wait_seconds(2)
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_C02_create_with_empty_form(self, sm_page):
         """SM-C02: Submit empty form — required field validation.
         Expected: SweetAlert2 "Validation Failed" + mat-error on required fields.
@@ -129,6 +150,8 @@ class TestCreateFormValidations:
             pass
         sm_page.force_close_form_popup()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_C03_create_name_only(self, sm_page):
         """SM-C03: Submit with only Name filled — partial validation.
         Expected: Validation Failed for remaining required fields.
@@ -153,6 +176,8 @@ class TestCreateFormValidations:
             pass
         sm_page.force_close_form_popup()
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_C04_create_without_uom(self, sm_page):
         """SM-C04: Submit without UOM — required field validation."""
         log.info("SM-C04: Submit without UOM")
@@ -174,6 +199,8 @@ class TestCreateFormValidations:
             pass
         sm_page.force_close_form_popup()
 
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_SM_C05_create_special_char_name(self, sm_page):
         """SM-C05: Create with special characters in Name.
         BUG-003: Name accepts all characters — no input restrictions.
@@ -202,6 +229,8 @@ class TestCreateFormValidations:
         sm_page.click_refresh()
         sm_page.wait_seconds(2)
 
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_SM_C06_create_spaces_only_name(self, sm_page):
         """SM-C06: Create with spaces-only Name.
         BUG-003: Spaces-only name accepted — creates blank record.
@@ -232,6 +261,9 @@ class TestCreateFormValidations:
         sm_page.click_refresh()
         sm_page.wait_seconds(2)
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_C07_create_duplicate_name(self, sm_page):
         """SM-C07: Create with duplicate Name.
         BUG-005: Duplicate names ALLOWED — no uniqueness constraint.
@@ -280,6 +312,9 @@ class TestCreateFormValidations:
         sm_page.click_refresh()
         sm_page.wait_seconds(2)
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_C08_create_long_name_256(self, sm_page):
         """SM-C08: Create with 256-char Name (exceeds server max of 255).
         BUG-001: No maxlength on input. Server rejects at 255.
@@ -321,6 +356,9 @@ class TestCreateFormValidations:
         assert count_after == count_before, \
             f"SM-C08: Record should NOT be created (before={count_before}, after={count_after})"
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_C09_create_long_base_uom_conversion(self, sm_page):
         """SM-C09: Create with 11-char Base Uom Conversion (exceeds server max of 10).
         BUG-002: No maxlength on input. Server rejects at 10 chars.
@@ -356,6 +394,8 @@ class TestCreateFormValidations:
         sm_page.click_refresh()
         sm_page.wait_seconds(2)
 
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_SM_C10_create_negative_uom_conversion(self, sm_page):
         """SM-C10: Create with negative Base Uom Conversion.
         BUG-004: Accepts negative values — no range validation.
@@ -385,6 +425,8 @@ class TestCreateFormValidations:
         sm_page.click_refresh()
         sm_page.wait_seconds(2)
 
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_SM_C11_create_zero_uom_conversion(self, sm_page):
         """SM-C11: Create with zero Base Uom Conversion.
         BUG-004: Accepts zero — no range validation.
@@ -414,6 +456,8 @@ class TestCreateFormValidations:
         sm_page.click_refresh()
         sm_page.wait_seconds(2)
 
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_SM_C12_create_alpha_uom_conversion(self, sm_page):
         """SM-C12: Create with alphabetic Base Uom Conversion.
         BUG-004: Accepts letters — no type validation.
@@ -443,6 +487,8 @@ class TestCreateFormValidations:
         sm_page.click_refresh()
         sm_page.wait_seconds(2)
 
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_SM_C13_create_special_char_uom_conversion(self, sm_page):
         """SM-C13: Create with special char Base Uom Conversion.
         BUG-004: Accepts special characters — no input restrictions.
@@ -480,6 +526,10 @@ class TestCreateFormValidations:
 class TestViewValidations:
     """Tests for the View (read-only) mode on Services Master."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_V01_view_opens_readonly_popup(self, sm_page):
         """SM-V01: View button opens read-only popup."""
         log.info("SM-V01: View opens read-only popup")
@@ -496,6 +546,9 @@ class TestViewValidations:
         sm_page.cancel()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_V02_view_name_disabled(self, sm_page):
         """SM-V02: Name field is disabled in View mode."""
         log.info("SM-V02: Name field disabled in View mode")
@@ -516,6 +569,9 @@ class TestViewValidations:
         sm_page.cancel()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_V03_view_dropdowns_disabled(self, sm_page):
         """SM-V03: All dropdowns are disabled in View mode."""
         log.info("SM-V03: Dropdowns disabled in View mode")
@@ -541,6 +597,9 @@ class TestViewValidations:
         sm_page.cancel()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_V04_view_no_submit_update_button(self, sm_page):
         """SM-V04: No Submit or Update button in View mode."""
         log.info("SM-V04: No Submit/Update in View mode")
@@ -560,6 +619,9 @@ class TestViewValidations:
         sm_page.cancel()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_V05_view_only_cancel_button(self, sm_page):
         """SM-V05: Only Cancel button visible in View mode."""
         log.info("SM-V05: Only Cancel in View mode")
@@ -584,6 +646,9 @@ class TestViewValidations:
 class TestEditFormValidations:
     """Tests for the Edit mode on Services Master."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_E01_edit_opens_with_update_button(self, sm_page):
         """SM-E01: Edit button opens form with Update button."""
         log.info("SM-E01: Edit opens with Update button")
@@ -600,6 +665,8 @@ class TestEditFormValidations:
         sm_page.cancel()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_E02_edit_all_fields_editable(self, sm_page):
         """SM-E02: All fields are editable in Edit mode."""
         log.info("SM-E02: All fields editable in Edit mode")
@@ -620,6 +687,9 @@ class TestEditFormValidations:
         sm_page.cancel()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_E03_edit_update_success(self, sm_page):
         """SM-E03: Edit and update a record successfully."""
         log.info("SM-E03: Edit and update record")
@@ -653,6 +723,8 @@ class TestEditFormValidations:
         sm_page.click_refresh()
         sm_page.wait_seconds(2)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_E04_edit_validation_on_empty_required(self, sm_page):
         """SM-E04: Edit — clear required field, submit → validation."""
         log.info("SM-E04: Edit validation on empty required field")
@@ -677,6 +749,10 @@ class TestEditFormValidations:
             pass
         sm_page.force_close_form_popup()
 
+    @pytest.mark.bug
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_E05_edit_long_name_server_reject(self, sm_page):
         """SM-E05: Edit — set 256-char Name → server rejection (Type B popup)."""
         log.info("SM-E05: Edit with 256-char Name (server rejection)")
@@ -714,6 +790,9 @@ class TestEditFormValidations:
 class TestSearchFilter:
     """Tests for search functionality on Services Master."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_S01_search_existing_record(self, sm_page):
         """SM-S01: Search for an existing record by name."""
         log.info("SM-S01: Search existing record")
@@ -729,6 +808,8 @@ class TestSearchFilter:
         found = sm_page.is_record_in_table(search_name)
         assert found, f"SM-S01: Should find record '{search_name}' after search"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_S02_search_nonexistent_record(self, sm_page):
         """SM-S02: Search for a non-existent record."""
         log.info("SM-S02: Search non-existent record")
@@ -739,6 +820,8 @@ class TestSearchFilter:
         found = sm_page.is_record_in_table("ZZZ_NONEXISTENT_RECORD_99999")
         assert not found, "SM-S02: Should NOT find non-existent record"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_S03_search_partial_match(self, sm_page):
         """SM-S03: Search with partial name matches record."""
         log.info("SM-S03: Search partial match")
@@ -757,6 +840,8 @@ class TestSearchFilter:
         # Partial match may or may not work depending on search implementation
         log.info(f"SM-S03: Partial search '{partial}' found={found}")
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_S04_search_clear_results(self, sm_page):
         """SM-S04: Clear search shows all records again."""
         log.info("SM-S04: Clear search")
@@ -775,6 +860,9 @@ class TestSearchFilter:
         assert count_after == count_before, \
             f"SM-S04: Record count should match after clear (before={count_before}, after={count_after})"
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_S05_search_case_insensitive(self, sm_page):
         """SM-S05: Search is case-insensitive."""
         log.info("SM-S05: Search case insensitive")
@@ -799,6 +887,10 @@ class TestSearchFilter:
 class TestPopupUIBehaviors:
     """Tests for popup and UI interactions on Services Master."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_P01_add_form_opens_popup(self, sm_page):
         """SM-P01: ADD button opens popup form."""
         log.info("SM-P01: ADD opens popup")
@@ -810,6 +902,10 @@ class TestPopupUIBehaviors:
         sm_page.cancel()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_P02_cancel_closes_popup(self, sm_page):
         """SM-P02: Cancel button closes the popup form."""
         log.info("SM-P02: Cancel closes popup")
@@ -820,6 +916,9 @@ class TestPopupUIBehaviors:
         is_closed = sm_page.is_form_closed()
         assert is_closed, "SM-P02: Form should be closed after Cancel"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_P03_close_button_closes_popup(self, sm_page):
         """SM-P03: Close (X) button closes the popup form."""
         log.info("SM-P03: Close (X) button closes popup")
@@ -846,6 +945,9 @@ class TestPopupUIBehaviors:
         is_closed = sm_page.is_form_closed()
         assert is_closed, "SM-P03: Form should be closed after Close button"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_P04_no_delete_button(self, sm_page):
         """SM-P04: No Delete button exists on the screen."""
         log.info("SM-P04: No Delete button")
@@ -870,6 +972,9 @@ class TestPopupUIBehaviors:
         sm_page.cancel()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_P05_refresh_button_updates_table(self, sm_page):
         """SM-P05: Refresh button reloads the table."""
         log.info("SM-P05: Refresh updates table")
@@ -882,6 +987,9 @@ class TestPopupUIBehaviors:
         is_loaded = sm_page.is_page_loaded()
         assert is_loaded, "SM-P05: Page should be loaded after Refresh"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_P06_table_has_expected_columns(self, sm_page):
         """SM-P06: Table has expected 7 columns."""
         log.info("SM-P06: Table columns check")
@@ -894,6 +1002,9 @@ class TestPopupUIBehaviors:
         assert len(headers) == 7, \
             f"SM-P06: Expected 7 columns, got {len(headers)}"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_P07_form_has_2_inputs(self, sm_page):
         """SM-P07: Form has 2 text inputs (Name, Base Uom Conversion)."""
         log.info("SM-P07: Form has 2 inputs")
@@ -912,6 +1023,9 @@ class TestPopupUIBehaviors:
         sm_page.cancel()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_P08_form_has_3_dropdowns(self, sm_page):
         """SM-P08: Form has 3 dropdowns (Base Uom, UOM, HSN SAC Code)."""
         log.info("SM-P08: Form has 3 dropdowns")
@@ -929,6 +1043,9 @@ class TestPopupUIBehaviors:
         sm_page.cancel()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_P09_form_has_1_toggle(self, sm_page):
         """SM-P09: Form has 1 toggle (Status)."""
         log.info("SM-P09: Form has 1 toggle")
@@ -946,6 +1063,9 @@ class TestPopupUIBehaviors:
         sm_page.cancel()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_P10_popup_header_title(self, sm_page):
         """SM-P10: Popup header displays correct title."""
         log.info("SM-P10: Popup header title")
@@ -972,6 +1092,10 @@ class TestPopupUIBehaviors:
 class TestToggleValidations:
     """Tests for toggle switch behaviors on Services Master."""
 
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_T01_status_default_on(self, sm_page):
         """SM-T01: Status toggle defaults to ON (Active) in Create."""
         log.info("SM-T01: Status default ON")
@@ -983,6 +1107,9 @@ class TestToggleValidations:
         sm_page.cancel()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_T02_status_toggle_to_off(self, sm_page):
         """SM-T02: Status toggle can be set to OFF (Inactive)."""
         log.info("SM-T02: Toggle Status to OFF")
@@ -996,6 +1123,9 @@ class TestToggleValidations:
         sm_page.cancel()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_T03_status_toggle_back_to_on(self, sm_page):
         """SM-T03: Status toggle can be set back to ON (Active)."""
         log.info("SM-T03: Toggle Status back to ON")
@@ -1010,6 +1140,8 @@ class TestToggleValidations:
         sm_page.cancel()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_T04_create_with_status_off(self, sm_page):
         """SM-T04: Create record with Status = OFF (Inactive)."""
         log.info("SM-T04: Create with Status OFF")
@@ -1034,6 +1166,8 @@ class TestToggleValidations:
 
         log.info(f"SM-T04: Create with Status OFF result: '{swal_title}'")
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_T05_toggle_state_persists_in_view(self, sm_page):
         """SM-T05: Toggle state is preserved in View mode."""
         log.info("SM-T05: Toggle state persists in View")
@@ -1059,6 +1193,9 @@ class TestToggleValidations:
 class TestFilterValidations:
     """Tests for filter panel functionality on Services Master."""
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_F01_filter_button_opens_panel(self, sm_page):
         """SM-F01: Filter button opens filter panel."""
         log.info("SM-F01: Filter button opens panel")
@@ -1079,6 +1216,8 @@ class TestFilterValidations:
         except Exception as e:
             log.warning(f"SM-F01: Filter button check failed: {e}")
 
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_SM_F02_filter_apply_nonfunctional(self, sm_page):
         """SM-F02: Filter Apply button likely non-functional (QPM pattern).
         This is an exploratory test — may be broken like other modules.
@@ -1095,6 +1234,9 @@ class TestFilterValidations:
 class TestHistoryValidations:
     """Tests for History popup functionality on Services Master."""
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_SM_H01_history_button_opens_popup(self, sm_page):
         """SM-H01: History button opens popup.
         BUG-007: History popup shows "No data available".
@@ -1114,6 +1256,9 @@ class TestHistoryValidations:
         else:
             log.warning("SM-H01: History popup did not open")
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_H02_history_popup_title(self, sm_page):
         """SM-H02: History popup shows 'History' in title."""
         log.info("SM-H02: History popup title")
@@ -1140,6 +1285,8 @@ class TestHistoryValidations:
         sm_page.close_history_popup()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.bug
+    @pytest.mark.regression
     def test_SM_H03_history_empty_bug(self, sm_page):
         """SM-H03: History shows no data (BUG-007 confirmed)."""
         log.info("SM-H03: History empty (BUG-007)")
@@ -1157,6 +1304,9 @@ class TestHistoryValidations:
         sm_page.close_history_popup()
         sm_page.wait_seconds(1)
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_SM_H04_history_close_button(self, sm_page):
         """SM-H04: History popup can be closed."""
         log.info("SM-H04: History close button")
@@ -1173,6 +1323,8 @@ class TestHistoryValidations:
         is_open = sm_page.is_history_popup_open()
         assert not is_open, "SM-H04: History popup should be closed"
 
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_SM_H05_history_from_different_row(self, sm_page):
         """SM-H05: History button works from different rows."""
         log.info("SM-H05: History from different rows")

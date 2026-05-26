@@ -1,10 +1,10 @@
 """
-Migration script to convert SHA256 hashed passwords to bcrypt hashes.
+Password Migration Script
+Migrates users from SHA256 to bcrypt hashing.
 Run this ONCE after updating to the new security system.
 """
 import json
 import bcrypt
-import hashlib
 from pathlib import Path
 
 def migrate_passwords():
@@ -19,38 +19,42 @@ def migrate_passwords():
     
     migrated_count = 0
     skipped_count = 0
+    needs_reset = 0
+    
+    print("🔐 Password Migration Tool")
+    print("=" * 50)
     
     for user_id, user in users_data.get('users', {}).items():
         password_hash = user.get('password', '')
         
         # Skip if already migrated (bcrypt hashes start with $2b$)
         if password_hash.startswith('$2b$'):
-            print(f"✓ User '{user['email']}' already uses bcrypt")
+            print(f"✓ {user.get('email', user_id)} - Already uses bcrypt")
             skipped_count += 1
             continue
         
-        # This is a SHA256 hash - we need the original password to re-hash
-        # Since we can't reverse SHA256, we'll mark these users for password reset
-        print(f"⚠ User '{user['email']}' has SHA256 hash - requires password reset")
-        user['password_reset_required'] = True
-        # Keep the old hash temporarily but mark for reset
-        user['old_hash'] = password_hash
-        # Set a temporary invalid bcrypt hash
-        user['password'] = '$2b$12$INVALID_HASH_NEEDS_RESET'
-        migrated_count += 1
+        # Check if it's old SHA256 format (64 hex characters)
+        if len(password_hash) == 64 and all(c in '0123456789abcdef' for c in password_hash):
+            print(f"⚠ {user.get('email', user_id)} - Old SHA256 hash detected")
+            print(f"  This user will need to reset their password")
+            
+            # Mark for password reset
+            user['password_reset_required'] = True
+            needs_reset += 1
+        else:
+            print(f"? {user.get('email', user_id)} - Unknown password format")
     
-    # Save updated users
+    # Save updated users.json
     with open(users_file, 'w') as f:
         json.dump(users_data, f, indent=2)
     
-    print(f"\n{'='*50}")
-    print(f"Migration Complete!")
-    print(f"{'='*50}")
-    print(f"✓ Already secure (bcrypt): {skipped_count} users")
-    print(f"⚠ Need password reset: {migrated_count} users")
-    print(f"\nIMPORTANT: Users with SHA256 hashes will need to reset their passwords.")
-    print(f"Their next login attempt will fail, and they should use 'Forgot Password'.")
-    print(f"{'='*50}\n")
+    print("\n" + "=" * 50)
+    print(f"✅ Migration Complete!")
+    print(f"   Already secure (bcrypt): {skipped_count} users")
+    print(f"   Need password reset: {needs_reset} users")
+    print(f"\n📝 Users marked for password reset will need to use")
+    print(f"   the 'Forgot Password' feature on next login.")
+    print("=" * 50)
 
 if __name__ == "__main__":
     migrate_passwords()

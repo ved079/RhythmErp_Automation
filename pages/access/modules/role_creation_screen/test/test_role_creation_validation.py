@@ -2,16 +2,23 @@
 test_role_creation_validation.py
 ----------------------------------
 Comprehensive validation test suite for RhythmERP Role Creation Screen.
-45 test cases across 7 phases.
+45 test cases across 7 classes.
 
-Phases:
-  1. Create Form Validations  (12 tests) — RC-C01 to RC-C12
-  2. Duplicate Validations      (3 tests) — RC-D01 to RC-D03
-  3. Edit Form Validations      (6 tests) — RC-E01 to RC-E06
-  4. Search & Filter Edge Cases (5 tests) — RC-S01 to RC-S05
-  5. Popup & UI Behaviors       (8 tests) — RC-P01 to RC-P08
-  6. History & Audit Trail      (4 tests) — RC-H01 to RC-H04
-  7. Bug-Specific Tests         (7 tests) — RC-B01 to RC-B07
+Marker Summary:
+  smoke      =  7  (C01, C02, C03, C04, E01, E02, S01)
+  sanity     = 45  (all tests)
+  regression = 45  (all tests)
+  bug        = 19  (C01, C03, C05–C08, D01–D03, E04, E05, P02, B01–B07)
+  ui         = 19  (C01, C02, C04, E01, E03, E06, P01–P08, H01–H04, B07)
+
+Classes (7):
+  1. TestCreateFormValidations   (12 tests) — RC-C01 to RC-C12
+  2. TestDuplicateValidations     (3 tests) — RC-D01 to RC-D03
+  3. TestEditFormValidations      (6 tests) — RC-E01 to RC-E06
+  4. TestSearchFilter             (5 tests) — RC-S01 to RC-S05
+  5. TestPopupUIBehaviors         (8 tests) — RC-P01 to RC-P08
+  6. TestHistoryAuditTrail        (4 tests) — RC-H01 to RC-H04
+  7. TestBugSpecific              (7 tests) — RC-B01 to RC-B07
 
 IMPORTANT — Role Creation Screen is a SIMPLE POPUP (NOT a stepper):
   - Only 2 fields: Role Name (text input) + Entity Group Name (mat-select)
@@ -115,6 +122,11 @@ class TestCreateFormValidations:
     """
 
     # ---- RC-C01: Submit with all fields empty ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-007: No visible mat-error text on required field validation")
+    @pytest.mark.ui
     def test_RC_C01_empty_submit(self, rc_page):
         """Submit with both fields empty — should be blocked.
         BUG-007: Only red outline, no visible error text.
@@ -159,6 +171,10 @@ class TestCreateFormValidations:
                 pass
 
     # ---- RC-C02: Create with valid data (happy path) ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_C02_valid_create(self, rc_page):
         """Create with valid data — should succeed."""
         log.info("RC-C02: Valid create test (happy path)")
@@ -184,6 +200,10 @@ class TestCreateFormValidations:
         log.info(f"Role created and found in table: {name}")
 
     # ---- RC-C03: Spaces-only Role Name ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-001: Spaces-only Role Name accepted as valid (ng-valid)")
     @pytest.mark.xfail(
         reason="BUG-001: Spaces-only Role Name accepted as valid (ng-valid)",
         strict=False,
@@ -228,6 +248,10 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- RC-C04: Entity Group not selected ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_C04_entity_group_not_selected(self, rc_page):
         """Fill Role Name only, leave Entity Group empty — should be blocked."""
         log.info("RC-C04: Entity Group not selected test")
@@ -265,6 +289,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- RC-C05: Special characters in Role Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-002: Special characters accepted in Role Name")
     @pytest.mark.xfail(
         reason="BUG-002: Special characters accepted in Role Name",
         strict=False,
@@ -291,6 +318,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- RC-C06: SQL injection in Role Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-003: SQL injection strings accepted in Role Name")
     @pytest.mark.xfail(
         reason="BUG-003: SQL injection strings accepted in Role Name",
         strict=False,
@@ -316,6 +346,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- RC-C07: XSS in Role Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-004: XSS payloads accepted in Role Name")
     @pytest.mark.xfail(
         reason="BUG-004: XSS payloads accepted in Role Name",
         strict=False,
@@ -341,6 +374,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- RC-C08: Very long Role Name (500 chars) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-006: No client maxlength — 500-char name silently fails server-side")
     @pytest.mark.xfail(
         reason="BUG-006: No client maxlength — 500-char name silently fails server-side",
         strict=False,
@@ -374,6 +410,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- RC-C09: Numbers-only Role Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_RC_C09_numbers_only_name(self, rc_page):
         """Numbers-only Role Name — should be accepted (no alpha-only rule)."""
         log.info("RC-C09: Numbers-only Role Name test")
@@ -395,6 +433,8 @@ class TestCreateFormValidations:
             log.info(f"Numbers-only Role Name rejected: {result.get('error', '')}")
 
     # ---- RC-C10: Leading/trailing spaces trimmed ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_RC_C10_leading_trailing_spaces(self, rc_page):
         """Leading/trailing spaces in Role Name — should be trimmed on save."""
         log.info("RC-C10: Leading/trailing spaces test")
@@ -420,6 +460,8 @@ class TestCreateFormValidations:
             log.info(f"Spaces role result: {result.get('error', '')}")
 
     # ---- RC-C11: Unicode in Role Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_RC_C11_unicode_name(self, rc_page):
         """Unicode characters in Role Name — check acceptance."""
         log.info("RC-C11: Unicode Role Name test")
@@ -440,6 +482,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- RC-C12: Role Name with dot ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_RC_C12_name_with_dot(self, rc_page):
         """Role Name containing a dot — should be accepted."""
         log.info("RC-C12: Role Name with dot test")
@@ -473,6 +517,9 @@ class TestDuplicateValidations:
     """
 
     # ---- RC-D01: Duplicate Role Name (exact) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-005: Duplicate Role Names allowed — no uniqueness validation")
     @pytest.mark.xfail(
         reason="BUG-005: Duplicate Role Names allowed — no uniqueness validation",
         strict=False,
@@ -509,6 +556,9 @@ class TestDuplicateValidations:
         page.wait_seconds(2)
 
     # ---- RC-D02: Duplicate (case-insensitive) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-005b: Case-insensitive duplicate Role Names allowed")
     @pytest.mark.xfail(
         reason="BUG-005b: Case-insensitive duplicate Role Names allowed",
         strict=False,
@@ -544,6 +594,9 @@ class TestDuplicateValidations:
         page.wait_seconds(2)
 
     # ---- RC-D03: Duplicate + different Entity Group ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-005: Duplicate Role Names allowed with different Entity Group")
     def test_RC_D03_duplicate_different_entity(self, rc_page):
         """Same name, different Entity Group — test if name uniqueness is checked."""
         log.info("RC-D03: Duplicate name with different Entity Group test")
@@ -584,6 +637,10 @@ class TestEditFormValidations:
     """RC-E01 to RC-E06: Validation checks on the Edit form."""
 
     # ---- RC-E01: Edit pre-populated fields ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_E01_edit_prepopulated(self, rc_page):
         """Edit popup should show fields pre-populated with existing data."""
         log.info("RC-E01: Edit pre-populated fields test")
@@ -619,6 +676,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- RC-E02: Edit with valid data ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_RC_E02_edit_valid(self, rc_page):
         """Edit a role with valid new data — should succeed."""
         log.info("RC-E02: Edit with valid data test")
@@ -642,6 +702,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- RC-E03: Edit with empty Role Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_E03_edit_empty_name(self, rc_page):
         """Clear Role Name in Edit, click Update — should be blocked."""
         log.info("RC-E03: Edit with empty Role Name test")
@@ -684,6 +747,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- RC-E04: Edit with special chars ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-002: Special characters accepted in Role Name during edit")
     def test_RC_E04_edit_special_chars(self, rc_page):
         """Edit to special characters in Role Name.
         BUG-002: Special chars are accepted.
@@ -709,6 +775,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- RC-E05: Edit with spaces-only ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-001: Spaces-only Role Name accepted during edit")
     def test_RC_E05_edit_spaces_only(self, rc_page):
         """Edit to spaces-only Role Name — should be blocked.
         BUG-001: Spaces-only accepted as valid.
@@ -734,6 +803,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- RC-E06: Edit Entity Group Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_E06_edit_entity_group(self, rc_page):
         """Change Entity Group in Edit — should succeed."""
         log.info("RC-E06: Edit Entity Group test")
@@ -766,6 +838,9 @@ class TestSearchFilter:
     """RC-S01 to RC-S05: Search and filter edge cases."""
 
     # ---- RC-S01: Search exact match ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_RC_S01_search_exact(self, rc_page):
         """Search for an exact existing role name."""
         log.info("RC-S01: Search exact match test")
@@ -790,6 +865,8 @@ class TestSearchFilter:
         page.clear_search()
 
     # ---- RC-S02: Search partial match ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_RC_S02_search_partial(self, rc_page):
         """Search with partial name — should find matching records."""
         log.info("RC-S02: Search partial match test")
@@ -815,6 +892,8 @@ class TestSearchFilter:
         page.clear_search()
 
     # ---- RC-S03: Search case insensitive ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_RC_S03_search_case_insensitive(self, rc_page):
         """Search with lowercase — should match case-insensitive."""
         log.info("RC-S03: Search case-insensitive test")
@@ -836,6 +915,8 @@ class TestSearchFilter:
         page.clear_search()
 
     # ---- RC-S04: Search no results ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_RC_S04_search_no_results(self, rc_page):
         """Search for non-existent name — should show empty or no-data."""
         log.info("RC-S04: Search no results test")
@@ -852,6 +933,8 @@ class TestSearchFilter:
         page.clear_search()
 
     # ---- RC-S05: Search special chars ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_RC_S05_search_special_chars(self, rc_page):
         """Search for special characters — should not crash."""
         log.info("RC-S05: Search special chars test")
@@ -875,6 +958,9 @@ class TestPopupUIBehaviors:
     """RC-P01 to RC-P08: Popup and UI behavior tests."""
 
     # ---- RC-P01: View popup readonly ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_P01_view_readonly(self, rc_page):
         """View popup should show disabled/readonly fields with Cancel only."""
         log.info("RC-P01: View popup readonly test")
@@ -908,6 +994,10 @@ class TestPopupUIBehaviors:
         page.wait_seconds(2)
 
     # ---- RC-P02: No delete functionality ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-008: No Delete option anywhere on screen")
+    @pytest.mark.ui
     def test_RC_P02_no_delete(self, rc_page):
         """Verify no Delete option exists anywhere on the screen.
         BUG-008: No Delete option.
@@ -950,6 +1040,9 @@ class TestPopupUIBehaviors:
         log.info("BUG-008 CONFIRMED: No Delete option found on screen")
 
     # ---- RC-P03: Cancel closes popup ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_P03_cancel_closes_popup(self, rc_page):
         """Open Add, click Cancel — popup should close without creating record."""
         log.info("RC-P03: Cancel closes popup test")
@@ -972,6 +1065,9 @@ class TestPopupUIBehaviors:
         log.info("Cancel closed the popup — no record created")
 
     # ---- RC-P04: Close (X) button ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_P04_close_x_button(self, rc_page):
         """Open Add, click X — popup should close."""
         log.info("RC-P04: Close (X) button test")
@@ -989,6 +1085,9 @@ class TestPopupUIBehaviors:
         log.info("X button closed the popup")
 
     # ---- RC-P05: Fullscreen button ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_P05_fullscreen(self, rc_page):
         """Click fullscreen button in popup — popup should expand."""
         log.info("RC-P05: Fullscreen button test")
@@ -1022,6 +1121,9 @@ class TestPopupUIBehaviors:
             pass
 
     # ---- RC-P06: SweetAlert2 success ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_P06_sweetalert_success(self, rc_page):
         """Create valid record — verify SweetAlert2 success message."""
         log.info("RC-P06: SweetAlert2 success test")
@@ -1040,6 +1142,9 @@ class TestPopupUIBehaviors:
         page.wait_seconds(2)
 
     # ---- RC-P07: Refresh button ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_P07_refresh(self, rc_page):
         """Click Refresh — table should reload data."""
         log.info("RC-P07: Refresh button test")
@@ -1058,6 +1163,9 @@ class TestPopupUIBehaviors:
         log.info(f"Before refresh: {initial_count} rows, after: {len(refreshed_names)} rows")
 
     # ---- RC-P08: Pagination ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_P08_pagination(self, rc_page):
         """Check pagination — verify paginator exists and works."""
         log.info("RC-P08: Pagination test")
@@ -1084,6 +1192,9 @@ class TestHistoryAuditTrail:
     """RC-H01 to RC-H04: History popup and audit trail tests."""
 
     # ---- RC-H01: History popup opens ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_H01_history_opens(self, rc_page):
         """Click History button — popup should open."""
         log.info("RC-H01: History popup opens test")
@@ -1113,6 +1224,9 @@ class TestHistoryAuditTrail:
         page.wait_seconds(2)
 
     # ---- RC-H02: History for edited record ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_H02_history_edited(self, rc_page):
         """View history for an edited record — should show history entries."""
         log.info("RC-H02: History for edited record test")
@@ -1153,6 +1267,9 @@ class TestHistoryAuditTrail:
         page.wait_seconds(2)
 
     # ---- RC-H03: History for new record ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_H03_history_new_record(self, rc_page):
         """View history for a new (un-edited) record."""
         log.info("RC-H03: History for new record test")
@@ -1180,6 +1297,9 @@ class TestHistoryAuditTrail:
         page.wait_seconds(2)
 
     # ---- RC-H04: History search ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_RC_H04_history_search(self, rc_page):
         """Type in history search box — should filter entries."""
         log.info("RC-H04: History search test")
@@ -1226,6 +1346,9 @@ class TestBugSpecific:
     """
 
     # ---- RC-B01: BUG-001 Spaces-only accepted ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-001: Spaces-only Role Name accepted as valid")
     @pytest.mark.xfail(
         reason="BUG-001: Spaces-only Role Name accepted as valid",
         strict=False,
@@ -1249,6 +1372,9 @@ class TestBugSpecific:
         page.wait_seconds(2)
 
     # ---- RC-B02: BUG-002 Special chars accepted ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-002: Special characters accepted in Role Name")
     @pytest.mark.xfail(
         reason="BUG-002: Special characters accepted in Role Name",
         strict=False,
@@ -1271,6 +1397,9 @@ class TestBugSpecific:
         page.wait_seconds(2)
 
     # ---- RC-B03: BUG-003 SQL injection accepted ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-003: SQL injection strings accepted in Role Name")
     @pytest.mark.xfail(
         reason="BUG-003: SQL injection strings accepted in Role Name",
         strict=False,
@@ -1293,6 +1422,9 @@ class TestBugSpecific:
         page.wait_seconds(2)
 
     # ---- RC-B04: BUG-004 XSS accepted ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-004: XSS payloads accepted in Role Name")
     @pytest.mark.xfail(
         reason="BUG-004: XSS payloads accepted in Role Name",
         strict=False,
@@ -1315,6 +1447,9 @@ class TestBugSpecific:
         page.wait_seconds(2)
 
     # ---- RC-B05: BUG-005 Duplicates allowed ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-005: Duplicate Role Names allowed")
     @pytest.mark.xfail(
         reason="BUG-005: Duplicate Role Names allowed",
         strict=False,
@@ -1345,6 +1480,9 @@ class TestBugSpecific:
         page.wait_seconds(2)
 
     # ---- RC-B06: BUG-006 No maxlength, silent fail ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-006: No client maxlength — 500-char name silently fails")
     @pytest.mark.xfail(
         reason="BUG-006: No client maxlength — 500-char name silently fails",
         strict=False,
@@ -1368,6 +1506,10 @@ class TestBugSpecific:
         page.wait_seconds(2)
 
     # ---- RC-B07: BUG-007 No visible error text ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug(reason="BUG-007: No visible mat-error text on required field validation")
+    @pytest.mark.ui
     def test_RC_B07_bug_no_error_text(self, rc_page):
         """Demonstrate BUG-007: No visible mat-error text on required field validation.
         This test documents the bug — it's not expected to fail.

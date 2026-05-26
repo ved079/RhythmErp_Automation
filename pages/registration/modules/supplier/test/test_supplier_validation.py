@@ -89,6 +89,7 @@ class TestCreateFormValidations:
     """SP-C01 to SP-C18: Validation checks on the Create stepper form."""
 
     # ---- SP-C01: Empty form submit ----
+    @pytest.mark.smoke
     def test_SP_C01_empty_submit(self, sp_page):
         """Submit stepper with all required fields empty — SweetAlert2 + mat-errors."""
         log.info("SP-C01: Empty submit test")
@@ -121,6 +122,7 @@ class TestCreateFormValidations:
             page.force_close_form_popup()
 
     # ---- SP-C02: Valid create (happy path) ----
+    @pytest.mark.smoke
     def test_SP_C02_valid_create(self, sp_page):
         """Create supplier with valid data across all 3 steps."""
         log.info("SP-C02: Valid create test")
@@ -143,6 +145,7 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- SP-C03: Company Name spaces-only ----
+    @pytest.mark.sanity
     def test_SP_C03_company_name_spaces(self, sp_page):
         """Enter spaces only in Company Name — should be rejected."""
         log.info("SP-C03: Company Name spaces-only test")
@@ -178,6 +181,7 @@ class TestCreateFormValidations:
             page.force_close_form_popup()
 
     # ---- SP-C04: Company Name special characters ----
+    @pytest.mark.bug
     @pytest.mark.xfail(reason=KnownBugs.BUG_001, strict=False)
     def test_SP_C04_company_name_special_chars(self, sp_page):
         """Special characters in Company Name — BUG-001: accepted."""
@@ -201,6 +205,7 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- SP-C05: Company Name SQL injection ----
+    @pytest.mark.bug
     @pytest.mark.xfail(reason=KnownBugs.BUG_001, strict=False)
     def test_SP_C05_company_name_sql_injection(self, sp_page):
         """SQL injection string in Company Name — BUG-001: accepted."""
@@ -224,6 +229,7 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- SP-C06: Company Name XSS ----
+    @pytest.mark.bug
     @pytest.mark.xfail(reason=KnownBugs.BUG_001, strict=False)
     def test_SP_C06_company_name_xss(self, sp_page):
         """XSS payload in Company Name — BUG-001: accepted."""
@@ -247,6 +253,7 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- SP-C07: Company Name 255 chars (boundary) ----
+    @pytest.mark.sanity
     def test_SP_C07_company_name_255_chars(self, sp_page):
         """Exactly 255 chars in Company Name — should be accepted (maxlength=255)."""
         log.info("SP-C07: Company Name 255 chars boundary test")
@@ -271,6 +278,7 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- SP-C08: Company Name 256 chars (over-max) ----
+    @pytest.mark.sanity
     def test_SP_C08_company_name_256_chars(self, sp_page):
         """256 chars — should be truncated at 255 due to maxlength."""
         log.info("SP-C08: Company Name 256 chars over-max test")
@@ -307,6 +315,7 @@ class TestCreateFormValidations:
             page.force_close_form_popup()
 
         # ---- SP-C09: Invalid email format ----
+    @pytest.mark.sanity
     def test_SP_C09_invalid_email(self, sp_page):
         """Invalid email format — ERP now validates and shows error."""
         log.info("SP-C09: Invalid email test")
@@ -329,6 +338,7 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- SP-C10: Invalid PAN format ----
+    @pytest.mark.sanity
     def test_SP_C10_invalid_pan(self, sp_page):
         """Invalid PAN format — ERP now validates and shows error."""
         log.info("SP-C10: Invalid PAN test")
@@ -351,6 +361,7 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- SP-C11: Phone Number text input ----
+    @pytest.mark.sanity
     def test_SP_C11_phone_alpha_chars(self, sp_page):
         """Type alphabetic chars in Phone Number — should reject or show error."""
         log.info("SP-C11: Phone Number alpha chars test")
@@ -387,6 +398,7 @@ class TestCreateFormValidations:
             page.force_close_form_popup()
 
     # ---- SP-C12: Ownership Status dropdown ----
+    @pytest.mark.sanity
     def test_SP_C12_ownership_status_dropdown(self, sp_page):
         """Ownership Status shows correct options."""
         log.info("SP-C12: Ownership Status dropdown test")
@@ -414,6 +426,7 @@ class TestCreateFormValidations:
             page.force_close_form_popup()
 
     # ---- SP-C13: PO Type dropdown ----
+    @pytest.mark.sanity
     def test_SP_C13_po_type_dropdown(self, sp_page):
         """PO Type shows Domestic/Import options."""
         log.info("SP-C13: PO Type dropdown test")
@@ -436,6 +449,7 @@ class TestCreateFormValidations:
             page.force_close_form_popup()
 
     # ---- SP-C14: Default Currency dropdown ----
+    @pytest.mark.sanity
     def test_SP_C14_currency_dropdown(self, sp_page):
         """Default Currency shows currency list (100+ currencies)."""
         log.info("SP-C14: Default Currency dropdown test")
@@ -458,6 +472,7 @@ class TestCreateFormValidations:
             page.force_close_form_popup()
 
     # ---- SP-C15: Payment Terms dropdown ----
+    @pytest.mark.sanity
     def test_SP_C15_payment_terms_dropdown(self, sp_page):
         """Payment Terms shows options (21 Days, 14 Days, etc.)."""
         log.info("SP-C15: Payment Terms dropdown test")
@@ -479,6 +494,7 @@ class TestCreateFormValidations:
             page.force_close_form_popup()
 
     # ---- SP-C16: Delivery Terms dropdown ----
+    @pytest.mark.sanity
     def test_SP_C16_delivery_terms_dropdown(self, sp_page):
         """Delivery Terms shows options (Delivery, Spot)."""
         log.info("SP-C16: Delivery Terms dropdown test")
@@ -500,6 +516,7 @@ class TestCreateFormValidations:
             page.force_close_form_popup()
 
     # ---- SP-C17: Mode Of Delivery dropdown ----
+    @pytest.mark.sanity
     def test_SP_C17_mode_of_delivery_dropdown(self, sp_page):
         """Mode Of Delivery shows options (Air, Courier, Sea, Railway, Truck)."""
         log.info("SP-C17: Mode Of Delivery dropdown test")
@@ -526,6 +543,7 @@ class TestCreateFormValidations:
             page.force_close_form_popup()
 
     # ---- SP-C18: Stepper Next/Back navigation ----
+    @pytest.mark.smoke
     def test_SP_C18_stepper_navigation(self, sp_page):
         """Navigate through steps via Next/Back buttons."""
         log.info("SP-C18: Stepper navigation test")
@@ -695,8 +713,7 @@ class TestEditFormValidations:
     """SP-E01 to SP-E04: Validation checks on the Edit form."""
 
     # ---- SP-E01: Edit no Update button ----
-    
-    # ---- SP-E01: Edit no Update button ----
+    @pytest.mark.sanity
     def test_SP_E01_edit_no_update_button(self, sp_page):
         """Open Edit popup — Update button should exist (BUG-005 fixed)."""
         log.info("SP-E01: Edit no Update button test")
@@ -719,7 +736,7 @@ class TestEditFormValidations:
             page.force_close_form_popup()
 
     # ---- SP-E02: Edit pre-populated fields ----
-    # ---- SP-E02: Edit pre-populated fields ----
+    @pytest.mark.smoke
     def test_SP_E02_edit_prepopulated(self, sp_page):
         """Edit popup shows fields pre-populated with existing data."""
         log.info("SP-E02: Edit pre-populated fields test")
@@ -743,8 +760,7 @@ class TestEditFormValidations:
             page.force_close_form_popup()
 
     # ---- SP-E03: Edit Company Name special chars ----
-    # ---- SP-E03: Edit Company Name special chars ----
-    # ---- SP-E03: Edit Company Name special chars ----
+    @pytest.mark.bug
     @pytest.mark.xfail(reason=KnownBugs.BUG_001, strict=False)
     def test_SP_E03_edit_company_name_special_chars(self, sp_page):
         """Edit to special chars in Company Name — BUG-001: accepted."""
@@ -787,7 +803,7 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- SP-E04: Edit Email to invalid ----
-    # ---- SP-E04: Edit Email to invalid ----
+    @pytest.mark.sanity
     def test_SP_E04_edit_invalid_email(self, sp_page):
         """Edit email to invalid format — ERP now validates."""
         log.info("SP-E04: Edit invalid email test")
@@ -835,7 +851,7 @@ class TestSearchFilter:
     """SP-S01 to SP-S05: Search edge cases."""
 
     # ---- SP-S01: Search exact match ----
-    # ---- SP-S01: Search exact match ----
+    @pytest.mark.smoke
     def test_SP_S01_search_exact(self, sp_page):
         """Search for exact Company Name — should find the supplier."""
         log.info("SP-S01: Search exact match test")
@@ -885,6 +901,7 @@ class TestSearchFilter:
         log.info(f"Case insensitive search result: found={found}")
 
     # ---- SP-S04: Search no results ----
+    @pytest.mark.sanity
     def test_SP_S04_search_no_results(self, sp_page):
         """Search for non-existent supplier — should return no results."""
         log.info("SP-S04: Search no results test")
@@ -925,6 +942,8 @@ class TestPopupUIBehaviors:
     """SP-P01 to SP-P07: Popup and UI interaction checks."""
 
     # ---- SP-P01: Add form opens ----
+    @pytest.mark.smoke
+    @pytest.mark.ui
     def test_SP_P01_add_form_opens(self, sp_page):
         """Click ADD — stepper popup opens."""
         log.info("SP-P01: Add form opens test")
@@ -951,7 +970,7 @@ class TestPopupUIBehaviors:
             page.force_close_form_popup()
 
     # ---- SP-P02: View popup readonly ----
-    # ---- SP-P02: View popup readonly ----
+    @pytest.mark.ui
     def test_SP_P02_view_popup_readonly(self, sp_page):
         """View popup shows all fields disabled/read-only."""
         log.info("SP-P02: View popup readonly test")
@@ -972,6 +991,7 @@ class TestPopupUIBehaviors:
         page.wait_seconds(0.5)
 
     # ---- SP-P03: Cancel closes popup ----
+    @pytest.mark.ui
     def test_SP_P03_cancel_closes_popup(self, sp_page):
         """Click Cancel — popup closes without creating a supplier."""
         log.info("SP-P03: Cancel closes popup test")
@@ -998,6 +1018,7 @@ class TestPopupUIBehaviors:
         log.info("Cancel correctly did not create a supplier")
 
     # ---- SP-P04: Close (X) button ----
+    @pytest.mark.ui
     def test_SP_P04_close_button(self, sp_page):
         """Click X — popup closes without creating a supplier."""
         log.info("SP-P04: Close button test")
@@ -1023,6 +1044,8 @@ class TestPopupUIBehaviors:
         log.info("X close correctly did not create a supplier")
 
     # ---- SP-P05: SweetAlert2 success ----
+    @pytest.mark.smoke
+    @pytest.mark.ui
     def test_SP_P05_sweetalert_success(self, sp_page):
         """Valid create shows SweetAlert2 success toast."""
         log.info("SP-P05: SweetAlert2 success test")
@@ -1044,6 +1067,8 @@ class TestPopupUIBehaviors:
         page.wait_seconds(2)
 
     # ---- SP-P06: Phone Number spinner controls ----
+    @pytest.mark.bug
+    @pytest.mark.ui
     @pytest.mark.xfail(reason=KnownBugs.BUG_003, strict=False)
     def test_SP_P06_phone_spinner_controls(self, sp_page):
         """Phone Number has spinner arrows — BUG-003: type=number."""
@@ -1065,6 +1090,8 @@ class TestPopupUIBehaviors:
             page.force_close_form_popup()
 
     # ---- SP-P07: Toggle switches default values ----
+    @pytest.mark.sanity
+    @pytest.mark.ui
     def test_SP_P07_toggle_defaults(self, sp_page):
         """Verify toggle defaults: MSME=No, Status=Active, GST=Yes, TDS=No."""
         log.info("SP-P07: Toggle switch defaults test")
@@ -1114,6 +1141,7 @@ class TestBugSpecific:
     """SP-B01 to SP-B05: Confirmed bug validation tests."""
 
     # ---- SP-B01: Company Name accepts special chars ----
+    @pytest.mark.bug
     @pytest.mark.xfail(reason=KnownBugs.BUG_001, strict=False)
     def test_SP_B01_special_chars_accepted(self, sp_page):
         """BUG-001: Create with special chars succeeds."""
@@ -1137,6 +1165,7 @@ class TestBugSpecific:
         page.wait_seconds(2)
 
     # ---- SP-B02: No email format validation ----
+    @pytest.mark.bug
     def test_SP_B02_no_email_validation(self, sp_page):
         """BUG-002: Invalid email accepted."""
         log.info("SP-B02: No email format validation bug test")
@@ -1159,6 +1188,7 @@ class TestBugSpecific:
         page.wait_seconds(2)
 
     # ---- SP-B03: Phone Number spinner controls ----
+    @pytest.mark.bug
     @pytest.mark.xfail(reason=KnownBugs.BUG_003, strict=False)
     def test_SP_B03_phone_spinner(self, sp_page):
         """BUG-003: type=number shows spinners."""
@@ -1180,6 +1210,7 @@ class TestBugSpecific:
             page.force_close_form_popup()
 
     # ---- SP-B04: No PAN format validation ----
+    @pytest.mark.bug
     def test_SP_B04_no_pan_validation(self, sp_page):
         """BUG-004: Invalid PAN accepted."""
         log.info("SP-B04: No PAN format validation bug test")
@@ -1202,6 +1233,7 @@ class TestBugSpecific:
         page.wait_seconds(2)
 
     # ---- SP-B05: Edit mode no Update button ----
+    @pytest.mark.bug
     def test_SP_B05_edit_no_update(self, sp_page):
         """BUG-005: Cannot save edits — no Update button."""
         log.info("SP-B05: Edit no Update button bug test")

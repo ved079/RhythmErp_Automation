@@ -1,5 +1,5 @@
 """
-conftest.py - Role Creation Screen (RhythmERP)
+conftest.py - Entity Group Definition Access Settings (RhythmERP)
 """
 
 import os
@@ -15,12 +15,20 @@ sys.path.insert(0, PROJECT_ROOT)
 from common.logger import log
 from common.browser_utils import get_driver
 from pages.login_screens.Login_Screens_.login_page import LoginPage
-from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
 from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
 from pages.common_settings.cs_report_generator import (
     CSReportStore,
     generate_cs_report,
 )
+
+
+def pytest_configure(config):
+    """Register custom pytest markers for Role Creation Screen tests."""
+    config.addinivalue_line("markers", "smoke: Core critical-path tests (create happy path, required field validation, edit pre-populated, search)")
+    config.addinivalue_line("markers", "sanity: Full suite — all 45 Role Creation tests")
+    config.addinivalue_line("markers", "regression: Full suite — all 45 Role Creation tests")
+    config.addinivalue_line("markers", "bug: Tests targeting confirmed bugs (BUG-001 through BUG-008)")
+    config.addinivalue_line("markers", "ui: Popup behavior, view/edit form, cancel/close, fullscreen, SweetAlert2, refresh, pagination, history, mat-error")
 
 
 # ================================================================
@@ -30,7 +38,7 @@ from pages.common_settings.cs_report_generator import (
 @pytest.fixture(scope="session")
 def driver():
     log.separator()
-    log.info("LAUNCHING BROWSER (RhythmERP - Role Creation Screen Tests)...")
+    log.info("LAUNCHING BROWSER (RhythmERP - Entity Group Definition Tests)...")
     log.separator()
     drv = get_driver()
     drv.maximize_window()
@@ -74,22 +82,17 @@ def logged_in_driver(driver):
 
     login_page.wait_for_login_complete()
     log.info("RhythmERP login successful!")
-    start_screenshot_broadcast(driver)
-    start_screenshot_broadcast(driver)
-    log.info("RhythmERP login successful!")
 
     yield driver
 
-    stop_screenshot_broadcast()
-
 
 @pytest.fixture
-def rc_page(logged_in_driver):
-    """Role Creation page object — fresh navigation for each test."""
-    from pages.access.modules.role_creation_screen.role_creation_page import (
-        RoleCreationPage,
+def egd_page(logged_in_driver):
+    """Entity Group Definition page object — fresh navigation for each test."""
+    from pages.access.modules.entity_group_definition.entity_group_definition_page import (
+        EntityGroupDefinitionPage,
     )
-    page = RoleCreationPage(logged_in_driver)
+    page = EntityGroupDefinitionPage(logged_in_driver)
     page.navigate_to_page()
     yield page
 
@@ -98,126 +101,131 @@ def rc_page(logged_in_driver):
 # REPORT GENERATOR HOOKS
 # ================================================================
 
-_rc_store = CSReportStore()
+_egd_store = CSReportStore()
 
-# ---- Role Creation Known Issues ----
-# These are populated from the Role Creation Master Spec exploration.
+# ---- Entity Group Definition Known Issues ----
 
-# BUG-001 (HIGH): Spaces-only Role Name accepted as valid (ng-valid)
-_rc_store.record_issue(
+# BUG-001 (HIGH): Spaces-only Entity Group Name accepted
+_egd_store.record_issue(
     severity="High",
-    module="Role Creation Screen",
-    category="Validation",
-    description="Spaces-only Role Name is accepted as valid (ng-valid class set). "
-                "The system does not validate against whitespace-only input in the "
-                "Role Name field. A name consisting entirely of spaces passes client-side "
-                "validation and can be submitted.",
-    expected="System should trigger a validation error like 'This field is required' "
-             "or 'Spaces-only input is not allowed' and keep the form open.",
-    actual="CONFIRMED: Spaces-only input accepted as ng-valid. Form can be submitted.",
-    test_ref="RC-C03",
-    status="Confirmed",
-)
-
-# BUG-002 (HIGH): Special characters accepted in Role Name
-_rc_store.record_issue(
-    severity="High",
-    module="Role Creation Screen",
-    category="Input Validation",
-    description="Special characters such as !@#$%^&*() are accepted in the Role Name "
-                "field and saved to the database. No input sanitization or validation "
-                "is performed on the Role Name field.",
-    expected="System should reject special characters with a validation error.",
-    actual="CONFIRMED: Special characters accepted and saved.",
-    test_ref="RC-C05",
-    status="Confirmed",
-)
-
-# BUG-003 (CRITICAL): SQL injection strings accepted
-_rc_store.record_issue(
-    severity="Critical",
-    module="Role Creation Screen",
-    category="Security",
-    description="SQL injection strings such as '; DROP TABLE roles; -- are accepted "
-                "in the Role Name field and saved to the database. This is a critical "
-                "security vulnerability that could allow data exfiltration or destruction.",
-    expected="System should reject or sanitize SQL injection input.",
-    actual="CONFIRMED: SQL injection strings accepted and saved.",
-    test_ref="RC-C06",
-    status="Confirmed",
-)
-
-# BUG-004 (CRITICAL): XSS payloads accepted
-_rc_store.record_issue(
-    severity="Critical",
-    module="Role Creation Screen",
-    category="Security",
-    description="XSS payloads such as <script>alert('xss')</script> are accepted "
-                "in the Role Name field and saved to the database. This is a critical "
-                "security vulnerability that could allow cross-site scripting attacks.",
-    expected="System should reject or sanitize XSS payloads.",
-    actual="CONFIRMED: XSS payloads accepted and saved.",
-    test_ref="RC-C07",
-    status="Confirmed",
-)
-
-# BUG-005 (HIGH): Duplicate Role Names allowed
-_rc_store.record_issue(
-    severity="High",
-    module="Role Creation Screen",
+    module="Entity Group Definition",
     category="Data Integrity",
-    description="Duplicate Role Names are ALLOWED in the system. Two or more roles "
-                "with identical Role Name can coexist with no warning. Case-insensitive "
-                "duplicates are also allowed.",
-    expected="System should show a validation error like 'Role Name already exists' "
-             "and keep the form open for correction.",
-    actual="CONFIRMED: No uniqueness validation. Duplicate names accepted.",
-    test_ref="RC-D01, RC-D02",
-    status="Confirmed",
+    description="Spaces-only Entity Group Name is accepted and creates a blank/empty "
+                "record in the table. When a user enters only spaces in the Entity "
+                "Group Name field and submits, the ERP trims the spaces but stores "
+                "an empty string, resulting in a row with no visible name text.",
+    expected="System should reject spaces-only input with a validation error "
+             "like 'Entity Group Name cannot be empty or spaces only'.",
+    actual="Spaces-only name is accepted and creates a blank record in the table.",
+    test_ref="EGD-C03, EGD-E06",
+    status="Open",
 )
 
-# BUG-006 (MEDIUM): No client maxlength — 500-char name silently fails
-_rc_store.record_issue(
+# BUG-002 (HIGH): Exact duplicate name silently rejected with no feedback
+_egd_store.record_issue(
+    severity="High",
+    module="Entity Group Definition",
+    category="UX",
+    description="When creating an Entity Group Definition with a name that exactly "
+                "matches an existing record, the form stays open with no error message, "
+                "no SweetAlert2 popup, no toast notification, and no mat-error. The "
+                "submission simply does nothing — the user gets zero feedback about "
+                "why their submission failed.",
+    expected="System should show a clear error message like 'Entity Group Name "
+             "already exists' and keep the form open for correction.",
+    actual="Form stays open with values intact but no feedback. Submission silently fails.",
+    test_ref="EGD-D01, EGD-D04, EGD-B03",
+    status="Open",
+)
+
+# BUG-003 (HIGH): Case-insensitive duplicate NOT blocked
+_egd_store.record_issue(
+    severity="High",
+    module="Entity Group Definition",
+    category="Data Integrity",
+    description="Case-insensitive duplicate Entity Group Names are NOT blocked. "
+                "If 'Agdi' exists, creating 'agdi' (lowercase) is accepted as a "
+                "new record. Similarly, spaces around names are not checked for "
+                "uniqueness. This leads to data duplication and confusion.",
+    expected="System should perform a case-insensitive comparison (ignoring "
+             "leading/trailing spaces) and reject duplicate names.",
+    actual="Case-variant duplicates are accepted as separate records.",
+    test_ref="EGD-D02, EGD-D03",
+    status="Open",
+)
+
+# BUG-004 (MEDIUM): Negative Level values accepted
+_egd_store.record_issue(
     severity="Medium",
-    module="Role Creation Screen",
+    module="Entity Group Definition",
     category="Validation",
-    description="No maxlength attribute on Role Name input. 500-character names pass "
-                "client-side validation (ng-valid) but are silently rejected server-side "
-                "with no error message shown to the user. The form just stays open with "
-                "no feedback.",
-    expected="Client should enforce maxlength or show a clear server-side error.",
-    actual="CONFIRMED: No maxlength. Server silently rejects with no error shown.",
-    test_ref="RC-C08",
-    status="Confirmed",
+    description="Negative Level values (e.g., -5, -10) are accepted without any "
+                "validation error. The Level field has no min attribute, allowing "
+                "any negative integer. This is likely unintended as entity group "
+                "levels should represent hierarchical depth (0, 1, 2, ...).",
+    expected="System should enforce min=0 on the Level field and reject negative values.",
+    actual="Negative levels are accepted and stored as-is.",
+    test_ref="EGD-B01",
+    status="Open",
 )
 
-# BUG-007 (LOW): No visible mat-error text on required field validation
-_rc_store.record_issue(
-    severity="Low",
-    module="Role Creation Screen",
-    category="Validation UX",
-    description="When required field validation triggers, only a red outline appears "
-                "on the invalid field. No visible mat-error text is displayed to guide "
-                "the user on what needs to be corrected.",
-    expected="Should display 'This field is required' inline error text.",
-    actual="CONFIRMED: Only red outline, no error text visible.",
-    test_ref="RC-C01",
-    status="Confirmed",
+# BUG-005 (MEDIUM): Decimal Level values accepted
+_egd_store.record_issue(
+    severity="Medium",
+    module="Entity Group Definition",
+    category="Validation",
+    description="Decimal Level values (e.g., 3.5) are accepted without validation. "
+                "The Level field has no step='1' attribute, allowing fractional values. "
+                "Entity group hierarchy levels should be integers.",
+    expected="System should enforce step='1' on the Level field and reject decimal values.",
+    actual="Decimal levels are accepted and stored as-is.",
+    test_ref="EGD-B02",
+    status="Open",
 )
 
-# BUG-008 (LOW): No Delete option anywhere on screen
-_rc_store.record_issue(
+# BUG-006 (LOW): Special characters in Entity Group Name accepted
+_egd_store.record_issue(
     severity="Low",
-    module="Role Creation Screen",
-    category="Functionality",
-    description="No Delete option exists anywhere on the Role Creation Screen — "
-                "no Delete button per row, no Delete in More menu, no Delete in the "
-                "edit popup. Records cannot be removed once created.",
-    expected="Users should be able to delete a Role Creation record via a Delete "
-             "button on the row or in the edit popup.",
-    actual="No Delete functionality available. Records cannot be removed.",
-    test_ref="RC-P02",
-    status="Confirmed",
+    module="Entity Group Definition",
+    category="Validation",
+    description="Special characters like !@#$%^&*() are accepted in Entity Group Name "
+                "without any sanitization or validation. While some special characters "
+                "may be acceptable, characters like <, >, or script tags could pose "
+                "security risks.",
+    expected="System should sanitize or restrict special characters in names.",
+    actual="All special characters are accepted without validation.",
+    test_ref="EGD-C08",
+    status="Open",
+)
+
+# BUG-007 (LOW): No maxlength on Entity Group Name
+_egd_store.record_issue(
+    severity="Low",
+    module="Entity Group Definition",
+    category="Validation",
+    description="No maxlength attribute on the Entity Group Name input field. Names "
+                "of 255+ characters are accepted and stored without truncation or "
+                "validation error.",
+    expected="System should enforce a reasonable maxlength (e.g., 255 chars) "
+             "and show inline validation if exceeded.",
+    actual="No maxlength constraint. Extremely long names are stored as-is.",
+    test_ref="EGD-C06, EGD-C07",
+    status="Open",
+)
+
+# BUG-008 (LOW): No success SweetAlert after create/update
+_egd_store.record_issue(
+    severity="Low",
+    module="Entity Group Definition",
+    category="UX",
+    description="No success SweetAlert2 popup appears after creating or updating "
+                "an Entity Group Definition. The form popup simply closes with no "
+                "confirmation to the user that the action succeeded.",
+    expected="A success alert like 'Entity Group Definition created successfully' "
+             "should appear after create/update.",
+    actual="Popup closes silently. No success confirmation shown to user.",
+    test_ref="EGD-C02, EGD-E02, EGD-E05",
+    status="Open",
 )
 
 
@@ -246,9 +254,9 @@ _capture_handler = None
 def pytest_runtest_setup(item):
     """Start log capture before each test."""
     global _capture_handler
-    _rc_store.start_test(item.name, item.nodeid)
+    _egd_store.start_test(item.name, item.nodeid)
 
-    _capture_handler = _LogCapture(_rc_store)
+    _capture_handler = _LogCapture(_egd_store)
     _capture_handler.setLevel(logging.INFO)
     try:
         if hasattr(log, "logger") and log.logger:
@@ -289,19 +297,19 @@ def pytest_runtest_makereport(item, call):
         else:
             status = "SKIPPED"
             error = ""
-        _rc_store.finish_test(status, error)
+        _egd_store.finish_test(status, error)
 
 
 def pytest_sessionfinish(session, exitstatus):
     """Generate Excel report at end of test session."""
-    if not _rc_store.has_results():
+    if not _egd_store.has_results():
         return
     output_dir = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "reports"
     )
     try:
         filepath = generate_cs_report(
-            _rc_store.results, output_dir, issues=_rc_store.known_issues
+            _egd_store.results, output_dir, issues=_egd_store.known_issues
         )
         print("")
         print("=" * 60)

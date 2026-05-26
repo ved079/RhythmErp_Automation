@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// GET /api/bugs — list all bug reports with replies
+// GET /api/bugs -” list all bug reports with replies
 export async function GET() {
   try {
     const reports = await db.bugReport.findMany({
@@ -26,7 +26,7 @@ export async function GET() {
   }
 }
 
-// POST /api/bugs — create a new bug report
+// POST /api/bugs -” create a new bug report
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()

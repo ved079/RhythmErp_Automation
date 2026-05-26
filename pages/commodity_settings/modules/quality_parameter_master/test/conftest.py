@@ -24,6 +24,26 @@ from pages.common_settings.cs_report_generator import (
 
 
 # ================================================================
+# PYTEST MARKERS
+# ================================================================
+
+def pytest_configure(config):
+    """Register custom pytest markers for Quality Parameter Master tests.
+
+    Usage examples:
+        pytest test_quality_parameter_master_validation.py -m smoke
+        pytest test_quality_parameter_master_validation.py -m "smoke or sanity"
+        pytest test_quality_parameter_master_validation.py -m "not bug"
+        pytest test_quality_parameter_master_validation.py -m ui
+    """
+    config.addinivalue_line("markers", "smoke: Critical path — core create/edit/search")
+    config.addinivalue_line("markers", "sanity: Broad functional coverage for quick feedback")
+    config.addinivalue_line("markers", "regression: Full test suite — all 30 tests")
+    config.addinivalue_line("markers", "bug: Tests validating known open bugs (BUG-001 to BUG-006)")
+    config.addinivalue_line("markers", "ui: UI element visibility, layout, and interaction checks")
+
+
+# ================================================================
 # FIXTURES
 # ================================================================
 

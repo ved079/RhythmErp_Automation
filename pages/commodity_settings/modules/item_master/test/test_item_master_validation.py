@@ -64,6 +64,22 @@ Run:
   pytest test_item_master_validation.py -v --tb=short
   pytest test_item_master_validation.py -v -k "TestCreateForm" --tb=short
   pytest test_item_master_validation.py -v -k "IM-C03" --tb=short
+
+Marker-based run examples (requires conftest.py with pytest_configure):
+  pytest test_item_master_validation.py -v -m smoke
+  pytest test_item_master_validation.py -v -m "smoke or sanity"
+  pytest test_item_master_validation.py -v -m "sanity and not bug"
+  pytest test_item_master_validation.py -v -m "not bug"
+  pytest test_item_master_validation.py -v -m ui
+  pytest test_item_master_validation.py -v -m bug
+  pytest test_item_master_validation.py -v -m regression
+
+Marker Summary (44 tests across 6 classes):
+  smoke (15): C01, C02, C03, C07, C14, C15, E01, E02, E03, S01, S03, P01, P03, P04, H01
+  sanity (41): All smoke + C04, C05, C08-C13, D01, E04-E08, S02, S04, S05, P02, P05-P08, H02-H05
+  regression (44): All tests (including 3 skipped: C06, D02, D03)
+  bug (9): C04, C08, C10, C11, C12, D01, E07, E08, P02
+  ui (16): C07, C15, E03, E05, E06, P01, P02, P03, P04, P05, P06, P07, P08, H01, H04, H05
 """
 
 import os
@@ -141,6 +157,9 @@ class TestCreateFormValidations:
     """
 
     # ---- IM-C01: Submit with all fields empty ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_C01_empty_submit(self, im_page):
         """Submit with all fields empty — should be blocked."""
         log.info("IM-C01: Empty submit test")
@@ -181,6 +200,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- IM-C02: Create with valid data (happy path) ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_C02_valid_create(self, im_page):
         """Create with valid data across all 3 steps — should succeed."""
         log.info("IM-C02: Valid create test (happy path)")
@@ -207,6 +229,9 @@ class TestCreateFormValidations:
         log.info(f"Item created and found in table: {name}")
 
     # ---- IM-C03: Item Name field is readonly ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_C03_item_name_readonly(self, im_page):
         """Item Name field is readonly — manual input should have no effect.
 
@@ -286,6 +311,9 @@ class TestCreateFormValidations:
                 pass
 
     # ---- IM-C04: Duplicate Item Name — verify duplicates are ALLOWED ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IM_C04_duplicate_name(self, im_page):
         """Duplicate Item Name in Create — verify duplicates are ALLOWED.
 
@@ -377,6 +405,8 @@ class TestCreateFormValidations:
             )
 
     # ---- IM-C05: Auto-generated Item Name length is reasonable ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_C05_auto_name_length_reasonable(self, im_page):
         """Auto-generated Item Name length should be reasonable.
 
@@ -420,6 +450,7 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- IM-C06: Maxlength not applicable for auto-generated field ----
+    @pytest.mark.regression
     @pytest.mark.skip(
         reason="Item Name is readonly and auto-generated from attributes; "
                "maxlength boundary testing (256 chars) is not applicable "
@@ -438,6 +469,10 @@ class TestCreateFormValidations:
         pass
 
     # ---- IM-C07: Verify Item Name readonly attribute ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IM_C07_verify_name_readonly_attribute(self, im_page):
         """Verify Item Name input element has the readonly attribute.
 
@@ -533,6 +568,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- IM-C08: Negative Base Uom Conversion ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IM_C08_negative_uom_conversion(self, im_page):
         """Negative value in Base Uom Conversion — should be rejected.
         BUG-004 was NOT confirmed during test run (XPASS): negative values
@@ -568,6 +606,8 @@ class TestCreateFormValidations:
                 pass
 
     # ---- IM-C09: Zero Base Uom Conversion ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_C09_zero_uom_conversion(self, im_page):
         """Zero value in Base Uom Conversion — check if rejected."""
         log.info("IM-C09: Zero UOM conversion test")
@@ -605,6 +645,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- IM-C10: Alphabetic Base Uom Conversion ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IM_C10_alpha_uom_conversion(self, im_page):
         """Alphabetic characters in Base Uom Conversion — should be rejected."""
         log.info("IM-C10: Alpha UOM conversion test")
@@ -642,6 +685,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- IM-C11: Special characters in Base Uom Conversion ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IM_C11_special_char_uom_conversion(self, im_page):
         """Special characters in Base Uom Conversion — should be rejected."""
         log.info("IM-C11: Special char UOM conversion test")
@@ -679,6 +725,9 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- IM-C12: Spaces in Base Uom Conversion ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IM_C12_spaces_uom_conversion(self, im_page):
         """Spaces-only value in Base Uom Conversion — should be rejected."""
         log.info("IM-C12: Spaces UOM conversion test")
@@ -716,6 +765,8 @@ class TestCreateFormValidations:
         page.wait_seconds(2)
 
     # ---- IM-C13: Valid decimal Base Uom Conversion ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_C13_decimal_uom_conversion(self, im_page):
         """Valid decimal value in Base Uom Conversion — should be accepted."""
         log.info("IM-C13: Decimal UOM conversion test")
@@ -740,6 +791,9 @@ class TestCreateFormValidations:
             )
 
     # ---- IM-C14: Partial required fields — dropdowns missing ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_C14_partial_required_fields(self, im_page):
         """Submit with only partial required fields — should be blocked.
 
@@ -820,6 +874,10 @@ class TestCreateFormValidations:
                 pass
 
     # ---- IM-C15: Stepper navigation — Back button ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IM_C15_stepper_back_button(self, im_page):
         """Fill Step 1, go to Step 2, then click Back — should return to Step 1."""
         log.info("IM-C15: Stepper Back button test")
@@ -892,6 +950,9 @@ class TestDuplicateValidations:
     """
 
     # ---- IM-D01: Duplicate name — Create after Create ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IM_D01_duplicate_create(self, im_page):
         """Create two items with identical attribute values (producing duplicate names).
 
@@ -974,6 +1035,7 @@ class TestDuplicateValidations:
             )
 
     # ---- IM-D02: Duplicate name — case-insensitive check ----
+    @pytest.mark.regression
     @pytest.mark.skip(
         reason="Item Name is readonly and auto-generated from attributes; "
                "cannot type a name in different case. Case-insensitive "
@@ -991,6 +1053,7 @@ class TestDuplicateValidations:
         pass
 
     # ---- IM-D03: Duplicate name — Edit to existing name ----
+    @pytest.mark.regression
     @pytest.mark.skip(
         reason="Item Name is readonly in Edit mode as well; cannot type "
                "another item's name into the edit form. The Item Name "
@@ -1021,6 +1084,9 @@ class TestEditFormValidations:
     """
 
     # ---- IM-E01: Edit — pre-populated fields ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_E01_edit_prepopulated(self, im_page):
         """Edit popup should show Step 1 fields pre-populated.
 
@@ -1083,6 +1149,9 @@ class TestEditFormValidations:
                 pass
 
     # ---- IM-E02: Edit — valid update ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_E02_valid_edit(self, im_page):
         """Edit with valid new values — should succeed.
 
@@ -1120,6 +1189,10 @@ class TestEditFormValidations:
         )
 
     # ---- IM-E03: Edit — readonly Item Name prevents clearing ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IM_E03_edit_readonly_name_enforcement(self, im_page):
         """Item Name is readonly in Edit — JS-based clearing should have no effect.
 
@@ -1211,6 +1284,8 @@ class TestEditFormValidations:
                 pass
 
     # ---- IM-E04: Edit — typing into readonly Item Name has no effect ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_E04_edit_readonly_name_no_typing(self, im_page):
         """Typing into readonly Item Name in Edit should have no effect.
 
@@ -1268,6 +1343,9 @@ class TestEditFormValidations:
         page.wait_seconds(2)
 
     # ---- IM-E05: Edit — stepper still works in edit mode ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IM_E05_edit_stepper_navigation(self, im_page):
         """Edit form should allow navigating between stepper steps."""
         log.info("IM-E05: Edit stepper navigation test")
@@ -1308,6 +1386,9 @@ class TestEditFormValidations:
                 pass
 
     # ---- IM-E06: Edit — toggle switches (all on Step 1) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IM_E06_edit_toggle_switches(self, im_page):
         """Toggle switches in Edit mode should be changeable.
 
@@ -1357,6 +1438,9 @@ class TestEditFormValidations:
                 pass
 
     # ---- IM-E07: Edit — negative Uom Conversion ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     @pytest.mark.xfail(
         reason="BUG-004: Negative Uom Conversion may be accepted in Edit",
         strict=False,
@@ -1398,6 +1482,9 @@ class TestEditFormValidations:
                 pass
 
     # ---- IM-E08: Edit — special chars in Item Code ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
     def test_IM_E08_edit_special_char_code(self, im_page):
         """Edit Item Code with special characters — check acceptance."""
         log.info("IM-E08: Edit special char code test")
@@ -1445,6 +1532,9 @@ class TestSearchFilter:
     """IM-S01 to IM-S05: Search and Filter edge cases."""
 
     # ---- IM-S01: Search with exact Item Name ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_S01_search_exact(self, im_page):
         """Search with exact item name — should find it."""
         log.info("IM-S01: Search exact name")
@@ -1459,6 +1549,8 @@ class TestSearchFilter:
         log.info(f"Exact search found: {name}")
 
     # ---- IM-S02: Search with partial Item Name ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_S02_search_partial(self, im_page):
         """Search with partial item name — should find it."""
         log.info("IM-S02: Search partial name")
@@ -1475,6 +1567,9 @@ class TestSearchFilter:
         log.info(f"Partial search found with: {partial}")
 
     # ---- IM-S03: Search with non-existent Name ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_S03_search_nonexistent(self, im_page):
         """Search for non-existent name — should return no results."""
         log.info("IM-S03: Search nonexistent")
@@ -1490,6 +1585,8 @@ class TestSearchFilter:
         log.info(f"Correctly not found: {fake_name}")
 
     # ---- IM-S04: Search after creating new item ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_S04_search_after_create(self, im_page):
         """Create a new item, then search — should find it immediately."""
         log.info("IM-S04: Search after create")
@@ -1507,6 +1604,8 @@ class TestSearchFilter:
         log.info(f"Newly created item found in search: {name}")
 
     # ---- IM-S05: Search and verify row details ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_S05_search_verify_details(self, im_page):
         """Search for an item and verify row details match."""
         log.info("IM-S05: Search verify details")
@@ -1540,6 +1639,10 @@ class TestPopupUIBehaviors:
     """IM-P01 to IM-P08: Popup, stepper, and UI behavior tests."""
 
     # ---- IM-P01: View popup is read-only ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IM_P01_view_read_only(self, im_page):
         """View popup should show fields as read-only."""
         log.info("IM-P01: View read-only test")
@@ -1561,6 +1664,10 @@ class TestPopupUIBehaviors:
         page.wait_seconds(0.5)
 
     # ---- IM-P02: No Delete button available ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.bug
+    @pytest.mark.ui
     def test_IM_P02_no_delete_button(self, im_page):
         """Verify no Delete button exists per row.
         BUG-005: No Delete option on the screen.
@@ -1596,6 +1703,10 @@ class TestPopupUIBehaviors:
             log.info("No rows in table to check for Delete button")
 
     # ---- IM-P03: Add form opens stepper ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IM_P03_add_form_stepper(self, im_page):
         """Add form should open with Step 1 active in stepper."""
         log.info("IM-P03: Add form stepper test")
@@ -1620,6 +1731,10 @@ class TestPopupUIBehaviors:
                 pass
 
     # ---- IM-P04: Cancel closes the form ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IM_P04_cancel_closes_form(self, im_page):
         """Cancel button should close the stepper form."""
         log.info("IM-P04: Cancel closes form test")
@@ -1638,6 +1753,9 @@ class TestPopupUIBehaviors:
         log.info("Cancel correctly closes the form")
 
     # ---- IM-P05: Refresh button works ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IM_P05_refresh_button(self, im_page):
         """Refresh button should reload the table."""
         log.info("IM-P05: Refresh button test")
@@ -1652,6 +1770,9 @@ class TestPopupUIBehaviors:
         log.info("Refresh button works — page reloaded")
 
     # ---- IM-P06: Step 3 — Add Row button ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IM_P06_step3_add_row(self, im_page):
         """Step 3 should allow adding rows to the packaging table."""
         log.info("IM-P06: Step 3 Add Row test")
@@ -1700,6 +1821,9 @@ class TestPopupUIBehaviors:
                 pass
 
     # ---- IM-P07: Toggle switches in Create form (all on Step 1) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IM_P07_toggle_switches_create(self, im_page):
         """Toggle switches should be functional in Create form.
 
@@ -1757,6 +1881,9 @@ class TestPopupUIBehaviors:
                 pass
 
     # ---- IM-P08: Stepper header click navigation ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IM_P08_stepper_header_click(self, im_page):
         """Clicking stepper headers should navigate between steps
         (if linear mode allows).
@@ -1802,6 +1929,10 @@ class TestHistoryAuditTrail:
     """
 
     # ---- IM-H01: History popup opens ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IM_H01_history_popup_opens(self, im_page):
         """Clicking History button should open the history popup."""
         log.info("IM-H01: History popup opens test")
@@ -1830,6 +1961,8 @@ class TestHistoryAuditTrail:
                 log.warning("No popup opened after clicking History button")
 
     # ---- IM-H02: History has data after create ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_H02_history_data_after_create(self, im_page):
         """After creating an item, history should show at least one entry."""
         log.info("IM-H02: History data after create test")
@@ -1855,6 +1988,8 @@ class TestHistoryAuditTrail:
             log.warning("History popup did not open")
 
     # ---- IM-H03: History data after edit ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
     def test_IM_H03_history_data_after_edit(self, im_page):
         """After editing an item, history should show additional entries.
 
@@ -1913,6 +2048,9 @@ class TestHistoryAuditTrail:
         page.clear_search()
 
     # ---- IM-H04: History search within popup ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IM_H04_history_search(self, im_page):
         """Search within history popup should filter results."""
         log.info("IM-H04: History search test")
@@ -1938,6 +2076,9 @@ class TestHistoryAuditTrail:
             log.warning("History popup did not open for search test")
 
     # ---- IM-H05: History close button works ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
     def test_IM_H05_history_close(self, im_page):
         """History popup should close via Close/Cancel button."""
         log.info("IM-H05: History close test")

@@ -1,5 +1,5 @@
 """
-conftest.py - Season Common Settings (RhythmERP)
+conftest.py - HSN SAC Common Settings (RhythmERP)
 """
 
 import os
@@ -14,7 +14,7 @@ from common.logger import log
 from common.browser_utils import get_driver
 from pages.login_screens.Login_Screens_.login_page import LoginPage
 from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
-from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
+from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHYTHMERP_FACILITY
 from pages.common_settings.cs_report_generator import CSReportStore, generate_cs_report
 
 
@@ -25,7 +25,7 @@ from pages.common_settings.cs_report_generator import CSReportStore, generate_cs
 @pytest.fixture(scope="session")
 def driver():
     log.separator()
-    log.info("LAUNCHING BROWSER (RhythmERP - Season Tests)...")
+    log.info("LAUNCHING BROWSER (RhythmERP - HSN SAC Tests)...")
     log.separator()
     drv = get_driver()
     drv.maximize_window()
@@ -58,13 +58,18 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    log.step(3, "Selecting facility (blank - first option)")
-    login_page.select_facility_by_index(index=0)
+    if RHYTHMERP_FACILITY:
+        log.step(3, "Selecting facility: " + str(RHYTHMERP_FACILITY))
+        login_page.select_facility(RHYTHMERP_FACILITY)
+    else:
+        log.step(3, "Selecting facility (blank - first option)")
+        login_page.select_facility(" ")
 
     login_page.wait_seconds(1)
 
     log.step(4, "Clicking Login button")
-    login_page.click_login()
+    login_button = ("xpath", "//button[contains(.,'Login')]")
+    login_page.click(login_button)
     login_page.wait_seconds(3)
 
     login_page.wait_for_login_complete()
@@ -79,36 +84,28 @@ def logged_in_driver(driver):
 
 
 @pytest.fixture
-def season_page(logged_in_driver):
-    """Season page object — fresh navigation for each test."""
-    from pages.common_settings.modules.season.season_page import SeasonPage
-    page = SeasonPage(logged_in_driver)
-    page.navigate_to_season()
+def hsn_sac_page(logged_in_driver):
+    """
+    Fresh HSN SAC page per test.
+    Navigates to the HSN SAC page before each test.
+    """
+    from pages.common_settings.modules.hsn_sac.hsn_sac_page import HsnSacPage
+    page = HsnSacPage(logged_in_driver)
+    page.navigate_to_page()
     yield page
-    # Teardown: force-close any lingering overlays/forms after each test
-    try:
-        page._force_close_panels()
-        page.driver.refresh()
-        page.wait_seconds(2)
-    except Exception:
-        pass
 
 
-@pytest.fixture(autouse=True)
-def hard_refresh_between_tests(logged_in_driver):
-    """Hard refresh the page before each test to ensure clean state."""
-    try:
-        logged_in_driver.refresh()
-        logged_in_driver.implicitly_wait(2)
-    except Exception:
-        pass
-    yield
-    # After test: hard refresh again
-    try:
-        logged_in_driver.refresh()
-        logged_in_driver.implicitly_wait(2)
-    except Exception:
-        pass
+# ================================================================
+# PYTEST MARKERS
+# ================================================================
+
+def pytest_configure(config):
+    """Register custom pytest markers for Season module."""
+    config.addinivalue_line("markers", "smoke: Core CRUD + critical path tests (4 tests)")
+    config.addinivalue_line("markers", "sanity: All 18 tests — full module sanity check")
+    config.addinivalue_line("markers", "regression: All 18 tests — full regression suite")
+    config.addinivalue_line("markers", "bug: Known bugs — SQL injection, XSS, duplicate alert, special chars, no max length (5 tests)")
+    config.addinivalue_line("markers", "ui: UI interaction tests — alerts, view mode, search, history, cancel, boundary (12 tests)")
 
 
 # ================================================================
@@ -116,61 +113,6 @@ def hard_refresh_between_tests(logged_in_driver):
 # ================================================================
 
 _cs_store = CSReportStore()
-
-# ---- Season Known Issues ----
-_cs_store.record_issue(
-    severity="Medium",
-    module="Season",
-    category="Data Integrity",
-    description="Duplicate Season Name shows generic 'Validation Failed' alert "
-                "without specifically mentioning the duplicate field. User must "
-                "click Cancel to dismiss and the form stays open for correction.",
-    expected="System should show a specific error like 'Season Name already exists' "
-             "highlighting the Name field.",
-    actual="Generic 'Validation Failed' Pattern B alert appears with option to "
-           "download errors as Excel. Form stays open for correction.",
-    test_ref="Test T5",
-    status="Open",
-)
-
-_cs_store.record_issue(
-    severity="High",
-    module="Season",
-    category="Security",
-    description="SQL injection accepted and stored in Season Name field. "
-                "Input like '; DROP TABLE Season-- is saved as-is and displayed "
-                "in the list table without any sanitization.",
-    expected="System should reject or sanitize SQL injection input.",
-    actual="SQL injection payload is accepted, stored in DB, and rendered in the list view.",
-    test_ref="Test T3",
-    status="Open",
-)
-
-_cs_store.record_issue(
-    severity="High",
-    module="Season",
-    category="Security",
-    description="XSS script tag accepted in Name field — stored as raw HTML and "
-                "visible in the list page. If any part of the UI renders HTML "
-                "content, this could execute arbitrary JavaScript.",
-    expected="System should reject or sanitize script tags and HTML input.",
-    actual="<script>alert('xss')</script> is stored as-is and visible in the list table.",
-    test_ref="Test T4",
-    status="Open",
-)
-
-_cs_store.record_issue(
-    severity="Low",
-    module="Season",
-    category="Validation",
-    description="No max length restriction on Name or Description fields. "
-                "Very long strings (200+ characters) are accepted without warning "
-                "or character count indicator.",
-    expected="System should enforce a reasonable max length with visual character count.",
-    actual="Fields accept any length input with no validation or feedback.",
-    test_ref="Test T10",
-    status="Open",
-)
 
 
 # ================================================================
@@ -250,6 +192,7 @@ def pytest_sessionfinish(session, exitstatus):
         return
     output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "reports")
     try:
+        os.makedirs(output_dir, exist_ok=True)
         filepath = generate_cs_report(_cs_store.results, output_dir,
                                        issues=_cs_store.known_issues)
         print("")
@@ -261,5 +204,3 @@ def pytest_sessionfinish(session, exitstatus):
         tb.print_exc()
         print("")
         print("  [WARNING] Report generation failed (see traceback above)")
-
-
