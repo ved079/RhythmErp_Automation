@@ -7,6 +7,7 @@ import { fetchModules, folderToSidebarId, sidebarToFolderMapping, startRun, fetc
 import { DashboardTab } from '@/components/dashboard/DashboardTab'
 import { ResultsTab } from '@/components/results/ResultsTab'
 import { ErrorBoundary } from '@/components/error-boundary/ErrorBoundary'
+import { OnboardingTour } from '@/components/onboarding/OnboardingTour'
 import {
   addBugReport,
   getBugReports,
@@ -3108,7 +3109,7 @@ export default function Home() {
           className="shrink-0 overflow-hidden h-full"
           style={{ width: sidebarOpen ? sidebarWidth : 0 }}
         >
-        <aside className="bg-[#e8f5e9] dark:bg-[#1a2e1a] border-r border-[#c8e6c9] dark:border-[#2d4a2d] flex flex-col h-full" style={{ width: sidebarWidth }}>
+        <aside data-tour-sidebar className="bg-[#e8f5e9] dark:bg-[#1a2e1a] border-r border-[#c8e6c9] dark:border-[#2d4a2d] flex flex-col h-full" style={{ width: sidebarWidth }}>
           <div className="px-3 py-2.5 border-b border-[#c8e6c9] dark:border-[#2d4a2d] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Search className="size-3.5 text-gray-500 dark:text-gray-400" />
@@ -3228,6 +3229,7 @@ export default function Home() {
               {/* Tab Content */}
               <div className="flex-1 overflow-hidden min-h-0">
                 {activeTab === 'operations' && (
+                  <div data-tour-operations className="h-full">
                   <ErrorBoundary>
                     <OperationsTab
                       testGroups={currentTestGroups}
@@ -3238,6 +3240,7 @@ export default function Home() {
                   </ErrorBoundary>
                 )}
             {activeTab === 'test-runner' && (
+              <div data-tour-run-button className="h-full">
               <ErrorBoundary>
                 <TestRunnerTab
                   tests={tests}
@@ -3281,6 +3284,7 @@ export default function Home() {
               </ErrorBoundary>
             )}
             {activeTab === 'results' && (
+              <div data-tour-results className="h-full">
               <ErrorBoundary>
                 <ResultsTab
                   tests={tests}
@@ -3293,9 +3297,11 @@ export default function Home() {
               </ErrorBoundary>
             )}
             {activeTab === 'schedule' && user && (
+              <div data-tour-schedule className="h-full">
               <ErrorBoundary>
                 <ScheduleRunsTab userName={user.name} sidebarModules={sidebarModules} />
               </ErrorBoundary>
+              </div>
             )}
           </div>
               </div>
@@ -3515,6 +3521,7 @@ export default function Home() {
         userName={user?.name || ''}
         userEmail={user?.email || ''}
       />
+      <OnboardingTour />
     </div>
   )
 }
