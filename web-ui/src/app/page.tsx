@@ -1,6 +1,8 @@
 ﻿'use client'
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { ErrorBoundary } from '@/components/error-boundary/ErrorBoundary'
+
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { fetchModules, folderToSidebarId, sidebarToFolderMapping, startRun, fetchTestCases, type ApiModule, type ApiSubModule, type TestCasesData } from '@/lib/api'
@@ -635,7 +637,7 @@ function TestStatusIcon({ status, size = 4 }: { status: string; size?: number })
 }
 
 // â”€â”€â”€ LOGIN PAGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
+function NavToast({ label, parent }: { label: string; parent?: string | null }) {
   return (
     <div
       className={`pointer-events-none absolute top-3 left-1/2 z-50 transition-all duration-300 ease-out ${
@@ -647,7 +649,7 @@ function TestStatusIcon({ status, size = 4 }: { status: string; size?: number })
         {parent && (
           <>
             <span className="opacity-50">{parent}</span>
-            <span className="opacity-30 mx-0.5">â€º</span>
+            <span className="opacity-30 mx-0.5">›</span>
           </>
         )}
         <span>{label}</span>
@@ -1422,6 +1424,7 @@ export default function Home() {
               {/* Tab Content */}
               <div className="flex-1 overflow-hidden min-h-0">
                 {activeTab === 'operations' && (
+                  <ErrorBoundary name="OperationsTab">
                   <OperationsTab
                     testGroups={currentTestGroups}
                     testCasesModule={
@@ -1430,6 +1433,7 @@ export default function Home() {
                   />
                 )}
             {activeTab === 'test-runner' && (
+                  <ErrorBoundary name="TestRunnerTab">
               <TestRunnerTab
                 tests={tests}
                 testChecks={testChecks}
@@ -1452,6 +1456,7 @@ export default function Home() {
               />
             )}
             {activeTab === 'live-execution' && (
+                  <ErrorBoundary name="LiveExecutionTab">
               <LiveExecutionTab
                 tests={tests}
                 testGroups={currentTestGroups}
@@ -1469,6 +1474,7 @@ export default function Home() {
               />
             )}
             {activeTab === 'results' && (
+                  <ErrorBoundary name="ResultsTab">
               <ResultsTab
                 tests={tests}
                 passedCount={passedCount}
@@ -1479,11 +1485,11 @@ export default function Home() {
               />
             )}
             {activeTab === 'schedule' && user && (
-              <ScheduleRunsTab userName={user.name} sidebarModules={sidebarModules} />
-            )}
+  <ErrorBoundary>
+    <ScheduleRunsTab userName={user.name} sidebarModules={sidebarModules} />
+  </ErrorBoundary>
+)}
           </div>
-              </div>
-          )}
         </main>
       </div>
 
