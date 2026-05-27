@@ -2523,6 +2523,9 @@ export default function Home() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [notifications, setNotifications] = useState<NotifType[]>([])
 
+  // Keyboard shortcuts cheat sheet
+  const [showShortcuts, setShowShortcuts] = useState(false)
+
   // Poll notifications every 2s
   useEffect(() => {
     const poll = async () => {
@@ -2593,25 +2596,7 @@ export default function Home() {
     setDarkMode((prev) => !prev)
   }, [])
 
-  // Keyboard shortcut: Ctrl+B to toggle sidebar, Cmd+K / Ctrl+K for quick switcher
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
-        e.preventDefault()
-        setSidebarOpen((prev) => !prev)
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault()
-        setQuickSwitcherOpen((prev) => !prev)
-        setQuickSearch('')
-      }
-      if (e.key === 'Escape' && quickSwitcherOpen) {
-        setQuickSwitcherOpen(false)
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [quickSwitcherOpen])
+  // Keyboard shortcuts moved after runByPriority definition
 
   // Auto-hide sidebar on Live Execution, show on other tabs
   useEffect(() => {
@@ -2907,6 +2892,88 @@ export default function Home() {
     [isRunning, tests, rerunTestIds, runTests]
   )
 
+  // Keyboard shortcuts: Ctrl+B sidebar, Ctrl+K quick switcher, Ctrl+D dark mode, Ctrl+R run tests, Ctrl+1-5 switch tabs, Ctrl+/ cheat sheet
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't fire shortcuts when typing in inputs/textareas
+      const target = e.target as HTMLElement
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+
+      // Escape — close any open panel/dialog
+      if (e.key === 'Escape') {
+        if (quickSwitcherOpen) {
+          setQuickSwitcherOpen(false)
+          return
+        }
+        if (showShortcuts) {
+          setShowShortcuts(false)
+          return
+        }
+        if (notifDropdownOpen) {
+          setNotifDropdownOpen(false)
+          return
+        }
+      }
+
+      // All Ctrl/Cmd shortcuts below — skip if typing in input
+      if (isInput) return
+      if (!(e.ctrlKey || e.metaKey)) return
+
+      // Ctrl+B — toggle sidebar
+      if (e.key === 'b') {
+        e.preventDefault()
+        setSidebarOpen((prev) => !prev)
+        return
+      }
+
+      // Ctrl+K — quick switcher
+      if (e.key === 'k') {
+        e.preventDefault()
+        setQuickSwitcherOpen((prev) => !prev)
+        setQuickSearch('')
+        return
+      }
+
+      // Ctrl+D — toggle dark mode
+      if (e.key === 'd') {
+        e.preventDefault()
+        toggleDarkMode()
+        return
+      }
+
+      // Ctrl+/ — show shortcuts cheat sheet
+      if (e.key === '/') {
+        e.preventDefault()
+        setShowShortcuts((prev) => !prev)
+        return
+      }
+
+      // Ctrl+R — run all pending tests (only when on a module with pending tests)
+      if (e.key === 'r' && selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && !isRunning) {
+        e.preventDefault()
+        const pendingCount = tests.filter((t) => t.status === 'pending').length
+        if (pendingCount > 0) {
+          runTests(false)
+          setActiveTab('live-execution')
+        }
+        return
+      }
+
+      // Ctrl+1-5 — switch tabs (only when on a module page)
+      if (selectedModule !== 'dashboard' && selectedModule !== 'my-tickets') {
+        const tabMap: Record<string, string> = { '1': 'operations', '2': 'test-runner', '3': 'live-execution', '4': 'results', '5': 'schedule' }
+        const tabId = tabMap[e.key]
+        if (tabId) {
+          e.preventDefault()
+          setActiveTab(tabId)
+          return
+        }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [quickSwitcherOpen, showShortcuts, notifDropdownOpen, selectedModule, isRunning, tests, toggleDarkMode, runTests])
+
   const passedCount = tests.filter((t) => t.status === 'passed').length
   const failedCount = tests.filter((t) => t.status === 'failed').length
 
@@ -2993,6 +3060,46 @@ export default function Home() {
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
       <AppTour selectedModule={selectedModule} activeTab={activeTab} />
+
+      {/* ─── KEYBOARD SHORTCUTS CHEAT SHEET ──────────────── */}
+      <Dialog open={showShortcuts} onOpenChange={setShowShortcuts}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="size-4 text-green-600" />
+              Keyboard Shortcuts
+            </DialogTitle>
+            <DialogDescription>
+              Quick actions to speed up your workflow
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-1.5 py-2">
+            {[
+              { keys: 'Ctrl + B', desc: 'Toggle sidebar' },
+              { keys: 'Ctrl + K', desc: 'Quick module search' },
+              { keys: 'Ctrl + D', desc: 'Toggle dark mode' },
+              { keys: 'Ctrl + R', desc: 'Run all pending tests' },
+              { keys: 'Ctrl + 1', desc: 'Test Specifications tab' },
+              { keys: 'Ctrl + 2', desc: 'Test Runner tab' },
+              { keys: 'Ctrl + 3', desc: 'Live Execution tab' },
+              { keys: 'Ctrl + 4', desc: 'Results tab' },
+              { keys: 'Ctrl + 5', desc: 'Schedule tab' },
+              { keys: 'Ctrl + /', desc: 'Show this cheat sheet' },
+              { keys: 'Escape', desc: 'Close dialog / panel' },
+            ].map((s) => (
+              <div key={s.keys} className="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                <span className="text-[13px] text-gray-600 dark:text-gray-400">{s.desc}</span>
+                <kbd className="px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-[11px] font-mono text-gray-700 dark:text-gray-300">
+                  {s.keys}
+                </kbd>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <span className="text-[11px] text-gray-400">Press <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-[10px] font-mono">Ctrl + /</kbd> to toggle</span>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* ─── HEADER ─────────────────────────────────────── */}
       <header className="h-12 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 shrink-0 z-10">
         <div className="flex items-center gap-3 flex-1">
@@ -3046,6 +3153,16 @@ export default function Home() {
             title="Take a tour of the app"
           >
             <HelpCircle className="size-4" />
+          </Button>
+          {/* Keyboard Shortcuts Button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowShortcuts(true)}
+            className="size-8 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
+            title="Keyboard shortcuts (Ctrl+/)"
+          >
+            <Zap className="size-4" />
           </Button>
           {/* Bell Notification */}
           <div className="relative" data-tour="notifications">
