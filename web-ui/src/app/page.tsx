@@ -111,6 +111,7 @@ import {
   HelpCircle,
 } from 'lucide-react'
 import { AppTour, startAppTour } from '@/components/tour/AppTour'
+import { Sparkline, getSparklineColor, TrendIndicator } from '@/components/ui/sparkline'
 
 // ─── Types ───────────────────────────────────────────────
 type TestPriority = 'smoke' | 'regression' | 'sanity'
@@ -176,6 +177,7 @@ interface ModuleHealth {
   passedTests: number
   failedTests: number
   lastRun: string
+  trend?: number[] // last 7 run pass rates for sparkline
 }
 
 // ─── Helper: get priority ────────────────────────────────
@@ -555,30 +557,31 @@ const bugRegistry = [
 ]
 
 // ─── Module Health Data (Feature 3) ─────────────────────
+// trend = last 7 run pass rates (oldest → newest), used for sparklines
 const moduleHealthData: ModuleHealth[] = [
-  { moduleId: 'customer', moduleName: 'Customer', parentGroup: 'Standalone', passRate: 100, totalTests: 15, passedTests: 15, failedTests: 0, lastRun: '16 May 2026, 09:30 AM' },
-  { moduleId: 'farmer', moduleName: 'Farmer', parentGroup: 'Standalone', passRate: 92, totalTests: 24, passedTests: 22, failedTests: 2, lastRun: '16 May 2026, 09:15 AM' },
-  { moduleId: 'company-onboarding', moduleName: 'Company Onboarding', parentGroup: 'Standalone', passRate: 88, totalTests: 18, passedTests: 16, failedTests: 2, lastRun: '15 May 2026, 04:20 PM' },
-  { moduleId: 'uom', moduleName: 'UOM', parentGroup: 'Common Settings', passRate: 100, totalTests: 8, passedTests: 8, failedTests: 0, lastRun: '16 May 2026, 08:45 AM' },
-  { moduleId: 'uom-conversion', moduleName: 'UOM Conversion', parentGroup: 'Common Settings', passRate: 100, totalTests: 6, passedTests: 6, failedTests: 0, lastRun: '16 May 2026, 08:46 AM' },
-  { moduleId: 'designation', moduleName: 'Designation', parentGroup: 'Common Settings', passRate: 100, totalTests: 5, passedTests: 5, failedTests: 0, lastRun: '15 May 2026, 03:10 PM' },
-  { moduleId: 'bank', moduleName: 'Bank', parentGroup: 'Common Settings', passRate: 83, totalTests: 12, passedTests: 10, failedTests: 2, lastRun: '16 May 2026, 08:50 AM' },
-  { moduleId: 'seasons', moduleName: 'Seasons', parentGroup: 'Common Settings', passRate: 100, totalTests: 7, passedTests: 7, failedTests: 0, lastRun: '14 May 2026, 10:00 AM' },
-  { moduleId: 'hsn-sac', moduleName: 'HSN SAC', parentGroup: 'Common Settings', passRate: 100, totalTests: 12, passedTests: 12, failedTests: 0, lastRun: '16 May 2026, 08:30 AM' },
+  { moduleId: 'customer', moduleName: 'Customer', parentGroup: 'Standalone', passRate: 100, totalTests: 15, passedTests: 15, failedTests: 0, lastRun: '16 May 2026, 09:30 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
+  { moduleId: 'farmer', moduleName: 'Farmer', parentGroup: 'Standalone', passRate: 92, totalTests: 24, passedTests: 22, failedTests: 2, lastRun: '16 May 2026, 09:15 AM', trend: [88, 85, 90, 92, 88, 91, 92] },
+  { moduleId: 'company-onboarding', moduleName: 'Company Onboarding', parentGroup: 'Standalone', passRate: 88, totalTests: 18, passedTests: 16, failedTests: 2, lastRun: '15 May 2026, 04:20 PM', trend: [78, 82, 80, 85, 83, 86, 88] },
+  { moduleId: 'uom', moduleName: 'UOM', parentGroup: 'Common Settings', passRate: 100, totalTests: 8, passedTests: 8, failedTests: 0, lastRun: '16 May 2026, 08:45 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
+  { moduleId: 'uom-conversion', moduleName: 'UOM Conversion', parentGroup: 'Common Settings', passRate: 100, totalTests: 6, passedTests: 6, failedTests: 0, lastRun: '16 May 2026, 08:46 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
+  { moduleId: 'designation', moduleName: 'Designation', parentGroup: 'Common Settings', passRate: 100, totalTests: 5, passedTests: 5, failedTests: 0, lastRun: '15 May 2026, 03:10 PM', trend: [100, 100, 100, 100, 100, 100, 100] },
+  { moduleId: 'bank', moduleName: 'Bank', parentGroup: 'Common Settings', passRate: 83, totalTests: 12, passedTests: 10, failedTests: 2, lastRun: '16 May 2026, 08:50 AM', trend: [75, 80, 78, 83, 80, 85, 83] },
+  { moduleId: 'seasons', moduleName: 'Seasons', parentGroup: 'Common Settings', passRate: 100, totalTests: 7, passedTests: 7, failedTests: 0, lastRun: '14 May 2026, 10:00 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
+  { moduleId: 'hsn-sac', moduleName: 'HSN SAC', parentGroup: 'Common Settings', passRate: 100, totalTests: 12, passedTests: 12, failedTests: 0, lastRun: '16 May 2026, 08:30 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
   { moduleId: 'error-code-master', moduleName: 'Error Code Master', parentGroup: 'Common Settings', passRate: 0, totalTests: 0, passedTests: 0, failedTests: 0, lastRun: '—' },
   { moduleId: 'vehicle-master', moduleName: 'Vehicle Master', parentGroup: 'Common Settings', passRate: 0, totalTests: 0, passedTests: 0, failedTests: 0, lastRun: '—' },
-  { moduleId: 'tax-authority', moduleName: 'Tax Authority', parentGroup: 'Common Settings', passRate: 83, totalTests: 18, passedTests: 15, failedTests: 3, lastRun: '16 May 2026, 09:00 AM' },
-  { moduleId: 'tax-rate', moduleName: 'Tax Rate', parentGroup: 'Common Settings', passRate: 85, totalTests: 20, passedTests: 17, failedTests: 3, lastRun: '16 May 2026, 10:23 AM' },
-  { moduleId: 'crop-master', moduleName: 'Crop Master', parentGroup: 'Commodity Settings', passRate: 95, totalTests: 20, passedTests: 19, failedTests: 1, lastRun: '16 May 2026, 07:45 AM' },
-  { moduleId: 'commodity-quality-param', moduleName: 'Commodity Quality Param', parentGroup: 'Commodity Settings', passRate: 78, totalTests: 9, passedTests: 7, failedTests: 2, lastRun: '15 May 2026, 02:00 PM' },
-  { moduleId: 'quality-parameter-def', moduleName: 'Quality Parameter Def', parentGroup: 'Commodity Settings', passRate: 100, totalTests: 11, passedTests: 11, failedTests: 0, lastRun: '16 May 2026, 07:50 AM' },
-  { moduleId: 'commodity-base-rate', moduleName: 'Commodity Base Rate', parentGroup: 'Commodity Settings', passRate: 88, totalTests: 8, passedTests: 7, failedTests: 1, lastRun: '15 May 2026, 11:30 AM' },
-  { moduleId: 'commodity-master', moduleName: 'Commodity Master', parentGroup: 'Commodity Settings', passRate: 91, totalTests: 22, passedTests: 20, failedTests: 2, lastRun: '16 May 2026, 08:00 AM' },
-  { moduleId: 'item-master', moduleName: 'Item Master', parentGroup: 'Commodity Settings', passRate: 100, totalTests: 16, passedTests: 16, failedTests: 0, lastRun: '16 May 2026, 08:10 AM' },
-  { moduleId: 'services-master', moduleName: 'Services Master', parentGroup: 'Commodity Settings', passRate: 100, totalTests: 10, passedTests: 10, failedTests: 0, lastRun: '14 May 2026, 09:00 AM' },
-  { moduleId: 'item-category', moduleName: 'Item Category', parentGroup: 'Commodity Settings', passRate: 100, totalTests: 8, passedTests: 8, failedTests: 0, lastRun: '14 May 2026, 09:05 AM' },
-  { moduleId: 'item-group', moduleName: 'Item Group', parentGroup: 'Commodity Settings', passRate: 100, totalTests: 7, passedTests: 7, failedTests: 0, lastRun: '14 May 2026, 09:10 AM' },
-  { moduleId: 'finance-settings', moduleName: 'Finance Settings', parentGroup: 'Standalone', passRate: 70, totalTests: 30, passedTests: 21, failedTests: 9, lastRun: '15 May 2026, 01:00 PM' },
+  { moduleId: 'tax-authority', moduleName: 'Tax Authority', parentGroup: 'Common Settings', passRate: 83, totalTests: 18, passedTests: 15, failedTests: 3, lastRun: '16 May 2026, 09:00 AM', trend: [78, 80, 83, 78, 82, 80, 83] },
+  { moduleId: 'tax-rate', moduleName: 'Tax Rate', parentGroup: 'Common Settings', passRate: 85, totalTests: 20, passedTests: 17, failedTests: 3, lastRun: '16 May 2026, 10:23 AM', trend: [75, 80, 90, 85, 75, 80, 85] },
+  { moduleId: 'crop-master', moduleName: 'Crop Master', parentGroup: 'Commodity Settings', passRate: 95, totalTests: 20, passedTests: 19, failedTests: 1, lastRun: '16 May 2026, 07:45 AM', trend: [90, 92, 88, 95, 90, 93, 95] },
+  { moduleId: 'commodity-quality-param', moduleName: 'Commodity Quality Param', parentGroup: 'Commodity Settings', passRate: 78, totalTests: 9, passedTests: 7, failedTests: 2, lastRun: '15 May 2026, 02:00 PM', trend: [85, 82, 78, 80, 75, 72, 78] },
+  { moduleId: 'quality-parameter-def', moduleName: 'Quality Parameter Def', parentGroup: 'Commodity Settings', passRate: 100, totalTests: 11, passedTests: 11, failedTests: 0, lastRun: '16 May 2026, 07:50 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
+  { moduleId: 'commodity-base-rate', moduleName: 'Commodity Base Rate', parentGroup: 'Commodity Settings', passRate: 88, totalTests: 8, passedTests: 7, failedTests: 1, lastRun: '15 May 2026, 11:30 AM', trend: [82, 85, 88, 84, 90, 86, 88] },
+  { moduleId: 'commodity-master', moduleName: 'Commodity Master', parentGroup: 'Commodity Settings', passRate: 91, totalTests: 22, passedTests: 20, failedTests: 2, lastRun: '16 May 2026, 08:00 AM', trend: [86, 88, 90, 85, 92, 89, 91] },
+  { moduleId: 'item-master', moduleName: 'Item Master', parentGroup: 'Commodity Settings', passRate: 100, totalTests: 16, passedTests: 16, failedTests: 0, lastRun: '16 May 2026, 08:10 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
+  { moduleId: 'services-master', moduleName: 'Services Master', parentGroup: 'Commodity Settings', passRate: 100, totalTests: 10, passedTests: 10, failedTests: 0, lastRun: '14 May 2026, 09:00 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
+  { moduleId: 'item-category', moduleName: 'Item Category', parentGroup: 'Commodity Settings', passRate: 100, totalTests: 8, passedTests: 8, failedTests: 0, lastRun: '14 May 2026, 09:05 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
+  { moduleId: 'item-group', moduleName: 'Item Group', parentGroup: 'Commodity Settings', passRate: 100, totalTests: 7, passedTests: 7, failedTests: 0, lastRun: '14 May 2026, 09:10 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
+  { moduleId: 'finance-settings', moduleName: 'Finance Settings', parentGroup: 'Standalone', passRate: 70, totalTests: 30, passedTests: 21, failedTests: 9, lastRun: '15 May 2026, 01:00 PM', trend: [82, 78, 75, 72, 68, 65, 70] },
   { moduleId: 'access', moduleName: 'Access', parentGroup: 'Standalone', passRate: 0, totalTests: 0, passedTests: 0, failedTests: 0, lastRun: '—' },
 ]
 

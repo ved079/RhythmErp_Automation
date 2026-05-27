@@ -3,6 +3,7 @@
 import React, { useMemo, useCallback } from 'react'
 import { Progress } from '@/components/ui/progress'
 import { Clock } from 'lucide-react'
+import { Sparkline, getSparklineColor, TrendIndicator } from '@/components/ui/sparkline'
 
 interface ModuleHealth {
   moduleId: string
@@ -13,6 +14,7 @@ interface ModuleHealth {
   failedTests: number
   totalTests: number
   lastRun: string
+  trend?: number[] // last 7 run pass rates for sparkline
 }
 
 const moduleHealthData: ModuleHealth[] = [
@@ -89,6 +91,19 @@ export function DashboardTab({ onSelectModule }: { onSelectModule: (moduleId: st
     return { total, fullyPassing, partiallyPassing, notStarted, totalPassed, totalFailed, totalTests }
   }, [])
 
+  // Overall trend: average pass rate across last 7 runs (computed from module trends)
+  const overallTrend = useMemo(() => {
+    const modulesWithTrend = moduleHealthData.filter((m) => m.trend && m.trend.length > 0)
+    if (modulesWithTrend.length === 0) return [0, 0, 0, 0, 0, 0, 0]
+    const maxLen = Math.max(...modulesWithTrend.map((m) => m.trend!.length))
+    const avgByRun: number[] = []
+    for (let i = 0; i < maxLen; i++) {
+      const vals = modulesWithTrend.filter((m) => m.trend![i] !== undefined).map((m) => m.trend![i])
+      avgByRun.push(Math.round(vals.reduce((s, v) => s + v, 0) / vals.length))
+    }
+    return avgByRun
+  }, [])
+
   const getHealthColor = useCallback((rate: number, total: number) => {
     if (total === 0) return { bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-400 dark:text-gray-500', indicator: 'bg-gray-400', label: 'Not Started' }
     if (rate === 100) return { bg: 'bg-green-50 dark:bg-green-900/20', text: 'text-green-700 dark:text-green-400', indicator: 'bg-green-500', label: 'Healthy' }
@@ -121,8 +136,18 @@ export function DashboardTab({ onSelectModule }: { onSelectModule: (moduleId: st
           </div>
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3.5 border border-blue-100 dark:border-blue-800/50">
             <div className="text-[11px] text-blue-600 dark:text-blue-400 font-medium uppercase tracking-wider">Overall Pass Rate</div>
-            <div className="text-xl font-bold text-blue-700 dark:text-blue-400 mt-1">
-              {quickStats.totalTests > 0 ? Math.round((quickStats.totalPassed / quickStats.totalTests) * 100) : 0}%
+            <div className="flex items-center gap-2 mt-1">
+              <div className="text-xl font-bold text-blue-700 dark:text-blue-400">
+                {quickStats.totalTests > 0 ? Math.round((quickStats.totalPassed / quickStats.totalTests) * 100) : 0}%
+              </div>
+              <Sparkline
+                data={overallTrend}
+                width={72}
+                height={22}
+                strokeColor={overallTrend[overallTrend.length - 1] >= overallTrend[overallTrend.length - 2] ? '#22c55e' : '#ef4444'}
+                fillColor={overallTrend[overallTrend.length - 1] >= overallTrend[overallTrend.length - 2] ? '#22c55e' : '#ef4444'}
+                strokeWidth={1.5}
+              />
             </div>
             <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
               {quickStats.totalPassed} / {quickStats.totalTests} tests passed
@@ -138,6 +163,19 @@ export function DashboardTab({ onSelectModule }: { onSelectModule: (moduleId: st
           const groupRate = groupTotal > 0 ? Math.round((groupPassed / groupTotal) * 100) : 0
           const groupHealth = getHealthColor(groupRate, groupTotal)
 
+          // Group trend: average of module trends per run
+          const groupTrend = useMemo(() => {
+            const modulesWithTrend = group.modules.filter((m) => m.trend && m.trend.length > 0)
+            if (modulesWithTrend.length === 0) return null
+            const maxLen = Math.max(...modulesWithTrend.map((m) => m.trend!.length))
+            const avgByRun: number[] = []
+            for (let i = 0; i < maxLen; i++) {
+              const vals = modulesWithTrend.filter((m) => m.trend![i] !== undefined).map((m) => m.trend![i])
+              avgByRun.push(Math.round(vals.reduce((s, v) => s + v, 0) / vals.length))
+            }
+            return avgByRun
+          }, [group.modules])
+
           return (
             <div key={group.name}>
               {/* Group Header */}
@@ -150,6 +188,16 @@ export function DashboardTab({ onSelectModule }: { onSelectModule: (moduleId: st
                 {groupTotal > 0 && (
                   <>
                     <div className="flex-1" />
+                    {groupTrend && groupTrend.length >= 2 && (
+                      <Sparkline
+                        data={groupTrend}
+                        width={56}
+                        height={16}
+                        strokeColor={groupTrend[groupTrend.length - 1] >= groupTrend[groupTrend.length - 2] ? '#22c55e' : '#ef4444'}
+                        fillColor={groupTrend[groupTrend.length - 1] >= groupTrend[groupTrend.length - 2] ? '#22c55e' : '#ef4444'}
+                        strokeWidth={1.5}
+                      />
+                    )}
                     <span className={`text-[12px] font-medium ${groupHealth.text}`}>
                       {groupRate}%
                     </span>
@@ -164,6 +212,7 @@ export function DashboardTab({ onSelectModule }: { onSelectModule: (moduleId: st
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
                 {group.modules.map((mod) => {
                   const health = getHealthColor(mod.passRate, mod.totalTests)
+                  const sparkColor = mod.trend ? getSparklineColor(mod.passRate, mod.trend[mod.trend.length - 2]) : { stroke: 'currentColor', fill: 'currentColor' }
                   return (
                     <button
                       key={mod.moduleId}
@@ -181,16 +230,32 @@ export function DashboardTab({ onSelectModule }: { onSelectModule: (moduleId: st
                             <span className="text-gray-400 dark:text-gray-500">
                               {mod.passedTests}/{mod.totalTests}
                             </span>
-                            <Progress value={mod.passRate} className="h-1.5 flex-1 bg-gray-200 dark:bg-gray-700" />
+                            {mod.trend && mod.trend.length >= 2 && (
+                              <Sparkline
+                                data={mod.trend}
+                                width={64}
+                                height={20}
+                                strokeColor={sparkColor.stroke}
+                                fillColor={sparkColor.fill}
+                                strokeWidth={1.5}
+                                className="ml-auto"
+                              />
+                            )}
+                            {!mod.trend && (
+                              <Progress value={mod.passRate} className="h-1.5 flex-1 bg-gray-200 dark:bg-gray-700" />
+                            )}
                           </>
                         ) : (
                           <span className="text-gray-400 dark:text-gray-500">No tests yet</span>
                         )}
                       </div>
                       {mod.totalTests > 0 && (
-                        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 flex items-center gap-1">
-                          <Clock className="size-2.5" />
-                          {mod.lastRun}
+                        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 flex items-center justify-between">
+                          <div className="flex items-center gap-1">
+                            <Clock className="size-2.5" />
+                            {mod.lastRun || '—'}
+                          </div>
+                          {mod.trend && <TrendIndicator data={mod.trend} />}
                         </div>
                       )}
                     </button>
