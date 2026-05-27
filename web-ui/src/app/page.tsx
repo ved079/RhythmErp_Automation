@@ -749,6 +749,14 @@ function SidebarModuleItem({
         </>
       )}
       <button
+        data-module-id={module.id}
+        ref={(el) => {
+          if (el && isExpanded && hasChildren) {
+            requestAnimationFrame(() => {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            })
+          }
+        }}
         onClick={() => {
           if (hasChildren) toggleExpand(module.id)
           else onSelect(module.id)
