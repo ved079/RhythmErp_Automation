@@ -3350,8 +3350,39 @@ export default function Home() {
   const toggleExpand = useCallback((id: string) => {
     setExpandedIds((prev) => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      if (next.has(id)) {
+        // Toggle close: clicking an already-open section closes it
+        next.delete(id)
+      } else {
+        // Accordion behavior: figure out which level this item is at
+        // and close siblings at the same level, keeping parents open
+        const isTopLevel = ALL_SIDEBAR_MODULES.some(m => m.id === id)
+        if (isTopLevel) {
+          // Top-level: close all other top-level sections
+          ALL_SIDEBAR_MODULES.forEach(m => next.delete(m.id))
+        } else {
+          // Sub-level: find siblings and close them, keep parent open
+          const findSiblings = (modules: SidebarModule[]): string[] => {
+            for (const mod of modules) {
+              if (mod.id === id) return [] // shouldn't happen for sub-items
+              if (mod.children) {
+                const childIds = mod.children.map(c => c.id)
+                if (childIds.includes(id)) {
+                  // Found the parent — return all sibling IDs (only those with children are expandable)
+                  return mod.children.filter(c => c.children && c.children.length > 0).map(c => c.id)
+                }
+                // Check deeper
+                const deeper = findSiblings(mod.children)
+                if (deeper.length > 0) return deeper
+              }
+            }
+            return []
+          }
+          const siblings = findSiblings(ALL_SIDEBAR_MODULES)
+          siblings.forEach(s => next.delete(s))
+        }
+        next.add(id)
+      }
       return next
     })
   }, [])
