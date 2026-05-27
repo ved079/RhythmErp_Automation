@@ -91,6 +91,7 @@ import {
   Globe,
   MoreHorizontal,
   ArrowLeft,
+  ArrowUpDown,
   RotateCcw,
   Menu,
   Sun,
@@ -864,6 +865,16 @@ function TestStatusIcon({ status, size = 4 }: { status: string; size?: number })
     default:
       return <Circle className={`size-${Math.max(size - 0.5, 3)} text-gray-300 dark:text-gray-600`} />
   }
+}
+
+// ─── Sort Arrow (ERP-style: 150ms rotation) ─────────────
+function SortArrow({ col, sortCol, sortDir }: { col: string; sortCol: string; sortDir: 'asc' | 'desc' }) {
+  const isActive = sortCol === col
+  return (
+    <ArrowUpDown
+      className={`size-3 transition-transform duration-150 ${isActive ? 'opacity-100' : 'opacity-30'} ${isActive && sortDir === 'desc' ? 'rotate-180' : ''}`}
+    />
+  )
 }
 
 // ─── LOGIN PAGE ──────────────────────────────────────────
@@ -2769,11 +2780,36 @@ function ResultsTab({
   const [resultFilter, setResultFilter] = useState<'all' | 'passed' | 'failed'>('all')
   const [compareRun1, setCompareRun1] = useState<string>('')
   const [compareRun2, setCompareRun2] = useState<string>('')
+  const [sortCol, setSortCol] = useState<'status' | 'id' | 'test' | 'duration'>('id')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
-  const filteredTests = tests.filter((t) => {
-    if (resultFilter === 'all') return true
-    return resultFilter === 'passed' ? t.status === 'passed' : t.status === 'failed'
-  })
+  const handleSort = (col: 'status' | 'id' | 'test' | 'duration') => {
+    if (sortCol === col) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortCol(col)
+      setSortDir('asc')
+    }
+  }
+
+  const filteredTests = tests
+    .filter((t) => {
+      if (resultFilter === 'all') return true
+      return resultFilter === 'passed' ? t.status === 'passed' : t.status === 'failed'
+    })
+    .sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1
+      switch (sortCol) {
+        case 'status': return dir * a.status.localeCompare(b.status)
+        case 'id': return dir * a.id.localeCompare(b.id)
+        case 'test': return dir * a.name.localeCompare(b.name)
+        case 'duration': {
+          const parseDur = (d: string) => { const p = d.split(':'); return p.length === 2 ? parseInt(p[0]) * 60 + parseInt(p[1]) : 0 }
+          return dir * (parseDur(a.duration) - parseDur(b.duration))
+        }
+        default: return 0
+      }
+    })
 
   // Get error info from testSpecGroups
   const getTestError = (id: string): string | undefined => {
@@ -2883,10 +2919,18 @@ function ResultsTab({
           <Table>
             <TableHeader>
               <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-12">Status</TableHead>
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-14">ID</TableHead>
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Test</TableHead>
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-16 text-center">Duration</TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-12 cursor-pointer select-none" onClick={() => handleSort('status')}>
+                  <span className="inline-flex items-center gap-1">Status <SortArrow col="status" sortCol={sortCol} sortDir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-14 cursor-pointer select-none" onClick={() => handleSort('id')}>
+                  <span className="inline-flex items-center gap-1">ID <SortArrow col="id" sortCol={sortCol} sortDir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 cursor-pointer select-none" onClick={() => handleSort('test')}>
+                  <span className="inline-flex items-center gap-1">Test <SortArrow col="test" sortCol={sortCol} sortDir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-16 text-center cursor-pointer select-none" onClick={() => handleSort('duration')}>
+                  <span className="inline-flex items-center gap-1">Duration <SortArrow col="duration" sortCol={sortCol} sortDir={sortDir} /></span>
+                </TableHead>
                 <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Error</TableHead>
                 <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-24 text-center">Actions</TableHead>
               </TableRow>

@@ -40,7 +40,7 @@ export default function RootLayout({
         className={`${manrope.variable} ${poppins.variable} ${roboto.variable} antialiased bg-background text-foreground`}
       >
         {children}
-        <Toaster position="bottom-right" richColors />
+        <Toaster position="top-right" richColors />
       </body>
     </html>
   );
