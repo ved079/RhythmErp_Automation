@@ -3862,18 +3862,6 @@ export default function Home() {
           style={{ width: sidebarOpen ? sidebarWidth : 0 }}
         >
         <aside className="bg-white dark:bg-[#1e293b] border-r border-[#E2E8F0] dark:border-[#334155] flex flex-col h-full shadow-[0_2px_5px_rgba(0,0,0,0.16),0_2px_10px_rgba(0,0,0,0.12)]" style={{ width: sidebarWidth }}>
-          {/* AgDi Logo Header */}
-          <div className="px-3 py-3 border-b border-[#E2E8F0] dark:border-[#334155] flex items-center gap-2.5">
-            <Image src="/agdi-logo.png" alt="AgDi" width={80} height={36} className="shrink-0 object-contain" />
-            <span className="text-[10px] text-[#666666] dark:text-gray-400 leading-tight mt-0.5">Automation Runner</span>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="ml-auto text-gray-400 dark:text-gray-500 hover:text-[#333333] dark:hover:text-gray-300 transition-colors cursor-pointer p-1 rounded hover:bg-[#E2E8F0]/60 dark:hover:bg-[#334155]/50"
-              title="Collapse sidebar (Ctrl+B)"
-            >
-              <ChevronLeft className="size-4" />
-            </button>
-          </div>
           <ScrollArea className="flex-1 min-h-0" data-tour="sidebar-modules">
             <div className="py-2 px-2">
               {sidebarModules.map((mod) => (
