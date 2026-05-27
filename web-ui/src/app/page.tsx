@@ -836,45 +836,39 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
 
         {/* Login Card */}
         <div className="w-full max-w-[340px]">
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email */}
-            <div className="space-y-1.5">
-              <Label className="text-[12px] text-gray-600 dark:text-gray-400 font-medium">Username*</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-500 dark:text-gray-400" />
-                <Input
-                  type="email"
-                  placeholder="Rular@admin.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="h-11 pl-9 text-[14px] bg-[#F5F5F5] dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 focus:bg-white dark:focus:bg-gray-700 focus:border-[#2196F3] focus:ring-[#2196F3]/20 text-gray-800 dark:text-gray-100"
-                  required
-                  autoFocus
-                />
-              </div>
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#374151] dark:text-gray-400" />
+              <Input
+                type="email"
+                placeholder="Username*"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-11 pl-9 text-[14px] bg-white dark:bg-gray-700/50 border-[#d1d5db] dark:border-gray-600 focus:border-[#3b82f6] focus:ring-[#3b82f6]/20 text-[#333333] dark:text-gray-100 rounded-md placeholder:text-[#9ca3af]"
+                required
+                autoFocus
+              />
             </div>
 
             {/* Password */}
-            <div className="space-y-1.5">
-              <Label className="text-[12px] text-gray-600 dark:text-gray-400 font-medium">Password*</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-500 dark:text-gray-400" />
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-11 pl-9 pr-10 text-[14px] bg-[#F5F5F5] dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 focus:bg-white dark:focus:bg-gray-700 focus:border-[#2196F3] focus:ring-[#2196F3]/20 text-gray-800 dark:text-gray-100"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors cursor-pointer"
-                >
-                  <Eye className="size-4" />
-                </button>
-              </div>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#374151] dark:text-gray-400" />
+              <Input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password*"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-11 pl-9 pr-10 text-[14px] bg-white dark:bg-gray-700/50 border-[#d1d5db] dark:border-gray-600 focus:border-[#3b82f6] focus:ring-[#3b82f6]/20 text-[#333333] dark:text-gray-100 rounded-md placeholder:text-[#9ca3af]"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#374151] hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300 transition-colors cursor-pointer"
+              >
+                <Eye className="size-4" />
+              </button>
             </div>
 
             {/* Remember Me / Forgot */}
