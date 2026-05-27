@@ -4,9 +4,6 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { fetchModules, folderToSidebarId, sidebarToFolderMapping, startRun, fetchTestCases, type ApiModule, type ApiSubModule, type TestCasesData } from '@/lib/api'
-import { DashboardTab } from '@/components/dashboard/DashboardTab'
-import { ResultsTab } from '@/components/results/ResultsTab'
-import { ErrorBoundary } from '@/components/error-boundary/ErrorBoundary'
 import {
   addBugReport,
   getBugReports,
@@ -266,8 +263,17 @@ function getTestsForSidebarModule(
 }
 const ALL_SIDEBAR_MODULES: SidebarModule[] = [
   { id: 'dashboard', label: 'Dashboard' },
-  { id: 'customer', label: 'Customer' },
-  { id: 'farmer', label: 'Farmer' },
+  {
+    id: 'registration',
+    label: 'Registration',
+    defaultExpanded: true,
+    children: [
+      { id: 'farmer', label: 'Farmer', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'supplier', label: 'Supplier', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'customer', label: 'Customer', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'agent', label: 'Agent', badge: '📝 No tests', badgeType: 'none' as const },
+    ],
+  },
   { id: 'company-onboarding', label: 'Company Onboarding' },
   {
     id: 'common-settings',
@@ -559,8 +565,10 @@ const bugRegistry = [
 // ─── Module Health Data (Feature 3) ─────────────────────
 // trend = last 7 run pass rates (oldest → newest), used for sparklines
 const moduleHealthData: ModuleHealth[] = [
-  { moduleId: 'customer', moduleName: 'Customer', parentGroup: 'Standalone', passRate: 100, totalTests: 15, passedTests: 15, failedTests: 0, lastRun: '16 May 2026, 09:30 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
-  { moduleId: 'farmer', moduleName: 'Farmer', parentGroup: 'Standalone', passRate: 92, totalTests: 24, passedTests: 22, failedTests: 2, lastRun: '16 May 2026, 09:15 AM', trend: [88, 85, 90, 92, 88, 91, 92] },
+  { moduleId: 'agent', moduleName: 'Agent', parentGroup: 'Registration', passRate: 96, totalTests: 50, passedTests: 48, failedTests: 2, lastRun: '16 May 2026, 09:30 AM', trend: [92, 94, 95, 93, 96, 95, 96] },
+  { moduleId: 'customer', moduleName: 'Customer', parentGroup: 'Registration', passRate: 100, totalTests: 46, passedTests: 46, failedTests: 0, lastRun: '16 May 2026, 09:30 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
+  { moduleId: 'farmer', moduleName: 'Farmer', parentGroup: 'Registration', passRate: 92, totalTests: 40, passedTests: 37, failedTests: 3, lastRun: '16 May 2026, 09:15 AM', trend: [88, 85, 90, 92, 88, 91, 92] },
+  { moduleId: 'supplier', moduleName: 'Supplier', parentGroup: 'Registration', passRate: 95, totalTests: 42, passedTests: 40, failedTests: 2, lastRun: '16 May 2026, 09:20 AM', trend: [90, 92, 93, 94, 95, 94, 95] },
   { moduleId: 'company-onboarding', moduleName: 'Company Onboarding', parentGroup: 'Standalone', passRate: 88, totalTests: 18, passedTests: 16, failedTests: 2, lastRun: '15 May 2026, 04:20 PM', trend: [78, 82, 80, 85, 83, 86, 88] },
   { moduleId: 'uom', moduleName: 'UOM', parentGroup: 'Common Settings', passRate: 100, totalTests: 8, passedTests: 8, failedTests: 0, lastRun: '16 May 2026, 08:45 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
   { moduleId: 'uom-conversion', moduleName: 'UOM Conversion', parentGroup: 'Common Settings', passRate: 100, totalTests: 6, passedTests: 6, failedTests: 0, lastRun: '16 May 2026, 08:46 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
@@ -920,6 +928,224 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   )
 }
 
+// ─── DASHBOARD TAB (Feature 3) ───────────────────────────
+function DashboardTab({
+  onSelectModule,
+}: {
+  onSelectModule: (moduleId: string) => void
+}) {
+  // Group modules by parentGroup, preserving order
+  const grouped = useMemo(() => {
+    const order = ['Registration', 'Standalone', 'Common Settings', 'Commodity Settings']
+    const groups: { name: string; icon: string; modules: ModuleHealth[] }[] = []
+    const groupMap = new Map<string, ModuleHealth[]>()
+
+    for (const mod of moduleHealthData) {
+      const g = mod.parentGroup || 'Other'
+      if (!groupMap.has(g)) groupMap.set(g, [])
+      groupMap.get(g)!.push(mod)
+    }
+
+    for (const name of order) {
+      const mods = groupMap.get(name)
+      if (mods) groups.push({ name, icon: name === 'Common Settings' ? '⚙️' : name === 'Commodity Settings' ? '📦' : '📁', modules: mods })
+    }
+    // catch any remaining
+    for (const [name, mods] of groupMap) {
+      if (!order.includes(name)) groups.push({ name, icon: '📁', modules: mods })
+    }
+    return groups
+  }, [])
+
+  const quickStats = useMemo(() => {
+    const total = moduleHealthData.length
+    const fullyPassing = moduleHealthData.filter((m) => m.totalTests > 0 && m.passRate === 100).length
+    const partiallyPassing = moduleHealthData.filter((m) => m.totalTests > 0 && m.passRate > 0 && m.passRate < 100).length
+    const notStarted = moduleHealthData.filter((m) => m.totalTests === 0).length
+    const totalPassed = moduleHealthData.reduce((s, m) => s + m.passedTests, 0)
+    const totalFailed = moduleHealthData.reduce((s, m) => s + m.failedTests, 0)
+    const totalTests = moduleHealthData.reduce((s, m) => s + m.totalTests, 0)
+    return { total, fullyPassing, partiallyPassing, notStarted, totalPassed, totalFailed, totalTests }
+  }, [])
+
+  // Overall trend: average pass rate across last 7 runs (computed from module trends)
+  const overallTrend = useMemo(() => {
+    const modulesWithTrend = moduleHealthData.filter((m) => m.trend && m.trend.length > 0)
+    if (modulesWithTrend.length === 0) return [90, 91, 90, 92, 91, 92, 93]
+    const maxLen = Math.max(...modulesWithTrend.map((m) => m.trend!.length))
+    const avgByRun: number[] = []
+    for (let i = 0; i < maxLen; i++) {
+      const vals = modulesWithTrend.filter((m) => m.trend![i] !== undefined).map((m) => m.trend![i])
+      avgByRun.push(Math.round(vals.reduce((s, v) => s + v, 0) / vals.length))
+    }
+    return avgByRun
+  }, [])
+
+  const getHealthColor = useCallback((rate: number, total: number) => {
+    if (total === 0) return { bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-400 dark:text-gray-500', indicator: 'bg-gray-400', label: 'Not Started' }
+    if (rate === 100) return { bg: 'bg-green-50 dark:bg-green-900/20', text: 'text-green-700 dark:text-green-400', indicator: 'bg-green-500', label: 'Healthy' }
+    if (rate >= 75) return { bg: 'bg-orange-50 dark:bg-orange-900/20', text: 'text-orange-700 dark:text-orange-400', indicator: 'bg-orange-500', label: 'Partial' }
+    return { bg: 'bg-red-50 dark:bg-red-900/20', text: 'text-red-700 dark:text-red-400', indicator: 'bg-red-500', label: 'Critical' }
+  }, [])
+
+  return (
+    <div className="flex flex-col h-full overflow-auto">
+      <div className="p-5 space-y-5">
+        {/* Page Header */}
+        <div>
+          <h2 className="text-[18px] font-semibold text-gray-800 dark:text-gray-100">Dashboard</h2>
+          <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">Overview of all RhythmERP automation modules</p>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3.5 border border-gray-100 dark:border-gray-700">
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">Total Modules</div>
+            <div className="text-xl font-bold text-gray-800 dark:text-gray-100 mt-1">{quickStats.total}</div>
+          </div>
+          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3.5 border border-green-100 dark:border-green-800/50">
+            <div className="text-[11px] text-green-600 dark:text-green-400 font-medium uppercase tracking-wider">Fully Passing</div>
+            <div className="text-xl font-bold text-green-700 dark:text-green-400 mt-1">{quickStats.fullyPassing}</div>
+          </div>
+          <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3.5 border border-orange-100 dark:border-orange-800/50">
+            <div className="text-[11px] text-orange-600 dark:text-orange-400 font-medium uppercase tracking-wider">Partial / Critical</div>
+            <div className="text-xl font-bold text-orange-700 dark:text-orange-400 mt-1">{quickStats.partiallyPassing}</div>
+          </div>
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3.5 border border-blue-100 dark:border-blue-800/50">
+            <div className="text-[11px] text-blue-600 dark:text-blue-400 font-medium uppercase tracking-wider">Overall Pass Rate</div>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="text-xl font-bold text-blue-700 dark:text-blue-400">
+                {quickStats.totalTests > 0 ? Math.round((quickStats.totalPassed / quickStats.totalTests) * 100) : 0}%
+              </div>
+              <Sparkline
+                data={overallTrend}
+                width={72}
+                height={22}
+                strokeColor={overallTrend[overallTrend.length - 1] >= overallTrend[overallTrend.length - 2] ? '#22c55e' : '#ef4444'}
+                fillColor={overallTrend[overallTrend.length - 1] >= overallTrend[overallTrend.length - 2] ? '#22c55e' : '#ef4444'}
+                strokeWidth={1.5}
+              />
+            </div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+              {quickStats.totalPassed} / {quickStats.totalTests} tests passed
+            </div>
+          </div>
+        </div>
+
+        {/* Module Groups */}
+        {grouped.map((group) => {
+          const groupTotal = group.modules.reduce((s, m) => s + m.totalTests, 0)
+          const groupPassed = group.modules.reduce((s, m) => s + m.passedTests, 0)
+          const groupFailed = group.modules.reduce((s, m) => s + m.failedTests, 0)
+          const groupRate = groupTotal > 0 ? Math.round((groupPassed / groupTotal) * 100) : 0
+          const groupHealth = getHealthColor(groupRate, groupTotal)
+
+          // Group trend: average of module trends per run
+          const groupTrend = useMemo(() => {
+            const modulesWithTrend = group.modules.filter((m) => m.trend && m.trend.length > 0)
+            if (modulesWithTrend.length === 0) return null
+            const maxLen = Math.max(...modulesWithTrend.map((m) => m.trend!.length))
+            const avgByRun: number[] = []
+            for (let i = 0; i < maxLen; i++) {
+              const vals = modulesWithTrend.filter((m) => m.trend![i] !== undefined).map((m) => m.trend![i])
+              avgByRun.push(Math.round(vals.reduce((s, v) => s + v, 0) / vals.length))
+            }
+            return avgByRun
+          }, [group.modules])
+
+          return (
+            <div key={group.name}>
+              {/* Group Header */}
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className="text-[14px]">{group.icon}</span>
+                <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">{group.name}</h3>
+                <span className="text-[12px] text-gray-500 dark:text-gray-400 ml-1">
+                  {group.modules.length} modules
+                </span>
+                {groupTotal > 0 && (
+                  <>
+                    <div className="flex-1" />
+                    {groupTrend && groupTrend.length >= 2 && (
+                      <Sparkline
+                        data={groupTrend}
+                        width={56}
+                        height={16}
+                        strokeColor={groupTrend[groupTrend.length - 1] >= groupTrend[groupTrend.length - 2] ? '#22c55e' : '#ef4444'}
+                        fillColor={groupTrend[groupTrend.length - 1] >= groupTrend[groupTrend.length - 2] ? '#22c55e' : '#ef4444'}
+                        strokeWidth={1.5}
+                      />
+                    )}
+                    <span className={`text-[12px] font-medium ${groupHealth.text}`}>
+                      {groupRate}%
+                    </span>
+                    <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                      ({groupPassed}/{groupTotal})
+                    </span>
+                  </>
+                )}
+              </div>
+
+              {/* Module Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
+                {group.modules.map((mod) => {
+                  const health = getHealthColor(mod.passRate, mod.totalTests)
+                  const sparkColor = mod.trend ? getSparklineColor(mod.passRate, mod.trend[mod.trend.length - 2]) : { stroke: 'currentColor', fill: 'currentColor' }
+                  return (
+                    <button
+                      key={mod.moduleId}
+                      onClick={() => onSelectModule(mod.moduleId)}
+                      className={`text-left p-3 rounded-lg border transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer ${health.bg} border-gray-100 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600`}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${health.indicator}`} />
+                        <span className="text-[13px] font-medium text-gray-800 dark:text-gray-100 truncate">{mod.moduleName}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px]">
+                        {mod.totalTests > 0 ? (
+                          <>
+                            <span className={`font-medium ${health.text}`}>{mod.passRate}%</span>
+                            <span className="text-gray-400 dark:text-gray-500">
+                              {mod.passedTests}/{mod.totalTests}
+                            </span>
+                            {mod.trend && mod.trend.length >= 2 && (
+                              <Sparkline
+                                data={mod.trend}
+                                width={64}
+                                height={20}
+                                strokeColor={sparkColor.stroke}
+                                fillColor={sparkColor.fill}
+                                strokeWidth={1.5}
+                                className="ml-auto"
+                              />
+                            )}
+                            {!mod.trend && (
+                              <Progress value={mod.passRate} className="h-1.5 flex-1 bg-gray-200 dark:bg-gray-700" />
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500">No tests yet</span>
+                        )}
+                      </div>
+                      {mod.totalTests > 0 && (
+                        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 flex items-center justify-between">
+                          <div className="flex items-center gap-1">
+                            <Clock className="size-2.5" />
+                            {mod.lastRun}
+                          </div>
+                          {mod.trend && <TrendIndicator data={mod.trend} />}
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 // ─── OPERATIONS TAB (Test Specification View) ────────────
 function OperationsTab({ testGroups, testCasesModule }: { testGroups: TestClassGroup[]; testCasesModule?: { label: string; tests: any[] } }) {
@@ -1954,7 +2180,7 @@ function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sideb
     return () => clearInterval(interval)
   }, [runs])
 
-  const handleSave = useCallback(async () => {
+  const handleAddRun = useCallback(async () => {
     let scheduledTimeStr = ''
     if (frequency === 'one-time' && scheduledDate && scheduledTime) {
       scheduledTimeStr = new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
@@ -1979,7 +2205,7 @@ function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sideb
     const mod = sidebarModules.find((m) => m.id === moduleId) || sidebarModules.find((m) => m.children?.some((c) => c.id === moduleId))
     const modName = mod?.label || moduleId
 
-  await addScheduledRun({
+    await addScheduledRun({
       moduleId,
       moduleName: modName,
       frequency,
@@ -2433,6 +2659,383 @@ function CompletionSummaryModal({
 }
 
 // ─── RESULTS TAB ─────────────────────────────────────────
+function ResultsTab({
+  tests,
+  passedCount,
+  failedCount,
+  totalCount,
+  runHistory,
+  onReportTest,
+}: {
+  tests: TestItem[]
+  passedCount: number
+  failedCount: number
+  totalCount: number
+  runHistory: RunSnapshot[]
+  onReportTest: (test: TestItem) => void
+}) {
+  const passRate = Math.round((passedCount / totalCount) * 100)
+  const [resultFilter, setResultFilter] = useState<'all' | 'passed' | 'failed'>('all')
+  const [compareRun1, setCompareRun1] = useState<string>('')
+  const [compareRun2, setCompareRun2] = useState<string>('')
+
+  const filteredTests = tests.filter((t) => {
+    if (resultFilter === 'all') return true
+    return resultFilter === 'passed' ? t.status === 'passed' : t.status === 'failed'
+  })
+
+  // Get error info from testSpecGroups
+  const getTestError = (id: string): string | undefined => {
+    for (const g of testSpecGroups) {
+      const t = g.tests.find((x) => x.id === id)
+      if (t) return t.error
+    }
+    return undefined
+  }
+
+  // Comparison logic (Feature 5)
+  const comparisonData = useMemo(() => {
+    if (!compareRun1 || !compareRun2) return null
+    const run1 = runHistory.find((r) => String(r.id) === compareRun1)
+    const run2 = runHistory.find((r) => String(r.id) === compareRun2)
+    if (!run1 || !run2) return null
+
+    const allTestIds = new Set([...run1.results.map((r) => r.testId), ...run2.results.map((r) => r.testId)])
+    const rows: {
+      testId: string
+      testName: string
+      run1Status: 'passed' | 'failed' | 'skipped'
+      run2Status: 'passed' | 'failed' | 'skipped'
+      change: 'fixed' | 'regressed' | 'unchanged'
+    }[] = []
+
+    let improved = 0
+    let regressed = 0
+    let unchanged = 0
+
+    for (const id of allTestIds) {
+      const r1 = run1.results.find((r) => r.testId === id)
+      const r2 = run2.results.find((r) => r.testId === id)
+      const s1 = r1?.status || 'skipped' as const
+      const s2 = r2?.status || 'skipped' as const
+      let change: 'fixed' | 'regressed' | 'unchanged' = 'unchanged'
+      if (s1 === 'failed' && s2 === 'passed') { change = 'fixed'; improved++ }
+      else if (s1 === 'passed' && s2 === 'failed') { change = 'regressed'; regressed++ }
+      else { unchanged++ }
+
+      // Find test name
+      let testName = id
+      for (const g of testSpecGroups) {
+        const t = g.tests.find((x) => x.id === id)
+        if (t) { testName = t.description; break }
+      }
+
+      rows.push({ testId: id, testName, run1Status: s1, run2Status: s2, change })
+    }
+
+    return { rows, improved, regressed, unchanged, run1Label: run1.date, run2Label: run2.date }
+  }, [compareRun1, compareRun2, runHistory])
+
+  return (
+    <div className="flex flex-col h-full overflow-auto">
+      {/* Summary Cards */}
+      <div className="px-4 pt-4 pb-3 shrink-0">
+        <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mb-3">Test Results Summary</h3>
+        <div className="grid grid-cols-4 gap-3">
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-100 dark:border-gray-700">
+            <div className="text-[12px] text-gray-500 dark:text-gray-400 font-medium mb-1">Total Tests</div>
+            <div className="text-2xl font-bold text-gray-800 dark:text-gray-100">{totalCount}</div>
+          </div>
+          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-100 dark:border-green-800/50">
+            <div className="text-[12px] text-green-600 dark:text-green-400 font-medium mb-1">Passed</div>
+            <div className="text-2xl font-bold text-green-700 dark:text-green-400">{passedCount}</div>
+          </div>
+          <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 border border-red-100 dark:border-red-800/50">
+            <div className="text-[12px] text-red-600 dark:text-red-400 font-medium mb-1">Failed</div>
+            <div className="text-2xl font-bold text-red-700 dark:text-red-400">{failedCount}</div>
+          </div>
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-100 dark:border-blue-800/50">
+            <div className="text-[12px] text-blue-600 dark:text-blue-400 font-medium mb-1">Pass Rate</div>
+            <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">{passRate}%</div>
+            <Progress value={passRate} className="h-1.5 mt-2 bg-blue-100 dark:bg-blue-800" />
+          </div>
+        </div>
+      </div>
+
+      <Separator className="mx-4" />
+
+      {/* Run Results Drill-Down */}
+      <div className="px-4 pt-3 pb-3 shrink-0">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">Run Results</h3>
+          <div className="flex items-center gap-1">
+            {(['all', 'passed', 'failed'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setResultFilter(f)}
+                className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
+                  resultFilter === f
+                    ? f === 'failed'
+                      ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                      : f === 'passed'
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200'
+                    : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+              >
+                {f === 'all' ? `All (${totalCount})` : f === 'passed' ? `Passed (${passedCount})` : `Failed (${failedCount})`}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 w-12">Status</TableHead>
+                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 w-14">ID</TableHead>
+                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Test</TableHead>
+                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 w-16 text-center">Duration</TableHead>
+                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Error</TableHead>
+                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 w-24 text-center">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredTests.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-[13px] text-gray-400 dark:text-gray-500 py-6">
+                    No {resultFilter} tests
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredTests.map((test) => {
+                  const error = getTestError(test.id)
+                  return (
+                    <TableRow key={test.id} className={`dark:border-gray-700 ${test.status === 'failed' ? 'bg-red-50/30 dark:bg-red-900/10' : ''}`}>
+                      <TableCell>
+                        <TestStatusIcon status={test.status} size={3.5} />
+                      </TableCell>
+                      <TableCell className="text-[12px] font-mono text-gray-500 dark:text-gray-400">{test.id}</TableCell>
+                      <TableCell className={`text-[13px] ${test.status === 'failed' ? 'text-red-700 dark:text-red-400 font-medium' : 'text-gray-700 dark:text-gray-200'}`}>
+                        {test.name}
+                      </TableCell>
+                      <TableCell className="text-center text-[12px] font-mono text-gray-500 dark:text-gray-400">{test.duration}</TableCell>
+                      <TableCell className="text-[12px] text-red-500 dark:text-red-400 max-w-[250px] truncate">
+                        {error || '—'}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {test.status === 'failed' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onReportTest(test)}
+                            className="h-7 text-[11px] gap-1 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 cursor-pointer"
+                          >
+                            <MessageSquare className="size-3" />
+                            Report
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      <Separator className="mx-4" />
+
+      {/* Compare Runs Section (Feature 5) */}
+      <div className="px-4 pt-3 pb-3 shrink-0">
+        <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mb-3 flex items-center gap-2">
+          <GitCompare className="size-4 text-gray-500 dark:text-gray-400" />
+          Compare Runs
+        </h3>
+        <div className="flex items-center gap-3 mb-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] text-gray-500 dark:text-gray-400 font-medium">Run 1:</span>
+            <Select value={compareRun1} onValueChange={setCompareRun1}>
+              <SelectTrigger className="h-8 w-56 text-[12px] bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-600">
+                <SelectValue placeholder="Select a run..." />
+              </SelectTrigger>
+              <SelectContent>
+                {runHistory.map((r) => (
+                  <SelectItem key={r.id} value={String(r.id)}>
+                    {r.date} ({r.rate}%)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <span className="text-gray-400 dark:text-gray-500 text-lg">vs</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] text-gray-500 dark:text-gray-400 font-medium">Run 2:</span>
+            <Select value={compareRun2} onValueChange={setCompareRun2}>
+              <SelectTrigger className="h-8 w-56 text-[12px] bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-600">
+                <SelectValue placeholder="Select a run..." />
+              </SelectTrigger>
+              <SelectContent>
+                {runHistory.map((r) => (
+                  <SelectItem key={r.id} value={String(r.id)}>
+                    {r.date} ({r.rate}%)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {comparisonData ? (
+          <>
+            {/* Summary */}
+            <div className="flex items-center gap-4 mb-3">
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                ✅ {comparisonData.improved} Fixed
+              </span>
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+                ❌ {comparisonData.regressed} Regressed
+              </span>
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+                ➡️ {comparisonData.unchanged} Unchanged
+              </span>
+            </div>
+
+            {/* Comparison Table */}
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 w-14">Test ID</TableHead>
+                    <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Test Name</TableHead>
+                    <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 text-center">{comparisonData.run1Label}</TableHead>
+                    <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 text-center">{comparisonData.run2Label}</TableHead>
+                    <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 text-center">Change</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {comparisonData.rows.map((row) => (
+                    <TableRow key={row.testId} className="dark:border-gray-700">
+                      <TableCell className="text-[12px] font-mono text-gray-500 dark:text-gray-400">{row.testId}</TableCell>
+                      <TableCell className="text-[13px] text-gray-700 dark:text-gray-200">{row.testName}</TableCell>
+                      <TableCell className="text-center">
+                        <TestStatusIcon status={row.run1Status} size={3.5} />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <TestStatusIcon status={row.run2Status} size={3.5} />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className={`text-[12px] font-medium ${
+                          row.change === 'fixed' ? 'text-green-600 dark:text-green-400' :
+                          row.change === 'regressed' ? 'text-red-600 dark:text-red-400' :
+                          'text-gray-500 dark:text-gray-400'
+                        }`}>
+                          {row.change === 'fixed' ? '✅ Fixed' : row.change === 'regressed' ? '❌ Regressed' : '➡️ Unchanged'}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-6 text-gray-400 dark:text-gray-500">
+            <GitCompare className="size-8 mx-auto mb-2 opacity-50" />
+            <p className="text-[13px]">Select two runs above to compare</p>
+          </div>
+        )}
+      </div>
+
+      <Separator className="mx-4" />
+
+      {/* Recent Runs */}
+      <div className="px-4 pt-3 pb-3 shrink-0">
+        <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mb-3">Recent Runs</h3>
+        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Date</TableHead>
+                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Duration</TableHead>
+                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 text-center">Passed</TableHead>
+                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 text-center">Failed</TableHead>
+                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 text-center">Rate</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {runHistory.slice(0, 5).map((run) => (
+                <TableRow key={run.id} className="dark:border-gray-700">
+                  <TableCell className="text-[13px] text-gray-700 dark:text-gray-200">{run.date}</TableCell>
+                  <TableCell className="text-[13px] text-gray-600 dark:text-gray-400 font-mono">{run.duration}</TableCell>
+                  <TableCell className="text-center">
+                    <span className="text-green-600 dark:text-green-400 font-medium text-[13px]">{run.passed}</span>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <span className={`font-medium text-[13px] ${run.failed > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                      {run.failed}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <span
+                      className={`text-[12px] font-medium px-2 py-0.5 rounded-full ${
+                        run.rate >= 90
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                          : run.rate >= 75
+                            ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                      }`}
+                    >
+                      {run.rate}%
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      <Separator className="mx-4" />
+
+      {/* Bug Registry */}
+      <div className="px-4 pt-3 pb-4">
+        <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mb-3">Bug Registry</h3>
+        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Bug ID</TableHead>
+                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Description</TableHead>
+                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 text-center">Status</TableHead>
+                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Related Tests</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {bugRegistry.map((bug) => (
+                <TableRow key={bug.id} className="dark:border-gray-700">
+                  <TableCell className="text-[13px] font-mono text-gray-600 dark:text-gray-400">{bug.id}</TableCell>
+                  <TableCell className="text-[13px] text-gray-700 dark:text-gray-200">{bug.desc}</TableCell>
+                  <TableCell className="text-center">
+                    <span
+                      className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                        bug.status === 'Open' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                      }`}
+                    >
+                      {bug.status}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-[13px] text-gray-500 dark:text-gray-400">{bug.tests}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ─── NAV TOAST ───────────────────────────────────────────
 function NavToast({ label, parent }: { label: string; parent?: string | null }) {
@@ -2528,7 +3131,6 @@ export default function Home() {
 
   // Keyboard shortcuts cheat sheet
   const [showShortcuts, setShowShortcuts] = useState(false)
-
   // Poll notifications every 2s
   useEffect(() => {
     const poll = async () => {
@@ -2598,8 +3200,6 @@ export default function Home() {
   const toggleDarkMode = useCallback(() => {
     setDarkMode((prev) => !prev)
   }, [])
-
-  // Keyboard shortcuts moved after runByPriority definition
 
   // Auto-hide sidebar on Live Execution, show on other tabs
   useEffect(() => {
@@ -3327,7 +3927,7 @@ export default function Home() {
           {/* ── DASHBOARD VIEW ── */}
           {selectedModule === 'dashboard' && (
             <div data-tour="dashboard">
-            <DashboardTab onSelectModule={handleSelectModule} />
+              <DashboardTab onSelectModule={handleSelectModule} />
             </div>
           )}
 
@@ -3369,82 +3969,72 @@ export default function Home() {
               <div className="flex-1 overflow-hidden min-h-0">
                 {activeTab === 'operations' && (
                   <div data-tour="operations">
-                  <ErrorBoundary>
-                    <OperationsTab
-                      testGroups={currentTestGroups}
-                      testCasesModule={
-                        allTestCases[selectedModule?.toLowerCase().replace(' ', '_').replace('-', '_')]
-                      }
-                    />
-                  </ErrorBoundary>
+                  <OperationsTab
+                    testGroups={currentTestGroups}
+                    testCasesModule={
+                      allTestCases[selectedModule?.toLowerCase().replace(' ', '_').replace('-', '_')]
+                    }
+                  />
                   </div>
                 )}
             {activeTab === 'test-runner' && (
               <div data-tour="test-runner">
-              <ErrorBoundary>
-                <TestRunnerTab
-                  tests={tests}
-                  testChecks={testChecks}
-                  toggleTestCheck={toggleTestCheck}
-                  isRunning={isRunning}
-                  totalFailed={failedCount}
-                  onRun={(selectedOnly) => {
-                    runTests(selectedOnly)
+              <TestRunnerTab
+                tests={tests}
+                testChecks={testChecks}
+                toggleTestCheck={toggleTestCheck}
+                isRunning={isRunning}
+                totalFailed={failedCount}
+                onRun={(selectedOnly) => {
+                  runTests(selectedOnly)
+                  setActiveTab('live-execution')
+                }}
+                onRunByPriority={runByPriority}
+                onRerunFailed={() => {
+                  const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id)
+                  if (failedIds.length > 0) {
+                    rerunTestIds(failedIds)
+                    runTests(true, failedIds)
                     setActiveTab('live-execution')
-                  }}
-                  onRunByPriority={runByPriority}
-                  onRerunFailed={() => {
-                    const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id)
-                    if (failedIds.length > 0) {
-                      rerunTestIds(failedIds)
-                      runTests(true, failedIds)
-                      setActiveTab('live-execution')
-                    }
-                  }}
-                />
-              </ErrorBoundary>
+                  }
+                }}
+              />
               </div>
             )}
             {activeTab === 'live-execution' && (
               <div data-tour="live-execution">
-              <ErrorBoundary>
-                <LiveExecutionTab
-                  tests={tests}
-                  testGroups={currentTestGroups}
-                  isRunning={isRunning}
-                  runningProgress={runningProgress}
-                  onStop={() => setIsRunning(false)}
-                  onBack={() => setActiveTab('test-runner')}
-                  onRerunFailed={() => {
-                    const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id)
-                    if (failedIds.length > 0) {
-                      rerunTestIds(failedIds)
-                      runTests(true, failedIds)
-                    }
-                  }}
-                />
-              </ErrorBoundary>
+              <LiveExecutionTab
+                tests={tests}
+                testGroups={currentTestGroups}
+                isRunning={isRunning}
+                runningProgress={runningProgress}
+                onStop={() => setIsRunning(false)}
+                onBack={() => setActiveTab('test-runner')}
+                onRerunFailed={() => {
+                  const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id)
+                  if (failedIds.length > 0) {
+                    rerunTestIds(failedIds)
+                    runTests(true, failedIds)
+                  }
+                }}
+              />
               </div>
             )}
             {activeTab === 'results' && (
               <div data-tour="results">
-              <ErrorBoundary>
-                <ResultsTab
-                  tests={tests}
-                  passedCount={passedCount}
-                  failedCount={failedCount}
-                  totalCount={tests.length}
-                  runHistory={runHistory}
-                  onReportTest={handleReportTest}
-                />
-              </ErrorBoundary>
+              <ResultsTab
+                tests={tests}
+                passedCount={passedCount}
+                failedCount={failedCount}
+                totalCount={tests.length}
+                runHistory={runHistory}
+                onReportTest={handleReportTest}
+              />
               </div>
             )}
             {activeTab === 'schedule' && user && (
               <div data-tour="schedule-runs">
-              <ErrorBoundary>
-                <ScheduleRunsTab userName={user.name} sidebarModules={sidebarModules} />
-              </ErrorBoundary>
+              <ScheduleRunsTab userName={user.name} sidebarModules={sidebarModules} />
               </div>
             )}
           </div>
