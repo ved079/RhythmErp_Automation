@@ -58,6 +58,10 @@ export async function POST(request: NextRequest) {
 
     return response
   } catch (error) {
+    const isMissingTable = error instanceof Error && 'code' in error && (error as any).code === 'P2021'
+    if (isMissingTable) {
+      return NextResponse.json({ error: 'Database not initialized. Run: npx prisma db push' }, { status: 503 })
+    }
     console.error('Login error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

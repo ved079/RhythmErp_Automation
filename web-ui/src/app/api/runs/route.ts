@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+function isMissingTableError(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && (error as any).code === 'P2021'
+}
+
 // GET /api/runs — list run history
 export async function GET(req: NextRequest) {
   try {
@@ -24,6 +28,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(mapped)
   } catch (error) {
+    if (isMissingTableError(error)) return NextResponse.json([])
     console.error('[RunHistory] GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch run history' }, { status: 500 })
   }

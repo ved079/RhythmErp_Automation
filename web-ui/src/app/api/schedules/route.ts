@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+function isMissingTableError(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && (error as any).code === 'P2021'
+}
+
 // GET /api/schedules — list all scheduled runs
 export async function GET() {
   try {
@@ -18,6 +22,7 @@ export async function GET() {
 
     return NextResponse.json(mapped)
   } catch (error) {
+    if (isMissingTableError(error)) return NextResponse.json([])
     console.error('[Schedules] GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch scheduled runs' }, { status: 500 })
   }
