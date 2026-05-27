@@ -60,18 +60,18 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    if RHYTHMERP_FACILITY:
-        log.step(3, "Selecting facility: " + str(RHYTHMERP_FACILITY))
-        login_page.select_facility(RHYTHMERP_FACILITY)
-    else:
-#         log.step(3, "Selecting facility (blank - first option)")
-        login_page.select_facility(" ")
+    # Facility selection disabled — single-tenant setup (dropdown handled by double-click)
+    # if RHYTHMERP_FACILITY:
+    #     log.step(3, "Selecting facility: " + str(RHYTHMERP_FACILITY))
+    #     login_page.select_facility(RHYTHMERP_FACILITY)
+    # else:
+    #     log.step(3, "Selecting facility (blank - first option)")
+    #     login_page.select_facility(" ")
 
     login_page.wait_seconds(1)
 
-    log.step(4, "Clicking Login button")
-    login_button = ("xpath", "//button[contains(.,'Login')]")
-    login_page.click(login_button)
+    log.step(4, "Clicking Login button (double-click)")
+    login_page.click_login()
     login_page.wait_seconds(3)
 
     login_page.wait_for_login_complete()
