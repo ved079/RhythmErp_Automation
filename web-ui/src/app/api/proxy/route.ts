@@ -20,7 +20,7 @@ async function proxyRequest(req: NextRequest) {
     const body = req.method !== "GET" ? await req.text() : undefined;
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 600000) // 10 min timeout for long test runs;
 
     const res = await fetch(targetUrl, {
       method: req.method,
