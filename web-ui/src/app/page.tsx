@@ -693,6 +693,7 @@ function SidebarModuleItem({
   onSelect,
   expandedIds,
   toggleExpand,
+  isLast = true,
 }: {
   module: SidebarModule
   depth?: number
@@ -700,36 +701,92 @@ function SidebarModuleItem({
   onSelect: (id: string) => void
   expandedIds: Set<string>
   toggleExpand: (id: string) => void
+  isLast?: boolean
 }) {
   const hasChildren = module.children && module.children.length > 0
   const isExpanded = expandedIds.has(module.id)
   const isActive = activeId === module.id
   const isParentActive = activeId && hasChildren && module.children!.some((c) => c.id === activeId)
+  const isChild = depth > 0
+
+  // Exact ERP tree-line values: width 2.7px, color #c8ccd4
+  const treeLineWidth = '2.7px'
+  const treeLineColor = '#c8ccd4'
 
   return (
-    <div>
+    <div className="relative">
+      {isChild && (
+        <>
+          {/* L-shaped tree branch connector (border-left + border-bottom with rounded corner) */}
+          <div
+            className="absolute bg-transparent z-0"
+            style={{
+              left: isChild && depth === 1 ? '34px' : '74px',
+              top: '6px',
+              width: depth === 1 ? '22px' : '16px',
+              height: '16px',
+              borderLeft: `${treeLineWidth} solid ${treeLineColor}`,
+              borderBottom: `${treeLineWidth} solid ${treeLineColor}`,
+              borderRadius: isLast ? '0 0 0 15px' : '0 0 0 15px',
+              // For last child, the vertical line stops here (L-shape)
+              // For non-last, the vertical line continues down via the parent ml-menu::before
+            }}
+          />
+          {/* Continuing vertical line for non-last items */}
+          {!isLast && (
+            <div
+              className="absolute z-0 bg-transparent"
+              style={{
+                left: isChild && depth === 1 ? '34px' : '74px',
+                top: '22px',
+                bottom: '0',
+                width: treeLineWidth,
+                backgroundColor: treeLineColor,
+                borderRadius: '10px',
+              }}
+            />
+          )}
+        </>
+      )}
       <button
         onClick={() => {
           if (hasChildren) toggleExpand(module.id)
           else onSelect(module.id)
         }}
-        className={`w-full flex items-center gap-1.5 px-3 py-[7px] text-[13px] rounded-md transition-all duration-150 cursor-pointer text-left font-['Poppins'] ${
-          isActive
-            ? 'bg-[#E8F5E9] dark:bg-[#1B4332]/25 text-[#1B4332] dark:text-green-300 font-semibold border-l-[3px] border-[#1B4332]'
-            : isParentActive
-              ? 'bg-[#E8F5E9]/50 dark:bg-[#1B4332]/10 text-[#555555] dark:text-gray-200 font-medium'
-              : 'text-[#333333] dark:text-gray-300 hover:bg-[#F7F9FC] dark:hover:bg-[#334155]/30'
+        className={`w-full flex items-center text-[14px] transition-all duration-200 cursor-pointer text-left font-['Poppins'] relative z-[1] ${
+          isChild
+            ? isActive
+              ? 'text-[#1B4332] dark:text-green-300 font-semibold'
+              : 'text-[#545454] dark:text-gray-300 font-medium hover:text-[#6777EF] dark:hover:text-indigo-400 hover:bg-[rgba(82,183,136,0.08)] hover:shadow-[rgba(82,183,136,0.5)_2px_0px_inset] hover:rounded-[5px]'
+            : isActive
+              ? 'bg-gradient-to-r from-[#DFF3E3] via-[#C8E6C9] to-[#B7E4C7] dark:bg-[#1B4332]/25 text-[#1B4332] dark:text-green-300 font-semibold shadow-[rgba(34,197,94,0.25)_2px_0px_4px_inset,rgba(34,197,94,0.15)_0px_2px_6px] rounded-[5px]'
+              : isParentActive
+                ? 'text-[#1B4332] dark:text-green-300 font-semibold'
+                : 'text-[#545454] dark:text-gray-300 font-medium hover:text-[#6777EF] dark:hover:text-indigo-400 hover:bg-[rgba(82,183,136,0.08)] hover:shadow-[rgba(82,183,136,0.5)_2px_0px_inset] hover:rounded-[5px]'
         }`}
-        style={{ paddingLeft: `${depth * 16 + 12}px` }}
+        style={{
+          paddingLeft: isChild ? (depth === 1 ? '48px' : '80px') : '15px',
+          paddingRight: '24px',
+          paddingTop: '7px',
+          paddingBottom: '7px',
+        }}
       >
         {hasChildren ? (
           <ChevronDown
-            className={`size-3.5 shrink-0 transition-transform duration-200 ${
+            className={`size-[18px] shrink-0 transition-transform duration-200 mr-1.5 ${
               !isExpanded ? '-rotate-90' : ''
+            } ${isActive || isParentActive ? 'text-[#1B4332] dark:text-green-300' : 'text-[#495584] dark:text-gray-400'}`}
+          />
+        ) : isChild ? (
+          <span
+            className={`w-[7px] h-[7px] rounded-full shrink-0 mr-2 ${
+              isActive
+                ? 'bg-[#1A56DB] dark:bg-indigo-400'
+                : 'border-[1.5px] border-[#777777] dark:border-gray-500'
             }`}
           />
         ) : (
-          <span className="w-3.5 shrink-0" />
+          <span className="w-[18px] shrink-0 mr-1.5" />
         )}
         <span className="truncate flex-1">{module.label}</span>
         {module.badge && (
@@ -749,8 +806,20 @@ function SidebarModuleItem({
         )}
       </button>
       {hasChildren && isExpanded && (
-        <div className="mt-0.5">
-          {module.children!.map((child) => (
+        <div className="relative">
+          {/* Vertical tree line running down the left side of all children */}
+          <div
+            className="absolute z-0"
+            style={{
+              left: '34px',
+              top: '0',
+              bottom: isLast ? '27px' : '0',
+              width: treeLineWidth,
+              backgroundColor: treeLineColor,
+              borderRadius: '10px',
+            }}
+          />
+          {module.children!.map((child, idx) => (
             <SidebarModuleItem
               key={child.id}
               module={child}
@@ -759,6 +828,7 @@ function SidebarModuleItem({
               onSelect={onSelect}
               expandedIds={expandedIds}
               toggleExpand={toggleExpand}
+              isLast={idx === module.children!.length - 1}
             />
           ))}
         </div>
@@ -3861,7 +3931,7 @@ export default function Home() {
           className="shrink-0 overflow-hidden h-full"
           style={{ width: sidebarOpen ? sidebarWidth : 0 }}
         >
-        <aside className="bg-white dark:bg-[#1e293b] border-r border-[#E2E8F0] dark:border-[#334155] flex flex-col h-full shadow-[0_2px_5px_rgba(0,0,0,0.16),0_2px_10px_rgba(0,0,0,0.12)]" style={{ width: sidebarWidth }}>
+        <aside className="flex flex-col h-full font-['Poppins'] bg-gradient-to-b from-[#F7FBF8] via-[#EAF5EC] to-[#D6EDDC] dark:from-[#1e293b] dark:via-[#1e293b] dark:to-[#1e293b] shadow-[-1px_0px_0px_#D4E3D9] dark:shadow-[-1px_0px_0px_#334155]" style={{ width: sidebarWidth }}>
           <ScrollArea className="flex-1 min-h-0" data-tour="sidebar-modules">
             <div className="py-2 px-2">
               {sidebarModules.map((mod) => (
