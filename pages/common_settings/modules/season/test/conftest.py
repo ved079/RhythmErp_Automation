@@ -1,5 +1,5 @@
 ﻿"""
-conftest.py - HSN SAC Common Settings (RhythmERP)
+conftest.py - Season Common Settings (RhythmERP)
 """
 
 import os
@@ -25,7 +25,7 @@ from pages.common_settings.cs_report_generator import CSReportStore, generate_cs
 @pytest.fixture(scope="session")
 def driver():
     log.separator()
-    log.info("LAUNCHING BROWSER (RhythmERP - HSN SAC Tests)...")
+    log.info("LAUNCHING BROWSER (RhythmERP - Season Tests)...")
     log.separator()
     drv = get_driver()
     drv.maximize_window()
@@ -84,14 +84,11 @@ def logged_in_driver(driver):
 
 
 @pytest.fixture
-def hsn_sac_page(logged_in_driver):
-    """
-    Fresh HSN SAC page per test.
-    Navigates to the HSN SAC page before each test.
-    """
-    from pages.common_settings.modules.hsn_sac.hsn_sac_page import HsnSacPage
-    page = HsnSacPage(logged_in_driver)
-    page.navigate_to_page()
+def season_page(logged_in_driver):
+    """Season page object — fresh navigation for each test."""
+    from pages.common_settings.modules.season.season_page import SeasonPage
+    page = SeasonPage(logged_in_driver)
+    page.navigate_to_season()
     yield page
 
 
