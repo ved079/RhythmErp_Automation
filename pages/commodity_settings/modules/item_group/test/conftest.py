@@ -1,4 +1,4 @@
-"""
+﻿"""
 conftest.py - Item Group (RhythmERP)
 ------------------------------------
 Pytest fixtures and report generation hooks for Item Group automation.
@@ -45,11 +45,11 @@ def pytest_configure(config):
         pytest test_item_group_validation.py -v -m "not bug"
         pytest test_item_group_validation.py -v -m ui
     """
-    config.addinivalue_line("markers", "smoke: Critical path tests — must-pass for build acceptance")
-    config.addinivalue_line("markers", "sanity: Core functionality tests — validates key features end-to-end")
-    config.addinivalue_line("markers", "regression: Full regression suite — all tests including edge cases")
-    config.addinivalue_line("markers", "bug: Bug-tracking tests — related to known/confirmed bugs")
-    config.addinivalue_line("markers", "ui: UI/visual behavior tests — popup, view, layout checks")
+    config.addinivalue_line("markers", "smoke: Critical path tests â€” must-pass for build acceptance")
+    config.addinivalue_line("markers", "sanity: Core functionality tests â€” validates key features end-to-end")
+    config.addinivalue_line("markers", "regression: Full regression suite â€” all tests including edge cases")
+    config.addinivalue_line("markers", "bug: Bug-tracking tests â€” related to known/confirmed bugs")
+    config.addinivalue_line("markers", "ui: UI/visual behavior tests â€” popup, view, layout checks")
 
 
 # ================================================================
@@ -92,8 +92,8 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    log.step(3, "Selecting facility (blank - first option)")
-    login_page.select_facility_by_index(index=0)
+#     log.step(3, "Selecting facility (blank - first option)")
+#     login_page.select_facility_by_index(index=0)
 
     login_page.wait_seconds(1)
 
@@ -114,7 +114,7 @@ def logged_in_driver(driver):
 
 @pytest.fixture
 def ig_page(logged_in_driver):
-    """Item Group page object — fresh navigation for each test."""
+    """Item Group page object â€” fresh navigation for each test."""
     from pages.commodity_settings.modules.item_group.item_group_page import (
         ItemGroupPage,
     )

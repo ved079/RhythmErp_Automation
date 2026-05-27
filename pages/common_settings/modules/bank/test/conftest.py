@@ -1,4 +1,4 @@
-"""
+﻿"""
 conftest.py - Bank Common Settings (RhythmERP)
 """
 
@@ -63,8 +63,8 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    log.step(3, "Selecting facility (blank - first option)")
-    login_page.select_facility_by_index(index=0)
+#     log.step(3, "Selecting facility (blank - first option)")
+#     login_page.select_facility_by_index(index=0)
 
     login_page.wait_seconds(1)
 
@@ -85,7 +85,7 @@ def logged_in_driver(driver):
 
 @pytest.fixture
 def bnk_page(logged_in_driver):
-    """Bank page object — fresh navigation for each test."""
+    """Bank page object â€” fresh navigation for each test."""
     from pages.common_settings.modules.bank.bank_page import BankPage
     page = BankPage(logged_in_driver)
     page.navigate_to_page()

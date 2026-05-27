@@ -1,4 +1,4 @@
-"""
+﻿"""
 test_forgot_password.py
 ------------------------
 RhythmERP Forgot Password test cases.
@@ -21,12 +21,12 @@ Screen 2 (invalid OTP, no manual input):
 Full Flow (manual OTP, ORDER MATTERS):
   FP_FF_01 - Browser back from OTP screen       (no OTP)
   FP_FF_02 - Back to login from screen 1        (no OTP)
-  FP_FF_03 - Grand Finale: reset → login → dashboard  (OTP #1)
+  FP_FF_03 - Grand Finale: reset â†’ login â†’ dashboard  (OTP #1)
   FP_FF_04 - Recently used password rejected    (OTP #2)
   FP_FF_05 - Current password rejected          (OTP #3)
   FP_FF_06 - Cleanup: reset back to default     (OTP #4)
 
-Execution order: ff_01 → ff_02 → ff_03 → ff_04 → ff_05 → ff_06
+Execution order: ff_01 â†’ ff_02 â†’ ff_03 â†’ ff_04 â†’ ff_05 â†’ ff_06
 ff_03 MUST run before ff_04 and ff_05 (generates the password they test).
 ff_06 MUST run last (resets password for next test run).
 """
@@ -164,7 +164,7 @@ class TestForgotPasswordScreen1:
             "Should proceed to OTP screen after trimming spaces from email"
 
     def test_fp_s1_05_email_case_insensitive(self, fp_on_screen1):
-        """Uppercase email is treated as different — RhythmERP is case-sensitive on email."""
+        """Uppercase email is treated as different â€” RhythmERP is case-sensitive on email."""
         fp = fp_on_screen1
         upper_email = RHYTHMERP_FP_EMAIL.upper()
         fp.enter_email(upper_email)
@@ -281,7 +281,7 @@ class TestForgotPasswordScreen2:
 # ================================================================
 class TestForgotPasswordFullFlow:
 
-    # ── Helpers ──
+    # â”€â”€ Helpers â”€â”€
 
     @staticmethod
     def _navigate_to_otp_screen(driver):
@@ -326,7 +326,7 @@ class TestForgotPasswordFullFlow:
                 break
         return alert_text
 
-    # ── Tests ──
+    # â”€â”€ Tests â”€â”€
 
     def test_fp_ff_01_browser_back_from_otp_screen(self, driver):
         """Browser back button on OTP screen should not allow form reuse."""
@@ -358,11 +358,11 @@ class TestForgotPasswordFullFlow:
     @manual_otp
     def test_fp_ff_03_grand_finale_reset_login_dashboard(self, driver):
         """GRAND FINALE: Reset password -> login with new creds -> verify dashboard.
-        MUST run before ff_04 and ff_05 — generates the password they test."""
+        MUST run before ff_04 and ff_05 â€” generates the password they test."""
         # Step 1: Generate a unique password
         timestamp = datetime.now().strftime("%H%M%S")
         new_password = f"Vedant@{timestamp}x"
-        print(f"\n  🔑 Auto-generated password: {new_password}\n")
+        print(f"\n  ðŸ”‘ Auto-generated password: {new_password}\n")
 
         # Save for rejection tests (ff_04 and ff_05)
         TestForgotPasswordFullFlow.generated_password = new_password
@@ -373,7 +373,7 @@ class TestForgotPasswordFullFlow:
         # Step 3: Enter OTP with retry (3 attempts)
         max_retries = 3
         for attempt in range(max_retries):
-            otp = input(f"  ⏳ Enter OTP for vedant@rhythmflows.com ({attempt + 1}/{max_retries}): ")
+            otp = input(f"  â³ Enter OTP for vedant@rhythmflows.com ({attempt + 1}/{max_retries}): ")
             fp.enter_otp(otp)
 
             # Step 4: Enter new password and reset
@@ -387,8 +387,8 @@ class TestForgotPasswordFullFlow:
 
             alert = self._wait_for_alert(fp)
             if self._is_otp_error(alert):
-                print(f"  ❌ Wrong OTP! App said: {alert}")
-                print(f"  📧 A new OTP has been sent. Check your email.\n")
+                print(f"  âŒ Wrong OTP! App said: {alert}")
+                print(f"  ðŸ“§ A new OTP has been sent. Check your email.\n")
                 fp = self._navigate_to_otp_screen(driver)
                 continue
             else:
@@ -411,7 +411,7 @@ class TestForgotPasswordFullFlow:
         login_page.wait_for_page_load()
         login_page.enter_email(RHYTHMERP_FP_USERNAME)
         login_page.enter_password(new_password)
-        login_page.select_facility_by_index(index=0)
+#         login_page.select_facility_by_index(index=0)
         login_page.click_login()
         login_page.wait_for_login_complete(timeout=20, login_url=RHYTHMERP_LOGIN_URL)
 
@@ -428,7 +428,7 @@ class TestForgotPasswordFullFlow:
 
         max_retries = 3
         for attempt in range(max_retries):
-            otp = input(f"  ⏳ Enter OTP for vedant@rhythmflows.com ({attempt + 1}/{max_retries}): ")
+            otp = input(f"  â³ Enter OTP for vedant@rhythmflows.com ({attempt + 1}/{max_retries}): ")
             fp.enter_otp(otp)
             fp.enter_new_password(recent_password)
             fp.enter_confirm_password(recent_password)
@@ -438,8 +438,8 @@ class TestForgotPasswordFullFlow:
             success = fp.is_success_screen_displayed()
 
             if self._is_otp_error(alert_text):
-                print(f"  ❌ Wrong OTP! App said: {alert_text}")
-                print(f"  📧 A new OTP has been sent. Check your email.\n")
+                print(f"  âŒ Wrong OTP! App said: {alert_text}")
+                print(f"  ðŸ“§ A new OTP has been sent. Check your email.\n")
                 fp = self._navigate_to_otp_screen(driver)
                 continue
 
@@ -458,7 +458,7 @@ class TestForgotPasswordFullFlow:
 
         max_retries = 3
         for attempt in range(max_retries):
-            otp = input(f"  ⏳ Enter OTP for vedant@rhythmflows.com ({attempt + 1}/{max_retries}): ")
+            otp = input(f"  â³ Enter OTP for vedant@rhythmflows.com ({attempt + 1}/{max_retries}): ")
             fp.enter_otp(otp)
             fp.enter_new_password(current_password)
             fp.enter_confirm_password(current_password)
@@ -468,8 +468,8 @@ class TestForgotPasswordFullFlow:
             success = fp.is_success_screen_displayed()
 
             if self._is_otp_error(alert_text):
-                print(f"  ❌ Wrong OTP! App said: {alert_text}")
-                print(f"  📧 A new OTP has been sent. Check your email.\n")
+                print(f"  âŒ Wrong OTP! App said: {alert_text}")
+                print(f"  ðŸ“§ A new OTP has been sent. Check your email.\n")
                 fp = self._navigate_to_otp_screen(driver)
                 continue
 
@@ -495,7 +495,7 @@ class TestForgotPasswordFullFlow:
             max_retries = 3
             otp_accepted = False
             for attempt in range(max_retries):
-                otp = input(f"  ⏳ Enter OTP for vedant@rhythmflows.com ({i+1}/{max_pushes+1}): ")
+                otp = input(f"  â³ Enter OTP for vedant@rhythmflows.com ({i+1}/{max_pushes+1}): ")
                 fp.enter_otp(otp)
                 fp.enter_new_password(target)
                 fp.enter_confirm_password(target)
@@ -503,7 +503,7 @@ class TestForgotPasswordFullFlow:
                 fp.wait_seconds(3)
 
                 if fp.is_success_screen_displayed():
-                    print(f"\n  ✅ Password reset to: {target}")
+                    print(f"\n  âœ… Password reset to: {target}")
                     # Verify login
                     fp.click_login_link_after_success()
                     fp.wait_seconds(2)
@@ -511,7 +511,7 @@ class TestForgotPasswordFullFlow:
                     login_page.wait_for_page_load()
                     login_page.enter_email(RHYTHMERP_FP_USERNAME)
                     login_page.enter_password(target)
-                    login_page.select_facility_by_index(index=0)
+#                     login_page.select_facility_by_index(index=0)
                     login_page.click_login()
                     login_page.wait_for_login_complete(timeout=20, login_url=RHYTHMERP_LOGIN_URL)
                     assert "signin" not in driver.current_url.lower(), \
@@ -520,7 +520,7 @@ class TestForgotPasswordFullFlow:
 
                 alert = self._wait_for_alert(fp)
                 if self._is_otp_error(alert):
-                    print(f"  ❌ Wrong OTP! Try again.")
+                    print(f"  âŒ Wrong OTP! Try again.")
                     fp = self._navigate_to_otp_screen(driver)
                     continue
                 else:
@@ -529,10 +529,10 @@ class TestForgotPasswordFullFlow:
             else:
                 pytest.fail(f"Wrong OTP {max_retries} times on attempt {i+1}")
 
-            # Target rejected — push with dummy password (same screen, same OTP)
+            # Target rejected â€” push with dummy password (same screen, same OTP)
             if i < max_pushes:
                 dummy = f"Vedant@push{datetime.now().strftime('%H%M%S')}x"
-                print(f"  ⚠️  Target rejected. Pushing with dummy: {dummy}")
+                print(f"  âš ï¸  Target rejected. Pushing with dummy: {dummy}")
 
                 fp.enter_new_password(dummy)
                 fp.enter_confirm_password(dummy)
@@ -540,12 +540,12 @@ class TestForgotPasswordFullFlow:
                 fp.wait_seconds(3)
 
                 if fp.is_success_screen_displayed():
-                    print(f"  ✅ Dummy set. Continuing rotation...")
-                    continue  # Next iteration — new OTP, try target again
+                    print(f"  âœ… Dummy set. Continuing rotation...")
+                    continue  # Next iteration â€” new OTP, try target again
 
                 alert2 = self._wait_for_alert(fp)
                 if self._is_otp_error(alert2):
-                    print(f"  ❌ OTP expired. Will get fresh OTP next round.")
+                    print(f"  âŒ OTP expired. Will get fresh OTP next round.")
                     continue
                 else:
                     pytest.fail(f"Unexpected error with dummy: {alert2}")

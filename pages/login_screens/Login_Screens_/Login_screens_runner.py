@@ -1,4 +1,4 @@
-# Login_screens_runner.py
+﻿# Login_screens_runner.py
 # --------------------
 # Multi-product runner for PACS and RhythmERP login/forgot-password.
 # ONLY runs the normal flow. No test framework. No gimmicks.
@@ -25,7 +25,7 @@ from pages.login_screens.Login_Screens_.login_page import LoginPage
 
 
 def run_login(product):
-    """Normal login flow — enter creds, select facility, login, verify dashboard."""
+    """Normal login flow â€” enter creds, select facility, login, verify dashboard."""
     if product == "rhythmerp":
         from config import RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHYTHMERP_LOGIN_URL
         email, password, login_url = RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHYTHMERP_LOGIN_URL
@@ -36,7 +36,7 @@ def run_login(product):
         use_index = False
 
     log.separator()
-    log.info(f" {product.upper()} — LOGIN SMOKE TEST")
+    log.info(f" {product.upper()} â€” LOGIN SMOKE TEST")
     log.info(f" URL: {login_url}")
     log.separator()
 
@@ -71,7 +71,7 @@ def run_login(product):
 
 
 def run_forgot_password(product):
-    """Normal forgot password flow — email -> OTP -> new password -> reset -> login -> verify dashboard."""
+    """Normal forgot password flow â€” email -> OTP -> new password -> reset -> login -> verify dashboard."""
     if product == "rhythmerp":
         from config import RHYTHMERP_FP_EMAIL, RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL
         email = RHYTHMERP_FP_EMAIL
@@ -90,7 +90,7 @@ def run_forgot_password(product):
         new_password = FP_NEW_PASSWORD
 
     log.separator()
-    log.info(f" {product.upper()} — FORGOT PASSWORD SMOKE TEST")
+    log.info(f" {product.upper()} â€” FORGOT PASSWORD SMOKE TEST")
     log.info(f" Email: {email}")
     log.info(f" New password: {new_password}")
     log.separator()
@@ -99,7 +99,7 @@ def run_forgot_password(product):
     page = LoginPage(driver)
 
     try:
-        # ── Step 1: Load login page and go to forgot password ──
+        # â”€â”€ Step 1: Load login page and go to forgot password â”€â”€
         page.load_url(login_url)
         log.info("Login page loaded")
 
@@ -108,7 +108,7 @@ def run_forgot_password(product):
         fp_page.navigate_to_forgot_password()
         log.info("Navigated to forgot password page")
 
-        # ── Step 2: Enter email and send OTP ──
+        # â”€â”€ Step 2: Enter email and send OTP â”€â”€
         fp_page.enter_email(email)
         log.info(f"Entered email: {email}")
 
@@ -124,7 +124,7 @@ def run_forgot_password(product):
 
         log.info("OTP screen appeared")
 
-        # ── Step 3: Enter OTP (3 attempts) ──
+        # â”€â”€ Step 3: Enter OTP (3 attempts) â”€â”€
         otp_accepted = False
         for attempt in range(3):
             otp = input(f"  Enter OTP received on {email} ({attempt + 1}/3): ")
@@ -146,18 +146,18 @@ def run_forgot_password(product):
             driver.save_screenshot(f"{product}_forgot_password_failed.png")
             return
 
-        # ── Step 4: Enter new password and confirm ──
+        # â”€â”€ Step 4: Enter new password and confirm â”€â”€
         fp_page.enter_new_password(new_password)
         fp_page.enter_confirm_password(new_password)
         log.info("Entered new password and confirm password")
 
-        # ── Step 5: Click Reset Password ──
+        # â”€â”€ Step 5: Click Reset Password â”€â”€
         fp_page.click_reset_password()
         log.info("Clicked Reset Password")
 
         time.sleep(3)
 
-        # ── Step 6: Verify success screen ──
+        # â”€â”€ Step 6: Verify success screen â”€â”€
         if fp_page.is_success_screen_displayed():
             msg = fp_page.get_success_message_text()
             log.info(f"Password reset SUCCESSFUL! Message: {msg}")
@@ -166,26 +166,26 @@ def run_forgot_password(product):
             driver.save_screenshot(f"{product}_reset_verify.png")
             return
 
-        # ── Step 7: Click login link on success screen -> redirected to login page ──
+        # â”€â”€ Step 7: Click login link on success screen -> redirected to login page â”€â”€
         fp_page.click_login_link_after_success()
         time.sleep(2)
         log.info("Redirected to login page")
 
-        # ── Step 8: Login with new credentials ──
+        # â”€â”€ Step 8: Login with new credentials â”€â”€
         login_page = LoginPage(driver)
         login_page.wait_for_page_load()
         login_page.enter_email(login_username)
         login_page.enter_password(new_password)
 
         if use_index:
-            login_page.select_facility_by_index(index=0)
+#             login_page.select_facility_by_index(index=0)
         else:
             login_page.select_facility(facility)
 
         login_page.click_login()
         log.info("Logged in with new credentials")
 
-        # ── Step 9: Verify dashboard ──
+        # â”€â”€ Step 9: Verify dashboard â”€â”€
         login_page.wait_for_login_complete(login_url=login_url)
         log.info(f"FORGOT PASSWORD FLOW COMPLETE! URL: {driver.current_url}")
 

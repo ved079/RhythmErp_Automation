@@ -1,4 +1,4 @@
-"""
+﻿"""
 conftest.py - Quality Parameter Master Commodity Settings (RhythmERP)
 """
 
@@ -36,9 +36,9 @@ def pytest_configure(config):
         pytest test_quality_parameter_master_validation.py -m "not bug"
         pytest test_quality_parameter_master_validation.py -m ui
     """
-    config.addinivalue_line("markers", "smoke: Critical path — core create/edit/search")
+    config.addinivalue_line("markers", "smoke: Critical path â€” core create/edit/search")
     config.addinivalue_line("markers", "sanity: Broad functional coverage for quick feedback")
-    config.addinivalue_line("markers", "regression: Full test suite — all 30 tests")
+    config.addinivalue_line("markers", "regression: Full test suite â€” all 30 tests")
     config.addinivalue_line("markers", "bug: Tests validating known open bugs (BUG-001 to BUG-006)")
     config.addinivalue_line("markers", "ui: UI element visibility, layout, and interaction checks")
 
@@ -83,8 +83,8 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    log.step(3, "Selecting facility (blank - first option)")
-    login_page.select_facility_by_index(index=0)
+#     log.step(3, "Selecting facility (blank - first option)")
+#     login_page.select_facility_by_index(index=0)
 
     login_page.wait_seconds(1)
 
@@ -105,7 +105,7 @@ def logged_in_driver(driver):
 
 @pytest.fixture
 def qp_master_page(logged_in_driver):
-    """Quality Parameter Master page object — fresh navigation for each test."""
+    """Quality Parameter Master page object â€” fresh navigation for each test."""
     from pages.commodity_settings.modules.quality_parameter_master.quality_parameter_master_page import (
         QualityParameterMasterPage,
     )
@@ -202,7 +202,7 @@ _qpm_store.record_issue(
     module="Quality Parameter Master",
     category="Functionality",
     description="No Delete option exists anywhere on the Quality Parameter Master "
-                "screen — no Delete button per row, no Delete in More menu, "
+                "screen â€” no Delete button per row, no Delete in More menu, "
                 "no Delete in the edit popup.",
     expected="Users should be able to delete a Quality Parameter via a Delete "
              "button on the row or in the edit popup.",

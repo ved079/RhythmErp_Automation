@@ -1,4 +1,4 @@
-"""
+﻿"""
 conftest.py - Item Master Commodity Settings (RhythmERP)
 """
 
@@ -37,11 +37,11 @@ def pytest_configure(config):
         pytest test_item_master_validation.py -v -m "not bug"
         pytest test_item_master_validation.py -v -m ui
     """
-    config.addinivalue_line("markers", "smoke: Critical path tests — must-pass for build acceptance")
-    config.addinivalue_line("markers", "sanity: Core functionality tests — validates key features end-to-end")
-    config.addinivalue_line("markers", "regression: Full regression suite — all tests including edge cases and skipped")
-    config.addinivalue_line("markers", "bug: Bug-tracking tests — related to known/confirmed bugs")
-    config.addinivalue_line("markers", "ui: UI/visual behavior tests — popup, stepper, toggle, view, layout checks")
+    config.addinivalue_line("markers", "smoke: Critical path tests â€” must-pass for build acceptance")
+    config.addinivalue_line("markers", "sanity: Core functionality tests â€” validates key features end-to-end")
+    config.addinivalue_line("markers", "regression: Full regression suite â€” all tests including edge cases and skipped")
+    config.addinivalue_line("markers", "bug: Bug-tracking tests â€” related to known/confirmed bugs")
+    config.addinivalue_line("markers", "ui: UI/visual behavior tests â€” popup, stepper, toggle, view, layout checks")
 
 
 # ================================================================
@@ -84,8 +84,8 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    log.step(3, "Selecting facility (blank - first option)")
-    login_page.select_facility_by_index(index=0)
+#     log.step(3, "Selecting facility (blank - first option)")
+#     login_page.select_facility_by_index(index=0)
 
     login_page.wait_seconds(1)
 
@@ -106,7 +106,7 @@ def logged_in_driver(driver):
 
 @pytest.fixture
 def im_page(logged_in_driver):
-    """Item Master page object — fresh navigation for each test."""
+    """Item Master page object â€” fresh navigation for each test."""
     from pages.commodity_settings.modules.item_master.item_master_page import (
         ItemMasterPage,
     )
@@ -125,12 +125,12 @@ _im_store = CSReportStore()
 # These will be populated/updated after running tests and observing
 # actual ERP behavior. Placeholder entries below:
 
-# BUG-001 (HIGH): [RETRACTED] Spaces-only Item Name — not applicable
+# BUG-001 (HIGH): [RETRACTED] Spaces-only Item Name â€” not applicable
 # Item Name is READONLY and auto-generated from attributes.
 # Cannot type spaces into it. This bug is not applicable.
-# _im_store.record_issue(...) — REMOVED, not applicable per V2 exploration
+# _im_store.record_issue(...) â€” REMOVED, not applicable per V2 exploration
 
-# BUG-002 (HIGH): Duplicate Item Names ALLOWED — CONFIRMED 2026-05-18
+# BUG-002 (HIGH): Duplicate Item Names ALLOWED â€” CONFIRMED 2026-05-18
 # Table has two "Soyabean" rows both Active. No uniqueness validation on Item Name.
 _im_store.record_issue(
     severity="High",
@@ -146,11 +146,11 @@ _im_store.record_issue(
     status="Confirmed",
 )
 
-# BUG-003 (MEDIUM): [RETRACTED] No maxlength on Item Name — not applicable
+# BUG-003 (MEDIUM): [RETRACTED] No maxlength on Item Name â€” not applicable
 # Item Name is READONLY and auto-generated. Maxlength testing not possible.
-# _im_store.record_issue(...) — REMOVED, not applicable per V2 exploration
+# _im_store.record_issue(...) â€” REMOVED, not applicable per V2 exploration
 
-# BUG-004 (MEDIUM): Negative Base Uom Conversion accepted — needs verification
+# BUG-004 (MEDIUM): Negative Base Uom Conversion accepted â€” needs verification
 _im_store.record_issue(
     severity="Medium",
     module="Item Master",
@@ -163,7 +163,7 @@ _im_store.record_issue(
     status="Suspected",
 )
 
-# BUG-006 (MEDIUM): Dropdown option duplication — CONFIRMED 2026-05-18
+# BUG-006 (MEDIUM): Dropdown option duplication â€” CONFIRMED 2026-05-18
 _im_store.record_issue(
     severity="Medium",
     module="Item Master",
@@ -197,7 +197,7 @@ _im_store.record_issue(
     module="Item Master",
     category="Functionality",
     description="No Delete option exists anywhere on the Item Master "
-                "screen — no Delete button per row, no Delete in More menu, "
+                "screen â€” no Delete button per row, no Delete in More menu, "
                 "no Delete in the edit popup.",
     expected="Users should be able to delete an Item Master record via a Delete "
              "button on the row or in the edit popup.",

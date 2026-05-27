@@ -1,4 +1,4 @@
-"""
+﻿"""
 conftest.py - HSN SAC Common Settings (RhythmERP)
 """
 
@@ -62,7 +62,7 @@ def logged_in_driver(driver):
         log.step(3, "Selecting facility: " + str(RHYTHMERP_FACILITY))
         login_page.select_facility(RHYTHMERP_FACILITY)
     else:
-        log.step(3, "Selecting facility (blank - first option)")
+#         log.step(3, "Selecting facility (blank - first option)")
         login_page.select_facility(" ")
 
     login_page.wait_seconds(1)
@@ -102,10 +102,10 @@ def hsn_sac_page(logged_in_driver):
 def pytest_configure(config):
     """Register custom pytest markers for Season module."""
     config.addinivalue_line("markers", "smoke: Core CRUD + critical path tests (4 tests)")
-    config.addinivalue_line("markers", "sanity: All 18 tests — full module sanity check")
-    config.addinivalue_line("markers", "regression: All 18 tests — full regression suite")
-    config.addinivalue_line("markers", "bug: Known bugs — SQL injection, XSS, duplicate alert, special chars, no max length (5 tests)")
-    config.addinivalue_line("markers", "ui: UI interaction tests — alerts, view mode, search, history, cancel, boundary (12 tests)")
+    config.addinivalue_line("markers", "sanity: All 18 tests â€” full module sanity check")
+    config.addinivalue_line("markers", "regression: All 18 tests â€” full regression suite")
+    config.addinivalue_line("markers", "bug: Known bugs â€” SQL injection, XSS, duplicate alert, special chars, no max length (5 tests)")
+    config.addinivalue_line("markers", "ui: UI interaction tests â€” alerts, view mode, search, history, cancel, boundary (12 tests)")
 
 
 # ================================================================

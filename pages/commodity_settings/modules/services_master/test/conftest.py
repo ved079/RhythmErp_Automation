@@ -1,4 +1,4 @@
-"""
+﻿"""
 conftest.py - Services Master Commodity Settings (RhythmERP)
 """
 
@@ -36,9 +36,9 @@ def pytest_configure(config):
         pytest test_services_master_validation.py -m "not bug"
         pytest test_services_master_validation.py -m ui
     """
-    config.addinivalue_line("markers", "smoke: Critical path — core create/view/edit/search")
+    config.addinivalue_line("markers", "smoke: Critical path â€” core create/view/edit/search")
     config.addinivalue_line("markers", "sanity: Broad functional coverage for quick feedback")
-    config.addinivalue_line("markers", "regression: Full test suite — all 50 tests")
+    config.addinivalue_line("markers", "regression: Full test suite â€” all 50 tests")
     config.addinivalue_line("markers", "bug: Tests validating known open bugs (BUG-001 to BUG-007)")
     config.addinivalue_line("markers", "ui: UI element visibility, layout, and interaction checks")
 
@@ -83,8 +83,8 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    log.step(3, "Selecting facility (blank - first option)")
-    login_page.select_facility_by_index(index=0)
+#     log.step(3, "Selecting facility (blank - first option)")
+#     login_page.select_facility_by_index(index=0)
 
     login_page.wait_seconds(1)
 
@@ -105,7 +105,7 @@ def logged_in_driver(driver):
 
 @pytest.fixture
 def sm_page(logged_in_driver):
-    """Services Master page object — fresh navigation for each test."""
+    """Services Master page object â€” fresh navigation for each test."""
     from pages.commodity_settings.modules.services_master.services_master_page import (
         ServicesMasterPage,
     )
@@ -158,7 +158,7 @@ _sm_store.record_issue(
     severity="High",
     module="Services Master",
     category="Data Integrity",
-    description="The Name field accepts all types of input without any restrictions — "
+    description="The Name field accepts all types of input without any restrictions â€” "
                 "special characters (!@#$%^&*), spaces-only, and any Unicode. No "
                 "input sanitization or format validation exists.",
     expected="System should restrict or sanitize special characters and reject "
@@ -173,7 +173,7 @@ _sm_store.record_issue(
     severity="High",
     module="Services Master",
     category="Validation",
-    description="The Base Uom Conversion field accepts all input types — alphabetic "
+    description="The Base Uom Conversion field accepts all input types â€” alphabetic "
                 "characters (abcDEF), special characters (!@#$%), negative numbers (-5), "
                 "zero (0), and spaces-only (   ). No type, range, or format validation "
                 "exists on this field despite it being a numeric/quantity field.",

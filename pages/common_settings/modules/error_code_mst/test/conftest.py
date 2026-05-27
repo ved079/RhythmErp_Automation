@@ -1,4 +1,4 @@
-"""
+﻿"""
 conftest.py - Error Code Mst Common Settings (RhythmERP)
 """
 
@@ -64,7 +64,7 @@ def logged_in_driver(driver):
         log.step(3, "Selecting facility: " + str(RHYTHMERP_FACILITY))
         login_page.select_facility(RHYTHMERP_FACILITY)
     else:
-        log.step(3, "Selecting facility (blank - first option)")
+#         log.step(3, "Selecting facility (blank - first option)")
         login_page.select_facility(" ")
 
     login_page.wait_seconds(1)
@@ -109,10 +109,10 @@ def ecm_page(logged_in_driver):
 def pytest_configure(config):
     """Register custom pytest markers for Error Code Mst module."""
     config.addinivalue_line("markers", "smoke: Core CRUD + critical path tests (4 tests)")
-    config.addinivalue_line("markers", "sanity: All 22 tests — full module sanity check")
-    config.addinivalue_line("markers", "regression: All 22 tests — full regression suite")
-    config.addinivalue_line("markers", "bug: Known bugs — duplicate create/edit accepted, no max-length on Code (3 tests)")
-    config.addinivalue_line("markers", "ui: UI interaction tests — alerts, view mode, edit mode, history popup, table columns (18 tests)")
+    config.addinivalue_line("markers", "sanity: All 22 tests â€” full module sanity check")
+    config.addinivalue_line("markers", "regression: All 22 tests â€” full regression suite")
+    config.addinivalue_line("markers", "bug: Known bugs â€” duplicate create/edit accepted, no max-length on Code (3 tests)")
+    config.addinivalue_line("markers", "ui: UI interaction tests â€” alerts, view mode, edit mode, history popup, table columns (18 tests)")
 
 
 # ================================================================

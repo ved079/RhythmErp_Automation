@@ -1,4 +1,4 @@
-"""
+﻿"""
 conftest.py - Entity Group Definition Access Settings (RhythmERP)
 """
 
@@ -71,8 +71,8 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    log.step(3, "Selecting facility (blank - first option)")
-    login_page.select_facility_by_index(index=0)
+#     log.step(3, "Selecting facility (blank - first option)")
+#     login_page.select_facility_by_index(index=0)
 
     login_page.wait_seconds(1)
 
@@ -88,7 +88,7 @@ def logged_in_driver(driver):
 
 @pytest.fixture
 def egd_page(logged_in_driver):
-    """Entity Group Definition page object — fresh navigation for each test."""
+    """Entity Group Definition page object â€” fresh navigation for each test."""
     from pages.access.modules.entity_group_definition.entity_group_definition_page import (
         EntityGroupDefinitionPage,
     )
@@ -129,7 +129,7 @@ _egd_store.record_issue(
     description="When creating an Entity Group Definition with a name that exactly "
                 "matches an existing record, the form stays open with no error message, "
                 "no SweetAlert2 popup, no toast notification, and no mat-error. The "
-                "submission simply does nothing — the user gets zero feedback about "
+                "submission simply does nothing â€” the user gets zero feedback about "
                 "why their submission failed.",
     expected="System should show a clear error message like 'Entity Group Name "
              "already exists' and keep the form open for correction.",

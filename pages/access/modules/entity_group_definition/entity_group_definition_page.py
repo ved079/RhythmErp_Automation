@@ -1,4 +1,4 @@
-"""
+﻿"""
 entity_group_definition_page.py
 -------------------------------
 Page Object Model for RhythmERP Entity Group Definition screen.
@@ -16,7 +16,7 @@ TABLE COLUMNS (visible):
   - Level              (number column, cdk-column-level)
 
 KNOWN BUGS (documented at time of inspection):
-  BUG-001 (HIGH)  : Spaces-only Entity Group Name accepted — creates blank record
+  BUG-001 (HIGH)  : Spaces-only Entity Group Name accepted â€” creates blank record
   BUG-002 (HIGH)  : Exact duplicate name silently rejected with NO user feedback
   BUG-003 (HIGH)  : Case-insensitive duplicate NOT blocked ("agdi" alongside "Agdi")
   BUG-004 (MEDIUM): Negative Level values accepted (no min validation)
@@ -28,12 +28,12 @@ KNOWN BUGS (documented at time of inspection):
 KEY RULES:
   - NEVER use Keys.ESCAPE (use backdrop click + JS overlay removal)
   - JS clicks for Angular Material overlays
-  - No dropdowns on this screen — no mat-select logic needed
+  - No dropdowns on this screen â€” no mat-select logic needed
   - No Delete option anywhere on this screen
   - No History / Audit trail feature on this screen
   - Popup uses .big-model container (not .edit_pop_up)
   - SweetAlert2 only appears on validation failure (not on success)
-  - Table has no ID — use table.mat-mdc-table selector
+  - Table has no ID â€” use table.mat-mdc-table selector
   - Add button uses class "erp-add-btn" (not mattooltip)
   - URL is /master-setup/entitygroupdefinition (NOT dynamic-screens)
 """
@@ -71,7 +71,7 @@ class EntityGroupDefinitionPage(BasePage):
     )
 
     # ==============================================================
-    #  LOCATORS — Toolbar
+    #  LOCATORS â€” Toolbar
     # ==============================================================
     ADD_BUTTON = (
         "css",
@@ -95,7 +95,7 @@ class EntityGroupDefinitionPage(BasePage):
     )
 
     # ==============================================================
-    #  LOCATORS — Search bar
+    #  LOCATORS â€” Search bar
     # ==============================================================
     SEARCH_INPUT = (
         "css",
@@ -107,7 +107,7 @@ class EntityGroupDefinitionPage(BasePage):
     )
 
     # ==============================================================
-    #  LOCATORS — Table (no ID on this screen!)
+    #  LOCATORS â€” Table (no ID on this screen!)
     # ==============================================================
     TABLE = ("css", "table.mat-mdc-table")
     TABLE_ROWS = ("css", "table.mat-mdc-table tbody tr")
@@ -128,7 +128,7 @@ class EntityGroupDefinitionPage(BasePage):
     )
 
     # ==============================================================
-    #  LOCATORS — Add / Edit Form popup (.big-model)
+    #  LOCATORS â€” Add / Edit Form popup (.big-model)
     # ==============================================================
     FORM_POPUP = (
         "css",
@@ -168,7 +168,7 @@ class EntityGroupDefinitionPage(BasePage):
     )
 
     # ==============================================================
-    #  LOCATORS — Row action buttons (parametrised by name)
+    #  LOCATORS â€” Row action buttons (parametrised by name)
     # ==============================================================
     VIEW_BUTTON = (
         "xpath",
@@ -186,7 +186,7 @@ class EntityGroupDefinitionPage(BasePage):
     )
 
     # ==============================================================
-    #  LOCATORS — SweetAlert2
+    #  LOCATORS â€” SweetAlert2
     # ==============================================================
     SWAL_TITLE = ("css", "#swal2-title")
     SWAL_HTML = ("css", ".swal2-html-container")
@@ -195,7 +195,7 @@ class EntityGroupDefinitionPage(BasePage):
     SWAL_CONTAINER = ("css", ".swal2-container")
 
     # ==============================================================
-    #  LOCATORS — Validation errors
+    #  LOCATORS â€” Validation errors
     # ==============================================================
     MAT_ERROR = ("css", "mat-error, .mat-mdc-form-field-error")
     FIELD_ERROR = (
@@ -205,7 +205,7 @@ class EntityGroupDefinitionPage(BasePage):
     )
 
     # ==============================================================
-    #  LOCATORS — Fullscreen toggle
+    #  LOCATORS â€” Fullscreen toggle
     # ==============================================================
     FULLSCREEN_BUTTON = (
         "css",
@@ -215,7 +215,7 @@ class EntityGroupDefinitionPage(BasePage):
     FULLSCREEN_CONTAINER = ("css", ".big-model.fullscreen")
 
     # ==============================================================
-    #  LOCATORS — Filter panel
+    #  LOCATORS â€” Filter panel
     # ==============================================================
     FILTER_PANEL = ("css", ".filter-panel")
     FILTER_CLOSE = ("css", ".filter-panel .close-btn")
@@ -223,7 +223,7 @@ class EntityGroupDefinitionPage(BasePage):
     FILTER_CLEAR = ("css", ".filter-panel button.clear-btn, .filter-panel button.clear_all")
 
     # ==============================================================
-    #  LOCATORS — Pagination
+    #  LOCATORS â€” Pagination
     # ==============================================================
     PAGINATION_NEXT = (
         "css",
@@ -264,7 +264,7 @@ class EntityGroupDefinitionPage(BasePage):
     def _is_listing_page_loaded(self):
         """Check if the listing page (table or add button) is loaded."""
         try:
-            # Check for EGD table (no ID — use mat-mdc-table or excel-table)
+            # Check for EGD table (no ID â€” use mat-mdc-table or excel-table)
             tables = self.driver.find_elements(
                 By.CSS_SELECTOR,
                 "table#excel-table, table.mat-mdc-table"
@@ -306,7 +306,7 @@ class EntityGroupDefinitionPage(BasePage):
         login_page.load_url(RHYTHMERP_LOGIN_URL)
         login_page.enter_email(RHYTHMERP_EMAIL)
         login_page.enter_password(RHYTHMERP_PASSWORD)
-        login_page.select_facility_by_index(index=0)
+#         login_page.select_facility_by_index(index=0)
         login_page.click_login()
         login_page.wait_for_login_complete()
         log.info("Re-login successful. Navigating back to EGD page...")
@@ -347,7 +347,7 @@ class EntityGroupDefinitionPage(BasePage):
         return self.is_displayed(self.TABLE, timeout=10)
 
     # ==============================================================
-    #  Overlay cleanup — NEVER use Keys.ESCAPE
+    #  Overlay cleanup â€” NEVER use Keys.ESCAPE
     # ==============================================================
 
     def _force_close_panels(self):
@@ -559,7 +559,7 @@ class EntityGroupDefinitionPage(BasePage):
         """
         log.info("Filling Entity Group Definition form...")
 
-        # Entity Group Name — support both key names
+        # Entity Group Name â€” support both key names
         name_value = data.get("entity_group_name") or data.get("entity_group")
         if name_value is not None:
             self.type_text(
@@ -568,7 +568,7 @@ class EntityGroupDefinitionPage(BasePage):
                 clear_first=True,
             )
 
-        # Level — number input; use JS for reliable Angular binding
+        # Level â€” number input; use JS for reliable Angular binding
         if data.get("level") is not None and data.get("level") != "":
             level_str = str(data["level"])
             self.js_type_text(
@@ -662,7 +662,7 @@ class EntityGroupDefinitionPage(BasePage):
         """
         # FIX-3: If popup is already closed, nothing to do
         if self.is_form_closed():
-            log.info("Popup already closed — nothing to do")
+            log.info("Popup already closed â€” nothing to do")
             return
 
         log.info("Closing popup via X button...")
@@ -693,7 +693,7 @@ class EntityGroupDefinitionPage(BasePage):
         try:
             self.cancel()
         except Exception:
-            log.warning("Cancel also failed — popup may already be closed")
+            log.warning("Cancel also failed â€” popup may already be closed")
 
     # ==============================================================
     #  High-level create / edit / search helpers
@@ -753,7 +753,7 @@ class EntityGroupDefinitionPage(BasePage):
 
     def _scan_current_page_for_name(self, name):
         """Check if a name appears in the CURRENT page of the table.
-        Does NOT search or paginate — just scans visible rows.
+        Does NOT search or paginate â€” just scans visible rows.
         Returns True if a partial case-insensitive match is found.
         """
         names = self.get_all_entity_group_names()
@@ -761,7 +761,7 @@ class EntityGroupDefinitionPage(BasePage):
 
     def _do_search(self, name):
         """Fill the search input and click the Search button.
-        Low-level helper — does NOT call is_entity_group_in_table().
+        Low-level helper â€” does NOT call is_entity_group_in_table().
         """
         # Fill search input
         try:
@@ -885,7 +885,7 @@ class EntityGroupDefinitionPage(BasePage):
                 pass
             return msg
         except TimeoutException:
-            log.info("No success alert appeared (expected for EGD — BUG-008)")
+            log.info("No success alert appeared (expected for EGD â€” BUG-008)")
             return ""
 
     def handle_validation_warning(self, timeout=10):
@@ -926,7 +926,7 @@ class EntityGroupDefinitionPage(BasePage):
                 )
             except Exception:
                 pass
-            log.info(f"Validation warning handled: {msg} — {html_msg}")
+            log.info(f"Validation warning handled: {msg} â€” {html_msg}")
             return msg
         except TimeoutException:
             return ""
@@ -1145,7 +1145,7 @@ class EntityGroupDefinitionPage(BasePage):
 
     def is_entity_group_in_table(self, name):
         """Check if an Entity Group with the given name appears in the table.
-        FIX-2: Uses search first to handle pagination — the record may be
+        FIX-2: Uses search first to handle pagination â€” the record may be
         on a different page. Falls back to current-page scan if search
         input is not available.
         """
@@ -1164,7 +1164,7 @@ class EntityGroupDefinitionPage(BasePage):
                     continue
             if has_search:
                 self._do_search(name)
-                # Don't clear search — we want the record visible
+                # Don't clear search â€” we want the record visible
         except Exception:
             pass
 

@@ -1,4 +1,4 @@
-"""
+﻿"""
 conftest.py - Tax Authority Common Settings (RhythmERP)
 """
 
@@ -21,7 +21,7 @@ from pages.common_settings.cs_report_generator import CSReportStore, generate_cs
 def pytest_configure(config):
     """Register custom pytest markers for Tax Authority tests."""
     config.addinivalue_line(
-        "markers", "smoke: Critical path tests — must pass for build acceptance (7 tests)"
+        "markers", "smoke: Critical path tests â€” must pass for build acceptance (7 tests)"
     )
     config.addinivalue_line(
         "markers", "sanity: Full functional validation of every test case (18 tests)"
@@ -77,8 +77,8 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    log.step(3, "Selecting facility (blank - first option)")
-    login_page.select_facility_by_index(index=0)
+#     log.step(3, "Selecting facility (blank - first option)")
+#     login_page.select_facility_by_index(index=0)
 
     login_page.wait_seconds(1)
 
@@ -100,14 +100,14 @@ def logged_in_driver(driver):
 @pytest.fixture
 def tax_authority_page(logged_in_driver):
     """
-    Tax Authority page object — fresh navigation for each test.
+    Tax Authority page object â€” fresh navigation for each test.
 
     Setup:
       1. Hard-refresh the browser to clear any leftover state from the
          previous test (overlays, open popups, stale Angular state).
       2. Navigate to the Tax Authority screen.
       3. If navigation fails, do one more hard-refresh + retry before
-         raising — this handles the case where a previous test left the
+         raising â€” this handles the case where a previous test left the
          browser in a partially broken state.
 
     Teardown:
@@ -132,7 +132,7 @@ def tax_authority_page(logged_in_driver):
         page.navigate_to_tax_authority()
     except Exception as first_err:
         log.warning(
-            f"First navigation attempt failed: {first_err!r} — "
+            f"First navigation attempt failed: {first_err!r} â€” "
             "retrying after hard refresh..."
         )
         try:
@@ -197,7 +197,7 @@ _cs_store.record_issue(
     expected="Tax Name should have a reasonable max-length limit.",
     actual="maxlength=-1 (unlimited). Extremely long strings (200+ characters) "
            "may be accepted without warning.",
-    test_ref="—",
+    test_ref="â€”",
     status="Open",
 )
 
@@ -210,7 +210,7 @@ _cs_store.record_issue(
     expected="ADD button should have mattooltip='ADD' for consistency.",
     actual="ADD button has no mattooltip. Requires different locator strategy "
            "(//button[mat-icon[text()='add']] instead of //button[contains(@class,'erp-add-btn')]).",
-    test_ref="—",
+    test_ref="â€”",
     status="Open",
 )
 

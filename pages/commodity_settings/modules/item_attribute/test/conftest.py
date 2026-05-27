@@ -1,4 +1,4 @@
-"""
+﻿"""
 conftest.py - Item Attribute 1-5 (RhythmERP)
 Fixtures, hooks, and bug registry for Item Attribute automation tests.
 Uses parameterized fixture for all 5 screens.
@@ -32,8 +32,8 @@ from pages.common_settings.cs_report_generator import (
 def pytest_configure(config):
     """Register custom pytest markers for test categorization."""
     config.addinivalue_line("markers", "smoke: Critical path tests (create, search, view, toggle)")
-    config.addinivalue_line("markers", "sanity: Core validation tests — must pass for build acceptance")
-    config.addinivalue_line("markers", "regression: Full regression suite — all tests")
+    config.addinivalue_line("markers", "sanity: Core validation tests â€” must pass for build acceptance")
+    config.addinivalue_line("markers", "regression: Full regression suite â€” all tests")
     config.addinivalue_line("markers", "bug: Tests documenting known open bugs (BUG-001 to BUG-005)")
     config.addinivalue_line("markers", "ui: UI-specific behavior tests (popups, toggles, button visibility)")
 
@@ -79,7 +79,7 @@ def logged_in_driver(driver):
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
     log.step(3, "Selecting facility (Agdi - index 0)")
-    login_page.select_facility_by_index(index=0)
+#     login_page.select_facility_by_index(index=0)
 
     login_page.wait_seconds(1)
 

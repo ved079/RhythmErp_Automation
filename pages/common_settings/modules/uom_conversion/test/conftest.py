@@ -1,4 +1,4 @@
-"""
+﻿"""
 conftest.py - UOM Conversion Common Settings (RhythmERP)
 """
 
@@ -21,7 +21,7 @@ from pages.common_settings.cs_report_generator import CSReportStore, generate_cs
 def pytest_configure(config):
     """Register custom pytest markers for UOM Conversion tests."""
     config.addinivalue_line(
-        "markers", "smoke: Critical path tests — must pass for build acceptance (6 tests)"
+        "markers", "smoke: Critical path tests â€” must pass for build acceptance (6 tests)"
     )
     config.addinivalue_line(
         "markers", "sanity: Full functional validation of every test case (22 tests)"
@@ -93,7 +93,7 @@ def logged_in_driver(driver):
         log.step(3, "Selecting facility: " + str(RHYTHMERP_FACILITY))
         login_page.select_facility(RHYTHMERP_FACILITY)
     else:
-        log.step(3, "Selecting facility (blank - first option)")
+#         log.step(3, "Selecting facility (blank - first option)")
         login_page.select_facility(" ")
 
     login_page.wait_seconds(1)
@@ -128,7 +128,7 @@ _cs_store.record_issue(
     description="Conversion factor with 22+ digits saves successfully but displays "
                 "as scientific notation (e.g. 1e+22) when the edit form is reopened. "
                 "Clicking Update with the scientific notation value triggers 'Invalid "
-                "Conversion Factor' validation — making the record permanently uneditable.",
+                "Conversion Factor' validation â€” making the record permanently uneditable.",
     expected="System should either reject values that cannot be displayed accurately, "
              "or preserve the full numeric value so the record remains editable.",
     actual="Value saves and displays as 1e+22 on reopen. Update fails with "
