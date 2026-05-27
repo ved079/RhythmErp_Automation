@@ -101,8 +101,9 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(UC_LOGIN_PASSWORD)
 
-    log.step(3, f"Selecting facility (index {UC_LOGIN_FACILITY_INDEX} — Agdi)")
-    login_page.select_facility_by_index(index=UC_LOGIN_FACILITY_INDEX)
+    # Facility selection disabled — single-tenant setup (dropdown handled by double-click)
+    # log.step(3, f"Selecting facility (index {UC_LOGIN_FACILITY_INDEX} — Agdi)")
+    # login_page.select_facility_by_index(index=UC_LOGIN_FACILITY_INDEX)
 
     login_page.wait_seconds(1)
 
