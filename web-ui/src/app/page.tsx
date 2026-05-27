@@ -3129,7 +3129,7 @@ export default function Home() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="size-8 text-gray-500 dark:text-gray-400">
+          <Button variant="ghost" size="icon" data-tour="universal-search" className="size-8 text-gray-500 dark:text-gray-400">
             <Search className="size-4" />
           </Button>
           {/* Feature 6: Dark mode toggle */}
@@ -3159,6 +3159,7 @@ export default function Home() {
             variant="ghost"
             size="icon"
             onClick={() => setShowShortcuts(true)}
+            data-tour="keyboard-shortcuts"
             className="size-8 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
             title="Keyboard shortcuts (Ctrl+/)"
           >
@@ -3225,6 +3226,7 @@ export default function Home() {
               variant="ghost"
               size="icon"
               onClick={handleLogout}
+              data-tour="logout-btn"
               className="size-8 text-gray-400 hover:text-red-500 cursor-pointer"
               title="Sign out"
             >

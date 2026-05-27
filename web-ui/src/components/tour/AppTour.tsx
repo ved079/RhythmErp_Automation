@@ -107,11 +107,31 @@ const FULL_TOUR_STEPS: DriveStep[] = [
     },
   },
   {
+    element: '[data-tour="universal-search"]',
+    popover: {
+      title: 'Universal Search',
+      description:
+        'Quickly search for modules, test cases, or results across the entire application. Click this icon to open the search panel.',
+      side: 'bottom' as const,
+      align: 'center' as const,
+    },
+  },
+  {
     element: '[data-tour="dark-mode"]',
     popover: {
       title: 'Dark Mode Toggle',
       description:
         'Switch between light and dark themes. Your preference is saved automatically for your next visit.',
+      side: 'bottom' as const,
+      align: 'center' as const,
+    },
+  },
+  {
+    element: '[data-tour="keyboard-shortcuts"]',
+    popover: {
+      title: 'Keyboard Shortcuts',
+      description:
+        'Access keyboard shortcuts for faster navigation — press Ctrl+/ anytime to see all shortcuts, or click this button. Shortcuts include Ctrl+R to run tests, Ctrl+D for dark mode, and Ctrl+1-5 to switch tabs.',
       side: 'bottom' as const,
       align: 'center' as const,
     },
@@ -131,7 +151,17 @@ const FULL_TOUR_STEPS: DriveStep[] = [
     popover: {
       title: 'Your Account',
       description:
-        'View your profile info and sign out. Admin and QA Lead users will also see an Admin Panel link here.',
+        'This shows your name and avatar. Admin and QA Lead users will also see an Admin Panel link nearby.',
+      side: 'bottom' as const,
+      align: 'end' as const,
+    },
+  },
+  {
+    element: '[data-tour="logout-btn"]',
+    popover: {
+      title: 'Sign Out',
+      description:
+        'Click here to securely sign out of your session. Always log out when you\'re done, especially on shared machines.',
       side: 'bottom' as const,
       align: 'end' as const,
     },
