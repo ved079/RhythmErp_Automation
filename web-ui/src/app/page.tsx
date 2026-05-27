@@ -114,6 +114,8 @@ import {
   Maximize2,
   Monitor,
   HelpCircle,
+  Copyright,
+  ExternalLink,
 } from 'lucide-react'
 import { AppTour, startAppTour } from '@/components/tour/AppTour'
 import { Sparkline, getSparklineColor, TrendIndicator } from '@/components/ui/sparkline'
@@ -4560,6 +4562,29 @@ export default function Home() {
         userName={user?.name || ''}
         userEmail={user?.email || ''}
       />
+
+      {/* ─── FOOTER (ERP-style) ───────────────────────────── */}
+      <footer className="shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-1.5 flex items-center justify-between">
+        <div className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
+          <Copyright className="size-3" />
+          <span>2026 AgDi Solutions Pvt. Ltd. All rights reserved.</span>
+        </div>
+        <div className="flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-500">
+          <span className="flex items-center gap-1">
+            Version 1.0.0
+          </span>
+          <a
+            href="https://rhythmerp.algorhythms.in"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 hover:text-[#3F51B5] dark:hover:text-indigo-400 transition-colors cursor-pointer"
+          >
+            <HelpCircle className="size-3" />
+            Help
+            <ExternalLink className="size-2.5" />
+          </a>
+        </div>
+      </footer>
     </div>
   )
 }
