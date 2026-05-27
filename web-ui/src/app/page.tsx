@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { toast } from 'sonner'
-import { fetchModules, folderToSidebarId, sidebarToFolderMapping, startRun, fetchTestCases, type ApiModule, type ApiSubModule, type TestCasesData } from '@/lib/api'
+import { fetchModules, folderToSidebarId, sidebarToFolderMapping, startRun, stopRun, fetchTestCases, fetchScreenshot, type ApiModule, type ApiSubModule, type TestCasesData } from '@/lib/api'
 import {
   addBugReport,
   getBugReports,
@@ -167,7 +167,7 @@ interface AuthUser {
 }
 
 interface RunSnapshot {
-  id: number
+  id: string
   date: string
   moduleId: string
   results: { testId: string; status: 'passed' | 'failed' }[]
@@ -567,143 +567,9 @@ const initialTests: TestItem[] = testSpecGroups.flatMap((g) =>
   }))
 )
 
-const consoleLogs = [
-  '[10:23:14] Navigating to Tax Rate page...',
-  '[10:23:16] Page loaded. Found 3 records in table.',
-  '[10:23:16] Clicking ADD button...',
-  '[10:23:17] Form popup opened.',
-  '[10:23:18] Filling Tax Rate Name: "Auto_Test_Demo"',
-  '[10:23:19] Selecting Tax Type: "GST"',
-  '[10:23:20] Selecting Tax Authority: "GST"',
-  '[10:23:21] Setting From Date: "14/05/2026"',
-  '[10:23:22] Setting To Date: "30/12/2099"',
-  '[10:23:23] Selecting Revision Status: "Effective"',
-  '[10:23:24] Clicking Submit button...',
-  '[10:23:25] Success notification detected.',
-  '[10:23:26] Verifying record in table...',
-  '[10:23:27] Record "Auto_Test_Demo" found. Test PASSED.',
-]
-
-const recentRuns = [
-  { date: '16 May 2026, 10:23 AM', duration: '4:32', passed: 17, failed: 3, rate: '85%' },
-  { date: '15 May 2026, 03:45 PM', duration: '5:01', passed: 15, failed: 5, rate: '75%' },
-  { date: '14 May 2026, 11:20 AM', duration: '4:10', passed: 18, failed: 2, rate: '90%' },
-  { date: '13 May 2026, 09:15 AM', duration: '3:55', passed: 16, failed: 4, rate: '80%' },
-  { date: '12 May 2026, 02:30 PM', duration: '6:22', passed: 20, failed: 0, rate: '100%' },
-]
-
-const bugRegistry = [
-  { id: 'TR-001', desc: 'Edit button disabled for all rows', status: 'Known', tests: 'T08' },
-  { id: 'TR-002', desc: 'SubTableAddButton not found', status: 'Open', tests: 'T03' },
-  { id: 'TR-003', desc: 'Date fields have name=null', status: 'Known', tests: 'T16' },
-  { id: 'TR-004', desc: 'Empty sub-table accepted on submit', status: 'Open', tests: 'T09' },
-  { id: 'TR-005', desc: 'No success SweetAlert2 on form close', status: 'Known', tests: 'T01' },
-]
-
-// ─── Module Health Data (Feature 3) ─────────────────────
-// trend = last 7 run pass rates (oldest → newest), used for sparklines
-const moduleHealthData: ModuleHealth[] = [
-  { moduleId: 'agent', moduleName: 'Agent', parentGroup: 'Registration', passRate: 96, totalTests: 50, passedTests: 48, failedTests: 2, lastRun: '16 May 2026, 09:30 AM', trend: [92, 94, 95, 93, 96, 95, 96] },
-  { moduleId: 'customer', moduleName: 'Customer', parentGroup: 'Registration', passRate: 100, totalTests: 46, passedTests: 46, failedTests: 0, lastRun: '16 May 2026, 09:30 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
-  { moduleId: 'farmer', moduleName: 'Farmer', parentGroup: 'Registration', passRate: 92, totalTests: 40, passedTests: 37, failedTests: 3, lastRun: '16 May 2026, 09:15 AM', trend: [88, 85, 90, 92, 88, 91, 92] },
-  { moduleId: 'supplier', moduleName: 'Supplier', parentGroup: 'Registration', passRate: 95, totalTests: 42, passedTests: 40, failedTests: 2, lastRun: '16 May 2026, 09:20 AM', trend: [90, 92, 93, 94, 95, 94, 95] },
-  { moduleId: 'company-onboarding', moduleName: 'Company Onboarding', parentGroup: 'Standalone', passRate: 88, totalTests: 18, passedTests: 16, failedTests: 2, lastRun: '15 May 2026, 04:20 PM', trend: [78, 82, 80, 85, 83, 86, 88] },
-  { moduleId: 'uom', moduleName: 'UOM', parentGroup: 'Common Settings', passRate: 100, totalTests: 8, passedTests: 8, failedTests: 0, lastRun: '16 May 2026, 08:45 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
-  { moduleId: 'uom-conversion', moduleName: 'UOM Conversion', parentGroup: 'Common Settings', passRate: 100, totalTests: 6, passedTests: 6, failedTests: 0, lastRun: '16 May 2026, 08:46 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
-  { moduleId: 'designation', moduleName: 'Designation', parentGroup: 'Common Settings', passRate: 100, totalTests: 5, passedTests: 5, failedTests: 0, lastRun: '15 May 2026, 03:10 PM', trend: [100, 100, 100, 100, 100, 100, 100] },
-  { moduleId: 'bank', moduleName: 'Bank', parentGroup: 'Common Settings', passRate: 83, totalTests: 12, passedTests: 10, failedTests: 2, lastRun: '16 May 2026, 08:50 AM', trend: [75, 80, 78, 83, 80, 85, 83] },
-  { moduleId: 'seasons', moduleName: 'Seasons', parentGroup: 'Common Settings', passRate: 100, totalTests: 7, passedTests: 7, failedTests: 0, lastRun: '14 May 2026, 10:00 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
-  { moduleId: 'hsn-sac', moduleName: 'HSN SAC', parentGroup: 'Common Settings', passRate: 100, totalTests: 12, passedTests: 12, failedTests: 0, lastRun: '16 May 2026, 08:30 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
-  { moduleId: 'error-code-master', moduleName: 'Error Code Master', parentGroup: 'Common Settings', passRate: 0, totalTests: 0, passedTests: 0, failedTests: 0, lastRun: '—' },
-  { moduleId: 'vehicle-master', moduleName: 'Vehicle Master', parentGroup: 'Common Settings', passRate: 0, totalTests: 0, passedTests: 0, failedTests: 0, lastRun: '—' },
-  { moduleId: 'tax-authority', moduleName: 'Tax Authority', parentGroup: 'Common Settings', passRate: 83, totalTests: 18, passedTests: 15, failedTests: 3, lastRun: '16 May 2026, 09:00 AM', trend: [78, 80, 83, 78, 82, 80, 83] },
-  { moduleId: 'tax-rate', moduleName: 'Tax Rate', parentGroup: 'Common Settings', passRate: 85, totalTests: 20, passedTests: 17, failedTests: 3, lastRun: '16 May 2026, 10:23 AM', trend: [75, 80, 90, 85, 75, 80, 85] },
-  { moduleId: 'crop-master', moduleName: 'Crop Master', parentGroup: 'Commodity Settings', passRate: 95, totalTests: 20, passedTests: 19, failedTests: 1, lastRun: '16 May 2026, 07:45 AM', trend: [90, 92, 88, 95, 90, 93, 95] },
-  { moduleId: 'commodity-quality-param', moduleName: 'Commodity Quality Param', parentGroup: 'Commodity Settings', passRate: 78, totalTests: 9, passedTests: 7, failedTests: 2, lastRun: '15 May 2026, 02:00 PM', trend: [85, 82, 78, 80, 75, 72, 78] },
-  { moduleId: 'quality-parameter-def', moduleName: 'Quality Parameter Def', parentGroup: 'Commodity Settings', passRate: 100, totalTests: 11, passedTests: 11, failedTests: 0, lastRun: '16 May 2026, 07:50 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
-  { moduleId: 'commodity-base-rate', moduleName: 'Commodity Base Rate', parentGroup: 'Commodity Settings', passRate: 88, totalTests: 8, passedTests: 7, failedTests: 1, lastRun: '15 May 2026, 11:30 AM', trend: [82, 85, 88, 84, 90, 86, 88] },
-  { moduleId: 'commodity-master', moduleName: 'Commodity Master', parentGroup: 'Commodity Settings', passRate: 91, totalTests: 22, passedTests: 20, failedTests: 2, lastRun: '16 May 2026, 08:00 AM', trend: [86, 88, 90, 85, 92, 89, 91] },
-  { moduleId: 'item-master', moduleName: 'Item Master', parentGroup: 'Commodity Settings', passRate: 100, totalTests: 16, passedTests: 16, failedTests: 0, lastRun: '16 May 2026, 08:10 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
-  { moduleId: 'services-master', moduleName: 'Services Master', parentGroup: 'Commodity Settings', passRate: 100, totalTests: 10, passedTests: 10, failedTests: 0, lastRun: '14 May 2026, 09:00 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
-  { moduleId: 'item-category', moduleName: 'Item Category', parentGroup: 'Commodity Settings', passRate: 100, totalTests: 8, passedTests: 8, failedTests: 0, lastRun: '14 May 2026, 09:05 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
-  { moduleId: 'item-group', moduleName: 'Item Group', parentGroup: 'Commodity Settings', passRate: 100, totalTests: 7, passedTests: 7, failedTests: 0, lastRun: '14 May 2026, 09:10 AM', trend: [100, 100, 100, 100, 100, 100, 100] },
-  { moduleId: 'finance-settings', moduleName: 'Finance Settings', parentGroup: 'Standalone', passRate: 70, totalTests: 30, passedTests: 21, failedTests: 9, lastRun: '15 May 2026, 01:00 PM', trend: [82, 78, 75, 72, 68, 65, 70] },
-  { moduleId: 'access', moduleName: 'Access', parentGroup: 'Standalone', passRate: 0, totalTests: 0, passedTests: 0, failedTests: 0, lastRun: '—' },
-]
-
-// ─── Initial Run History (Feature 5) ────────────────────
-const initialRunHistory: RunSnapshot[] = [
-  {
-    id: 5,
-    date: '12 May 2026, 02:30 PM',
-    moduleId: 'tax-rate',
-    results: [
-      { testId: 'T01', status: 'passed' }, { testId: 'T02', status: 'passed' },
-      { testId: 'T03', status: 'passed' }, { testId: 'T04', status: 'passed' },
-      { testId: 'T05', status: 'passed' }, { testId: 'T06', status: 'passed' },
-      { testId: 'T09', status: 'passed' }, { testId: 'T10', status: 'passed' },
-      { testId: 'T11', status: 'passed' }, { testId: 'T17', status: 'passed' },
-      { testId: 'T18', status: 'passed' }, { testId: 'T24', status: 'passed' },
-    ],
-    passed: 20, failed: 0, total: 20, duration: '6:22', rate: 100,
-  },
-  {
-    id: 4,
-    date: '13 May 2026, 09:15 AM',
-    moduleId: 'tax-rate',
-    results: [
-      { testId: 'T01', status: 'passed' }, { testId: 'T02', status: 'passed' },
-      { testId: 'T03', status: 'failed' }, { testId: 'T04', status: 'passed' },
-      { testId: 'T05', status: 'failed' }, { testId: 'T06', status: 'passed' },
-      { testId: 'T09', status: 'failed' }, { testId: 'T10', status: 'passed' },
-      { testId: 'T11', status: 'passed' }, { testId: 'T17', status: 'passed' },
-      { testId: 'T18', status: 'passed' }, { testId: 'T24', status: 'passed' },
-    ],
-    passed: 16, failed: 4, total: 20, duration: '3:55', rate: 80,
-  },
-  {
-    id: 3,
-    date: '14 May 2026, 11:20 AM',
-    moduleId: 'tax-rate',
-    results: [
-      { testId: 'T01', status: 'passed' }, { testId: 'T02', status: 'passed' },
-      { testId: 'T03', status: 'failed' }, { testId: 'T04', status: 'passed' },
-      { testId: 'T05', status: 'passed' }, { testId: 'T06', status: 'passed' },
-      { testId: 'T09', status: 'failed' }, { testId: 'T10', status: 'passed' },
-      { testId: 'T11', status: 'passed' }, { testId: 'T17', status: 'passed' },
-      { testId: 'T18', status: 'passed' }, { testId: 'T24', status: 'passed' },
-    ],
-    passed: 18, failed: 2, total: 20, duration: '4:10', rate: 90,
-  },
-  {
-    id: 2,
-    date: '15 May 2026, 03:45 PM',
-    moduleId: 'tax-rate',
-    results: [
-      { testId: 'T01', status: 'passed' }, { testId: 'T02', status: 'failed' },
-      { testId: 'T03', status: 'failed' }, { testId: 'T04', status: 'passed' },
-      { testId: 'T05', status: 'passed' }, { testId: 'T06', status: 'passed' },
-      { testId: 'T09', status: 'failed' }, { testId: 'T10', status: 'passed' },
-      { testId: 'T11', status: 'failed' }, { testId: 'T17', status: 'passed' },
-      { testId: 'T18', status: 'passed' }, { testId: 'T24', status: 'passed' },
-    ],
-    passed: 15, failed: 5, total: 20, duration: '5:01', rate: 75,
-  },
-  {
-    id: 1,
-    date: '16 May 2026, 10:23 AM',
-    moduleId: 'tax-rate',
-    results: [
-      { testId: 'T01', status: 'passed' }, { testId: 'T02', status: 'passed' },
-      { testId: 'T03', status: 'failed' }, { testId: 'T04', status: 'passed' },
-      { testId: 'T05', status: 'passed' }, { testId: 'T06', status: 'passed' },
-      { testId: 'T09', status: 'failed' }, { testId: 'T10', status: 'passed' },
-      { testId: 'T11', status: 'passed' }, { testId: 'T17', status: 'passed' },
-      { testId: 'T18', status: 'passed' }, { testId: 'T24', status: 'passed' },
-    ],
-    passed: 17, failed: 3, total: 20, duration: '4:32', rate: 85,
-  },
-]
+// consoleLogs, recentRuns, bugRegistry replaced with real data from backend
+// moduleHealthData replaced with computed moduleHealth from real run history
+// initialRunHistory replaced with loadRunHistory() from Prisma
 
 // ─── Priority Config ────────────────────────────────────
 const priorityConfig = {
@@ -1063,8 +929,10 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
 // ─── DASHBOARD TAB (Feature 3) ───────────────────────────
 function DashboardTab({
   onSelectModule,
+  moduleHealth,
 }: {
   onSelectModule: (moduleId: string) => void
+  moduleHealth: ModuleHealth[]
 }) {
   // Group modules by parentGroup, preserving order
   const grouped = useMemo(() => {
@@ -1072,7 +940,7 @@ function DashboardTab({
     const groups: { name: string; icon: string; modules: ModuleHealth[] }[] = []
     const groupMap = new Map<string, ModuleHealth[]>()
 
-    for (const mod of moduleHealthData) {
+    for (const mod of moduleHealth) {
       const g = mod.parentGroup || 'Other'
       if (!groupMap.has(g)) groupMap.set(g, [])
       groupMap.get(g)!.push(mod)
@@ -1087,22 +955,22 @@ function DashboardTab({
       if (!order.includes(name)) groups.push({ name, icon: '📁', modules: mods })
     }
     return groups
-  }, [])
+  }, [moduleHealth])
 
   const quickStats = useMemo(() => {
-    const total = moduleHealthData.length
-    const fullyPassing = moduleHealthData.filter((m) => m.totalTests > 0 && m.passRate === 100).length
-    const partiallyPassing = moduleHealthData.filter((m) => m.totalTests > 0 && m.passRate > 0 && m.passRate < 100).length
-    const notStarted = moduleHealthData.filter((m) => m.totalTests === 0).length
-    const totalPassed = moduleHealthData.reduce((s, m) => s + m.passedTests, 0)
-    const totalFailed = moduleHealthData.reduce((s, m) => s + m.failedTests, 0)
-    const totalTests = moduleHealthData.reduce((s, m) => s + m.totalTests, 0)
+    const total = moduleHealth.length
+    const fullyPassing = moduleHealth.filter((m) => m.totalTests > 0 && m.passRate === 100).length
+    const partiallyPassing = moduleHealth.filter((m) => m.totalTests > 0 && m.passRate > 0 && m.passRate < 100).length
+    const notStarted = moduleHealth.filter((m) => m.totalTests === 0).length
+    const totalPassed = moduleHealth.reduce((s, m) => s + m.passedTests, 0)
+    const totalFailed = moduleHealth.reduce((s, m) => s + m.failedTests, 0)
+    const totalTests = moduleHealth.reduce((s, m) => s + m.totalTests, 0)
     return { total, fullyPassing, partiallyPassing, notStarted, totalPassed, totalFailed, totalTests }
-  }, [])
+  }, [moduleHealth])
 
   // Overall trend: average pass rate across last 7 runs (computed from module trends)
   const overallTrend = useMemo(() => {
-    const modulesWithTrend = moduleHealthData.filter((m) => m.trend && m.trend.length > 0)
+    const modulesWithTrend = moduleHealth.filter((m) => m.trend && m.trend.length > 0)
     if (modulesWithTrend.length === 0) return [90, 91, 90, 92, 91, 92, 93]
     const maxLen = Math.max(...modulesWithTrend.map((m) => m.trend!.length))
     const avgByRun: number[] = []
@@ -1111,7 +979,7 @@ function DashboardTab({
       avgByRun.push(Math.round(vals.reduce((s, v) => s + v, 0) / vals.length))
     }
     return avgByRun
-  }, [])
+  }, [moduleHealth])
 
   const getHealthColor = useCallback((rate: number, total: number) => {
     if (total === 0) return { bg: 'bg-gray-50 dark:bg-gray-800', text: 'text-[#888888] dark:text-gray-500', indicator: 'bg-[#888888]', label: 'Not Started' }
@@ -1173,7 +1041,7 @@ function DashboardTab({
           const groupHealth = getHealthColor(groupRate, groupTotal)
 
           // Group trend: average of module trends per run
-          const groupTrend = useMemo(() => {
+          const groupTrend = (() => {
             const modulesWithTrend = group.modules.filter((m) => m.trend && m.trend.length > 0)
             if (modulesWithTrend.length === 0) return null
             const maxLen = Math.max(...modulesWithTrend.map((m) => m.trend!.length))
@@ -1183,7 +1051,7 @@ function DashboardTab({
               avgByRun.push(Math.round(vals.reduce((s, v) => s + v, 0) / vals.length))
             }
             return avgByRun
-          }, [group.modules])
+          })()
 
           return (
             <div key={group.name}>
@@ -1857,8 +1725,7 @@ function LiveScreencast({ isRunning, onScreenshotReady }: { isRunning: boolean; 
 
     const poll = async () => {
       try {
-        const res = await fetch('/api/proxy?path=screenshot')
-        const data = await res.json()
+        const data = await fetchScreenshot()
         if (data.active && data.screenshot) {
           const src = `data:image/png;base64,${data.screenshot}`
           setImgSrc(src)
@@ -2424,7 +2291,7 @@ function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sideb
     setRuns(await getScheduledRuns())
     setShowForm(false)
     toast.success(`Scheduled run created for ${modName}`)
-  }, [moduleId, frequency, scheduledDate, scheduledTime, weeklyDay, testSelection, userName])
+  }, [moduleId, frequency, scheduledDate, scheduledTime, weeklyDay, testSelection, userName, sidebarModules])
 
   const handleDelete = useCallback(async (id: string) => {
     await deleteScheduledRun(id)
@@ -2455,7 +2322,7 @@ function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sideb
       }
     }
     return opts
-  }, [])
+  }, [sidebarModules])
 
   return (
     <div className="flex flex-col h-full overflow-auto">
@@ -2873,6 +2740,7 @@ function ResultsTab({
   totalCount,
   runHistory,
   onReportTest,
+  bugReportsList,
 }: {
   tests: TestItem[]
   passedCount: number
@@ -2880,6 +2748,7 @@ function ResultsTab({
   totalCount: number
   runHistory: RunSnapshot[]
   onReportTest: (test: TestItem) => void
+  bugReportsList: { id: string; testId: string; desc: string; status: string }[]
 }) {
   const passRate = Math.round((passedCount / totalCount) * 100)
   const [resultFilter, setResultFilter] = useState<'all' | 'passed' | 'failed'>('all')
@@ -3265,9 +3134,9 @@ function ResultsTab({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {bugRegistry.map((bug) => (
+              {bugReportsList.map((bug) => (
                 <TableRow key={bug.id} className="dark:border-gray-700">
-                  <TableCell className="text-[13px] font-mono text-gray-600 dark:text-gray-400">{bug.id}</TableCell>
+                  <TableCell className="text-[13px] font-mono text-gray-600 dark:text-gray-400">{bug.id.slice(0, 8).toUpperCase()}</TableCell>
                   <TableCell className="text-[13px] text-gray-700 dark:text-gray-200">{bug.desc}</TableCell>
                   <TableCell className="text-center">
                     <span
@@ -3278,7 +3147,7 @@ function ResultsTab({
                       {bug.status}
                     </span>
                   </TableCell>
-                  <TableCell className="text-[13px] text-gray-500 dark:text-gray-400">{bug.tests}</TableCell>
+                  <TableCell className="text-[13px] text-gray-500 dark:text-gray-400">{bug.testId}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -3426,9 +3295,144 @@ export default function Home() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
   }, [])
 
-  // Feature 5: Run history
-  const [runHistory, setRunHistory] = useState<RunSnapshot[]>(initialRunHistory)
-  const runIdCounterRef = useRef(initialRunHistory.length + 1)
+  // Feature 5: Run history (loaded from Prisma DB)
+  const [runHistory, setRunHistory] = useState<RunSnapshot[]>([])
+
+  // Track the current backend run ID for stop functionality
+  const currentRunIdRef = useRef<string | null>(null)
+
+  // Real console log lines from SSE events
+  const [consoleLogs, setConsoleLogs] = useState<string[]>(['> Waiting for tests to start...', '> Select tests in Test Runner and click Run.'])
+
+  // Real bug reports from Prisma
+  const [bugReportsList, setBugReportsList] = useState<{ id: string; testId: string; desc: string; status: string }[]>([])
+
+  // Load run history from Prisma
+  const loadRunHistory = useCallback(async () => {
+    try {
+      const res = await fetch('/api/runs?limit=50')
+      if (res.ok) {
+        const data = await res.json()
+        const mapped: RunSnapshot[] = (data as Array<{
+          id: string
+          moduleId: string
+          moduleName: string
+          passed: number
+          failed: number
+          total: number
+          duration: string
+          rate: number
+          results: { testId: string; status: string }[] | null
+          startedAt: string
+          completedAt: string | null
+          status: string
+        }>).map((r) => ({
+          id: r.id,
+          date: r.startedAt ? new Date(r.startedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—',
+          moduleId: r.moduleId,
+          results: Array.isArray(r.results) ? r.results.map((x: { testId: string; status: string }) => ({
+            testId: x.testId,
+            status: x.status === 'passed' ? 'passed' as const : 'failed' as const,
+          })) : [],
+          passed: r.passed || 0,
+          failed: r.failed || 0,
+          total: r.total || 0,
+          duration: r.duration || '—',
+          rate: r.rate || 0,
+        }))
+        setRunHistory(mapped)
+      }
+    } catch {
+      // Silently fail — runs will show as empty
+    }
+  }, [])
+
+  // Load bug reports from Prisma
+  const loadBugReports = useCallback(async () => {
+    try {
+      const reports = await getBugReports()
+      setBugReportsList(reports.map((r) => ({
+        id: r.id,
+        testId: r.testId,
+        desc: r.error || r.testDescription,
+        status: r.status === 'open' ? 'Open' : r.status === 'in_progress' ? 'In Progress' : 'Fixed',
+      })))
+    } catch {
+      // Silently fail
+    }
+  }, [])
+
+  // Load run history and bug reports on mount
+  useEffect(() => {
+    loadRunHistory()
+    loadBugReports()
+  }, [loadRunHistory, loadBugReports])
+
+  // Compute module health from real run history
+  const moduleHealth = useMemo(() => {
+    // Build a mapping of sidebar module IDs to their parent group and display name
+    const moduleInfo = new Map<string, { name: string; parentGroup: string }>()
+    function collectModules(items: SidebarModule[], parent?: string) {
+      for (const item of items) {
+        if (item.id !== 'dashboard' && item.id !== 'my-tickets') {
+          const group = parent || (item.children ? item.label : undefined) || 'Standalone'
+          moduleInfo.set(item.id, { name: item.label, parentGroup: group })
+          if (item.children) {
+            collectModules(item.children, item.label)
+          }
+        }
+      }
+    }
+    collectModules(sidebarModules)
+
+    // Group runs by moduleId
+    const runsByModule = new Map<string, RunSnapshot[]>()
+    for (const run of runHistory) {
+      const existing = runsByModule.get(run.moduleId) || []
+      existing.push(run)
+      runsByModule.set(run.moduleId, existing)
+    }
+
+    // Build health data for all known modules
+    const health: ModuleHealth[] = []
+    for (const [modId, info] of moduleInfo) {
+      const runs = runsByModule.get(modId) || []
+      if (runs.length === 0) {
+        health.push({
+          moduleId: modId,
+          moduleName: info.name,
+          parentGroup: info.parentGroup,
+          passRate: 0,
+          totalTests: 0,
+          passedTests: 0,
+          failedTests: 0,
+          lastRun: '—',
+        })
+      } else {
+        // Use the latest run for stats
+        const latestRun = runs[0] // already sorted desc by loadRunHistory
+        const passedTests = latestRun.passed
+        const failedTests = latestRun.failed
+        const totalTests = latestRun.total
+        const passRate = totalTests > 0 ? Math.round((passedTests / totalTests) * 100) : 0
+        // Trend: last 7 run pass rates (oldest → newest)
+        const sortedRuns = [...runs].reverse().slice(-7)
+        const trend = sortedRuns.map((r) => r.total > 0 ? Math.round((r.passed / r.total) * 100) : 0)
+        health.push({
+          moduleId: modId,
+          moduleName: info.name,
+          parentGroup: info.parentGroup,
+          passRate,
+          totalTests,
+          passedTests,
+          failedTests,
+          lastRun: latestRun.date,
+          trend,
+        })
+      }
+    }
+    return health
+  }, [runHistory, sidebarModules])
 
   // Feature 6: Dark mode
   const [navToast, setNavToast] = useState<{ key: number; label: string; parent?: string | null } | null>(null)
@@ -3481,16 +3485,55 @@ export default function Home() {
         const totalSecs = durations.reduce((a, b) => a + b, 0)
         const mins = Math.floor(totalSecs / 60)
         const secs = totalSecs % 60
+        const durationStr = `${mins}:${String(secs).padStart(2, '0')}`
         setCompletionStats({
           passed,
           failed,
-          duration: `${mins}:${String(secs).padStart(2, '0')}`,
+          duration: durationStr,
         })
         setCompletionModalOpen(true)
+
+        // Save run to Prisma DB
+        const runId = currentRunIdRef.current
+        const moduleName = (() => {
+          for (const mod of sidebarModules) {
+            if (mod.id === selectedModule) return mod.label
+            if (mod.children) {
+              const child = mod.children.find(c => c.id === selectedModule)
+              if (child) return child.label
+            }
+          }
+          return selectedModule
+        })()
+        fetch('/api/runs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            moduleId: selectedModule,
+            moduleName,
+            passed,
+            failed,
+            total,
+            duration: durationStr,
+            rate: total > 0 ? Math.round((passed / total) * 100) : 0,
+            results: tests.filter(t => t.status === 'passed' || t.status === 'failed').map(t => ({
+              testId: t.id,
+              status: t.status,
+            })),
+            status: 'completed',
+            startedAt: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+          }),
+        }).then(() => {
+          loadRunHistory()
+        }).catch(() => {
+          // Silently fail — run will still be tracked locally
+        })
+        currentRunIdRef.current = null
       }
     }
     prevIsRunningRef.current = isRunning
-  }, [isRunning, tests])
+  }, [isRunning, tests, selectedModule, sidebarModules, loadRunHistory])
 
   // Check session on mount & seed admin
   useEffect(() => {
@@ -3730,6 +3773,7 @@ export default function Home() {
       setIsRunning(true)
       setRunningProgress('Starting tests...')
       setActiveTab('live-execution')
+      setConsoleLogs([])
 
       const testNames = testsToRun.map((t) => t.id)
       const runOnlyTests = selectedOnly || forceIds ? testNames : null
@@ -3739,9 +3783,16 @@ export default function Home() {
         mapping.subModule,
         runOnlyTests,
         (event) => {
+          // Capture run ID from the first SSE event
+          if (!currentRunIdRef.current && (event as Record<string, unknown>).run_id) {
+            currentRunIdRef.current = (event as Record<string, unknown>).run_id as string
+          }
           if (event.type === 'log') {
             setRunningProgress(event.message)
+            setConsoleLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${event.message}`])
           } else if (event.type === 'test_end') {
+            const statusLabel = event.status === 'passed' ? 'PASSED' : event.status === 'failed' ? 'FAILED' : 'SKIPPED'
+            setConsoleLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${event.test_name} — ${statusLabel}${event.message ? ': ' + event.message : ''}`])
             if (event.test_name && event.status) {
               const testId = testsToRun.find((t) => t.id.endsWith('::' + event.test_name))?.id
                 || testsToRun.find((t) => t.id.includes(event.test_name || ''))?.id
@@ -3769,8 +3820,10 @@ export default function Home() {
             }
           } else if (event.type === 'run_end') {
             setRunningProgress('Run complete!')
+            setConsoleLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Run complete!`])
           } else if (event.type === 'error') {
             toast.error('Run error', { description: event.message, duration: 8000 })
+            setConsoleLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ERROR: ${event.message}`])
           }
         },
         () => {
@@ -4234,7 +4287,7 @@ export default function Home() {
           {/* ── DASHBOARD VIEW ── */}
           {selectedModule === 'dashboard' && (
             <div data-tour="dashboard">
-              <DashboardTab onSelectModule={handleSelectModule} />
+              <DashboardTab onSelectModule={handleSelectModule} moduleHealth={moduleHealth} />
             </div>
           )}
 
@@ -4315,7 +4368,18 @@ export default function Home() {
                 testGroups={currentTestGroups}
                 isRunning={isRunning}
                 runningProgress={runningProgress}
-                onStop={() => setIsRunning(false)}
+                onStop={async () => {
+                  const runId = currentRunIdRef.current
+                  if (runId) {
+                    try {
+                      await stopRun(runId)
+                      toast.success('Run stopped')
+                    } catch (err) {
+                      toast.error('Failed to stop run', { description: err instanceof Error ? err.message : 'Unknown error' })
+                    }
+                  }
+                  setIsRunning(false)
+                }}
                 onBack={() => setActiveTab('test-runner')}
                 onRerunFailed={() => {
                   const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id)
@@ -4336,6 +4400,7 @@ export default function Home() {
                 totalCount={tests.length}
                 runHistory={runHistory}
                 onReportTest={handleReportTest}
+                bugReportsList={bugReportsList}
               />
               </div>
             )}
