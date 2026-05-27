@@ -1,36 +1,30 @@
 """
 auth_helper.py
 --------------
-Reusable authentication helper — your "auth_section" equivalent.
+Reusable authentication helper for RhythmERP automation.
 Call login from any test without repeating code.
 
 Usage in conftest.py (fixture):
     auth = AuthSection(driver)
-    auth.login()  # Uses defaults from .env
+    auth.login_default()
 
 Usage in tests (manual):
     auth = AuthSection(driver)
-    auth.login_as("admin@mail.com", "Admin@123", "admin_facility")
+    auth.login_as("admin@mail.com", "Admin@123")
 """
-
-import os
-from dotenv import load_dotenv
 
 from pages.login_screens.Login_Screens_.login_page import LoginPage
 from common.logger import log
-
-
-load_dotenv()
+import config
 
 
 class AuthSection:
     """
-    Reusable authentication helper class.
+    Reusable authentication helper class for RhythmERP.
 
     Provides methods to:
-    - Login with default credentials from .env
+    - Login with default credentials from config
     - Login with custom credentials
-    - Login as different user roles
     - Verify login was successful
     """
 
@@ -38,37 +32,32 @@ class AuthSection:
         self.driver = driver
         self.login_page = LoginPage(driver)
 
-    def login(self, email=None, password=None, facility=None):
+    def login(self, email=None, password=None):
         """
-        Login to PACS application.
-        Uses credentials from .env if not provided.
-        This is the main method — call it from anywhere.
+        Login to RhythmERP application.
+        Uses credentials from config.py (loaded from .env) if not provided.
 
         Args:
-            email: User email (defaults to PACS_EMAIL from .env)
-            password: User password (defaults to PACS_PASSWORD from .env)
-            facility: Facility name (defaults to PACS_FACILITY from .env)
+            email: User email (defaults to RHYTHMERP_EMAIL from config)
+            password: User password (defaults to RHYTHMERP_PASSWORD from config)
         """
-        # Load defaults from .env if not provided
-        email = email or os.getenv("PACS_EMAIL", "")
-        password = password or os.getenv("PACS_PASSWORD", "")
-        facility = facility or os.getenv("PACS_FACILITY", "")
+        # Load defaults from config
+        email = email or config.RHYTHMERP_EMAIL
+        password = password or config.RHYTHMERP_PASSWORD
 
-        if not all([email, password, facility]):
+        if not email or not password:
             raise ValueError(
                 "Login credentials are missing. "
-                "Provide them directly or set them in .env file."
+                "Provide them directly or set RHYTHMERP_EMAIL and RHYTHMERP_PASSWORD in .env file."
             )
 
         log.info("Attempting login...")
-        log.info(f"  Email   : {email}")
-        log.info(f"  Facility: {facility}")
+        log.info(f"  Email: {email}")
 
         # Execute login steps
         self.login_page.load()
         self.login_page.enter_email(email)
         self.login_page.enter_password(password)
-        self.login_page.select_facility(facility)
         self.login_page.click_login()
 
         # Verify login succeeded
@@ -77,25 +66,24 @@ class AuthSection:
         log.info("Login successful!")
         return True
 
-    def login_as(self, email, password, facility):
+    def login_as(self, email, password):
         """
         Login with specific credentials (for role-based testing).
 
         Args:
             email: Specific user email
             password: Specific user password
-            facility: Specific facility to select
 
         Example:
             auth = AuthSection(driver)
-            auth.login_as("admin@mail.com", "Admin@123", "admin_facility")
+            auth.login_as("admin@mail.com", "Admin@123")
         """
         log.info(f"Logging in as: {email}")
-        return self.login(email, password, facility)
+        return self.login(email, password)
 
     def login_default(self):
         """
-        Quick login using default .env credentials.
+        Quick login using default credentials from config/.env.
         Shortcut for the most common case.
 
         Example:

@@ -1,9 +1,12 @@
 """
 config.py
 ---------
-Central configuration for PACS Automation Project.
+Central configuration for RhythmERP Automation Project.
 All URLs, timeouts, paths, and settings are defined here.
 Other modules import from this file — change once, reflects everywhere.
+
+IMPORTANT: Credentials are loaded from .env file.
+Never hardcode credentials here — always use environment variables.
 """
 
 import os
@@ -12,59 +15,39 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-
-
 # ============================================================
 # RHYTHMERP APPLICATION
 # ============================================================
-RHYTHMERP_BASE_URL = "https://rhythmerp.algorhythms.in"
+RHYTHMERP_BASE_URL = os.getenv("RHYTHMERP_BASE_URL", "https://rhythmerp.algorhythms.in")
 RHYTHMERP_LOGIN_URL = f"{RHYTHMERP_BASE_URL}/#/authentication/signin"
-RHYTHMERP_LOGIN_URL = f"{RHYTHMERP_BASE_URL}/#/authentication/signin"
-LOGIN_URL = RHYTHMERP_LOGIN_URL    # <-- add this line
+LOGIN_URL = RHYTHMERP_LOGIN_URL
 COMPANY_ONBOARDING_URL = f"{RHYTHMERP_BASE_URL}/#/dynamic-screens/Company%20Onboarding"
 RHYTHMERP_FORGOT_PASSWORD_URL = f"{RHYTHMERP_BASE_URL}/#/authentication/forgot-password"
 
 
-
 # ============================================================
-# RHYTHMERP LOGIN CREDENTIALS
+# RHYTHMERP LOGIN CREDENTIALS (loaded from .env)
 # ============================================================
-RHYTHMERP_EMAIL = "Rular@admin.com"
-RHYTHMERP_PASSWORD = "Rular@12345678"
-RHYTHMERP_FACILITY = ""  # blank text dropdown — click by index
-NEW_RHYTHMERP_EMAIL = "Rular@admin.com"
-NEW_RHYTHMERP_PASSWORD = "Rular@12345678"
-NEW_RHYTHMERP_FACILITY = ""
-
+RHYTHMERP_EMAIL = os.getenv("RHYTHMERP_EMAIL", "")
+RHYTHMERP_PASSWORD = os.getenv("RHYTHMERP_PASSWORD", "")
+RHYTHMERP_FACILITY = os.getenv("RHYTHMERP_FACILITY", "")
 
 
 # ============================================================
 # FORGOT PASSWORD CREDENTIALS (loaded from .env)
 # ============================================================
-FP_EMAIL = os.getenv("FP_EMAIL", "")
-FP_CURRENT_PASSWORD = os.getenv("FP_CURRENT_PASSWORD", "")
-FP_NEW_PASSWORD = os.getenv("FP_NEW_PASSWORD", "")
-FP_ALT_PASSWORD = os.getenv("FP_ALT_PASSWORD", "")
-FP_USERNAME = os.getenv("FP_USERNAME", "")
-FP_TENANT = os.getenv("FP_TENANT", "")
-FP_OLD_PASSWORDS = [
-    os.getenv("FP_OLD_PASSWORD_1", ""),
-    os.getenv("FP_OLD_PASSWORD_2", ""),
-    os.getenv("FP_OLD_PASSWORD_3", ""),
+RHYTHMERP_FP_EMAIL = os.getenv("RHYTHMERP_FP_EMAIL", RHYTHMERP_EMAIL)
+RHYTHMERP_FP_USERNAME = os.getenv("RHYTHMERP_FP_USERNAME", RHYTHMERP_EMAIL)
+RHYTHMERP_FP_TENANT = os.getenv("RHYTHMERP_FP_TENANT", "")
+RHYTHMERP_FP_CURRENT_PASSWORD = os.getenv("RHYTHMERP_FP_CURRENT_PASSWORD", RHYTHMERP_PASSWORD)
+RHYTHMERP_FP_NEW_PASSWORD = os.getenv("RHYTHMERP_FP_NEW_PASSWORD", "")
+RHYTHMERP_FP_ALT_PASSWORD = os.getenv("RHYTHMERP_FP_ALT_PASSWORD", "")
+RHYTHMERP_FP_DEFAULT_PASSWORD = os.getenv("RHYTHMERP_FP_DEFAULT_PASSWORD", RHYTHMERP_PASSWORD)
+RHYTHMERP_FP_OLD_PASSWORDS = [
+    os.getenv("RHYTHMERP_FP_OLD_PASSWORD_1", ""),
+    os.getenv("RHYTHMERP_FP_OLD_PASSWORD_2", ""),
+    os.getenv("RHYTHMERP_FP_OLD_PASSWORD_3", ""),
 ]
-
-
-# ============================================================
-# RHYTHMERP FORGOT PASSWORD CREDENTIALS
-# ============================================================
-RHYTHMERP_FP_EMAIL = "Rular@admin.com"
-RHYTHMERP_FP_USERNAME = "Rular@admin.com"
-RHYTHMERP_FP_TENANT = ""  # blank text — click by index
-RHYTHMERP_FP_CURRENT_PASSWORD = "Rular@12345678"
-RHYTHMERP_FP_NEW_PASSWORD = ""
-RHYTHMERP_FP_ALT_PASSWORD = ""
-RHYTHMERP_FP_DEFAULT_PASSWORD = "Rular@12345678"   # cleanup target — reset back after tests
-RHYTHMERP_FP_OLD_PASSWORDS = ["", "", ""]
 
 
 # ============================================================

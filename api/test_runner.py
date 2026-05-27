@@ -1,4 +1,4 @@
-﻿"""Run pytest tests via subprocess and stream results as SSE events."""
+"""Run pytest tests via subprocess and stream results as SSE events."""
 
 import subprocess
 import os
@@ -9,13 +9,52 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from api.database import create_run, update_run_started, update_run_completed
+from api.database import create_run, update_run_started, update_run_completed, update_run_status
 from api.models import (
     RunStatus, TestStatus, TestResult, LogEvent, CreateRunRequest
 )
 
 
 PROJECT_ROOT = Path(__file__).parent.parent
+
+# Active subprocess tracking: run_id -> subprocess.Popen
+_active_processes: dict[str, subprocess.Popen] = {}
+
+
+# --- Input Validation ---
+
+ALLOWED_MODULES = {
+    "login_screens", "access", "company_onboarding",
+    "common_settings", "commodity_settings", "registration",
+}
+
+ALLOWED_SUB_MODULES = {
+    # login_screens
+    # access
+    "entity_group_definition", "user_creation_screen", "role_creation_screen",
+    # common_settings
+    "bank", "designation", "error_code_mst", "hsn_sac", "season",
+    "tax_authority", "tax_rate", "uom", "uom_conversion", "vehicle_master",
+    # commodity_settings
+    "crop_master", "item_master", "quality_parameter_master", "services_master",
+    "item_category", "item_group", "commodity_quality_parameter",
+    "commodity_base_rate", "item_attribute",
+    # registration
+    "agent", "supplier", "customer", "farmer",
+}
+
+
+def validate_module_path(module: str, sub_module: str = None) -> None:
+    """Validate module and sub_module against whitelist to prevent path traversal."""
+    if not module or not re.match(r'^[a-zA-Z0-9_]+$', module):
+        raise ValueError(f"Invalid module name: {module}")
+    if sub_module:
+        if not re.match(r'^[a-zA-Z0-9_]+$', sub_module):
+            raise ValueError(f"Invalid sub_module name: {sub_module}")
+    # Verify the path actually exists
+    test_path = build_pytest_path(module, sub_module)
+    if not test_path:
+        raise ValueError(f"Test path not found for module={module}, sub_module={sub_module}")
 
 
 def build_pytest_path(module: str, sub_module: str = None) -> str:
@@ -24,8 +63,16 @@ def build_pytest_path(module: str, sub_module: str = None) -> str:
         test_dir = PROJECT_ROOT / "pages" / module / "modules" / sub_module / "test"
         if test_dir.exists():
             return str(test_dir)
+        # Fallback: check for test files directly in sub_module dir
+        test_dir = PROJECT_ROOT / "pages" / module / "modules" / sub_module
+        if test_dir.exists():
+            return str(test_dir)
     else:
         test_dir = PROJECT_ROOT / "pages" / module / "test"
+        if test_dir.exists():
+            return str(test_dir)
+        # Some modules like login_screens have tests in subdirectories
+        test_dir = PROJECT_ROOT / "pages" / module / "Test_cases_login"
         if test_dir.exists():
             return str(test_dir)
     return ""
@@ -173,13 +220,46 @@ def _resolve_tests(test_path: str, requested: list) -> list:
     return resolved
 
 
+def stop_run(run_id: str) -> bool:
+    """Stop a running test subprocess. Returns True if process was killed."""
+    process = _active_processes.get(run_id)
+    if not process or process.poll() is not None:
+        return False
+
+    try:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=3)
+
+        update_run_status(run_id, RunStatus.STOPPED)
+        return True
+    except Exception:
+        return False
+    finally:
+        _active_processes.pop(run_id, None)
+
+
 def run_tests_stream(request: CreateRunRequest):
     """Run pytest and yield SSE events. This is a generator for Server-Sent Events."""
 
-    # 1. Create run record
+    # 1. Validate inputs
+    try:
+        validate_module_path(request.module, request.sub_module)
+    except ValueError as e:
+        yield _sse_event(LogEvent(
+            type="error",
+            message=str(e),
+            timestamp=datetime.now(timezone.utc),
+        ))
+        return
+
+    # 2. Create run record
     run_id = create_run(request.module, request.sub_module)
 
-    # 2. Build pytest path
+    # 3. Build pytest path
     test_path = build_pytest_path(request.module, request.sub_module)
     if not test_path:
         yield _sse_event(LogEvent(
@@ -187,9 +267,9 @@ def run_tests_stream(request: CreateRunRequest):
             message=f"Test path not found for module={request.module}, sub_module={request.sub_module}",
             timestamp=datetime.now(timezone.utc),
         ))
-        return run_id
+        return
 
-    # 3. Build command
+    # 4. Build command
     cmd = ["python", "-m", "pytest", "-v", "--tb=short"]
 
     # Add specific tests if provided - resolve IDs to actual pytest node IDs
@@ -202,7 +282,7 @@ def run_tests_stream(request: CreateRunRequest):
     else:
         cmd.append(test_path)
 
-    # 4. Mark run as started
+    # 5. Mark run as started
     update_run_started(run_id)
     yield _sse_event(LogEvent(
         type="log",
@@ -210,14 +290,14 @@ def run_tests_stream(request: CreateRunRequest):
         timestamp=datetime.now(timezone.utc),
     ))
 
-    # 5. Run pytest
+    # 6. Run pytest
     results = []
     total = passed = failed = skipped = 0
     start_time = time.time()
 
     env = os.environ.copy()
     if request.env_url:
-        env["PACS_BASE_URL"] = request.env_url
+        env["RHYTHMERP_BASE_URL"] = request.env_url
 
     try:
         process = subprocess.Popen(
@@ -229,6 +309,8 @@ def run_tests_stream(request: CreateRunRequest):
             env=env,
             bufsize=1,
         )
+        # Track the process for stop functionality
+        _active_processes[run_id] = process
 
         for line in process.stdout:
             line = line.strip()
@@ -275,8 +357,24 @@ def run_tests_stream(request: CreateRunRequest):
             message=f"Run failed with error: {str(e)}",
             timestamp=datetime.now(timezone.utc),
         ))
+    finally:
+        # Clean up process tracking
+        _active_processes.pop(run_id, None)
 
-    # 6. Save results
+    # 7. Check if the run was stopped
+    current_run = None
+    from api.database import get_run
+    current_run = get_run(run_id)
+
+    if current_run and current_run.get("status") == RunStatus.STOPPED.value:
+        yield _sse_event(LogEvent(
+            type="run_end",
+            message=f"Run {run_id} was stopped by user after {duration:.1f}s",
+            timestamp=datetime.now(timezone.utc),
+        ))
+        return
+
+    # 8. Save results
     final_status = RunStatus.COMPLETED if failed == 0 else RunStatus.FAILED
     update_run_completed(
         run_id=run_id,
@@ -294,8 +392,6 @@ def run_tests_stream(request: CreateRunRequest):
         message=f"Run {run_id} finished: {passed} passed, {failed} failed, {skipped} skipped in {duration:.1f}s",
         timestamp=datetime.now(timezone.utc),
     ))
-
-    return run_id
 
 
 def _parse_pytest_line(line: str) -> tuple:
