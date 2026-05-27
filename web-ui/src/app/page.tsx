@@ -108,7 +108,9 @@ import {
   Ticket,
   Maximize2,
   Monitor,
+  HelpCircle,
 } from 'lucide-react'
+import { AppTour, startAppTour } from '@/components/tour/AppTour'
 
 // ─── Types ───────────────────────────────────────────────
 type TestPriority = 'smoke' | 'regression' | 'sanity'
@@ -1248,7 +1250,7 @@ function TestRunnerTab({
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Action Bar */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0 flex-wrap">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0 flex-wrap" data-tour="run-buttons">
         <Button
           onClick={() => onRun(false)}
           disabled={isRunning || pendingCount === 0}
@@ -2990,6 +2992,7 @@ export default function Home() {
 
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
+      <AppTour selectedModule={selectedModule} activeTab={activeTab} />
       {/* ─── HEADER ─────────────────────────────────────── */}
       <header className="h-12 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 shrink-0 z-10">
         <div className="flex items-center gap-3 flex-1">
@@ -2997,6 +3000,7 @@ export default function Home() {
             variant="ghost"
             size="icon"
             onClick={() => setSidebarOpen(!sidebarOpen)}
+            data-tour="sidebar-toggle"
             className={`size-8 cursor-pointer shrink-0 transition-all duration-200 ${
               sidebarOpen
                 ? 'text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800'
@@ -3026,13 +3030,25 @@ export default function Home() {
             variant="ghost"
             size="icon"
             onClick={toggleDarkMode}
+            data-tour="dark-mode"
             className="size-8 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
             title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
           >
             {darkMode ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </Button>
+          {/* Help / Tour Button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={startAppTour}
+            data-tour="help-btn"
+            className="size-8 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer"
+            title="Take a tour of the app"
+          >
+            <HelpCircle className="size-4" />
+          </Button>
           {/* Bell Notification */}
-          <div className="relative">
+          <div className="relative" data-tour="notifications">
             <Button
               variant="ghost"
               size="icon"
@@ -3079,7 +3095,7 @@ export default function Home() {
             </Link>
           )}
           <Separator orientation="vertical" className="h-5 mx-1" />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" data-tour="user-menu">
             <Avatar className="size-7">
               <AvatarFallback className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold">
                 {userInitials}
@@ -3122,7 +3138,7 @@ export default function Home() {
               <ChevronLeft className="size-4" />
             </button>
           </div>
-          <ScrollArea className="flex-1 min-h-0">
+          <ScrollArea className="flex-1 min-h-0" data-tour="sidebar-modules">
             <div className="py-2 px-2">
               {sidebarModules.map((mod) => (
                 <SidebarModuleItem
@@ -3188,7 +3204,9 @@ export default function Home() {
 
           {/* ── DASHBOARD VIEW ── */}
           {selectedModule === 'dashboard' && (
+            <div data-tour="dashboard">
             <DashboardTab onSelectModule={handleSelectModule} />
+            </div>
           )}
 
           {/* ── MY TICKETS VIEW ── */}
@@ -3200,7 +3218,7 @@ export default function Home() {
           {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && (
               <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               {/* Tab bar */}
-              <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 shrink-0">
+              <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 shrink-0" data-tour="tab-bar">
                 <div className="flex items-center h-10 px-4 gap-0">
                   {tabs.map((tab) => (
                     <button
@@ -3228,6 +3246,7 @@ export default function Home() {
               {/* Tab Content */}
               <div className="flex-1 overflow-hidden min-h-0">
                 {activeTab === 'operations' && (
+                  <div data-tour="operations">
                   <ErrorBoundary>
                     <OperationsTab
                       testGroups={currentTestGroups}
@@ -3236,8 +3255,10 @@ export default function Home() {
                       }
                     />
                   </ErrorBoundary>
+                  </div>
                 )}
             {activeTab === 'test-runner' && (
+              <div data-tour="test-runner">
               <ErrorBoundary>
                 <TestRunnerTab
                   tests={tests}
@@ -3260,8 +3281,10 @@ export default function Home() {
                   }}
                 />
               </ErrorBoundary>
+              </div>
             )}
             {activeTab === 'live-execution' && (
+              <div data-tour="live-execution">
               <ErrorBoundary>
                 <LiveExecutionTab
                   tests={tests}
@@ -3279,8 +3302,10 @@ export default function Home() {
                   }}
                 />
               </ErrorBoundary>
+              </div>
             )}
             {activeTab === 'results' && (
+              <div data-tour="results">
               <ErrorBoundary>
                 <ResultsTab
                   tests={tests}
@@ -3291,11 +3316,14 @@ export default function Home() {
                   onReportTest={handleReportTest}
                 />
               </ErrorBoundary>
+              </div>
             )}
             {activeTab === 'schedule' && user && (
+              <div data-tour="schedule-runs">
               <ErrorBoundary>
                 <ScheduleRunsTab userName={user.name} sidebarModules={sidebarModules} />
               </ErrorBoundary>
+              </div>
             )}
           </div>
               </div>
