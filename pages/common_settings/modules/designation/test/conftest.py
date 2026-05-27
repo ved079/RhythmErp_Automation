@@ -121,8 +121,8 @@ def logged_in_driver(driver):
     login_page.enter_password(RHYTHMERP_PASSWORD)
     time.sleep(0.5)
 
-    # Select facility by index 0
-    login_page.select_facility_by_index(0)
+    # Facility selection disabled — single-tenant setup (dropdown handled by double-click)
+    # login_page.select_facility_by_index(0)
     time.sleep(1)
 
     # Click Login (JS click required)
