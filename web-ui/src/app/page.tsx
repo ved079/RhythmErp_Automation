@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import { fetchModules, fetchRunDetail, folderToSidebarId, sidebarToFolderMapping, startRun, stopRun, fetchTestCases, fetchScreenshot, type ApiModule, type ApiSubModule, type TestCasesData, type ApiRunDetail, type ApiTestResult } from '@/lib/api'
 import {
@@ -121,6 +122,11 @@ import {
 } from 'lucide-react'
 import { AppTour, startAppTour } from '@/components/tour/AppTour'
 import { Sparkline, getSparklineColor, TrendIndicator } from '@/components/ui/sparkline'
+import { PassRateTrendChart, ModuleHealthBarChart, BugDistributionPie, TestExecutionTimeline } from '@/components/dashboard/DashboardCharts'
+import { ScreenshotGallery, ScreenshotLightbox, ScreenshotCompare } from '@/components/screenshot/ScreenshotGallery'
+import RunComparisonDialog from '@/components/comparison/RunComparisonDialog'
+import { ExportMenu, generateReportSummary } from '@/components/export/ExportUtils'
+import type { ScreenshotEntry } from '@/components/screenshot/ScreenshotGallery'
 
 // ─── Types ───────────────────────────────────────────────
 type TestPriority = 'smoke' | 'regression' | 'sanity'
@@ -933,10 +939,12 @@ function DashboardTab({
   onSelectModule,
   moduleHealth,
   onRunModule,
+  runHistory,
 }: {
   onSelectModule: (moduleId: string) => void
   moduleHealth: ModuleHealth[]
   onRunModule?: (moduleId: string) => void
+  runHistory?: RunSnapshot[]
 }) {
   // Group modules by parentGroup, preserving order
   const grouped = useMemo(() => {
@@ -996,9 +1004,15 @@ function DashboardTab({
     <div className="flex flex-col h-full overflow-auto">
       <div className="p-5 space-y-5">
         {/* Page Header */}
-        <div>
-          <h2 className="text-[18px] font-semibold text-[#333333] dark:text-gray-100">Dashboard</h2>
-          <p className="text-[13px] text-[#666666] dark:text-gray-400 mt-0.5">Overview of all RhythmERP automation modules</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-[18px] font-semibold text-[#333333] dark:text-gray-100">Dashboard</h2>
+            <p className="text-[13px] text-[#666666] dark:text-gray-400 mt-0.5">Overview of all RhythmERP automation modules</p>
+          </div>
+          <ExportMenu
+            runHistory={runHistory}
+            moduleHealth={moduleHealth}
+          />
         </div>
 
         {/* Quick Stats */}
@@ -1033,6 +1047,44 @@ function DashboardTab({
             <div className="text-[11px] text-[#888888] dark:text-gray-400 mt-0.5">
               {quickStats.totalPassed} / {quickStats.totalTests} tests passed
             </div>
+          </div>
+        </div>
+
+        {/* ── Advanced Charts ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Pass Rate Trend */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-100 dark:border-gray-700 shadow-sm">
+            <h3 className="text-[13px] font-semibold text-[#333333] dark:text-gray-100 mb-3 flex items-center gap-2">
+              <TrendingUp className="size-4 text-[#3F51B5]" />
+              Pass Rate Trend
+            </h3>
+            <PassRateTrendChart runHistory={runHistory || []} />
+          </div>
+          {/* Module Health Bar Chart */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-100 dark:border-gray-700 shadow-sm">
+            <h3 className="text-[13px] font-semibold text-[#333333] dark:text-gray-100 mb-3 flex items-center gap-2">
+              <BarChart3 className="size-4 text-[#3F51B5]" />
+              Module Health Overview
+            </h3>
+            <ModuleHealthBarChart moduleHealth={moduleHealth} />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Bug Distribution Pie */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-100 dark:border-gray-700 shadow-sm">
+            <h3 className="text-[13px] font-semibold text-[#333333] dark:text-gray-100 mb-3 flex items-center gap-2">
+              <AlertTriangle className="size-4 text-[#F44336]" />
+              Bug Distribution
+            </h3>
+            <BugDistributionPie moduleHealth={moduleHealth} />
+          </div>
+          {/* Test Execution Timeline */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-100 dark:border-gray-700 shadow-sm">
+            <h3 className="text-[13px] font-semibold text-[#333333] dark:text-gray-100 mb-3 flex items-center gap-2">
+              <Activity className="size-4 text-[#3F51B5]" />
+              Execution Timeline
+            </h3>
+            <TestExecutionTimeline runHistory={runHistory || []} />
           </div>
         </div>
 
@@ -1796,6 +1848,7 @@ function LiveExecutionTab({
   onStop,
   onBack,
   onRerunFailed,
+  onScreenshotCaptured,
 }: {
   tests: TestItem[]
   testGroups: TestClassGroup[]
@@ -1804,6 +1857,7 @@ function LiveExecutionTab({
   onStop: () => void
   onBack: () => void
   onRerunFailed: () => void
+  onScreenshotCaptured?: (entry: ScreenshotEntry) => void
 }) {
   const consoleEndRef = useRef<HTMLDivElement>(null)
   const lastProgressRef = useRef<string>('')
@@ -1822,7 +1876,19 @@ function LiveExecutionTab({
   const handleScreenshotReady = useCallback((src: string, active: boolean) => {
     setTvImgSrc(src)
     setTvActive(active)
-  }, [])
+    // Save to screenshot gallery for Phase 4
+    if (active && src && onScreenshotCaptured) {
+      const runningTest = tests.find((t) => t.status === 'running')
+      onScreenshotCaptured({
+        id: `ss-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        src,
+        testName: runningTest?.name || 'Live Execution',
+        timestamp: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        moduleName: undefined,
+        status: runningTest?.status === 'failed' ? 'failed' : 'passed',
+      })
+    }
+  }, [onScreenshotCaptured, tests])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -2757,6 +2823,10 @@ function ResultsTab({
   onReportTest,
   bugReportsList,
   onRunDetail,
+  onCompareRuns,
+  testGroups,
+  moduleHealth,
+  moduleName,
 }: {
   tests: TestItem[]
   passedCount: number
@@ -2766,6 +2836,10 @@ function ResultsTab({
   onReportTest: (test: TestItem) => void
   bugReportsList: { id: string; testId: string; desc: string; status: string }[]
   onRunDetail?: (run: RunSnapshot) => void
+  onCompareRuns?: () => void
+  testGroups?: TestClassGroup[]
+  moduleHealth?: ModuleHealth[]
+  moduleName?: string
 }) {
   const passRate = Math.round((passedCount / totalCount) * 100)
   const [resultFilter, setResultFilter] = useState<'all' | 'passed' | 'failed'>('all')
@@ -2886,7 +2960,7 @@ function ResultsTab({
       <div className="px-4 pt-3 pb-3 shrink-0">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">Run Results</h3>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             {(['all', 'passed', 'failed'] as const).map((f) => (
               <button
                 key={f}
@@ -2904,6 +2978,25 @@ function ResultsTab({
                 {f === 'all' ? `All (${totalCount})` : f === 'passed' ? `Passed (${passedCount})` : `Failed (${failedCount})`}
               </button>
             ))}
+            {/* Compare Runs & Export Buttons */}
+            <Separator orientation="vertical" className="h-5 mx-1" />
+            {onCompareRuns && runHistory.length >= 2 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onCompareRuns}
+                className="h-7 text-[12px] gap-1.5 cursor-pointer border-[#3F51B5]/30 text-[#3F51B5] hover:bg-[#3F51B5] hover:text-white dark:border-indigo-500/30 dark:text-indigo-400 dark:hover:bg-indigo-600 dark:hover:text-white"
+              >
+                <GitCompare className="size-3" />
+                Compare
+              </Button>
+            )}
+            <ExportMenu
+              testGroups={testGroups}
+              runHistory={runHistory}
+              moduleHealth={moduleHealth}
+              moduleName={moduleName}
+            />
           </div>
         </div>
         <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
@@ -4055,6 +4148,16 @@ export default function Home() {
   const [runDetailDialogOpen, setRunDetailDialogOpen] = useState(false)
   const [selectedRunForDetail, setSelectedRunForDetail] = useState<RunSnapshot | null>(null)
 
+  // Phase 4: Run Comparison Dialog
+  const [runComparisonOpen, setRunComparisonOpen] = useState(false)
+
+  // Phase 4: Screenshot Gallery state
+  const [screenshotEntries, setScreenshotEntries] = useState<ScreenshotEntry[]>([])
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState(0)
+  const [screenshotCompareOpen, setScreenshotCompareOpen] = useState(false)
+  const [compareScreenshots, setCompareScreenshots] = useState<[ScreenshotEntry | null, ScreenshotEntry | null]>([null, null])
+
   // Poll notifications every 2s
   useEffect(() => {
     const poll = async () => {
@@ -4239,28 +4342,12 @@ export default function Home() {
 
   // Feature 6: Dark mode
   const [navToast, setNavToast] = useState<{ key: number; label: string; parent?: string | null } | null>(null)
-  const [darkMode, setDarkMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('rhythmerp-dark-mode')
-      if (stored !== null) return stored === 'true'
-      return window.matchMedia('(prefers-color-scheme: dark)').matches
-    }
-    return false
-  })
-
-  // Persist dark mode & toggle class
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
-    localStorage.setItem('rhythmerp-dark-mode', String(darkMode))
-  }, [darkMode])
-
+  // Phase 4: Dark mode via next-themes (persists across sessions, system preference detection)
+  const { theme, setTheme } = useTheme()
+  const darkMode = theme === 'dark'
   const toggleDarkMode = useCallback(() => {
-    setDarkMode((prev) => !prev)
-  }, [])
+    setTheme(darkMode ? 'light' : 'dark')
+  }, [darkMode, setTheme])
 
   // Auto-hide sidebar on Live Execution, show on other tabs
   useEffect(() => {
@@ -4668,7 +4755,7 @@ export default function Home() {
     [isRunning, tests, rerunTestIds, runTests]
   )
 
-  // Keyboard shortcuts: Ctrl+B sidebar, Ctrl+K quick switcher, Ctrl+D dark mode, Ctrl+R run tests, Ctrl+1-5 switch tabs, Ctrl+/ cheat sheet
+  // Keyboard shortcuts: Ctrl+B sidebar, Ctrl+K quick switcher, Ctrl+D dark mode, Ctrl+R run tests, Ctrl+1-6 switch tabs, Ctrl+/ cheat sheet
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Don't fire shortcuts when typing in inputs/textareas
@@ -4735,9 +4822,9 @@ export default function Home() {
         return
       }
 
-      // Ctrl+1-5 — switch tabs (only when on a module page)
+      // Ctrl+1-6 — switch tabs (only when on a module page)
       if (selectedModule !== 'dashboard' && selectedModule !== 'my-tickets') {
-        const tabMap: Record<string, string> = { '1': 'operations', '2': 'test-runner', '3': 'live-execution', '4': 'results', '5': 'schedule' }
+        const tabMap: Record<string, string> = { '1': 'operations', '2': 'test-runner', '3': 'live-execution', '4': 'results', '5': 'screenshots', '6': 'schedule' }
         const tabId = tabMap[e.key]
         if (tabId) {
           e.preventDefault()
@@ -4828,6 +4915,7 @@ export default function Home() {
     { id: 'test-runner', label: '🧪 Test Runner' },
     { id: 'live-execution', label: '📺 Live Execution' },
     { id: 'results', label: '📈 Results' },
+    { id: 'screenshots', label: '📸 Screenshots' },
     { id: 'schedule', label: '🗓️ Schedule' },
   ]
 
@@ -4857,7 +4945,8 @@ export default function Home() {
               { keys: 'Ctrl + 2', desc: 'Test Runner tab' },
               { keys: 'Ctrl + 3', desc: 'Live Execution tab' },
               { keys: 'Ctrl + 4', desc: 'Results tab' },
-              { keys: 'Ctrl + 5', desc: 'Schedule tab' },
+              { keys: 'Ctrl + 5', desc: 'Screenshots tab' },
+              { keys: 'Ctrl + 6', desc: 'Schedule tab' },
               { keys: 'Ctrl + /', desc: 'Show this cheat sheet' },
               { keys: 'Escape', desc: 'Close dialog / panel' },
             ].map((s) => (
@@ -4942,7 +5031,7 @@ export default function Home() {
           >
             <Zap className="size-4" />
           </Button>
-          {/* Bell Notification */}
+          {/* Bell Notification — Enhanced with categories */}
           <div className="relative" data-tour="notifications">
             <Button
               variant="ghost"
@@ -4956,30 +5045,64 @@ export default function Home() {
             >
               <Bell className="size-4" />
               {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#6777EF] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#6777EF] text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-pulse">
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
             </Button>
             {notifDropdownOpen && (
-              <div className="absolute right-0 top-10 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50">
-                <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                  <span className="text-[13px] font-semibold text-[#333333] dark:text-gray-100">Notifications</span>
-                  <button onClick={handleMarkAllRead} className="text-[11px] text-[#3F51B5] hover:text-[#2D3FC7] cursor-pointer">Mark all read</button>
+              <div className="absolute right-0 top-10 w-96 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
+                  <div className="flex items-center gap-2">
+                    <Bell className="size-4 text-[#3F51B5]" />
+                    <span className="text-[13px] font-semibold text-[#333333] dark:text-gray-100">Notifications</span>
+                    {unreadCount > 0 && (
+                      <Badge className="bg-[#6777EF] text-white text-[10px] px-1.5 py-0 h-4">{unreadCount} new</Badge>
+                    )}
+                  </div>
+                  <button onClick={handleMarkAllRead} className="text-[11px] text-[#3F51B5] hover:text-[#2D3FC7] cursor-pointer font-medium">Mark all read</button>
                 </div>
-                <div className="max-h-64 overflow-y-auto">
+                <div className="max-h-72 overflow-y-auto">
                   {notifications.length === 0 ? (
-                    <div className="p-6 text-center text-[12px] text-gray-400">No notifications yet</div>
+                    <div className="p-8 text-center">
+                      <Bell className="size-8 text-gray-200 dark:text-gray-600 mx-auto mb-2" />
+                      <div className="text-[13px] text-gray-400 dark:text-gray-500">No notifications yet</div>
+                      <div className="text-[11px] text-gray-300 dark:text-gray-600 mt-1">Notifications will appear here when tests complete or bugs are updated</div>
+                    </div>
                   ) : (
-                    notifications.slice(0, 15).map((n) => (
-                      <div key={n.id} className={`px-3 py-2 border-b border-gray-50 dark:border-gray-700/50 ${!n.read ? 'bg-[#E8F5E9]/50 dark:bg-green-900/10' : ''}`}>
-                        <div className="text-[12px] font-medium text-[#333333] dark:text-gray-200">{n.title}</div>
-                        <div className="text-[11px] text-[#666666] dark:text-gray-400 mt-0.5">{n.message}</div>
-                        <div className="text-[10px] text-[#888888] mt-0.5">{new Date(n.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
-                      </div>
-                    ))
+                    notifications.slice(0, 20).map((n) => {
+                      // Get category icon and color based on notification type
+                      const getCategoryStyle = (type: string) => {
+                        switch (type) {
+                          case 'run_complete': return { icon: <CheckCircle2 className="size-3.5" />, color: 'text-green-500 bg-green-50 dark:bg-green-900/20' }
+                          case 'status_change': return { icon: <RotateCcw className="size-3.5" />, color: 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' }
+                          case 'reply': return { icon: <MessageSquare className="size-3.5" />, color: 'text-purple-500 bg-purple-50 dark:bg-purple-900/20' }
+                          case 'schedule': return { icon: <CalendarClock className="size-3.5" />, color: 'text-orange-500 bg-orange-50 dark:bg-orange-900/20' }
+                          default: return { icon: <Bell className="size-3.5" />, color: 'text-gray-500 bg-gray-50 dark:bg-gray-700/50' }
+                        }
+                      }
+                      const catStyle = getCategoryStyle(n.type)
+                      return (
+                        <div key={n.id} className={`px-4 py-2.5 border-b border-gray-50 dark:border-gray-700/50 flex gap-3 items-start hover:bg-gray-50/50 dark:hover:bg-gray-700/20 transition-colors ${!n.read ? 'bg-[#E8F5E9]/30 dark:bg-green-900/5' : ''}`}>
+                          <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${catStyle.color}`}>
+                            {catStyle.icon}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[12px] font-medium text-[#333333] dark:text-gray-200 leading-tight">{n.title}</div>
+                            <div className="text-[11px] text-[#666666] dark:text-gray-400 mt-0.5 leading-snug">{n.message}</div>
+                            <div className="text-[10px] text-[#888888] dark:text-gray-500 mt-1">{new Date(n.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                          </div>
+                          {!n.read && <div className="shrink-0 w-2 h-2 rounded-full bg-[#6777EF] mt-1.5" />}
+                        </div>
+                      )
+                    })
                   )}
                 </div>
+                {notifications.length > 0 && (
+                  <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-center">
+                    <span className="text-[11px] text-gray-400 dark:text-gray-500">{notifications.length} notification{notifications.length !== 1 ? 's' : ''}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -5105,7 +5228,7 @@ export default function Home() {
           {/* ── DASHBOARD VIEW ── */}
           {selectedModule === 'dashboard' && (
             <div data-tour="dashboard">
-              <DashboardTab onSelectModule={handleSelectModule} moduleHealth={moduleHealth} onRunModule={handleRunModule} />
+              <DashboardTab onSelectModule={handleSelectModule} moduleHealth={moduleHealth} onRunModule={handleRunModule} runHistory={runHistory} />
             </div>
           )}
 
@@ -5206,6 +5329,13 @@ export default function Home() {
                     runTests(true, failedIds)
                   }
                 }}
+                onScreenshotCaptured={(entry) => {
+                  setScreenshotEntries((prev) => {
+                    // Keep max 50 screenshots, avoid too many
+                    if (prev.length >= 50) return [entry, ...prev.slice(0, 49)]
+                    return [entry, ...prev]
+                  })
+                }}
               />
               </div>
             )}
@@ -5220,7 +5350,89 @@ export default function Home() {
                 onReportTest={handleReportTest}
                 bugReportsList={bugReportsList}
                 onRunDetail={(run) => { setSelectedRunForDetail(run); setRunDetailDialogOpen(true) }}
+                onCompareRuns={() => setRunComparisonOpen(true)}
+                testGroups={currentTestGroups}
+                moduleHealth={moduleHealth}
+                moduleName={modulePath.name}
               />
+              </div>
+            )}
+            {activeTab === 'screenshots' && (
+              <div data-tour="screenshots" className="flex flex-col h-full">
+                <div className="p-4 shrink-0">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">Screenshot Gallery</h3>
+                      <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">Screenshots captured during test execution</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {screenshotEntries.length >= 2 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setCompareScreenshots([screenshotEntries[0] || null, screenshotEntries[1] || null])
+                            setScreenshotCompareOpen(true)
+                          }}
+                          className="h-7 text-[12px] gap-1.5 cursor-pointer"
+                        >
+                          <GitCompare className="size-3" />
+                          Compare
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const data = await fetchScreenshot()
+                            if (data.active && data.screenshot) {
+                              const newEntry: ScreenshotEntry = {
+                                id: `ss-${Date.now()}`,
+                                src: `data:image/png;base64,${data.screenshot}`,
+                                testName: 'Live Capture',
+                                timestamp: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                                status: 'running',
+                              }
+                              setScreenshotEntries((prev) => [newEntry, ...prev])
+                              toast.success('Screenshot captured')
+                            } else {
+                              toast.info('No active screenshot available')
+                            }
+                          } catch {
+                            toast.error('Failed to capture screenshot')
+                          }
+                        }}
+                        className="h-7 text-[12px] gap-1.5 cursor-pointer"
+                      >
+                        <Monitor className="size-3" />
+                        Capture Now
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-auto px-4 pb-4">
+                  <ScreenshotGallery
+                    screenshots={screenshotEntries}
+                    onRefresh={async () => {
+                      try {
+                        const data = await fetchScreenshot()
+                        if (data.active && data.screenshot) {
+                          const newEntry: ScreenshotEntry = {
+                            id: `ss-${Date.now()}`,
+                            src: `data:image/png;base64,${data.screenshot}`,
+                            testName: 'Live Capture',
+                            timestamp: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                            status: 'running',
+                          }
+                          setScreenshotEntries((prev) => [newEntry, ...prev])
+                        }
+                      } catch {
+                        // silently fail
+                      }
+                    }}
+                  />
+                </div>
               </div>
             )}
             {activeTab === 'schedule' && user && (
@@ -5462,6 +5674,32 @@ export default function Home() {
         onClose={() => { setRunDetailDialogOpen(false); setSelectedRunForDetail(null) }}
         run={selectedRunForDetail}
       />
+
+      {/* ─── Phase 4: Run Comparison Dialog ──────────────── */}
+      <RunComparisonDialog
+        open={runComparisonOpen}
+        onClose={() => setRunComparisonOpen(false)}
+        runHistory={runHistory}
+      />
+
+      {/* ─── Phase 4: Screenshot Lightbox (external trigger) ── */}
+      {lightboxOpen && (
+        <ScreenshotLightbox
+          open={lightboxOpen}
+          onClose={() => setLightboxOpen(false)}
+          screenshots={screenshotEntries}
+          initialIndex={lightboxIndex}
+        />
+      )}
+
+      {/* ─── Phase 4: Screenshot Compare ─────────────────── */}
+      {screenshotCompareOpen && (
+        <ScreenshotCompare
+          left={compareScreenshots[0]}
+          right={compareScreenshots[1]}
+          onClose={() => setScreenshotCompareOpen(false)}
+        />
+      )}
 
       {/* ─── FOOTER (ERP-style) ───────────────────────────── */}
       <footer className="shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-1.5 flex items-center justify-between">
