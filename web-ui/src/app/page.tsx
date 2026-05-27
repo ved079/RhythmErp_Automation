@@ -140,13 +140,16 @@ interface TestItem {
 
 interface TestSpecItem {
   id: string
+  screenName?: string
   description: string
-  status: 'passed' | 'failed' | 'not-run'
+  status: 'passed' | 'failed' | 'bug' | 'todo' | 'not-run'
   duration: string
   steps: string
   expected: string
-  error?: string
+  actual: string
+  bugDetails?: string
   priority?: TestPriority
+  date?: string
 }
 
 interface TestClassGroup {
@@ -256,6 +259,7 @@ function getTestsForSidebarModule(
       duration: '—',
       steps: t.docstring || '',
       expected: t.docstring || '',
+      actual: '',
     })),
   }]
 
@@ -396,6 +400,8 @@ const testSpecGroups: TestClassGroup[] = [
         priority: 'smoke',
         steps: 'Click Add → Fill Name, Tax Type, Tax Authority → Select From/To Date, Revision Status → Submit',
         expected: 'Record created successfully, SweetAlert2 success toast',
+        actual: 'Record created successfully, SweetAlert2 success toast appeared',
+        date: '2026-05-16',
       },
       {
         id: 'T02',
@@ -405,6 +411,8 @@ const testSpecGroups: TestClassGroup[] = [
         priority: 'smoke',
         steps: 'Click Add → Fill Tax Rate Name → Submit',
         expected: 'Record created with default values',
+        actual: 'Record created with default values, appeared in table',
+        date: '2026-05-16',
       },
     ],
   },
@@ -419,6 +427,8 @@ const testSpecGroups: TestClassGroup[] = [
         priority: 'regression',
         steps: 'Search record → Click Edit → Change Name → Update',
         expected: 'Name updated, success alert',
+        actual: 'Name updated successfully, success alert shown',
+        date: '2026-05-16',
       },
       {
         id: 'T05',
@@ -428,6 +438,8 @@ const testSpecGroups: TestClassGroup[] = [
         priority: 'regression',
         steps: 'Search record → Click Edit → Clear Name → Update',
         expected: 'Validation error shown',
+        actual: 'Validation error displayed, name field highlighted',
+        date: '2026-05-16',
       },
       {
         id: 'T06',
@@ -437,6 +449,8 @@ const testSpecGroups: TestClassGroup[] = [
         priority: 'regression',
         steps: 'Search for non-existent name → Verify not in table',
         expected: 'Record not found',
+        actual: 'No matching record found in table',
+        date: '2026-05-16',
       },
     ],
   },
@@ -446,22 +460,26 @@ const testSpecGroups: TestClassGroup[] = [
       {
         id: 'T03',
         description: 'Add HSN row in sub-table',
-        status: 'failed',
+        status: 'bug',
         duration: '—',
         priority: 'regression',
         steps: 'Click Add → Fill fields → Go to "Define Tax Rate Details" tab → Click Add → Select HSN Number → Enter Tax Rate → Submit',
         expected: 'Sub-table row added, record created',
-        error: 'SubTableAddButton not found in DOM',
+        actual: 'SubTableAddButton not found in DOM',
+        bugDetails: 'SubTableAddButton not found in DOM — button element missing from page',
+        date: '2026-05-16',
       },
       {
         id: 'T09',
         description: 'Submit with empty sub-table',
-        status: 'failed',
+        status: 'bug',
         duration: '—',
         priority: 'regression',
         steps: 'Click Add → Fill header fields → Submit WITHOUT adding sub-table row',
         expected: 'Form should reject empty sub-table',
-        error: 'Server accepts empty sub-table as success (wrong assertion)',
+        actual: 'Server accepts empty sub-table as success (wrong assertion)',
+        bugDetails: 'Server accepts empty sub-table as success — no validation on sub-table rows',
+        date: '2026-05-16',
       },
     ],
   },
@@ -476,6 +494,8 @@ const testSpecGroups: TestClassGroup[] = [
         priority: 'smoke',
         steps: 'Enter record name in search field → Verify record appears in table',
         expected: 'Matching record displayed in results',
+        actual: 'Matching record displayed in search results',
+        date: '2026-05-16',
       },
       {
         id: 'T11',
@@ -485,6 +505,8 @@ const testSpecGroups: TestClassGroup[] = [
         priority: 'regression',
         steps: 'Enter non-existent name → Verify "No records found" message',
         expected: 'No records displayed, empty state shown',
+        actual: 'No records displayed, empty state shown correctly',
+        date: '2026-05-16',
       },
     ],
   },
@@ -499,6 +521,8 @@ const testSpecGroups: TestClassGroup[] = [
         priority: 'sanity',
         steps: 'Navigate through page controls → Verify First, Prev, Next, Last buttons',
         expected: 'Pagination works correctly, correct records per page',
+        actual: 'Pagination controls work correctly, correct records per page',
+        date: '2026-05-16',
       },
     ],
   },
@@ -513,6 +537,8 @@ const testSpecGroups: TestClassGroup[] = [
         priority: 'sanity',
         steps: 'Click History icon → Verify popup opens with record history',
         expected: 'History popup displays with correct entries',
+        actual: 'History popup displays with correct entries',
+        date: '2026-05-16',
       },
       {
         id: 'T18',
@@ -522,6 +548,8 @@ const testSpecGroups: TestClassGroup[] = [
         priority: 'sanity',
         steps: 'Open History popup → Enter search term → Verify filtered results',
         expected: 'History entries filtered correctly',
+        actual: 'History entries filtered correctly',
+        date: '2026-05-16',
       },
     ],
   },
@@ -531,7 +559,7 @@ const initialTests: TestItem[] = testSpecGroups.flatMap((g) =>
   g.tests.map((t) => ({
     id: t.id,
     name: t.description,
-    status: t.status === 'not-run' ? ('pending' as const) : (t.status as 'passed' | 'failed'),
+    status: (t.status === 'not-run' || t.status === 'todo' ? 'pending' : t.status === 'bug' ? 'failed' : t.status) as 'passed' | 'failed' | 'pending',
     duration: t.duration === '—' ? '—' : t.duration,
     priority: t.priority,
   }))
@@ -1253,24 +1281,10 @@ function DashboardTab({
 function OperationsTab({ testGroups, testCasesModule }: { testGroups: TestClassGroup[]; testCasesModule?: { label: string; tests: any[] } }) {
   const testSpecGroups = testGroups
   const [searchVal, setSearchVal] = useState('')
-  const [filter, setFilter] = useState<'all' | 'passed' | 'failed' | 'bug' | 'not-run'>('all')
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
-    // Auto-expand all groups when testSpecGroups changes
-  useEffect(() => {
-    if (testSpecGroups.length > 0) {
-      setExpandedGroups(new Set(testSpecGroups.map((g) => g.className)))
-    }
-  }, [testSpecGroups])
+  const [filter, setFilter] = useState<'all' | 'passed' | 'bug' | 'todo' | 'not-run'>('all')
   const [expandedTests, setExpandedTests] = useState<Set<string>>(new Set())
-
-  const toggleGroup = useCallback((name: string) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
-      return next
-    })
-  }, [])
+  const [sortCol, setSortCol] = useState<string>('id')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   const toggleTest = useCallback((id: string) => {
     setExpandedTests((prev) => {
@@ -1281,37 +1295,84 @@ function OperationsTab({ testGroups, testCasesModule }: { testGroups: TestClassG
     })
   }, [])
 
-  const filteredGroups = useMemo(() =>
-    testSpecGroups
-      .map((group) => {
-        const filteredTests = group.tests.filter((test) => {
-          const matchSearch =
-            searchVal === '' ||
-            test.id.toLowerCase().includes(searchVal.toLowerCase()) ||
-            test.description.toLowerCase().includes(searchVal.toLowerCase()) ||
-            test.steps.toLowerCase().includes(searchVal.toLowerCase()) ||
-            test.expected.toLowerCase().includes(searchVal.toLowerCase())
-          const matchFilter =
-            filter === 'all' ||
-            (filter === 'passed' && test.status === 'passed') ||
-            (filter === 'failed' && test.status === 'failed') ||
-            (filter === 'bug' && test.status === 'not-run' && !!test.error) ||
-            (filter === 'not-run' && test.status === 'not-run' && !test.error)
-          return matchSearch && matchFilter
-        })
-        return { ...group, tests: filteredTests, filteredTestCount: filteredTests.length }
-      })
-      .filter((g) => g.filteredTestCount > 0),
-  [searchVal, filter, testSpecGroups])
+  const handleSort = useCallback((col: string) => {
+    if (sortCol === col) {
+      setSortDir((d) => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortCol(col)
+      setSortDir('asc')
+    }
+  }, [sortCol])
 
-  const totalTests = testSpecGroups.reduce((acc, g) => acc + g.tests.length, 0)
-  const bugCount = testSpecGroups.reduce(
-    (acc, g) => acc + g.tests.filter((t) => !!t.error).length,
-    0
-  )
+  // Flatten all tests from all groups into one list for the table
+  const allTests = useMemo(() => {
+    const flat: (TestSpecItem & { groupName: string })[] = []
+    for (const g of testSpecGroups) {
+      for (const t of g.tests) {
+        flat.push({ ...t, groupName: g.className })
+      }
+    }
+    return flat
+  }, [testSpecGroups])
+
+  // Filter + sort
+  const filteredTests = useMemo(() => {
+    let result = allTests.filter((test) => {
+      const matchSearch =
+        searchVal === '' ||
+        test.id.toLowerCase().includes(searchVal.toLowerCase()) ||
+        test.description.toLowerCase().includes(searchVal.toLowerCase()) ||
+        test.steps.toLowerCase().includes(searchVal.toLowerCase()) ||
+        test.expected.toLowerCase().includes(searchVal.toLowerCase()) ||
+        test.actual.toLowerCase().includes(searchVal.toLowerCase())
+      const matchFilter =
+        filter === 'all' ||
+        (filter === 'passed' && test.status === 'passed') ||
+        (filter === 'bug' && test.status === 'bug') ||
+        (filter === 'todo' && test.status === 'todo') ||
+        (filter === 'not-run' && test.status === 'not-run')
+      return matchSearch && matchFilter
+    })
+
+    // Sort
+    const statusOrder: Record<string, number> = { bug: 0, failed: 1, todo: 2, 'not-run': 3, passed: 4 }
+    const priorityOrder: Record<string, number> = { smoke: 0, regression: 1, sanity: 2 }
+
+    result.sort((a, b) => {
+      let cmp = 0
+      switch (sortCol) {
+        case 'id':
+          cmp = a.id.localeCompare(b.id, undefined, { numeric: true })
+          break
+        case 'description':
+          cmp = a.description.localeCompare(b.description)
+          break
+        case 'status':
+          cmp = (statusOrder[a.status] ?? 5) - (statusOrder[b.status] ?? 5)
+          break
+        case 'priority':
+          cmp = (priorityOrder[a.priority ?? ''] ?? 3) - (priorityOrder[b.priority ?? ''] ?? 3)
+          break
+        case 'date':
+          cmp = (a.date || 'zzz').localeCompare(b.date || 'zzz')
+          break
+        default:
+          cmp = 0
+      }
+      return sortDir === 'desc' ? -cmp : cmp
+    })
+
+    return result
+  }, [allTests, searchVal, filter, sortCol, sortDir])
+
+  const totalTests = allTests.length
+  const passedCount = allTests.filter((t) => t.status === 'passed').length
+  const bugCount = allTests.filter((t) => t.status === 'bug').length
+  const todoCount = allTests.filter((t) => t.status === 'todo').length
+  const notRunCount = allTests.filter((t) => t.status === 'not-run').length
 
   const getStatusDisplay = (test: TestSpecItem) => {
-    if (test.error) {
+    if (test.status === 'bug') {
       return { label: 'BUG', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400', icon: '\u{1F41B}' }
     }
     if (test.status === 'passed') {
@@ -1320,13 +1381,15 @@ function OperationsTab({ testGroups, testCasesModule }: { testGroups: TestClassG
     if (test.status === 'failed') {
       return { label: 'FAIL', color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400', icon: '\u274C' }
     }
+    if (test.status === 'todo') {
+      return { label: 'TODO', color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400', icon: '\u{1F4CB}' }
+    }
     return { label: '\u2014', color: 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400', icon: '\u2014' }
   }
 
-  const findTestCase = (testId: string) => testCasesModule?.tests.find((tc: any) => tc.id === testId)
-
   return (
     <div className="flex flex-col h-full min-h-0">
+      {/* ─── Toolbar ─── */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-gray-400" />
@@ -1337,6 +1400,18 @@ function OperationsTab({ testGroups, testCasesModule }: { testGroups: TestClassG
             className="h-8 pl-8 text-[13px] bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-100"
           />
         </div>
+        <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
+          <SelectTrigger className="h-8 w-28 text-[13px] bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-600">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All ({totalTests})</SelectItem>
+            <SelectItem value="passed">Passed ({passedCount})</SelectItem>
+            <SelectItem value="bug">Bug ({bugCount})</SelectItem>
+            <SelectItem value="todo">Todo ({todoCount})</SelectItem>
+            <SelectItem value="not-run">Not Run ({notRunCount})</SelectItem>
+          </SelectContent>
+        </Select>
         <Button
           variant="outline"
           className="h-8 text-[13px] gap-1.5 border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300"
@@ -1368,160 +1443,188 @@ function OperationsTab({ testGroups, testCasesModule }: { testGroups: TestClassG
           }}
         >
           <FileSpreadsheet className="size-3.5" />
-          Export to Excel
+          Export
         </Button>
-        <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-          <SelectTrigger className="h-8 w-28 text-[13px] bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="passed">Passed</SelectItem>
-            <SelectItem value="failed">Failed</SelectItem>
-            <SelectItem value="bug">Bug</SelectItem>
-          </SelectContent>
-        </Select>
         <div className="flex-1" />
         <Separator orientation="vertical" className="h-5 mx-1" />
         <div className="flex items-center gap-3 text-[12px]">
-          <span className="text-gray-500 dark:text-gray-400">{totalTests} tests</span>
+          <span className="text-gray-500 dark:text-gray-400">{filteredTests.length} of {totalTests}</span>
           {bugCount > 0 && (
-            <span className="text-red-500 dark:text-red-400 font-medium">{'\u{1F41B}'} {bugCount} bugs</span>
+            <span className="text-red-500 dark:text-red-400 font-medium">{'\u{1F41B}'} {bugCount} bug{bugCount !== 1 ? 's' : ''}</span>
           )}
         </div>
       </div>
 
+      {/* ─── Summary Badges ─── */}
+      {totalTests > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-50 dark:border-gray-800 shrink-0">
+          <button
+            onClick={() => setFilter('all')}
+            className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors cursor-pointer ${filter === 'all' ? 'bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100' : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+          >
+            All {totalTests}
+          </button>
+          <button
+            onClick={() => setFilter('passed')}
+            className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors cursor-pointer ${filter === 'passed' ? 'bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200' : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40'}`}
+          >
+            {'\u2705'} Passed {passedCount}
+          </button>
+          <button
+            onClick={() => setFilter('bug')}
+            className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors cursor-pointer ${filter === 'bug' ? 'bg-red-200 dark:bg-red-800 text-red-800 dark:text-red-200' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40'}`}
+          >
+            {'\u{1F41B}'} Bug {bugCount}
+          </button>
+          {todoCount > 0 && (
+            <button
+              onClick={() => setFilter('todo')}
+              className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors cursor-pointer ${filter === 'todo' ? 'bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200' : 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40'}`}
+            >
+              {'\u{1F4CB}'} Todo {todoCount}
+            </button>
+          )}
+          {notRunCount > 0 && (
+            <button
+              onClick={() => setFilter('not-run')}
+              className={`text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors cursor-pointer ${filter === 'not-run' ? 'bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-gray-200' : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+            >
+              Not Run {notRunCount}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ─── Table ─── */}
       <ScrollArea className="flex-1 min-h-0">
-        <div className="p-4 space-y-2">
-          {filteredGroups.map((group) => {
-            const bugs = group.tests.filter((t) => !!t.error).length
-            const bugsOnly = bugs === group.tests.length && bugs > 0
-            const hasBugs = bugs > 0
-            const noBugs = bugs === 0 && group.tests.length > 0
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
+              <TableHead
+                className="text-[#3F51B5] dark:text-indigo-300 text-[12px] font-semibold cursor-pointer select-none w-12"
+                onClick={() => handleSort('id')}
+              >
+                <span className="inline-flex items-center gap-1"># <SortArrow col="id" sortCol={sortCol} sortDir={sortDir} /></span>
+              </TableHead>
+              <TableHead
+                className="text-[#3F51B5] dark:text-indigo-300 text-[12px] font-semibold cursor-pointer select-none"
+                onClick={() => handleSort('description')}
+              >
+                <span className="inline-flex items-center gap-1">Description <SortArrow col="description" sortCol={sortCol} sortDir={sortDir} /></span>
+              </TableHead>
+              <TableHead
+                className="text-[#3F51B5] dark:text-indigo-300 text-[12px] font-semibold cursor-pointer select-none w-24"
+                onClick={() => handleSort('status')}
+              >
+                <span className="inline-flex items-center gap-1">Status <SortArrow col="status" sortCol={sortCol} sortDir={sortDir} /></span>
+              </TableHead>
+              <TableHead
+                className="text-[#3F51B5] dark:text-indigo-300 text-[12px] font-semibold cursor-pointer select-none w-28"
+                onClick={() => handleSort('priority')}
+              >
+                <span className="inline-flex items-center gap-1">Priority <SortArrow col="priority" sortCol={sortCol} sortDir={sortDir} /></span>
+              </TableHead>
+              <TableHead
+                className="text-[#3F51B5] dark:text-indigo-300 text-[12px] font-semibold cursor-pointer select-none w-28"
+                onClick={() => handleSort('date')}
+              >
+                <span className="inline-flex items-center gap-1">Date <SortArrow col="date" sortCol={sortCol} sortDir={sortDir} /></span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredTests.map((test) => {
+              const isExpanded = expandedTests.has(test.id)
+              const statusInfo = getStatusDisplay(test)
 
-            const groupBorderColor = bugsOnly
-              ? 'border-red-200 dark:border-red-800'
-              : hasBugs
-                ? 'border-orange-200 dark:border-orange-800'
-                : 'border-gray-200 dark:border-gray-700'
-
-            return (
-              <div key={group.className} className={`border rounded-lg overflow-hidden ${groupBorderColor}`}>
-                <button
-                  onClick={() => toggleGroup(group.className)}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors cursor-pointer"
-                >
-                  <ChevronRight
-                    className={`size-4 text-gray-400 dark:text-gray-500 shrink-0 transition-transform duration-200 ${
-                      expandedGroups.has(group.className) ? 'rotate-90' : ''
-                    }`}
-                  />
-                  <span className="text-[13px] font-semibold text-gray-800 dark:text-gray-100 flex-1 text-left">
-                    {group.className}
-                  </span>
-                  <span className="text-[12px] text-gray-500 dark:text-gray-400">
-                    {group.tests.length} test{group.tests.length !== 1 ? 's' : ''}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    {noBugs && (
-                      <span className="inline-flex items-center gap-0.5 text-[11px] text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded-full font-medium">
-                        {'\u2705'} All Clear
+              return (
+                <React.Fragment key={test.id}>
+                  {/* ─── Main Row ─── */}
+                  <TableRow
+                    className={`cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50 ${isExpanded ? 'bg-gray-50/50 dark:bg-gray-800/30' : ''} ${test.status === 'bug' ? 'border-l-2 border-l-red-400 dark:border-l-red-500' : test.status === 'todo' ? 'border-l-2 border-l-amber-400 dark:border-l-amber-500' : ''}`}
+                    onClick={() => toggleTest(test.id)}
+                  >
+                    <TableCell className="text-[12px] text-gray-500 dark:text-gray-400 font-mono py-2.5">
+                      {test.id}
+                    </TableCell>
+                    <TableCell className="text-[13px] text-gray-800 dark:text-gray-100 py-2.5">
+                      <div className="flex items-center gap-2">
+                        {isExpanded ? (
+                          <ChevronDown className="size-3.5 text-gray-400 dark:text-gray-500 shrink-0" />
+                        ) : (
+                          <ChevronRight className="size-3.5 text-gray-400 dark:text-gray-500 shrink-0" />
+                        )}
+                        <span className="truncate">{test.description}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-2.5">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap ${statusInfo.color}`}>
+                        {statusInfo.icon} {statusInfo.label}
                       </span>
-                    )}
-                    {hasBugs && (
-                      <span className="inline-flex items-center gap-0.5 text-[11px] text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30 px-1.5 py-0.5 rounded-full font-medium">
-                        {'\u{1F41B}'} {bugs}
-                      </span>
-                    )}
-                  </div>
-                </button>
+                    </TableCell>
+                    <TableCell className="py-2.5">
+                      <PriorityBadge priority={test.priority} />
+                    </TableCell>
+                    <TableCell className="text-[11px] text-gray-500 dark:text-gray-400 py-2.5">
+                      {test.date || '\u2014'}
+                    </TableCell>
+                  </TableRow>
 
-                {expandedGroups.has(group.className) && (
-                  <div className="border-t border-gray-100 dark:border-gray-700">
-                    {group.tests.map((test, idx) => {
-                      const isLast = idx === group.tests.length - 1
-                      const isExpanded = expandedTests.has(test.id)
-                      const statusInfo = getStatusDisplay(test)
-                      const tc = findTestCase(test.id)
-
-                      return (
-                        <div key={test.id}>
-                          <button
-                            onClick={() => toggleTest(test.id)}
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 pl-10 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors cursor-pointer ${
-                              !isLast ? 'border-b border-gray-50 dark:border-gray-800' : ''
-                            }`}
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="size-3 text-gray-400 dark:text-gray-500 shrink-0" />
-                            ) : (
-                              <ChevronRight className="size-3 text-gray-400 dark:text-gray-500 shrink-0" />
-                            )}
-
-                            <span className="text-[12px] text-gray-700 dark:text-gray-200 flex-1 text-left">
-                              {test.description}
-                            </span>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${statusInfo.color}`}>
-                              {statusInfo.icon} {statusInfo.label}
-                            </span>
-                          </button>
-
-                          {isExpanded && (
-                            <div className="px-10 pb-3 pl-[72px] pr-4 border-b border-gray-50 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-800/20">
-                              <div className="space-y-2 py-2">
-                                {test.steps && (
-                                  <div>
-                                    <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Steps:</span>
-                                    <p className="text-[12px] text-gray-600 dark:text-gray-300 mt-0.5 leading-5 whitespace-pre-line">{test.steps}</p>
-                                  </div>
-                                )}
-                                <div>
-                                  <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Expected:</span>
-                                  <p className="text-[12px] text-gray-600 dark:text-gray-300 mt-0.5 leading-5">{test.expected}</p>
-                                </div>
-                                <div>
-                                  <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actual:</span>
-                                  <p className="text-[12px] text-gray-600 dark:text-gray-300 mt-0.5 leading-5">{tc?.actual || test.actual || '\u2014'}</p>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                  <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status:</span>
-                                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${statusInfo.color}`}>
-                                    {statusInfo.icon} {statusInfo.label}
-                                  </span>
-                                  {tc?.date && (
-                                    <>
-                                      <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider ml-2">Date:</span>
-                                      <span className="text-[11px] text-gray-600 dark:text-gray-400">{tc.date}</span>
-                                    </>
-                                  )}
-                                </div>
-                                {test.error && (
-                                  <div className="mt-1">
-                                    <span className="text-[11px] font-semibold text-red-500 dark:text-red-400 uppercase tracking-wider">Bug Details:</span>
-                                    <p className="text-[12px] text-red-600 dark:text-red-400 mt-0.5 leading-5 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
-                                      {test.actual}
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
+                  {/* ─── Expanded Detail Row ─── */}
+                  {isExpanded && (
+                    <TableRow
+                      className={`bg-gray-50/40 dark:bg-gray-800/20 hover:bg-gray-50/40 dark:hover:bg-gray-800/20 ${test.status === 'bug' ? 'border-l-2 border-l-red-400 dark:border-l-red-500' : test.status === 'todo' ? 'border-l-2 border-l-amber-400 dark:border-l-amber-500' : ''}`}
+                    >
+                      <TableCell colSpan={5} className="py-0 px-6">
+                        <div className="py-3 pl-7 space-y-3">
+                          {test.screenName && (
+                            <div className="flex items-start gap-3">
+                              <span className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-20 shrink-0 pt-0.5">Screen</span>
+                              <span className="text-[12px] text-gray-600 dark:text-gray-300">{test.screenName}</span>
+                            </div>
+                          )}
+                          {test.steps && (
+                            <div className="flex items-start gap-3">
+                              <span className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-20 shrink-0 pt-0.5">Steps</span>
+                              <p className="text-[12px] text-gray-600 dark:text-gray-300 leading-5 whitespace-pre-line flex-1">{test.steps}</p>
+                            </div>
+                          )}
+                          <div className="flex items-start gap-3">
+                            <span className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-20 shrink-0 pt-0.5">Expected</span>
+                            <p className="text-[12px] text-gray-600 dark:text-gray-300 leading-5 flex-1">{test.expected}</p>
+                          </div>
+                          <div className="flex items-start gap-3">
+                            <span className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-20 shrink-0 pt-0.5">Actual</span>
+                            <p className="text-[12px] text-gray-600 dark:text-gray-300 leading-5 flex-1">{test.actual || '\u2014'}</p>
+                          </div>
+                          {test.bugDetails && (
+                            <div className="flex items-start gap-3">
+                              <span className="text-[11px] font-semibold text-red-500 dark:text-red-400 uppercase tracking-wider w-20 shrink-0 pt-0.5">Bug</span>
+                              <p className="text-[12px] text-red-600 dark:text-red-400 leading-5 bg-red-50 dark:bg-red-900/20 px-2.5 py-1.5 rounded flex-1">
+                                {test.bugDetails}
+                              </p>
                             </div>
                           )}
                         </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </React.Fragment>
+              )
+            })}
 
-          {filteredGroups.length === 0 && (
-            <div className="text-center py-12 text-gray-400 dark:text-gray-500">
-              <Search className="size-8 mx-auto mb-2 opacity-50" />
-              <p className="text-[13px]">No tests match your search criteria</p>
-            </div>
-          )}
-        </div>
+            {filteredTests.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="h-40 text-center">
+                  <div className="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
+                    <Search className="size-8 mb-2 opacity-50" />
+                    <p className="text-[13px]">No tests match your search criteria</p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </ScrollArea>
     </div>
   )
@@ -2815,7 +2918,7 @@ function ResultsTab({
   const getTestError = (id: string): string | undefined => {
     for (const g of testSpecGroups) {
       const t = g.tests.find((x) => x.id === id)
-      if (t) return t.error
+      if (t) return t.bugDetails || (t.status === 'bug' ? t.actual : undefined)
     }
     return undefined
   }
@@ -3503,24 +3606,41 @@ export default function Home() {
     const moduleKey = id.toLowerCase().replace(" ", "_").replace("-", "_")
     if (allTestCases[moduleKey]) {
       const moduleData = allTestCases[moduleKey]
+      const mapTestCaseStatus = (s: string): TestSpecItem['status'] => {
+        const upper = s.toUpperCase().trim()
+        if (upper === 'PASSED' || upper === 'PASS') return 'passed'
+        if (upper === 'BUG') return 'bug'
+        if (upper === 'TODO') return 'todo'
+        if (upper === 'FAILED' || upper === 'FAIL') return 'failed'
+        return 'not-run'
+      }
       const specGroups: TestClassGroup[] = [{
         className: moduleData.label,
         tests: moduleData.tests.map((t) => ({
           id: t.id,
+          screenName: t.screenName,
           description: t.description,
-          status: 'not-run' as const,
+          status: mapTestCaseStatus(t.status),
           duration: '',
           steps: t.steps,
           expected: t.expected,
-          error: t.status === 'BUG' ? t.actual : undefined,
+          actual: t.actual || '',
+          bugDetails: t.status === 'BUG' ? t.actual : undefined,
           priority: undefined,
+          date: t.date || undefined,
         })),
       }]
       setCurrentTestGroups(specGroups)
+      const mapToTestItemStatus = (s: string): 'passed' | 'failed' | 'pending' => {
+        const upper = s.toUpperCase().trim()
+        if (upper === 'PASSED' || upper === 'PASS') return 'passed'
+        if (upper === 'BUG' || upper === 'FAILED' || upper === 'FAIL') return 'failed'
+        return 'pending'
+      }
       const items: TestItem[] = moduleData.tests.map((t) => ({
         id: t.id,
         name: t.description,
-        status: 'pending' as const,
+        status: mapToTestItemStatus(t.status),
         duration: '',
       }))
       setTests(items)
@@ -3565,10 +3685,15 @@ export default function Home() {
   const getTestError = useCallback((id: string): string | undefined => {
     for (const g of testSpecGroups) {
       const t = g.tests.find((x) => x.id === id)
-      if (t) return t.error
+      if (t) return t.bugDetails || (t.status === 'bug' ? t.actual : undefined)
+    }
+    // Also check currentTestGroups for loaded module tests
+    for (const g of currentTestGroups) {
+      const t = g.tests.find((x) => x.id === id)
+      if (t) return t.bugDetails || (t.status === 'bug' ? t.actual : undefined)
     }
     return undefined
-  }, [])
+  }, [currentTestGroups])
 
   // Mock run animation
     const runTests = useCallback(
