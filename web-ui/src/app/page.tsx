@@ -4,12 +4,13 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { toast } from 'sonner'
-import { fetchModules, folderToSidebarId, sidebarToFolderMapping, startRun, stopRun, fetchTestCases, fetchScreenshot, type ApiModule, type ApiSubModule, type TestCasesData } from '@/lib/api'
+import { fetchModules, fetchRunDetail, folderToSidebarId, sidebarToFolderMapping, startRun, stopRun, fetchTestCases, fetchScreenshot, type ApiModule, type ApiSubModule, type TestCasesData, type ApiRunDetail, type ApiTestResult } from '@/lib/api'
 import {
   addBugReport,
   getBugReports,
   addReplyToReport,
   markReportReadByUser,
+  updateBugReportStatus,
   getNotifications,
   markAllNotificationsRead,
   getUnreadNotificationCount,
@@ -19,6 +20,7 @@ import {
   updateScheduledRun,
   addNotification,
   getSLAStatus,
+  getSLADeadline,
   type BugReport,
   type Notification as NotifType,
   type ScheduledRun,
@@ -930,9 +932,11 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
 function DashboardTab({
   onSelectModule,
   moduleHealth,
+  onRunModule,
 }: {
   onSelectModule: (moduleId: string) => void
   moduleHealth: ModuleHealth[]
+  onRunModule?: (moduleId: string) => void
 }) {
   // Group modules by parentGroup, preserving order
   const grouped = useMemo(() => {
@@ -1094,7 +1098,7 @@ function DashboardTab({
                     <button
                       key={mod.moduleId}
                       onClick={() => onSelectModule(mod.moduleId)}
-                      className={`text-left p-3.5 rounded-[14px] border transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-[#3F51B5]/30 dark:hover:border-indigo-600/30 shadow-[0_8px_22px_rgba(0,0,0,0.05)]`}
+                      className={`relative text-left p-3.5 rounded-[14px] border transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-[#3F51B5]/30 dark:hover:border-indigo-600/30 shadow-[0_8px_22px_rgba(0,0,0,0.05)]`}
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${health.indicator}`} />
@@ -1134,6 +1138,17 @@ function DashboardTab({
                           </div>
                           {mod.trend && <TrendIndicator data={mod.trend} />}
                         </div>
+                      )}
+                      {/* Feature 3: Run Tests overlay button */}
+                      {mod.totalTests > 0 && onRunModule && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onRunModule(mod.moduleId) }}
+                          className="absolute bottom-2.5 right-2.5 flex items-center gap-1 bg-[#2D3FC7] hover:bg-[#3F51B5] text-white text-[10px] font-semibold px-2 py-1 rounded-md shadow-sm transition-all hover:shadow-md cursor-pointer"
+                          title="Run all tests for this module"
+                        >
+                          <Play className="size-2.5" />
+                          Run
+                        </button>
                       )}
                     </button>
                   )
@@ -2741,6 +2756,7 @@ function ResultsTab({
   runHistory,
   onReportTest,
   bugReportsList,
+  onRunDetail,
 }: {
   tests: TestItem[]
   passedCount: number
@@ -2749,6 +2765,7 @@ function ResultsTab({
   runHistory: RunSnapshot[]
   onReportTest: (test: TestItem) => void
   bugReportsList: { id: string; testId: string; desc: string; status: string }[]
+  onRunDetail?: (run: RunSnapshot) => void
 }) {
   const passRate = Math.round((passedCount / totalCount) * 100)
   const [resultFilter, setResultFilter] = useState<'all' | 'passed' | 'failed'>('all')
@@ -3087,7 +3104,11 @@ function ResultsTab({
             </TableHeader>
             <TableBody>
               {runHistory.slice(0, 5).map((run) => (
-                <TableRow key={run.id} className="dark:border-gray-700">
+                <TableRow
+                  key={run.id}
+                  className={`dark:border-gray-700 ${onRunDetail ? 'cursor-pointer hover:bg-[#DFE9FB]/30 dark:hover:bg-indigo-900/10 transition-colors' : ''}`}
+                  onClick={() => onRunDetail?.(run)}
+                >
                   <TableCell className="text-[13px] text-gray-700 dark:text-gray-200">{run.date}</TableCell>
                   <TableCell className="text-[13px] text-gray-600 dark:text-gray-400 font-mono">{run.duration}</TableCell>
                   <TableCell className="text-center">
@@ -3191,6 +3212,780 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
   )
 }
 
+// ─── MY TICKETS TAB (Feature 1) ──────────────────────────
+function MyTicketsTab({
+  userEmail,
+  userName,
+}: {
+  userEmail: string
+  userName: string
+}) {
+  const [allReports, setAllReports] = useState<BugReport[]>([])
+  const [loading, setLoading] = useState(true)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'in-progress' | 'fixed'>('all')
+  const [priorityFilter, setPriorityFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all')
+  const [selectedTicket, setSelectedTicket] = useState<BugReport | null>(null)
+  const [replyText, setReplyText] = useState('')
+  const [sendingReply, setSendingReply] = useState(false)
+
+  const loadReports = useCallback(async () => {
+    setLoading(true)
+    try {
+      const reports = await getBugReports()
+      setAllReports(reports.filter((r) => r.reporterEmail === userEmail))
+    } catch {
+      // silent
+    } finally {
+      setLoading(false)
+    }
+  }, [userEmail])
+
+  useEffect(() => {
+    loadReports()
+  }, [loadReports])
+
+  // Mark as read when opening detail
+  useEffect(() => {
+    if (selectedTicket && !selectedTicket.readByUser) {
+      markReportReadByUser(selectedTicket.id).then(() => {
+        setAllReports((prev) =>
+          prev.map((r) => (r.id === selectedTicket.id ? { ...r, readByUser: true } : r))
+        )
+        setSelectedTicket((prev) => (prev ? { ...prev, readByUser: true } : prev))
+      })
+    }
+  }, [selectedTicket])
+
+  const filteredReports = useMemo(() => {
+    return allReports.filter((r) => {
+      if (statusFilter !== 'all' && r.status !== statusFilter) return false
+      if (priorityFilter !== 'all' && r.priority !== priorityFilter) return false
+      return true
+    })
+  }, [allReports, statusFilter, priorityFilter])
+
+  const handleSendReply = useCallback(async () => {
+    if (!selectedTicket || !replyText.trim()) return
+    setSendingReply(true)
+    try {
+      const updated = await addReplyToReport(selectedTicket.id, {
+        authorName: userName,
+        authorRole: 'user',
+        message: replyText.trim(),
+      })
+      if (updated) {
+        setSelectedTicket(updated)
+        setAllReports((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      }
+      setReplyText('')
+    } catch {
+      toast.error('Failed to send reply')
+    } finally {
+      setSendingReply(false)
+    }
+  }, [selectedTicket, replyText, userName])
+
+  const handleStatusChange = useCallback(async (newStatus: BugReport['status']) => {
+    if (!selectedTicket) return
+    try {
+      const updated = await updateBugReportStatus(selectedTicket.id, newStatus)
+      if (updated) {
+        setSelectedTicket(updated)
+        setAllReports((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+        toast.success(`Status updated to ${newStatus === 'in-progress' ? 'In Progress' : newStatus === 'fixed' ? 'Fixed' : 'Open'}`)
+      }
+    } catch {
+      toast.error('Failed to update status')
+    }
+  }, [selectedTicket])
+
+  const priorityBadge = (p: BugReport['priority']) => {
+    const colors = {
+      high: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+      medium: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
+      low: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+    }
+    return (
+      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${colors[p]}`}>
+        {p.charAt(0).toUpperCase() + p.slice(1)}
+      </span>
+    )
+  }
+
+  const statusBadge = (s: BugReport['status']) => {
+    const colors = {
+      open: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400',
+      'in-progress': 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+      fixed: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+    }
+    const labels = { open: 'Open', 'in-progress': 'In Progress', fixed: 'Fixed' }
+    return (
+      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${colors[s]}`}>
+        {labels[s]}
+      </span>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="size-6 text-[#3F51B5] animate-spin" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-auto">
+      <div className="p-5 space-y-4">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-[18px] font-semibold text-[#333333] dark:text-gray-100">My Tickets</h2>
+            <p className="text-[13px] text-[#666666] dark:text-gray-400 mt-0.5">
+              Track and manage your bug reports • {allReports.length} ticket{allReports.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadReports}
+            className="text-[12px] gap-1.5 cursor-pointer"
+          >
+            <RefreshCw className="size-3.5" />
+            Refresh
+          </Button>
+        </div>
+
+        {/* Filters */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1">
+            <Filter className="size-3.5 text-[#888888] dark:text-gray-400" />
+            <span className="text-[12px] text-[#888888] dark:text-gray-400 font-medium mr-1">Status:</span>
+            {(['all', 'open', 'in-progress', 'fixed'] as const).map((s) => {
+              const labels: Record<string, string> = { all: 'All', open: 'Open', 'in-progress': 'In Progress', fixed: 'Fixed' }
+              const count = s === 'all' ? allReports.length : allReports.filter((r) => r.status === s).length
+              return (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
+                    statusFilter === s
+                      ? 'bg-[#DFE9FB] dark:bg-indigo-900/30 text-[#3F51B5] dark:text-indigo-400'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {labels[s]} ({count})
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-[12px] text-[#888888] dark:text-gray-400 font-medium mr-1">Priority:</span>
+            {(['all', 'high', 'medium', 'low'] as const).map((p) => {
+              const labels: Record<string, string> = { all: 'All', high: 'High', medium: 'Medium', low: 'Low' }
+              const count = p === 'all' ? allReports.length : allReports.filter((r) => r.priority === p).length
+              return (
+                <button
+                  key={p}
+                  onClick={() => setPriorityFilter(p)}
+                  className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
+                    priorityFilter === p
+                      ? 'bg-[#DFE9FB] dark:bg-indigo-900/30 text-[#3F51B5] dark:text-indigo-400'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {labels[p]} ({count})
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Tickets List */}
+        {filteredReports.length === 0 ? (
+          <div className="text-center py-16">
+            <Ticket className="size-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
+            <p className="text-[14px] text-gray-500 dark:text-gray-400 font-medium">No tickets found</p>
+            <p className="text-[12px] text-gray-400 dark:text-gray-500 mt-1">
+              {allReports.length === 0
+                ? 'You haven\'t reported any bugs yet'
+                : 'Try adjusting your filters'}
+            </p>
+          </div>
+        ) : (
+          <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
+                  <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-24">Ticket ID</TableHead>
+                  <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Description</TableHead>
+                  <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-28">Module</TableHead>
+                  <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-20 text-center">Priority</TableHead>
+                  <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-24 text-center">Status</TableHead>
+                  <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-32 text-center">SLA</TableHead>
+                  <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-28">Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredReports.map((report) => {
+                  const sla = getSLAStatus(report.priority, report.createdAt, report.status)
+                  const isUnread = !report.readByUser
+                  return (
+                    <TableRow
+                      key={report.id}
+                      className={`cursor-pointer hover:bg-[#DFE9FB]/30 dark:hover:bg-indigo-900/10 transition-colors ${isUnread ? 'bg-blue-50/50 dark:bg-indigo-900/10' : ''}`}
+                      onClick={() => setSelectedTicket(report)}
+                    >
+                      <TableCell className="text-[12px] font-mono font-semibold text-[#3F51B5] dark:text-indigo-400">
+                        {report.id.slice(0, 8).toUpperCase()}
+                        {isUnread && <span className="ml-1.5 inline-block size-1.5 rounded-full bg-blue-500" />}
+                      </TableCell>
+                      <TableCell className="text-[13px] text-gray-700 dark:text-gray-200 max-w-[250px] truncate">
+                        {report.testDescription}
+                      </TableCell>
+                      <TableCell className="text-[12px] text-gray-500 dark:text-gray-400">
+                        {report.moduleName}
+                      </TableCell>
+                      <TableCell className="text-center">{priorityBadge(report.priority)}</TableCell>
+                      <TableCell className="text-center">{statusBadge(report.status)}</TableCell>
+                      <TableCell className="text-center">
+                        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${sla.color}`}>
+                          {sla.label}
+                        </span>
+                        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{sla.remaining}</div>
+                      </TableCell>
+                      <TableCell className="text-[12px] text-gray-500 dark:text-gray-400">
+                        {new Date(report.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
+
+      {/* Ticket Detail Dialog */}
+      <Dialog open={!!selectedTicket} onOpenChange={(open) => { if (!open) setSelectedTicket(null) }}>
+        <DialogContent className="max-w-[640px] max-h-[85vh] overflow-y-auto">
+          {selectedTicket && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Ticket className="size-5 text-[#3F51B5]" />
+                  Ticket {selectedTicket.id.slice(0, 8).toUpperCase()}
+                </DialogTitle>
+                <DialogDescription className="text-[13px] text-gray-500 dark:text-gray-400">
+                  Filed on {new Date(selectedTicket.createdAt).toLocaleString()}
+                </DialogDescription>
+              </DialogHeader>
+
+              {/* Bug Info */}
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium uppercase">Test ID</div>
+                    <div className="text-[13px] text-gray-800 dark:text-gray-200 font-mono mt-0.5">{selectedTicket.testId}</div>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium uppercase">Module</div>
+                    <div className="text-[13px] text-gray-800 dark:text-gray-200 mt-0.5">{selectedTicket.moduleName}</div>
+                  </div>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium uppercase">Description</div>
+                  <div className="text-[13px] text-gray-800 dark:text-gray-200 mt-0.5">{selectedTicket.testDescription}</div>
+                </div>
+                {selectedTicket.error && (
+                  <div className="bg-red-50 dark:bg-red-900/10 rounded-lg p-3 border border-red-100 dark:border-red-800/30">
+                    <div className="text-[11px] text-red-600 dark:text-red-400 font-medium uppercase">Error</div>
+                    <div className="text-[12px] text-red-700 dark:text-red-300 mt-0.5 font-mono whitespace-pre-wrap">{selectedTicket.error}</div>
+                  </div>
+                )}
+                {selectedTicket.userNote && (
+                  <div className="bg-yellow-50 dark:bg-yellow-900/10 rounded-lg p-3 border border-yellow-100 dark:border-yellow-800/30">
+                    <div className="text-[11px] text-yellow-600 dark:text-yellow-400 font-medium uppercase">User Note</div>
+                    <div className="text-[12px] text-yellow-700 dark:text-yellow-300 mt-0.5">{selectedTicket.userNote}</div>
+                  </div>
+                )}
+
+                {/* SLA + Priority + Status */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Priority:</span>
+                    {priorityBadge(selectedTicket.priority)}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Status:</span>
+                    {statusBadge(selectedTicket.status)}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">SLA:</span>
+                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${getSLAStatus(selectedTicket.priority, selectedTicket.createdAt, selectedTicket.status).color}`}>
+                      {getSLAStatus(selectedTicket.priority, selectedTicket.createdAt, selectedTicket.status).label}
+                    </span>
+                  </div>
+                </div>
+
+                {/* SLA Deadline */}
+                {selectedTicket.status !== 'fixed' && (
+                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 flex items-center gap-2">
+                    <Timer className="size-4 text-gray-400" />
+                    <div>
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400">SLA Deadline</div>
+                      <div className="text-[13px] text-gray-800 dark:text-gray-200 font-medium">
+                        {getSLADeadline(selectedTicket.priority, selectedTicket.createdAt).toLocaleString()}
+                      </div>
+                      <div className={`text-[11px] font-medium ${getSLAStatus(selectedTicket.priority, selectedTicket.createdAt, selectedTicket.status).overdue ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                        {getSLAStatus(selectedTicket.priority, selectedTicket.createdAt, selectedTicket.status).remaining}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Status Change Buttons */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[12px] text-gray-500 dark:text-gray-400 font-medium">Change Status:</span>
+                  {selectedTicket.status === 'open' && (
+                    <Button
+                      size="sm"
+                      onClick={() => handleStatusChange('in-progress')}
+                      className="text-[12px] bg-[#2D3FC7] hover:bg-[#3F51B5] text-white gap-1 cursor-pointer"
+                    >
+                      <Play className="size-3" />
+                      Mark In Progress
+                    </Button>
+                  )}
+                  {selectedTicket.status === 'in-progress' && (
+                    <Button
+                      size="sm"
+                      onClick={() => handleStatusChange('fixed')}
+                      className="text-[12px] bg-green-600 hover:bg-green-700 text-white gap-1 cursor-pointer"
+                    >
+                      <CheckCircle2 className="size-3" />
+                      Mark Fixed
+                    </Button>
+                  )}
+                  {selectedTicket.status === 'fixed' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleStatusChange('open')}
+                      className="text-[12px] gap-1 cursor-pointer"
+                    >
+                      <RotateCcw className="size-3" />
+                      Reopen
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Reply Thread */}
+              <div>
+                <h4 className="text-[13px] font-semibold text-gray-800 dark:text-gray-100 mb-2 flex items-center gap-1.5">
+                  <MessageSquare className="size-4 text-[#3F51B5]" />
+                  Replies ({selectedTicket.replies.length})
+                </h4>
+                {selectedTicket.replies.length === 0 ? (
+                  <div className="text-center py-4 text-[12px] text-gray-400 dark:text-gray-500">
+                    No replies yet
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {selectedTicket.replies.map((reply) => (
+                      <div
+                        key={reply.id}
+                        className={`rounded-lg p-3 ${
+                          reply.authorRole === 'admin'
+                            ? 'bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800/30'
+                            : 'bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <Avatar className="size-5">
+                            <AvatarFallback className={`text-[9px] ${reply.authorRole === 'admin' ? 'bg-purple-500' : 'bg-[#6777EF]'} text-white`}>
+                              {reply.authorName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-[12px] font-medium text-gray-800 dark:text-gray-200">{reply.authorName}</span>
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                            reply.authorRole === 'admin'
+                              ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
+                              : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                          }`}>
+                            {reply.authorRole === 'admin' ? 'Admin' : 'You'}
+                          </span>
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500 ml-auto">
+                            {new Date(reply.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <div className="text-[12px] text-gray-700 dark:text-gray-300 pl-7">{reply.message}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Reply Input */}
+                <div className="flex items-center gap-2 mt-3">
+                  <Input
+                    placeholder="Type a reply..."
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendReply() } }}
+                    className="h-9 text-[13px] bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600"
+                    disabled={sendingReply}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleSendReply}
+                    disabled={!replyText.trim() || sendingReply}
+                    className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white gap-1 cursor-pointer"
+                  >
+                    {sendingReply ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+// ─── USER PROFILE DIALOG (Feature 2) ────────────────────
+function UserProfileDialog({
+  open,
+  onClose,
+  user,
+}: {
+  open: boolean
+  onClose: () => void
+  user: AuthUser
+}) {
+  const [lastLogin, setLastLogin] = useState<string | null>(null)
+  const [loadingProfile, setLoadingProfile] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [changingPassword, setChangingPassword] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setLoadingProfile(true)
+      fetch('/api/proxy?path=auth/me', { headers: { 'Content-Type': 'application/json' } })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.last_login) setLastLogin(data.last_login)
+        })
+        .catch(() => { /* silent */ })
+        .finally(() => setLoadingProfile(false))
+    }
+  }, [open])
+
+  const handleChangePassword = useCallback(async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error('Please fill in all password fields')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('New passwords do not match')
+      return
+    }
+    if (newPassword.length < 6) {
+      toast.error('New password must be at least 6 characters')
+      return
+    }
+    setChangingPassword(true)
+    try {
+      const res = await fetch('/api/proxy?path=auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.detail || data.error || 'Failed to change password')
+        return
+      }
+      toast.success('Password changed successfully')
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch {
+      toast.error('Network error. Please try again.')
+    } finally {
+      setChangingPassword(false)
+    }
+  }, [currentPassword, newPassword, confirmPassword])
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
+      <DialogContent className="max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <User className="size-5 text-[#3F51B5]" />
+            My Profile
+          </DialogTitle>
+          <DialogDescription>View your account details and change password</DialogDescription>
+        </DialogHeader>
+
+        {/* User Info */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+            <Avatar className="size-12">
+              <AvatarFallback className="bg-[#6777EF] text-white text-lg font-semibold">
+                {user.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <div className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">{user.name}</div>
+              <div className="text-[12px] text-gray-500 dark:text-gray-400">{user.email}</div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
+                  {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Last Login */}
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 flex items-center gap-2">
+            <Clock className="size-4 text-gray-400" />
+            <div>
+              <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Last Login</div>
+              <div className="text-[13px] text-gray-800 dark:text-gray-200">
+                {loadingProfile ? 'Loading...' : lastLogin ? new Date(lastLogin).toLocaleString() : '—'}
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Password Change Section */}
+          <div>
+            <h4 className="text-[13px] font-semibold text-gray-800 dark:text-gray-100 mb-3 flex items-center gap-1.5">
+              <Lock className="size-4 text-gray-500" />
+              Change Password
+            </h4>
+            <div className="space-y-2.5">
+              <div>
+                <Label className="text-[12px] text-gray-600 dark:text-gray-400">Current Password</Label>
+                <Input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="h-9 text-[13px] bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-[12px] text-gray-600 dark:text-gray-400">New Password</Label>
+                <Input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="h-9 text-[13px] bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-[12px] text-gray-600 dark:text-gray-400">Confirm New Password</Label>
+                <Input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="h-9 text-[13px] bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 mt-1"
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleChangePassword() }}
+                />
+              </div>
+              <Button
+                onClick={handleChangePassword}
+                disabled={changingPassword}
+                className="w-full bg-[#2D3FC7] hover:bg-[#3F51B5] text-white text-[13px] gap-1.5 cursor-pointer"
+              >
+                {changingPassword ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Changing...
+                  </>
+                ) : (
+                  <>
+                    <Shield className="size-4" />
+                    Change Password
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── RUN DETAIL DIALOG (Feature 4) ───────────────────────
+function RunDetailDialog({
+  open,
+  onClose,
+  run,
+}: {
+  open: boolean
+  onClose: () => void
+  run: RunSnapshot | null
+}) {
+  const [runDetail, setRunDetail] = useState<ApiRunDetail | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open || !run) return
+    let cancelled = false
+    // Use a microtask to avoid synchronous setState in effect
+    const loadDetail = async () => {
+      setLoading(true)
+      setRunDetail(null)
+      try {
+        const detail = await fetchRunDetail(run.id)
+        if (!cancelled) setRunDetail(detail)
+      } catch {
+        if (!cancelled) setRunDetail(null)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    loadDetail()
+    return () => { cancelled = true }
+  }, [open, run])
+
+  if (!run) return null
+
+  const passRate = run.total > 0 ? Math.round((run.passed / run.total) * 100) : 0
+
+  // Build test results from either full API detail or from the run snapshot
+  const testResults = runDetail?.results?.map((r) => ({
+    id: r.name,
+    name: r.name.split('::').pop() || r.name,
+    status: r.status,
+    duration: r.duration ? `${(r.duration / 1000).toFixed(1)}s` : '—',
+    message: r.message,
+  })) ?? run.results.map((r) => ({
+    id: r.testId,
+    name: r.testId,
+    status: r.status === 'passed' ? 'passed' as const : 'failed' as const,
+    duration: '—',
+    message: null as string | null,
+  }))
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
+      <DialogContent className="max-w-[700px] max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <BarChart3 className="size-5 text-[#3F51B5]" />
+            Run Details
+          </DialogTitle>
+          <DialogDescription className="text-[13px] text-gray-500 dark:text-gray-400">
+            {run.date}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Run Metadata */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 text-center">
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium uppercase">Date</div>
+            <div className="text-[13px] text-gray-800 dark:text-gray-200 font-medium mt-0.5">{run.date}</div>
+          </div>
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 text-center">
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium uppercase">Duration</div>
+            <div className="text-[13px] text-gray-800 dark:text-gray-200 font-mono mt-0.5">{run.duration}</div>
+          </div>
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 text-center">
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium uppercase">Pass Rate</div>
+            <div className="text-[13px] font-bold mt-0.5">
+              <span className={
+                passRate >= 90 ? 'text-green-600 dark:text-green-400'
+                  : passRate >= 75 ? 'text-yellow-600 dark:text-yellow-400'
+                    : 'text-red-600 dark:text-red-400'
+              }>
+                {passRate}%
+              </span>
+            </div>
+          </div>
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 text-center">
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium uppercase">Total Tests</div>
+            <div className="text-[13px] text-gray-800 dark:text-gray-200 font-medium mt-0.5">{run.total}</div>
+            <div className="text-[10px] text-gray-400 dark:text-gray-500">
+              <span className="text-green-600 dark:text-green-400">{run.passed} passed</span>
+              {' / '}
+              <span className="text-red-600 dark:text-red-400">{run.failed} failed</span>
+            </div>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Full Test Results Table */}
+        <div>
+          <h4 className="text-[13px] font-semibold text-gray-800 dark:text-gray-100 mb-2">
+            Test Results ({testResults.length})
+          </h4>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="size-5 text-[#3F51B5] animate-spin" />
+              <span className="ml-2 text-[13px] text-gray-500 dark:text-gray-400">Loading details...</span>
+            </div>
+          ) : testResults.length === 0 ? (
+            <div className="text-center py-6 text-[12px] text-gray-400 dark:text-gray-500">
+              No test results available for this run
+            </div>
+          ) : (
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-72 overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
+                    <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-10">Status</TableHead>
+                    <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Test ID / Name</TableHead>
+                    <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-20 text-center">Duration</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {testResults.map((t) => (
+                    <TableRow key={t.id} className="dark:border-gray-700">
+                      <TableCell>
+                        <TestStatusIcon status={t.status} size={3.5} />
+                      </TableCell>
+                      <TableCell className="text-[12px]">
+                        <div className="font-mono text-gray-500 dark:text-gray-400 text-[11px]">{t.id}</div>
+                        {t.name !== t.id && (
+                          <div className="text-gray-700 dark:text-gray-200">{t.name}</div>
+                        )}
+                        {t.message && (
+                          <div className="text-red-500 dark:text-red-400 text-[11px] mt-0.5 truncate max-w-[350px]">{t.message}</div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center text-[12px] font-mono text-gray-500 dark:text-gray-400">{t.duration}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} className="cursor-pointer">
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ─── MAIN PAGE COMPONENT ─────────────────────────────────
 export default function Home() {
   const [user, setUser] = useState<AuthUser | null>(null)
@@ -3252,6 +4047,14 @@ export default function Home() {
 
   // Keyboard shortcuts cheat sheet
   const [showShortcuts, setShowShortcuts] = useState(false)
+
+  // Feature 2: User Profile Dialog
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false)
+
+  // Feature 4: Run Detail Dialog
+  const [runDetailDialogOpen, setRunDetailDialogOpen] = useState(false)
+  const [selectedRunForDetail, setSelectedRunForDetail] = useState<RunSnapshot | null>(null)
+
   // Poll notifications every 2s
   useEffect(() => {
     const poll = async () => {
@@ -3708,6 +4511,16 @@ export default function Home() {
     setActiveTab('operations')
     setSidebarOpen(true)
   }, [])
+
+  // Feature 3: Run module tests from Dashboard
+  const handleRunModule = useCallback((moduleId: string) => {
+    handleSelectModule(moduleId)
+    // Switch to test-runner tab and auto-run
+    setTimeout(() => {
+      setActiveTab('test-runner')
+      // runTests will be called after the state update
+    }, 100)
+  }, [handleSelectModule])
 
   const toggleTestCheck = useCallback((id: string) => {
     setTestChecks((prev) => {
@@ -4178,19 +4991,24 @@ export default function Home() {
           )}
           <Separator orientation="vertical" className="h-5 mx-0.5" />
           <div className="flex items-center gap-2" data-tour="user-menu">
-            <Avatar className="size-7">
-              <AvatarFallback className="bg-[#6777EF] text-white text-xs font-semibold">
-                {userInitials}
-              </AvatarFallback>
-            </Avatar>
-            <div className="hidden sm:flex flex-col">
-              <span className="text-[12px] text-[#333333] dark:text-gray-200 font-medium max-w-[120px] truncate leading-tight">
-                {user.name}
-              </span>
-              <span className="text-[10px] text-[#888888] dark:text-gray-500 leading-tight">
-                {user.role}
-              </span>
-            </div>
+            <button
+              onClick={() => setProfileDialogOpen(true)}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+            >
+              <Avatar className="size-7">
+                <AvatarFallback className="bg-[#6777EF] text-white text-xs font-semibold">
+                  {userInitials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="hidden sm:flex flex-col">
+                <span className="text-[12px] text-[#333333] dark:text-gray-200 font-medium max-w-[120px] truncate leading-tight">
+                  {user.name}
+                </span>
+                <span className="text-[10px] text-[#888888] dark:text-gray-500 leading-tight">
+                  {user.role}
+                </span>
+              </div>
+            </button>
             <Button
               variant="ghost"
               size="icon"
@@ -4287,13 +5105,13 @@ export default function Home() {
           {/* ── DASHBOARD VIEW ── */}
           {selectedModule === 'dashboard' && (
             <div data-tour="dashboard">
-              <DashboardTab onSelectModule={handleSelectModule} moduleHealth={moduleHealth} />
+              <DashboardTab onSelectModule={handleSelectModule} moduleHealth={moduleHealth} onRunModule={handleRunModule} />
             </div>
           )}
 
           {/* ── MY TICKETS VIEW ── */}
           {selectedModule === 'my-tickets' && user && (
-            <div className='p-8 text-center text-gray-400 text-sm'>No tickets yet</div>
+            <MyTicketsTab userEmail={user.email} userName={user.name} />
           )}
 
           {/* ── MODULE VIEW (module selected — tabs + content) ── */}
@@ -4401,6 +5219,7 @@ export default function Home() {
                 runHistory={runHistory}
                 onReportTest={handleReportTest}
                 bugReportsList={bugReportsList}
+                onRunDetail={(run) => { setSelectedRunForDetail(run); setRunDetailDialogOpen(true) }}
               />
               </div>
             )}
@@ -4626,6 +5445,22 @@ export default function Home() {
         moduleName={modulePath.name}
         userName={user?.name || ''}
         userEmail={user?.email || ''}
+      />
+
+      {/* ─── Feature 2: User Profile Dialog ──────────────── */}
+      {user && (
+        <UserProfileDialog
+          open={profileDialogOpen}
+          onClose={() => setProfileDialogOpen(false)}
+          user={user}
+        />
+      )}
+
+      {/* ─── Feature 4: Run Detail Dialog ─────────────────── */}
+      <RunDetailDialog
+        open={runDetailDialogOpen}
+        onClose={() => { setRunDetailDialogOpen(false); setSelectedRunForDetail(null) }}
+        run={selectedRunForDetail}
       />
 
       {/* ─── FOOTER (ERP-style) ───────────────────────────── */}

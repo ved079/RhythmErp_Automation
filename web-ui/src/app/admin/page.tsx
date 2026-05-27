@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getBugReports, updateBugReportStatus, addReplyToReport, markReportReadByAdmin, getSLAStatus, type BugReport } from '@/lib/bug-reports'
+import { fetchModules, fetchTestCases } from '@/lib/api'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -160,7 +162,7 @@ interface SystemSetting {
   category: string
 }
 
-// ─── Mock Data ───────────────────────────────────────────
+// ─── Fallback Defaults ───────────────────────────────────
 const initialTests: AdminTest[] = [
   { id: 'T01', description: 'Create with all valid fields', className: 'TestCreate', status: 'active', priority: 'smoke', steps: 'Click Add → Fill Name, Tax Type, Tax Authority → Select From/To Date, Revision Status → Submit', expected: 'Record created successfully, SweetAlert2 success toast', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
   { id: 'T02', description: 'Create with minimum fields', className: 'TestCreate', status: 'active', priority: 'smoke', steps: 'Click Add → Fill Tax Rate Name → Submit', expected: 'Record created with default values', moduleId: 'tax-rate', moduleName: 'Tax Rate', lastResult: 'passed', lastRun: '16 May 2026, 10:23 AM' },
@@ -265,12 +267,19 @@ export default function AdminPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [activeSection, setActiveSection] = useState('overview')
 
-  // Admin data state
-  const [tests, setTests] = useState<AdminTest[]>(initialTests)
-  const [modules, setModules] = useState<AdminModule[]>(initialModules)
-  const [environments, setEnvironments] = useState<Environment[]>(initialEnvironments)
-  const [users, setUsers] = useState<AdminUser[]>(initialUsers)
-  const [settings, setSettings] = useState<SystemSetting[]>(initialSettings)
+  // Admin data state (initialized empty, loaded from API/localStorage on mount)
+  const [tests, setTests] = useState<AdminTest[]>([])
+  const [modules, setModules] = useState<AdminModule[]>([])
+  const [environments, setEnvironments] = useState<Environment[]>([])
+  const [users, setUsers] = useState<AdminUser[]>([])
+  const [settings, setSettings] = useState<SystemSetting[]>([])
+
+  // Data loading states
+  const [testsLoaded, setTestsLoaded] = useState(false)
+  const [modulesLoaded, setModulesLoaded] = useState(false)
+  const [usersLoaded, setUsersLoaded] = useState(false)
+  const [envLoaded, setEnvLoaded] = useState(false)
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
 
   // Dialogs
   const [testDialogOpen, setTestDialogOpen] = useState(false)
@@ -306,6 +315,138 @@ export default function AdminPage() {
       })()
     }
   }, [activeSection])
+
+  // Load users from FastAPI backend
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/proxy?path=auth/users')
+        if (res.ok) {
+          const data = await res.json()
+          setUsers(data.map((u: Record<string, unknown>) => ({
+            id: String(u.id || ''),
+            email: String(u.email || ''),
+            name: String(u.name || ''),
+            role: (String(u.role || 'tester')) as AdminUser['role'],
+            status: (String(u.status || 'active')) as AdminUser['status'],
+            lastLogin: u.last_login ? String(u.last_login) : u.created_at ? new Date(String(u.created_at)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : undefined,
+            moduleAccess: Array.isArray(u.module_access) ? u.module_access.map(String) : ['all'],
+          })))
+        } else {
+          setUsers(initialUsers)
+        }
+      } catch {
+        setUsers(initialUsers)
+      } finally {
+        setUsersLoaded(true)
+      }
+    })()
+  }, [])
+
+  // Load test cases from FastAPI backend
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await fetchTestCases()
+        const mapped: AdminTest[] = []
+        for (const [, mod] of Object.entries(data)) {
+          for (const t of mod.tests) {
+            mapped.push({
+              id: t.id,
+              description: t.description || t.screenName,
+              className: t.screenName,
+              status: (t.status === 'Passed' || t.status === 'Failed') ? 'active' : 'draft',
+              priority: 'regression' as TestPriority,
+              steps: t.steps || '',
+              expected: t.expected || '',
+              moduleId: mod.label.toLowerCase().replace(/\s+/g, '-'),
+              moduleName: mod.label,
+              lastResult: t.status === 'Passed' ? 'passed' : t.status === 'Failed' ? 'failed' : 'not-run',
+              lastRun: t.date || '—',
+              error: t.actual && t.actual !== t.expected ? t.actual : undefined,
+            })
+          }
+        }
+        if (mapped.length > 0) setTests(mapped)
+        else setTests(initialTests)
+      } catch {
+        setTests(initialTests)
+      } finally {
+        setTestsLoaded(true)
+      }
+    })()
+  }, [])
+
+  // Load modules from FastAPI backend
+  useEffect(() => {
+    (async () => {
+      try {
+        const apiModules = await fetchModules()
+        const mapped: AdminModule[] = []
+        let sortIdx = 0
+        for (const mod of apiModules) {
+          const totalTests = mod.sub_modules.reduce((sum, sm) => sum + sm.tests.length + sm.test_files.length, 0)
+          mapped.push({
+            id: mod.name,
+            label: mod.display,
+            testCount: totalTests,
+            sortOrder: sortIdx++,
+            status: 'active' as const,
+          })
+          for (const sm of mod.sub_modules) {
+            const smTestCount = sm.tests.length + sm.test_files.length
+            mapped.push({
+              id: sm.name,
+              label: sm.display,
+              parentId: mod.name,
+              parentLabel: mod.display,
+              testCount: smTestCount,
+              sortOrder: sortIdx++,
+              status: 'active' as const,
+            })
+          }
+        }
+        if (mapped.length > 0) setModules(mapped)
+        else setModules(initialModules)
+      } catch {
+        setModules(initialModules)
+      } finally {
+        setModulesLoaded(true)
+      }
+    })()
+  }, [])
+
+  // Load environments from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('rhythmerp-admin-environments')
+      if (stored) {
+        setEnvironments(JSON.parse(stored))
+      } else {
+        setEnvironments(initialEnvironments)
+      }
+    } catch {
+      setEnvironments(initialEnvironments)
+    } finally {
+      setEnvLoaded(true)
+    }
+  }, [])
+
+  // Load settings from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('rhythmerp-admin-settings')
+      if (stored) {
+        setSettings(JSON.parse(stored))
+      } else {
+        setSettings(initialSettings)
+      }
+    } catch {
+      setSettings(initialSettings)
+    } finally {
+      setSettingsLoaded(true)
+    }
+  }, [])
 
   // Search / filter
   const [testSearch, setTestSearch] = useState('')
@@ -403,30 +544,86 @@ export default function AdminPage() {
 
   const handleSaveEnv = useCallback((envData: Partial<Environment>) => {
     if (editingEnv) {
-      setEnvironments((prev) => prev.map((e) => e.id === editingEnv.id ? { ...e, ...envData } : e))
+      setEnvironments((prev) => {
+        const updated = prev.map((e) => e.id === editingEnv.id ? { ...e, ...envData } : e)
+        localStorage.setItem('rhythmerp-admin-environments', JSON.stringify(updated))
+        return updated
+      })
     } else {
-      setEnvironments((prev) => [...prev, { ...envData, id: `env-${Date.now()}`, status: 'active' as const } as Environment])
+      setEnvironments((prev) => {
+        const updated = [...prev, { ...envData, id: `env-${Date.now()}`, status: 'active' as const, color: envData.color || 'bg-green-500' } as Environment]
+        localStorage.setItem('rhythmerp-admin-environments', JSON.stringify(updated))
+        return updated
+      })
     }
     setEnvDialogOpen(false)
     setEditingEnv(null)
   }, [editingEnv])
 
-  const handleSaveUser = useCallback((userData: Partial<AdminUser>) => {
+  const handleSaveUser = useCallback(async (userData: Partial<AdminUser> & { password?: string }) => {
     if (editingUser) {
-      setUsers((prev) => prev.map((u) => u.id === editingUser.id ? { ...u, ...userData } : u))
+      try {
+        const res = await fetch(`/api/proxy?path=auth/users/${editingUser.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: userData.name, email: userData.email, role: userData.role, status: userData.status }),
+        })
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          throw new Error(errData.detail || 'Failed to update user')
+        }
+        setUsers((prev) => prev.map((u) => u.id === editingUser.id ? { ...u, ...userData } : u))
+        toast.success('User updated')
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to update user')
+      }
     } else {
-      setUsers((prev) => [...prev, { ...userData, id: `usr-${Date.now()}`, status: 'active' as const, moduleAccess: userData.moduleAccess || [] } as AdminUser])
+      try {
+        const res = await fetch('/api/proxy?path=auth/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: userData.name, email: userData.email, password: userData.password || 'changeme', role: userData.role }),
+        })
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          throw new Error(errData.detail || 'Failed to create user')
+        }
+        const created = await res.json()
+        setUsers((prev) => [...prev, { ...userData, id: created.id || `usr-${Date.now()}`, status: 'active' as const, moduleAccess: userData.moduleAccess || [] } as AdminUser])
+        toast.success('User created')
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to create user')
+      }
     }
     setUserDialogOpen(false)
     setEditingUser(null)
   }, [editingUser])
 
-  const handleDelete = useCallback(() => {
+  const handleDelete = useCallback(async () => {
     if (!deleteTarget) return
-    if (deleteTarget.type === 'test') setTests((prev) => prev.filter((t) => t.id !== deleteTarget.id))
-    else if (deleteTarget.type === 'module') setModules((prev) => prev.filter((m) => m.id !== deleteTarget.id))
-    else if (deleteTarget.type === 'environment') setEnvironments((prev) => prev.filter((e) => e.id !== deleteTarget.id))
-    else if (deleteTarget.type === 'user') setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id))
+    if (deleteTarget.type === 'user') {
+      try {
+        const res = await fetch(`/api/proxy?path=auth/users/${deleteTarget.id}`, { method: 'DELETE' })
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          throw new Error(errData.detail || 'Failed to delete user')
+        }
+        setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id))
+        toast.success('User deleted')
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to delete user')
+      }
+    } else if (deleteTarget.type === 'test') {
+      setTests((prev) => prev.filter((t) => t.id !== deleteTarget.id))
+    } else if (deleteTarget.type === 'module') {
+      setModules((prev) => prev.filter((m) => m.id !== deleteTarget.id))
+    } else if (deleteTarget.type === 'environment') {
+      setEnvironments((prev) => {
+        const updated = prev.filter((e) => e.id !== deleteTarget.id)
+        localStorage.setItem('rhythmerp-admin-environments', JSON.stringify(updated))
+        return updated
+      })
+    }
     setDeleteDialogOpen(false)
     setDeleteTarget(null)
   }, [deleteTarget])
@@ -605,6 +802,12 @@ export default function AdminPage() {
               <AdminOverview stats={overviewStats} tests={tests} environments={environments} />
             )}
             {activeSection === 'tests' && (
+              !testsLoaded ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="size-5 text-red-600 animate-spin" />
+                  <span className="ml-2 text-[13px] text-gray-500">Loading test cases...</span>
+                </div>
+              ) : (
               <AdminTests
                 tests={filteredTests}
                 allTests={tests}
@@ -621,8 +824,15 @@ export default function AdminPage() {
                 onEditTest={(t) => { setEditingTest(t); setTestDialogOpen(true) }}
                 onDeleteTest={(t) => { setDeleteTarget({ type: 'test', id: t.id, label: `${t.id} — ${t.description}` }); setDeleteDialogOpen(true) }}
               />
+              )
             )}
             {activeSection === 'modules' && (
+              !modulesLoaded ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="size-5 text-red-600 animate-spin" />
+                  <span className="ml-2 text-[13px] text-gray-500">Loading modules...</span>
+                </div>
+              ) : (
               <AdminModules
                 modules={modules}
                 onAddModule={() => { setEditingModule(null); setModuleDialogOpen(true) }}
@@ -640,25 +850,60 @@ export default function AdminPage() {
                   })
                 }}
               />
+              )
             )}
             {activeSection === 'environments' && (
+              !envLoaded ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="size-5 text-red-600 animate-spin" />
+                  <span className="ml-2 text-[13px] text-gray-500">Loading environments...</span>
+                </div>
+              ) : (
               <AdminEnvironments
                 environments={environments}
                 onAddEnv={() => { setEditingEnv(null); setEnvDialogOpen(true) }}
                 onEditEnv={(e) => { setEditingEnv(e); setEnvDialogOpen(true) }}
                 onDeleteEnv={(e) => { setDeleteTarget({ type: 'environment', id: e.id, label: e.name }); setDeleteDialogOpen(true) }}
-                onToggleEnv={(id) => setEnvironments((prev) => prev.map((e) => e.id === id ? { ...e, status: e.status === 'active' ? 'inactive' as const : 'active' as const } : e))}
+                onToggleEnv={(id) => setEnvironments((prev) => {
+                  const updated = prev.map((e) => e.id === id ? { ...e, status: e.status === 'active' ? 'inactive' as const : 'active' as const } : e)
+                  localStorage.setItem('rhythmerp-admin-environments', JSON.stringify(updated))
+                  return updated
+                })}
               />
+              )
             )}
             {activeSection === 'users' && (
+              !usersLoaded ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="size-5 text-red-600 animate-spin" />
+                  <span className="ml-2 text-[13px] text-gray-500">Loading users...</span>
+                </div>
+              ) : (
               <AdminUsers
                 users={users}
                 modules={modules}
                 onAddUser={() => { setEditingUser(null); setUserDialogOpen(true) }}
                 onEditUser={(u) => { setEditingUser(u); setUserDialogOpen(true) }}
                 onDeleteUser={(u) => { setDeleteTarget({ type: 'user', id: u.id, label: `${u.name} (${u.email})` }); setDeleteDialogOpen(true) }}
-                onToggleUser={(id) => setUsers((prev) => prev.map((u) => u.id === id ? { ...u, status: u.status === 'active' ? 'inactive' as const : 'active' as const } : u))}
+                onToggleUser={async (id) => {
+                  const targetUser = users.find((u) => u.id === id)
+                  if (!targetUser) return
+                  const newStatus = targetUser.status === 'active' ? 'inactive' : 'active'
+                  try {
+                    const res = await fetch(`/api/proxy?path=auth/users/${id}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ status: newStatus }),
+                    })
+                    if (!res.ok) throw new Error('Failed to update user status')
+                    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, status: newStatus } : u))
+                    toast.success(`User ${newStatus === 'active' ? 'activated' : 'deactivated'}`)
+                  } catch {
+                    toast.error('Failed to update user status')
+                  }
+                }}
               />
+              )
             )}
             {activeSection === 'bug-reports' && (
               <AdminBugReports
@@ -670,10 +915,21 @@ export default function AdminPage() {
               />
             )}
             {activeSection === 'settings' && (
+              !settingsLoaded ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="size-5 text-red-600 animate-spin" />
+                  <span className="ml-2 text-[13px] text-gray-500">Loading settings...</span>
+                </div>
+              ) : (
               <AdminSettings
                 settings={settings}
-                onUpdateSetting={(id, value) => setSettings((prev) => prev.map((s) => s.id === id ? { ...s, value } : s))}
+                onUpdateSetting={(id, value) => setSettings((prev) => {
+                  const updated = prev.map((s) => s.id === id ? { ...s, value } : s)
+                  localStorage.setItem('rhythmerp-admin-settings', JSON.stringify(updated))
+                  return updated
+                })}
               />
+              )
             )}
           </div>
         </main>
@@ -1809,10 +2065,11 @@ function EnvironmentForm({ env, onSave, onCancel }: { env: Environment | null; o
   )
 }
 
-function UserForm({ user, onSave, onCancel }: { user: AdminUser | null; onSave: (u: Partial<AdminUser>) => void; onCancel: () => void }) {
+function UserForm({ user, onSave, onCancel }: { user: AdminUser | null; onSave: (u: Partial<AdminUser> & { password?: string }) => void; onCancel: () => void }) {
   const [name, setName] = useState(user?.name || '')
   const [email, setEmail] = useState(user?.email || '')
   const [role, setRole] = useState(user?.role || 'tester')
+  const [password, setPassword] = useState('')
 
   return (
     <div className="space-y-4">
@@ -1824,6 +2081,13 @@ function UserForm({ user, onSave, onCancel }: { user: AdminUser | null; onSave: 
         <Label className="text-[12px]">Email</Label>
         <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" disabled={!!user} className="h-9 text-[12px] bg-gray-50 dark:bg-gray-700/50" placeholder="user@rhythmerp.com" />
       </div>
+      {!user && (
+        <div className="space-y-1.5">
+          <Label className="text-[12px]">Password</Label>
+          <Input value={password} onChange={(e) => setPassword(e.target.value)} type="password" className="h-9 text-[12px]" placeholder="Minimum 6 characters" />
+          <p className="text-[10px] text-gray-400 dark:text-gray-500">Default: changeme if left empty</p>
+        </div>
+      )}
       <div className="space-y-1.5">
         <Label className="text-[12px]">Role</Label>
         <Select value={role} onValueChange={setRole}>
@@ -1840,7 +2104,7 @@ function UserForm({ user, onSave, onCancel }: { user: AdminUser | null; onSave: 
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel} className="cursor-pointer text-[12px]">Cancel</Button>
-        <Button onClick={() => onSave({ name, email, role: role as AdminUser['role'] })} className="bg-red-600 hover:bg-red-700 text-white cursor-pointer text-[12px]">
+        <Button onClick={() => onSave({ name, email, role: role as AdminUser['role'], password: password || undefined })} className="bg-red-600 hover:bg-red-700 text-white cursor-pointer text-[12px]">
           <Save className="size-3.5 mr-1" /> {user ? 'Update' : 'Create'} User
         </Button>
       </DialogFooter>
