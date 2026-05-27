@@ -930,14 +930,12 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
       </div>
 
       {/* ─── RIGHT: Hero Illustration ─── */}
-      <div className="hidden lg:flex flex-1 items-center justify-center relative overflow-hidden bg-gradient-to-b from-[#E3F2FD] via-[#F5DEB3]/20 to-[#E8F5E9] dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-        <div className="relative w-full h-full flex items-center justify-center p-8">
-          <img
-            src="/agdi-hero-illustration.png"
-            alt="AgDi - Agricultural Digital Intelligence"
-            className="w-full h-full object-contain p-8"
-          />
-        </div>
+      <div className="hidden lg:flex flex-1 relative overflow-hidden">
+        <img
+          src="/agdi-hero-illustration.png"
+          alt="AgDi - Agricultural Digital Intelligence"
+          className="w-full h-full object-cover"
+        />
       </div>
     </div>
   )
