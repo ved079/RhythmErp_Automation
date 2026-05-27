@@ -56,6 +56,12 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Search,
   Plus,
   Filter,
@@ -1568,7 +1574,7 @@ function TestRunnerTab({
         <Button
           onClick={() => onRun(false)}
           disabled={isRunning || pendingCount === 0}
-          className="bg-[#3F51B5] hover:bg-[#2D3FC7] text-white h-9 text-[13px] gap-2 px-5 cursor-pointer font-['Roboto']"
+          className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white h-9 text-[13px] gap-2 px-5 cursor-pointer font-['Roboto']"
         >
           <Play className="size-4" />
           Run All ({pendingCount})
@@ -1601,7 +1607,7 @@ function TestRunnerTab({
         <Button
           onClick={() => onRunByPriority('regression')}
           disabled={isRunning || regressionCount === 0}
-          className="bg-[#3F51B5] hover:bg-[#2D3FC7] text-white h-9 text-[13px] gap-2 px-4 cursor-pointer"
+          className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white h-9 text-[13px] gap-2 px-4 cursor-pointer"
         >
           <Activity className="size-3.5" />
           Run Regression ({regressionCount})
@@ -2733,7 +2739,7 @@ function CompletionSummaryModal({
               Rerun Failed
             </Button>
           )}
-          <Button onClick={onNewRun} className="flex-1 h-9 text-[13px] gap-2 bg-[#3F51B5] hover:bg-[#2D3FC7] text-white cursor-pointer font-['Roboto']">
+          <Button onClick={onNewRun} className="flex-1 h-9 text-[13px] gap-2 bg-[#2D3FC7] hover:bg-[#3F51B5] text-white cursor-pointer font-['Roboto']">
             <RotateCcw className="size-4" />
             New Run
           </Button>
@@ -2876,13 +2882,13 @@ function ResultsTab({
         <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
           <Table>
             <TableHeader>
-              <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 w-12">Status</TableHead>
-                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 w-14">ID</TableHead>
-                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Test</TableHead>
-                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 w-16 text-center">Duration</TableHead>
-                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Error</TableHead>
-                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 w-24 text-center">Actions</TableHead>
+              <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-12">Status</TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-14">ID</TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Test</TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-16 text-center">Duration</TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Error</TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-24 text-center">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -2909,17 +2915,29 @@ function ResultsTab({
                         {error || '—'}
                       </TableCell>
                       <TableCell className="text-center">
-                        {test.status === 'failed' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onReportTest(test)}
-                            className="h-7 text-[11px] gap-1 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20 cursor-pointer"
-                          >
-                            <MessageSquare className="size-3" />
-                            Report
-                          </Button>
-                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
+                              <MoreVertical className="size-4 text-gray-500 dark:text-gray-400" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-40">
+                            <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer">
+                              <Eye className="size-3.5" />
+                              View Details
+                            </DropdownMenuItem>
+                            {test.status === 'failed' && (
+                              <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer text-orange-600 dark:text-orange-400">
+                                <MessageSquare className="size-3.5" />
+                                Report Bug
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer">
+                              <RotateCcw className="size-3.5" />
+                              Re-run Test
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   )
@@ -2991,12 +3009,12 @@ function ResultsTab({
             <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                    <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 w-14">Test ID</TableHead>
-                    <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Test Name</TableHead>
-                    <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 text-center">{comparisonData.run1Label}</TableHead>
-                    <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 text-center">{comparisonData.run2Label}</TableHead>
-                    <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 text-center">Change</TableHead>
+                  <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
+                    <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-14">Test ID</TableHead>
+                    <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Test Name</TableHead>
+                    <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 text-center">{comparisonData.run1Label}</TableHead>
+                    <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 text-center">{comparisonData.run2Label}</TableHead>
+                    <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 text-center">Change</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -3041,12 +3059,12 @@ function ResultsTab({
         <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
           <Table>
             <TableHeader>
-              <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Date</TableHead>
-                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Duration</TableHead>
-                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 text-center">Passed</TableHead>
-                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 text-center">Failed</TableHead>
-                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 text-center">Rate</TableHead>
+              <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Date</TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Duration</TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 text-center">Passed</TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 text-center">Failed</TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 text-center">Rate</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -3090,11 +3108,11 @@ function ResultsTab({
         <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
           <Table>
             <TableHeader>
-              <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Bug ID</TableHead>
-                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Description</TableHead>
-                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 text-center">Status</TableHead>
-                <TableHead className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">Related Tests</TableHead>
+              <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Bug ID</TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Description</TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 text-center">Status</TableHead>
+                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Related Tests</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
