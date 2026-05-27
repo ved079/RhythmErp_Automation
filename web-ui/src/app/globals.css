@@ -6,8 +6,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-manrope);
+  --font-mono: var(--font-roboto);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -45,71 +45,73 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(0.98 0.002 200);
-  --foreground: oklch(0.20 0.01 240);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.20 0.01 240);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.20 0.01 240);
-  --primary: oklch(0.55 0.18 250);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.95 0.02 140);
-  --secondary-foreground: oklch(0.30 0.05 150);
-  --muted: oklch(0.96 0.005 200);
-  --muted-foreground: oklch(0.50 0.01 240);
-  --accent: oklch(0.93 0.03 200);
-  --accent-foreground: oklch(0.25 0.03 250);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.91 0.01 200);
-  --input: oklch(0.91 0.01 200);
-  --ring: oklch(0.55 0.18 250);
-  --chart-1: oklch(0.55 0.18 250);
-  --chart-2: oklch(0.65 0.20 140);
-  --chart-3: oklch(0.60 0.15 30);
-  --chart-4: oklch(0.70 0.15 75);
-  --chart-5: oklch(0.60 0.20 310);
-  --sidebar: oklch(0.96 0.03 150);
-  --sidebar-foreground: oklch(0.25 0.02 240);
-  --sidebar-primary: oklch(0.55 0.18 250);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.92 0.04 220);
-  --sidebar-accent-foreground: oklch(0.55 0.18 250);
-  --sidebar-border: oklch(0.90 0.03 150);
-  --sidebar-ring: oklch(0.55 0.18 250);
+  /* RhythmERP Color System */
+  --background: #F1F2F7;
+  --foreground: #212529;
+  --card: #FFFFFF;
+  --card-foreground: #212529;
+  --popover: #FFFFFF;
+  --popover-foreground: #212529;
+  --primary: #3F51B5;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F7F9FC;
+  --secondary-foreground: #555555;
+  --muted: #F1F2F7;
+  --muted-foreground: #919396;
+  --accent: #DFE9FB;
+  --accent-foreground: #3F51B5;
+  --destructive: #F44336;
+  --border: #E2E8F0;
+  --input: #d1d5db;
+  --ring: #3F51B5;
+  --chart-1: #3F51B5;
+  --chart-2: #10B981;
+  --chart-3: #F44336;
+  --chart-4: #6777EF;
+  --chart-5: #495584;
+  /* Sidebar - white with shadow (RhythmERP style) */
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #555555;
+  --sidebar-primary: #1B4332;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #E8F5E9;
+  --sidebar-accent-foreground: #1B4332;
+  --sidebar-border: #E2E8F0;
+  --sidebar-ring: #3F51B5;
 }
 
 .dark {
-  --background: oklch(0.14 0.01 240);
-  --foreground: oklch(0.96 0.005 200);
-  --card: oklch(0.20 0.01 240);
-  --card-foreground: oklch(0.96 0.005 200);
-  --popover: oklch(0.20 0.01 240);
-  --popover-foreground: oklch(0.96 0.005 200);
-  --primary: oklch(0.65 0.18 250);
-  --primary-foreground: oklch(0.14 0.01 240);
-  --secondary: oklch(0.25 0.03 150);
-  --secondary-foreground: oklch(0.90 0.02 140);
-  --muted: oklch(0.25 0.01 240);
-  --muted-foreground: oklch(0.65 0.01 240);
-  --accent: oklch(0.28 0.04 250);
-  --accent-foreground: oklch(0.90 0.02 250);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.65 0.18 250);
-  --chart-1: oklch(0.65 0.18 250);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.18 0.04 150);
-  --sidebar-foreground: oklch(0.90 0.02 140);
-  --sidebar-primary: oklch(0.65 0.18 250);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.25 0.04 250);
-  --sidebar-accent-foreground: oklch(0.65 0.18 250);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.65 0.18 250);
+  --background: #0f172a;
+  --foreground: #e2e8f0;
+  --card: #1e293b;
+  --card-foreground: #e2e8f0;
+  --popover: #1e293b;
+  --popover-foreground: #e2e8f0;
+  --primary: #5C6BC0;
+  --primary-foreground: #FFFFFF;
+  --secondary: #1e293b;
+  --secondary-foreground: #94a3b8;
+  --muted: #1e293b;
+  --muted-foreground: #64748b;
+  --accent: #1e3a5f;
+  --accent-foreground: #93c5fd;
+  --destructive: #ef4444;
+  --border: #334155;
+  --input: #475569;
+  --ring: #5C6BC0;
+  --chart-1: #5C6BC0;
+  --chart-2: #34d399;
+  --chart-3: #f87171;
+  --chart-4: #818cf8;
+  --chart-5: #94a3b8;
+  --sidebar: #1e293b;
+  --sidebar-foreground: #94a3b8;
+  --sidebar-primary: #4ade80;
+  --sidebar-primary-foreground: #0f172a;
+  --sidebar-accent: #1e3a5f;
+  --sidebar-accent-foreground: #4ade80;
+  --sidebar-border: #334155;
+  --sidebar-ring: #5C6BC0;
 }
 
 @layer base {
@@ -118,10 +120,17 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-manrope), 'Manrope', sans-serif;
   }
 }
 
-/* ─── AgDi Design System ─────────────────────────── */
+/* ─── RhythmERP Design System ─────────────────────────── */
+
+/* Font families */
+.font-sidebar { font-family: var(--font-poppins), 'Poppins', sans-serif; }
+.font-body { font-family: var(--font-manrope), 'Manrope', sans-serif; }
+.font-button { font-family: var(--font-roboto), 'Roboto', sans-serif; }
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
@@ -131,20 +140,20 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #c8e6c9;
+  background: #c5cae9;
   border-radius: 3px;
 }
 .dark ::-webkit-scrollbar-thumb {
-  background: #2d4a2d;
+  background: #374151;
 }
 
-/* ─── driver.js Tour Popover Theme (AgDi Styled) ─────────────────── */
+/* ─── driver.js Tour Popover Theme (RhythmERP Styled) ─────────────────── */
 .rhythmerp-tour-popover {
-  font-family: inherit !important;
+  font-family: var(--font-manrope), 'Manrope', sans-serif !important;
   background: white !important;
-  border: 1px solid #E3F2FD !important;
+  border: 1px solid #DFE9FB !important;
   border-radius: 12px !important;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(33, 150, 243, 0.1) !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.05) !important;
   max-width: 380px !important;
   padding: 0 !important;
 }
@@ -152,7 +161,7 @@
 .rhythmerp-tour-popover .driver-popover-title {
   font-size: 15px !important;
   font-weight: 600 !important;
-  color: #1565C0 !important;
+  color: #3F51B5 !important;
   padding: 16px 20px 4px !important;
   border-bottom: none !important;
   margin: 0 !important;
@@ -161,14 +170,14 @@
 .rhythmerp-tour-popover .driver-popover-description {
   font-size: 13px !important;
   line-height: 1.6 !important;
-  color: #374151 !important;
+  color: #212529 !important;
   padding: 4px 20px 12px !important;
   margin: 0 !important;
 }
 
 .rhythmerp-tour-popover .driver-popover-progress-text {
   font-size: 11px !important;
-  color: #9ca3af !important;
+  color: #919396 !important;
   padding: 0 20px 8px !important;
 }
 
@@ -178,11 +187,12 @@
 }
 
 .rhythmerp-tour-popover .driver-popover-next-btn {
-  background: #2196F3 !important;
+  background: #3F51B5 !important;
   color: white !important;
   border: none !important;
-  border-radius: 8px !important;
-  font-size: 13px !important;
+  border-radius: 4px !important;
+  font-family: var(--font-roboto), 'Roboto', sans-serif !important;
+  font-size: 14px !important;
   font-weight: 500 !important;
   padding: 6px 16px !important;
   cursor: pointer !important;
@@ -190,14 +200,14 @@
 }
 
 .rhythmerp-tour-popover .driver-popover-next-btn:hover {
-  background: #1976D2 !important;
+  background: #2D3FC7 !important;
 }
 
 .rhythmerp-tour-popover .driver-popover-prev-btn {
   background: #f5f5f5 !important;
-  color: #374151 !important;
-  border: 1px solid #e0e0e0 !important;
-  border-radius: 8px !important;
+  color: #555555 !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 4px !important;
   font-size: 13px !important;
   font-weight: 500 !important;
   padding: 6px 16px !important;
@@ -210,7 +220,7 @@
 }
 
 .rhythmerp-tour-popover .driver-popover-close-btn {
-  color: #9ca3af !important;
+  color: #919396 !important;
   font-size: 12px !important;
   font-weight: 400 !important;
   padding: 6px 12px !important;
@@ -218,18 +228,18 @@
 }
 
 .rhythmerp-tour-popover .driver-popover-close-btn:hover {
-  color: #6b7280 !important;
+  color: #555555 !important;
 }
 
 /* Dark mode support */
 .dark .rhythmerp-tour-popover {
-  background: #1f2937 !important;
+  background: #1e293b !important;
   border-color: #1e3a5f !important;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(33, 150, 243, 0.15) !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3) !important;
 }
 
 .dark .rhythmerp-tour-popover .driver-popover-title {
-  color: #64B5F6 !important;
+  color: #93c5fd !important;
 }
 
 .dark .rhythmerp-tour-popover .driver-popover-description {
@@ -247,11 +257,11 @@
 }
 
 .dark .rhythmerp-tour-popover .driver-popover-close-btn {
-  color: #6b7280 !important;
+  color: #64748b !important;
 }
 
 .dark .rhythmerp-tour-popover .driver-popover-close-btn:hover {
-  color: #9ca3af !important;
+  color: #94a3b8 !important;
 }
 
 /* driver.js arrow color override */
@@ -269,14 +279,14 @@
 }
 
 .dark .driver-popover-arrow-side-left.driver-popover-arrow {
-  border-left-color: #1f2937 !important;
+  border-left-color: #1e2937 !important;
 }
 .dark .driver-popover-arrow-side-right.driver-popover-arrow {
-  border-right-color: #1f2937 !important;
+  border-right-color: #1e2937 !important;
 }
 .dark .driver-popover-arrow-side-top.driver-popover-arrow {
-  border-top-color: #1f2937 !important;
+  border-top-color: #1e2937 !important;
 }
 .dark .driver-popover-arrow-side-bottom.driver-popover-arrow {
-  border-bottom-color: #1f2937 !important;
+  border-bottom-color: #1e2937 !important;
 }
