@@ -9,6 +9,7 @@ export async function GET() {
       include: { replies: { orderBy: { createdAt: 'asc' } } },
     })
 
+    // Map DB enums to client-friendly format
     const mapped = reports.map((r) => ({
       ...r,
       priority: r.priority,
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    // Map client status to DB enum
     const dbPriority = priority === 'low' || priority === 'medium' || priority === 'high' ? priority : 'medium'
 
     const report = await db.bugReport.create({
@@ -55,6 +57,7 @@ export async function POST(req: NextRequest) {
       include: { replies: true },
     })
 
+    // Create notification
     await db.notification.create({
       data: {
         type: 'schedule',

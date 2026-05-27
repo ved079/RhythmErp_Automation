@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
-import { Toaster as SonnerToaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,10 +14,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RhythmERP Automation Runner",
-  description: "Internal QA tool for running Selenium/pytest tests against RhythmERP system",
+  title: "agDi - RhythmERP Automation Runner",
+  description: "Agricultural Digital Intelligence - Internal QA tool for running Selenium/pytest tests against RhythmERP system",
   icons: {
-    icon: "/logo.svg",
+    icon: "/agdi-logo.png",
   },
 };
 
@@ -34,16 +33,6 @@ export default function RootLayout({
       >
         {children}
         <Toaster position="bottom-right" richColors />
-        <SonnerToaster
-          position="bottom-right"
-          theme="system"
-          toastOptions={{
-            style: { fontSize: '13px' },
-          }}
-          richColors
-          closeButton
-          duration={4000}
-        />
       </body>
     </html>
   );

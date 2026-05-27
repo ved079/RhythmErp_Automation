@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 
 type BugStatus = 'open' | 'in_progress' | 'fixed'
 
-// PATCH /api/bugs/[id]
+// PATCH /api/bugs/[id] — update status, assignment, etc.
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -17,9 +17,11 @@ export async function PATCH(
       return NextResponse.json({ error: 'Bug report not found' }, { status: 404 })
     }
 
+    // Build update data
     const updateData: Record<string, unknown> = {}
 
     if (body.status !== undefined) {
+      // Map client status to DB enum
       const statusMap: Record<string, BugStatus> = {
         'open': 'open',
         'in-progress': 'in_progress',
@@ -31,11 +33,13 @@ export async function PATCH(
         return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
       }
 
+      // If status changed, update readByUser to false
       if (existing.status !== dbStatus) {
         updateData.readByUser = false
       }
       updateData.status = dbStatus
 
+      // Create notification on status change
       if (existing.status !== dbStatus) {
         await db.notification.create({
           data: {

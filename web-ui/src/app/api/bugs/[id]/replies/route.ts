@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// POST /api/bugs/[id]/replies
+// POST /api/bugs/[id]/replies — add a reply to a bug report
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -31,6 +31,7 @@ export async function POST(
       },
     })
 
+    // Update read flags on the bug report
     const updateData: Record<string, unknown> = {}
     if (authorRole === 'admin') {
       updateData.readByUser = false
@@ -43,6 +44,7 @@ export async function POST(
       data: updateData,
     })
 
+    // Create notification
     if (authorRole === 'admin') {
       await db.notification.create({
         data: {

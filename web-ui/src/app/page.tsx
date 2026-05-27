@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { toast } from 'sonner'
 import { fetchModules, folderToSidebarId, sidebarToFolderMapping, startRun, fetchTestCases, type ApiModule, type ApiSubModule, type TestCasesData } from '@/lib/api'
 import {
@@ -669,9 +670,9 @@ const initialRunHistory: RunSnapshot[] = [
 
 // ─── Priority Config ────────────────────────────────────
 const priorityConfig = {
-  smoke: { icon: <Flame className="size-3" />, label: '🔥 Smoke', color: 'text-orange-700 bg-orange-100 dark:text-orange-300 dark:bg-orange-900/40', dot: 'bg-orange-500' },
-  regression: { icon: <Activity className="size-3" />, label: '🔄 Regression', color: 'text-blue-700 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/40', dot: 'bg-blue-500' },
-  sanity: { icon: <ShieldCheck className="size-3" />, label: '🛡️ Sanity', color: 'text-purple-700 bg-purple-100 dark:text-purple-300 dark:bg-purple-900/40', dot: 'bg-purple-500' },
+  smoke: { icon: <Flame className="size-3" />, label: '🔥 Smoke', color: 'text-[#E65100] bg-[#FFF3E0] dark:text-orange-300 dark:bg-orange-900/40', dot: 'bg-[#FF9800]' },
+  regression: { icon: <Activity className="size-3" />, label: '🔄 Regression', color: 'text-[#1565C0] bg-[#E3F2FD] dark:text-blue-300 dark:bg-blue-900/40', dot: 'bg-[#2196F3]' },
+  sanity: { icon: <ShieldCheck className="size-3" />, label: '🛡️ Sanity', color: 'text-[#2E7D32] bg-[#E8F5E9] dark:text-green-300 dark:bg-green-900/40', dot: 'bg-[#4CAF50]' },
 } as const
 
 function PriorityBadge({ priority }: { priority?: TestPriority }) {
@@ -712,12 +713,12 @@ function SidebarModuleItem({
           if (hasChildren) toggleExpand(module.id)
           else onSelect(module.id)
         }}
-        className={`w-full flex items-center gap-1.5 px-3 py-[7px] text-[13px] rounded-md transition-colors cursor-pointer text-left ${
+        className={`w-full flex items-center gap-1.5 px-3 py-[7px] text-[13px] rounded-md transition-all duration-150 cursor-pointer text-left ${
           isActive
-            ? 'bg-[#c8e6c9] dark:bg-[#2d4a2d] text-gray-900 dark:text-gray-100 font-medium shadow-sm'
+            ? 'bg-[#E3F2FD] dark:bg-[#1976D2]/25 text-[#1976D2] dark:text-blue-300 font-semibold border-l-[3px] border-[#2196F3]'
             : isParentActive
-              ? 'bg-[#c8e6c9]/50 dark:bg-[#2d4a2d]/50 text-gray-800 dark:text-gray-200 font-medium'
-              : 'text-gray-700 dark:text-gray-300 hover:bg-[#c8e6c9]/40 dark:hover:bg-[#2d4a2d]/30'
+              ? 'bg-[#E3F2FD]/50 dark:bg-[#1976D2]/10 text-[#333333] dark:text-gray-200 font-medium'
+              : 'text-[#333333] dark:text-gray-300 hover:bg-[#c8e6c9]/50 dark:hover:bg-[#2d4a2d]/30'
         }`}
         style={{ paddingLeft: `${depth * 16 + 12}px` }}
       >
@@ -821,31 +822,32 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   )
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-[400px]">
+    <div className="min-h-screen bg-white dark:bg-gray-900 flex">
+      {/* ─── LEFT: Login Form ─── */}
+      <div className="w-full lg:w-[440px] xl:w-[480px] shrink-0 flex flex-col items-center justify-center px-8 py-12 bg-white dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700 relative">
         {/* Logo */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-green-600 flex items-center justify-center mb-4 shadow-lg shadow-green-600/20">
-            <span className="text-white text-2xl font-bold">R</span>
+        <div className="flex flex-col items-center mb-10">
+          <div className="flex items-center justify-center mb-5">
+            <Image src="/agdi-logo.png" alt="AgDi" width={120} height={60} className="object-contain" />
           </div>
-          <h1 className="text-[22px] font-semibold text-gray-800 dark:text-gray-100">Welcome Back !</h1>
-          <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">Sign in to RhythmERP Automation Runner</p>
+          <h1 className="text-[24px] font-bold text-gray-800 dark:text-gray-100">Welcome Back!</h1>
+          <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">Sign in to continue</p>
         </div>
 
         {/* Login Card */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg shadow-gray-200/50 dark:shadow-gray-900/50 border border-gray-100 dark:border-gray-700 p-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="w-full max-w-[340px]">
+          <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email */}
             <div className="space-y-1.5">
-              <Label className="text-[13px] text-gray-700 dark:text-gray-300 font-medium">Email / Username</Label>
+              <Label className="text-[12px] text-gray-600 dark:text-gray-400 font-medium">Username*</Label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-500 dark:text-gray-400" />
                 <Input
                   type="email"
-                  placeholder="admin@rhythmerp.com"
+                  placeholder="Rular@admin.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="h-10 pl-9 text-[13px] bg-gray-50/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 focus:bg-white dark:focus:bg-gray-700 text-gray-800 dark:text-gray-100"
+                  className="h-11 pl-9 text-[14px] bg-[#F5F5F5] dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 focus:bg-white dark:focus:bg-gray-700 focus:border-[#2196F3] focus:ring-[#2196F3]/20 text-gray-800 dark:text-gray-100"
                   required
                   autoFocus
                 />
@@ -854,28 +856,28 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
 
             {/* Password */}
             <div className="space-y-1.5">
-              <Label className="text-[13px] text-gray-700 dark:text-gray-300 font-medium">Password</Label>
+              <Label className="text-[12px] text-gray-600 dark:text-gray-400 font-medium">Password*</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-500 dark:text-gray-400" />
                 <Input
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="h-10 pl-9 pr-10 text-[13px] bg-gray-50/50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 focus:bg-white dark:focus:bg-gray-700 text-gray-800 dark:text-gray-100"
+                  className="h-11 pl-9 pr-10 text-[14px] bg-[#F5F5F5] dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 focus:bg-white dark:focus:bg-gray-700 focus:border-[#2196F3] focus:ring-[#2196F3]/20 text-gray-800 dark:text-gray-100"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors cursor-pointer"
                 >
                   <Eye className="size-4" />
                 </button>
               </div>
             </div>
 
-            {/* Remember Me */}
+            {/* Remember Me / Forgot */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Checkbox
@@ -884,18 +886,18 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
                   onCheckedChange={(v) => setRememberMe(v === true)}
                   className="size-4"
                 />
-                <label htmlFor="remember" className="text-[12px] text-gray-600 dark:text-gray-400 cursor-pointer select-none">
+                <label htmlFor="remember" className="text-[13px] text-gray-600 dark:text-gray-400 cursor-pointer select-none">
                   Remember me
                 </label>
               </div>
-              <button type="button" className="text-[12px] text-green-600 hover:text-green-700 font-medium cursor-pointer">
-                Forgot password?
+              <button type="button" className="text-[13px] text-gray-600 dark:text-gray-400 hover:text-[#2196F3] dark:hover:text-blue-400 font-medium cursor-pointer">
+                Forgot Password?
               </button>
             </div>
 
             {/* Error */}
             {error && (
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-[12px] px-3 py-2 rounded-lg flex items-center gap-2">
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-[12px] px-3 py-2.5 rounded-lg flex items-center gap-2">
                 <XCircle className="size-3.5 shrink-0" />
                 {error}
               </div>
@@ -905,7 +907,7 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full h-10 bg-green-600 hover:bg-green-700 text-white text-[14px] font-medium gap-2 rounded-lg cursor-pointer"
+              className="w-full h-11 bg-[#2196F3] hover:bg-[#1976D2] text-white text-[15px] font-semibold gap-2 rounded cursor-pointer shadow-md shadow-[#2196F3]/20 transition-all duration-200 hover:shadow-lg hover:shadow-[#2196F3]/30"
             >
               {loading ? (
                 <>
@@ -913,16 +915,29 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
                   Signing in...
                 </>
               ) : (
-                'Sign In'
+                'Login'
               )}
             </Button>
           </form>
         </div>
 
         {/* Footer */}
-        <p className="text-center text-[11px] text-gray-400 dark:text-gray-500 mt-6">
-          RhythmERP Automation Runner v1.0 — Internal QA Tool
-        </p>
+        <div className="absolute bottom-6 left-0 right-0 text-center">
+          <p className="text-[11px] text-gray-400 dark:text-gray-500">
+            agDi Automation Runner v1.0 — Internal QA Tool
+          </p>
+        </div>
+      </div>
+
+      {/* ─── RIGHT: Hero Illustration ─── */}
+      <div className="hidden lg:flex flex-1 items-center justify-center relative overflow-hidden bg-gradient-to-b from-[#E3F2FD] via-[#F5DEB3]/20 to-[#E8F5E9] dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+        <div className="relative w-full h-full flex items-center justify-center p-8">
+          <img
+            src="/agdi-hero-illustration.png"
+            alt="AgDi - Agricultural Digital Intelligence"
+            className="w-full h-full object-contain p-8"
+          />
+        </div>
       </div>
     </div>
   )
@@ -982,10 +997,10 @@ function DashboardTab({
   }, [])
 
   const getHealthColor = useCallback((rate: number, total: number) => {
-    if (total === 0) return { bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-400 dark:text-gray-500', indicator: 'bg-gray-400', label: 'Not Started' }
-    if (rate === 100) return { bg: 'bg-green-50 dark:bg-green-900/20', text: 'text-green-700 dark:text-green-400', indicator: 'bg-green-500', label: 'Healthy' }
-    if (rate >= 75) return { bg: 'bg-orange-50 dark:bg-orange-900/20', text: 'text-orange-700 dark:text-orange-400', indicator: 'bg-orange-500', label: 'Partial' }
-    return { bg: 'bg-red-50 dark:bg-red-900/20', text: 'text-red-700 dark:text-red-400', indicator: 'bg-red-500', label: 'Critical' }
+    if (total === 0) return { bg: 'bg-gray-50 dark:bg-gray-800', text: 'text-[#888888] dark:text-gray-500', indicator: 'bg-[#888888]', label: 'Not Started' }
+    if (rate === 100) return { bg: 'bg-[#E8F5E9] dark:bg-green-900/20', text: 'text-[#2E7D32] dark:text-green-400', indicator: 'bg-[#4CAF50]', label: 'Healthy' }
+    if (rate >= 75) return { bg: 'bg-[#FFF3E0] dark:bg-orange-900/20', text: 'text-[#E65100] dark:text-orange-400', indicator: 'bg-[#FF9800]', label: 'Partial' }
+    return { bg: 'bg-[#FFEBEE] dark:bg-red-900/20', text: 'text-[#C62828] dark:text-red-400', indicator: 'bg-[#F44336]', label: 'Critical' }
   }, [])
 
   return (
@@ -993,28 +1008,28 @@ function DashboardTab({
       <div className="p-5 space-y-5">
         {/* Page Header */}
         <div>
-          <h2 className="text-[18px] font-semibold text-gray-800 dark:text-gray-100">Dashboard</h2>
-          <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">Overview of all RhythmERP automation modules</p>
+          <h2 className="text-[18px] font-semibold text-[#333333] dark:text-gray-100">Dashboard</h2>
+          <p className="text-[13px] text-[#666666] dark:text-gray-400 mt-0.5">Overview of all RhythmERP automation modules</p>
         </div>
 
         {/* Quick Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3.5 border border-gray-100 dark:border-gray-700">
-            <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">Total Modules</div>
-            <div className="text-xl font-bold text-gray-800 dark:text-gray-100 mt-1">{quickStats.total}</div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-3.5 border border-gray-100 dark:border-gray-700 shadow-sm">
+            <div className="text-[11px] text-[#888888] dark:text-gray-400 font-medium uppercase tracking-wider">Total Modules</div>
+            <div className="text-xl font-bold text-[#333333] dark:text-gray-100 mt-1">{quickStats.total}</div>
           </div>
-          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3.5 border border-green-100 dark:border-green-800/50">
-            <div className="text-[11px] text-green-600 dark:text-green-400 font-medium uppercase tracking-wider">Fully Passing</div>
-            <div className="text-xl font-bold text-green-700 dark:text-green-400 mt-1">{quickStats.fullyPassing}</div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-3.5 border border-green-100 dark:border-green-800/50 shadow-sm">
+            <div className="text-[11px] text-[#4CAF50] dark:text-green-400 font-medium uppercase tracking-wider">Fully Passing</div>
+            <div className="text-xl font-bold text-[#2E7D32] dark:text-green-400 mt-1">{quickStats.fullyPassing}</div>
           </div>
-          <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3.5 border border-orange-100 dark:border-orange-800/50">
-            <div className="text-[11px] text-orange-600 dark:text-orange-400 font-medium uppercase tracking-wider">Partial / Critical</div>
-            <div className="text-xl font-bold text-orange-700 dark:text-orange-400 mt-1">{quickStats.partiallyPassing}</div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-3.5 border border-orange-100 dark:border-orange-800/50 shadow-sm">
+            <div className="text-[11px] text-[#FF9800] dark:text-orange-400 font-medium uppercase tracking-wider">Partial / Critical</div>
+            <div className="text-xl font-bold text-[#E65100] dark:text-orange-400 mt-1">{quickStats.partiallyPassing}</div>
           </div>
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3.5 border border-blue-100 dark:border-blue-800/50">
-            <div className="text-[11px] text-blue-600 dark:text-blue-400 font-medium uppercase tracking-wider">Overall Pass Rate</div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-3.5 border border-blue-100 dark:border-blue-800/50 shadow-sm">
+            <div className="text-[11px] text-[#2196F3] dark:text-blue-400 font-medium uppercase tracking-wider">Overall Pass Rate</div>
             <div className="flex items-center gap-2 mt-1">
-              <div className="text-xl font-bold text-blue-700 dark:text-blue-400">
+              <div className="text-xl font-bold text-[#1565C0] dark:text-blue-400">
                 {quickStats.totalTests > 0 ? Math.round((quickStats.totalPassed / quickStats.totalTests) * 100) : 0}%
               </div>
               <Sparkline
@@ -1026,7 +1041,7 @@ function DashboardTab({
                 strokeWidth={1.5}
               />
             </div>
-            <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+            <div className="text-[11px] text-[#888888] dark:text-gray-400 mt-0.5">
               {quickStats.totalPassed} / {quickStats.totalTests} tests passed
             </div>
           </div>
@@ -1058,8 +1073,8 @@ function DashboardTab({
               {/* Group Header */}
               <div className="flex items-center gap-2 mb-2.5">
                 <span className="text-[14px]">{group.icon}</span>
-                <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">{group.name}</h3>
-                <span className="text-[12px] text-gray-500 dark:text-gray-400 ml-1">
+                <h3 className="text-[14px] font-semibold text-[#333333] dark:text-gray-100">{group.name}</h3>
+                <span className="text-[12px] text-[#888888] dark:text-gray-400 ml-1">
                   {group.modules.length} modules
                 </span>
                 {groupTotal > 0 && (
@@ -1094,7 +1109,7 @@ function DashboardTab({
                     <button
                       key={mod.moduleId}
                       onClick={() => onSelectModule(mod.moduleId)}
-                      className={`text-left p-3 rounded-lg border transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer ${health.bg} border-gray-100 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600`}
+                      className={`text-left p-3.5 rounded-lg border transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-[#2196F3]/30 dark:hover:border-blue-600/30 shadow-sm`}
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${health.indicator}`} />
@@ -1483,7 +1498,7 @@ function TestRunnerTab({
         <Button
           onClick={() => onRun(false)}
           disabled={isRunning || pendingCount === 0}
-          className="bg-green-600 hover:bg-green-700 text-white h-9 text-[13px] gap-2 px-5 cursor-pointer"
+          className="bg-[#2196F3] hover:bg-[#1976D2] text-white h-9 text-[13px] gap-2 px-5 cursor-pointer shadow-sm shadow-[#2196F3]/20"
         >
           <Play className="size-4" />
           Run All ({pendingCount})
@@ -2264,7 +2279,7 @@ function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sideb
           <Button
             size="sm"
             onClick={() => setShowForm(!showForm)}
-            className="bg-green-600 hover:bg-green-700 text-white text-[12px] cursor-pointer"
+            className="bg-[#2196F3] hover:bg-[#1976D2] text-white text-[12px] cursor-pointer shadow-sm"
           >
             <Plus className="size-3.5 mr-1" /> New Schedule
           </Button>
@@ -2355,7 +2370,7 @@ function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sideb
             </div>
 
             <div className="flex items-center gap-2 pt-1">
-              <Button size="sm" onClick={handleAddRun} className="bg-green-600 hover:bg-green-700 text-white text-[12px] cursor-pointer">
+              <Button size="sm" onClick={handleAddRun} className="bg-[#2196F3] hover:bg-[#1976D2] text-white text-[12px] cursor-pointer shadow-sm">
                 <CalendarClock className="size-3.5 mr-1" /> Create Schedule
               </Button>
               <Button size="sm" variant="outline" onClick={() => { setShowForm(false); setFrequency('one-time'); setScheduledDate(''); setScheduledTime('') }} className="text-[12px] cursor-pointer">
@@ -2589,19 +2604,19 @@ function CompletionSummaryModal({
         </DialogHeader>
 
         {/* Header */}
-        <div className={`rounded-lg p-4 text-center ${allPassed ? 'bg-green-50 dark:bg-green-900/20' : 'bg-orange-50 dark:bg-orange-900/20'}`}>
+        <div className={`rounded-lg p-4 text-center ${allPassed ? 'bg-[#E8F5E9] dark:bg-green-900/20' : 'bg-[#FFF3E0] dark:bg-orange-900/20'}`}>
           <div className="flex justify-center mb-2">
             {allPassed ? (
-              <div className="w-14 h-14 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center">
-                <CheckCircle2 className="size-8 text-green-600 dark:text-green-400" />
+              <div className="w-14 h-14 rounded-full bg-[#C8E6C9] dark:bg-green-900/40 flex items-center justify-center">
+                <CheckCircle2 className="size-8 text-[#2E7D32] dark:text-green-400" />
               </div>
             ) : (
-              <div className="w-14 h-14 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center">
-                <AlertTriangle className="size-8 text-orange-600 dark:text-orange-400" />
+              <div className="w-14 h-14 rounded-full bg-[#FFE0B2] dark:bg-orange-900/40 flex items-center justify-center">
+                <AlertTriangle className="size-8 text-[#E65100] dark:text-orange-400" />
               </div>
             )}
           </div>
-          <h3 className={`text-[18px] font-bold ${allPassed ? 'text-green-700 dark:text-green-400' : 'text-orange-700 dark:text-orange-400'}`}>
+          <h3 className={`text-[18px] font-bold ${allPassed ? 'text-[#2E7D32] dark:text-green-400' : 'text-[#E65100] dark:text-orange-400'}`}>
             {allPassed ? 'All Tests Passed!' : 'Tests Completed with Failures'}
           </h3>
           <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">
@@ -2611,9 +2626,9 @@ function CompletionSummaryModal({
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 text-center border border-green-100 dark:border-green-800/50">
-            <div className="text-[11px] text-green-600 dark:text-green-400 font-medium uppercase">Passed</div>
-            <div className="text-2xl font-bold text-green-700 dark:text-green-400 mt-1">{passedCount}</div>
+          <div className="bg-[#E8F5E9] dark:bg-green-900/20 rounded-lg p-3 text-center border border-[#C8E6C9] dark:border-green-800/50">
+            <div className="text-[11px] text-[#4CAF50] dark:text-green-400 font-medium uppercase">Passed</div>
+            <div className="text-2xl font-bold text-[#2E7D32] dark:text-green-400 mt-1">{passedCount}</div>
           </div>
           <div className={`rounded-lg p-3 text-center border ${failedCount > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800/50' : 'bg-gray-50 dark:bg-gray-800 border-gray-100 dark:border-gray-700'}`}>
             <div className={`text-[11px] font-medium uppercase ${failedCount > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>Failed</div>
@@ -2648,7 +2663,7 @@ function CompletionSummaryModal({
               Rerun Failed
             </Button>
           )}
-          <Button onClick={onNewRun} className="flex-1 h-9 text-[13px] gap-2 bg-[#1976d2] hover:bg-[#1565c0] text-white cursor-pointer">
+          <Button onClick={onNewRun} className="flex-1 h-9 text-[13px] gap-2 bg-[#2196F3] hover:bg-[#1976D2] text-white cursor-pointer shadow-sm">
             <RotateCcw className="size-4" />
             New Run
           </Button>
@@ -3163,7 +3178,9 @@ export default function Home() {
           (window as any).__ALL_TEST_CASES__ = data
         }
       })
-      .catch(() => console.error('Failed to fetch test cases'))
+      .catch(() => {
+        // Backend not running — this is expected when FastAPI isn't available
+      })
   }, [])
 
   const handleMarkAllRead = useCallback(async () => {
@@ -3631,10 +3648,8 @@ export default function Home() {
     return (
       <div className="h-screen flex items-center justify-center bg-white dark:bg-gray-900">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-green-600 flex items-center justify-center animate-pulse">
-            <span className="text-white text-lg font-bold">R</span>
-          </div>
-          <Loader2 className="size-5 text-green-600 animate-spin" />
+          <Image src="/agdi-logo.png" alt="AgDi" width={80} height={36} className="object-contain animate-pulse" />
+          <Loader2 className="size-5 text-[#2196F3] animate-spin" />
         </div>
       </div>
     )
@@ -3704,7 +3719,7 @@ export default function Home() {
         </DialogContent>
       </Dialog>
       {/* ─── HEADER ─────────────────────────────────────── */}
-      <header className="h-12 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 shrink-0 z-10">
+      <header className="h-12 bg-white dark:bg-gray-900 border-b border-[#e0e0e0] dark:border-gray-700 flex items-center px-4 shrink-0 z-10 shadow-sm">
         <div className="flex items-center gap-3 flex-1">
           <Button
             variant="ghost"
@@ -3713,8 +3728,8 @@ export default function Home() {
             data-tour="sidebar-toggle"
             className={`size-8 cursor-pointer shrink-0 transition-all duration-200 ${
               sidebarOpen
-                ? 'text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800'
-                : 'text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20'
+                ? 'text-[#888888] hover:text-[#333333] hover:bg-gray-100 dark:hover:bg-gray-800'
+                : 'text-[#2196F3] hover:text-[#1976D2] hover:bg-[#E3F2FD] dark:hover:bg-blue-900/20'
             }`}
             title="Toggle sidebar (Ctrl+B)"
           >
@@ -3722,26 +3737,29 @@ export default function Home() {
           </Button>
           <Separator orientation="vertical" className="h-5" />
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-green-600 flex items-center justify-center">
-              <span className="text-white text-xs font-bold">R</span>
-            </div>
-            <span className="text-[15px] font-semibold text-gray-800 dark:text-gray-100 tracking-tight">
-              Rhythm<span className="text-green-600">ERP</span>
-              <span className="text-gray-400 dark:text-gray-500 font-normal ml-1.5 text-[13px]">Automation Runner</span>
-            </span>
+            <Image src="/agdi-logo.png" alt="AgDi" width={70} height={28} className="object-contain" />
+            <span className="text-[#888888] dark:text-gray-500 text-[13px]">Automation Runner</span>
+          </div>
+          {/* AgDi-style Search Bar */}
+          <div className="hidden md:flex items-center ml-4 bg-[#F5F5F5] dark:bg-gray-800 rounded-md px-3 py-1.5 gap-2 w-64">
+            <Search className="size-3.5 text-[#888888] dark:text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search modules..."
+              className="bg-transparent text-[13px] text-[#333333] dark:text-gray-200 placeholder:text-[#888888] dark:placeholder:text-gray-500 outline-none flex-1"
+              onFocus={() => setQuickSwitcherOpen(true)}
+              readOnly
+            />
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" data-tour="universal-search" className="size-8 text-gray-500 dark:text-gray-400">
-            <Search className="size-4" />
-          </Button>
+        <div className="flex items-center gap-1.5">
           {/* Feature 6: Dark mode toggle */}
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleDarkMode}
             data-tour="dark-mode"
-            className="size-8 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
+            className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
             title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
           >
             {darkMode ? <Sun className="size-4" /> : <Moon className="size-4" />}
@@ -3752,7 +3770,7 @@ export default function Home() {
             size="icon"
             onClick={startAppTour}
             data-tour="help-btn"
-            className="size-8 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer"
+            className="size-8 text-[#2196F3] hover:text-[#1976D2] hover:bg-[#E3F2FD] dark:hover:bg-blue-900/20 cursor-pointer"
             title="Take a tour of the app"
           >
             <HelpCircle className="size-4" />
@@ -3763,7 +3781,7 @@ export default function Home() {
             size="icon"
             onClick={() => setShowShortcuts(true)}
             data-tour="keyboard-shortcuts"
-            className="size-8 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
+            className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
             title="Keyboard shortcuts (Ctrl+/)"
           >
             <Zap className="size-4" />
@@ -3777,12 +3795,12 @@ export default function Home() {
                 setNotifDropdownOpen((prev) => !prev)
                 if (!notifDropdownOpen) handleMarkAllRead()
               }}
-              className="size-8 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer relative"
+              className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer relative"
               title="Notifications"
             >
               <Bell className="size-4" />
               {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-orange-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#2196F3] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
@@ -3790,18 +3808,18 @@ export default function Home() {
             {notifDropdownOpen && (
               <div className="absolute right-0 top-10 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50">
                 <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                  <span className="text-[13px] font-semibold text-gray-800 dark:text-gray-100">Notifications</span>
-                  <button onClick={handleMarkAllRead} className="text-[11px] text-green-600 hover:text-green-700 cursor-pointer">Mark all read</button>
+                  <span className="text-[13px] font-semibold text-[#333333] dark:text-gray-100">Notifications</span>
+                  <button onClick={handleMarkAllRead} className="text-[11px] text-[#2196F3] hover:text-[#1976D2] cursor-pointer">Mark all read</button>
                 </div>
                 <div className="max-h-64 overflow-y-auto">
                   {notifications.length === 0 ? (
                     <div className="p-6 text-center text-[12px] text-gray-400">No notifications yet</div>
                   ) : (
                     notifications.slice(0, 15).map((n) => (
-                      <div key={n.id} className={`px-3 py-2 border-b border-gray-50 dark:border-gray-700/50 ${!n.read ? 'bg-green-50/50 dark:bg-green-900/10' : ''}`}>
-                        <div className="text-[12px] font-medium text-gray-700 dark:text-gray-200">{n.title}</div>
-                        <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">{n.message}</div>
-                        <div className="text-[10px] text-gray-400 mt-0.5">{new Date(n.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                      <div key={n.id} className={`px-3 py-2 border-b border-gray-50 dark:border-gray-700/50 ${!n.read ? 'bg-[#E3F2FD]/50 dark:bg-blue-900/10' : ''}`}>
+                        <div className="text-[12px] font-medium text-[#333333] dark:text-gray-200">{n.title}</div>
+                        <div className="text-[11px] text-[#666666] dark:text-gray-400 mt-0.5">{n.message}</div>
+                        <div className="text-[10px] text-[#888888] mt-0.5">{new Date(n.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
                       </div>
                     ))
                   )}
@@ -3810,30 +3828,35 @@ export default function Home() {
             )}
           </div>
           {(user.role === 'admin' || user.role === 'qa_lead') && (
-            <Link href="/admin" className="flex items-center gap-1.5 px-2.5 h-8 text-[12px] text-gray-500 dark:text-gray-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors" title="Admin Panel">
+            <Link href="/admin" className="flex items-center gap-1.5 px-2.5 h-8 text-[12px] text-[#888888] dark:text-gray-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors" title="Admin Panel">
               <Shield className="size-3.5" />
               <span className="hidden sm:inline">Admin</span>
             </Link>
           )}
-          <Separator orientation="vertical" className="h-5 mx-1" />
+          <Separator orientation="vertical" className="h-5 mx-0.5" />
           <div className="flex items-center gap-2" data-tour="user-menu">
             <Avatar className="size-7">
-              <AvatarFallback className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold">
+              <AvatarFallback className="bg-[#2196F3] text-white text-xs font-semibold">
                 {userInitials}
               </AvatarFallback>
             </Avatar>
-            <span className="text-[12px] text-gray-600 dark:text-gray-300 font-medium max-w-[120px] truncate">
-              {user.name}
-            </span>
+            <div className="hidden sm:flex flex-col">
+              <span className="text-[12px] text-[#333333] dark:text-gray-200 font-medium max-w-[120px] truncate leading-tight">
+                {user.name}
+              </span>
+              <span className="text-[10px] text-[#888888] dark:text-gray-500 leading-tight">
+                {user.role}
+              </span>
+            </div>
             <Button
               variant="ghost"
               size="icon"
               onClick={handleLogout}
               data-tour="logout-btn"
-              className="size-8 text-gray-400 hover:text-red-500 cursor-pointer"
+              className="size-7 text-[#888888] hover:text-red-500 cursor-pointer"
               title="Sign out"
             >
-              <LogOut className="size-4" />
+              <LogOut className="size-3.5" />
             </Button>
           </div>
         </div>
@@ -3846,15 +3869,14 @@ export default function Home() {
           className="shrink-0 overflow-hidden h-full"
           style={{ width: sidebarOpen ? sidebarWidth : 0 }}
         >
-        <aside className="bg-[#e8f5e9] dark:bg-[#1a2e1a] border-r border-[#c8e6c9] dark:border-[#2d4a2d] flex flex-col h-full" style={{ width: sidebarWidth }}>
-          <div className="px-3 py-2.5 border-b border-[#c8e6c9] dark:border-[#2d4a2d] flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Search className="size-3.5 text-gray-500 dark:text-gray-400" />
-              <span className="text-[13px] font-medium text-gray-600 dark:text-gray-300">Module Navigator</span>
-            </div>
+        <aside className="bg-[#E6F9F0] dark:bg-[#1a2e1a] border-r border-[#c8e6c9] dark:border-[#2d4a2d] flex flex-col h-full" style={{ width: sidebarWidth }}>
+          {/* AgDi Logo Header */}
+          <div className="px-3 py-3 border-b border-[#c8e6c9] dark:border-[#2d4a2d] flex items-center gap-2.5">
+            <Image src="/agdi-logo.png" alt="AgDi" width={80} height={36} className="shrink-0 object-contain" />
+            <span className="text-[10px] text-[#666666] dark:text-gray-400 leading-tight mt-0.5">Automation Runner</span>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer p-0.5 rounded hover:bg-[#c8e6c9]/50 dark:hover:bg-[#2d4a2d]/50"
+              className="ml-auto text-gray-400 dark:text-gray-500 hover:text-[#333333] dark:hover:text-gray-300 transition-colors cursor-pointer p-1 rounded hover:bg-[#c8e6c9]/60 dark:hover:bg-[#2d4a2d]/50"
               title="Collapse sidebar (Ctrl+B)"
             >
               <ChevronLeft className="size-4" />
@@ -3875,9 +3897,16 @@ export default function Home() {
             </div>
           </ScrollArea>
           <div className="px-3 py-2 border-t border-[#c8e6c9] dark:border-[#2d4a2d]">
-            <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            {/* Rural Landscape Illustration */}
+            <div className="relative w-full h-16 mb-1.5 rounded-lg overflow-hidden opacity-70">
+              <Image src="/agdi-landscape.png" alt="AgDi Landscape" fill className="object-cover" />
+            </div>
+            <div className="flex items-center gap-2 text-[11px] text-[#666666] dark:text-gray-400">
+              <div className="w-2 h-2 rounded-full bg-[#4CAF50] animate-pulse" />
               Connected to RhythmERP
+            </div>
+            <div className="text-[9px] text-[#888888] dark:text-gray-500 mt-1">
+              agDi v1.0 · Helpline: 18006043021
             </div>
           </div>
         </aside>
@@ -3887,12 +3916,12 @@ export default function Home() {
         {sidebarOpen && (
           <div
             onMouseDown={handleResizeStart}
-            className="w-1 cursor-col-resize bg-transparent hover:bg-green-400/40 active:bg-green-400/60 transition-colors shrink-0 relative z-10"
+            className="w-1 cursor-col-resize bg-transparent hover:bg-[#2196F3]/40 active:bg-[#2196F3]/60 transition-colors shrink-0 relative z-10"
           />
         )}
 
         {/* ─── MAIN CONTENT ─────────────────────────────── */}
-        <main className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900 relative">
+        <main className="flex-1 flex flex-col overflow-hidden bg-[#FAFBFC] dark:bg-gray-900 relative">
           {navToast && (
             <NavToast key={navToast.key} label={navToast.label} parent={navToast.parent} />
           )}
@@ -3901,7 +3930,7 @@ export default function Home() {
             <div className="flex items-center gap-1.5 px-4 py-2 border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
               <button
                 onClick={handleGoHome}
-                className="text-[12px] text-green-600 hover:text-green-700 dark:hover:text-green-400 font-medium cursor-pointer transition-colors hover:underline"
+                className="text-[12px] text-[#2196F3] hover:text-[#1976D2] dark:hover:text-blue-400 font-medium cursor-pointer transition-colors hover:underline"
               >
                 Dashboard
               </button>
@@ -3948,8 +3977,8 @@ export default function Home() {
                       onClick={() => setActiveTab(tab.id)}
                       className={`px-4 h-full text-[13px] font-medium transition-colors border-b-2 cursor-pointer ${
                         activeTab === tab.id
-                          ? 'border-green-600 text-green-700 dark:text-green-400 bg-white dark:bg-gray-900'
-                          : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100/50 dark:hover:bg-gray-800/30'
+                          ? 'border-[#2196F3] text-[#1976D2] dark:text-blue-400 bg-white dark:bg-gray-900'
+                          : 'border-transparent text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100/50 dark:hover:bg-gray-800/30'
                       }`}
                     >
                       {tab.label}
@@ -4090,7 +4119,7 @@ export default function Home() {
       {activeTab === 'live-execution' && !isRunning && passedCount + failedCount > 0 && (
         <button
           onClick={() => setActiveTab('test-runner')}
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-green-600 hover:bg-green-700 text-white transition-all duration-200 rounded-xl px-5 py-2.5 flex items-center gap-2 shadow-lg shadow-green-600/20 cursor-pointer hover:shadow-xl hover:shadow-green-600/30 hover:-translate-y-0.5"
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-[#2196F3] hover:bg-[#1976D2] text-white transition-all duration-200 rounded-xl px-5 py-2.5 flex items-center gap-2 shadow-lg shadow-[#2196F3]/20 cursor-pointer hover:shadow-xl hover:shadow-[#2196F3]/30 hover:-translate-y-0.5"
         >
           <RotateCcw className="size-4" />
           <span className="text-[13px] font-medium">New Test Run</span>
@@ -4170,8 +4199,8 @@ export default function Home() {
                         }}
                         className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors cursor-pointer ${
                           isActive
-                            ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
-                            : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                            ? 'bg-[#E3F2FD] dark:bg-blue-900/20 text-[#1976D2] dark:text-blue-400'
+                            : 'text-[#333333] dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50'
                         }`}
                       >
                         {mod.parent && (
@@ -4184,7 +4213,7 @@ export default function Home() {
                         {mod.badge && (
                           <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">{mod.badge}</span>
                         )}
-                        {isActive && <CheckCircle2 className="size-3.5 text-green-500 shrink-0" />}
+                        {isActive && <CheckCircle2 className="size-3.5 text-[#2196F3] shrink-0" />}
                       </button>
                     )
                   })

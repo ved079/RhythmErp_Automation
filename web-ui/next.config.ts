@@ -7,8 +7,6 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
-  // Turbopack config (empty - no custom webpack needed)
-  turbopack: {},
 };
 
 export default nextConfig;

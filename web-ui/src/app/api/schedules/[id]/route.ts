@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// PATCH /api/schedules/[id]
+// PATCH /api/schedules/[id] — update a scheduled run
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -27,11 +27,25 @@ export async function PATCH(
       updateData.frequency = freqMap[body.frequency] || 'one_time'
     }
 
-    if (body.scheduledTime !== undefined) updateData.scheduledTime = new Date(body.scheduledTime)
-    if (body.testSelection !== undefined) updateData.testSelection = body.testSelection
-    if (body.selectedTestIds !== undefined) updateData.selectedTestIds = JSON.stringify(body.selectedTestIds)
-    if (body.enabled !== undefined) updateData.enabled = body.enabled
-    if (body.lastRunAt !== undefined) updateData.lastRunAt = new Date(body.lastRunAt)
+    if (body.scheduledTime !== undefined) {
+      updateData.scheduledTime = new Date(body.scheduledTime)
+    }
+
+    if (body.testSelection !== undefined) {
+      updateData.testSelection = body.testSelection
+    }
+
+    if (body.selectedTestIds !== undefined) {
+      updateData.selectedTestIds = JSON.stringify(body.selectedTestIds)
+    }
+
+    if (body.enabled !== undefined) {
+      updateData.enabled = body.enabled
+    }
+
+    if (body.lastRunAt !== undefined) {
+      updateData.lastRunAt = new Date(body.lastRunAt)
+    }
 
     const updated = await db.scheduledRun.update({
       where: { id },
@@ -51,7 +65,7 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/schedules/[id]
+// DELETE /api/schedules/[id] — delete a scheduled run
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

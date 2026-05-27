@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// GET /api/runs
+// GET /api/runs — list run history
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url)
@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
       take: limit,
     })
 
+    // Parse results JSON if present
     const mapped = runs.map((r) => ({
       ...r,
       results: r.results ? JSON.parse(r.results) : null,
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/runs
+// POST /api/runs — create a run history entry
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()

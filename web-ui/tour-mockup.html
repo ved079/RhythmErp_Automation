@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RhythmERP Automation Runner — Tour Mockup</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --green: #16a34a;
+    --green-light: #22c55e;
+    --green-dark: #15803d;
+    --green-bg: #f0fdf4;
+    --sidebar-w: 220px;
+    --header-h: 52px;
+    --tab-h: 42px;
+  }
+
+  body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px;
+    color: #1e293b;
+    background: #f8fafc;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* ===== APP LAYOUT ===== */
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* Header */
+  #app-header {
+    height: var(--header-h);
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    z-index: 10;
+  }
+  #app-header .logo {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--green);
+    letter-spacing: -0.3px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  #app-header .logo svg { width: 22px; height: 22px; }
+  #app-header .search-box {
+    flex: 1;
+    max-width: 340px;
+    margin-left: 20px;
+    position: relative;
+  }
+  #app-header .search-box input {
+    width: 100%;
+    padding: 6px 12px 6px 32px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 12.5px;
+    background: #f8fafc;
+    outline: none;
+    color: #64748b;
+  }
+  #app-header .search-box .shortcut {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 10px;
+    color: #94a3b8;
+  }
+  #app-header .search-box .search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    font-size: 13px;
+  }
+  #app-header .header-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    font-size: 16px;
+    transition: background 0.15s;
+  }
+  .icon-btn:hover { background: #f1f5f9; }
+  .avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--green);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* Body area */
+  #app-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* Sidebar */
+  #app-sidebar {
+    width: var(--sidebar-w);
+    background: var(--green-dark);
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+  #app-sidebar .sidebar-title {
+    padding: 14px 16px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: rgba(255,255,255,0.6);
+  }
+  #app-sidebar .sidebar-item {
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.15s;
+    border-left: 3px solid transparent;
+    color: rgba(255,255,255,0.85);
+  }
+  #app-sidebar .sidebar-item:hover { background: rgba(255,255,255,0.1); }
+  #app-sidebar .sidebar-item.active {
+    background: rgba(255,255,255,0.15);
+    border-left-color: #fff;
+    color: #fff;
+    font-weight: 500;
+  }
+  #app-sidebar .sidebar-item .item-icon {
+    width: 18px;
+    text-align: center;
+    font-size: 13px;
+  }
+
+  /* Main content */
+  #app-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Tab bar */
+  #app-tabs {
+    height: var(--tab-h);
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: stretch;
+    padding: 0 16px;
+  }
+  .tab {
+    padding: 0 16px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  .tab:hover { color: #334155; }
+  .tab.active {
+    color: var(--green);
+    border-bottom-color: var(--green);
+    font-weight: 600;
+  }
+
+  /* Content area */
+  #app-content {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    background: #f8fafc;
+  }
+
+  /* Test Runner panel */
+  .runner-panel {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    padding: 20px;
+    max-width: 780px;
+  }
+  .runner-panel h2 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: #1e293b;
+  }
+  .runner-options {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .runner-chip {
+    padding: 5px 14px;
+    border-radius: 20px;
+    border: 1px solid #e2e8f0;
+    font-size: 12px;
+    cursor: pointer;
+    color: #64748b;
+    background: #fff;
+    transition: all 0.15s;
+  }
+  .runner-chip.active {
+    background: var(--green-bg);
+    border-color: var(--green);
+    color: var(--green);
+    font-weight: 500;
+  }
+  .test-list {
+    border: 1px solid #f1f5f9;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .test-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    gap: 10px;
+  }
+  .test-row:last-child { border-bottom: none; }
+  .test-check {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1.5px solid #cbd5e1;
+    flex-shrink: 0;
+  }
+  .test-check.checked {
+    background: var(--green);
+    border-color: var(--green);
+    position: relative;
+  }
+  .test-check.checked::after {
+    content: '✓';
+    color: #fff;
+    font-size: 10px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .test-name { font-size: 13px; color: #334155; flex: 1; }
+  .test-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+  .test-badge.smoke { background: #fef3c7; color: #92400e; }
+  .test-badge.regression { background: #e0e7ff; color: #3730a3; }
+  .test-badge.sanity { background: #fce7f3; color: #9d174d; }
+  .run-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 22px;
+    background: var(--green);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 16px;
+    transition: background 0.15s;
+  }
+  .run-btn:hover { background: var(--green-dark); }
+  .run-btn svg { width: 14px; height: 14px; }
+
+  /* Help button */
+  #help-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--green);
+    color: #fff;
+    border: none;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    z-index: 5;
+    box-shadow: 0 2px 8px rgba(22,163,74,0.3);
+    transition: transform 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #help-btn:hover { transform: scale(1.08); }
+
+  /* ===== TOUR OVERLAY ===== */
+  #tour-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: none;
+  }
+  #tour-overlay.active { display: block; }
+
+  /* SVG overlay with cutout */
+  #tour-overlay svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Highlighted element ring */
+  .tour-highlight-ring {
+    position: fixed;
+    z-index: 1001;
+    border-radius: 8px;
+    box-shadow: 0 0 0 4px rgba(22,163,74,0.35), 0 0 0 9999px rgba(0,0,0,0.5);
+    pointer-events: none;
+    display: none;
+  }
+  .tour-highlight-ring.active { display: block; }
+  .tour-highlight-ring.center-mode {
+    border-radius: 16px;
+  }
+
+  /* ===== POPOVER ===== */
+  #tour-popover {
+    position: fixed;
+    z-index: 1002;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.04);
+    width: 340px;
+    overflow: visible;
+    display: none;
+  }
+  #tour-popover.active { display: block; }
+
+  .popover-green-bar {
+    height: 4px;
+    background: var(--green);
+    border-radius: 14px 14px 0 0;
+  }
+
+  .popover-body {
+    padding: 20px 22px 16px;
+  }
+
+  .popover-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 8px;
+  }
+
+  .popover-desc {
+    font-size: 13.5px;
+    color: #64748b;
+    line-height: 1.55;
+  }
+
+  .popover-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 22px 16px;
+  }
+
+  .popover-dots {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+  }
+  .popover-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    transition: all 0.2s;
+  }
+  .popover-dot.active {
+    background: var(--green);
+    width: 18px;
+    border-radius: 4px;
+  }
+
+  .popover-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-next {
+    padding: 7px 18px;
+    background: var(--green);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-next:hover { background: var(--green-dark); }
+
+  .btn-back {
+    padding: 7px 14px;
+    background: transparent;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-back:hover { background: #f8fafc; border-color: #cbd5e1; }
+
+  .btn-skip {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px 0;
+    text-decoration: none;
+  }
+  .btn-skip:hover { color: #64748b; text-decoration: underline; }
+
+  /* Arrow */
+  .popover-arrow {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: #fff;
+    transform: rotate(45deg);
+    z-index: -1;
+  }
+  .popover-arrow.top {
+    top: -7px;
+    border-left: 1px solid rgba(0,0,0,0.04);
+    border-top: 1px solid rgba(0,0,0,0.04);
+  }
+  .popover-arrow.bottom {
+    bottom: -7px;
+    border-right: 1px solid rgba(0,0,0,0.04);
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+  }
+  .popover-arrow.left {
+    left: -7px;
+    border-left: 1px solid rgba(0,0,0,0.04);
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+  }
+  .popover-arrow.right {
+    right: -7px;
+    border-right: 1px solid rgba(0,0,0,0.04);
+    border-top: 1px solid rgba(0,0,0,0.04);
+  }
+
+  /* Centered popover for steps 1 & 8 */
+  #tour-popover.centered {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 400px;
+  }
+  #tour-popover.centered .popover-arrow { display: none; }
+
+  .popover-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    background: var(--green-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    margin-bottom: 14px;
+  }
+
+  /* Notification badge */
+  .notif-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 8px;
+    height: 8px;
+    background: #ef4444;
+    border-radius: 50%;
+    border: 1.5px solid #fff;
+  }
+
+  /* Keyboard shortcut badge in search */
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 10px;
+    padding: 1px 5px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    color: #94a3b8;
+    font-family: system-ui;
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== APP LAYOUT ===== -->
+<div id="app">
+  <!-- Header -->
+  <header id="app-header">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      RhythmERP
+    </div>
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" placeholder="Search modules, tests..." readonly>
+      <span class="shortcut"><kbd>Ctrl</kbd> <kbd>K</kbd></span>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" title="Dark mode" style="position:relative;">🌙</button>
+      <button class="icon-btn" title="Notifications" style="position:relative;">🔔<span class="notif-badge"></span></button>
+      <div class="avatar">JD</div>
+    </div>
+  </header>
+
+  <div id="app-body">
+    <!-- Sidebar -->
+    <nav id="app-sidebar">
+      <div class="sidebar-title">Test Modules</div>
+      <div class="sidebar-item active">
+        <span class="item-icon">⚙️</span> Common Settings
+      </div>
+      <div class="sidebar-item">
+        <span class="item-icon">📦</span> Item Management
+      </div>
+      <div class="sidebar-item">
+        <span class="item-icon">🛒</span> Purchase Order
+      </div>
+      <div class="sidebar-item">
+        <span class="item-icon">💰</span> Sales Order
+      </div>
+      <div class="sidebar-item">
+        <span class="item-icon">🏪</span> Inventory
+      </div>
+      <div class="sidebar-item">
+        <span class="item-icon">📊</span> Financials
+      </div>
+      <div class="sidebar-item">
+        <span class="item-icon">🏭</span> Manufacturing
+      </div>
+      <div class="sidebar-item">
+        <span class="item-icon">🚚</span> Logistics
+      </div>
+      <div class="sidebar-item">
+        <span class="item-icon">🏗️</span> Commodity Settings
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main id="app-main">
+      <!-- Tab bar -->
+      <div id="app-tabs">
+        <div class="tab">Test Specifications</div>
+        <div class="tab active">Test Runner</div>
+        <div class="tab">Live Execution</div>
+        <div class="tab">Results</div>
+        <div class="tab">Schedule</div>
+      </div>
+
+      <!-- Content -->
+      <div id="app-content">
+        <div class="runner-panel">
+          <h2>Common Settings — Test Runner</h2>
+          <div class="runner-options">
+            <span class="runner-chip active">All Tests</span>
+            <span class="runner-chip">Smoke</span>
+            <span class="runner-chip">Regression</span>
+            <span class="runner-chip">Sanity</span>
+            <span class="runner-chip">Failed Only</span>
+          </div>
+          <div class="test-list">
+            <div class="test-row">
+              <div class="test-check checked"></div>
+              <span class="test-name">CS-001: Company setup validation</span>
+              <span class="test-badge smoke">Smoke</span>
+            </div>
+            <div class="test-row">
+              <div class="test-check checked"></div>
+              <span class="test-name">CS-002: Currency configuration</span>
+              <span class="test-badge regression">Regression</span>
+            </div>
+            <div class="test-row">
+              <div class="test-check checked"></div>
+              <span class="test-name">CS-003: Tax group assignment</span>
+              <span class="test-badge smoke">Smoke</span>
+            </div>
+            <div class="test-row">
+              <div class="test-check"></div>
+              <span class="test-name">CS-004: Warehouse mapping</span>
+              <span class="test-badge sanity">Sanity</span>
+            </div>
+            <div class="test-row">
+              <div class="test-check"></div>
+              <span class="test-name">CS-005: User role permissions</span>
+              <span class="test-badge regression">Regression</span>
+            </div>
+          </div>
+          <button class="run-btn" id="run-tests-btn">
+            <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Run Tests
+          </button>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Help button (outside overlay) -->
+<button id="help-btn">?</button>
+
+<!-- ===== TOUR OVERLAY ===== -->
+<div id="tour-overlay">
+  <svg>
+    <defs>
+      <mask id="tour-mask">
+        <rect x="0" y="0" width="100%" height="100%" fill="white"/>
+        <rect id="tour-cutout" x="0" y="0" width="0" height="0" rx="8" fill="black"/>
+      </mask>
+    </defs>
+    <rect x="0" y="0" width="100%" height="100%" fill="rgba(0,0,0,0.5)" mask="url(#tour-mask)"/>
+  </svg>
+</div>
+
+<!-- Highlight ring -->
+<div class="tour-highlight-ring" id="tour-ring"></div>
+
+<!-- Popover -->
+<div id="tour-popover">
+  <div class="popover-green-bar"></div>
+  <div class="popover-arrow" id="popover-arrow"></div>
+  <div class="popover-body">
+    <div class="popover-icon" id="popover-icon"></div>
+    <div class="popover-title" id="popover-title"></div>
+    <div class="popover-desc" id="popover-desc"></div>
+  </div>
+  <div class="popover-footer">
+    <div class="popover-dots" id="popover-dots"></div>
+    <div class="popover-actions" id="popover-actions"></div>
+  </div>
+</div>
+
+<script>
+const STEPS = [
+  {
+    target: null, // center modal
+    title: 'Welcome to RhythmERP! 🎉',
+    desc: 'This quick tour will show you around the Automation Runner. Takes about 60 seconds.',
+    icon: '🎉',
+    nextText: "Let's Go",
+    showBack: false,
+    centered: true
+  },
+  {
+    target: '#app-header',
+    title: 'Your Workspace',
+    desc: 'The header gives you quick access to search, dark mode, notifications, and your profile.',
+    icon: '🏠',
+    nextText: 'Next',
+    showBack: true,
+    position: 'bottom'
+  },
+  {
+    target: '#app-sidebar',
+    title: 'Module Navigator',
+    desc: 'Browse all test modules here — from Common Settings to Commodity Settings. Click any module to see its tests.',
+    icon: '📁',
+    nextText: 'Next',
+    showBack: true,
+    position: 'right'
+  },
+  {
+    target: '.search-box',
+    title: 'Quick Switch (Ctrl+K)',
+    desc: 'Jump to any module instantly with keyboard shortcuts. Try Ctrl+K anytime!',
+    icon: '⌨️',
+    nextText: 'Next',
+    showBack: true,
+    position: 'bottom'
+  },
+  {
+    target: '#app-tabs',
+    title: 'Tab Bar',
+    desc: 'Each module has 5 views: Specifications, Test Runner, Live Execution, Results, and Schedule.',
+    icon: '📑',
+    nextText: 'Next',
+    showBack: true,
+    position: 'bottom'
+  },
+  {
+    target: '.runner-panel',
+    title: 'Test Runner',
+    desc: 'Select which tests to run, choose by priority (Smoke/Regression/Sanity), or re-run failed tests.',
+    icon: '▶️',
+    nextText: 'Next',
+    showBack: true,
+    position: 'bottom'
+  },
+  {
+    target: '#run-tests-btn',
+    title: 'Run Tests',
+    desc: 'Hit this green button to start execution. It will switch to Live Execution automatically.',
+    icon: '🚀',
+    nextText: 'Next',
+    showBack: true,
+    position: 'bottom'
+  },
+  {
+    target: null, // center modal
+    title: "You're All Set! 🚀",
+    desc: 'Explore the sidebar, run your first test, and check out Ctrl+K for quick navigation. Click the ? button anytime to restart the tour.',
+    icon: '✅',
+    nextText: 'Get Started!',
+    showBack: false,
+    centered: true
+  }
+];
+
+let currentStep = -1;
+
+function showStep(index) {
+  currentStep = index;
+  const step = STEPS[index];
+  const overlay = document.getElementById('tour-overlay');
+  const ring = document.getElementById('tour-ring');
+  const popover = document.getElementById('tour-popover');
+  const cutout = document.getElementById('tour-cutout');
+  const arrow = document.getElementById('popover-arrow');
+
+  overlay.classList.add('active');
+
+  if (step.centered) {
+    // Center modal — no highlight ring, full overlay
+    ring.classList.remove('active');
+    cutout.setAttribute('x', 0);
+    cutout.setAttribute('y', 0);
+    cutout.setAttribute('width', 0);
+    cutout.setAttribute('height', 0);
+
+    popover.classList.add('active', 'centered');
+    arrow.style.display = 'none';
+  } else {
+    const el = document.querySelector(step.target);
+    const rect = el.getBoundingClientRect();
+    const pad = 8;
+
+    // Position ring
+    ring.classList.add('active');
+    ring.style.top = (rect.top - pad) + 'px';
+    ring.style.left = (rect.left - pad) + 'px';
+    ring.style.width = (rect.width + pad * 2) + 'px';
+    ring.style.height = (rect.height + pad * 2) + 'px';
+
+    // SVG cutout
+    cutout.setAttribute('x', rect.left - pad);
+    cutout.setAttribute('y', rect.top - pad);
+    cutout.setAttribute('width', rect.width + pad * 2);
+    cutout.setAttribute('height', rect.height + pad * 2);
+
+    popover.classList.remove('centered');
+    popover.classList.add('active');
+    arrow.style.display = 'block';
+
+    // Position popover
+    positionPopover(rect, step.position, arrow);
+  }
+
+  // Populate content
+  document.getElementById('popover-icon').textContent = step.icon;
+  document.getElementById('popover-title').textContent = step.title;
+  document.getElementById('popover-desc').textContent = step.desc;
+
+  // Build dots
+  const dotsContainer = document.getElementById('popover-dots');
+  dotsContainer.innerHTML = '';
+  for (let i = 0; i < STEPS.length; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'popover-dot' + (i === index ? ' active' : '');
+    dotsContainer.appendChild(dot);
+  }
+
+  // Build actions
+  const actionsContainer = document.getElementById('popover-actions');
+  actionsContainer.innerHTML = '';
+
+  if (index < STEPS.length - 1) {
+    const skipBtn = document.createElement('button');
+    skipBtn.className = 'btn-skip';
+    skipBtn.textContent = 'Skip';
+    skipBtn.onclick = endTour;
+    actionsContainer.appendChild(skipBtn);
+  }
+
+  if (step.showBack) {
+    const backBtn = document.createElement('button');
+    backBtn.className = 'btn-back';
+    backBtn.textContent = 'Back';
+    backBtn.onclick = () => showStep(index - 1);
+    actionsContainer.appendChild(backBtn);
+  }
+
+  const nextBtn = document.createElement('button');
+  nextBtn.className = 'btn-next';
+  nextBtn.textContent = step.nextText;
+  nextBtn.onclick = () => {
+    if (index < STEPS.length - 1) {
+      showStep(index + 1);
+    } else {
+      endTour();
+    }
+  };
+  actionsContainer.appendChild(nextBtn);
+}
+
+function positionPopover(targetRect, prefPosition, arrow) {
+  const popover = document.getElementById('tour-popover');
+  const popW = 340;
+  const popH = popover.offsetHeight || 220;
+  const gap = 14;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  let top, left, arrowSide;
+
+  // Determine best position
+  const spaceBelow = vh - targetRect.bottom;
+  const spaceAbove = targetRect.top;
+  const spaceRight = vw - targetRect.right;
+  const spaceLeft = targetRect.left;
+
+  if (prefPosition === 'right' && spaceRight > popW + gap) {
+    arrowSide = 'left';
+    top = targetRect.top + targetRect.height / 2 - popH / 2;
+    left = targetRect.right + gap;
+  } else if (prefPosition === 'bottom' || spaceBelow > spaceAbove) {
+    arrowSide = 'top';
+    top = targetRect.bottom + gap;
+    left = targetRect.left + targetRect.width / 2 - popW / 2;
+  } else {
+    arrowSide = 'bottom';
+    top = targetRect.top - popH - gap;
+    left = targetRect.left + targetRect.width / 2 - popW / 2;
+  }
+
+  // Clamp
+  left = Math.max(12, Math.min(left, vw - popW - 12));
+  top = Math.max(12, Math.min(top, vh - popH - 12));
+
+  popover.style.top = top + 'px';
+  popover.style.left = left + 'px';
+
+  // Arrow position
+  arrow.className = 'popover-arrow';
+  if (arrowSide === 'top') {
+    arrow.classList.add('top');
+    arrow.style.left = (targetRect.left + targetRect.width / 2 - left - 7) + 'px';
+    arrow.style.top = '-7px';
+    arrow.style.bottom = '';
+    arrow.style.right = '';
+  } else if (arrowSide === 'bottom') {
+    arrow.classList.add('bottom');
+    arrow.style.left = (targetRect.left + targetRect.width / 2 - left - 7) + 'px';
+    arrow.style.bottom = '-7px';
+    arrow.style.top = '';
+    arrow.style.right = '';
+  } else if (arrowSide === 'left') {
+    arrow.classList.add('left');
+    arrow.style.top = (targetRect.top + targetRect.height / 2 - top - 7) + 'px';
+    arrow.style.left = '-7px';
+    arrow.style.right = '';
+    arrow.style.bottom = '';
+  }
+}
+
+function endTour() {
+  document.getElementById('tour-overlay').classList.remove('active');
+  document.getElementById('tour-ring').classList.remove('active');
+  document.getElementById('tour-popover').classList.remove('active', 'centered');
+  currentStep = -1;
+}
+
+function startTour() {
+  showStep(0);
+}
+
+// Auto-start tour
+window.addEventListener('load', () => {
+  setTimeout(startTour, 300);
+});
+
+// Expose for Playwright control
+window.tourGo = (step) => showStep(step);
+window.tourEnd = endTour;
+window.tourStart = startTour;
+window.getStep = () => currentStep;
+</script>
+
+</body>
+</html>

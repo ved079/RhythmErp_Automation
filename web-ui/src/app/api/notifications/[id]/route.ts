@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// PATCH /api/notifications/[id]
+// PATCH /api/notifications/[id] — mark a single notification as read
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

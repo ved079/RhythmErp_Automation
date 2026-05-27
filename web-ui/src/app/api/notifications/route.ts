@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// GET /api/notifications
+// GET /api/notifications — list all notifications (newest first, capped at 50)
 export async function GET() {
   try {
     const notifications = await db.notification.findMany({
@@ -15,7 +15,7 @@ export async function GET() {
   }
 }
 
-// POST /api/notifications
+// POST /api/notifications — create a notification
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()

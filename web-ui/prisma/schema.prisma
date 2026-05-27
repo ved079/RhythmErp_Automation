@@ -75,7 +75,8 @@ model User {
   lastLogin    DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
-  sessions     Session[]
+
+  sessions Session[]
 }
 
 model Session {
@@ -84,9 +85,8 @@ model Session {
   userId    String
   expiresAt DateTime
   createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model BugReport {
@@ -106,24 +106,24 @@ model BugReport {
   readByAdmin     Boolean     @default(false)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
-  replies         Reply[]
+
+  replies Reply[]
 }
 
 model Reply {
-  id          String          @id @default(cuid())
-  bugReportId String
-  authorName  String
-  authorRole  ReplyAuthorRole @default(user)
-  message     String
-  createdAt   DateTime        @default(now())
-  bugReport   BugReport       @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
+  id           String         @id @default(cuid())
+  bugReportId  String
+  authorName   String
+  authorRole   ReplyAuthorRole
+  message      String
+  createdAt    DateTime       @default(now())
 
-  @@index([bugReportId])
+  bugReport BugReport @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
 }
 
 model Notification {
   id        String           @id @default(cuid())
-  type      NotificationType @default(run_complete)
+  type      NotificationType
   title     String
   message   String
   ticketId  String?
@@ -133,16 +133,16 @@ model Notification {
 }
 
 model ScheduledRun {
-  id              String        @id @default(cuid())
+  id              String         @id @default(cuid())
   moduleId        String
   moduleName      String
-  frequency       Frequency     @default(one_time)
+  frequency       Frequency
   scheduledTime   DateTime
-  testSelection   TestSelection @default(all)
+  testSelection   TestSelection  @default(all)
   selectedTestIds String?
-  enabled         Boolean       @default(true)
+  enabled         Boolean        @default(true)
   createdBy       String
-  createdAt       DateTime      @default(now())
+  createdAt       DateTime       @default(now())
   lastRunAt       DateTime?
 }
 
@@ -150,14 +150,14 @@ model RunHistory {
   id          String    @id @default(cuid())
   moduleId    String
   moduleName  String
-  passed      Int       @default(0)
-  failed      Int       @default(0)
-  total       Int       @default(0)
-  duration    String    @default("")
-  rate        Float     @default(0)
-  results     String?
-  status      RunStatus @default(pending)
-  startedAt   DateTime  @default(now())
+  passed      Int
+  failed      Int
+  total       Int
+  duration    String
+  rate        Float
+  results     String
+  startedAt   DateTime
   completedAt DateTime?
+  status      RunStatus @default(pending)
   createdBy   String?
 }

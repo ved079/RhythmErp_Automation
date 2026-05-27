@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// GET /api/runs/[id]
+// GET /api/runs/[id] — get a specific run
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -26,7 +26,7 @@ export async function GET(
   }
 }
 
-// PATCH /api/runs/[id]
+// PATCH /api/runs/[id] — update a run (e.g., mark as completed)
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

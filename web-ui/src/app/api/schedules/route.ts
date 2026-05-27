@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// GET /api/schedules
+// GET /api/schedules — list all scheduled runs
 export async function GET() {
   try {
     const runs = await db.scheduledRun.findMany({
       orderBy: { createdAt: 'desc' },
     })
 
+    // Map DB enums to client format
     const mapped = runs.map((r) => ({
       ...r,
       frequency: r.frequency === 'one_time' ? 'one-time' : r.frequency,
@@ -22,7 +23,7 @@ export async function GET() {
   }
 }
 
-// POST /api/schedules
+// POST /api/schedules — create a scheduled run
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -32,6 +33,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    // Map client frequency to DB enum
     const freqMap: Record<string, string> = {
       'one-time': 'one_time',
       'one_time': 'one_time',
@@ -56,6 +58,7 @@ export async function POST(req: NextRequest) {
       },
     })
 
+    // Create notification
     await db.notification.create({
       data: {
         type: 'schedule',

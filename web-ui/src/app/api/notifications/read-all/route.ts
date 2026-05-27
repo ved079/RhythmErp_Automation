@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// PATCH /api/notifications/read-all
+// PATCH /api/notifications/read-all — mark all notifications as read
 export async function PATCH() {
   try {
     await db.notification.updateMany({

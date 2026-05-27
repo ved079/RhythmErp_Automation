@@ -20,7 +20,7 @@ async function proxyRequest(req: NextRequest) {
     const body = req.method !== "GET" ? await req.text() : undefined;
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 600000) // 10 min timeout for long test runs;
+    const timeout = setTimeout(() => controller.abort(), 600000); // 10 min timeout for long test runs
 
     const res = await fetch(targetUrl, {
       method: req.method,
@@ -31,6 +31,9 @@ async function proxyRequest(req: NextRequest) {
     });
     clearTimeout(timeout);
 
+    console.log(`[Proxy] Response: ${res.status}`);
+
+    // If SSE stream, forward it directly
     const ct = res.headers.get("content-type") || "";
     if (ct.includes("text/event-stream")) {
       return new NextResponse(res.body, {
