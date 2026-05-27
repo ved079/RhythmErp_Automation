@@ -67,9 +67,8 @@ def logged_in_driver(driver):
 
     login_page.wait_seconds(1)
 
-    log.step(4, "Clicking Login button")
-    login_button = ("xpath", "//button[contains(.,'Login')]")
-    login_page.click(login_button)
+    log.step(4, "Clicking Login button (double-click)")
+    login_page.click_login()
     login_page.wait_seconds(3)
 
     login_page.wait_for_login_complete()
