@@ -922,7 +922,7 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ type: 'spring', stiffness: 200, damping: 12, delay: 0.15 }}
               >
-                <Image src="/agdi-logo.png" alt="AgDi" width={150} height={92} className="object-contain" priority />
+                <Image src="/agdi-logo-new.png" alt="AgDi Automation" width={200} height={92} className="object-contain" priority />
               </motion.div>
             </motion.div>
 
@@ -5085,7 +5085,7 @@ export default function Home() {
     return (
       <div className="h-screen flex items-center justify-center bg-[#F1F2F7] dark:bg-gray-900">
         <div className="flex flex-col items-center gap-3">
-          <Image src="/agdi-logo.png" alt="AgDi" width={80} height={36} className="object-contain animate-pulse" />
+          <Image src="/agdi-logo-new.png" alt="AgDi Automation" width={80} height={36} className="object-contain animate-pulse" />
           <Loader2 className="size-5 text-[#3F51B5] animate-spin" />
         </div>
       </div>
@@ -5176,7 +5176,7 @@ export default function Home() {
           </Button>
           <Separator orientation="vertical" className="h-5" />
           <div className="flex items-center gap-2">
-            <Image src="/agdi-logo.png" alt="AgDi" width={70} height={28} className="object-contain" />
+            <Image src="/agdi-logo-new.png" alt="AgDi Automation" width={70} height={28} className="object-contain" />
             <span className="text-[#888888] dark:text-gray-500 text-[13px]">Automation Runner</span>
           </div>
           {/* AgDi-style Search Bar */}
