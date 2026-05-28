@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useTheme } from 'next-themes'
+import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { fetchModules, fetchRunDetail, folderToSidebarId, sidebarToFolderMapping, startRun, stopRun, fetchTestCases, fetchScreenshot, type ApiModule, type ApiSubModule, type TestCasesData, type ApiRunDetail, type ApiTestResult } from '@/lib/api'
 import {
@@ -824,20 +825,54 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
     <div className="min-h-screen bg-[#F1F2F7] dark:bg-gray-900 flex">
       {/* ─── LEFT: Login Form ─── */}
       <div className="w-full lg:w-[440px] xl:w-[480px] shrink-0 flex flex-col items-center justify-center px-8 py-12 bg-white dark:bg-gray-800 relative">
-        {/* Logo */}
-        <div className="flex flex-col items-center mb-10">
-          <div className="flex items-center justify-center mb-5">
+        {/* Logo — drops from above */}
+        <motion.div
+          className="flex flex-col items-center mb-10"
+          initial={{ y: -80, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 120, damping: 14, mass: 0.8 }}
+        >
+          <motion.div
+            className="flex items-center justify-center mb-5"
+            initial={{ scale: 0.3, rotate: -15 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: 'spring', stiffness: 200, damping: 12, delay: 0.15 }}
+          >
             <Image src="/agdi-logo.png" alt="AgDi" width={120} height={60} className="object-contain" />
-          </div>
-          <h1 className="text-[24px] font-bold text-gray-800 dark:text-gray-100">Welcome Back!</h1>
-          <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">Sign in to continue</p>
-        </div>
+          </motion.div>
+          <motion.h1
+            className="text-[24px] font-bold text-gray-800 dark:text-gray-100"
+            initial={{ y: 15, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.35, duration: 0.5, ease: 'easeOut' }}
+          >
+            Welcome Back!
+          </motion.h1>
+          <motion.p
+            className="text-[14px] text-gray-500 dark:text-gray-400 mt-1"
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5, duration: 0.5, ease: 'easeOut' }}
+          >
+            Sign in to continue
+          </motion.p>
+        </motion.div>
 
-        {/* Login Card */}
-        <div className="w-full max-w-[340px]">
+        {/* Login Card — fades up with stagger */}
+        <motion.div
+          className="w-full max-w-[340px]"
+          initial={{ y: 30, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.55, duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+        >
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email */}
-            <div className="relative">
+            <motion.div
+              className="relative"
+              initial={{ x: -20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: 0.65, duration: 0.4 }}
+            >
               <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#374151] dark:text-gray-400" />
               <Input
                 type="email"
@@ -848,10 +883,15 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
                 required
                 autoFocus
               />
-            </div>
+            </motion.div>
 
             {/* Password */}
-            <div className="relative">
+            <motion.div
+              className="relative"
+              initial={{ x: -20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: 0.75, duration: 0.4 }}
+            >
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#374151] dark:text-gray-400" />
               <Input
                 type={showPassword ? 'text' : 'password'}
@@ -868,10 +908,15 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
               >
                 <Eye className="size-4" />
               </button>
-            </div>
+            </motion.div>
 
             {/* Remember Me / Forgot */}
-            <div className="flex items-center justify-between">
+            <motion.div
+              className="flex items-center justify-between"
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.85, duration: 0.4 }}
+            >
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="remember"
@@ -886,50 +931,74 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
               <button type="button" className="text-[13px] text-gray-600 dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-indigo-400 font-medium cursor-pointer">
                 Forgot Password?
               </button>
-            </div>
+            </motion.div>
 
             {/* Error */}
-            {error && (
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-[12px] px-3 py-2.5 rounded-lg flex items-center gap-2">
-                <XCircle className="size-3.5 shrink-0" />
-                {error}
-              </div>
-            )}
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-[12px] px-3 py-2.5 rounded-lg flex items-center gap-2"
+                  initial={{ height: 0, opacity: 0, scale: 0.95 }}
+                  animate={{ height: 'auto', opacity: 1, scale: 1 }}
+                  exit={{ height: 0, opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  <XCircle className="size-3.5 shrink-0" />
+                  {error}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Submit */}
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full h-11 bg-[#3F51B5] hover:bg-[#2D3FC7] text-white text-[15px] font-semibold gap-2 rounded-[4px] cursor-pointer transition-all duration-200 font-['Roboto']"
+            <motion.div
+              initial={{ y: 15, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.95, duration: 0.4 }}
             >
-              {loading ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                'Login'
-              )}
-            </Button>
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full h-11 bg-[#3F51B5] hover:bg-[#2D3FC7] text-white text-[15px] font-semibold gap-2 rounded-[4px] cursor-pointer transition-all duration-200 font-['Roboto']"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  'Login'
+                )}
+              </Button>
+            </motion.div>
           </form>
-        </div>
+        </motion.div>
 
         {/* Footer */}
-        <div className="absolute bottom-6 left-0 right-0 text-center">
+        <motion.div
+          className="absolute bottom-6 left-0 right-0 text-center"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.2, duration: 0.6 }}
+        >
           <p className="text-[11px] text-gray-400 dark:text-gray-500">
             agDi Automation Runner v1.0 — Internal QA Tool
           </p>
-        </div>
+        </motion.div>
       </div>
 
       {/* ─── RIGHT: Hero Illustration ─── */}
-      <div className="hidden lg:flex flex-1 relative overflow-hidden">
+      <motion.div
+        className="hidden lg:flex flex-1 relative overflow-hidden"
+        initial={{ x: 80, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ delay: 0.3, duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
+      >
         <img
           src="/agdi-hero-illustration.png"
           alt="AgDi - Agricultural Digital Intelligence"
           className="w-full h-full object-cover"
         />
-      </div>
+      </motion.div>
     </div>
   )
 }
