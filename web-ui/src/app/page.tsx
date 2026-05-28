@@ -607,6 +607,7 @@ function SidebarModuleItem({
   expandedIds,
   toggleExpand,
   isLast = true,
+  justExpandedId,
 }: {
   module: SidebarModule
   depth?: number
@@ -615,6 +616,7 @@ function SidebarModuleItem({
   expandedIds: Set<string>
   toggleExpand: (id: string) => void
   isLast?: boolean
+  justExpandedId: string | null
 }) {
   const hasChildren = module.children && module.children.length > 0
   const isExpanded = expandedIds.has(module.id)
@@ -664,9 +666,10 @@ function SidebarModuleItem({
       <button
         data-module-id={module.id}
         ref={(el) => {
-          if (el && isExpanded && hasChildren) {
+          // Only scroll when THIS module was just expanded (not on every re-render)
+          if (el && justExpandedId === module.id && hasChildren) {
             requestAnimationFrame(() => {
-              el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              el.scrollIntoView({ behavior: 'smooth', block: 'start' })
             })
           }
         }}
@@ -750,6 +753,7 @@ function SidebarModuleItem({
               expandedIds={expandedIds}
               toggleExpand={toggleExpand}
               isLast={idx === module.children!.length - 1}
+              justExpandedId={justExpandedId}
             />
           ))}
         </div>
@@ -5001,6 +5005,7 @@ export default function Home() {
   const [apiModules, setApiModules] = useState<ApiModule[]>([])
   const [selectedModule, setSelectedModule] = useState<string>('dashboard')
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const [justExpandedId, setJustExpandedId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('operations')
   const [consoleOpen, setConsoleOpen] = useState(false)
   // Hash routing - read initial state from URL hash
@@ -5378,6 +5383,7 @@ export default function Home() {
       if (next.has(id)) {
         // Toggle close: clicking an already-open section closes it
         next.delete(id)
+        setJustExpandedId(null)
       } else {
         // Accordion behavior: figure out which level this item is at
         // and close siblings at the same level, keeping parents open
@@ -5407,10 +5413,19 @@ export default function Home() {
           siblings.forEach(s => next.delete(s))
         }
         next.add(id)
+        setJustExpandedId(id)
       }
       return next
     })
   }, [])
+
+  // Clear justExpandedId after scroll animation completes (prevents re-scrolling)
+  useEffect(() => {
+    if (justExpandedId) {
+      const timer = setTimeout(() => setJustExpandedId(null), 600)
+      return () => clearTimeout(timer)
+    }
+  }, [justExpandedId])
 
   // --- Hash routing: init from URL hash ---
   useEffect(() => {
@@ -6134,6 +6149,7 @@ export default function Home() {
                   onSelect={handleSelectModule}
                   expandedIds={expandedIds}
                   toggleExpand={toggleExpand}
+                  justExpandedId={justExpandedId}
                 />
               ))}
             </div>
