@@ -121,6 +121,7 @@ import {
   HelpCircle,
   Copyright,
   ExternalLink,
+  Bug,
 } from 'lucide-react'
 import { AppTour, startAppTour } from '@/components/tour/AppTour'
 import { Sparkline, getSparklineColor, TrendIndicator } from '@/components/ui/sparkline'
@@ -5060,6 +5061,8 @@ export default function Home() {
   const [allTestCases, setAllTestCases] = useState<TestCasesData>({})
   const [isRunning, setIsRunning] = useState(false)
   const [runningProgress, setRunningProgress] = useState('')
+  const [dashboardStats, setDashboardStats] = useState<Record<string, unknown> | null>(null)
+  const [dashboardLoading, setDashboardLoading] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -5135,15 +5138,59 @@ export default function Home() {
   // ─── Fetch real modules from API ──────────────────────
   useEffect(() => {
     if (!user) return // Don't fetch until authenticated
+
+    // Try FastAPI modules first, fall back to DB modules
     fetchModules()
       .then((mods) => {
         setApiModules(mods)
         setSidebarModules(filterSidebarByAccess(buildSidebarModules(mods), user))
       })
-      .catch((err) => {
-        console.warn('API modules fetch failed, using defaults:', err)
-        // Apply access filter to defaults on failure too
-        setSidebarModules(filterSidebarByAccess(ALL_SIDEBAR_MODULES, user))
+      .catch(async () => {
+        // FastAPI not available — try DB modules from Prisma
+        try {
+          const res = await fetch('/api/admin/modules')
+          if (res.ok) {
+            const data = await res.json()
+            const dbMods = data.modules || []
+            if (dbMods.length > 0) {
+              // Build sidebar from DB modules
+              const sidebarFromDb: SidebarModule[] = [
+                { id: 'dashboard', label: 'Dashboard' },
+              ]
+              const parents = dbMods.filter((m: Record<string, unknown>) => !m.parentId && m.status === 'active')
+              for (const parent of parents) {
+                const children = dbMods
+                  .filter((m: Record<string, unknown>) => m.parentId === (parent as Record<string, unknown>).id && m.status === 'active')
+                  .sort((a: Record<string, unknown>, b: Record<string, unknown>) => ((a.sortOrder as number) || 0) - ((b.sortOrder as number) || 0))
+                const hasChildren = children.length > 0
+                const testCount = (parent.testCount as number) || 0
+                const childTotal = children.reduce((s: number, c: Record<string, unknown>) => s + ((c.testCount as number) || 0), 0)
+                const totalTests = testCount + childTotal
+                sidebarFromDb.push({
+                  id: (parent.name as string).toLowerCase().replace(/\s+/g, '-'),
+                  label: parent.label as string,
+                  badge: totalTests > 0 ? `${totalTests} tests` : undefined,
+                  badgeType: totalTests > 0 ? 'success' : 'none',
+                  defaultExpanded: hasChildren,
+                  children: hasChildren ? children.map((c: Record<string, unknown>) => ({
+                    id: (c.name as string).toLowerCase().replace(/\s+/g, '-'),
+                    label: c.label as string,
+                    badge: (c.testCount as number) > 0 ? `${c.testCount} tests` : '📝 No tests',
+                    badgeType: (c.testCount as number) > 0 ? 'success' as const : 'none' as const,
+                  })) : undefined,
+                })
+              }
+              sidebarFromDb.push({ id: 'my-tickets', label: 'My Tickets' })
+              setSidebarModules(filterSidebarByAccess(sidebarFromDb, user))
+            } else {
+              setSidebarModules(filterSidebarByAccess(ALL_SIDEBAR_MODULES, user))
+            }
+          } else {
+            setSidebarModules(filterSidebarByAccess(ALL_SIDEBAR_MODULES, user))
+          }
+        } catch {
+          setSidebarModules(filterSidebarByAccess(ALL_SIDEBAR_MODULES, user))
+        }
       })
   }, [user])
     // Fetch test cases from backend
@@ -5233,6 +5280,24 @@ export default function Home() {
       // Silently fail
     }
   }, [])
+
+  // Load dashboard stats from /api/dashboard/stats
+  const loadDashboardStats = useCallback(async () => {
+    setDashboardLoading(true)
+    try {
+      const res = await fetch('/api/dashboard/stats')
+      if (res.ok) {
+        const data = await res.json()
+        setDashboardStats(data)
+      }
+    } catch { /* empty */ }
+    finally { setDashboardLoading(false) }
+  }, [])
+
+  // Load dashboard stats when dashboard is selected
+  useEffect(() => {
+    if (selectedModule === 'dashboard') loadDashboardStats()
+  }, [selectedModule, loadDashboardStats])
 
   // Load run history and bug reports after auth
   useEffect(() => {
@@ -5921,6 +5986,457 @@ export default function Home() {
     setReportDialogOpen(true)
   }, [getTestError])
 
+  // ─── Dashboard Render Function ────────────────────────────
+  const renderDashboard = () => {
+    // Extract stats from API data
+    const stats = dashboardStats as Record<string, any> | null
+    const totalTests = (stats?.totalTests as number) ?? 0
+    const totalPassed = (stats?.totalPassed as number) ?? 0
+    const totalFailed = (stats?.totalFailed as number) ?? 0
+    const passRate = (stats?.passRate as number) ?? 0
+    const totalBugs = (stats?.totalBugs as number) ?? 0
+    const openBugs = (stats?.openBugs as number) ?? 0
+    const inProgressBugs = (stats?.inProgressBugs as number) ?? 0
+    const fixedBugs = (stats?.fixedBugs as number) ?? 0
+    const highPriorityBugs = (stats?.highPriorityBugs as number) ?? 0
+    const totalRuns = (stats?.totalRuns as number) ?? 0
+    const completedRuns = (stats?.completedRuns as number) ?? 0
+    const failedRuns = (stats?.failedRuns as number) ?? 0
+    const activeUsers = (stats?.activeUsers as number) ?? 0
+    const activeModules = (stats?.activeModules as number) ?? 0
+    const activeEnvs = (stats?.activeEnvs as number) ?? 0
+    const recentRuns = (stats?.recentRuns as Array<Record<string, any>>) ?? []
+    const recentBugs = (stats?.recentBugs as Array<Record<string, any>>) ?? []
+    const bugTrend = (stats?.bugTrend as Array<{ date: string; count: number }>) ?? []
+    const runTrend = (stats?.runTrend as Array<Record<string, any>>) ?? []
+    const apiModuleHealth = (stats?.moduleHealth as Array<Record<string, any>>) ?? []
+    const bugByPriority = (stats?.bugByPriority as Record<string, number>) ?? {}
+    const bugByStatus = (stats?.bugByStatus as Record<string, number>) ?? {}
+
+    // Map API runTrend to RunSnapshot[] for chart components
+    const apiRunHistory: RunSnapshot[] = runTrend.map((r) => ({
+      id: r.id ?? '',
+      date: r.startedAt ?? '',
+      moduleId: r.moduleName ?? '',
+      results: [],
+      passed: r.passed ?? 0,
+      failed: r.failed ?? 0,
+      total: r.total ?? 0,
+      duration: r.duration ?? '—',
+      rate: r.passRate ?? 0,
+    }))
+
+    // Map API moduleHealth to ModuleHealth[] for chart components
+    const apiModuleHealthData: ModuleHealth[] = apiModuleHealth.map((m) => ({
+      moduleId: m.moduleName ?? '',
+      moduleName: m.moduleName ?? '',
+      passRate: m.passRate ?? 0,
+      totalTests: m.total ?? 0,
+      passedTests: m.passed ?? 0,
+      failedTests: m.failed ?? 0,
+      lastRun: '',
+    }))
+
+    // Use API data if available, otherwise fall back to local data
+    const chartRunHistory = apiRunHistory.length > 0 ? apiRunHistory : runHistory
+    const chartModuleHealth = apiModuleHealthData.length > 0 ? apiModuleHealthData : moduleHealth
+
+    // Sparkline data from bug trend
+    const bugTrendData = bugTrend.map((b) => b.count)
+
+    // Sparkline data from run trend
+    const runTrendData = runTrend.map((r) => r.passRate ?? 0)
+
+    return (
+      <div data-tour="dashboard" className="flex-1 min-h-0 overflow-auto">
+        <div className="p-5 space-y-5">
+          {/* Page Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-[18px] font-semibold text-[#333333] dark:text-gray-100 font-['Poppins']">Dashboard</h2>
+              <p className="text-[13px] text-[#666666] dark:text-gray-400 mt-0.5 font-['Manrope']">Overview of all RhythmERP automation modules</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={loadDashboardStats}
+                disabled={dashboardLoading}
+                className="h-8 px-3 text-[12px] text-[#666666] dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-indigo-400"
+              >
+                <RefreshCw className={`size-3.5 mr-1 ${dashboardLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <ExportMenu runHistory={runHistory} moduleHealth={moduleHealth} />
+            </div>
+          </div>
+
+          {/* Loading State */}
+          {dashboardLoading && !dashboardStats && (
+            <div className="flex items-center justify-center py-20">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="size-8 text-[#3F51B5] animate-spin" />
+                <span className="text-[13px] text-[#888888] dark:text-gray-400 font-['Manrope']">Loading dashboard stats...</span>
+              </div>
+            </div>
+          )}
+
+          {/* Stat Cards Row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {/* Total Tests Card */}
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-[#E8F5E9] dark:bg-green-900/30 flex items-center justify-center">
+                    <CheckCircle2 className="size-4 text-[#4CAF50]" />
+                  </div>
+                  <span className="text-[11px] text-[#888888] dark:text-gray-400 font-medium uppercase tracking-wider font-['Poppins']">Total Tests</span>
+                </div>
+                {runTrendData.length >= 2 && (
+                  <Sparkline
+                    data={runTrendData}
+                    width={56}
+                    height={18}
+                    strokeColor={runTrendData[runTrendData.length - 1] >= runTrendData[runTrendData.length - 2] ? '#22c55e' : '#ef4444'}
+                    fillColor={runTrendData[runTrendData.length - 1] >= runTrendData[runTrendData.length - 2] ? '#22c55e' : '#ef4444'}
+                    strokeWidth={1.5}
+                  />
+                )}
+              </div>
+              <div className="text-xl font-bold text-[#333333] dark:text-gray-100 font-['Poppins']">{totalTests.toLocaleString()}</div>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[11px] text-[#4CAF50] dark:text-green-400 font-medium font-['Manrope']">{totalPassed.toLocaleString()} passed</span>
+                <span className="text-[11px] text-[#888888] dark:text-gray-500">•</span>
+                <span className="text-[11px] text-[#F44336] dark:text-red-400 font-medium font-['Manrope']">{totalFailed.toLocaleString()} failed</span>
+              </div>
+              <div className="mt-2">
+                <Progress value={passRate} className="h-1.5 bg-gray-100 dark:bg-gray-700" />
+                <span className="text-[10px] text-[#3F51B5] dark:text-indigo-400 font-medium font-['Manrope']">{passRate.toFixed(1)}% pass rate</span>
+              </div>
+            </div>
+
+            {/* Total Bugs Card */}
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-[#FFEBEE] dark:bg-red-900/30 flex items-center justify-center">
+                    <Bug className="size-4 text-[#F44336]" />
+                  </div>
+                  <span className="text-[11px] text-[#888888] dark:text-gray-400 font-medium uppercase tracking-wider font-['Poppins']">Total Bugs</span>
+                </div>
+                {bugTrendData.length >= 2 && (
+                  <Sparkline
+                    data={bugTrendData}
+                    width={56}
+                    height={18}
+                    strokeColor="#F44336"
+                    fillColor="#F44336"
+                    strokeWidth={1.5}
+                  />
+                )}
+              </div>
+              <div className="text-xl font-bold text-[#333333] dark:text-gray-100 font-['Poppins']">{totalBugs.toLocaleString()}</div>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[11px] text-[#F44336] dark:text-red-400 font-medium font-['Manrope']">{openBugs} open</span>
+                <span className="text-[11px] text-[#888888] dark:text-gray-500">•</span>
+                <span className="text-[11px] text-[#FF9800] dark:text-orange-400 font-medium font-['Manrope']">{inProgressBugs} in progress</span>
+              </div>
+              {highPriorityBugs > 0 && (
+                <div className="flex items-center gap-1 mt-1.5">
+                  <AlertTriangle className="size-3 text-[#FF9800]" />
+                  <span className="text-[10px] text-[#FF9800] dark:text-orange-400 font-medium font-['Manrope']">{highPriorityBugs} high priority</span>
+                </div>
+              )}
+            </div>
+
+            {/* Total Runs Card */}
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-[#DFE9FB] dark:bg-indigo-900/30 flex items-center justify-center">
+                  <Play className="size-4 text-[#3F51B5]" />
+                </div>
+                <span className="text-[11px] text-[#888888] dark:text-gray-400 font-medium uppercase tracking-wider font-['Poppins']">Total Runs</span>
+              </div>
+              <div className="text-xl font-bold text-[#333333] dark:text-gray-100 font-['Poppins']">{totalRuns.toLocaleString()}</div>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[11px] text-[#4CAF50] dark:text-green-400 font-medium font-['Manrope']">{completedRuns} completed</span>
+                <span className="text-[11px] text-[#888888] dark:text-gray-500">•</span>
+                <span className="text-[11px] text-[#F44336] dark:text-red-400 font-medium font-['Manrope']">{failedRuns} failed</span>
+              </div>
+            </div>
+
+            {/* Active Modules Card */}
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-[#FFF3E0] dark:bg-orange-900/30 flex items-center justify-center">
+                  <LayoutDashboard className="size-4 text-[#FF9800]" />
+                </div>
+                <span className="text-[11px] text-[#888888] dark:text-gray-400 font-medium uppercase tracking-wider font-['Poppins']">Active Modules</span>
+              </div>
+              <div className="text-xl font-bold text-[#333333] dark:text-gray-100 font-['Poppins']">{activeModules}</div>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[11px] text-[#888888] dark:text-gray-400 font-['Manrope']">{activeUsers} users</span>
+                <span className="text-[11px] text-[#888888] dark:text-gray-500">•</span>
+                <span className="text-[11px] text-[#888888] dark:text-gray-400 font-['Manrope']">{activeEnvs} envs</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Charts Row 1: Pass Rate Trend + Bug Distribution */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Pass Rate Trend */}
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
+              <h3 className="text-[13px] font-semibold text-[#333333] dark:text-gray-100 mb-3 flex items-center gap-2 font-['Poppins']">
+                <TrendingUp className="size-4 text-[#3F51B5]" />
+                Pass Rate Trend
+              </h3>
+              <PassRateTrendChart runHistory={chartRunHistory} />
+            </div>
+            {/* Bug Distribution */}
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
+              <h3 className="text-[13px] font-semibold text-[#333333] dark:text-gray-100 mb-3 flex items-center gap-2 font-['Poppins']">
+                <AlertTriangle className="size-4 text-[#F44336]" />
+                Bug Distribution
+              </h3>
+              <BugDistributionPie moduleHealth={chartModuleHealth} />
+            </div>
+          </div>
+
+          {/* Charts Row 2: Module Health + Bug by Status */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Module Health Bar Chart */}
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
+              <h3 className="text-[13px] font-semibold text-[#333333] dark:text-gray-100 mb-3 flex items-center gap-2 font-['Poppins']">
+                <BarChart3 className="size-4 text-[#3F51B5]" />
+                Module Health Overview
+              </h3>
+              <ModuleHealthBarChart moduleHealth={chartModuleHealth} />
+            </div>
+            {/* Bug Status + Priority Summary */}
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
+              <h3 className="text-[13px] font-semibold text-[#333333] dark:text-gray-100 mb-3 flex items-center gap-2 font-['Poppins']">
+                <Activity className="size-4 text-[#3F51B5]" />
+                Bug Status &amp; Priority
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                {/* Bug by Status */}
+                <div>
+                  <div className="text-[11px] text-[#888888] dark:text-gray-400 font-medium uppercase tracking-wider mb-2 font-['Poppins']">By Status</div>
+                  <div className="space-y-2">
+                    {Object.entries(bugByStatus).map(([status, count]) => {
+                      const statusColors: Record<string, string> = {
+                        open: 'bg-[#F44336] text-white',
+                        in_progress: 'bg-[#FF9800] text-white',
+                        fixed: 'bg-[#4CAF50] text-white',
+                        closed: 'bg-[#888888] text-white',
+                        rejected: 'bg-gray-400 text-white',
+                      }
+                      const statusLabels: Record<string, string> = {
+                        open: 'Open',
+                        in_progress: 'In Progress',
+                        fixed: 'Fixed',
+                        closed: 'Closed',
+                        rejected: 'Rejected',
+                      }
+                      return (
+                        <div key={status} className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-2 h-2 rounded-full ${statusColors[status]?.split(' ')[0] ?? 'bg-gray-400'}`} />
+                            <span className="text-[12px] text-[#333333] dark:text-gray-200 font-['Manrope']">{statusLabels[status] ?? status}</span>
+                          </div>
+                          <span className="text-[12px] font-semibold text-[#333333] dark:text-gray-100 font-['Poppins']">{count as number}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+                {/* Bug by Priority */}
+                <div>
+                  <div className="text-[11px] text-[#888888] dark:text-gray-400 font-medium uppercase tracking-wider mb-2 font-['Poppins']">By Priority</div>
+                  <div className="space-y-2">
+                    {Object.entries(bugByPriority).map(([priority, count]) => {
+                      const priorityColors: Record<string, string> = {
+                        high: 'bg-[#F44336]',
+                        medium: 'bg-[#FF9800]',
+                        low: 'bg-[#4CAF50]',
+                      }
+                      const priorityLabels: Record<string, string> = {
+                        high: 'High',
+                        medium: 'Medium',
+                        low: 'Low',
+                      }
+                      return (
+                        <div key={priority} className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-2 h-2 rounded-full ${priorityColors[priority] ?? 'bg-gray-400'}`} />
+                            <span className="text-[12px] text-[#333333] dark:text-gray-200 font-['Manrope']">{priorityLabels[priority] ?? priority}</span>
+                          </div>
+                          <span className="text-[12px] font-semibold text-[#333333] dark:text-gray-100 font-['Poppins']">{count as number}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Row 3: Execution Timeline */}
+          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
+            <h3 className="text-[13px] font-semibold text-[#333333] dark:text-gray-100 mb-3 flex items-center gap-2 font-['Poppins']">
+              <Activity className="size-4 text-[#3F51B5]" />
+              Execution Timeline
+            </h3>
+            <TestExecutionTimeline runHistory={chartRunHistory} />
+          </div>
+
+          {/* Row 4: Recent Bugs + Recent Runs */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Recent Bugs */}
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
+              <h3 className="text-[13px] font-semibold text-[#333333] dark:text-gray-100 mb-3 flex items-center gap-2 font-['Poppins']">
+                <Bug className="size-4 text-[#F44336]" />
+                Recent Bugs
+              </h3>
+              {recentBugs.length === 0 ? (
+                <div className="text-center py-8">
+                  <CheckCircle2 className="size-8 text-[#4CAF50] mx-auto mb-2" />
+                  <p className="text-[12px] text-[#888888] dark:text-gray-400 font-['Manrope']">No bugs reported yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-y-auto">
+                  {recentBugs.map((bug) => {
+                    const priorityColor: Record<string, string> = {
+                      high: 'bg-[#FFEBEE] text-[#C62828] dark:bg-red-900/30 dark:text-red-400',
+                      medium: 'bg-[#FFF3E0] text-[#E65100] dark:bg-orange-900/30 dark:text-orange-400',
+                      low: 'bg-[#E8F5E9] text-[#2E7D32] dark:bg-green-900/30 dark:text-green-400',
+                    }
+                    const statusColor: Record<string, string> = {
+                      open: 'bg-[#F44336] text-white',
+                      in_progress: 'bg-[#FF9800] text-white',
+                      fixed: 'bg-[#4CAF50] text-white',
+                      closed: 'bg-[#888888] text-white',
+                      rejected: 'bg-gray-400 text-white',
+                    }
+                    const statusLabel: Record<string, string> = {
+                      open: 'Open',
+                      in_progress: 'In Progress',
+                      fixed: 'Fixed',
+                      closed: 'Closed',
+                      rejected: 'Rejected',
+                    }
+                    return (
+                      <div key={bug.id as string} className="flex items-start gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="text-[12px] font-medium text-[#333333] dark:text-gray-100 truncate font-['Manrope']">
+                              {(bug.testDescription as string) || (bug.testId as string)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {(bug.moduleName as string) && (
+                              <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-['Manrope']">
+                                {bug.moduleName as string}
+                              </Badge>
+                            )}
+                            <Badge className={`text-[10px] h-4 px-1.5 ${priorityColor[bug.priority as string] ?? 'bg-gray-100 text-gray-600'}`}>
+                              {bug.priority as string}
+                            </Badge>
+                            <Badge className={`text-[10px] h-4 px-1.5 ${statusColor[bug.status as string] ?? 'bg-gray-100 text-gray-600'}`}>
+                              {statusLabel[bug.status as string] ?? (bug.status as string)}
+                            </Badge>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-[#888888] dark:text-gray-500 shrink-0 font-['Manrope']">
+                          {bug.createdAt ? new Date(bug.createdAt as string).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : ''}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Recent Runs */}
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
+              <h3 className="text-[13px] font-semibold text-[#333333] dark:text-gray-100 mb-3 flex items-center gap-2 font-['Poppins']">
+                <Clock className="size-4 text-[#3F51B5]" />
+                Recent Runs
+              </h3>
+              {recentRuns.length === 0 ? (
+                <div className="text-center py-8">
+                  <Play className="size-8 text-[#888888] mx-auto mb-2" />
+                  <p className="text-[12px] text-[#888888] dark:text-gray-400 font-['Manrope']">No runs recorded yet</p>
+                </div>
+              ) : (
+                <div className="space-y-0 max-h-72 overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="text-[10px] h-7 px-2 font-['Poppins']">Module</TableHead>
+                        <TableHead className="text-[10px] h-7 px-2 font-['Poppins']">Status</TableHead>
+                        <TableHead className="text-[10px] h-7 px-2 font-['Poppins'] text-right">Passed</TableHead>
+                        <TableHead className="text-[10px] h-7 px-2 font-['Poppins'] text-right">Failed</TableHead>
+                        <TableHead className="text-[10px] h-7 px-2 font-['Poppins'] text-right">Rate</TableHead>
+                        <TableHead className="text-[10px] h-7 px-2 font-['Poppins'] text-right">Duration</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recentRuns.map((run) => {
+                        const runStatus = run.status as string
+                        const runRate = (run.rate as number) ?? 0
+                        return (
+                          <TableRow key={run.id as string} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => {
+                            if (run.moduleId as string) {
+                              handleSelectModule(run.moduleId as string)
+                            }
+                          }}>
+                            <TableCell className="text-[12px] px-2 py-1.5 font-['Manrope'] text-[#333333] dark:text-gray-200 truncate max-w-[120px]">
+                              {(run.moduleName as string) || '—'}
+                            </TableCell>
+                            <TableCell className="px-2 py-1.5">
+                              <Badge className={`text-[10px] h-4 px-1.5 ${
+                                runStatus === 'completed' ? 'bg-[#4CAF50] text-white' :
+                                runStatus === 'failed' ? 'bg-[#F44336] text-white' :
+                                'bg-[#FF9800] text-white'
+                              }`}>
+                                {runStatus === 'completed' ? <CheckCircle2 className="size-2.5 mr-0.5" /> :
+                                 runStatus === 'failed' ? <XCircle className="size-2.5 mr-0.5" /> :
+                                 <Clock className="size-2.5 mr-0.5" />}
+                                {runStatus.charAt(0).toUpperCase() + runStatus.slice(1)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-[12px] px-2 py-1.5 text-right text-[#4CAF50] dark:text-green-400 font-medium font-['Manrope']">
+                              {run.passed as number ?? 0}
+                            </TableCell>
+                            <TableCell className="text-[12px] px-2 py-1.5 text-right text-[#F44336] dark:text-red-400 font-medium font-['Manrope']">
+                              {run.failed as number ?? 0}
+                            </TableCell>
+                            <TableCell className="text-[12px] px-2 py-1.5 text-right font-medium font-['Manrope']">
+                              <span className={runRate >= 80 ? 'text-[#4CAF50] dark:text-green-400' : runRate >= 50 ? 'text-[#FF9800] dark:text-orange-400' : 'text-[#F44336] dark:text-red-400'}>
+                                {runRate.toFixed(1)}%
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-[12px] px-2 py-1.5 text-right text-[#888888] dark:text-gray-400 font-['Manrope']">
+                              {(run.duration as string) || '—'}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Module Groups (from existing DashboardTab) */}
+          <DashboardTab onSelectModule={handleSelectModule} moduleHealth={moduleHealth} onRunModule={handleRunModule} runHistory={runHistory} />
+        </div>
+      </div>
+    )
+  }
+
   // Loading / Login screen
   if (loading) {
     return (
@@ -6257,11 +6773,7 @@ export default function Home() {
           )}
 
           {/* ── DASHBOARD VIEW ── */}
-          {selectedModule === 'dashboard' && (
-            <div data-tour="dashboard" className="flex-1 min-h-0 overflow-hidden">
-              <DashboardTab onSelectModule={handleSelectModule} moduleHealth={moduleHealth} onRunModule={handleRunModule} runHistory={runHistory} />
-            </div>
-          )}
+          {selectedModule === 'dashboard' && renderDashboard()}
 
           {/* ── MY TICKETS VIEW ── */}
           {selectedModule === 'my-tickets' && user && (
