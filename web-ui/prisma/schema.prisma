@@ -30,6 +30,8 @@ enum BugStatus {
   open
   in_progress
   fixed
+  closed
+  rejected
 }
 
 enum ReplyAuthorRole {

@@ -4756,7 +4756,7 @@ function UserProfileDialog({
     }
     setChangingPassword(true)
     try {
-      const res = await fetch('/api/proxy?path=auth/change-password', {
+      const res = await fetch('/api/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -4766,7 +4766,7 @@ function UserProfileDialog({
       })
       const data = await res.json()
       if (!res.ok) {
-        toast.error(data.detail || data.error || 'Failed to change password')
+        toast.error(data.error || 'Failed to change password')
         return
       }
       toast.success('Password changed successfully')

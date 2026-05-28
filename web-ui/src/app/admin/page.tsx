@@ -124,11 +124,17 @@ export default function AdminPage() {
 
   // Bug filters
   const [bugStatusFilter, setBugStatusFilter] = useState('all')
+  const [bugSearch, setBugSearch] = useState('')
+  const [bugModuleFilter, setBugModuleFilter] = useState('all')
+  const [bugPriorityFilter, setBugPriorityFilter] = useState('all')
   const [expandedBug, setExpandedBug] = useState<string | null>(null)
   const [bugReplyText, setBugReplyText] = useState<Record<string, string>>({})
 
-  // Audit pagination
+  // Audit pagination & filters
   const [auditPage, setAuditPage] = useState(1)
+  const [auditSearch, setAuditSearch] = useState('')
+  const [auditActionFilter, setAuditActionFilter] = useState('all')
+  const [auditUserFilter, setAuditUserFilter] = useState('all')
 
   // Dialogs
   const [envDialogOpen, setEnvDialogOpen] = useState(false)
@@ -260,21 +266,24 @@ export default function AdminPage() {
     }
   }, [activeSection])
 
-  // Audit log
+  // Audit log — load on initial page load (for overview) and refresh when visiting audit-log section
+  const loadAuditLog = useCallback(async () => {
+    setAuditLoaded(false)
+    try {
+      const res = await fetch('/api/admin/audit-log')
+      if (res.ok) {
+        const data = await res.json()
+        setAuditLog(data.entries || [])
+      }
+    } catch { /* empty */ } finally { setAuditLoaded(true) }
+  }, [])
+
+  useEffect(() => { loadAuditLog() }, [loadAuditLog])
+
+  // Refresh when switching to audit-log section
   useEffect(() => {
-    if (activeSection === 'audit-log') {
-      setAuditLoaded(false)
-      ;(async () => {
-        try {
-          const res = await fetch('/api/admin/audit-log')
-          if (res.ok) {
-            const data = await res.json()
-            setAuditLog(data.entries || [])
-          }
-        } catch { /* empty */ } finally { setAuditLoaded(true) }
-      })()
-    }
-  }, [activeSection])
+    if (activeSection === 'audit-log') { loadAuditLog() }
+  }, [activeSection, loadAuditLog])
 
   // ─── Handlers ──────────────────────────────────────────
   const handleLogout = useCallback(async () => {
@@ -298,6 +307,22 @@ export default function AdminPage() {
     for (const t of tests) if (!m.has(t.moduleId)) m.set(t.moduleId, t.moduleName)
     return Array.from(m.entries()).sort((a, b) => a[1].localeCompare(b[1]))
   }, [tests])
+
+  // Filtered audit log
+  const filteredAuditLog = useMemo(() => {
+    return auditLog.filter(a => {
+      const ms = !auditSearch || a.userName.toLowerCase().includes(auditSearch.toLowerCase()) || a.targetLabel.toLowerCase().includes(auditSearch.toLowerCase()) || a.details.toLowerCase().includes(auditSearch.toLowerCase()) || a.targetType.toLowerCase().includes(auditSearch.toLowerCase())
+      const mst = auditActionFilter === 'all' || a.action === auditActionFilter
+      const mu = auditUserFilter === 'all' || a.userName === auditUserFilter
+      return ms && mst && mu
+    })
+  }, [auditLog, auditSearch, auditActionFilter, auditUserFilter])
+
+  const uniqueAuditUsers = useMemo(() => {
+    const s = new Set<string>()
+    for (const a of auditLog) s.add(a.userName)
+    return Array.from(s).sort()
+  }, [auditLog])
 
   // Stats
   const stats = useMemo(() => {
@@ -742,19 +767,28 @@ export default function AdminPage() {
 
   // 4. Bug Reports
   const renderBugReports = () => {
-    const filtered = bugStatusFilter === 'all' ? bugReports : bugReports.filter(b => b.status === bugStatusFilter)
+    const filteredByStatus = bugStatusFilter === 'all' ? bugReports : bugReports.filter(b => b.status === bugStatusFilter)
+    const filtered = filteredByStatus.filter(b => {
+      const ms = !bugSearch || b.testDescription.toLowerCase().includes(bugSearch.toLowerCase()) || b.error.toLowerCase().includes(bugSearch.toLowerCase()) || b.id.toLowerCase().includes(bugSearch.toLowerCase()) || b.reporterName.toLowerCase().includes(bugSearch.toLowerCase())
+      const mm = bugModuleFilter === 'all' || b.moduleName.toLowerCase().replace(/\s+/g, '-') === bugModuleFilter || b.moduleName === bugModuleFilter
+      const mp = bugPriorityFilter === 'all' || b.priority === bugPriorityFilter
+      return ms && mm && mp
+    })
+    const uniqueBugModules = [...new Set(bugReports.map(b => b.moduleName))].sort()
     const tabs = [
       { id: 'all', label: 'All', count: bugReports.length },
       { id: 'open', label: 'Open', count: bugReports.filter(b => b.status === 'open').length },
       { id: 'in-progress', label: 'In Progress', count: bugReports.filter(b => b.status === 'in-progress').length },
       { id: 'fixed', label: 'Fixed', count: bugReports.filter(b => b.status === 'fixed').length },
+      { id: 'closed', label: 'Closed', count: bugReports.filter(b => b.status === 'closed').length },
+      { id: 'rejected', label: 'Rejected', count: bugReports.filter(b => b.status === 'rejected').length },
     ]
 
     return (
       <div className="space-y-4">
         <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Bug Reports</h2>
         {/* Status tabs */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {tabs.map(tab => (
             <button key={tab.id} onClick={() => setBugStatusFilter(tab.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-['Manrope'] font-medium transition-colors cursor-pointer ${
@@ -763,6 +797,35 @@ export default function AdminPage() {
               {tab.label} <span className="ml-1 opacity-70">({tab.count})</span>
             </button>
           ))}
+        </div>
+        {/* Search & Filters */}
+        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 size-4 text-[#888]" />
+              <Input placeholder="Search bugs..." value={bugSearch} onChange={e => setBugSearch(e.target.value)}
+                className="pl-9 h-9 text-sm font-['Manrope']" />
+            </div>
+            <Select value={bugModuleFilter} onValueChange={setBugModuleFilter}>
+              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Module" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Modules</SelectItem>
+                {uniqueBugModules.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={bugPriorityFilter} onValueChange={setBugPriorityFilter}>
+              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Priority" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priorities</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" className="h-9 text-xs font-['Roboto']" onClick={() => { setBugSearch(''); setBugModuleFilter('all'); setBugPriorityFilter('all') }}>
+              <RotateCcw className="size-3 mr-1" /> Clear Filters
+            </Button>
+          </div>
         </div>
         {!bugsLoaded ? (
           <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
@@ -789,7 +852,7 @@ export default function AdminPage() {
                       <p className="text-sm font-['Manrope'] text-[#333] dark:text-gray-100 truncate mt-0.5">{bug.testDescription}</p>
                       <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope'] mt-0.5">{bug.moduleName} · {bug.priority} priority · {sla.remaining}</p>
                     </div>
-                    <Badge className={`text-[10px] border-0 ${bug.status === 'open' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : bug.status === 'in-progress' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'}`}>
+                    <Badge className={`text-[10px] border-0 ${bug.status === 'open' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : bug.status === 'in-progress' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : bug.status === 'fixed' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : bug.status === 'closed' ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'}`}>
                       {bug.status}
                     </Badge>
                     <ChevronDown className={`size-4 text-[#888] transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
@@ -803,9 +866,9 @@ export default function AdminPage() {
                         {bug.userNote && <div className="sm:col-span-2"><span className="text-[#888] dark:text-gray-400">Note:</span> <span className="text-[#333] dark:text-gray-100">{bug.userNote}</span></div>}
                       </div>
                       {/* Status change buttons */}
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
                         <span className="text-xs text-[#888] dark:text-gray-400 font-['Manrope'] self-center">Change status:</span>
-                        {(['open', 'in-progress', 'fixed'] as const).map(s => (
+                        {(['open', 'in-progress', 'fixed', 'closed', 'rejected'] as const).map(s => (
                           <Button key={s} size="sm" variant={bug.status === s ? 'default' : 'outline'}
                             className={`h-7 text-[10px] font-['Roboto'] ${bug.status === s ? 'bg-[#3F51B5] hover:bg-[#2D3FC7]' : ''}`}
                             onClick={() => handleBugStatusChange(bug.id, s)} disabled={bug.status === s}>
@@ -979,25 +1042,65 @@ export default function AdminPage() {
   // 8. Audit Log
   const renderAuditLog = () => {
     const perPage = 25
-    const totalPages = Math.ceil(auditLog.length / perPage) || 1
-    const paged = auditLog.slice((auditPage - 1) * perPage, auditPage * perPage)
+    const totalPages = Math.ceil(filteredAuditLog.length / perPage) || 1
+    const paged = filteredAuditLog.slice((auditPage - 1) * perPage, auditPage * perPage)
 
     const actionColor = (action: string) => {
       if (action === 'create') return 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
       if (action === 'update') return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
       if (action === 'delete') return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+      if (action === 'login') return 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+      if (action === 'logout') return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+      if (action === 'reset_password') return 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
+      if (action === 'toggle') return 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300'
       return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
     }
 
     return (
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Audit Log</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Audit Log</h2>
+          <Badge variant="outline" className="text-xs font-['Manrope']">{filteredAuditLog.length} entries</Badge>
+        </div>
+        {/* Filters */}
+        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 size-4 text-[#888]" />
+              <Input placeholder="Search user, target, details..." value={auditSearch} onChange={e => { setAuditSearch(e.target.value); setAuditPage(1) }}
+                className="pl-9 h-9 text-sm font-['Manrope']" />
+            </div>
+            <Select value={auditActionFilter} onValueChange={v => { setAuditActionFilter(v); setAuditPage(1) }}>
+              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Action" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Actions</SelectItem>
+                <SelectItem value="create">Create</SelectItem>
+                <SelectItem value="update">Update</SelectItem>
+                <SelectItem value="delete">Delete</SelectItem>
+                <SelectItem value="login">Login</SelectItem>
+                <SelectItem value="logout">Logout</SelectItem>
+                <SelectItem value="reset_password">Reset Password</SelectItem>
+                <SelectItem value="toggle">Toggle</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={auditUserFilter} onValueChange={v => { setAuditUserFilter(v); setAuditPage(1) }}>
+              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="User" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Users</SelectItem>
+                {uniqueAuditUsers.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" className="h-9 text-xs font-['Roboto']" onClick={() => { setAuditSearch(''); setAuditActionFilter('all'); setAuditUserFilter('all'); setAuditPage(1) }}>
+              <RotateCcw className="size-3 mr-1" /> Clear Filters
+            </Button>
+          </div>
+        </div>
         {!auditLoaded ? (
           <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
-        ) : auditLog.length === 0 ? (
+        ) : filteredAuditLog.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 text-center">
             <FileText className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
-            <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No audit entries yet</p>
+            <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No audit entries match your filters</p>
           </div>
         ) : (
           <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm overflow-hidden">
@@ -1019,7 +1122,7 @@ export default function AdminPage() {
                         {new Date(a.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </TableCell>
                       <TableCell className="text-xs font-['Manrope'] text-[#333] dark:text-gray-100">{a.userName}</TableCell>
-                      <TableCell><Badge className={`text-[9px] border-0 ${actionColor(a.action)}`}>{a.action}</Badge></TableCell>
+                      <TableCell><Badge className={`text-[9px] border-0 ${actionColor(a.action)}`}>{a.action.replace('_', ' ')}</Badge></TableCell>
                       <TableCell>
                         <div className="text-xs font-['Manrope']">
                           <span className="text-[#888] dark:text-gray-400">{a.targetType}</span>
@@ -1034,7 +1137,7 @@ export default function AdminPage() {
             </div>
             <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-700">
               <span className="text-xs text-[#888] dark:text-gray-400 font-['Manrope']">
-                Showing {(auditPage - 1) * perPage + 1}–{Math.min(auditPage * perPage, auditLog.length)} of {auditLog.length}
+                Showing {(auditPage - 1) * perPage + 1}–{Math.min(auditPage * perPage, filteredAuditLog.length)} of {filteredAuditLog.length}
               </span>
               <div className="flex gap-1">
                 <Button size="sm" variant="outline" disabled={auditPage <= 1} onClick={() => setAuditPage(p => p - 1)} className="h-7 text-xs"><ChevronLeft className="size-3" /></Button>
@@ -1242,6 +1345,7 @@ function UserDialog({ open, onOpenChange, editingUser, onSave, allModules }: {
   const [email, setEmail] = useState(editingUser?.email || '')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<string>(editingUser?.role || 'tester')
+  const [status, setStatus] = useState<string>(editingUser?.status || 'active')
   const [moduleAccess, setModuleAccess] = useState<string[]>(editingUser?.moduleAccess || [])
 
   const toggleModule = (modId: string) => {
@@ -1283,18 +1387,30 @@ function UserDialog({ open, onOpenChange, editingUser, onSave, allModules }: {
               <Input value={password} onChange={e => setPassword(e.target.value)} placeholder="changeme" type="password" className="h-9 text-sm font-['Manrope']" />
             </div>
           )}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-['Manrope']">Role</Label>
-            <Select value={role} onValueChange={setRole}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="qa_lead">QA Lead</SelectItem>
-                <SelectItem value="tester">Tester</SelectItem>
-                <SelectItem value="viewer">Viewer</SelectItem>
-                <SelectItem value="client">Client</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-['Manrope']">Role</Label>
+              <Select value={role} onValueChange={setRole}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="qa_lead">QA Lead</SelectItem>
+                  <SelectItem value="tester">Tester</SelectItem>
+                  <SelectItem value="viewer">Viewer</SelectItem>
+                  <SelectItem value="client">Client</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-['Manrope']">Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           {/* Module Access */}
           <div className="space-y-2">
@@ -1334,7 +1450,7 @@ function UserDialog({ open, onOpenChange, editingUser, onSave, allModules }: {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="font-['Roboto']">Cancel</Button>
-          <Button onClick={() => onSave({ name, email, password: password || undefined, role: role as AdminUser['role'], moduleAccess })}
+          <Button onClick={() => onSave({ name, email, password: password || undefined, role: role as AdminUser['role'], status: status as AdminUser['status'], moduleAccess })}
             disabled={!name || !email}
             className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto']">
             {editingUser ? 'Update' : 'Create'}

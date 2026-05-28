@@ -17,7 +17,7 @@ export interface BugReport {
   error: string
   userNote: string
   priority: 'low' | 'medium' | 'high'
-  status: 'open' | 'in-progress' | 'fixed'
+  status: 'open' | 'in-progress' | 'fixed' | 'closed' | 'rejected'
   reporterName: string
   reporterEmail: string
   createdAt: string
@@ -258,7 +258,8 @@ export function getSLADeadline(priority: BugReport['priority'], createdAt: strin
 }
 
 export function getSLAStatus(priority: BugReport['priority'], createdAt: string, status: BugReport['status']): { label: string; color: string; remaining: string; overdue: boolean } {
-  if (status === 'fixed') return { label: 'Resolved', color: 'text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/40', remaining: '—', overdue: false }
+  if (status === 'fixed' || status === 'closed') return { label: 'Resolved', color: 'text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/40', remaining: '—', overdue: false }
+  if (status === 'rejected') return { label: 'Rejected', color: 'text-gray-700 bg-gray-100 dark:text-gray-400 dark:bg-gray-700/40', remaining: '—', overdue: false }
 
   const deadline = getSLADeadline(priority, createdAt)
   const now = new Date()

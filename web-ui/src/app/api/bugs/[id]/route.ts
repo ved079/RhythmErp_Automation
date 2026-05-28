@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-type BugStatus = 'open' | 'in_progress' | 'fixed'
+type BugStatus = 'open' | 'in_progress' | 'fixed' | 'closed' | 'rejected'
 
 // PATCH /api/bugs/[id] — update status, assignment, etc.
 export async function PATCH(
@@ -27,6 +27,8 @@ export async function PATCH(
         'in-progress': 'in_progress',
         'in_progress': 'in_progress',
         'fixed': 'fixed',
+        'closed': 'closed',
+        'rejected': 'rejected',
       }
       const dbStatus = statusMap[body.status]
       if (!dbStatus) {
