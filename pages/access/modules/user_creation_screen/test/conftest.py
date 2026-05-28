@@ -26,8 +26,8 @@ from pages.common_settings.cs_report_generator import (
 # ================================================================
 # LOGIN CREDENTIALS — User Creation Screen
 # ================================================================
-UC_LOGIN_EMAIL = "Rular@admin.com"
-UC_LOGIN_PASSWORD = "Rular@12345678"
+UC_LOGIN_EMAIL = "Assistant@mail.com"
+UC_LOGIN_PASSWORD = "Vedant@12345"
 UC_LOGIN_FACILITY_INDEX = 0  # Agdi
 
 

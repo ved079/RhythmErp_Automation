@@ -17,7 +17,7 @@
 | **Form Type** | Multi-Step Stepper Popup (3 steps) |
 | **Framework** | Angular Material |
 | **Popup Selector** | `.big-model, .edit_pop_up, mat-dialog-container` |
-| **Login** | `Rular@admin.com` / `Rular@12345678` |
+| **Login** | `Assistant@mail.com` / `Vedant@12345` |
 | **Facility** | `RuralLife Producer Company` (index 0) |
 
 ### Stepper Steps
@@ -492,8 +492,8 @@ from pages.common_settings.cs_report_generator import CSReportStore, generate_cs
 
 ### Supplier-Specific Login (conftest.py)
 ```python
-SP_LOGIN_EMAIL = "Rular@admin.com"
-SP_LOGIN_PASSWORD = "Rular@12345678"
+SP_LOGIN_EMAIL = "Assistant@mail.com"
+SP_LOGIN_PASSWORD = "Vedant@12345"
 SP_LOGIN_FACILITY_INDEX = 0  # RuralLife Producer Company
 ```
 

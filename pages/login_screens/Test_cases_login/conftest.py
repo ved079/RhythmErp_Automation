@@ -240,8 +240,11 @@ def pytest_runtest_makereport(item, call):
             if driver:
                 try:
                     from pages.login_screens.Login_Screens_.login_page import LoginPage
-                    from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
-import os
+                    from common.screenshot_broadcast import (
+                        start as start_screenshot_broadcast,
+                        stop as stop_screenshot_broadcast,
+                    )
+                    import os
                     os.makedirs(REPORT_DIR, exist_ok=True)
                     shot_name = f"FAILED_{item.name}"
                     lp = LoginPage(driver)

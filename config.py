@@ -75,3 +75,14 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 # Ensure directories exist
 for directory in [SCREENSHOT_DIR, REPORT_DIR, DATA_DIR]:
     os.makedirs(directory, exist_ok=True)
+
+# ============================================================
+# ALIAS MAPPINGS (backward compatibility)
+# ============================================================
+FP_EMAIL = RHYTHMERP_FP_EMAIL
+FP_CURRENT_PASSWORD = RHYTHMERP_FP_CURRENT_PASSWORD
+FP_NEW_PASSWORD = RHYTHMERP_FP_NEW_PASSWORD
+FP_ALT_PASSWORD = RHYTHMERP_FP_ALT_PASSWORD
+FP_USERNAME = RHYTHMERP_FP_USERNAME
+FP_TENANT = RHYTHMERP_FP_TENANT
+FP_OLD_PASSWORDS = RHYTHMERP_FP_OLD_PASSWORDS

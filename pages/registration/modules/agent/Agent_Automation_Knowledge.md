@@ -17,7 +17,7 @@
 | **Form Type** | Multi-Step Stepper Popup (4 steps) |
 | **Framework** | Angular Material |
 | **Popup Selector** | `.edit_pop_up.override_edit_pop_up.popup-mode` |
-| **Login** | `Rular@admin.com` / `Rular@12345678` |
+| **Login** | `Assistant@mail.com` / `Vedant@12345` |
 | **Facility** | `RuralLife Producer Company` (index 0) |
 
 ### Stepper Steps
