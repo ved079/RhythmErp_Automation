@@ -72,6 +72,7 @@ import {
   RefreshCw,
   MoreVertical,
   Eye,
+  EyeOff,
   Pencil,
   ClipboardList,
   Clock,
@@ -782,12 +783,93 @@ function SortArrow({ col, sortCol, sortDir }: { col: string; sortCol: string; so
   )
 }
 
-// ─── LOGIN PAGE ──────────────────────────────────────────
+// ─── LOGIN PAGE (RhythmERP replica) ──────────────────────
+function MaterialOutlinedField({
+  label,
+  type,
+  value,
+  onChange,
+  icon,
+  required,
+  autoFocus,
+  suffixIcon,
+  onSuffixClick,
+}: {
+  label: string
+  type: string
+  value: string
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  icon: React.ReactNode
+  required?: boolean
+  autoFocus?: boolean
+  suffixIcon?: React.ReactNode
+  onSuffixClick?: () => void
+}) {
+  const [focused, setFocused] = useState(false)
+  const hasValue = value.length > 0
+  const floatLabel = focused || hasValue
+
+  return (
+    <div className="w-full mb-6">
+      <div
+        className={`relative flex items-center h-[56px] rounded-[4px] transition-colors duration-150 ${
+          focused
+            ? 'outline outline-2 outline-[#3F51B5] outline-offset-0'
+            : 'outline outline-1 outline-[rgba(0,0,0,0.38)] outline-offset-0 dark:outline-[rgba(255,255,255,0.38)]'
+        }`}
+      >
+        {/* Prefix icon — matches ERP mat-icon prefix (48×24 area) */}
+        <div className="flex items-center justify-center w-[48px] shrink-0 pl-2">
+          <span className={`transition-colors duration-150 ${
+            focused ? 'text-[#3F51B5]' : 'text-[#212529] dark:text-gray-400'
+          }`}>
+            {icon}
+          </span>
+        </div>
+
+        {/* Input + floating label */}
+        <div className="relative flex-1 h-full">
+          {/* Floating label with white bg "notch" — creates the Material outlined notch effect */}
+          <label
+            className={`absolute left-0 transition-all duration-150 pointer-events-none font-['Manrope',sans-serif] z-10 ${
+              floatLabel
+                ? 'top-0 text-[12px] leading-none px-[4px] ' + (focused ? 'text-[rgba(63,81,181,0.87)]' : 'text-[rgba(0,0,0,0.6)] dark:text-gray-400') + ' bg-white dark:bg-gray-800 -translate-y-1/2'
+                : 'top-[16px] text-[16px] text-[rgba(0,0,0,0.6)] dark:text-gray-400 bg-transparent'
+            }`}
+          >
+            {label}{required && <span className="text-[#f44336] ml-0.5">*</span>}
+          </label>
+          <input
+            type={type}
+            value={value}
+            onChange={onChange}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            autoFocus={autoFocus}
+            required={required}
+            className="w-full h-full bg-transparent text-[16px] text-[rgba(0,0,0,0.87)] dark:text-gray-100 font-['Manrope',sans-serif] outline-none border-none placeholder-transparent leading-[56px]"
+          />
+        </div>
+
+        {/* Suffix icon (e.g. visibility toggle) */}
+        {suffixIcon && (
+          <button
+            type="button"
+            onClick={onSuffixClick}
+            className="flex items-center justify-center w-[48px] h-[48px] shrink-0 cursor-pointer text-[#212529] dark:text-gray-400 hover:bg-[rgba(0,0,0,0.04)] rounded-full transition-colors"
+          >
+            {suffixIcon}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -822,182 +904,165 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   )
 
   return (
-    <div className="min-h-screen bg-[#F1F2F7] dark:bg-gray-900 flex">
-      {/* ─── LEFT: Login Form ─── */}
-      <div className="w-full lg:w-[440px] xl:w-[480px] shrink-0 flex flex-col items-center justify-center px-8 py-12 bg-white dark:bg-gray-800 relative">
-        {/* Logo — drops from above */}
-        <motion.div
-          className="flex flex-col items-center mb-10"
-          initial={{ y: -80, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 120, damping: 14, mass: 0.8 }}
-        >
-          <motion.div
-            className="flex items-center justify-center mb-5"
-            initial={{ scale: 0.3, rotate: -15 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 12, delay: 0.15 }}
-          >
-            <Image src="/agdi-logo.png" alt="AgDi" width={120} height={60} className="object-contain" />
-          </motion.div>
-          <motion.h1
-            className="text-[24px] font-bold text-gray-800 dark:text-gray-100"
-            initial={{ y: 15, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.35, duration: 0.5, ease: 'easeOut' }}
-          >
-            Welcome Back!
-          </motion.h1>
-          <motion.p
-            className="text-[14px] text-gray-500 dark:text-gray-400 mt-1"
-            initial={{ y: 10, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.5, duration: 0.5, ease: 'easeOut' }}
-          >
-            Sign in to continue
-          </motion.p>
-        </motion.div>
-
-        {/* Login Card — fades up with stagger */}
-        <motion.div
-          className="w-full max-w-[340px]"
-          initial={{ y: 30, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.55, duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
-        >
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Email */}
+    <div className="min-h-screen flex">
+      {/* ─── LEFT: Login Form (ERP: col-lg-4, white, centered) ─── */}
+      <div className="w-full lg:w-1/3 shrink-0 flex items-center min-h-screen bg-white dark:bg-gray-800 p-4">
+        <div className="w-full flex justify-center">
+          <div className="w-full max-w-[300px]">
+            {/* Logo — drops from above */}
             <motion.div
-              className="relative"
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: 0.65, duration: 0.4 }}
-            >
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#374151] dark:text-gray-400" />
-              <Input
-                type="email"
-                placeholder="Username*"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-11 pl-9 text-[14px] bg-white dark:bg-gray-700/50 border-[#d1d5db] dark:border-gray-600 focus:border-[#3F51B5] focus:ring-[#3F51B5]/20 text-[#333333] dark:text-gray-100 rounded-md placeholder:text-[#9ca3af]"
-                required
-                autoFocus
-              />
-            </motion.div>
-
-            {/* Password */}
-            <motion.div
-              className="relative"
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: 0.75, duration: 0.4 }}
-            >
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#374151] dark:text-gray-400" />
-              <Input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Password*"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-11 pl-9 pr-10 text-[14px] bg-white dark:bg-gray-700/50 border-[#d1d5db] dark:border-gray-600 focus:border-[#3F51B5] focus:ring-[#3F51B5]/20 text-[#333333] dark:text-gray-100 rounded-md placeholder:text-[#9ca3af]"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#374151] hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300 transition-colors cursor-pointer"
-              >
-                <Eye className="size-4" />
-              </button>
-            </motion.div>
-
-            {/* Remember Me / Forgot */}
-            <motion.div
-              className="flex items-center justify-between"
-              initial={{ y: 10, opacity: 0 }}
+              className="text-center mb-[20px]"
+              initial={{ y: -60, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.85, duration: 0.4 }}
+              transition={{ type: 'spring', stiffness: 120, damping: 14, mass: 0.8 }}
             >
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="remember"
-                  checked={rememberMe}
-                  onCheckedChange={(v) => setRememberMe(v === true)}
-                  className="size-4"
-                />
-                <label htmlFor="remember" className="text-[13px] text-gray-600 dark:text-gray-400 cursor-pointer select-none">
-                  Remember me
-                </label>
-              </div>
-              <button type="button" className="text-[13px] text-gray-600 dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-indigo-400 font-medium cursor-pointer">
-                Forgot Password?
-              </button>
+              <motion.div
+                className="flex justify-center mb-0"
+                initial={{ scale: 0.3, rotate: -15 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: 'spring', stiffness: 200, damping: 12, delay: 0.15 }}
+              >
+                <Image src="/agdi-logo.png" alt="AgDi" width={150} height={92} className="object-contain" priority />
+              </motion.div>
             </motion.div>
 
-            {/* Error */}
-            <AnimatePresence>
-              {error && (
+            {/* Heading + Subtitle (ERP: text-center, Manrope font) */}
+            <div className="text-center">
+              <motion.h4
+                className="text-[20px] font-bold text-[#212529] dark:text-gray-100 font-['Manrope',sans-serif] mt-[24px] mb-2"
+                initial={{ y: 15, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.35, duration: 0.5, ease: 'easeOut' }}
+              >
+                Welcome Back !
+              </motion.h4>
+              <motion.p
+                className="text-[13px] font-medium text-[#919AA3] dark:text-gray-400 font-['Manrope',sans-serif]"
+                initial={{ y: 10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.5, duration: 0.5, ease: 'easeOut' }}
+              >
+                Sign in to continue
+              </motion.p>
+            </div>
+
+            {/* Form (ERP: p-2 mt-5 = padding 8px, margin-top 32px) — fades up with stagger */}
+            <motion.div
+              className="p-2 mt-8"
+              initial={{ y: 30, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.55, duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+            >
+              <form onSubmit={handleSubmit}>
+                {/* Username (ERP: mat-form-field outlined with "face" icon) */}
                 <motion.div
-                  className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-[12px] px-3 py-2.5 rounded-lg flex items-center gap-2"
-                  initial={{ height: 0, opacity: 0, scale: 0.95 }}
-                  animate={{ height: 'auto', opacity: 1, scale: 1 }}
-                  exit={{ height: 0, opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.25 }}
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.65, duration: 0.4 }}
                 >
-                  <XCircle className="size-3.5 shrink-0" />
-                  {error}
+                  <MaterialOutlinedField
+                    label="Username"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    icon={<User className="size-[24px]" />}
+                    required
+                    autoFocus
+                  />
                 </motion.div>
-              )}
-            </AnimatePresence>
 
-            {/* Submit */}
-            <motion.div
-              initial={{ y: 15, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.95, duration: 0.4 }}
-            >
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full h-11 bg-[#3F51B5] hover:bg-[#2D3FC7] text-white text-[15px] font-semibold gap-2 rounded-[4px] cursor-pointer transition-all duration-200 font-['Roboto']"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  'Login'
-                )}
-              </Button>
+                {/* Password (ERP: mat-form-field outlined with "vpn_key" icon + visibility toggle) */}
+                <motion.div
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.75, duration: 0.4 }}
+                >
+                  <MaterialOutlinedField
+                    label="Password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    icon={<Lock className="size-[24px]" />}
+                    required
+                    suffixIcon={showPassword ? <Eye className="size-[24px]" /> : <EyeOff className="size-[24px]" />}
+                    onSuffixClick={() => setShowPassword(!showPassword)}
+                  />
+                </motion.div>
+
+                {/* Error message */}
+                <AnimatePresence>
+                  {error && (
+                    <motion.div
+                      className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-[12px] px-3 py-2.5 rounded-[4px] flex items-center gap-2 mb-4"
+                      initial={{ height: 0, opacity: 0, scale: 0.95 }}
+                      animate={{ height: 'auto', opacity: 1, scale: 1 }}
+                      exit={{ height: 0, opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.25 }}
+                    >
+                      <XCircle className="size-3.5 shrink-0" />
+                      {error}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Forgot Password row (ERP: flex-sb-m, pt-15px, pb-20px) */}
+                <motion.div
+                  className="flex justify-between items-center pt-[15px] pb-[20px]"
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.85, duration: 0.4 }}
+                >
+                  <div />
+                  <button
+                    type="button"
+                    className="text-[13px] font-medium text-[#555555] dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-indigo-400 font-['Poppins',sans-serif] no-underline cursor-pointer bg-transparent border-none"
+                  >
+                    Forgot Password?
+                  </button>
+                </motion.div>
+
+                {/* Login button (ERP: centered, auto-width, 36px height, #3F51B5, rounded 4px) */}
+                <motion.div
+                  className="flex justify-center"
+                  initial={{ y: 15, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.95, duration: 0.4 }}
+                >
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    className="h-[36px] min-w-[74px] px-6 bg-[#3F51B5] hover:bg-[#3949AB] text-white text-[14px] font-medium tracking-[1.25px] rounded-[4px] cursor-pointer transition-colors duration-150 font-['Roboto',sans-serif] normal-case"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin mr-1" />
+                        Login
+                      </>
+                    ) : (
+                      'Login'
+                    )}
+                  </Button>
+                </motion.div>
+              </form>
             </motion.div>
-          </form>
-        </motion.div>
-
-        {/* Footer */}
-        <motion.div
-          className="absolute bottom-6 left-0 right-0 text-center"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.2, duration: 0.6 }}
-        >
-          <p className="text-[11px] text-gray-400 dark:text-gray-500">
-            agDi Automation Runner v1.0 — Internal QA Tool
-          </p>
-        </motion.div>
+          </div>
+        </div>
       </div>
 
-      {/* ─── RIGHT: Hero Illustration ─── */}
+      {/* ─── RIGHT: Hero with overlay (ERP: col-lg-8, bg image + dark overlay) ─── */}
       <motion.div
-        className="hidden lg:flex flex-1 relative overflow-hidden"
+        className="hidden lg:block lg:w-2/3 relative overflow-hidden"
         initial={{ x: 80, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ delay: 0.3, duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
       >
+        {/* Background image */}
         <img
           src="/agdi-hero-illustration.png"
           alt="AgDi - Agricultural Digital Intelligence"
           className="w-full h-full object-cover"
         />
+
       </motion.div>
     </div>
   )
