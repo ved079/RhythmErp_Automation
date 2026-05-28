@@ -203,16 +203,16 @@ export default function AdminPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/api/proxy?path=users')
+        const res = await fetch('/api/admin/users')
         if (res.ok) {
           const data = await res.json()
-          const arr = data.users || data
+          const arr = data.users || []
           setUsers(arr.map((u: Record<string, unknown>) => ({
             id: String(u.id || ''), email: String(u.email || ''), name: String(u.name || ''),
             role: String(u.role || 'tester') as AdminUser['role'],
             status: String(u.status || 'active') as AdminUser['status'],
-            lastLogin: u.last_login ? String(u.last_login) : undefined,
-            moduleAccess: Array.isArray(u.module_access) ? u.module_access.map(String) : ['all'],
+            lastLogin: u.lastLogin ? String(u.lastLogin) : undefined,
+            moduleAccess: Array.isArray(u.moduleAccess) ? u.moduleAccess.map(String) : ['all'],
           })))
         }
       } catch { /* empty */ } finally { setUsersLoaded(true) }
@@ -223,10 +223,10 @@ export default function AdminPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/api/proxy?path=environments')
+        const res = await fetch('/api/admin/environments')
         if (res.ok) {
           const data = await res.json()
-          setEnvironments(Array.isArray(data) ? data : data.environments || [])
+          setEnvironments(data.environments || [])
         }
       } catch { /* empty */ } finally { setEnvLoaded(true) }
     })()
@@ -236,10 +236,10 @@ export default function AdminPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/api/proxy?path=settings')
+        const res = await fetch('/api/admin/settings')
         if (res.ok) {
           const data = await res.json()
-          setSettings(Array.isArray(data) ? data : data.settings || [])
+          setSettings(data.settings || [])
         }
       } catch { /* empty */ } finally { setSettingsLoaded(true) }
     })()
@@ -266,10 +266,10 @@ export default function AdminPage() {
       setAuditLoaded(false)
       ;(async () => {
         try {
-          const res = await fetch('/api/proxy?path=audit-log')
+          const res = await fetch('/api/admin/audit-log')
           if (res.ok) {
             const data = await res.json()
-            setAuditLog(Array.isArray(data) ? data : data.entries || [])
+            setAuditLog(data.entries || [])
           }
         } catch { /* empty */ } finally { setAuditLoaded(true) }
       })()
@@ -315,20 +315,21 @@ export default function AdminPage() {
   const handleSaveEnv = useCallback(async (envData: Partial<Environment>) => {
     try {
       if (editingEnv) {
-        const res = await fetch(`/api/proxy?path=environments/${editingEnv.id}`, {
+        const res = await fetch(`/api/admin/environments/${editingEnv.id}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(envData),
         })
-        if (!res.ok) throw new Error('Failed to update')
-        setEnvironments(prev => prev.map(e => e.id === editingEnv.id ? { ...e, ...envData } : e))
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to update') }
+        const updated = await res.json()
+        setEnvironments(prev => prev.map(e => e.id === editingEnv.id ? { ...e, ...updated } : e))
         toast.success('Environment updated')
       } else {
-        const res = await fetch('/api/proxy?path=environments', {
+        const res = await fetch('/api/admin/environments', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...envData, status: 'active', color: envData.color || 'bg-green-500' }),
         })
-        if (!res.ok) throw new Error('Failed to create')
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to create') }
         const created = await res.json()
-        setEnvironments(prev => [...prev, { ...envData, id: created.id || `env-${Date.now()}`, status: 'active', color: envData.color || 'bg-green-500' } as Environment])
+        setEnvironments(prev => [...prev, { ...envData, id: created.id, name: created.name, baseUrl: created.baseUrl, browser: created.browser, status: created.status, color: created.color, lastUsed: created.lastUsed } as Environment])
         toast.success('Environment created')
       }
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Operation failed') }
@@ -338,7 +339,7 @@ export default function AdminPage() {
   const handleToggleEnv = useCallback(async (env: Environment) => {
     const newStatus = env.status === 'active' ? 'inactive' : 'active'
     try {
-      const res = await fetch(`/api/proxy?path=environments/${env.id}`, {
+      const res = await fetch(`/api/admin/environments/${env.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       })
@@ -352,21 +353,22 @@ export default function AdminPage() {
   const handleSaveUser = useCallback(async (userData: Partial<AdminUser> & { password?: string }) => {
     try {
       if (editingUser) {
-        const res = await fetch(`/api/proxy?path=users/${editingUser.id}`, {
+        const res = await fetch(`/api/admin/users/${editingUser.id}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: userData.name, email: userData.email, role: userData.role, status: userData.status, module_access: userData.moduleAccess }),
         })
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Failed') }
-        setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...userData } : u))
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed') }
+        const updated = await res.json()
+        setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, name: updated.name, email: updated.email, role: updated.role, status: updated.status, moduleAccess: updated.moduleAccess } : u))
         toast.success('User updated')
       } else {
-        const res = await fetch('/api/proxy?path=users', {
+        const res = await fetch('/api/admin/users', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: userData.name, email: userData.email, password: userData.password || 'changeme', role: userData.role, module_access: userData.moduleAccess || [] }),
         })
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Failed') }
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed') }
         const created = await res.json()
-        setUsers(prev => [...prev, { ...userData, id: created.id || `usr-${Date.now()}`, status: 'active', moduleAccess: userData.moduleAccess || [] } as AdminUser])
+        setUsers(prev => [...prev, { id: created.id, email: created.email, name: created.name, role: created.role, status: created.status || 'active', moduleAccess: created.moduleAccess || userData.moduleAccess || [] } as AdminUser])
         toast.success('User created')
       }
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
@@ -375,8 +377,8 @@ export default function AdminPage() {
 
   const handleResetPassword = useCallback(async (userId: string) => {
     try {
-      const res = await fetch(`/api/proxy?path=users/${userId}/reset-password`, { method: 'POST' })
-      if (!res.ok) throw new Error('Failed to reset password')
+      const res = await fetch(`/api/admin/users/${userId}/reset-password`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to reset password') }
       toast.success('Password reset to default')
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
   }, [])
@@ -385,13 +387,13 @@ export default function AdminPage() {
     if (!deleteTarget) return
     try {
       if (deleteTarget.type === 'user') {
-        const res = await fetch(`/api/proxy?path=users/${deleteTarget.id}`, { method: 'DELETE' })
-        if (!res.ok) throw new Error('Failed to delete')
+        const res = await fetch(`/api/admin/users/${deleteTarget.id}`, { method: 'DELETE' })
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
         setUsers(prev => prev.filter(u => u.id !== deleteTarget.id))
         toast.success('User deleted')
       } else if (deleteTarget.type === 'environment') {
-        const res = await fetch(`/api/proxy?path=environments/${deleteTarget.id}`, { method: 'DELETE' })
-        if (!res.ok) throw new Error('Failed to delete')
+        const res = await fetch(`/api/admin/environments/${deleteTarget.id}`, { method: 'DELETE' })
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
         setEnvironments(prev => prev.filter(e => e.id !== deleteTarget.id))
         toast.success('Environment deleted')
       }
@@ -401,7 +403,7 @@ export default function AdminPage() {
 
   const handleSaveSetting = useCallback(async (setting: SystemSetting, newValue: string) => {
     try {
-      const res = await fetch(`/api/proxy?path=settings/${setting.id}`, {
+      const res = await fetch(`/api/admin/settings/${setting.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ value: newValue }),
       })
@@ -413,10 +415,10 @@ export default function AdminPage() {
 
   const handleSeedSettings = useCallback(async () => {
     try {
-      const res = await fetch('/api/proxy?path=settings/seed', { method: 'POST' })
+      const res = await fetch('/api/admin/settings/seed', { method: 'POST' })
       if (!res.ok) throw new Error('Failed to reset')
       const data = await res.json()
-      setSettings(Array.isArray(data) ? data : [])
+      setSettings(data.settings || [])
       toast.success('Settings reset to defaults')
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
   }, [])

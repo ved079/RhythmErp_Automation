@@ -28,6 +28,8 @@ export async function GET(request: NextRequest) {
         email: session.user.email,
         name: session.user.name,
         role: session.user.role,
+        status: session.user.status,
+        moduleAccess: JSON.parse(session.user.moduleAccess || '[]'),
       },
     })
   } catch (error) {

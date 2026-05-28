@@ -43,6 +43,25 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Update lastLogin timestamp
+    await db.user.update({
+      where: { id: user.id },
+      data: { lastLogin: new Date() },
+    }).catch(() => {}) // non-critical
+
+    // Create audit log entry for login
+    await db.auditLog.create({
+      data: {
+        userId: user.id,
+        userName: user.name,
+        action: 'login',
+        targetType: 'session',
+        targetId: user.id,
+        targetLabel: user.email,
+        details: `User logged in with role: ${user.role}`,
+      },
+    }).catch(() => {}) // non-critical
+
     const response = NextResponse.json({
       message: 'Login successful',
       user: { id: user.id, email: user.email, name: user.name, role: user.role },
