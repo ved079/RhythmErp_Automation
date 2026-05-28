@@ -63,7 +63,7 @@ KEY RULES (verified 2026-05-22 on live app):
   - NO History button on Supplier screen
   - No Delete option anywhere
 
-LOGIN: Rular@admin.com / Rular@12345678 / Facility: RuralLife Producer Company (index 0)
+LOGIN: Assistant@mail.com / Vedant@12345 / Facility: RuralLife Producer Company (index 0)
 """
 
 import random

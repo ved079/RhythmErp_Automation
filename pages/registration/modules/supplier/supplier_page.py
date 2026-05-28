@@ -80,7 +80,7 @@ TABLE COLUMNS (main listing):
   - Phone Number (mobile_no)
   - Status
 
-LOGIN: Rular@admin.com / Rular@12345678 / Facility: RuralLife Producer Company (index 0)
+LOGIN: Assistant@mail.com / Vedant@12345 / Facility: RuralLife Producer Company (index 0)
 """
 
 import os

@@ -4,8 +4,8 @@ conftest.py - Supplier Screen (RhythmERP)
 Session-scoped driver + login fixtures for Supplier Screen tests.
 
 IMPORTANT: Uses DIFFERENT login credentials than other screens!
-  Email:    Rular@admin.com
-  Password: Rular@12345678
+  Email:    Assistant@mail.com
+  Password: Vedant@12345
   Facility: RuralLife Producer Company (index 0)
 """
 
@@ -33,8 +33,8 @@ from pages.common_settings.cs_report_generator import (
 # ================================================================
 # LOGIN CREDENTIALS — Supplier Screen (DIFFERENT from other screens!)
 # ================================================================
-SP_LOGIN_EMAIL = "Rular@admin.com"
-SP_LOGIN_PASSWORD = "Rular@12345678"
+SP_LOGIN_EMAIL = "Assistant@mail.com"
+SP_LOGIN_PASSWORD = "Vedant@12345"
 SP_LOGIN_FACILITY_INDEX = 0  # RuralLife Producer Company
 
 
@@ -92,7 +92,7 @@ def driver():
 @pytest.fixture(scope="session")
 def logged_in_driver(driver):
     """Driver with completed RhythmERP login session.
-    Uses Rular@admin.com / Rular@12345678 / RuralLife Producer Company.
+    Uses Assistant@mail.com / Vedant@12345 / RuralLife Producer Company.
     """
     log.separator()
     log.info("LOGGING INTO RHYTHMERP (Supplier Screen)...")
@@ -119,7 +119,7 @@ def logged_in_driver(driver):
     login_page.click_login()
     login_page.wait_seconds(3)
     login_page.wait_for_login_complete()
-    log.info("RhythmERP login successful (Rular@admin)!")
+    log.info("RhythmERP login successful (Assistant@mail)!")
     start_screenshot_broadcast(driver)
 
     yield driver
