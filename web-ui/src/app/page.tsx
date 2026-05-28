@@ -5461,8 +5461,8 @@ export default function Home() {
   useEffect(() => {
     const init = async () => {
       try {
-        // Seed admin user (idempotent)
-        await fetch('/api/auth/seed')
+        // Seed admin user (idempotent — POST for security)
+        await fetch('/api/auth/seed', { method: 'POST' })
         // Check session
         const res = await fetch('/api/auth/me')
         if (res.ok) {

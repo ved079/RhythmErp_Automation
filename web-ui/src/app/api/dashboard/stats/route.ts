@@ -3,42 +3,14 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-
-/**
- * Validate that the request comes from an authenticated user (any role).
- * Returns the session if valid, or an error response if not.
- */
-async function validateSession(req: NextRequest) {
-  const token = req.cookies.get('session_token')?.value
-
-  if (!token) {
-    return { error: NextResponse.json({ error: 'Not authenticated' }, { status: 401 }) }
-  }
-
-  try {
-    const session = await db.session.findUnique({
-      where: { token },
-      include: { user: true },
-    })
-
-    if (!session || session.expiresAt < new Date()) {
-      if (session) {
-        await db.session.delete({ where: { id: session.id } }).catch(() => {})
-      }
-      return { error: NextResponse.json({ error: 'Session expired' }, { status: 401 }) }
-    }
-
-    return { session }
-  } catch (err) {
-    console.error('validateSession error:', err)
-    return { error: NextResponse.json({ error: 'Internal server error' }, { status: 500 }) }
-  }
-}
+import { validateSession } from '@/lib/session'
 
 export async function GET(req: NextRequest) {
   // ── Auth check ──
-  const auth = await validateSession(req)
-  if ('error' in auth) return auth.error
+  const user = await validateSession(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
 
   try {
     // ── Run all independent queries in parallel ──

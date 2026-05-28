@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
+import { getCookieOptions, cleanupExpiredSessions } from '@/lib/session'
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,16 +21,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
+    // Check if user is active
+    if (user.status === 'inactive') {
+      return NextResponse.json({ error: 'Account is deactivated. Contact admin.' }, { status: 403 })
+    }
+
     const isValid = await bcrypt.compare(password, user.password)
 
     if (!isValid) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
-    // Clean up old sessions for this user
-    await db.session.deleteMany({
-      where: { userId: user.id },
-    })
+    // Clean up old sessions for this user + expired sessions globally
+    await Promise.all([
+      db.session.deleteMany({ where: { userId: user.id } }),
+      cleanupExpiredSessions(),
+    ])
 
     // Create new session
     const token = crypto.randomBytes(32).toString('hex')
@@ -67,13 +74,7 @@ export async function POST(request: NextRequest) {
       user: { id: user.id, email: user.email, name: user.name, role: user.role },
     })
 
-    response.cookies.set('session_token', token, {
-      httpOnly: true,
-      secure: false,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60, // 7 days
-    })
+    response.cookies.set('session_token', token, getCookieOptions())
 
     return response
   } catch (error) {
