@@ -174,6 +174,8 @@ interface AuthUser {
   email: string
   name: string
   role: string
+  status?: string
+  moduleAccess?: string[]
 }
 
 interface RunSnapshot {
@@ -398,6 +400,48 @@ function buildSidebarModules(apiModules: ApiModule[]): SidebarModule[] {
   }
 
   return sidebar
+}
+
+/**
+ * Filter sidebar modules based on user's role and moduleAccess.
+ * - admin/qa_lead: full access (all modules)
+ * - Others: only modules listed in moduleAccess (or 'all' for legacy)
+ * - 'dashboard' and 'my-tickets' are always visible
+ */
+function filterSidebarByAccess(modules: SidebarModule[], user: AuthUser): SidebarModule[] {
+  // Admin and QA Lead get full access
+  if (user.role === 'admin' || user.role === 'qa_lead') return modules
+
+  const access = user.moduleAccess || []
+  // Legacy support: ['all'] means full access
+  if (access.includes('all')) return modules
+
+  // Always-visible module IDs
+  const alwaysVisible = new Set(['dashboard', 'my-tickets'])
+
+  function filterItems(items: SidebarModule[]): SidebarModule[] {
+    return items
+      .filter(item => {
+        if (alwaysVisible.has(item.id)) return true
+        // Check if this module ID or any of its children are in the access list
+        if (access.includes(item.id)) return true
+        if (item.children) {
+          const visibleChildren = item.children.filter(c =>
+            alwaysVisible.has(c.id) || access.includes(c.id) || (c.children && c.children.some(gc => access.includes(gc.id)))
+          )
+          if (visibleChildren.length > 0) return true
+        }
+        return false
+      })
+      .map(item => {
+        if (!item.children) return item
+        // Filter children recursively
+        const filteredChildren = filterItems(item.children)
+        return { ...item, children: filteredChildren.length > 0 ? filteredChildren : undefined }
+      })
+  }
+
+  return filterItems(modules)
 }
 
 const testSpecGroups: TestClassGroup[] = [
@@ -5001,7 +5045,7 @@ function RunDetailDialog({
 export default function Home() {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
-  const [sidebarModules, setSidebarModules] = useState<SidebarModule[]>(ALL_SIDEBAR_MODULES)
+  const [sidebarModules, setSidebarModules] = useState<SidebarModule[]>([])
   const [apiModules, setApiModules] = useState<ApiModule[]>([])
   const [selectedModule, setSelectedModule] = useState<string>('dashboard')
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
@@ -5094,11 +5138,12 @@ export default function Home() {
     fetchModules()
       .then((mods) => {
         setApiModules(mods)
-        setSidebarModules(buildSidebarModules(mods))
+        setSidebarModules(filterSidebarByAccess(buildSidebarModules(mods), user))
       })
       .catch((err) => {
         console.warn('API modules fetch failed, using defaults:', err)
-        // Keep ALL_SIDEBAR_MODULES on failure
+        // Apply access filter to defaults on failure too
+        setSidebarModules(filterSidebarByAccess(ALL_SIDEBAR_MODULES, user))
       })
   }, [user])
     // Fetch test cases from backend
@@ -5358,6 +5403,8 @@ export default function Home() {
         if (res.ok) {
           const data = await res.json()
           setUser(data.user)
+          // Set initial sidebar with access filtering for session-restore case
+          setSidebarModules(filterSidebarByAccess(ALL_SIDEBAR_MODULES, data.user))
         }
       } catch {
         // Silently fail
@@ -5370,6 +5417,9 @@ export default function Home() {
 
   const handleLogin = useCallback((u: AuthUser) => {
     setUser(u)
+    // Set initial sidebar with access filtering (will be refined after API fetch)
+    setSidebarModules(filterSidebarByAccess(ALL_SIDEBAR_MODULES, u))
+    setSelectedModule('dashboard')
   }, [])
 
   const handleLogout = useCallback(async () => {
@@ -5895,13 +5945,17 @@ export default function Home() {
     .toUpperCase()
     .slice(0, 2)
 
+  // Role-based access
+  const isReadOnly = user?.role === 'viewer' || user?.role === 'client'
+  const canRunTests = !isReadOnly
+
   const tabs = [
     { id: 'operations', label: '📋 Test Specifications' },
-    { id: 'test-runner', label: '🧪 Test Runner' },
-    { id: 'live-execution', label: '📺 Live Execution' },
+    ...(canRunTests ? [{ id: 'test-runner', label: '🧪 Test Runner' }] : []),
+    ...(canRunTests ? [{ id: 'live-execution', label: '📺 Live Execution' }] : []),
     { id: 'results', label: '📈 Results' },
     { id: 'screenshots', label: '📸 Screenshots' },
-    { id: 'schedule', label: '🗓️ Schedule' },
+    ...(canRunTests ? [{ id: 'schedule', label: '🗓️ Schedule' }] : []),
   ]
 
   return (
