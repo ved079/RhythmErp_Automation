@@ -2406,7 +2406,8 @@ function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sideb
   }, [sidebarModules])
 
   return (
-    <div className="flex flex-col h-full overflow-auto">
+    <div className="flex flex-col h-full min-h-0">
+      <ScrollArea className="flex-1 min-h-0">
       <div className="p-4 space-y-4">
         <div className="flex items-center justify-between">
           <div>
@@ -2571,6 +2572,7 @@ function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sideb
           )}
         </div>
       </div>
+      </ScrollArea>
     </div>
   )
 }
@@ -2929,7 +2931,7 @@ function ResultsTab({
   }, [compareRun1, compareRun2, runHistory])
 
   return (
-    <div className="flex flex-col h-full overflow-auto">
+    <div className="flex flex-col h-full min-h-0">
       {/* Summary Cards */}
       <div className="px-4 pt-4 pb-3 shrink-0">
         <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mb-3">Test Results Summary</h3>
@@ -2957,7 +2959,8 @@ function ResultsTab({
       <Separator className="mx-4" />
 
       {/* Run Results Drill-Down */}
-      <div className="px-4 pt-3 pb-3 shrink-0">
+      <ScrollArea className="flex-1 min-h-0">
+      <div className="px-4 pt-3 pb-3">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">Run Results</h3>
           <div className="flex items-center gap-2">
@@ -3268,6 +3271,7 @@ function ResultsTab({
           </Table>
         </div>
       </div>
+      </ScrollArea>
     </div>
   )
 }
@@ -5227,7 +5231,7 @@ export default function Home() {
 
           {/* ── DASHBOARD VIEW ── */}
           {selectedModule === 'dashboard' && (
-            <div data-tour="dashboard">
+            <div data-tour="dashboard" className="flex-1 min-h-0 overflow-hidden">
               <DashboardTab onSelectModule={handleSelectModule} moduleHealth={moduleHealth} onRunModule={handleRunModule} runHistory={runHistory} />
             </div>
           )}
@@ -5269,7 +5273,7 @@ export default function Home() {
               {/* Tab Content */}
               <div className="flex-1 overflow-hidden min-h-0">
                 {activeTab === 'operations' && (
-                  <div data-tour="operations">
+                  <div data-tour="operations" className="h-full">
                   <OperationsTab
                     testGroups={currentTestGroups}
                     testCasesModule={
@@ -5279,7 +5283,7 @@ export default function Home() {
                   </div>
                 )}
             {activeTab === 'test-runner' && (
-              <div data-tour="test-runner">
+              <div data-tour="test-runner" className="h-full">
               <TestRunnerTab
                 tests={tests}
                 testChecks={testChecks}
@@ -5303,7 +5307,7 @@ export default function Home() {
               </div>
             )}
             {activeTab === 'live-execution' && (
-              <div data-tour="live-execution">
+              <div data-tour="live-execution" className="h-full">
               <LiveExecutionTab
                 tests={tests}
                 testGroups={currentTestGroups}
@@ -5340,7 +5344,7 @@ export default function Home() {
               </div>
             )}
             {activeTab === 'results' && (
-              <div data-tour="results">
+              <div data-tour="results" className="h-full">
               <ResultsTab
                 tests={tests}
                 passedCount={passedCount}
@@ -5358,7 +5362,7 @@ export default function Home() {
               </div>
             )}
             {activeTab === 'screenshots' && (
-              <div data-tour="screenshots" className="flex flex-col h-full">
+              <div data-tour="screenshots" className="flex flex-col h-full min-h-0">
                 <div className="p-4 shrink-0">
                   <div className="flex items-center justify-between mb-3">
                     <div>
@@ -5436,7 +5440,7 @@ export default function Home() {
               </div>
             )}
             {activeTab === 'schedule' && user && (
-              <div data-tour="schedule-runs">
+              <div data-tour="schedule-runs" className="h-full">
               <ScheduleRunsTab userName={user.name} sidebarModules={sidebarModules} />
               </div>
             )}
