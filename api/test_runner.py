@@ -1,4 +1,9 @@
-"""Run pytest tests via subprocess and stream results as SSE events."""
+"""Run pytest tests via subprocess and stream results as SSE events.
+
+In v3.0, this module also sends a callback to Next.js when a run completes,
+so that run results are always persisted even if the user navigates away
+from the page during the SSE stream.
+"""
 
 import subprocess
 import os
@@ -6,12 +11,15 @@ import re
 import ast
 import json
 import time
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+import httpx
+
 from api.database import create_run, update_run_started, update_run_completed, update_run_status
 from api.models import (
-    RunStatus, TestStatus, TestResult, LogEvent, CreateRunRequest
+    RunStatus, TestStatus, TestResult, LogEvent, CreateRunRequest, RunCompletionPayload
 )
 
 
@@ -19,6 +27,13 @@ PROJECT_ROOT = Path(__file__).parent.parent
 
 # Active subprocess tracking: run_id -> subprocess.Popen
 _active_processes: dict[str, subprocess.Popen] = {}
+
+# Callback configuration
+NEXTJS_CALLBACK_URL = os.getenv("NEXTJS_CALLBACK_URL", "http://localhost:3000")
+PROXY_API_KEY = os.getenv("PROXY_API_KEY", "rhythmerp-proxy-key-change-in-production")
+CALLBACK_ENABLED = os.getenv("RUN_CALLBACK_ENABLED", "true").lower() == "true"
+
+logger = logging.getLogger(__name__)
 
 
 # --- Input Validation ---
@@ -29,7 +44,6 @@ ALLOWED_MODULES = {
 }
 
 ALLOWED_SUB_MODULES = {
-    # login_screens
     # access
     "entity_group_definition", "user_creation_screen", "role_creation_screen",
     # common_settings
@@ -242,6 +256,56 @@ def stop_run(run_id: str) -> bool:
         _active_processes.pop(run_id, None)
 
 
+def _send_run_callback(run_id: str, module: str, sub_module: str | None,
+                       passed: int, failed: int, skipped: int, total: int,
+                       duration: float, status: str, results: list[TestResult],
+                       started_at: str | None, completed_at: str | None) -> None:
+    """Send run completion callback to Next.js.
+
+    This ensures run results are persisted even if the user navigated away
+    from the SSE stream. The callback is fire-and-forget — failures are logged
+    but don't affect the test run.
+    """
+    if not CALLBACK_ENABLED:
+        return
+
+    callback_url = f"{NEXTJS_CALLBACK_URL}/api/runs/callback"
+
+    payload = RunCompletionPayload(
+        run_id=run_id,
+        module=module,
+        sub_module=sub_module,
+        passed=passed,
+        failed=failed,
+        skipped=skipped,
+        total=total,
+        duration_seconds=round(duration, 2),
+        status=status,
+        results=[r.model_dump() for r in results],
+        started_at=started_at,
+        completed_at=completed_at,
+    )
+
+    try:
+        with httpx.Client(timeout=10) as client:
+            resp = client.post(
+                callback_url,
+                json=payload.model_dump(),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Proxy-API-Key": PROXY_API_KEY,
+                },
+            )
+            if resp.status_code >= 300:
+                logger.warning(f"[Callback] Next.js returned {resp.status_code}: {resp.text[:200]}")
+            else:
+                logger.info(f"[Callback] Run {run_id} results synced to Next.js ({status})")
+    except httpx.ConnectError:
+        logger.warning(f"[Callback] Could not reach Next.js at {NEXTJS_CALLBACK_URL} — run results saved locally only")
+    except Exception as e:
+        logger.warning(f"[Callback] Failed to sync run {run_id}: {e}")
+
+
 def run_tests_stream(request: CreateRunRequest):
     """Run pytest and yield SSE events. This is a generator for Server-Sent Events."""
 
@@ -284,6 +348,8 @@ def run_tests_stream(request: CreateRunRequest):
 
     # 5. Mark run as started
     update_run_started(run_id)
+    started_at_iso = datetime.now(timezone.utc).isoformat()
+
     yield _sse_event(LogEvent(
         type="log",
         message=f"Starting run {run_id}: {' '.join(cmd)}",
@@ -367,6 +433,14 @@ def run_tests_stream(request: CreateRunRequest):
     current_run = get_run(run_id)
 
     if current_run and current_run.get("status") == RunStatus.STOPPED.value:
+        completed_at_iso = datetime.now(timezone.utc).isoformat()
+        # Send callback for stopped runs too
+        _send_run_callback(
+            run_id=run_id, module=request.module, sub_module=request.sub_module,
+            passed=passed, failed=failed, skipped=skipped, total=total,
+            duration=duration, status="stopped", results=results,
+            started_at=started_at_iso, completed_at=completed_at_iso,
+        )
         yield _sse_event(LogEvent(
             type="run_end",
             message=f"Run {run_id} was stopped by user after {duration:.1f}s",
@@ -374,7 +448,7 @@ def run_tests_stream(request: CreateRunRequest):
         ))
         return
 
-    # 8. Save results
+    # 8. Save results locally
     final_status = RunStatus.COMPLETED if failed == 0 else RunStatus.FAILED
     update_run_completed(
         run_id=run_id,
@@ -385,6 +459,18 @@ def run_tests_stream(request: CreateRunRequest):
         skipped=skipped,
         duration=round(duration, 2),
         results=results,
+    )
+
+    completed_at_iso = datetime.now(timezone.utc).isoformat()
+
+    # 9. Send callback to Next.js so results are persisted server-side
+    _send_run_callback(
+        run_id=run_id, module=request.module, sub_module=request.sub_module,
+        passed=passed, failed=failed, skipped=skipped, total=total,
+        duration=duration,
+        status=final_status.value,  # "completed" or "failed"
+        results=results,
+        started_at=started_at_iso, completed_at=completed_at_iso,
     )
 
     yield _sse_event(LogEvent(

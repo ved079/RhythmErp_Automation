@@ -19,6 +19,7 @@ const PUBLIC_ROUTES = new Set([
 const PUBLIC_PREFIXES = [
   '/api/auth/login',
   '/api/auth/seed',
+  '/api/runs/callback',  // FastAPI server-to-server callback (uses API key auth)
 ]
 
 function isPublicRoute(pathname: string): boolean {

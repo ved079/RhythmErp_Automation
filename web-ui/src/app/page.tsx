@@ -4277,10 +4277,10 @@ function UserProfileDialog({
   useEffect(() => {
     if (open) {
       setLoadingProfile(true)
-      fetch('/api/proxy?path=auth/me', { headers: { 'Content-Type': 'application/json' } })
+      fetch('/api/auth/me', { headers: { 'Content-Type': 'application/json' } })
         .then((res) => res.json())
         .then((data) => {
-          if (data.last_login) setLastLogin(data.last_login)
+          if (data.lastLogin) setLastLogin(data.lastLogin)
         })
         .catch(() => { /* silent */ })
         .finally(() => setLoadingProfile(false))
