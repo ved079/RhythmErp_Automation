@@ -64,6 +64,35 @@ enum RunStatus {
   stopped
 }
 
+enum EnvStatus {
+  active
+  inactive
+}
+
+enum BrowserType {
+  chrome
+  firefox
+  edge
+  safari
+}
+
+enum SettingType {
+  text
+  number
+  boolean
+  select
+}
+
+enum AuditAction {
+  create
+  update
+  delete
+  login
+  logout
+  reset_password
+  toggle
+}
+
 model User {
   id           String     @id @default(cuid())
   email        String     @unique
@@ -160,4 +189,47 @@ model RunHistory {
   completedAt DateTime?
   status      RunStatus @default(pending)
   createdBy   String?
+}
+
+// ─── Admin: Environment Management ──────────────────────
+
+model Environment {
+  id        String      @id @default(cuid())
+  name      String      @unique
+  baseUrl   String
+  browser   BrowserType @default(chrome)
+  status    EnvStatus   @default(active)
+  color     String      @default("bg-green-500")
+  lastUsed  DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+// ─── Admin: System Settings ─────────────────────────────
+
+model SystemSetting {
+  id          String      @id @default(cuid())
+  key         String      @unique
+  label       String
+  value       String
+  type        SettingType @default(text)
+  description String      @default("")
+  category    String      @default("general")
+  options     String      @default("[]")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+// ─── Admin: Audit Log ──────────────────────────────────
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  userId      String
+  userName    String
+  action      AuditAction
+  targetType  String
+  targetId    String      @default("")
+  targetLabel String      @default("")
+  details     String      @default("")
+  createdAt   DateTime    @default(now())
 }
