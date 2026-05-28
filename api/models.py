@@ -262,3 +262,69 @@ class ChangePasswordRequest(BaseModel):
         if not re.search(r'\d', v):
             raise ValueError('Password must contain at least one number')
         return v
+
+
+# --- Admin Panel Models ---
+
+class EnvironmentRequest(BaseModel):
+    name: str
+    base_url: str
+    browser: str = "Chrome"
+    status: str = "active"
+    color: str = "bg-green-500"
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Name cannot be empty')
+        return v.strip()
+
+    @field_validator('base_url')
+    @classmethod
+    def validate_base_url(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Base URL cannot be empty')
+        return v.strip()
+
+
+class SettingRequest(BaseModel):
+    key: str
+    label: str
+    value: str = ""
+    type: str = "text"
+    description: str = ""
+    category: str = "System"
+
+    @field_validator('key')
+    @classmethod
+    def validate_key(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Key cannot be empty')
+        return v.strip()
+
+    @field_validator('label')
+    @classmethod
+    def validate_label(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Label cannot be empty')
+        return v.strip()
+
+
+class AdminResetPasswordRequest(BaseModel):
+    new_password: str
+
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password(cls, v):
+        if not v:
+            raise ValueError('Password cannot be empty')
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters')
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'\d', v):
+            raise ValueError('Password must contain at least one number')
+        return v

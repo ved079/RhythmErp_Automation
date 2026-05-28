@@ -2,8 +2,14 @@
 FastAPI backend for Rhythm ERP Test Runner UI.
 
 Endpoints:
-  - Auth:  POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me
-  - Users: GET /api/users, POST /api/users, PUT /api/users/{id}, DELETE /api/users/{id}
+  - Auth:  POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me,
+           GET /api/auth/users (alias for /api/users)
+  - Users: GET /api/users, POST /api/users, PUT /api/users/{id}, DELETE /api/users/{id},
+           POST /api/users/{id}/reset-password
+  - Environments: GET /api/environments, POST /api/environments, PUT /api/environments/{id},
+                  DELETE /api/environments/{id}
+  - Settings: GET /api/settings, PUT /api/settings/{id}, POST /api/settings/seed
+  - Audit Log: GET /api/audit-log
   - Modules: GET /api/modules
   - Runs:  GET /api/runs, GET /api/runs/{id}, POST /api/runs/start,
            POST /api/runs/{id}/stop, POST /api/runs/{id}/rerun-failed
@@ -32,11 +38,17 @@ from api.models import (
     ModuleListResponse, RunResponse, RunListResponse,
     CreateRunRequest, StartRunRequest,
     LoginRequest, CreateUserRequest, UpdateUserRequest, ChangePasswordRequest,
+    EnvironmentRequest, SettingRequest, AdminResetPasswordRequest,
     RunStatus,
 )
 from api.test_discovery import discover_all_modules
 from api.test_runner import run_tests_stream, stop_run
-from api.database import init_db, get_run, list_runs, get_failed_tests, delete_run
+from api.database import (
+    init_db, get_run, list_runs, get_failed_tests, delete_run,
+    list_environments, get_environment, create_environment, update_environment, delete_environment,
+    list_settings, get_setting, upsert_setting, delete_setting, seed_default_settings,
+    list_audit_log, add_audit_entry,
+)
 from api.screenshot_store import take_screenshot
 
 
@@ -199,6 +211,7 @@ def require_role(*roles: str):
 @app.on_event("startup")
 def startup():
     init_db()
+    seed_default_settings()
 
 
 # ================================================================
@@ -378,6 +391,13 @@ def create_user(req: CreateUserRequest, user: dict = Depends(require_role("admin
     data["users"].append(new_user)
     _save_users(data)
 
+    # Audit log
+    add_audit_entry(
+        user_id=user["id"], user_name=user.get("name", ""), action="create_user",
+        target_type="user", target_id=user_id, target_label=req.name,
+        details=f"Created user {req.email} with role {req.role}"
+    )
+
     return {
         "id": user_id,
         "email": req.email,
@@ -422,6 +442,14 @@ def update_user(
 
     _save_users(data)
 
+    # Audit log
+    updated_fields = [k for k, v in {"name": req.name, "email": req.email, "role": req.role, "status": req.status}.items() if v is not None]
+    add_audit_entry(
+        user_id=current_user["id"], user_name=current_user.get("name", ""), action="update_user",
+        target_type="user", target_id=user_id, target_label=target.get("name", ""),
+        details=f"Updated fields: {', '.join(updated_fields)}"
+    )
+
     return {
         "id": target["id"],
         "email": target["email"],
@@ -440,13 +468,35 @@ def delete_user(user_id: str, current_user: dict = Depends(require_role("admin")
 
     data = _load_users()
     original_count = len(data["users"])
+    # Find user name before deleting for audit log
+    deleted_user = next((u for u in data["users"] if u["id"] == user_id), None)
+    deleted_user_name = deleted_user.get("name", "") if deleted_user else ""
+    deleted_user_email = deleted_user.get("email", "") if deleted_user else ""
     data["users"] = [u for u in data["users"] if u["id"] != user_id]
 
     if len(data["users"]) == original_count:
         raise HTTPException(status_code=404, detail="User not found")
 
     _save_users(data)
+
+    # Audit log
+    add_audit_entry(
+        user_id=current_user["id"], user_name=current_user.get("name", ""), action="delete_user",
+        target_type="user", target_id=user_id, target_label=deleted_user_name,
+        details=f"Deleted user {deleted_user_email}"
+    )
+
     return {"message": "User deleted successfully"}
+
+
+# ================================================================
+# AUTH USERS ALIAS (for admin frontend compatibility)
+# ================================================================
+
+@app.get("/api/auth/users")
+def auth_list_users(user: dict = Depends(require_role("admin"))):
+    """Alias for GET /api/users — admin frontend fetches /api/auth/users."""
+    return list_users(user)
 
 
 # ================================================================
@@ -554,6 +604,175 @@ def delete_run_endpoint(run_id: str, user: dict = Depends(require_role("admin"))
     if not success:
         raise HTTPException(status_code=404, detail="Run not found")
     return {"message": "Run deleted successfully"}
+
+
+# ================================================================
+# ENVIRONMENTS ENDPOINTS
+# ================================================================
+
+@app.get("/api/environments")
+def get_environments(user: dict = Depends(get_current_user)):
+    """List all environments. Auth required."""
+    return {"environments": list_environments()}
+
+
+@app.post("/api/environments")
+def create_env_endpoint(req: EnvironmentRequest, user: dict = Depends(require_role("admin"))):
+    """Create a new environment. Admin only."""
+    env_id = create_environment(
+        name=req.name, base_url=req.base_url, browser=req.browser,
+        status=req.status, color=req.color
+    )
+    # Audit log
+    add_audit_entry(
+        user_id=user["id"], user_name=user.get("name", ""), action="create_environment",
+        target_type="environment", target_id=env_id, target_label=req.name,
+        details=f"Created environment {req.name} at {req.base_url}"
+    )
+    return {"id": env_id, "message": "Environment created successfully"}
+
+
+@app.put("/api/environments/{env_id}")
+def update_env_endpoint(
+    env_id: str,
+    req: EnvironmentRequest,
+    user: dict = Depends(require_role("admin")),
+):
+    """Update an environment. Admin only."""
+    existing = get_environment(env_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Environment not found")
+    success = update_environment(
+        env_id, name=req.name, base_url=req.base_url, browser=req.browser,
+        status=req.status, color=req.color
+    )
+    if not success:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    # Audit log
+    add_audit_entry(
+        user_id=user["id"], user_name=user.get("name", ""), action="update_environment",
+        target_type="environment", target_id=env_id, target_label=req.name,
+        details=f"Updated environment {req.name}"
+    )
+    return {"message": "Environment updated successfully"}
+
+
+@app.delete("/api/environments/{env_id}")
+def delete_env_endpoint(env_id: str, user: dict = Depends(require_role("admin"))):
+    """Delete an environment. Admin only."""
+    existing = get_environment(env_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Environment not found")
+    env_name = existing.get("name", "")
+    success = delete_environment(env_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Environment not found")
+    # Audit log
+    add_audit_entry(
+        user_id=user["id"], user_name=user.get("name", ""), action="delete_environment",
+        target_type="environment", target_id=env_id, target_label=env_name,
+        details=f"Deleted environment {env_name}"
+    )
+    return {"message": "Environment deleted successfully"}
+
+
+# ================================================================
+# SETTINGS ENDPOINTS
+# ================================================================
+
+@app.get("/api/settings")
+def get_settings(user: dict = Depends(get_current_user)):
+    """List all settings. Auth required."""
+    return {"settings": list_settings()}
+
+
+@app.put("/api/settings/{setting_id}")
+def update_setting_endpoint(
+    setting_id: str,
+    req: SettingRequest,
+    user: dict = Depends(require_role("admin")),
+):
+    """Update a setting value. Admin only."""
+    # Verify setting exists by key or id
+    existing = get_setting(req.key)
+    if not existing:
+        # Try by id
+        all_settings = list_settings()
+        existing = next((s for s in all_settings if s["id"] == setting_id), None)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Setting not found")
+    upsert_setting(
+        key=req.key if req.key else existing["key"],
+        label=req.label if req.label else existing["label"],
+        value=req.value if req.value is not None else existing.get("value", ""),
+        type=req.type if req.type else existing.get("type", "text"),
+        description=req.description if req.description is not None else existing.get("description", ""),
+        category=req.category if req.category else existing.get("category", "System"),
+    )
+    # Audit log
+    add_audit_entry(
+        user_id=user["id"], user_name=user.get("name", ""), action="update_setting",
+        target_type="setting", target_id=setting_id, target_label=req.label,
+        details=f"Updated setting {req.key} = {req.value}"
+    )
+    return {"message": "Setting updated successfully"}
+
+
+@app.post("/api/settings/seed")
+def seed_settings_endpoint(user: dict = Depends(require_role("admin"))):
+    """Seed default settings. Admin only."""
+    seed_default_settings()
+    return {"message": "Default settings seeded successfully"}
+
+
+# ================================================================
+# AUDIT LOG ENDPOINT
+# ================================================================
+
+@app.get("/api/audit-log")
+def get_audit_log(
+    limit: int = 100,
+    offset: int = 0,
+    user: dict = Depends(require_role("admin")),
+):
+    """List audit log entries. Admin only."""
+    return {"entries": list_audit_log(limit=limit, offset=offset)}
+
+
+# ================================================================
+# ADMIN PASSWORD RESET
+# ================================================================
+
+@app.post("/api/users/{user_id}/reset-password")
+def admin_reset_password(
+    user_id: str,
+    req: AdminResetPasswordRequest,
+    current_user: dict = Depends(require_role("admin")),
+):
+    """Admin resets another user's password. Admin only."""
+    data = _load_users()
+    target = None
+    for u in data["users"]:
+        if u["id"] == user_id:
+            target = u
+            break
+
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Hash and save new password
+    hashed = bcrypt.hashpw(req.new_password.encode(), bcrypt.gensalt()).decode()
+    target["password"] = hashed
+    _save_users(data)
+
+    # Audit log
+    add_audit_entry(
+        user_id=current_user["id"], user_name=current_user.get("name", ""), action="reset_password",
+        target_type="user", target_id=user_id, target_label=target.get("name", ""),
+        details=f"Admin reset password for {target.get('email', '')}"
+    )
+
+    return {"message": "Password reset successfully"}
 
 
 # ================================================================
