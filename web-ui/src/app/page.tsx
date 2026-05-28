@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { useTheme } from 'next-themes'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
-import { fetchModules, fetchRunDetail, folderToSidebarId, sidebarToFolderMapping, startRun, stopRun, fetchTestCases, fetchScreenshot, type ApiModule, type ApiSubModule, type TestCasesData, type ApiRunDetail, type ApiTestResult } from '@/lib/api'
+import { fetchModules, folderToSidebarId, sidebarToFolderMapping, startRun, stopRun, fetchTestCases, fetchScreenshot, saveRunResults, syncModulesToDB, type ApiModule, type ApiSubModule, type TestCasesData, type RunCompletionSummary } from '@/lib/api'
 import {
   addBugReport,
   getBugReports,
@@ -124,6 +124,10 @@ import {
   Bug,
 } from 'lucide-react'
 import { AppTour, startAppTour } from '@/components/tour/AppTour'
+import { LoginPage } from '@/components/auth/LoginPage'
+import type { AuthUser } from '@/components/auth/LoginPage'
+import { SidebarModuleItem } from '@/components/sidebar/SidebarModuleItem'
+import type { SidebarModule } from '@/components/sidebar/SidebarModuleItem'
 import { Sparkline, getSparklineColor, TrendIndicator } from '@/components/ui/sparkline'
 import { PassRateTrendChart, ModuleHealthBarChart, BugDistributionPie, TestExecutionTimeline } from '@/components/dashboard/DashboardCharts'
 import { ScreenshotGallery, ScreenshotLightbox, ScreenshotCompare } from '@/components/screenshot/ScreenshotGallery'
@@ -134,14 +138,7 @@ import type { ScreenshotEntry } from '@/components/screenshot/ScreenshotGallery'
 // ─── Types ───────────────────────────────────────────────
 type TestPriority = 'smoke' | 'regression' | 'sanity'
 
-interface SidebarModule {
-  id: string
-  label: string
-  badge?: string
-  badgeType?: 'success' | 'warning' | 'wip' | 'none'
-  children?: SidebarModule[]
-  defaultExpanded?: boolean
-}
+// SidebarModule and AuthUser are imported from extracted components
 
 interface TestItem {
   id: string
@@ -170,14 +167,7 @@ interface TestClassGroup {
   tests: TestSpecItem[]
 }
 
-interface AuthUser {
-  id: string
-  email: string
-  name: string
-  role: string
-  status?: string
-  moduleAccess?: string[]
-}
+// AuthUser is imported from @/components/auth/LoginPage
 
 interface RunSnapshot {
   id: string
@@ -643,169 +633,7 @@ function PriorityBadge({ priority }: { priority?: TestPriority }) {
   )
 }
 
-// ─── Sidebar Module Component ────────────────────────────
-function SidebarModuleItem({
-  module,
-  depth = 0,
-  activeId,
-  onSelect,
-  expandedIds,
-  toggleExpand,
-  isLast = true,
-  justExpandedId,
-}: {
-  module: SidebarModule
-  depth?: number
-  activeId: string | null
-  onSelect: (id: string) => void
-  expandedIds: Set<string>
-  toggleExpand: (id: string) => void
-  isLast?: boolean
-  justExpandedId: string | null
-}) {
-  const hasChildren = module.children && module.children.length > 0
-  const isExpanded = expandedIds.has(module.id)
-  const isActive = activeId === module.id
-  const isParentActive = activeId && hasChildren && module.children!.some((c) => c.id === activeId)
-  const isChild = depth > 0
-
-  // Exact ERP tree-line values: width 2.7px, color #c8ccd4
-  const treeLineWidth = '2.7px'
-  const treeLineColor = '#c8ccd4'
-
-  return (
-    <div className="relative">
-      {isChild && (
-        <>
-          {/* L-shaped tree branch connector (border-left + border-bottom with rounded corner) */}
-          <div
-            className="absolute bg-transparent z-0"
-            style={{
-              left: isChild && depth === 1 ? '34px' : '74px',
-              top: '6px',
-              width: depth === 1 ? '22px' : '16px',
-              height: '16px',
-              borderLeft: `${treeLineWidth} solid ${treeLineColor}`,
-              borderBottom: `${treeLineWidth} solid ${treeLineColor}`,
-              borderRadius: isLast ? '0 0 0 15px' : '0 0 0 15px',
-              // For last child, the vertical line stops here (L-shape)
-              // For non-last, the vertical line continues down via the parent ml-menu::before
-            }}
-          />
-          {/* Continuing vertical line for non-last items */}
-          {!isLast && (
-            <div
-              className="absolute z-0 bg-transparent"
-              style={{
-                left: isChild && depth === 1 ? '34px' : '74px',
-                top: '22px',
-                bottom: '0',
-                width: treeLineWidth,
-                backgroundColor: treeLineColor,
-                borderRadius: '10px',
-              }}
-            />
-          )}
-        </>
-      )}
-      <button
-        data-module-id={module.id}
-        ref={(el) => {
-          // Only scroll when THIS module was just expanded (not on every re-render)
-          if (el && justExpandedId === module.id && hasChildren) {
-            requestAnimationFrame(() => {
-              el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            })
-          }
-        }}
-        onClick={() => {
-          if (hasChildren) toggleExpand(module.id)
-          else onSelect(module.id)
-        }}
-        className={`w-full flex items-center text-[14px] transition-all duration-200 cursor-pointer text-left font-['Poppins'] relative z-[1] ${
-          isChild
-            ? isActive
-              ? 'text-[#1B4332] dark:text-green-300 font-semibold'
-              : 'text-[#545454] dark:text-gray-300 font-medium hover:text-[#6777EF] dark:hover:text-indigo-400 hover:bg-[rgba(82,183,136,0.08)] hover:shadow-[rgba(82,183,136,0.5)_2px_0px_inset] hover:rounded-[5px]'
-            : isActive
-              ? 'bg-gradient-to-r from-[#DFF3E3] via-[#C8E6C9] to-[#B7E4C7] dark:bg-[#1B4332]/25 text-[#1B4332] dark:text-green-300 font-semibold shadow-[rgba(34,197,94,0.25)_2px_0px_4px_inset,rgba(34,197,94,0.15)_0px_2px_6px] rounded-[5px]'
-              : isParentActive
-                ? 'text-[#1B4332] dark:text-green-300 font-semibold'
-                : 'text-[#545454] dark:text-gray-300 font-medium hover:text-[#6777EF] dark:hover:text-indigo-400 hover:bg-[rgba(82,183,136,0.08)] hover:shadow-[rgba(82,183,136,0.5)_2px_0px_inset] hover:rounded-[5px]'
-        }`}
-        style={{
-          paddingLeft: isChild ? (depth === 1 ? '48px' : '80px') : '15px',
-          paddingRight: '24px',
-          paddingTop: '7px',
-          paddingBottom: '7px',
-        }}
-      >
-        {hasChildren ? (
-          <ChevronDown
-            className={`size-[18px] shrink-0 transition-transform duration-200 mr-1.5 ${
-              !isExpanded ? '-rotate-90' : ''
-            } ${isActive || isParentActive ? 'text-[#1B4332] dark:text-green-300' : 'text-[#495584] dark:text-gray-400'}`}
-          />
-        ) : isChild ? (
-          <span
-            className={`w-[7px] h-[7px] rounded-full shrink-0 mr-2 ${
-              isActive
-                ? 'bg-[#1A56DB] dark:bg-indigo-400'
-                : 'border-[1.5px] border-[#777777] dark:border-gray-500'
-            }`}
-          />
-        ) : (
-          <span className="w-[18px] shrink-0 mr-1.5" />
-        )}
-        <span className="truncate flex-1">{module.label}</span>
-        {module.badge && (
-          <span
-            className={`text-[11px] ml-auto shrink-0 ${
-              module.badgeType === 'success'
-                ? 'text-green-700 dark:text-green-400'
-                : module.badgeType === 'warning'
-                  ? 'text-orange-700 dark:text-orange-400'
-                  : module.badgeType === 'wip'
-                    ? 'text-blue-600 dark:text-blue-400'
-                    : 'text-gray-500 dark:text-gray-400'
-            }`}
-          >
-            {module.badge}
-          </span>
-        )}
-      </button>
-      {hasChildren && isExpanded && (
-        <div className="relative">
-          {/* Vertical tree line running down the left side of all children */}
-          <div
-            className="absolute z-0"
-            style={{
-              left: '34px',
-              top: '0',
-              bottom: isLast ? '27px' : '0',
-              width: treeLineWidth,
-              backgroundColor: treeLineColor,
-              borderRadius: '10px',
-            }}
-          />
-          {module.children!.map((child, idx) => (
-            <SidebarModuleItem
-              key={child.id}
-              module={child}
-              depth={depth + 1}
-              activeId={activeId}
-              onSelect={onSelect}
-              expandedIds={expandedIds}
-              toggleExpand={toggleExpand}
-              isLast={idx === module.children!.length - 1}
-              justExpandedId={justExpandedId}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
+// SidebarModuleItem is imported from @/components/sidebar/SidebarModuleItem
 
 // ─── Test Status Icon ────────────────────────────────────
 function TestStatusIcon({ status, size = 4 }: { status: string; size?: number }) {
@@ -832,290 +660,7 @@ function SortArrow({ col, sortCol, sortDir }: { col: string; sortCol: string; so
   )
 }
 
-// ─── LOGIN PAGE (RhythmERP replica) ──────────────────────
-function MaterialOutlinedField({
-  label,
-  type,
-  value,
-  onChange,
-  icon,
-  required,
-  autoFocus,
-  suffixIcon,
-  onSuffixClick,
-}: {
-  label: string
-  type: string
-  value: string
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-  icon: React.ReactNode
-  required?: boolean
-  autoFocus?: boolean
-  suffixIcon?: React.ReactNode
-  onSuffixClick?: () => void
-}) {
-  const [focused, setFocused] = useState(false)
-  const hasValue = value.length > 0
-  const floatLabel = focused || hasValue
-
-  return (
-    <div className="w-full mb-6">
-      <div
-        className={`relative flex items-center h-[56px] rounded-[4px] transition-colors duration-150 ${
-          focused
-            ? 'outline outline-2 outline-[#3F51B5] outline-offset-0'
-            : 'outline outline-1 outline-[rgba(0,0,0,0.38)] outline-offset-0 dark:outline-[rgba(255,255,255,0.38)]'
-        }`}
-      >
-        {/* Prefix icon — matches ERP mat-icon prefix (48×24 area) */}
-        <div className="flex items-center justify-center w-[48px] shrink-0 pl-2">
-          <span className={`transition-colors duration-150 ${
-            focused ? 'text-[#3F51B5]' : 'text-[#212529] dark:text-gray-400'
-          }`}>
-            {icon}
-          </span>
-        </div>
-
-        {/* Input + floating label */}
-        <div className="relative flex-1 h-full">
-          {/* Floating label with white bg "notch" — creates the Material outlined notch effect */}
-          <label
-            className={`absolute left-0 transition-all duration-150 pointer-events-none font-['Manrope',sans-serif] z-10 ${
-              floatLabel
-                ? 'top-0 text-[12px] leading-none px-[4px] ' + (focused ? 'text-[rgba(63,81,181,0.87)]' : 'text-[rgba(0,0,0,0.6)] dark:text-gray-400') + ' bg-white dark:bg-gray-800 -translate-y-1/2'
-                : 'top-[16px] text-[16px] text-[rgba(0,0,0,0.6)] dark:text-gray-400 bg-transparent'
-            }`}
-          >
-            {label}{required && <span className="text-[#f44336] ml-0.5">*</span>}
-          </label>
-          <input
-            type={type}
-            value={value}
-            onChange={onChange}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            autoFocus={autoFocus}
-            required={required}
-            className="w-full h-full bg-transparent text-[16px] text-[rgba(0,0,0,0.87)] dark:text-gray-100 font-['Manrope',sans-serif] outline-none border-none placeholder-transparent leading-[56px]"
-          />
-        </div>
-
-        {/* Suffix icon (e.g. visibility toggle) */}
-        {suffixIcon && (
-          <button
-            type="button"
-            onClick={onSuffixClick}
-            className="flex items-center justify-center w-[48px] h-[48px] shrink-0 cursor-pointer text-[#212529] dark:text-gray-400 hover:bg-[rgba(0,0,0,0.04)] rounded-full transition-colors"
-          >
-            {suffixIcon}
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault()
-      setError('')
-      setLoading(true)
-
-      try {
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        })
-
-        const data = await res.json()
-
-        if (!res.ok) {
-          setError(data.error || 'Login failed')
-          return
-        }
-
-        onLogin(data.user)
-      } catch {
-        setError('Network error. Please try again.')
-      } finally {
-        setLoading(false)
-      }
-    },
-    [email, password, onLogin]
-  )
-
-  return (
-    <div className="min-h-screen flex">
-      {/* ─── LEFT: Login Form (ERP: col-lg-4, white, centered) ─── */}
-      <div className="w-full lg:w-1/3 shrink-0 flex items-center min-h-screen bg-white dark:bg-gray-800 p-4">
-        <div className="w-full flex justify-center">
-          <div className="w-full max-w-[300px]">
-            {/* Logo — drops from above */}
-            <motion.div
-              className="text-center mb-[20px]"
-              initial={{ y: -60, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 120, damping: 14, mass: 0.8 }}
-            >
-              <motion.div
-                className="flex justify-center mb-0"
-                initial={{ scale: 0.3, rotate: -15 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ type: 'spring', stiffness: 200, damping: 12, delay: 0.15 }}
-              >
-                <Image src="/agdi-logo-new.webp" alt="AgDi Automation" width={200} height={92} className="object-contain" priority />
-              </motion.div>
-            </motion.div>
-
-            {/* Heading + Subtitle (ERP: text-center, Manrope font) */}
-            <div className="text-center">
-              <motion.h4
-                className="text-[20px] font-bold text-[#212529] dark:text-gray-100 font-['Manrope',sans-serif] mt-[24px] mb-2"
-                initial={{ y: 15, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.35, duration: 0.5, ease: 'easeOut' }}
-              >
-                Welcome Back !
-              </motion.h4>
-              <motion.p
-                className="text-[13px] font-medium text-[#919AA3] dark:text-gray-400 font-['Manrope',sans-serif]"
-                initial={{ y: 10, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.5, duration: 0.5, ease: 'easeOut' }}
-              >
-                Sign in to continue
-              </motion.p>
-            </div>
-
-            {/* Form (ERP: p-2 mt-5 = padding 8px, margin-top 32px) — fades up with stagger */}
-            <motion.div
-              className="p-2 mt-8"
-              initial={{ y: 30, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.55, duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
-            >
-              <form onSubmit={handleSubmit}>
-                {/* Username (ERP: mat-form-field outlined with "face" icon) */}
-                <motion.div
-                  initial={{ x: -20, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: 0.65, duration: 0.4 }}
-                >
-                  <MaterialOutlinedField
-                    label="Username"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    icon={<User className="size-[24px]" />}
-                    required
-                    autoFocus
-                  />
-                </motion.div>
-
-                {/* Password (ERP: mat-form-field outlined with "vpn_key" icon + visibility toggle) */}
-                <motion.div
-                  initial={{ x: -20, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: 0.75, duration: 0.4 }}
-                >
-                  <MaterialOutlinedField
-                    label="Password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    icon={<Lock className="size-[24px]" />}
-                    required
-                    suffixIcon={showPassword ? <Eye className="size-[24px]" /> : <EyeOff className="size-[24px]" />}
-                    onSuffixClick={() => setShowPassword(!showPassword)}
-                  />
-                </motion.div>
-
-                {/* Error message */}
-                <AnimatePresence>
-                  {error && (
-                    <motion.div
-                      className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-[12px] px-3 py-2.5 rounded-[4px] flex items-center gap-2 mb-4"
-                      initial={{ height: 0, opacity: 0, scale: 0.95 }}
-                      animate={{ height: 'auto', opacity: 1, scale: 1 }}
-                      exit={{ height: 0, opacity: 0, scale: 0.95 }}
-                      transition={{ duration: 0.25 }}
-                    >
-                      <XCircle className="size-3.5 shrink-0" />
-                      {error}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* Forgot Password row (ERP: flex-sb-m, pt-15px, pb-20px) */}
-                <motion.div
-                  className="flex justify-between items-center pt-[15px] pb-[20px]"
-                  initial={{ y: 10, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.85, duration: 0.4 }}
-                >
-                  <div />
-                  <button
-                    type="button"
-                    className="text-[13px] font-medium text-[#555555] dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-indigo-400 font-['Poppins',sans-serif] no-underline cursor-pointer bg-transparent border-none"
-                  >
-                    Forgot Password?
-                  </button>
-                </motion.div>
-
-                {/* Login button (ERP: centered, auto-width, 36px height, #3F51B5, rounded 4px) */}
-                <motion.div
-                  className="flex justify-center"
-                  initial={{ y: 15, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.95, duration: 0.4 }}
-                >
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    className="h-[36px] min-w-[74px] px-6 bg-[#3F51B5] hover:bg-[#3949AB] text-white text-[14px] font-medium tracking-[1.25px] rounded-[4px] cursor-pointer transition-colors duration-150 font-['Roboto',sans-serif] normal-case"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin mr-1" />
-                        Login
-                      </>
-                    ) : (
-                      'Login'
-                    )}
-                  </Button>
-                </motion.div>
-              </form>
-            </motion.div>
-          </div>
-        </div>
-      </div>
-
-      {/* ─── RIGHT: Hero with overlay (ERP: col-lg-8, bg image + dark overlay) ─── */}
-      <motion.div
-        className="hidden lg:block lg:w-2/3 relative overflow-hidden"
-        initial={{ x: 80, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        transition={{ delay: 0.3, duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
-      >
-        {/* Background image */}
-        <img
-          src="/agdi-hero-illustration.png"
-          alt="AgDi - Agricultural Digital Intelligence"
-          className="w-full h-full object-cover"
-        />
-
-      </motion.div>
-    </div>
-  )
-}
+// LoginPage is imported from @/components/auth/LoginPage
 
 // ─── DASHBOARD TAB (Feature 3) ───────────────────────────
 function DashboardTab({
@@ -4894,7 +4439,7 @@ function RunDetailDialog({
   onClose: () => void
   run: RunSnapshot | null
 }) {
-  const [runDetail, setRunDetail] = useState<ApiRunDetail | null>(null)
+  const [runDetail, setRunDetail] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -4905,7 +4450,7 @@ function RunDetailDialog({
       setLoading(true)
       setRunDetail(null)
       try {
-        const detail = await fetchRunDetail(run.id)
+        const detail = await fetch(`/api/runs/${run.id}`).then(r => r.ok ? r.json() : null)
         if (!cancelled) setRunDetail(detail)
       } catch {
         if (!cancelled) setRunDetail(null)
@@ -5144,6 +4689,10 @@ export default function Home() {
       .then((mods) => {
         setApiModules(mods)
         setSidebarModules(filterSidebarByAccess(buildSidebarModules(mods), user))
+        // Sync modules to Next.js DB for offline access and dashboard
+        if (mods.length > 0) {
+          syncModulesToDB(mods).catch(() => {})
+        }
       })
       .catch(async () => {
         // FastAPI not available — try DB modules from Prisma
@@ -5826,10 +5375,27 @@ export default function Home() {
             setConsoleLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ERROR: ${event.message}`])
           }
         },
-        () => {
+        (summary: RunCompletionSummary) => {
           setIsRunning(false)
           setRunningProgress('')
           toast.success('Test run finished!')
+
+          // Save run results to Next.js DB for persistence
+          if (summary.total > 0) {
+            saveRunResults(summary, user?.id).then((saved) => {
+              if (saved) {
+                // Refresh run history and dashboard stats
+                loadRunHistory()
+                if (selectedModule === 'dashboard') loadDashboardStats()
+                // Create a notification for the completed run
+                addNotification({
+                  type: 'run_complete',
+                  title: `Run complete: ${summary.passed}/${summary.total} passed`,
+                  message: `${summary.module}${summary.subModule ? ' → ' + summary.subModule : ''} — ${summary.failed} failed, ${summary.passed} passed`,
+                }).catch(() => {})
+              }
+            })
+          }
         },
         (err) => {
           setIsRunning(false)
@@ -5838,7 +5404,7 @@ export default function Home() {
         }
       )
     },
-    [isRunning, tests, testChecks, selectedModule]
+    [isRunning, tests, testChecks, selectedModule, user, loadRunHistory, loadDashboardStats]
   )
    
 
