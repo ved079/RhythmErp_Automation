@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Manrope, Poppins, Roboto } from "next/font/google";
+import { ThemeProvider } from "next-themes";
 import "./globals.css";
 import { Toaster } from "sonner";
 
@@ -39,8 +40,15 @@ export default function RootLayout({
       <body
         className={`${manrope.variable} ${poppins.variable} ${roboto.variable} antialiased bg-background text-foreground`}
       >
-        {children}
-        <Toaster position="bottom-right" richColors />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          <Toaster position="top-right" richColors />
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -71,6 +71,37 @@ export async function fetchRunDetail(runId: string): Promise<ApiRunDetail> {
   return res.json();
 }
 
+// --- Stop a running test ---
+export async function stopRun(runId: string): Promise<void> {
+  const res = await fetch(`${PROXY}?path=runs/${runId}/stop`, { method: "POST" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+  }
+}
+
+// --- Screenshot helper ---
+
+export async function fetchScreenshot(): Promise<{ screenshot: string | null; active: boolean }> {
+  try {
+    const res = await fetch(`${PROXY}?path=screenshot`);
+    if (!res.ok) return { screenshot: null, active: false };
+    return res.json();
+  } catch {
+    return { screenshot: null, active: false };
+  }
+}
+
+// --- Delete a run ---
+
+export async function deleteRun(runId: string): Promise<void> {
+  const res = await fetch(`${PROXY}?path=runs/${runId}`, { method: "DELETE" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+  }
+}
+
 // --- SSE stream helper ---
 
 export interface SSEEvent {

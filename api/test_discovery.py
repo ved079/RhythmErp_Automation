@@ -2,20 +2,24 @@
 
 import ast
 import os
-from typing import Optional
 
 from api.models import Module, SubModule, TestFunction, ModuleListResponse
 
 
 # Map folder names → display names
 DISPLAY_NAMES = {
+    # Top-level modules
     "login_screens": "Login Screens",
+    "access": "Access",
     "access_screen": "Access Screen",
     "company_onboarding": "Company Onboarding",
     "common_settings": "Common Settings",
     "commodity_settings": "Commodity Settings",
-    "designation": "Designation",
+    "registration": "Registration",
+
+    # Common Settings sub-modules
     "bank": "Bank",
+    "designation": "Designation",
     "error_code_mst": "Error Code Master",
     "hsn_sac": "HSN/SAC",
     "season": "Season",
@@ -24,10 +28,28 @@ DISPLAY_NAMES = {
     "uom": "UOM",
     "uom_conversion": "UOM Conversion",
     "vehicle_master": "Vehicle Master",
+
+    # Commodity Settings sub-modules
     "crop_master": "Crop Master",
     "item_master": "Item Master",
     "quality_parameter_master": "Quality Parameter Master",
-    "item_attribute": "Item Category"
+    "services_master": "Services Master",
+    "item_category": "Item Category",
+    "item_group": "Item Group",
+    "commodity_quality_parameter": "Commodity Quality Parameter",
+    "commodity_base_rate": "Commodity Base Rate",
+    "item_attribute": "Item Attribute",
+
+    # Access sub-modules
+    "entity_group_definition": "Entity Group Definition",
+    "user_creation_screen": "User Creation",
+    "role_creation_screen": "Role Creation",
+
+    # Registration sub-modules
+    "agent": "Agent",
+    "supplier": "Supplier",
+    "customer": "Customer",
+    "farmer": "Farmer",
 }
 
 
@@ -102,6 +124,14 @@ def discover_sub_modules(base_path: str) -> list[SubModule]:
                 if tf.startswith("test_") and tf.endswith(".py"):
                     test_files.append(tf)
                     all_tests.extend(parse_test_functions(os.path.join(test_dir, tf)))
+        # Also check for Test_cases_* pattern (login_screens uses this)
+        for item in sorted(os.listdir(base_path)):
+            item_path = os.path.join(base_path, item)
+            if os.path.isdir(item_path) and item.startswith("Test_cases"):
+                for tf in sorted(os.listdir(item_path)):
+                    if tf.startswith("test_") and tf.endswith(".py"):
+                        test_files.append(tf)
+                        all_tests.extend(parse_test_functions(os.path.join(item_path, tf)))
         # Check for test files directly
         for tf in sorted(os.listdir(base_path)):
             if tf.startswith("test_") and tf.endswith(".py") and tf not in test_files:

@@ -14,7 +14,6 @@ Fixtures:
 import os
 import sys
 import pytest
-from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
 
 # Ensure project root is in Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -23,7 +22,6 @@ from common.logger import log
 from common.browser_utils import get_driver
 from common.auth_helper import AuthSection
 from pages.login_screens.Login_Screens_.login_page import LoginPage
-import api.screenshot_store as _ss
 
 
 # ================================================================
@@ -37,18 +35,15 @@ def driver():
     log.info("LAUNCHING BROWSER...")
     log.separator()
 
-    driver = get_driver()
-    _ss.set_driver(driver)
+    drv = get_driver()
 
-    yield driver
-
-    _ss.set_driver(None)
+    yield drv
 
     log.separator()
     log.info("CLOSING BROWSER...")
     log.separator()
     try:
-        driver.quit()
+        drv.quit()
         log.info("Browser closed successfully")
     except Exception as e:
         log.error(f"Error closing browser: {e}")
@@ -61,15 +56,13 @@ def driver():
 @pytest.fixture
 def login_page(driver):
     """Provide a LoginPage object (not logged in)."""
-    page = LoginPage(driver)
-    return page
+    return LoginPage(driver)
 
 
 @pytest.fixture
 def auth_section(driver):
     """Provide an AuthSection helper object."""
-    auth = AuthSection(driver)
-    return auth
+    return AuthSection(driver)
 
 
 # ================================================================
