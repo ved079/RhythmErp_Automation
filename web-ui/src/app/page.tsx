@@ -4175,6 +4175,7 @@ export default function Home() {
 
   // ─── Fetch real modules from API ──────────────────────
   useEffect(() => {
+    if (!user) return // Don't fetch until authenticated
     fetchModules()
       .then((mods) => {
         setApiModules(mods)
@@ -4184,9 +4185,10 @@ export default function Home() {
         console.warn('API modules fetch failed, using defaults:', err)
         // Keep ALL_SIDEBAR_MODULES on failure
       })
-  }, [])
+  }, [user])
     // Fetch test cases from backend
   useEffect(() => {
+    if (!user) return // Don't fetch until authenticated
     fetchTestCases()
       .then((data) => {
         setAllTestCases(data)
@@ -4197,7 +4199,7 @@ export default function Home() {
       .catch(() => {
         // Backend not running — this is expected when FastAPI isn't available
       })
-  }, [])
+  }, [user])
 
   const handleMarkAllRead = useCallback(async () => {
     await markAllNotificationsRead()
@@ -4272,11 +4274,12 @@ export default function Home() {
     }
   }, [])
 
-  // Load run history and bug reports on mount
+  // Load run history and bug reports after auth
   useEffect(() => {
+    if (!user) return
     loadRunHistory()
     loadBugReports()
-  }, [loadRunHistory, loadBugReports])
+  }, [user, loadRunHistory, loadBugReports])
 
   // Compute module health from real run history
   const moduleHealth = useMemo(() => {
@@ -4595,6 +4598,59 @@ export default function Home() {
       }
     }
   }, [apiModules, allTestCases])
+
+  // ─── Re-load current module tests when data changes (e.g. after login) ───
+  useEffect(() => {
+    if (selectedModule === 'dashboard' || selectedModule === 'my-tickets') return
+    const moduleKey = selectedModule.toLowerCase().replace(" ", "_").replace("-", "_")
+    if (allTestCases[moduleKey]) {
+      const moduleData = allTestCases[moduleKey]
+      const mapTestCaseStatus = (s: string): TestSpecItem['status'] => {
+        const upper = s.toUpperCase().trim()
+        if (upper === 'PASSED' || upper === 'PASS') return 'passed'
+        if (upper === 'BUG') return 'bug'
+        if (upper === 'TODO') return 'todo'
+        if (upper === 'FAILED' || upper === 'FAIL') return 'failed'
+        return 'not-run'
+      }
+      const specGroups: TestClassGroup[] = [{
+        className: moduleData.label,
+        tests: moduleData.tests.map((t) => ({
+          id: t.id,
+          screenName: t.screenName,
+          description: t.description,
+          status: mapTestCaseStatus(t.status),
+          duration: '',
+          steps: t.steps,
+          expected: t.expected,
+          actual: t.actual || '',
+          bugDetails: t.status === 'BUG' ? t.actual : undefined,
+          priority: undefined,
+          date: t.date || undefined,
+        })),
+      }]
+      setCurrentTestGroups(specGroups)
+      const mapToTestItemStatus = (s: string): 'passed' | 'failed' | 'pending' => {
+        const upper = s.toUpperCase().trim()
+        if (upper === 'PASSED' || upper === 'PASS') return 'passed'
+        if (upper === 'BUG' || upper === 'FAILED' || upper === 'FAIL') return 'failed'
+        return 'pending'
+      }
+      const items: TestItem[] = moduleData.tests.map((t) => ({
+        id: t.id,
+        name: t.description,
+        status: mapToTestItemStatus(t.status),
+        duration: '',
+      }))
+      setTests(items)
+    } else {
+      const { groups, items } = getTestsForSidebarModule(selectedModule, apiModules)
+      if (groups.length > 0) {
+        setCurrentTestGroups(groups)
+        setTests(items)
+      }
+    }
+  }, [allTestCases, apiModules, selectedModule])
 
   
   const handleGoHome = useCallback(() => {
