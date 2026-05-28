@@ -4360,7 +4360,7 @@ export default function Home() {
   useEffect(() => {
     if (activeTab === 'live-execution') {
       setSidebarOpen(false)
-    } else if (activeTab === 'operations' || activeTab === 'test-runner' || activeTab === 'results') {
+    } else {
       setSidebarOpen(true)
     }
   }, [activeTab])
