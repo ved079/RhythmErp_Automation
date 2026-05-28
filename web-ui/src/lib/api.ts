@@ -1,4 +1,4 @@
-﻿/**
+/**
  * API helper — all calls to the FastAPI backend go through the Next.js proxy.
  * This avoids CORS issues since the proxy runs server-side.
  */
