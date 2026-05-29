@@ -1918,7 +1918,45 @@ function UserDialog({ open, onOpenChange, editingUser, onSave, allModules }: {
     setModuleAccess(prev => prev.includes('all') ? [] : ['all'])
   }
 
-  const parentModules = allModules.filter(m => !m.parentId)
+  // Use DB modules if available, otherwise fall back to ALL_SIDEBAR_MODULES
+  const effectiveModulesWithChildren: AdminModule[] = allModules.length > 0 ? allModules : (() => {
+    const result: AdminModule[] = []
+    for (const sm of ALL_SIDEBAR_MODULES) {
+      if (sm.id === 'dashboard' || sm.id === 'my-tickets') continue
+      result.push({
+        id: sm.id, name: sm.id, label: sm.label,
+        parentId: undefined, parentLabel: undefined,
+        testCount: 0, sortOrder: 0, status: 'active' as const,
+      })
+      if (sm.children) {
+        for (const child of sm.children) {
+          if (child.children) {
+            for (const grandChild of child.children) {
+              result.push({
+                id: grandChild.id, name: grandChild.id, label: grandChild.label,
+                parentId: child.id, parentLabel: child.label,
+                testCount: 0, sortOrder: 0, status: 'active' as const,
+              })
+            }
+            result.push({
+              id: child.id, name: child.id, label: child.label,
+              parentId: sm.id, parentLabel: sm.label,
+              testCount: 0, sortOrder: 0, status: 'active' as const,
+            })
+          } else {
+            result.push({
+              id: child.id, name: child.id, label: child.label,
+              parentId: sm.id, parentLabel: sm.label,
+              testCount: 0, sortOrder: 0, status: 'active' as const,
+            })
+          }
+        }
+      }
+    }
+    return result
+  })()
+
+  const parentModules = effectiveModulesWithChildren.filter(m => !m.parentId)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -2033,45 +2071,7 @@ function ModuleDialog({ open, onOpenChange, editingModule, onSave, allModules }:
   const [status, setStatus] = useState<string>(editingModule?.status || 'active')
   const [sortOrder, setSortOrder] = useState(String(editingModule?.sortOrder ?? 0))
 
-    // Use DB modules if available, otherwise fall back to ALL_SIDEBAR_MODULES
-  const effectiveModulesWithChildren: AdminModule[] = allModules.length > 0 ? allModules : (() => {
-    const result: AdminModule[] = []
-    for (const sm of ALL_SIDEBAR_MODULES) {
-      if (sm.id === 'dashboard' || sm.id === 'my-tickets') continue
-      result.push({
-        id: sm.id, name: sm.id, label: sm.label,
-        parentId: undefined, parentLabel: undefined,
-        testCount: 0, sortOrder: 0, status: 'active' as const,
-      })
-      if (sm.children) {
-        for (const child of sm.children) {
-          if (child.children) {
-            for (const grandChild of child.children) {
-              result.push({
-                id: grandChild.id, name: grandChild.id, label: grandChild.label,
-                parentId: child.id, parentLabel: child.label,
-                testCount: 0, sortOrder: 0, status: 'active' as const,
-              })
-            }
-            result.push({
-              id: child.id, name: child.id, label: child.label,
-              parentId: sm.id, parentLabel: sm.label,
-              testCount: 0, sortOrder: 0, status: 'active' as const,
-            })
-          } else {
-            result.push({
-              id: child.id, name: child.id, label: child.label,
-              parentId: sm.id, parentLabel: sm.label,
-              testCount: 0, sortOrder: 0, status: 'active' as const,
-            })
-          }
-        }
-      }
-    }
-    return result
-  })()
-
-  const parentModules = effectiveModulesWithChildren.filter(m => !m.parentId)
+  const parentModules = allModules.filter(m => !m.parentId)
   
   // When editing, exclude self from parent list (if it's a parent)
   const availableParents = editingModule
