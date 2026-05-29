@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useNotificationsSocket, emitNotification } from '@/hooks/use-notifications-socket'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useTheme } from 'next-themes'
@@ -143,16 +144,21 @@ export default function Home() {
   const [screenshotCompareOpen, setScreenshotCompareOpen] = useState(false)
   const [compareScreenshots, setCompareScreenshots] = useState<[ScreenshotEntry | null, ScreenshotEntry | null]>([null, null])
 
-  // Poll notifications every 2s
-  useEffect(() => {
-    const poll = async () => {
-      setUnreadCount(await getUnreadNotificationCount())
-      setNotifications(await getNotifications())
-    }
-    poll()
-    const interval = setInterval(poll, 2000)
-    return () => clearInterval(interval)
+  // ─── Real-time WebSocket notifications ──────────────────────
+  const { connected: wsConnected, on: wsOn } = useNotificationsSocket(user?.id)
+
+  // Initial load + periodic refresh (fallback)
+  const refreshNotifications = useCallback(async () => {
+    setUnreadCount(await getUnreadNotificationCount())
+    setNotifications(await getNotifications())
   }, [])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refreshNotifications()
+    const interval = setInterval(refreshNotifications, 30000) // Reduced from 2s to 30s
+    return () => clearInterval(interval)
+  }, [refreshNotifications])
 
   // ─── Fetch real modules from API ──────────────────────
   useEffect(() => {
@@ -295,6 +301,38 @@ export default function Home() {
     loadRunHistory()
     loadBugReports()
   }, [user, loadRunHistory, loadBugReports])
+
+  // ─── WebSocket event handlers (after loadRunHistory/loadDashboardStats) ──
+  useEffect(() => {
+    const unsubRunComplete = wsOn('run_complete', (data) => {
+      toast.success(`Run complete: ${data.moduleName}`, { description: `${data.passed}/${data.total} passed (${data.rate}% pass rate)` })
+      refreshNotifications()
+      loadRunHistory()
+      if (selectedModule === 'dashboard') loadDashboardStats()
+    })
+
+    const unsubBugReply = wsOn('bug_reply', (data) => {
+      toast.info(`Reply on bug #${data.bugReportId}`, { description: `${data.replyAuthor}: ${data.message}` })
+      refreshNotifications()
+    })
+
+    const unsubBugStatus = wsOn('bug_status_change', (data) => {
+      toast.info(`Bug #${data.bugReportId} updated`, { description: `Status changed to ${data.newStatus} by ${data.changedBy}` })
+      refreshNotifications()
+    })
+
+    const unsubNotif = wsOn('notification', (data) => {
+      toast.info(data.title, { description: data.message })
+      refreshNotifications()
+    })
+
+    return () => {
+      unsubRunComplete()
+      unsubBugReply()
+      unsubBugStatus()
+      unsubNotif()
+    }
+  }, [wsOn, refreshNotifications, loadRunHistory, loadDashboardStats, selectedModule])
 
   // Compute module health
   const moduleHealth = useMemo(() => {
@@ -756,6 +794,10 @@ export default function Home() {
           <Button variant="ghost" size="icon" onClick={toggleDarkMode} data-tour="dark-mode" className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer" title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}>{darkMode ? <Sun className="size-4" /> : <Moon className="size-4" />}</Button>
           <Button variant="ghost" size="icon" onClick={startAppTour} data-tour="help-btn" className="size-8 text-[#3F51B5] hover:text-[#2D3FC7] hover:bg-[#E8F5E9] dark:hover:bg-indigo-900/20 cursor-pointer" title="Take a tour of the app"><HelpCircle className="size-4" /></Button>
           <Button variant="ghost" size="icon" onClick={() => setShowShortcuts(true)} data-tour="keyboard-shortcuts" className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer" title="Keyboard shortcuts (Ctrl+/)"><Zap className="size-4" /></Button>
+          {/* WS Connection Indicator */}
+          <div className="flex items-center" title={wsConnected ? 'Real-time connected' : 'Real-time disconnected — using polling'}>
+            <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-yellow-400 animate-pulse'}`} />
+          </div>
           {/* Notifications */}
           <div className="relative" data-tour="notifications">
             <Button variant="ghost" size="icon" onClick={() => { setNotifDropdownOpen((prev) => !prev); if (!notifDropdownOpen) handleMarkAllRead() }} className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer relative" title="Notifications"><Bell className="size-4" />{unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#6777EF] text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-pulse">{unreadCount > 9 ? '9+' : unreadCount}</span>}</Button>

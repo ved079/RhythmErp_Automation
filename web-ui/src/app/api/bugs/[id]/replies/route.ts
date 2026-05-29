@@ -65,6 +65,22 @@ export async function POST(
       })
     }
 
+    // Emit WebSocket event for real-time notification
+    try {
+      await fetch('http://localhost:3003/emit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'bug_reply',
+          data: {
+            bugReportId: id,
+            replyAuthor: authorName,
+            message: message.substring(0, 200),
+          },
+        }),
+      })
+    } catch {}
+
     return NextResponse.json(reply, { status: 201 })
   } catch (error) {
     console.error('[BugReport Replies] POST error:', error)

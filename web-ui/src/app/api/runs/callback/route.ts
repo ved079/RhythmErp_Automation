@@ -132,6 +132,26 @@ export async function POST(req: NextRequest) {
       },
     })
 
+    // Emit WebSocket event for real-time notification
+    try {
+      await fetch('http://localhost:3003/emit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'run_complete',
+          data: {
+            runId: run.id,
+            moduleName,
+            passed: payload.passed,
+            failed: payload.failed,
+            total: payload.total,
+            duration: durationStr,
+            rate,
+          },
+        }),
+      })
+    } catch {}
+
     return NextResponse.json({
       action: 'created',
       id: run.id,

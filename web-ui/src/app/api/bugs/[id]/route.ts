@@ -71,6 +71,24 @@ export async function PATCH(
       replies: updated.replies.map((rep) => ({ ...rep })),
     }
 
+    // Emit WebSocket event for status change
+    if (body.status && existing.status !== updateData.status) {
+      try {
+        await fetch('http://localhost:3003/emit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event: 'bug_status_change',
+            data: {
+              bugReportId: id,
+              newStatus: body.status,
+              changedBy: body.changedBy || 'system',
+            },
+          }),
+        })
+      } catch {}
+    }
+
     return NextResponse.json(mapped)
   } catch (error) {
     console.error('[BugReport] PATCH error:', error)
