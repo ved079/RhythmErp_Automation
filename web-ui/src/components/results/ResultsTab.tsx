@@ -1,7 +1,9 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { GitCompare, MoreVertical, Eye, MessageSquare, RotateCcw, Sparkles, Brain } from 'lucide-react'
+import { GitCompare, MoreVertical, Eye, MessageSquare, RotateCcw } from 'lucide-react'
+// AI icons — temporarily disabled
+// import { Sparkles, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -21,8 +23,8 @@ export function ResultsTab({
   totalCount,
   runHistory,
   onReportTest,
-  onAiTriage,
-  onAiAnalysis,
+  // onAiTriage,   // AI — temporarily disabled
+  // onAiAnalysis, // AI — temporarily disabled
   bugReportsList,
   onRunDetail,
   onCompareRuns,
@@ -36,8 +38,8 @@ export function ResultsTab({
   totalCount: number
   runHistory: RunSnapshot[]
   onReportTest: (test: TestItem) => void
-  onAiTriage?: (test: TestItem) => void
-  onAiAnalysis?: (test: TestItem) => void
+  // onAiTriage?: (test: TestItem) => void   // AI — temporarily disabled
+  // onAiAnalysis?: (test: TestItem) => void // AI — temporarily disabled
   bugReportsList: { id: string; testId: string; desc: string; status: string }[]
   onRunDetail?: (run: RunSnapshot) => void
   onCompareRuns?: () => void
@@ -265,18 +267,20 @@ export function ResultsTab({
                                 Report Bug
                               </DropdownMenuItem>
                             )}
-                            {test.status === 'failed' && onAiTriage && (
+                            {/* AI Bug Triage — temporarily disabled */}
+                            {/* test.status === 'failed' && onAiTriage && (
                               <DropdownMenuItem onClick={() => onAiTriage(test)} className="text-[12px] gap-2 cursor-pointer text-purple-600 dark:text-purple-400">
                                 <Sparkles className="size-3.5" />
                                 AI Bug Triage
                               </DropdownMenuItem>
-                            )}
-                            {test.status === 'failed' && onAiAnalysis && (
+                            ) */}
+                            {/* AI Failure Analysis — temporarily disabled */}
+                            {/* test.status === 'failed' && onAiAnalysis && (
                               <DropdownMenuItem onClick={() => onAiAnalysis(test)} className="text-[12px] gap-2 cursor-pointer text-violet-600 dark:text-violet-400">
                                 <Brain className="size-3.5" />
                                 AI Failure Analysis
                               </DropdownMenuItem>
-                            )}
+                            ) */}
                             <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer">
                               <RotateCcw className="size-3.5" />
                               Re-run Test
