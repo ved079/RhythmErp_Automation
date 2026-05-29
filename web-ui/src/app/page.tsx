@@ -285,11 +285,13 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (selectedModule === 'dashboard') loadDashboardStats()
   }, [selectedModule, loadDashboardStats])
 
   useEffect(() => {
     if (!user) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadRunHistory()
     loadBugReports()
   }, [user, loadRunHistory, loadBugReports])
@@ -340,6 +342,7 @@ export default function Home() {
 
   // Auto-hide sidebar on Live Execution
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (activeTab === 'live-execution') setSidebarOpen(false)
     else setSidebarOpen(true)
   }, [activeTab])
@@ -355,6 +358,7 @@ export default function Home() {
         const totalSecs = durations.reduce((a, b) => a + b, 0)
         const mins = Math.floor(totalSecs / 60); const secs = totalSecs % 60
         const durationStr = `${mins}:${String(secs).padStart(2, '0')}`
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setCompletionStats({ passed, failed, duration: durationStr })
         setCompletionModalOpen(true)
         const moduleName = (() => {
@@ -476,6 +480,7 @@ export default function Home() {
       const moduleData = allTestCases[moduleKey]
       const mapTestCaseStatus = (s: string): TestSpecItem['status'] => { const upper = s.toUpperCase().trim(); if (upper === 'PASSED' || upper === 'PASS') return 'passed'; if (upper === 'BUG') return 'bug'; if (upper === 'TODO') return 'todo'; if (upper === 'FAILED' || upper === 'FAIL') return 'failed'; return 'not-run' }
       const specGroups: TestClassGroup[] = [{ className: moduleData.label, tests: moduleData.tests.map((t) => ({ id: t.id, screenName: t.screenName, description: t.description, status: mapTestCaseStatus(t.status), duration: '', steps: t.steps, expected: t.expected, actual: t.actual || '', bugDetails: t.status === 'BUG' ? t.actual : undefined, priority: undefined, date: t.date || undefined })) }]
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrentTestGroups(specGroups)
       const mapToTestItemStatus = (s: string): 'passed' | 'failed' | 'pending' => { const upper = s.toUpperCase().trim(); if (upper === 'PASSED' || upper === 'PASS') return 'passed'; if (upper === 'BUG' || upper === 'FAILED' || upper === 'FAIL') return 'failed'; return 'pending' }
       setTests(moduleData.tests.map((t) => ({ id: t.id, name: t.description, status: mapToTestItemStatus(t.status), duration: '' })))

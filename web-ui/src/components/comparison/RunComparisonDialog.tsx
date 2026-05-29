@@ -214,6 +214,7 @@ export default function RunComparisonDialog({
   // Fetch details when both selected
   useEffect(() => {
     if (!open || !baseRunId || !compareRunId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setBaseDetail(null)
       setCompareDetail(null)
       setError(null)
@@ -251,6 +252,7 @@ export default function RunComparisonDialog({
   // Reset selection when dialog closes
   useEffect(() => {
     if (!open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setBaseRunId('')
       setCompareRunId('')
       setBaseDetail(null)

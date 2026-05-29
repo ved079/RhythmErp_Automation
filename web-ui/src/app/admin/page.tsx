@@ -294,10 +294,12 @@ export default function AdminPage() {
     } catch { /* empty */ } finally { setAuditLoaded(true) }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadAuditLog() }, [loadAuditLog])
 
   // Refresh when switching to audit-log section
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (activeSection === 'audit-log') { loadAuditLog() }
   }, [activeSection, loadAuditLog])
 

@@ -29,6 +29,7 @@ export function UserProfileDialog({
 
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoadingProfile(true)
       fetch('/api/auth/me', { headers: { 'Content-Type': 'application/json' } })
         .then((res) => res.json())

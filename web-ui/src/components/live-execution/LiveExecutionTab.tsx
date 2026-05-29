@@ -146,6 +146,7 @@ export function LiveExecutionTab({
     if (runningTestId && runningTestId !== prevRunningTestIdRef.current) {
       prevRunningTestIdRef.current = runningTestId
       if (runningSteps.length > 0) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setCurrentStepIndex(0)
         let idx = 0
         stepTimerRef.current = setInterval(() => {

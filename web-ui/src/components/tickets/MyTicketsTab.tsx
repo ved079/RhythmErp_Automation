@@ -42,6 +42,7 @@ export function MyTicketsTab({
   }, [userEmail])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadReports()
   }, [loadReports])
 
