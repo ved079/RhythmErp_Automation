@@ -1,13 +1,13 @@
-<#
-.SYNOPSIS
-    EOD Sync Script
-    Pushes github/rhythmerp_integration to ALL branches across ALL remotes.
-    Every branch on every remote becomes identical to your source of truth.
-
-.USAGE
-    Normal run  : .\eod_sync.ps1
-    Preview only: .\eod_sync.ps1 -DryRun
-#>
+#
+# .SYNOPSIS
+#     EOD Sync Script
+#     Pushes github/rhythmerp_integration to ALL branches across ALL remotes.
+#     Every branch on every remote becomes identical to your source of truth.
+#
+# .USAGE
+#     Normal run  : .\eod_sync.ps1
+#     Preview only: .\eod_sync.ps1 -DryRun
+#
 
 param(
     [switch]$DryRun
@@ -18,6 +18,8 @@ param(
 $sourceRemote = "github"
 $sourceBranch = "rhythmerp_integration"
 
+$preferredGithubUser = "vedant665"   # <-- change if you ever switch accounts
+
 $targetBranches = @(
     "main",
     "rhythmerp_integration",
@@ -27,6 +29,20 @@ $targetBranches = @(
 )
 
 $remotes = [System.Collections.ArrayList]@("github", "github-private")
+
+# ── PIN THE GITHUB ACCOUNT ─────────────────────────────────────────────────────
+# Tells Git Credential Manager to always use this account for github.com,
+# so you never see the "Select an account" popup again.
+
+Write-Host ""
+Write-Host "-- Pinning GitHub credential to '$preferredGithubUser'..." -ForegroundColor DarkGray
+
+git config --global credential.https://github.com.username $preferredGithubUser
+
+# Also set it as an env-var that GCM respects mid-session
+$env:GCM_CREDENTIAL_ACCOUNT = $preferredGithubUser
+
+Write-Host "   Done. All GitHub operations will use '$preferredGithubUser'." -ForegroundColor DarkGray
 
 # ── GITLAB CHECK ───────────────────────────────────────────────────────────────
 
@@ -82,8 +98,9 @@ Write-Host "OK: Local '$sourceBranch' is up to date with '$sourceRemote'." -Fore
 Write-Host ""
 Write-Host "-- Step 3: Pushing to all branches on all remotes..." -ForegroundColor Yellow
 
-$failCount = 0
+$failCount   = 0
 $successCount = 0
+$skipCount   = 0
 
 foreach ($remote in $remotes) {
     Write-Host ""
@@ -96,6 +113,7 @@ foreach ($remote in $remotes) {
         git show-ref --verify --quiet $trackingRef 2>$null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "    SKIP: $remote/$branch not found on remote." -ForegroundColor DarkGray
+            $skipCount++
             continue
         }
 
@@ -124,9 +142,11 @@ Write-Host "================================================" -ForegroundColor C
 if ($DryRun) {
     Write-Host "Dry run done. Run without -DryRun to actually sync." -ForegroundColor Magenta
 } elseif ($failCount -eq 0) {
-    Write-Host "EOD Sync complete! All branches match rhythmerp_integration." -ForegroundColor Green
+    Write-Host "EOD Sync complete!  Pushed: $successCount  Skipped: $skipCount  Failed: 0" -ForegroundColor Green
+    Write-Host "All branches match rhythmerp_integration." -ForegroundColor Green
 } else {
-    Write-Host "Sync finished with $failCount failure(s) and $successCount success(es). Check errors above." -ForegroundColor Yellow
+    Write-Host "Sync finished. Pushed: $successCount  Skipped: $skipCount  Failed: $failCount" -ForegroundColor Yellow
+    Write-Host "Check the errors above." -ForegroundColor Yellow
 }
 
 Write-Host "================================================" -ForegroundColor Cyan

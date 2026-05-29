@@ -14,14 +14,51 @@ export interface SessionUser {
   moduleAccess: string[]
 }
 
+// ─── In-memory session cache (30s TTL) ──────────────────────
+// Avoids hitting the DB for validateSession on every API call.
+// On a typical page load, 6-8 API calls fire simultaneously —
+// without caching, each one does a separate DB query just to
+// validate the same session token.
+const sessionCache = new Map<string, { user: SessionUser; expiresAt: number }>()
+const SESSION_CACHE_TTL = 30_000 // 30 seconds
+
+function getCachedSession(token: string): SessionUser | null {
+  const cached = sessionCache.get(token)
+  if (!cached) return null
+  if (Date.now() > cached.expiresAt) {
+    sessionCache.delete(token)
+    return null
+  }
+  return cached.user
+}
+
+function setCachedSession(token: string, user: SessionUser): void {
+  if (sessionCache.size > 500) {
+    const now = Date.now()
+    for (const [key, val] of sessionCache) {
+      if (now > val.expiresAt) sessionCache.delete(key)
+    }
+  }
+  sessionCache.set(token, { user, expiresAt: Date.now() + SESSION_CACHE_TTL })
+}
+
+function invalidateCachedSession(token: string): void {
+  sessionCache.delete(token)
+}
+
 /**
  * Validate that the request comes from an authenticated user (any role).
  * Returns the user object if valid, or null if not.
  * Automatically cleans up expired sessions.
+ * Uses in-memory cache to avoid repeated DB queries for the same token.
  */
 export async function validateSession(req: NextRequest): Promise<SessionUser | null> {
   const token = req.cookies.get('session_token')?.value
   if (!token) return null
+
+  // Check cache first — avoids DB hit for concurrent requests with same token
+  const cached = getCachedSession(token)
+  if (cached) return cached
 
   try {
     const session = await db.session.findUnique({
@@ -34,10 +71,11 @@ export async function validateSession(req: NextRequest): Promise<SessionUser | n
       if (session) {
         await db.session.delete({ where: { id: session.id } }).catch(() => {})
       }
+      invalidateCachedSession(token)
       return null
     }
 
-    return {
+    const user: SessionUser = {
       id: session.user.id,
       email: session.user.email,
       name: session.user.name,
@@ -45,6 +83,9 @@ export async function validateSession(req: NextRequest): Promise<SessionUser | n
       status: session.user.status,
       moduleAccess: JSON.parse(session.user.moduleAccess || '[]'),
     }
+
+    setCachedSession(token, user)
+    return user
   } catch (err) {
     console.error('validateSession error:', err)
     return null

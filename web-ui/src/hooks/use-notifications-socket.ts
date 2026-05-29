@@ -56,12 +56,20 @@ export function useNotificationsSocket(userId?: string) {
   const handlersRef = useRef<Map<string, Set<Function>>>(new Map())
 
   useEffect(() => {
+    // Don't connect if no user is logged in
+    if (!userId) {
+      socketRef.current = null
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setConnected(false)
+      return
+    }
+
     const socket = io('/?XTransformPort=3003', {
       transports: ['websocket', 'polling'],
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 20,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
     })
 
     socket.on('connect', () => {

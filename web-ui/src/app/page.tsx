@@ -178,11 +178,12 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
+    if (!user) return
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshNotifications()
     const interval = setInterval(refreshNotifications, 30000) // Reduced from 2s to 30s
     return () => clearInterval(interval)
-  }, [refreshNotifications])
+  }, [refreshNotifications, user])
 
   // ─── Fetch real modules from API ──────────────────────
   useEffect(() => {
@@ -244,16 +245,20 @@ export default function Home() {
   }, [user])
 
   // Fetch test cases from backend
+    // Fetch test cases from backend (deferred — not needed for initial paint)
   useEffect(() => {
     if (!user) return
-    fetchTestCases()
-      .then((data) => {
-        setAllTestCases(data)
-        if (typeof window !== 'undefined') {
-          (window as any).__ALL_TEST_CASES__ = data
-        }
-      })
-      .catch(() => {})
+    const timer = setTimeout(() => {
+      fetchTestCases()
+        .then((data) => {
+          setAllTestCases(data)
+          if (typeof window !== 'undefined') {
+            (window as any).__ALL_TEST_CASES__ = data
+          }
+        })
+        .catch(() => {})
+    }, 200) // Deferred behind modules fetch
+    return () => clearTimeout(timer)
   }, [user])
 
   const handleMarkAllRead = useCallback(async () => {
@@ -321,9 +326,12 @@ export default function Home() {
 
   useEffect(() => {
     if (!user) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadRunHistory()
-    loadBugReports()
+    // Defer non-critical data loads to avoid blocking the initial paint.
+    const timer = setTimeout(() => {
+      loadRunHistory()
+      loadBugReports()
+    }, 100)
+    return () => clearTimeout(timer)
   }, [user, loadRunHistory, loadBugReports])
 
   // ─── WebSocket event handlers (after loadRunHistory/loadDashboardStats) ──
@@ -440,13 +448,30 @@ export default function Home() {
     prevIsRunningRef.current = isRunning
   }, [isRunning, tests, selectedModule, sidebarModules, loadRunHistory])
 
-  // Check session on mount
+    // Check session on mount
   useEffect(() => {
     const init = async () => {
       try {
-        await fetch('/api/auth/seed', { method: 'POST' })
-        const res = await fetch('/api/auth/me')
-        if (res.ok) { const data = await res.json(); setUser(data.user); setSidebarModules(filterSidebarByAccess(ALL_SIDEBAR_MODULES, data.user)) }
+        // Seed admin user in background — only once per browser session
+        if (typeof window !== 'undefined' && !sessionStorage.getItem('seed_called')) {
+          sessionStorage.setItem('seed_called', '1')
+          fetch('/api/auth/seed', { method: 'POST' }).catch(() => {})
+        }
+
+        // Check auth immediately with timeout
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 8000)
+        try {
+          const res = await fetch('/api/auth/me', { signal: controller.signal })
+          clearTimeout(timeout)
+          if (res.ok) {
+            const data = await res.json()
+            setUser(data.user)
+            setSidebarModules(filterSidebarByAccess(ALL_SIDEBAR_MODULES, data.user))
+          }
+        } catch {
+          clearTimeout(timeout)
+        }
       } catch {} finally { setLoading(false) }
     }
     init()

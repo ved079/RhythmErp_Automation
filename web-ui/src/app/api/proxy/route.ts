@@ -6,6 +6,33 @@ const API_BASE = process.env.API_PROXY_URL || "http://127.0.0.1:8000";
 // Shared secret for proxy-to-FastAPI communication
 const PROXY_API_KEY = process.env.PROXY_API_KEY || "rhythmerp-proxy-key-change-in-production";
 
+// ─── Backend health cache ────────────────────────────────
+// Avoid hammering the Python backend when it's down.
+let backendAlive = true;
+let backendCheckedAt = 0;
+const BACKEND_CHECK_TTL = 30_000; // 30 seconds
+
+async function isBackendRunning(): Promise<boolean> {
+  if (Date.now() - backendCheckedAt < BACKEND_CHECK_TTL) {
+    return backendAlive;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(`${API_BASE}/api/health`, {
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    clearTimeout(timeout);
+    backendAlive = res.ok;
+  } catch {
+    backendAlive = false;
+  }
+  backendCheckedAt = Date.now();
+  return backendAlive;
+}
+
 async function proxyRequest(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const path = searchParams.get("path") || "";
@@ -23,17 +50,30 @@ async function proxyRequest(req: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
+  // Quick-reject if backend is down (skip for SSE streams)
+  const isStreamPath = path.startsWith("runs/start");
+  if (!isHealthCheck && !isStreamPath) {
+    const alive = await isBackendRunning();
+    if (!alive) {
+      return NextResponse.json(
+        {
+          error: "Automation engine is not running",
+          detail: "The FastAPI backend is not reachable. Please start it and try again.",
+          targetUrl,
+        },
+        { status: 502 }
+      );
+    }
+  }
+
   try {
     const headers: Record<string, string> = {};
 
-    // Forward content type
     const contentType = req.headers.get("content-type");
     if (contentType) headers["Content-Type"] = contentType;
 
-    // Send proxy API key for FastAPI to verify this is a trusted proxy request
     headers["X-Proxy-API-Key"] = PROXY_API_KEY;
 
-    // Send user info headers so FastAPI can log who made the request
     if (user) {
       headers["X-User-Id"] = user.id;
       headers["X-User-Email"] = user.email;
@@ -42,8 +82,12 @@ async function proxyRequest(req: NextRequest) {
 
     const body = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
 
+    // Shorter timeout for regular calls (10s), long for streams (10min)
+    const isStreamRequest = isStreamPath || path.startsWith("screenshot");
+    const timeoutMs = isStreamRequest ? 600_000 : 10_000;
+
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 600000); // 10 min timeout for long test runs
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     const res = await fetch(targetUrl, {
       method: req.method,
@@ -54,7 +98,6 @@ async function proxyRequest(req: NextRequest) {
     });
     clearTimeout(timeout);
 
-    // If SSE stream, forward it directly
     const ct = res.headers.get("content-type") || "";
     if (ct.includes("text/event-stream")) {
       return new NextResponse(res.body, {
@@ -67,6 +110,10 @@ async function proxyRequest(req: NextRequest) {
       });
     }
 
+    // Backend responded — mark as alive
+    backendAlive = true;
+    backendCheckedAt = Date.now();
+
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
   } catch (err: unknown) {
@@ -74,16 +121,17 @@ async function proxyRequest(req: NextRequest) {
     if (err instanceof Error) {
       message = err.message;
       if (err.name === "AbortError") {
-        message = "Request timed out (10 min limit)";
+        message = isStreamPath ? "Request timed out (10 min limit)" : "Request timed out (10s limit)";
       } else if ("cause" in err && err.cause) {
         message += ` | cause: ${JSON.stringify(err.cause)}`;
       }
     }
     console.error(`[Proxy] Failed to fetch ${targetUrl}:`, message);
 
-    // Provide a helpful error for when FastAPI is not running
     const isConnectionRefused = message.includes("ECONNREFUSED") || message.includes("fetch failed");
     if (isConnectionRefused) {
+      backendAlive = false;
+      backendCheckedAt = Date.now();
       return NextResponse.json(
         {
           error: "Automation engine is not running",

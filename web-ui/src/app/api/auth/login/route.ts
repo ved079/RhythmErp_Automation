@@ -56,18 +56,21 @@ export async function POST(request: NextRequest) {
       data: { lastLogin: new Date() },
     }).catch(() => {}) // non-critical
 
-    // Create audit log entry for login
-    await db.auditLog.create({
-      data: {
-        userId: user.id,
-        userName: user.name,
-        action: 'login',
-        targetType: 'session',
-        targetId: user.id,
-        targetLabel: user.email,
-        details: `User logged in with role: ${user.role}`,
-      },
-    }).catch(() => {}) // non-critical
+    // Create audit log entry for login (non-critical — wrapped in try/catch
+    // because db.auditLog may be undefined if the table doesn't exist yet)
+    try {
+      await db.auditLog.create({
+        data: {
+          userId: user.id,
+          userName: user.name,
+          action: 'login',
+          targetType: 'session',
+          targetId: user.id,
+          targetLabel: user.email,
+          details: `User logged in with role: ${user.role}`,
+        },
+      })
+    } catch {} // non-critical
 
     const response = NextResponse.json({
       message: 'Login successful',
