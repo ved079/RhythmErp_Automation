@@ -37,7 +37,7 @@ import {
   XCircle, Circle, Sun, Moon, Home, FolderTree, Inbox,
   Send, Timer, Database, Cpu, Zap, BarChart3, FileText,
   RotateCcw, Save, Monitor, Key, Bell, ChevronRight,
-  Menu,
+  Menu, HardDrive,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────
@@ -146,6 +146,27 @@ export default function AdminPage() {
   const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; label: string } | null>(null)
   const [moduleDialogOpen, setModuleDialogOpen] = useState(false)
   const [editingModule, setEditingModule] = useState<AdminModule | null>(null)
+
+  // Bulk user actions
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set())
+  const [bulkActionConfirmOpen, setBulkActionConfirmOpen] = useState(false)
+  const [bulkActionType, setBulkActionType] = useState<string>('')
+
+  // Dashboard widget customization
+  const [hiddenWidgets, setHiddenWidgets] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set()
+    try {
+      const saved = localStorage.getItem('admin-overview-widgets')
+      if (saved) { const arr: string[] = JSON.parse(saved); const allDefaults = ['stat-cards', 'pass-rate', 'environments', 'recent-failures', 'recent-activity']; return new Set(allDefaults.filter(w => !arr.includes(w))) }
+    } catch { /* empty */ }
+    return new Set()
+  })
+  const [widgetDialogOpen, setWidgetDialogOpen] = useState(false)
+
+  // System health
+  const [systemHealthData, setSystemHealthData] = useState<Record<string, unknown> | null>(null)
+  const [healthLoaded, setHealthLoaded] = useState(false)
+  const [appStartTime] = useState(() => Date.now())
 
   // ─── Auth check ──────────────────────────────────────
   useEffect(() => {
@@ -302,6 +323,31 @@ export default function AdminPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (activeSection === 'audit-log') { loadAuditLog() }
   }, [activeSection, loadAuditLog])
+
+  // System health — load when switching to system-health section
+  useEffect(() => {
+    if (activeSection === 'system-health') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setHealthLoaded(false)
+      fetch('/api/admin/system-health')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => { setSystemHealthData(data) })
+        .catch(() => { /* empty */ })
+        .finally(() => { setHealthLoaded(true) })
+    }
+  }, [activeSection])
+
+  // Widget toggle helper
+  const toggleWidgetVisibility = useCallback((widgetId: string) => {
+    setHiddenWidgets(prev => {
+      const next = new Set(prev)
+      if (next.has(widgetId)) next.delete(widgetId)
+      else next.add(widgetId)
+      const visible = ['stat-cards', 'pass-rate', 'environments', 'recent-failures', 'recent-activity'].filter(w => !next.has(w))
+      localStorage.setItem('admin-overview-widgets', JSON.stringify(visible))
+      return next
+    })
+  }, [])
 
   // ─── Handlers ──────────────────────────────────────────
   const handleLogout = useCallback(async () => {
@@ -560,6 +606,46 @@ export default function AdminPage() {
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
   }, [])
 
+  // Bulk user action handlers
+  const handleBulkAction = useCallback(async () => {
+    const ids = Array.from(selectedUserIds)
+    if (ids.length === 0) return
+    try {
+      if (bulkActionType === 'activate') {
+        await Promise.all(ids.map(id => fetch(`/api/admin/users/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'active' }) })))
+        setUsers(prev => prev.map(u => ids.includes(u.id) ? { ...u, status: 'active' as const } : u))
+        toast.success(`${ids.length} user(s) activated`)
+      } else if (bulkActionType === 'deactivate') {
+        await Promise.all(ids.map(id => fetch(`/api/admin/users/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'inactive' }) })))
+        setUsers(prev => prev.map(u => ids.includes(u.id) ? { ...u, status: 'inactive' as const } : u))
+        toast.success(`${ids.length} user(s) deactivated`)
+      } else if (bulkActionType === 'delete') {
+        await Promise.all(ids.map(id => fetch(`/api/admin/users/${id}`, { method: 'DELETE' })))
+        setUsers(prev => prev.filter(u => !ids.includes(u.id)))
+        toast.success(`${ids.length} user(s) deleted`)
+      }
+      setSelectedUserIds(new Set())
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Bulk action failed') }
+    finally { setBulkActionConfirmOpen(false); setBulkActionType('') }
+  }, [selectedUserIds, bulkActionType])
+
+  const toggleUserSelection = useCallback((id: string) => {
+    setSelectedUserIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const toggleAllUsers = useCallback(() => {
+    if (selectedUserIds.size === users.length && users.length > 0) {
+      setSelectedUserIds(new Set())
+    } else {
+      setSelectedUserIds(new Set(users.map(u => u.id)))
+    }
+  }, [selectedUserIds.size, users])
+
   // ─── Sidebar items ──────────────────────────────────
   const sidebarItems = [
     { id: 'overview', icon: LayoutDashboard, label: 'Overview' },
@@ -569,6 +655,7 @@ export default function AdminPage() {
     { id: 'environments', icon: Globe, label: 'Environments' },
     { id: 'users', icon: UsersIcon, label: 'Users' },
     { id: 'settings', icon: Settings, label: 'Settings' },
+    { id: 'system-health', icon: Activity, label: 'System Health' },
     { id: 'audit-log', icon: FileText, label: 'Audit Log' },
   ]
 
@@ -606,106 +693,152 @@ export default function AdminPage() {
       { label: 'Users', value: stats.activeUsers, icon: UsersIcon, color: '#7B1FA2', bg: '#F3E5F5' },
     ]
 
+    const allWidgets = [
+      { id: 'stat-cards', label: 'Stat Cards' },
+      { id: 'pass-rate', label: 'Pass Rate' },
+      { id: 'environments', label: 'Active Environments' },
+      { id: 'recent-failures', label: 'Recent Failures' },
+      { id: 'recent-activity', label: 'Recent Activity' },
+    ]
+
     return (
       <div className="space-y-6">
-        <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Dashboard Overview</h2>
-        {/* Stat cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {statCards.map(c => (
-            <div key={c.label} className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5 flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: c.bg }}>
-                <c.icon className="size-5" style={{ color: c.color }} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold font-['Poppins'] text-[#333] dark:text-gray-100">{c.value}</p>
-                <p className="text-xs text-[#888] dark:text-gray-400 font-['Manrope']">{c.label}</p>
-              </div>
-            </div>
-          ))}
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Dashboard Overview</h2>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setWidgetDialogOpen(true)} title="Customize widgets">
+            <Settings className="size-4 text-[#888]" />
+          </Button>
         </div>
+        {/* Stat cards */}
+        {!hiddenWidgets.has('stat-cards') && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {statCards.map(c => (
+              <div key={c.label} className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5 flex items-center gap-4">
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: c.bg }}>
+                  <c.icon className="size-5" style={{ color: c.color }} />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold font-['Poppins'] text-[#333] dark:text-gray-100">{c.value}</p>
+                  <p className="text-xs text-[#888] dark:text-gray-400 font-['Manrope']">{c.label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Pass Rate Donut */}
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
-            <h3 className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 mb-4">Pass Rate</h3>
-            <div className="flex items-center justify-center">
-              <svg width="160" height="160" viewBox="0 0 160 160">
-                <circle cx="80" cy="80" r="60" fill="none" stroke={isDark ? '#374151' : '#E5E7EB'} strokeWidth="18" />
-                <circle cx="80" cy="80" r="60" fill="none" stroke="#4CAF50" strokeWidth="18"
-                  strokeDasharray={`${passPct * 3.77} ${377 - passPct * 3.77}`} strokeDashoffset="94.25"
-                  strokeLinecap="round" className="transition-all duration-700" />
-                <circle cx="80" cy="80" r="60" fill="none" stroke="#F44336" strokeWidth="18"
-                  strokeDasharray={`${failPct * 3.77} ${377 - failPct * 3.77}`}
-                  strokeDashoffset={94.25 - passPct * 3.77} strokeLinecap="round" className="transition-all duration-700" />
-                <text x="80" y="72" textAnchor="middle" className="fill-[#333] dark:fill-gray-100 text-2xl font-bold font-['Poppins']">{stats.passRate}%</text>
-                <text x="80" y="92" textAnchor="middle" className="fill-[#888] dark:fill-gray-400 text-xs font-['Manrope']">Pass Rate</text>
-              </svg>
+          {!hiddenWidgets.has('pass-rate') && (
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+              <h3 className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 mb-4">Pass Rate</h3>
+              <div className="flex items-center justify-center">
+                <svg width="160" height="160" viewBox="0 0 160 160">
+                  <circle cx="80" cy="80" r="60" fill="none" stroke={isDark ? '#374151' : '#E5E7EB'} strokeWidth="18" />
+                  <circle cx="80" cy="80" r="60" fill="none" stroke="#4CAF50" strokeWidth="18"
+                    strokeDasharray={`${passPct * 3.77} ${377 - passPct * 3.77}`} strokeDashoffset="94.25"
+                    strokeLinecap="round" className="transition-all duration-700" />
+                  <circle cx="80" cy="80" r="60" fill="none" stroke="#F44336" strokeWidth="18"
+                    strokeDasharray={`${failPct * 3.77} ${377 - failPct * 3.77}`}
+                    strokeDashoffset={94.25 - passPct * 3.77} strokeLinecap="round" className="transition-all duration-700" />
+                  <text x="80" y="72" textAnchor="middle" className="fill-[#333] dark:fill-gray-100 text-2xl font-bold font-['Poppins']">{stats.passRate}%</text>
+                  <text x="80" y="92" textAnchor="middle" className="fill-[#888] dark:fill-gray-400 text-xs font-['Manrope']">Pass Rate</text>
+                </svg>
+              </div>
+              <div className="flex justify-center gap-4 mt-3 text-xs font-['Manrope']">
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#4CAF50]" />Passed {passCount}</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#F44336]" />Failed {failCount}</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-gray-600" />Not Run {notRunCount}</span>
+              </div>
             </div>
-            <div className="flex justify-center gap-4 mt-3 text-xs font-['Manrope']">
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#4CAF50]" />Passed {passCount}</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#F44336]" />Failed {failCount}</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-gray-600" />Not Run {notRunCount}</span>
-            </div>
-          </div>
+          )}
 
           {/* Active Environments */}
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
-            <h3 className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 mb-3">Active Environments</h3>
-            {envLoaded ? (
-              <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                {environments.filter(e => e.status === 'active').map(e => (
-                  <div key={e.id} className="flex items-center gap-3 p-2 rounded-lg bg-[#F1F2F7] dark:bg-gray-700/50">
-                    <span className={`w-2.5 h-2.5 rounded-full ${e.color || 'bg-green-500'}`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[#333] dark:text-gray-100 truncate">{e.name}</p>
-                      <p className="text-xs text-[#888] dark:text-gray-400 truncate">{e.baseUrl}</p>
+          {!hiddenWidgets.has('environments') && (
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+              <h3 className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 mb-3">Active Environments</h3>
+              {envLoaded ? (
+                <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                  {environments.filter(e => e.status === 'active').map(e => (
+                    <div key={e.id} className="flex items-center gap-3 p-2 rounded-lg bg-[#F1F2F7] dark:bg-gray-700/50">
+                      <span className={`w-2.5 h-2.5 rounded-full ${e.color || 'bg-green-500'}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-[#333] dark:text-gray-100 truncate">{e.name}</p>
+                        <p className="text-xs text-[#888] dark:text-gray-400 truncate">{e.baseUrl}</p>
+                      </div>
+                      <Badge variant="outline" className="text-[10px]">{e.browser}</Badge>
                     </div>
-                    <Badge variant="outline" className="text-[10px]">{e.browser}</Badge>
-                  </div>
-                ))}
-                {environments.filter(e => e.status === 'active').length === 0 && <p className="text-xs text-[#888] dark:text-gray-400 text-center py-4">No active environments</p>}
-              </div>
-            ) : <Loader2 className="size-5 animate-spin text-[#3F51B5] mx-auto" />}
-          </div>
+                  ))}
+                  {environments.filter(e => e.status === 'active').length === 0 && <p className="text-xs text-[#888] dark:text-gray-400 text-center py-4">No active environments</p>}
+                </div>
+              ) : <Loader2 className="size-5 animate-spin text-[#3F51B5] mx-auto" />}
+            </div>
+          )}
 
           {/* Recent Failures */}
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
-            <h3 className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 mb-3">Recent Failures</h3>
-            {testsLoaded ? (
-              <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                {stats.failedTests.slice(0, 6).map(t => (
-                  <div key={t.id} className="flex items-start gap-2 p-2 rounded-lg bg-red-50 dark:bg-red-900/20">
-                    <XCircle className="size-4 text-[#F44336] shrink-0 mt-0.5" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-[#333] dark:text-gray-100 truncate">{t.description}</p>
-                      <p className="text-[10px] text-[#888] dark:text-gray-400">{t.moduleName}</p>
+          {!hiddenWidgets.has('recent-failures') && (
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+              <h3 className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 mb-3">Recent Failures</h3>
+              {testsLoaded ? (
+                <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                  {stats.failedTests.slice(0, 6).map(t => (
+                    <div key={t.id} className="flex items-start gap-2 p-2 rounded-lg bg-red-50 dark:bg-red-900/20">
+                      <XCircle className="size-4 text-[#F44336] shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-[#333] dark:text-gray-100 truncate">{t.description}</p>
+                        <p className="text-[10px] text-[#888] dark:text-gray-400">{t.moduleName}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {stats.failedTests.length === 0 && <p className="text-xs text-[#888] dark:text-gray-400 text-center py-4">No failures 🎉</p>}
-              </div>
-            ) : <Loader2 className="size-5 animate-spin text-[#3F51B5] mx-auto" />}
-          </div>
+                  ))}
+                  {stats.failedTests.length === 0 && <p className="text-xs text-[#888] dark:text-gray-400 text-center py-4">No failures 🎉</p>}
+                </div>
+              ) : <Loader2 className="size-5 animate-spin text-[#3F51B5] mx-auto" />}
+            </div>
+          )}
         </div>
 
         {/* Recent Audit */}
-        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
-          <h3 className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 mb-3">Recent Activity</h3>
-          {auditLog.length > 0 ? (
-            <div className="space-y-2">
-              {auditLog.slice(0, 5).map(a => (
-                <div key={a.id} className="flex items-center gap-3 p-2 rounded-lg bg-[#F1F2F7] dark:bg-gray-700/50 text-xs font-['Manrope']">
-                  <Badge className={`text-[9px] px-1.5 py-0 border-0 ${a.action === 'create' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : a.action === 'delete' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'}`}>{a.action}</Badge>
-                  <span className="text-[#333] dark:text-gray-100">{a.userName}</span>
-                  <span className="text-[#888] dark:text-gray-400">{a.targetLabel}</span>
-                  <span className="ml-auto text-[#888] dark:text-gray-400">{new Date(a.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+        {!hiddenWidgets.has('recent-activity') && (
+          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+            <h3 className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 mb-3">Recent Activity</h3>
+            {auditLog.length > 0 ? (
+              <div className="space-y-2">
+                {auditLog.slice(0, 5).map(a => (
+                  <div key={a.id} className="flex items-center gap-3 p-2 rounded-lg bg-[#F1F2F7] dark:bg-gray-700/50 text-xs font-['Manrope']">
+                    <Badge className={`text-[9px] px-1.5 py-0 border-0 ${a.action === 'create' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : a.action === 'delete' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'}`}>{a.action}</Badge>
+                    <span className="text-[#333] dark:text-gray-100">{a.userName}</span>
+                    <span className="text-[#888] dark:text-gray-400">{a.targetLabel}</span>
+                    <span className="ml-auto text-[#888] dark:text-gray-400">{new Date(a.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-[#888] dark:text-gray-400 text-center py-4">No recent activity</p>
+            )}
+          </div>
+        )}
+
+        {/* Widget Customization Dialog */}
+        <Dialog open={widgetDialogOpen} onOpenChange={setWidgetDialogOpen}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100">Customize Widgets</DialogTitle>
+              <DialogDescription className="font-['Manrope'] text-[#888]">
+                Toggle which overview widgets are visible.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              {allWidgets.map(w => (
+                <div key={w.id} className="flex items-center gap-3 p-2 rounded-lg bg-[#F1F2F7] dark:bg-gray-700/50">
+                  <Checkbox checked={!hiddenWidgets.has(w.id)} onCheckedChange={() => toggleWidgetVisibility(w.id)} />
+                  <span className="text-sm font-['Manrope'] text-[#333] dark:text-gray-100">{w.label}</span>
                 </div>
               ))}
             </div>
-          ) : (
-            <p className="text-xs text-[#888] dark:text-gray-400 text-center py-4">No recent activity</p>
-          )}
-        </div>
+            <DialogFooter>
+              <Button onClick={() => setWidgetDialogOpen(false)} className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto']">Done</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     )
   }
@@ -1184,6 +1317,30 @@ export default function AdminPage() {
           <Plus className="size-3.5 mr-1" /> Add User
         </Button>
       </div>
+      {/* Bulk action bar */}
+      {selectedUserIds.size > 0 && (
+        <div className="bg-[#E8EAF6] dark:bg-[#1A237E]/30 rounded-[14px] shadow-sm p-3 flex items-center gap-3 flex-wrap">
+          <span className="text-xs font-semibold font-['Poppins'] text-[#3F51B5] dark:text-[#7986CB]">
+            {selectedUserIds.size} selected
+          </span>
+          <Button size="sm" className="h-7 text-[10px] bg-green-600 hover:bg-green-700 text-white font-['Roboto']"
+            onClick={() => { setBulkActionType('activate'); setBulkActionConfirmOpen(true) }}>
+            <CheckCircle2 className="size-3 mr-1" /> Activate
+          </Button>
+          <Button size="sm" className="h-7 text-[10px] bg-orange-500 hover:bg-orange-600 text-white font-['Roboto']"
+            onClick={() => { setBulkActionType('deactivate'); setBulkActionConfirmOpen(true) }}>
+            <XCircle className="size-3 mr-1" /> Deactivate
+          </Button>
+          <Button size="sm" className="h-7 text-[10px] bg-[#F44336] hover:bg-[#D32F2F] text-white font-['Roboto']"
+            onClick={() => { setBulkActionType('delete'); setBulkActionConfirmOpen(true) }}>
+            <Trash2 className="size-3 mr-1" /> Delete
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 text-[10px] font-['Roboto'] text-[#888]"
+            onClick={() => setSelectedUserIds(new Set())}>
+            Clear
+          </Button>
+        </div>
+      )}
       {!usersLoaded ? (
         <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
       ) : (
@@ -1192,6 +1349,12 @@ export default function AdminPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-[#DFE9FB] dark:bg-[#1A237E]/40 hover:bg-[#DFE9FB] dark:hover:bg-[#1A237E]/40">
+                  <TableHead className="w-10 text-[#3F51B5] dark:text-[#7986CB]">
+                    <Checkbox
+                      checked={users.length > 0 && selectedUserIds.size === users.length}
+                      onCheckedChange={toggleAllUsers}
+                    />
+                  </TableHead>
                   <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">User</TableHead>
                   <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Role</TableHead>
                   <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Status</TableHead>
@@ -1202,7 +1365,13 @@ export default function AdminPage() {
               </TableHeader>
               <TableBody>
                 {users.map(u => (
-                  <TableRow key={u.id}>
+                  <TableRow key={u.id} className={selectedUserIds.has(u.id) ? 'bg-[#E8EAF6]/50 dark:bg-[#1A237E]/20' : ''}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedUserIds.has(u.id)}
+                        onCheckedChange={() => toggleUserSelection(u.id)}
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Avatar className="size-7"><AvatarFallback className="bg-[#E8EAF6] dark:bg-[#1A237E]/40 text-[#3F51B5] dark:text-[#7986CB] text-[10px] font-semibold">
@@ -1238,6 +1407,26 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {/* Bulk Action Confirmation Dialog */}
+      <Dialog open={bulkActionConfirmOpen} onOpenChange={setBulkActionConfirmOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100">Confirm Bulk Action</DialogTitle>
+            <DialogDescription className="font-['Manrope'] text-[#888]">
+              Are you sure you want to {bulkActionType === 'activate' ? 'activate' : bulkActionType === 'deactivate' ? 'deactivate' : 'delete'} <strong>{selectedUserIds.size} user(s)</strong>?
+              {bulkActionType === 'delete' && ' This action cannot be undone.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkActionConfirmOpen(false)} className="font-['Roboto']">Cancel</Button>
+            <Button onClick={handleBulkAction}
+              className={`text-white font-['Roboto'] ${bulkActionType === 'delete' ? 'bg-[#F44336] hover:bg-[#D32F2F]' : bulkActionType === 'deactivate' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}>
+              {bulkActionType === 'activate' ? 'Activate' : bulkActionType === 'deactivate' ? 'Deactivate' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 
@@ -1251,7 +1440,160 @@ export default function AdminPage() {
     />
   )
 
-  // 8. Audit Log
+  // 8. System Health
+  const renderSystemHealth = () => {
+    const uptimeSeconds = Math.floor((Date.now() - appStartTime) / 1000)
+    const formatUptime = (s: number) => {
+      const d = Math.floor(s / 86400); const h = Math.floor((s % 86400) / 3600); const m = Math.floor((s % 3600) / 60)
+      return d > 0 ? `${d}d ${h}h ${m}m` : h > 0 ? `${h}h ${m}m` : `${m}m`
+    }
+
+    const dbStats = (systemHealthData?.dbStats || {}) as Record<string, number>
+    const dbFileSize = (systemHealthData?.dbFileSize || '—') as string
+    const lastRun = (systemHealthData?.lastRun || null) as { id: string; moduleName: string; status: string; completedAt: string } | null
+    const activeModules = (systemHealthData?.activeModules || 0) as number
+    const totalTestCases = (systemHealthData?.totalTestCases || 0) as number
+    const serverUptime = (systemHealthData?.serverUptime || 0) as number
+
+    const statusColor = (ok: boolean, warn = false) =>
+      ok ? 'bg-green-500' : warn ? 'bg-yellow-500' : 'bg-red-500'
+
+    const apiOk = modulesLoaded
+    const dbOk = dbStats.users !== undefined
+    const lastRunOk = lastRun?.status === 'completed'
+
+    return (
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">System Health</h2>
+        {!healthLoaded ? (
+          <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* API Connectivity */}
+              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#E8EAF6] dark:bg-[#1A237E]/40">
+                    <Activity className="size-5 text-[#3F51B5] dark:text-[#7986CB]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">API Connectivity</p>
+                    <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Backend API status</p>
+                  </div>
+                  <span className={`ml-auto w-3 h-3 rounded-full ${statusColor(apiOk)}`} />
+                </div>
+                <p className="text-xs font-['Manrope'] text-[#545454] dark:text-gray-300">
+                  {apiOk ? 'API is reachable and responding' : 'API connection failed'}
+                </p>
+              </div>
+
+              {/* Database Stats */}
+              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#E0F2F1] dark:bg-[#004D40]/40">
+                    <Database className="size-5 text-[#00897B] dark:text-[#4DB6AC]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Database</p>
+                    <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">SQLite record counts</p>
+                  </div>
+                  <span className={`ml-auto w-3 h-3 rounded-full ${statusColor(dbOk)}`} />
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs font-['Manrope']">
+                  <span className="text-[#888] dark:text-gray-400">Users: <strong className="text-[#333] dark:text-gray-100">{dbStats.users ?? '—'}</strong></span>
+                  <span className="text-[#888] dark:text-gray-400">Runs: <strong className="text-[#333] dark:text-gray-100">{dbStats.runs ?? '—'}</strong></span>
+                  <span className="text-[#888] dark:text-gray-400">Bugs: <strong className="text-[#333] dark:text-gray-100">{dbStats.bugs ?? '—'}</strong></span>
+                  <span className="text-[#888] dark:text-gray-400">Modules: <strong className="text-[#333] dark:text-gray-100">{dbStats.modules ?? '—'}</strong></span>
+                  <span className="text-[#888] dark:text-gray-400">Envs: <strong className="text-[#333] dark:text-gray-100">{dbStats.environments ?? '—'}</strong></span>
+                  <span className="text-[#888] dark:text-gray-400">Notifs: <strong className="text-[#333] dark:text-gray-100">{dbStats.notifications ?? '—'}</strong></span>
+                </div>
+              </div>
+
+              {/* Disk Usage */}
+              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#FFF3E0] dark:bg-[#BF360C]/40">
+                    <HardDrive className="size-5 text-[#F57C00] dark:text-[#FFB74D]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Disk Usage</p>
+                    <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Database file size</p>
+                  </div>
+                  <span className={`ml-auto w-3 h-3 rounded-full ${statusColor(true)}`} />
+                </div>
+                <p className="text-2xl font-bold font-['Poppins'] text-[#333] dark:text-gray-100">{dbFileSize}</p>
+              </div>
+
+              {/* Last Run Status */}
+              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#F3E5F5] dark:bg-[#4A148C]/40">
+                    <Zap className="size-5 text-[#7B1FA2] dark:text-[#CE93D8]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Last Run</p>
+                    <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Most recent test run</p>
+                  </div>
+                  <span className={`ml-auto w-3 h-3 rounded-full ${statusColor(lastRunOk, !lastRun && !lastRunOk)}`} />
+                </div>
+                {lastRun ? (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-[#333] dark:text-gray-100 font-['Manrope']">{lastRun.moduleName}</p>
+                    <Badge className={`text-[10px] border-0 ${lastRun.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : lastRun.status === 'failed' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'}`}>{lastRun.status}</Badge>
+                    <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">{lastRun.completedAt ? new Date(lastRun.completedAt).toLocaleString() : 'In progress'}</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-[#888] dark:text-gray-400 font-['Manrope']">No runs yet</p>
+                )}
+              </div>
+
+              {/* Uptime */}
+              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#E8F5E9] dark:bg-[#1B5E20]/40">
+                    <Timer className="size-5 text-[#2E7D32] dark:text-[#66BB6A]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Uptime</p>
+                    <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Since page loaded</p>
+                  </div>
+                  <span className="ml-auto w-3 h-3 rounded-full bg-green-500" />
+                </div>
+                <p className="text-2xl font-bold font-['Poppins'] text-[#333] dark:text-gray-100">{formatUptime(uptimeSeconds)}</p>
+                <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Server: {formatUptime(serverUptime)}</p>
+              </div>
+
+              {/* Active Modules & Test Cases */}
+              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#E8EAF6] dark:bg-[#1A237E]/40">
+                    <FolderTree className="size-5 text-[#3F51B5] dark:text-[#7986CB]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Modules & Tests</p>
+                    <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Active counts</p>
+                  </div>
+                  <span className={`ml-auto w-3 h-3 rounded-full ${statusColor(activeModules > 0)}`} />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-['Manrope']">
+                    <span className="text-[#888] dark:text-gray-400">Active Modules</span>
+                    <strong className="text-[#333] dark:text-gray-100">{activeModules}</strong>
+                  </div>
+                  <div className="flex items-center justify-between text-xs font-['Manrope']">
+                    <span className="text-[#888] dark:text-gray-400">Total Test Cases</span>
+                    <strong className="text-[#333] dark:text-gray-100">{totalTestCases}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // 9. Audit Log
   const renderAuditLog = () => {
     const perPage = 25
     const totalPages = Math.ceil(filteredAuditLog.length / perPage) || 1
@@ -1456,6 +1798,7 @@ export default function AdminPage() {
             activeSection === 'environments' ? renderEnvironments() :
             activeSection === 'users' ? renderUsers() :
             activeSection === 'settings' ? renderSettings() :
+            activeSection === 'system-health' ? renderSystemHealth() :
             activeSection === 'audit-log' ? renderAuditLog() : null}
         </main>
       </div>
