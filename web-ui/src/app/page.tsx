@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNotificationsSocket, emitNotification } from '@/hooks/use-notifications-socket'
-import Link from 'next/link'
-import Image from 'next/image'
+// Removed unused imports: Link, Image (not used in page)
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import { fetchModules, sidebarToFolderMapping, startRun, stopRun, fetchTestCases, fetchScreenshot, saveRunResults, syncModulesToDB, type ApiModule, type TestCasesData, type RunCompletionSummary } from '@/lib/api'
@@ -35,30 +34,44 @@ import {
   Terminal, Monitor, HelpCircle, Copyright, ExternalLink, Bug, Clock,
   ChevronRight, LogOut, GitCompare, RotateCcw as RotateCcwIcon,
 } from 'lucide-react'
-import { AppTour, startAppTour } from '@/components/tour/AppTour'
+import dynamic from 'next/dynamic'
+import { startAppTour } from '@/components/tour/AppTour'
 import { LoginPage } from '@/components/auth/LoginPage'
 import type { AuthUser } from '@/lib/types'
 import { SidebarModuleItem } from '@/components/sidebar/SidebarModuleItem'
 import type { SidebarModule } from '@/components/sidebar/SidebarModuleItem'
 import { Sparkline } from '@/components/ui/sparkline'
-import { PassRateTrendChart, ModuleHealthBarChart, BugDistributionPie, TestExecutionTimeline } from '@/components/dashboard/DashboardCharts'
-import { ScreenshotGallery, ScreenshotLightbox, ScreenshotCompare } from '@/components/screenshot/ScreenshotGallery'
-import RunComparisonDialog from '@/components/comparison/RunComparisonDialog'
-import { ExportMenu } from '@/components/export/ExportUtils'
+import Link from 'next/link'
+import Image from 'next/image'
 import type { ScreenshotEntry } from '@/components/screenshot/ScreenshotGallery'
 
-// Extracted tab components
-import { DashboardTab } from '@/components/dashboard/DashboardTab'
-import { OperationsTab } from '@/components/operations/OperationsTab'
-import { TestRunnerTab } from '@/components/test-runner/TestRunnerTab'
-import { LiveExecutionTab } from '@/components/live-execution/LiveExecutionTab'
-import { ScheduleRunsTab } from '@/components/schedule/ScheduleRunsTab'
-import { ResultsTab } from '@/components/results/ResultsTab'
-import { MyTicketsTab } from '@/components/tickets/MyTicketsTab'
-import { ReportToAdminDialog } from '@/components/dialogs/ReportToAdminDialog'
-import { CompletionSummaryModal } from '@/components/dialogs/CompletionSummaryModal'
-import { UserProfileDialog } from '@/components/dialogs/UserProfileDialog'
-import { RunDetailDialog } from '@/components/dialogs/RunDetailDialog'
+// ─── Lazy-loaded components (code-split for faster initial load) ────
+// Tabs — only compiled when their tab is visited
+const DashboardTab = dynamic(() => import('@/components/dashboard/DashboardTab').then(m => ({ default: m.DashboardTab })), { ssr: false })
+const OperationsTab = dynamic(() => import('@/components/operations/OperationsTab').then(m => ({ default: m.OperationsTab })), { ssr: false })
+const TestRunnerTab = dynamic(() => import('@/components/test-runner/TestRunnerTab').then(m => ({ default: m.TestRunnerTab })), { ssr: false })
+const LiveExecutionTab = dynamic(() => import('@/components/live-execution/LiveExecutionTab').then(m => ({ default: m.LiveExecutionTab })), { ssr: false })
+const ScheduleRunsTab = dynamic(() => import('@/components/schedule/ScheduleRunsTab').then(m => ({ default: m.ScheduleRunsTab })), { ssr: false })
+const ResultsTab = dynamic(() => import('@/components/results/ResultsTab').then(m => ({ default: m.ResultsTab })), { ssr: false })
+const MyTicketsTab = dynamic(() => import('@/components/tickets/MyTicketsTab').then(m => ({ default: m.MyTicketsTab })), { ssr: false })
+
+// Dialogs — only compiled when opened
+const ReportToAdminDialog = dynamic(() => import('@/components/dialogs/ReportToAdminDialog').then(m => ({ default: m.ReportToAdminDialog })), { ssr: false })
+const CompletionSummaryModal = dynamic(() => import('@/components/dialogs/CompletionSummaryModal').then(m => ({ default: m.CompletionSummaryModal })), { ssr: false })
+const UserProfileDialog = dynamic(() => import('@/components/dialogs/UserProfileDialog').then(m => ({ default: m.UserProfileDialog })), { ssr: false })
+const RunDetailDialog = dynamic(() => import('@/components/dialogs/RunDetailDialog').then(m => ({ default: m.RunDetailDialog })), { ssr: false })
+
+// Heavy chart/gallery components — only loaded on dashboard/screenshots tabs
+const AppTour = dynamic(() => import('@/components/tour/AppTour').then(m => ({ default: m.AppTour })), { ssr: false })
+const PassRateTrendChart = dynamic(() => import('@/components/dashboard/DashboardCharts').then(m => ({ default: m.PassRateTrendChart })), { ssr: false })
+const ModuleHealthBarChart = dynamic(() => import('@/components/dashboard/DashboardCharts').then(m => ({ default: m.ModuleHealthBarChart })), { ssr: false })
+const BugDistributionPie = dynamic(() => import('@/components/dashboard/DashboardCharts').then(m => ({ default: m.BugDistributionPie })), { ssr: false })
+const TestExecutionTimeline = dynamic(() => import('@/components/dashboard/DashboardCharts').then(m => ({ default: m.TestExecutionTimeline })), { ssr: false })
+const ScreenshotGallery = dynamic(() => import('@/components/screenshot/ScreenshotGallery').then(m => ({ default: m.ScreenshotGallery })), { ssr: false })
+const ScreenshotLightbox = dynamic(() => import('@/components/screenshot/ScreenshotGallery').then(m => ({ default: m.ScreenshotLightbox })), { ssr: false })
+const ScreenshotCompare = dynamic(() => import('@/components/screenshot/ScreenshotGallery').then(m => ({ default: m.ScreenshotCompare })), { ssr: false })
+const RunComparisonDialog = dynamic(() => import('@/components/comparison/RunComparisonDialog'), { ssr: false })
+const ExportMenu = dynamic(() => import('@/components/export/ExportUtils').then(m => ({ default: m.ExportMenu })), { ssr: false })
 // AI Features — temporarily disabled (can be re-enabled later)
 // import { AiBugTriage } from '@/components/ai/AiBugTriage'
 // import { AiTestSuggestions } from '@/components/ai/AiTestSuggestions'
