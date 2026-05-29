@@ -1,9 +1,11 @@
 // ─── Next.js Middleware ──────────────────────────────────────
 // Centralized route protection — runs before every API request.
 // Public routes (no auth required):
-//   - /api/auth/login  (POST)
-//   - /api/auth/seed   (POST)
-//   - /api/route.ts    (health check)
+//   - /api/auth/login                (POST)
+//   - /api/auth/seed                 (POST)
+//   - /api/auth/forgot-password      (POST)
+//   - /api/auth/reset-password-token (POST)
+//   - /api/route.ts                  (health check)
 // All other /api/* routes require a valid session cookie.
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -12,6 +14,8 @@ import { NextRequest, NextResponse } from 'next/server'
 const PUBLIC_ROUTES = new Set([
   '/api/auth/login',
   '/api/auth/seed',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password-token',
   '/api',
 ])
 
@@ -19,6 +23,8 @@ const PUBLIC_ROUTES = new Set([
 const PUBLIC_PREFIXES = [
   '/api/auth/login',
   '/api/auth/seed',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password-token',
   '/api/runs/callback',  // FastAPI server-to-server callback (uses API key auth)
 ]
 

@@ -113,7 +113,8 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  sessions Session[]
+  sessions        Session[]
+  passwordResets  PasswordReset[]
 }
 
 model Session {
@@ -256,4 +257,16 @@ model AuditLog {
   targetLabel String      @default("")
   details     String      @default("")
   createdAt   DateTime    @default(now())
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  email     String
+  otp       String   // 6-digit OTP code
+  userId    String
+  used      Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
