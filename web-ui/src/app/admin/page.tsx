@@ -148,6 +148,10 @@ export default function AdminPage() {
   const [moduleDialogOpen, setModuleDialogOpen] = useState(false)
   const [editingModule, setEditingModule] = useState<AdminModule | null>(null)
 
+  // Reset password dialog
+  const [resetPasswordDialogOpen, setResetPasswordDialogOpen] = useState(false)
+  const [resetPasswordUser, setResetPasswordUser] = useState<AdminUser | null>(null)
+
   // Bulk user actions
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set())
   const [bulkActionConfirmOpen, setBulkActionConfirmOpen] = useState(false)
@@ -465,11 +469,13 @@ export default function AdminPage() {
     finally { setUserDialogOpen(false); setEditingUser(null) }
   }, [editingUser])
 
-  const handleResetPassword = useCallback(async (userId: string) => {
+  const handleResetPassword = useCallback(async (userId: string, password: string) => {
     try {
-      const res = await fetch(`/api/admin/users/${userId}/reset-password`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+      const res = await fetch(`/api/admin/users/${userId}/reset-password`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) })
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to reset password') }
-      toast.success('Password reset to default')
+      toast.success(`Password reset to: ${password}`)
+      setResetPasswordDialogOpen(false)
+      setResetPasswordUser(null)
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
   }, [])
 
@@ -1397,7 +1403,7 @@ export default function AdminPage() {
                     <TableCell>
                       <div className="flex gap-1">
                         <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => { setEditingUser(u); setUserDialogOpen(true) }}><Pencil className="size-3 text-[#3F51B5]" /></Button>
-                        <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => handleResetPassword(u.id)} title="Reset password"><Key className="size-3 text-[#F57C00]" /></Button>
+                        <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => { setResetPasswordUser(u); setResetPasswordDialogOpen(true) }} title="Reset password"><Key className="size-3 text-[#F57C00]" /></Button>
                         <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => { setDeleteTarget({ type: 'user', id: u.id, label: u.name }); setDeleteDialogOpen(true) }}><Trash2 className="size-3 text-[#F44336]" /></Button>
                       </div>
                     </TableCell>
@@ -1810,6 +1816,9 @@ export default function AdminPage() {
       {/* ─── USER DIALOG ────────────────────────────── */}
       <UserDialog key={editingUser?.id || 'new'} open={userDialogOpen} onOpenChange={setUserDialogOpen} editingUser={editingUser} onSave={handleSaveUser} allModules={modules} />
 
+      {/* ─── RESET PASSWORD DIALOG ───────────────────── */}
+      <ResetPasswordDialog open={resetPasswordDialogOpen} onOpenChange={setResetPasswordDialogOpen} user={resetPasswordUser} onReset={handleResetPassword} />
+
       {/* ─── MODULE DIALOG ──────────────────────────── */}
       <ModuleDialog key={editingModule?.id || 'new'} open={moduleDialogOpen} onOpenChange={setModuleDialogOpen} editingModule={editingModule} onSave={handleSaveModule} allModules={modules} />
 
@@ -1829,6 +1838,128 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+// ─── Reset Password Dialog Component ──────────────────────────
+function ResetPasswordDialog({ open, onOpenChange, user, onReset }: {
+  open: boolean; onOpenChange: (v: boolean) => void
+  user: AdminUser | null; onReset: (userId: string, password: string) => void
+}) {
+  const [password, setPassword] = useState('changeme')
+  const [loading, setLoading] = useState(false)
+  const [history, setHistory] = useState<{ id: string; resetBy: string; date: string; password: string }[]>([])
+
+  // Fetch reset history when dialog opens
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [fetchedUserId, setFetchedUserId] = useState<string | null>(null)
+
+  if (open && user && user.id !== fetchedUserId) {
+    setFetchedUserId(user.id)
+    setHistoryLoading(true)
+    setHistory([])
+    fetch(`/api/admin/users/${user.id}/reset-password`)
+      .then(res => res.ok ? res.json() : { history: [] })
+      .then(data => {
+        setHistory(data.history || [])
+        setHistoryLoading(false)
+      })
+      .catch(() => { setHistory([]); setHistoryLoading(false) })
+  }
+  if (!open && fetchedUserId) {
+    setFetchedUserId(null)
+    setPassword('changeme')
+    setHistory([])
+  }
+
+  if (!user) return null
+
+  const handleReset = async () => {
+    setLoading(true)
+    await onReset(user.id, password)
+    setLoading(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100 flex items-center gap-2">
+            <Key className="size-4 text-[#F57C00]" />
+            Reset Password
+          </DialogTitle>
+          <DialogDescription className="font-['Manrope'] text-[#888] dark:text-gray-400">
+            Set a new password for <strong className="text-[#333] dark:text-gray-200">{user.name}</strong> ({user.email})
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 mt-2">
+          {/* Password input */}
+          <div className="space-y-2">
+            <Label className="font-['Manrope'] text-xs text-[#555] dark:text-gray-400">New Password</Label>
+            <Input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter new password"
+              className="font-['Manrope'] h-9"
+            />
+            <p className="text-[10px] text-[#999] dark:text-gray-500">
+              Default: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded text-[10px]">changeme</code> — min 6 characters
+            </p>
+          </div>
+
+          {/* Warning */}
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+              <AlertTriangle className="size-3 shrink-0" />
+              This will invalidate all active sessions for this user. They will need to log in again.
+            </p>
+          </div>
+
+          {/* Reset History */}
+          {history.length > 0 && (
+            <div className="space-y-2">
+              <Label className="font-['Manrope'] text-xs text-[#555] dark:text-gray-400">Recent Reset History</Label>
+              <div className="border rounded-lg overflow-hidden dark:border-gray-700">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-gray-50 dark:bg-gray-800">
+                      <TableHead className="text-[10px] h-8 font-['Manrope']">Reset By</TableHead>
+                      <TableHead className="text-[10px] h-8 font-['Manrope']">Date</TableHead>
+                      <TableHead className="text-[10px] h-8 font-['Manrope']">Password Set</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {history.map((entry) => (
+                      <TableRow key={entry.id}>
+                        <TableCell className="text-[11px] font-['Manrope'] py-1.5">{entry.resetBy}</TableCell>
+                        <TableCell className="text-[11px] font-['Manrope'] py-1.5 text-[#888] dark:text-gray-400">
+                          {new Date(entry.date).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </TableCell>
+                        <TableCell className="text-[11px] font-['Manrope'] py-1.5">
+                          <code className="bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">{entry.password}</code>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+          {historyLoading && (
+            <div className="flex justify-center py-2"><Loader2 className="size-4 animate-spin text-[#3F51B5]" /></div>
+          )}
+        </div>
+
+        <DialogFooter className="mt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="font-['Roboto']">Cancel</Button>
+          <Button onClick={handleReset} disabled={loading || password.length < 6} className="bg-[#F57C00] hover:bg-[#E65100] text-white font-['Roboto']">
+            {loading ? <Loader2 className="size-4 animate-spin mr-1" /> : <Key className="size-3.5 mr-1" />}
+            Reset Password
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
