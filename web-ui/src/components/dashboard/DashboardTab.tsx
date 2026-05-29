@@ -1,14 +1,13 @@
 'use client'
 
 import React, { useMemo, useCallback } from 'react'
-import { Clock, TrendingUp, BarChart3, AlertTriangle, Activity, Play } from 'lucide-react'
+import { Clock, Play, TrendingUp, BarChart3, AlertTriangle, Activity } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { Sparkline, getSparklineColor, TrendIndicator } from '@/components/ui/sparkline'
 import { PassRateTrendChart, ModuleHealthBarChart, BugDistributionPie, TestExecutionTimeline } from '@/components/dashboard/DashboardCharts'
 import { ExportMenu } from '@/components/export/ExportUtils'
 import type { ModuleHealth, RunSnapshot } from '@/lib/types'
 
-// ─── DASHBOARD TAB (Feature 3) ───────────────────────────
 export function DashboardTab({
   onSelectModule,
   moduleHealth,

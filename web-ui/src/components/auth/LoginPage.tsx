@@ -4,10 +4,19 @@ import React, { useState, useCallback } from 'react'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import { User, Lock, Eye, EyeOff, Loader2, XCircle } from 'lucide-react'
-import type { AuthUser } from '@/lib/types'
+import { User, Lock, Eye, EyeOff, XCircle, Loader2 } from 'lucide-react'
 
-// ─── LOGIN PAGE (RhythmERP replica) ──────────────────────
+// ─── Types ───────────────────────────────────────────────
+interface AuthUser {
+  id: string
+  email: string
+  name: string
+  role: string
+  status?: string
+  moduleAccess?: string[]
+}
+
+// ─── Material Outlined Field ─────────────────────────────
 function MaterialOutlinedField({
   label,
   type,
@@ -42,7 +51,6 @@ function MaterialOutlinedField({
             : 'outline outline-1 outline-[rgba(0,0,0,0.38)] outline-offset-0 dark:outline-[rgba(255,255,255,0.38)]'
         }`}
       >
-        {/* Prefix icon — matches ERP mat-icon prefix (48×24 area) */}
         <div className="flex items-center justify-center w-[48px] shrink-0 pl-2">
           <span className={`transition-colors duration-150 ${
             focused ? 'text-[#3F51B5]' : 'text-[#212529] dark:text-gray-400'
@@ -51,9 +59,7 @@ function MaterialOutlinedField({
           </span>
         </div>
 
-        {/* Input + floating label */}
         <div className="relative flex-1 h-full">
-          {/* Floating label with white bg "notch" — creates the Material outlined notch effect */}
           <label
             className={`absolute left-0 transition-all duration-150 pointer-events-none font-['Manrope',sans-serif] z-10 ${
               floatLabel
@@ -75,7 +81,6 @@ function MaterialOutlinedField({
           />
         </div>
 
-        {/* Suffix icon (e.g. visibility toggle) */}
         {suffixIcon && (
           <button
             type="button"
@@ -90,7 +95,8 @@ function MaterialOutlinedField({
   )
 }
 
-function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
+// ─── Login Page ──────────────────────────────────────────
+export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -129,11 +135,11 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
 
   return (
     <div className="min-h-screen flex">
-      {/* ─── LEFT: Login Form (ERP: col-lg-4, white, centered) ─── */}
+      {/* ─── LEFT: Login Form ─── */}
       <div className="w-full lg:w-1/3 shrink-0 flex items-center min-h-screen bg-white dark:bg-gray-800 p-4">
         <div className="w-full flex justify-center">
           <div className="w-full max-w-[300px]">
-            {/* Logo — drops from above */}
+            {/* Logo */}
             <motion.div
               className="text-center mb-[20px]"
               initial={{ y: -60, opacity: 0 }}
@@ -150,7 +156,7 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
               </motion.div>
             </motion.div>
 
-            {/* Heading + Subtitle (ERP: text-center, Manrope font) */}
+            {/* Heading */}
             <div className="text-center">
               <motion.h4
                 className="text-[20px] font-bold text-[#212529] dark:text-gray-100 font-['Manrope',sans-serif] mt-[24px] mb-2"
@@ -170,7 +176,7 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
               </motion.p>
             </div>
 
-            {/* Form (ERP: p-2 mt-5 = padding 8px, margin-top 32px) — fades up with stagger */}
+            {/* Form */}
             <motion.div
               className="p-2 mt-8"
               initial={{ y: 30, opacity: 0 }}
@@ -178,7 +184,6 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
               transition={{ delay: 0.55, duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
             >
               <form onSubmit={handleSubmit}>
-                {/* Username (ERP: mat-form-field outlined with "face" icon) */}
                 <motion.div
                   initial={{ x: -20, opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
@@ -195,7 +200,6 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
                   />
                 </motion.div>
 
-                {/* Password (ERP: mat-form-field outlined with "vpn_key" icon + visibility toggle) */}
                 <motion.div
                   initial={{ x: -20, opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
@@ -229,7 +233,7 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
                   )}
                 </AnimatePresence>
 
-                {/* Forgot Password row (ERP: flex-sb-m, pt-15px, pb-20px) */}
+                {/* Forgot Password */}
                 <motion.div
                   className="flex justify-between items-center pt-[15px] pb-[20px]"
                   initial={{ y: 10, opacity: 0 }}
@@ -245,7 +249,7 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
                   </button>
                 </motion.div>
 
-                {/* Login button (ERP: centered, auto-width, 36px height, #3F51B5, rounded 4px) */}
+                {/* Login button */}
                 <motion.div
                   className="flex justify-center"
                   initial={{ y: 15, opacity: 0 }}
@@ -273,23 +277,21 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
         </div>
       </div>
 
-      {/* ─── RIGHT: Hero with overlay (ERP: col-lg-8, bg image + dark overlay) ─── */}
+      {/* ─── RIGHT: Hero ─── */}
       <motion.div
         className="hidden lg:block lg:w-2/3 relative overflow-hidden"
         initial={{ x: 80, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ delay: 0.3, duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
       >
-        {/* Background image */}
         <img
           src="/agdi-hero-illustration.png"
           alt="AgDi - Agricultural Digital Intelligence"
           className="w-full h-full object-cover"
         />
-
       </motion.div>
     </div>
   )
 }
 
-export { MaterialOutlinedField, LoginPage }
+export type { AuthUser }

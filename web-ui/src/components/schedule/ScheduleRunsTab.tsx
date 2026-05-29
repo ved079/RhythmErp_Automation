@@ -1,17 +1,22 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { Plus, CalendarClock, Timer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { CalendarClock, Plus, Timer } from 'lucide-react'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
-import type { SidebarModule } from '@/lib/types'
-import { type ScheduledRun, getScheduledRuns, addScheduledRun, deleteScheduledRun, updateScheduledRun, addNotification } from '@/lib/bug-reports'
-
-// ─── SCHEDULE RUNS TAB (Feature 5) ────────────────────────
+import type { SidebarModule } from '@/components/sidebar/SidebarModuleItem'
+import {
+  getScheduledRuns,
+  addScheduledRun,
+  deleteScheduledRun,
+  updateScheduledRun,
+  addNotification,
+  type ScheduledRun,
+} from '@/lib/bug-reports'
 
 export function ScheduleRunsTab({ userName, sidebarModules }: { userName: string; sidebarModules: SidebarModule[] }) {
   const [runs, setRuns] = useState<ScheduledRun[]>([])

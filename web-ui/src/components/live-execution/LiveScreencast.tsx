@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Loader2 } from 'lucide-react'
 import { fetchScreenshot } from '@/lib/api'
 
-// ─── LIVE SCREENCAST ─────────────────────────────────────
 export function LiveScreencast({ isRunning, onScreenshotReady }: { isRunning: boolean; onScreenshotReady?: (src: string, active: boolean) => void }) {
   const [imgSrc, setImgSrc] = useState<string>('')
   const [active, setActive] = useState(false)

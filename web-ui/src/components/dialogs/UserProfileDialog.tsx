@@ -1,24 +1,17 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { toast } from 'sonner'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
+import { User, Clock, Lock, Shield, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { User, Lock, Clock, Loader2, Shield } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { toast } from 'sonner'
 import type { AuthUser } from '@/lib/types'
 
-// ─── USER PROFILE DIALOG (Feature 2) ────────────────────
-function UserProfileDialog({
+export function UserProfileDialog({
   open,
   onClose,
   user,
@@ -37,10 +30,10 @@ function UserProfileDialog({
   useEffect(() => {
     if (open) {
       setLoadingProfile(true)
-      fetch('/api/proxy?path=auth/me', { headers: { 'Content-Type': 'application/json' } })
+      fetch('/api/auth/me', { headers: { 'Content-Type': 'application/json' } })
         .then((res) => res.json())
         .then((data) => {
-          if (data.last_login) setLastLogin(data.last_login)
+          if (data.lastLogin) setLastLogin(data.lastLogin)
         })
         .catch(() => { /* silent */ })
         .finally(() => setLoadingProfile(false))
@@ -188,5 +181,3 @@ function UserProfileDialog({
     </Dialog>
   )
 }
-
-export { UserProfileDialog }

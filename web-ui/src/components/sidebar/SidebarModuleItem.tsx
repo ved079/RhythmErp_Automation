@@ -1,11 +1,20 @@
 'use client'
 
 import React from 'react'
-import { ChevronDown } from 'lucide-react'
-import type { SidebarModule } from '@/lib/types'
+import { ChevronDown, Circle } from 'lucide-react'
 
-// ─── Sidebar Module Component ────────────────────────────
-function SidebarModuleItem({
+// ─── Types ───────────────────────────────────────────────
+interface SidebarModule {
+  id: string
+  label: string
+  badge?: string
+  badgeType?: 'success' | 'warning' | 'wip' | 'none'
+  children?: SidebarModule[]
+  defaultExpanded?: boolean
+}
+
+// ─── Sidebar Module Item ─────────────────────────────────
+export function SidebarModuleItem({
   module,
   depth = 0,
   activeId,
@@ -30,7 +39,6 @@ function SidebarModuleItem({
   const isParentActive = activeId && hasChildren && module.children!.some((c) => c.id === activeId)
   const isChild = depth > 0
 
-  // Exact ERP tree-line values: width 2.7px, color #c8ccd4
   const treeLineWidth = '2.7px'
   const treeLineColor = '#c8ccd4'
 
@@ -38,7 +46,6 @@ function SidebarModuleItem({
     <div className="relative">
       {isChild && (
         <>
-          {/* L-shaped tree branch connector (border-left + border-bottom with rounded corner) */}
           <div
             className="absolute bg-transparent z-0"
             style={{
@@ -49,11 +56,8 @@ function SidebarModuleItem({
               borderLeft: `${treeLineWidth} solid ${treeLineColor}`,
               borderBottom: `${treeLineWidth} solid ${treeLineColor}`,
               borderRadius: isLast ? '0 0 0 15px' : '0 0 0 15px',
-              // For last child, the vertical line stops here (L-shape)
-              // For non-last, the vertical line continues down via the parent ml-menu::before
             }}
           />
-          {/* Continuing vertical line for non-last items */}
           {!isLast && (
             <div
               className="absolute z-0 bg-transparent"
@@ -72,7 +76,6 @@ function SidebarModuleItem({
       <button
         data-module-id={module.id}
         ref={(el) => {
-          // Only scroll when THIS module was just expanded (not on every re-render)
           if (el && justExpandedId === module.id && hasChildren) {
             requestAnimationFrame(() => {
               el.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -137,7 +140,6 @@ function SidebarModuleItem({
       </button>
       {hasChildren && isExpanded && (
         <div className="relative">
-          {/* Vertical tree line running down the left side of all children */}
           <div
             className="absolute z-0"
             style={{
@@ -168,4 +170,4 @@ function SidebarModuleItem({
   )
 }
 
-export { SidebarModuleItem }
+export type { SidebarModule }

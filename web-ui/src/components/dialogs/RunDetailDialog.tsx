@@ -1,16 +1,14 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { BarChart3, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { BarChart3, Loader2 } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import type { RunSnapshot } from '@/lib/types'
-import { fetchRunDetail, type ApiRunDetail } from '@/lib/api'
-import { TestStatusIcon } from '@/components/shared/StatusIcons'
+import { TestStatusIcon } from '@/components/shared/PriorityBadge'
 
-// ─── RUN DETAIL DIALOG (Feature 4) ───────────────────────
 export function RunDetailDialog({
   open,
   onClose,
@@ -20,7 +18,7 @@ export function RunDetailDialog({
   onClose: () => void
   run: RunSnapshot | null
 }) {
-  const [runDetail, setRunDetail] = useState<ApiRunDetail | null>(null)
+  const [runDetail, setRunDetail] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -31,7 +29,7 @@ export function RunDetailDialog({
       setLoading(true)
       setRunDetail(null)
       try {
-        const detail = await fetchRunDetail(run.id)
+        const detail = await fetch(`/api/runs/${run.id}`).then(r => r.ok ? r.json() : null)
         if (!cancelled) setRunDetail(detail)
       } catch {
         if (!cancelled) setRunDetail(null)

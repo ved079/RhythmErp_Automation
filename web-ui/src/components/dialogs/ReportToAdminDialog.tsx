@@ -1,14 +1,13 @@
 'use client'
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
+import { MessageSquare, Send, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { MessageSquare, Send, Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { addBugReport } from '@/lib/bug-reports'
+import { toast } from 'sonner'
 
-// ─── REPORT TO ADMIN DIALOG ──────────────────────────────
 export function ReportToAdminDialog({
   open,
   onClose,

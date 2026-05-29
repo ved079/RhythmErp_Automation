@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 
-export async function GET() {
+/**
+ * POST /api/auth/seed
+ * Seed the default admin user (idempotent).
+ * Changed from GET to POST for security — prevents accidental creation via URL.
+ */
+export async function POST() {
   try {
     const existing = await db.user.findUnique({
       where: { email: 'admin@rhythmerp.com' },

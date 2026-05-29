@@ -1,18 +1,19 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { RefreshCw, Filter, Ticket, Play, CheckCircle2, RotateCcw, Loader2, MessageSquare, Send, Timer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Ticket, RefreshCw, Filter, Loader2, Send, Timer, Play, CheckCircle2, RotateCcw, MessageSquare } from 'lucide-react'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import type { BugReport } from '@/lib/bug-reports'
-import { getBugReports, markReportReadByUser, addReplyToReport, updateBugReportStatus, getSLAStatus, getSLADeadline } from '@/lib/bug-reports'
+import {
+  getBugReports, addReplyToReport, markReportReadByUser, updateBugReportStatus,
+  getSLAStatus, getSLADeadline, type BugReport,
+} from '@/lib/bug-reports'
 
-// ─── MY TICKETS TAB (Feature 1) ──────────────────────────
 export function MyTicketsTab({
   userEmail,
   userName,
@@ -120,8 +121,8 @@ export function MyTicketsTab({
     }
     const labels = { open: 'Open', 'in-progress': 'In Progress', fixed: 'Fixed' }
     return (
-      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${colors[s as keyof typeof colors] || 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>
-        {labels[s as keyof typeof labels] || s}
+      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${colors[s]}`}>
+        {labels[s]}
       </span>
     )
   }

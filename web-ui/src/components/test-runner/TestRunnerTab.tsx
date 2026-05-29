@@ -1,15 +1,13 @@
 'use client'
 
 import React, { useCallback } from 'react'
-import { Play, CheckCircle2, XCircle, Circle, Flame, Activity, ShieldCheck, RotateCcw } from 'lucide-react'
+import { Play, Flame, Activity, RotateCcw, CheckCircle2, XCircle, Circle, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { PriorityBadge, priorityConfig } from '@/components/shared/PriorityBadge'
-import { TestStatusIcon } from '@/components/shared/StatusIcons'
-import type { TestItem, TestPriority } from '@/lib/types'
+import { priorityConfig, type TestPriority, type TestItem } from '@/data/testSpecGroups'
+import { PriorityBadge, TestStatusIcon } from '@/components/shared/PriorityBadge'
 
-// ─── TEST RUNNER TAB ────────────────────────────────────
 export function TestRunnerTab({
   tests,
   testChecks,

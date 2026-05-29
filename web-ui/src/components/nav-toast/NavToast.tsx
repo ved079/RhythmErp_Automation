@@ -4,8 +4,10 @@ import React, { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
 
 // ─── NAV TOAST ───────────────────────────────────────────
-// Style selector — change this to switch: 'style_a' thru 'style_l'
-const NAV_TOAST_STYLE = 'style_x' as const
+// Style selector — change this to switch: 'style_a' thru 'style_x'
+export const NAV_TOAST_STYLE = 'style_x' as const
+
+export type NavToastStyleType = typeof NAV_TOAST_STYLE
 
 function NavToast({ label, parent }: { label: string; parent?: string | null }) {
   const [visible, setVisible] = useState(true)
@@ -66,7 +68,7 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
   }
 
   // ── Style B: Logo Canvas ──
-  // Wide pill where the entire background IS the logo, super faint, text floats over this
+  // Wide pill where the entire background IS the logo, super faint, text floats over it
   if (NAV_TOAST_STYLE === 'style_b') {
     return (
       <div className="pointer-events-none absolute top-3 left-1/2 z-50" style={animStyle}>
@@ -812,4 +814,4 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
   return null
 }
 
-export { NavToast, NAV_TOAST_STYLE }
+export default NavToast

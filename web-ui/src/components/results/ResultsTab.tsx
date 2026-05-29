@@ -1,38 +1,19 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { GitCompare, MoreVertical, Eye, MessageSquare, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
-import { Progress } from '@/components/ui/progress'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Separator } from '@/components/ui/separator'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import {
-  GitCompare,
-  Eye,
-  MessageSquare,
-  RotateCcw,
-  MoreVertical,
-  ArrowUpDown,
-} from 'lucide-react'
-import type { TestItem, RunSnapshot, TestClassGroup, ModuleHealth } from '@/lib/types'
-import { testSpecGroups } from '@/lib/module-data'
+import { Progress } from '@/components/ui/progress'
+import { testSpecGroups, type TestClassGroup, type TestItem } from '@/data/testSpecGroups'
+import type { RunSnapshot, ModuleHealth } from '@/lib/types'
 import { ExportMenu } from '@/components/export/ExportUtils'
-import { PriorityBadge } from '@/components/shared/PriorityBadge'
-import { TestStatusIcon } from '@/components/shared/StatusIcons'
+import { TestStatusIcon, SortArrow } from '@/components/shared/PriorityBadge'
 
-// ─── Sort Arrow (ERP-style: 150ms rotation) ─────────────
-function SortArrow({ col, sortCol, sortDir }: { col: string; sortCol: string; sortDir: 'asc' | 'desc' }) {
-  const isActive = sortCol === col
-  return (
-    <ArrowUpDown
-      className={`size-3 transition-transform duration-150 ${isActive ? 'opacity-100' : 'opacity-30'} ${isActive && sortDir === 'desc' ? 'rotate-180' : ''}`}
-    />
-  )
-}
-
-// ─── RESULTS TAB ─────────────────────────────────────────
 export function ResultsTab({
   tests,
   passedCount,

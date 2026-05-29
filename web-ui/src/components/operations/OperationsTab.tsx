@@ -1,31 +1,16 @@
 'use client'
 
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { Search, ChevronRight, ChevronDown, FileSpreadsheet } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { PriorityBadge, priorityConfig } from '@/components/shared/PriorityBadge'
-import { SortArrow } from '@/components/shared/StatusIcons'
-import type { TestClassGroup, TestSpecItem, TestPriority } from '@/lib/types'
+import { Separator } from '@/components/ui/separator'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import type { TestSpecItem, TestClassGroup } from '@/data/testSpecGroups'
+import { PriorityBadge, SortArrow } from '@/components/shared/PriorityBadge'
 
-// ─── OPERATIONS TAB (Test Specification View) ────────────
 export function OperationsTab({ testGroups, testCasesModule }: { testGroups: TestClassGroup[]; testCasesModule?: { label: string; tests: any[] } }) {
   const testSpecGroups = testGroups
   const [searchVal, setSearchVal] = useState('')

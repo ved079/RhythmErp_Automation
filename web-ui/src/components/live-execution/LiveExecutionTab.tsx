@@ -2,31 +2,15 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
-  ArrowLeft,
-  Square,
-  RotateCcw,
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  Circle,
-  Play,
-  Globe,
-  Monitor,
-  Maximize2,
-  MoreHorizontal,
-  ClipboardList,
-  Terminal,
-  X,
+  ArrowLeft, Globe, MoreHorizontal, Play, Square, RotateCcw, CheckCircle2,
+  XCircle, Circle, Loader2, ClipboardList, Monitor, Maximize2, X, Terminal,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { LiveScreencast } from '@/components/runner/LiveScreencast'
-import { PriorityBadge } from '@/components/shared/PriorityBadge'
-import { ScreenshotEntry } from '@/components/screenshot/ScreenshotGallery'
-import { testSpecGroups } from '@/lib/module-data'
-import type { TestItem, TestClassGroup } from '@/lib/types'
+import { testSpecGroups, type TestClassGroup, type TestItem } from '@/data/testSpecGroups'
+import type { ScreenshotEntry } from '@/components/screenshot/ScreenshotGallery'
+import { LiveScreencast } from './LiveScreencast'
 
-// ─── LIVE EXECUTION TAB (Browser view + Console) ────────
 export function LiveExecutionTab({
   tests,
   testGroups,
