@@ -49,6 +49,8 @@ export interface AuthUser {
   email: string
   name: string
   role: string
+  status?: string
+  moduleAccess?: string[]
 }
 
 // ─── Run Types ───────────────────────────────────────────
@@ -81,4 +83,12 @@ export function getPriority(id: string): TestPriority {
   if (['T01', 'T02', 'T10'].includes(id)) return 'smoke'
   if (['T03', 'T04', 'T05', 'T06', 'T09', 'T11'].includes(id)) return 'regression'
   return 'sanity'
+}
+
+export function getStepsForTest(testId: string, testSpecGroups: TestClassGroup[]): string[] {
+  for (const g of testSpecGroups) {
+    const t = g.tests.find((x) => x.id === testId)
+    if (t) return t.steps.split(' → ').map((s) => s.trim())
+  }
+  return []
 }

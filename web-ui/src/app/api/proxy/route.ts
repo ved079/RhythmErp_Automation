@@ -1,10 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateSession } from "@/lib/session";
+import { db } from "@/lib/db";
 
 const API_BASE = process.env.API_PROXY_URL || "http://127.0.0.1:8000";
 
 // Shared secret for proxy-to-FastAPI communication
 const PROXY_API_KEY = process.env.PROXY_API_KEY || "rhythmerp-proxy-key-change-in-production";
+
+/**
+ * Validate the session cookie from the incoming request.
+ * Returns the user object if valid, null otherwise.
+ */
+async function validateSession(req: NextRequest): Promise<{ id: string; email: string; name: string; role: string } | null> {
+  const token = req.cookies.get("session_token")?.value;
+  if (!token) return null;
+
+  try {
+    const session = await db.session.findUnique({
+      where: { token },
+      include: { user: true },
+    });
+
+    if (!session || !session.user || session.expiresAt < new Date()) {
+      return null;
+    }
+
+    return {
+      id: session.user.id,
+      email: session.user.email,
+      name: session.user.name,
+      role: session.user.role,
+    };
+  } catch {
+    return null;
+  }
+}
 
 async function proxyRequest(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -73,29 +102,13 @@ async function proxyRequest(req: NextRequest) {
     let message = "Unknown error";
     if (err instanceof Error) {
       message = err.message;
-      if (err.name === "AbortError") {
-        message = "Request timed out (10 min limit)";
-      } else if ("cause" in err && err.cause) {
+      if ("cause" in err && err.cause) {
         message += ` | cause: ${JSON.stringify(err.cause)}`;
       }
     }
     console.error(`[Proxy] Failed to fetch ${targetUrl}:`, message);
-
-    // Provide a helpful error for when FastAPI is not running
-    const isConnectionRefused = message.includes("ECONNREFUSED") || message.includes("fetch failed");
-    if (isConnectionRefused) {
-      return NextResponse.json(
-        {
-          error: "Automation engine is not running",
-          detail: "The FastAPI backend is not reachable. Please start it and try again.",
-          targetUrl,
-        },
-        { status: 502 }
-      );
-    }
-
     return NextResponse.json(
-      { error: message, targetUrl },
+      { error: message, targetUrl, hint: "Is FastAPI running on 127.0.0.1:8000?" },
       { status: 502 }
     );
   }

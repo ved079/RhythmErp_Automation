@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
-import { validateSession } from '@/lib/session'
 
 export async function POST(request: NextRequest) {
   try {
-    // Validate session using shared helper
-    const user = await validateSession(request)
-
-    if (!user) {
+    // Validate session
+    const token = request.cookies.get('session_token')?.value
+    if (!token) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const session = await db.session.findUnique({
+      where: { token },
+      include: { user: true },
+    })
+
+    if (!session || !session.user || session.expiresAt < new Date()) {
+      return NextResponse.json({ error: 'Session expired. Please login again.' }, { status: 401 })
     }
 
     const body = await request.json()
@@ -23,14 +30,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'New password must be at least 6 characters' }, { status: 400 })
     }
 
-    // Get the full user record with password hash
-    const dbUser = await db.user.findUnique({ where: { id: user.id } })
-    if (!dbUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
-
     // Verify current password
-    const isValid = await bcrypt.compare(current_password, dbUser.password)
+    const isValid = await bcrypt.compare(current_password, session.user.password)
     if (!isValid) {
       return NextResponse.json({ error: 'Current password is incorrect' }, { status: 400 })
     }
@@ -38,19 +39,19 @@ export async function POST(request: NextRequest) {
     // Hash and save new password
     const hashedPassword = await bcrypt.hash(new_password, 10)
     await db.user.update({
-      where: { id: user.id },
+      where: { id: session.user.id },
       data: { password: hashedPassword },
     })
 
     // Create audit log entry
     await db.auditLog.create({
       data: {
-        userId: user.id,
-        userName: user.name,
+        userId: session.user.id,
+        userName: session.user.name,
         action: 'update',
         targetType: 'user',
-        targetId: user.id,
-        targetLabel: user.email,
+        targetId: session.user.id,
+        targetLabel: session.user.email,
         details: 'Password changed',
       },
     }).catch(() => {}) // non-critical

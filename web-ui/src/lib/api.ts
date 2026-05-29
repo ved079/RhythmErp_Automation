@@ -1,17 +1,9 @@
 /**
  * API helper — all calls to the FastAPI backend go through the Next.js proxy.
  * This avoids CORS issues since the proxy runs server-side.
- *
- * Architecture:
- * - Test execution (start/stop/stream) → FastAPI via proxy
- * - Run history, modules sync → Next.js native DB routes
- * - Screenshots → FastAPI via proxy
- * - Test cases → FastAPI via proxy
  */
 
 const PROXY = "/api/proxy";
-
-// ─── FastAPI Types ───────────────────────────────────────
 
 export interface ApiModule {
   name: string;
@@ -60,45 +52,23 @@ export interface ApiTestResult {
   screenshot: string | null;
 }
 
-// ─── Next.js Native DB Types ────────────────────────────
-
-export interface RunHistoryItem {
-  id: string;
-  moduleId: string;
-  moduleName: string;
-  passed: number;
-  failed: number;
-  total: number;
-  duration: string;
-  rate: number;
-  results: { testId: string; status: string; message?: string; duration?: number }[] | null;
-  startedAt: string;
-  completedAt: string | null;
-  status: string;
-  createdBy: string | null;
-}
-
-// ─── FastAPI Proxy Calls ────────────────────────────────
+// --- GET helpers ---
 
 export async function fetchModules(): Promise<ApiModule[]> {
   const res = await fetch(`${PROXY}?path=modules`);
-  if (!res.ok) return [];
   const data = await res.json();
   return data.modules || [];
 }
 
-/**
- * Fetch run detail from Next.js DB (native route, not FastAPI).
- * Replaces the old proxy-based fetchRunDetail.
- */
-export async function fetchRunDetail(runId: string): Promise<RunHistoryItem | null> {
-  try {
-    const res = await fetch(`/api/runs/${runId}`);
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
-  }
+export async function fetchRuns(): Promise<ApiRunListItem[]> {
+  const res = await fetch(`${PROXY}?path=runs`);
+  const data = await res.json();
+  return data.runs || [];
+}
+
+export async function fetchRunDetail(runId: string): Promise<ApiRunDetail> {
+  const res = await fetch(`${PROXY}?path=runs/${runId}`);
+  return res.json();
 }
 
 // --- Stop a running test ---
@@ -111,6 +81,7 @@ export async function stopRun(runId: string): Promise<void> {
 }
 
 // --- Screenshot helper ---
+
 export async function fetchScreenshot(): Promise<{ screenshot: string | null; active: boolean }> {
   try {
     const res = await fetch(`${PROXY}?path=screenshot`);
@@ -118,6 +89,16 @@ export async function fetchScreenshot(): Promise<{ screenshot: string | null; ac
     return res.json();
   } catch {
     return { screenshot: null, active: false };
+  }
+}
+
+// --- Delete a run ---
+
+export async function deleteRun(runId: string): Promise<void> {
+  const res = await fetch(`${PROXY}?path=runs/${runId}`, { method: "DELETE" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || data.error || `HTTP ${res.status}`);
   }
 }
 
@@ -130,24 +111,18 @@ export interface SSEEvent {
   status: string | null;
   duration: number | null;
   timestamp: string;
-  run_id?: string;
-  total_tests?: number;
-  passed?: number;
-  failed?: number;
-  duration_ms?: number;
 }
 
 /**
  * Start a test run and return an EventSource-like stream.
  * Uses fetch + ReadableStream since EventSource doesn't support POST.
- * Collects run results for saving to Next.js DB after completion.
  */
 export async function startRun(
   module: string,
   subModule: string | null = null,
   tests: string[] | null = null,
   onEvent: (event: SSEEvent) => void,
-  onDone: (summary: RunCompletionSummary) => void,
+  onDone: () => void,
   onError: (err: Error) => void
 ) {
   try {
@@ -170,21 +145,6 @@ export async function startRun(
     const decoder = new TextDecoder();
     let buffer = "";
 
-    // Track results for saving to DB after completion
-    const summary: RunCompletionSummary = {
-      runId: null,
-      module,
-      subModule,
-      passed: 0,
-      failed: 0,
-      skipped: 0,
-      total: 0,
-      results: [],
-      startedAt: new Date().toISOString(),
-      completedAt: null,
-      status: 'failed' as const,
-    };
-
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -198,170 +158,19 @@ export async function startRun(
           try {
             const event: SSEEvent = JSON.parse(line.slice(6));
             onEvent(event);
-
-            // Track results for DB sync
-            if (event.run_id && !summary.runId) {
-              summary.runId = event.run_id;
-            }
-            if (event.type === 'test_end' && event.test_name && event.status) {
-              if (event.status === 'passed') summary.passed++;
-              else if (event.status === 'failed') summary.failed++;
-              else summary.skipped++;
-              summary.total++;
-              summary.results.push({
-                testId: event.test_name,
-                status: event.status,
-                message: event.message || undefined,
-                duration: event.duration || undefined,
-              });
-            }
-            if (event.type === 'run_end') {
-              summary.completedAt = new Date().toISOString();
-              summary.status = summary.failed > 0 ? 'completed' : 'completed';
-              // Override with any totals from the run_end event
-              if (event.total_tests !== undefined) summary.total = event.total_tests;
-              if (event.passed !== undefined) summary.passed = event.passed;
-              if (event.failed !== undefined) summary.failed = event.failed;
-            }
           } catch {
             // skip malformed lines
           }
         }
       }
     }
-
-    // If we never got a run_end, mark as completed anyway
-    if (!summary.completedAt) {
-      summary.completedAt = new Date().toISOString();
-      summary.status = summary.total > 0 ? 'completed' : 'failed';
-    }
-
-    onDone(summary);
+    onDone();
   } catch (err) {
     onError(err instanceof Error ? err : new Error(String(err)));
   }
 }
 
-// ─── Run Completion Summary ─────────────────────────────
-// Collected during SSE stream, used to save results to Next.js DB
-
-export interface RunCompletionSummary {
-  runId: string | null;
-  module: string;
-  subModule: string | null;
-  passed: number;
-  failed: number;
-  skipped: number;
-  total: number;
-  results: { testId: string; status: string; message?: string; duration?: number }[];
-  startedAt: string;
-  completedAt: string | null;
-  status: 'completed' | 'failed' | 'stopped';
-}
-
-// ─── Next.js Native DB Calls ────────────────────────────
-// These read/write directly to the Next.js Prisma database,
-// not through the FastAPI proxy.
-
-/**
- * Fetch run history from Next.js DB (not FastAPI).
- * This is the primary source of truth for historical runs.
- */
-export async function fetchRunsFromDB(limit = 50): Promise<RunHistoryItem[]> {
-  try {
-    const res = await fetch(`/api/runs?limit=${limit}`);
-    if (!res.ok) return [];
-    return res.json();
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Save run results to Next.js DB after a test run completes.
- * This is called automatically after SSE stream ends.
- */
-export async function saveRunResults(summary: RunCompletionSummary, userId?: string): Promise<RunHistoryItem | null> {
-  try {
-    const durationMs = summary.completedAt && summary.startedAt
-      ? new Date(summary.completedAt).getTime() - new Date(summary.startedAt).getTime()
-      : 0;
-    const durationStr = durationMs > 0
-      ? `${Math.floor(durationMs / 60000)}m ${Math.floor((durationMs % 60000) / 1000)}s`
-      : '—';
-    const rate = summary.total > 0 ? Math.round((summary.passed / summary.total) * 10000) / 100 : 0;
-
-    const res = await fetch('/api/runs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        moduleId: summary.subModule || summary.module,
-        moduleName: summary.subModule
-          ? summary.subModule.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-          : summary.module.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-        passed: summary.passed,
-        failed: summary.failed,
-        total: summary.total,
-        duration: durationStr,
-        rate,
-        results: summary.results,
-        status: summary.status,
-        startedAt: summary.startedAt,
-        completedAt: summary.completedAt,
-        createdBy: userId || null,
-      }),
-    });
-    if (!res.ok) return null;
-    return res.json();
-  } catch (err) {
-    console.error('[saveRunResults] Failed to save:', err);
-    return null;
-  }
-}
-
-/**
- * Sync modules from FastAPI to Next.js DB.
- * Called when modules are fetched, keeps the TestModule table up to date.
- */
-export async function syncModulesToDB(modules: ApiModule[]): Promise<void> {
-  try {
-    await fetch('/api/admin/modules/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ modules }),
-    });
-  } catch {
-    // Silent fail — sync is non-critical
-  }
-}
-
-// ─── Test Cases (still from FastAPI) ────────────────────
-
-export interface TestCaseItem {
-  id: string
-  screenName: string
-  description: string
-  steps: string
-  expected: string
-  actual: string
-  status: string
-  date: string
-}
-
-export interface TestCaseModule {
-  label: string
-  tests: TestCaseItem[]
-}
-
-export type TestCasesData = Record<string, TestCaseModule>
-
-export async function fetchTestCases(): Promise<TestCasesData> {
-  const res = await fetch(`${PROXY}?path=test-cases`)
-  if (!res.ok) throw new Error('Failed to fetch test cases')
-  return res.json()
-}
-
-// ─── Module name mapping ────────────────────────────────
+// --- Module name mapping ---
 
 /**
  * Map sub-module folder names to sidebar module IDs.
@@ -439,4 +248,30 @@ export function sidebarToFolderMapping(sidebarId: string): { module: string; sub
     }
   }
   return null;
+
+}
+
+// ─── Test Cases Types & Fetch ──────────────────────────
+export interface TestCaseItem {
+  id: string
+  screenName: string
+  description: string
+  steps: string
+  expected: string
+  actual: string
+  status: string
+  date: string
+}
+
+export interface TestCaseModule {
+  label: string
+  tests: TestCaseItem[]
+}
+
+export type TestCasesData = Record<string, TestCaseModule>
+
+export async function fetchTestCases(): Promise<TestCasesData> {
+  const res = await fetch(`${PROXY}?path=test-cases`)
+  if (!res.ok) throw new Error('Failed to fetch test cases')
+  return res.json()
 }

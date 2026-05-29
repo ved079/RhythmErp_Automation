@@ -7,7 +7,7 @@ import {
   getBugReports, updateBugReportStatus, addReplyToReport,
   markReportReadByAdmin, getSLAStatus, type BugReport,
 } from '@/lib/bug-reports'
-import { fetchTestCases } from '@/lib/api'
+import { fetchModules, fetchTestCases } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -49,9 +49,8 @@ interface AdminTest {
   error?: string; lastResult?: 'passed' | 'failed' | 'not-run'; lastRun?: string
 }
 interface AdminModule {
-  id: string; name: string; label: string; parentId?: string; parentLabel?: string
+  id: string; label: string; parentId?: string; parentLabel?: string
   badge?: string; testCount: number; sortOrder: number; status: 'active' | 'draft' | 'disabled'
-  description?: string
 }
 interface Environment {
   id: string; name: string; baseUrl: string; browser: string
@@ -144,8 +143,6 @@ export default function AdminPage() {
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; label: string } | null>(null)
-  const [moduleDialogOpen, setModuleDialogOpen] = useState(false)
-  const [editingModule, setEditingModule] = useState<AdminModule | null>(null)
 
   // ─── Auth check ──────────────────────────────────────
   useEffect(() => {
@@ -186,40 +183,27 @@ export default function AdminPage() {
     })()
   }, [])
 
-  // Modules — load from native Prisma API
-  const loadModules = useCallback(async () => {
-    setModulesLoaded(false)
-    try {
-      const res = await fetch('/api/admin/modules')
-      if (res.ok) {
-        const data = await res.json()
-        const arr = data.modules || []
-        setModules(arr.map((m: Record<string, unknown>) => ({
-          id: String(m.id || ''),
-          name: String(m.name || ''),
-          label: String(m.label || ''),
-          parentId: m.parentId ? String(m.parentId) : undefined,
-          parentLabel: m.parentLabel ? String(m.parentLabel) : undefined,
-          testCount: Number(m.testCount || 0),
-          sortOrder: Number(m.sortOrder || 0),
-          status: String(m.status || 'active') as AdminModule['status'],
-          description: m.description ? String(m.description) : undefined,
-        })))
-      }
-    } catch { /* empty */ } finally { setModulesLoaded(true) }
-  }, [])
-
-  // Initial load
+  // Modules
   useEffect(() => {
-    (async () => { await loadModules() })()
+    (async () => {
+      try {
+        const apiMods = await fetchModules()
+        const mapped: AdminModule[] = []
+        let idx = 0
+        for (const mod of apiMods) {
+          const total = mod.sub_modules.reduce((s, sm) => s + sm.tests.length + sm.test_files.length, 0)
+          mapped.push({ id: mod.name, label: mod.display, testCount: total, sortOrder: idx++, status: 'active' })
+          for (const sm of mod.sub_modules) {
+            mapped.push({
+              id: sm.name, label: sm.display, parentId: mod.name, parentLabel: mod.display,
+              testCount: sm.tests.length + sm.test_files.length, sortOrder: idx++, status: 'active',
+            })
+          }
+        }
+        setModules(mapped)
+      } catch { /* empty */ } finally { setModulesLoaded(true) }
+    })()
   }, [])
-
-  // Refresh modules when switching to modules section
-  useEffect(() => {
-    if (activeSection === 'modules') {
-      (async () => { await loadModules() })()
-    }
-  }, [activeSection, loadModules])
 
   // Users
   useEffect(() => {
@@ -437,11 +421,6 @@ export default function AdminPage() {
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
         setEnvironments(prev => prev.filter(e => e.id !== deleteTarget.id))
         toast.success('Environment deleted')
-      } else if (deleteTarget.type === 'module') {
-        const res = await fetch(`/api/admin/modules/${deleteTarget.id}`, { method: 'DELETE' })
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
-        setModules(prev => prev.filter(m => m.id !== deleteTarget.id))
-        toast.success('Module deleted')
       }
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
     finally { setDeleteDialogOpen(false); setDeleteTarget(null) }
@@ -489,73 +468,6 @@ export default function AdminPage() {
   const handleMarkBugRead = useCallback(async (id: string) => {
     await markReportReadByAdmin(id)
     setBugReports(prev => prev.map(b => b.id === id ? { ...b, readByAdmin: true } : b))
-  }, [])
-
-  // Module CRUD
-  const handleSaveModule = useCallback(async (moduleData: Partial<AdminModule> & { name: string; label: string }) => {
-    try {
-      if (editingModule) {
-        const res = await fetch(`/api/admin/modules/${editingModule.id}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: moduleData.name, label: moduleData.label,
-            parentId: moduleData.parentId || null, parentLabel: moduleData.parentLabel || null,
-            description: moduleData.description || '', sortOrder: moduleData.sortOrder ?? 0,
-            status: moduleData.status || 'active',
-          }),
-        })
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to update') }
-        toast.success('Module updated')
-        loadModules()
-      } else {
-        const res = await fetch('/api/admin/modules', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: moduleData.name, label: moduleData.label,
-            parentId: moduleData.parentId || null, parentLabel: moduleData.parentLabel || null,
-            description: moduleData.description || '', sortOrder: moduleData.sortOrder ?? 0,
-            status: moduleData.status || 'active',
-          }),
-        })
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to create') }
-        toast.success('Module created')
-        loadModules()
-      }
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Operation failed') }
-    finally { setModuleDialogOpen(false); setEditingModule(null) }
-  }, [editingModule, loadModules])
-
-  const handleDeleteModule = useCallback(async (moduleId: string) => {
-    try {
-      const res = await fetch(`/api/admin/modules/${moduleId}`, { method: 'DELETE' })
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
-      setModules(prev => prev.filter(m => m.id !== moduleId))
-      toast.success('Module deleted')
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
-  }, [])
-
-  const handleSeedModules = useCallback(async () => {
-    try {
-      const res = await fetch('/api/admin/modules/seed', { method: 'POST' })
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to seed') }
-      const data = await res.json()
-      toast.success(`Modules seeded: ${data.created || 0} created, ${data.updated || 0} updated`)
-      loadModules()
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
-  }, [loadModules])
-
-  const handleToggleModuleStatus = useCallback(async (mod: AdminModule) => {
-    const statusCycle: Record<string, AdminModule['status']> = { active: 'draft', draft: 'disabled', disabled: 'active' }
-    const newStatus = statusCycle[mod.status] || 'active'
-    try {
-      const res = await fetch(`/api/admin/modules/${mod.id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      })
-      if (!res.ok) throw new Error('Failed to toggle status')
-      setModules(prev => prev.map(m => m.id === mod.id ? { ...m, status: newStatus } : m))
-      toast.success(`Module status changed to ${newStatus}`)
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
   }, [])
 
   // ─── Sidebar items ──────────────────────────────────
@@ -815,71 +727,13 @@ export default function AdminPage() {
   const renderModules = () => {
     const parents = modules.filter(m => !m.parentId)
     const getChildren = (parentId: string) => modules.filter(m => m.parentId === parentId)
-    const activeCount = modules.filter(m => m.status === 'active').length
-    const draftCount = modules.filter(m => m.status === 'draft').length
-    const disabledCount = modules.filter(m => m.status === 'disabled').length
-
-    const statusBadge = (status: string) => {
-      if (status === 'active') return 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
-      if (status === 'draft') return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'
-      return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-    }
 
     return (
       <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Modules</h2>
-          <div className="flex gap-2">
-            <Button onClick={handleSeedModules}
-              className="bg-[#00897B] hover:bg-[#00695C] text-white font-['Roboto'] text-xs h-8">
-              <Database className="size-3.5 mr-1" /> Seed Defaults
-            </Button>
-            <Button onClick={() => { setEditingModule(null); setModuleDialogOpen(true) }}
-              className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto'] text-xs h-8">
-              <Plus className="size-3.5 mr-1" /> Add Module
-            </Button>
-          </div>
-        </div>
-
-        {/* Stats row */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-green-100 dark:bg-green-900/40">
-              <CheckCircle2 className="size-4 text-green-700 dark:text-green-300" />
-            </div>
-            <div>
-              <p className="text-lg font-bold font-['Poppins'] text-[#333] dark:text-gray-100">{activeCount}</p>
-              <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Active</p>
-            </div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-yellow-100 dark:bg-yellow-900/40">
-              <Clock className="size-4 text-yellow-700 dark:text-yellow-300" />
-            </div>
-            <div>
-              <p className="text-lg font-bold font-['Poppins'] text-[#333] dark:text-gray-100">{draftCount}</p>
-              <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Draft</p>
-            </div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-red-100 dark:bg-red-900/40">
-              <XCircle className="size-4 text-red-700 dark:text-red-300" />
-            </div>
-            <div>
-              <p className="text-lg font-bold font-['Poppins'] text-[#333] dark:text-gray-100">{disabledCount}</p>
-              <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Disabled</p>
-            </div>
-          </div>
-        </div>
-
+        <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Modules</h2>
+        <p className="text-xs text-[#888] dark:text-gray-400 font-['Manrope']">Modules are discovered from test cases — read-only view.</p>
         {!modulesLoaded ? (
           <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
-        ) : modules.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 text-center">
-            <FolderTree className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
-            <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No modules configured</p>
-            <p className="text-xs text-[#888] dark:text-gray-400 font-['Manrope'] mt-1">Click &quot;Seed Defaults&quot; to create default modules, or add one manually.</p>
-          </div>
         ) : (
           <div className="space-y-3">
             {parents.map(parent => {
@@ -888,50 +742,16 @@ export default function AdminPage() {
                 <div key={parent.id} className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm overflow-hidden">
                   <div className="flex items-center gap-3 p-4 bg-[#E8EAF6] dark:bg-[#1A237E]/30">
                     <FolderTree className="size-4 text-[#3F51B5]" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold font-['Poppins'] text-[#3F51B5] dark:text-[#7986CB]">{parent.label}</span>
-                        <Badge className={`text-[9px] border-0 ${statusBadge(parent.status)}`}>{parent.status}</Badge>
-                      </div>
-                      {parent.description && <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope'] mt-0.5 truncate">{parent.description}</p>}
-                    </div>
-                    <Badge variant="outline" className="text-[10px]">{parent.testCount} tests</Badge>
-                    <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => handleToggleModuleStatus(parent)} title="Toggle status">
-                        {parent.status === 'active' ? <CheckCircle2 className="size-3 text-green-600" /> : parent.status === 'draft' ? <Clock className="size-3 text-yellow-600" /> : <XCircle className="size-3 text-red-600" />}
-                      </Button>
-                      <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => { setEditingModule(parent); setModuleDialogOpen(true) }}>
-                        <Pencil className="size-3 text-[#3F51B5]" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => { setDeleteTarget({ type: 'module', id: parent.id, label: parent.label }); setDeleteDialogOpen(true) }}>
-                        <Trash2 className="size-3 text-[#F44336]" />
-                      </Button>
-                    </div>
+                    <span className="text-sm font-semibold font-['Poppins'] text-[#3F51B5] dark:text-[#7986CB]">{parent.label}</span>
+                    <Badge variant="outline" className="text-[10px] ml-auto">{parent.testCount} tests</Badge>
                   </div>
                   {children.length > 0 && (
                     <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
                       {children.map(child => (
                         <div key={child.id} className="flex items-center gap-3 px-4 py-2.5 ml-6 border-l-2 border-[#3F51B5]/20 dark:border-[#7986CB]/20">
                           <ChevronRight className="size-3 text-[#888] dark:text-gray-400" />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-['Manrope'] text-[#333] dark:text-gray-100">{child.label}</span>
-                              <Badge className={`text-[8px] border-0 px-1 py-0 ${statusBadge(child.status)}`}>{child.status}</Badge>
-                            </div>
-                            {child.description && <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope'] truncate">{child.description}</p>}
-                          </div>
-                          <Badge variant="outline" className="text-[9px]">{child.testCount} tests</Badge>
-                          <div className="flex gap-1">
-                            <Button size="sm" variant="ghost" className="size-6 p-0" onClick={() => handleToggleModuleStatus(child)} title="Toggle status">
-                              {child.status === 'active' ? <CheckCircle2 className="size-3 text-green-600" /> : child.status === 'draft' ? <Clock className="size-3 text-yellow-600" /> : <XCircle className="size-3 text-red-600" />}
-                            </Button>
-                            <Button size="sm" variant="ghost" className="size-6 p-0" onClick={() => { setEditingModule(child); setModuleDialogOpen(true) }}>
-                              <Pencil className="size-3 text-[#3F51B5]" />
-                            </Button>
-                            <Button size="sm" variant="ghost" className="size-6 p-0" onClick={() => { setDeleteTarget({ type: 'module', id: child.id, label: child.label }); setDeleteDialogOpen(true) }}>
-                              <Trash2 className="size-3 text-[#F44336]" />
-                            </Button>
-                          </div>
+                          <span className="text-xs font-['Manrope'] text-[#333] dark:text-gray-100">{child.label}</span>
+                          <Badge variant="outline" className="text-[9px] ml-auto">{child.testCount} tests</Badge>
                         </div>
                       ))}
                     </div>
@@ -939,36 +759,6 @@ export default function AdminPage() {
                 </div>
               )
             })}
-            {/* Orphan children (no parent found) */}
-            {modules.filter(m => m.parentId && !modules.find(p => p.id === m.parentId)).length > 0 && (
-              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm overflow-hidden">
-                <div className="flex items-center gap-3 p-4 bg-orange-50 dark:bg-orange-900/20">
-                  <AlertTriangle className="size-4 text-orange-600" />
-                  <span className="text-sm font-semibold font-['Poppins'] text-orange-700 dark:text-orange-300">Orphaned Modules</span>
-                </div>
-                <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
-                  {modules.filter(m => m.parentId && !modules.find(p => p.id === m.parentId)).map(child => (
-                    <div key={child.id} className="flex items-center gap-3 px-4 py-2.5">
-                      <ChevronRight className="size-3 text-[#888] dark:text-gray-400" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-['Manrope'] text-[#333] dark:text-gray-100">{child.label}</span>
-                          <Badge className={`text-[8px] border-0 px-1 py-0 ${statusBadge(child.status)}`}>{child.status}</Badge>
-                        </div>
-                      </div>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" className="size-6 p-0" onClick={() => { setEditingModule(child); setModuleDialogOpen(true) }}>
-                          <Pencil className="size-3 text-[#3F51B5]" />
-                        </Button>
-                        <Button size="sm" variant="ghost" className="size-6 p-0" onClick={() => { setDeleteTarget({ type: 'module', id: child.id, label: child.label }); setDeleteDialogOpen(true) }}>
-                          <Trash2 className="size-3 text-[#F44336]" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -1464,9 +1254,6 @@ export default function AdminPage() {
       {/* ─── USER DIALOG ────────────────────────────── */}
       <UserDialog key={editingUser?.id || 'new'} open={userDialogOpen} onOpenChange={setUserDialogOpen} editingUser={editingUser} onSave={handleSaveUser} allModules={modules} />
 
-      {/* ─── MODULE DIALOG ──────────────────────────── */}
-      <ModuleDialog key={editingModule?.id || 'new'} open={moduleDialogOpen} onOpenChange={setModuleDialogOpen} editingModule={editingModule} onSave={handleSaveModule} allModules={modules} />
-
       {/* ─── DELETE CONFIRM DIALOG ──────────────────── */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent className="sm:max-w-[400px]">
@@ -1667,106 +1454,6 @@ function UserDialog({ open, onOpenChange, editingUser, onSave, allModules }: {
             disabled={!name || !email}
             className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto']">
             {editingUser ? 'Update' : 'Create'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-// ─── Module Dialog Component ─────────────────────────────────
-function ModuleDialog({ open, onOpenChange, editingModule, onSave, allModules }: {
-  open: boolean; onOpenChange: (v: boolean) => void
-  editingModule: AdminModule | null; onSave: (data: Partial<AdminModule> & { name: string; label: string }) => void
-  allModules: AdminModule[]
-}) {
-  const [name, setName] = useState(editingModule?.name || '')
-  const [label, setLabel] = useState(editingModule?.label || '')
-  const [parentId, setParentId] = useState<string>(editingModule?.parentId || 'none')
-  const [description, setDescription] = useState(editingModule?.description || '')
-  const [status, setStatus] = useState<string>(editingModule?.status || 'active')
-  const [sortOrder, setSortOrder] = useState(String(editingModule?.sortOrder ?? 0))
-
-  const parentModules = allModules.filter(m => !m.parentId)
-  // When editing, exclude self from parent list (if it's a parent)
-  const availableParents = editingModule
-    ? parentModules.filter(p => p.id !== editingModule.id)
-    : parentModules
-
-  const handleSave = () => {
-    if (!name.trim() || !label.trim()) return
-    const selectedParent = parentId !== 'none' ? parentId : undefined
-    const parentMod = selectedParent ? allModules.find(m => m.id === selectedParent) : undefined
-    onSave({
-      name: name.trim(),
-      label: label.trim(),
-      parentId: selectedParent,
-      parentLabel: parentMod?.label,
-      description: description.trim(),
-      sortOrder: Number(sortOrder) || 0,
-      status: status as AdminModule['status'],
-    })
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[520px]">
-        <DialogHeader>
-          <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100">{editingModule ? 'Edit Module' : 'Add Module'}</DialogTitle>
-          <DialogDescription className="font-['Manrope'] text-[#888]">
-            {editingModule ? 'Update module configuration.' : 'Create a new test module.'}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Name (slug) <span className="text-red-500">*</span></Label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. registration-farmer" className="h-9 text-sm font-['Manrope']" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Label (display) <span className="text-red-500">*</span></Label>
-              <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Farmer" className="h-9 text-sm font-['Manrope']" />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-['Manrope']">Parent Module</Label>
-            <Select value={parentId} onValueChange={setParentId}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="None (Top-level)" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None (Top-level)</SelectItem>
-                {availableParents.map(p => (
-                  <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-['Manrope']">Description</Label>
-            <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Brief description of this module..." className="min-h-[60px] text-sm font-['Manrope']" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Status</Label>
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="disabled">Disabled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Sort Order</Label>
-              <Input type="number" value={sortOrder} onChange={e => setSortOrder(e.target.value)} className="h-9 text-sm font-['Manrope']" />
-            </div>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="font-['Roboto']">Cancel</Button>
-          <Button onClick={handleSave} disabled={!name.trim() || !label.trim()}
-            className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto']">
-            {editingModule ? 'Update' : 'Create'}
           </Button>
         </DialogFooter>
       </DialogContent>

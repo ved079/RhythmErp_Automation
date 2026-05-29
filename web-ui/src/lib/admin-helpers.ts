@@ -1,36 +1,58 @@
 // ─── Admin API Helpers ──────────────────────────────────
 // Shared utilities for all /api/admin/* routes:
-// - Session validation (admin/qa_lead only) — delegates to session.ts
+// - Session validation (admin/qa_lead only)
 // - Audit log creation
 
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { validateAdminSession, type SessionUser } from '@/lib/session'
 
-// Re-export the admin user type for backward compatibility
-export type AdminUser = SessionUser
+export interface AdminUser {
+  id: string
+  email: string
+  name: string
+  role: string
+}
 
 /**
  * Validate that the request comes from an authenticated admin or qa_lead user.
  * Returns the user object if valid, or an error response if not.
  */
 export async function validateAdmin(req: NextRequest): Promise<{ user: AdminUser } | { error: Response }> {
-  const user = await validateAdminSession(req)
+  const token = req.cookies.get('session_token')?.value
 
-  if (!user) {
-    // Check if it's an auth issue or a permissions issue
-    // Try to validate session first
-    const { validateSession } = await import('@/lib/session')
-    const anyUser = await validateSession(req)
-
-    if (!anyUser) {
-      return { error: new Response(JSON.stringify({ error: 'Not authenticated' }), { status: 401, headers: { 'Content-Type': 'application/json' } }) }
-    }
-
-    return { error: new Response(JSON.stringify({ error: 'Insufficient permissions' }), { status: 403, headers: { 'Content-Type': 'application/json' } }) }
+  if (!token) {
+    return { error: new Response(JSON.stringify({ error: 'Not authenticated' }), { status: 401, headers: { 'Content-Type': 'application/json' } }) }
   }
 
-  return { user }
+  try {
+    const session = await db.session.findUnique({
+      where: { token },
+      include: { user: true },
+    })
+
+    if (!session || !session.user || session.expiresAt < new Date()) {
+      if (session) {
+        await db.session.delete({ where: { id: session.id } }).catch(() => {})
+      }
+      return { error: new Response(JSON.stringify({ error: 'Session expired' }), { status: 401, headers: { 'Content-Type': 'application/json' } }) }
+    }
+
+    if (session.user.role !== 'admin' && session.user.role !== 'qa_lead') {
+      return { error: new Response(JSON.stringify({ error: 'Insufficient permissions' }), { status: 403, headers: { 'Content-Type': 'application/json' } }) }
+    }
+
+    return {
+      user: {
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.name,
+        role: session.user.role,
+      },
+    }
+  } catch (err) {
+    console.error('validateAdmin error:', err)
+    return { error: new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500, headers: { 'Content-Type': 'application/json' } }) }
+  }
 }
 
 /**

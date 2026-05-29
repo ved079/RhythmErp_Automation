@@ -95,12 +95,6 @@ enum AuditAction {
   toggle
 }
 
-enum ModuleStatus {
-  active
-  draft
-  disabled
-}
-
 model User {
   id           String     @id @default(cuid())
   email        String     @unique
@@ -226,22 +220,6 @@ model SystemSetting {
   options     String      @default("[]")
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
-}
-
-// ─── Admin: Test Module Management ────────────────────
-
-model TestModule {
-  id          String       @id @default(cuid())
-  name        String       @unique
-  label       String
-  parentId    String?
-  parentLabel String?
-  description String       @default("")
-  sortOrder   Int          @default(0)
-  testCount   Int          @default(0)
-  status      ModuleStatus @default(active)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
 }
 
 // ─── Admin: Audit Log ──────────────────────────────────

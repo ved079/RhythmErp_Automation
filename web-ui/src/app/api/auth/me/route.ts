@@ -1,15 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { validateSession } from '@/lib/session'
+import { db } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await validateSession(request)
+    const token = request.cookies.get('session_token')?.value
 
-    if (!user) {
+    if (!token) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    return NextResponse.json({ user })
+    const session = await db.session.findUnique({
+      where: { token },
+      include: { user: true },
+    })
+
+    if (!session || session.expiresAt < new Date()) {
+      // Clean up expired session
+      if (session) {
+        await db.session.delete({ where: { id: session.id } })
+      }
+      return NextResponse.json({ error: 'Session expired' }, { status: 401 })
+    }
+
+    return NextResponse.json({
+      user: {
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.name,
+        role: session.user.role,
+        status: session.user.status,
+        moduleAccess: JSON.parse(session.user.moduleAccess || '[]'),
+      },
+    })
   } catch (error) {
     console.error('Me error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

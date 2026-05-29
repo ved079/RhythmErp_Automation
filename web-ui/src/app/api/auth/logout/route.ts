@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getCookieOptions } from '@/lib/session'
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,8 +35,11 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({ message: 'Logged out' })
 
     response.cookies.set('session_token', '', {
-      ...getCookieOptions(),
-      maxAge: 0, // Clear the cookie
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 0,
     })
 
     return response

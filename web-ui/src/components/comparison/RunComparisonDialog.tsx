@@ -39,7 +39,7 @@ import {
   AlertTriangle,
   Loader2,
 } from 'lucide-react'
-import { fetchRunDetail, type RunHistoryItem } from '@/lib/api'
+import { fetchRunDetail, type ApiRunDetail, type ApiTestResult } from '@/lib/api'
 import type { RunSnapshot } from '@/lib/types'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 
@@ -200,8 +200,8 @@ export default function RunComparisonDialog({
   const [compareRunId, setCompareRunId] = useState<string>('')
 
   // Detail data
-  const [baseDetail, setBaseDetail] = useState<RunHistoryItem | null>(null)
-  const [compareDetail, setCompareDetail] = useState<RunHistoryItem | null>(null)
+  const [baseDetail, setBaseDetail] = useState<ApiRunDetail | null>(null)
+  const [compareDetail, setCompareDetail] = useState<ApiRunDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -264,19 +264,14 @@ export default function RunComparisonDialog({
   const diffRows = useMemo<DiffRow[]>(() => {
     if (!baseDetail || !compareDetail) return []
 
-    type TestResult = { testId: string; status: string; message?: string; duration?: number }
-    const baseMap = new Map<string, TestResult>()
-    const compareMap = new Map<string, TestResult>()
+    const baseMap = new Map<string, ApiTestResult>()
+    const compareMap = new Map<string, ApiTestResult>()
 
-    const baseResults = Array.isArray(baseDetail.results) ? baseDetail.results : []
-    const compareResults = Array.isArray(compareDetail.results) ? compareDetail.results : []
-    for (const r of baseResults) {
-      const key = r.testId || r.name || ''
-      baseMap.set(key, r as TestResult)
+    for (const r of baseDetail.results) {
+      baseMap.set(r.name, r)
     }
-    for (const r of compareResults) {
-      const key = r.testId || r.name || ''
-      compareMap.set(key, r as TestResult)
+    for (const r of compareDetail.results) {
+      compareMap.set(r.name, r)
     }
 
     const allNames = new Set([...baseMap.keys(), ...compareMap.keys()])
@@ -363,8 +358,8 @@ export default function RunComparisonDialog({
   const summaryDelta = useMemo(() => {
     if (!baseDetail || !compareDetail) return null
 
-    const baseRate = passRate(baseDetail.passed, baseDetail.total)
-    const compareRate = passRate(compareDetail.passed, compareDetail.total)
+    const baseRate = passRate(baseDetail.passed, baseDetail.total_tests)
+    const compareRate = passRate(compareDetail.passed, compareDetail.total_tests)
     const deltaPassed = compareDetail.passed - baseDetail.passed
     const deltaFailed = compareDetail.failed - baseDetail.failed
     const deltaRate = compareRate - baseRate
@@ -533,13 +528,13 @@ export default function RunComparisonDialog({
                   Base Run
                 </div>
                 <div className="text-[13px] text-gray-700 dark:text-gray-200 font-medium">
-                  {formatDate(baseDetail.startedAt)}
+                  {formatDate(baseDetail.started_at)}
                 </div>
                 <div className="grid grid-cols-3 gap-2 mt-2">
                   <div className="text-center">
                     <div className="text-[11px] text-gray-400 dark:text-gray-500">Total</div>
                     <div className="text-[14px] font-bold text-gray-800 dark:text-gray-100">
-                      {baseDetail.total}
+                      {baseDetail.total_tests}
                     </div>
                   </div>
                   <div className="text-center">
@@ -577,13 +572,13 @@ export default function RunComparisonDialog({
                   Compare Run
                 </div>
                 <div className="text-[13px] text-gray-700 dark:text-gray-200 font-medium">
-                  {formatDate(compareDetail.startedAt)}
+                  {formatDate(compareDetail.started_at)}
                 </div>
                 <div className="grid grid-cols-3 gap-2 mt-2">
                   <div className="text-center">
                     <div className="text-[11px] text-gray-400 dark:text-gray-500">Total</div>
                     <div className="text-[14px] font-bold text-gray-800 dark:text-gray-100">
-                      {compareDetail.total}
+                      {compareDetail.total_tests}
                     </div>
                   </div>
                   <div className="text-center">
