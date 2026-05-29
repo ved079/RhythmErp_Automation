@@ -42,18 +42,21 @@ export async function POST(request: NextRequest) {
       data: { password: hashedPassword },
     })
 
-    // Create audit log entry
-    await db.auditLog.create({
-      data: {
-        userId: user.id,
-        userName: user.name,
-        action: 'update',
-        targetType: 'user',
-        targetId: user.id,
-        targetLabel: user.email,
-        details: 'Password changed',
-      },
-    }).catch(() => {}) // non-critical
+    // Create audit log entry (non-critical — wrapped in try/catch
+    // because .catch() doesn't catch synchronous TypeErrors)
+    try {
+      await db.auditLog.create({
+        data: {
+          userId: user.id,
+          userName: user.name,
+          action: 'update',
+          targetType: 'user',
+          targetId: user.id,
+          targetLabel: user.email,
+          details: 'Password changed',
+        },
+      })
+    } catch {} // non-critical
 
     return NextResponse.json({ message: 'Password changed successfully' })
   } catch (error) {
