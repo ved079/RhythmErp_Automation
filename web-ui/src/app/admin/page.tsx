@@ -8,6 +8,7 @@ import {
   markReportReadByAdmin, getSLAStatus, type BugReport,
 } from '@/lib/bug-reports'
 import { fetchTestCases } from '@/lib/api'
+import { ALL_SIDEBAR_MODULES } from '@/data/sidebarModules'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -1981,7 +1982,7 @@ function UserDialog({ open, onOpenChange, editingUser, onSave, allModules }: {
             <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 max-h-[200px] overflow-y-auto">
               <div className="space-y-2">
                 {parentModules.map(mod => {
-                  const children = allModules.filter(m => m.parentId === mod.id)
+                  const children = effectiveModulesWithChildren.filter(m => m.parentId === mod.id)
                   const isParentChecked = moduleAccess.includes('all') || moduleAccess.includes(mod.id)
                   return (
                     <div key={mod.id}>
@@ -2032,7 +2033,46 @@ function ModuleDialog({ open, onOpenChange, editingModule, onSave, allModules }:
   const [status, setStatus] = useState<string>(editingModule?.status || 'active')
   const [sortOrder, setSortOrder] = useState(String(editingModule?.sortOrder ?? 0))
 
-  const parentModules = allModules.filter(m => !m.parentId)
+    // Use DB modules if available, otherwise fall back to ALL_SIDEBAR_MODULES
+  const effectiveModulesWithChildren: AdminModule[] = allModules.length > 0 ? allModules : (() => {
+    const result: AdminModule[] = []
+    for (const sm of ALL_SIDEBAR_MODULES) {
+      if (sm.id === 'dashboard' || sm.id === 'my-tickets') continue
+      result.push({
+        id: sm.id, name: sm.id, label: sm.label,
+        parentId: undefined, parentLabel: undefined,
+        testCount: 0, sortOrder: 0, status: 'active' as const,
+      })
+      if (sm.children) {
+        for (const child of sm.children) {
+          if (child.children) {
+            for (const grandChild of child.children) {
+              result.push({
+                id: grandChild.id, name: grandChild.id, label: grandChild.label,
+                parentId: child.id, parentLabel: child.label,
+                testCount: 0, sortOrder: 0, status: 'active' as const,
+              })
+            }
+            result.push({
+              id: child.id, name: child.id, label: child.label,
+              parentId: sm.id, parentLabel: sm.label,
+              testCount: 0, sortOrder: 0, status: 'active' as const,
+            })
+          } else {
+            result.push({
+              id: child.id, name: child.id, label: child.label,
+              parentId: sm.id, parentLabel: sm.label,
+              testCount: 0, sortOrder: 0, status: 'active' as const,
+            })
+          }
+        }
+      }
+    }
+    return result
+  })()
+
+  const parentModules = effectiveModulesWithChildren.filter(m => !m.parentId)
+  
   // When editing, exclude self from parent list (if it's a parent)
   const availableParents = editingModule
     ? parentModules.filter(p => p.id !== editingModule.id)
