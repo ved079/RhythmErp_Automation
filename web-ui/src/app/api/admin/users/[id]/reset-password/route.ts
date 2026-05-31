@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
-import { validateAdmin, createAuditLog } from '@/lib/admin-helpers'
+import { validateAdmin, createAuditLogWithRequest } from '@/lib/admin-helpers'
 
 // GET — Fetch password reset history for a user (from audit log)
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Get last 5 reset_password audit entries for this user
     const resetHistory = await db.auditLog.findMany({
       where: {
-        action: 'reset_password',
+        action: { in: ['reset_password', 'password_change'] },
         targetType: 'user',
         targetId: id,
       },
@@ -30,16 +30,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       take: 5,
     })
 
-    const history = resetHistory.map((entry) => {
-      // details format: "Password reset by admin to: <password>"
-      const passwordMatch = entry.details.match(/to: (.+)$/)
-      return {
-        id: entry.id,
-        resetBy: entry.userName,
-        date: entry.createdAt,
-        password: passwordMatch ? passwordMatch[1] : '—',
-      }
-    })
+    // H1: Do NOT expose passwords in audit history
+    const history = resetHistory.map((entry) => ({
+      id: entry.id,
+      resetBy: entry.userName,
+      date: entry.createdAt,
+      ipAddress: entry.ipAddress || '—',
+      details: entry.details.replace(/password:\s*\S+/i, 'password: [REDACTED]'),
+    }))
 
     return NextResponse.json({ history })
   } catch (err) {
@@ -66,7 +64,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const body = await req.json().catch(() => ({}))
-    const newPassword = body.password || 'changeme'
+    // C4: Use env var for default password instead of hardcoded 'changeme'
+    const defaultPassword = process.env.DEFAULT_USER_PASSWORD || 'changeme'
+    const newPassword = body.password || defaultPassword
 
     const hashedPassword = await bcrypt.hash(newPassword, 12)
     await db.user.update({
@@ -79,15 +79,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await db.session.deleteMany({ where: { userId: id } })
     } catch {}
 
-    // Create audit log with the password so admin can see it in history
-    await createAuditLog({
+    // H1: Create audit log — do NOT log the password in plaintext
+    await createAuditLogWithRequest(req, {
       userId: auth.user.id,
       userName: auth.user.name,
       action: 'reset_password',
       targetType: 'user',
       targetId: id,
       targetLabel: `${existing.name} (${existing.email})`,
-      details: `Password reset by admin to: ${newPassword}`,
+      details: 'Password reset by admin',
     })
 
     return NextResponse.json({ message: 'Password reset successfully', password: newPassword })

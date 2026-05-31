@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import ZAI from 'z-ai-web-dev-sdk'
+import { validateSession } from '@/lib/session'
 
 // Cached ZAI instance for reuse across requests
 let zaiInstance: ZAI | null = null
@@ -30,6 +31,12 @@ interface TestSuggestionsRequest {
 }
 
 export async function POST(req: NextRequest) {
+  // C1: Auth check
+  const user = await validateSession(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
   try {
     const body: TestSuggestionsRequest = await req.json()
     const { failedTests, moduleHistory } = body

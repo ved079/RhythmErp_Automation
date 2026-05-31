@@ -1,17 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { validateSession } from '@/lib/session'
 
 // GET /api/runs/[id] — get a specific run
+// C1: Now requires authentication
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // C1: Auth check
+  const user = await validateSession(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
   try {
     const { id } = await params
 
     const run = await db.runHistory.findUnique({ where: { id } })
     if (!run) {
       return NextResponse.json({ error: 'Run not found' }, { status: 404 })
+    }
+
+    // Non-admin users can only see their own runs
+    if (user.role !== 'admin' && run.userId !== user.id) {
+      return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
     }
 
     const mapped = {
@@ -27,18 +40,31 @@ export async function GET(
 }
 
 // PATCH /api/runs/[id] — update a run (e.g., mark as completed)
+// C1: Now requires authentication
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // C1: Auth check
+  const user = await validateSession(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
   try {
     const { id } = await params
-    const body = await req.json()
 
     const existing = await db.runHistory.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Run not found' }, { status: 404 })
     }
+
+    // Non-admin users can only update their own runs
+    if (user.role !== 'admin' && existing.userId !== user.id) {
+      return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+    }
+
+    const body = await req.json()
 
     const updateData: Record<string, unknown> = {}
 

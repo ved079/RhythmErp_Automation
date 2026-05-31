@@ -1,6 +1,8 @@
 // ─── Bug Report Types & Helpers ─────────────────────────
 // All data now lives in SQLite via API routes (not localStorage)
 
+import { withCsrf } from '@/lib/csrf-client'
+
 export interface Reply {
   id: string
   authorName: string
@@ -48,22 +50,22 @@ export async function getBugReports(): Promise<BugReport[]> {
 }
 
 export async function addBugReport(report: Omit<BugReport, 'id' | 'status' | 'createdAt' | 'updatedAt' | 'replies' | 'readByUser' | 'readByAdmin'>): Promise<BugReport> {
-  const res = await fetch('/api/bugs', {
+  const res = await fetch('/api/bugs', withCsrf({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(report),
-  })
+  }))
   if (!res.ok) throw new Error('Failed to create bug report')
   return res.json()
 }
 
 export async function updateBugReportStatus(id: string, status: BugReport['status']): Promise<BugReport | null> {
   try {
-    const res = await fetch(`/api/bugs/${id}`, {
+    const res = await fetch(`/api/bugs/${id}`, withCsrf({
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
-    })
+    }))
     if (!res.ok) return null
     return res.json()
   } catch {
@@ -78,11 +80,11 @@ export async function getOpenBugCount(): Promise<number> {
 
 export async function addReplyToReport(reportId: string, reply: Omit<Reply, 'id' | 'createdAt'>): Promise<BugReport | null> {
   try {
-    const res = await fetch(`/api/bugs/${reportId}/replies`, {
+    const res = await fetch(`/api/bugs/${reportId}/replies`, withCsrf({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(reply),
-    })
+    }))
     if (!res.ok) return null
     // Re-fetch the full bug report to get updated replies + read flags
     const reportRes = await fetch(`/api/bugs`)
@@ -96,11 +98,11 @@ export async function addReplyToReport(reportId: string, reply: Omit<Reply, 'id'
 
 export async function markReportReadByUser(reportId: string): Promise<void> {
   try {
-    await fetch(`/api/bugs/${reportId}/read`, {
+    await fetch(`/api/bugs/${reportId}/read`, withCsrf({
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ role: 'user' }),
-    })
+    }))
   } catch {
     // silent fail
   }
@@ -108,11 +110,11 @@ export async function markReportReadByUser(reportId: string): Promise<void> {
 
 export async function markReportReadByAdmin(reportId: string): Promise<void> {
   try {
-    await fetch(`/api/bugs/${reportId}/read`, {
+    await fetch(`/api/bugs/${reportId}/read`, withCsrf({
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ role: 'admin' }),
-    })
+    }))
   } catch {
     // silent fail
   }
@@ -120,11 +122,11 @@ export async function markReportReadByAdmin(reportId: string): Promise<void> {
 
 export async function assignReport(reportId: string, assignedTo: string, assignedToName: string): Promise<BugReport | null> {
   try {
-    const res = await fetch(`/api/bugs/${reportId}`, {
+    const res = await fetch(`/api/bugs/${reportId}`, withCsrf({
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ assignedTo, assignedToName }),
-    })
+    }))
     if (!res.ok) return null
     return res.json()
   } catch {
@@ -154,18 +156,18 @@ export async function getNotifications(): Promise<Notification[]> {
 }
 
 export async function addNotification(notification: Omit<Notification, 'id' | 'createdAt' | 'read'>): Promise<Notification> {
-  const res = await fetch('/api/notifications', {
+  const res = await fetch('/api/notifications', withCsrf({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(notification),
-  })
+  }))
   if (!res.ok) throw new Error('Failed to create notification')
   return res.json()
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
   try {
-    await fetch(`/api/notifications/${id}`, { method: 'PATCH' })
+    await fetch(`/api/notifications/${id}`, withCsrf({ method: 'PATCH' }))
   } catch {
     // silent fail
   }
@@ -173,7 +175,7 @@ export async function markNotificationRead(id: string): Promise<void> {
 
 export async function markAllNotificationsRead(): Promise<void> {
   try {
-    await fetch('/api/notifications/read-all', { method: 'PATCH' })
+    await fetch('/api/notifications/read-all', withCsrf({ method: 'PATCH' }))
   } catch {
     // silent fail
   }
@@ -216,22 +218,22 @@ export async function getScheduledRuns(): Promise<ScheduledRun[]> {
 }
 
 export async function addScheduledRun(run: Omit<ScheduledRun, 'id' | 'createdAt'>): Promise<ScheduledRun> {
-  const res = await fetch('/api/schedules', {
+  const res = await fetch('/api/schedules', withCsrf({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(run),
-  })
+  }))
   if (!res.ok) throw new Error('Failed to create scheduled run')
   return res.json()
 }
 
 export async function updateScheduledRun(id: string, updates: Partial<ScheduledRun>): Promise<ScheduledRun | null> {
   try {
-    const res = await fetch(`/api/schedules/${id}`, {
+    const res = await fetch(`/api/schedules/${id}`, withCsrf({
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
-    })
+    }))
     if (!res.ok) return null
     return res.json()
   } catch {
@@ -241,7 +243,7 @@ export async function updateScheduledRun(id: string, updates: Partial<ScheduledR
 
 export async function deleteScheduledRun(id: string): Promise<void> {
   try {
-    await fetch(`/api/schedules/${id}`, { method: 'DELETE' })
+    await fetch(`/api/schedules/${id}`, withCsrf({ method: 'DELETE' }))
   } catch {
     // silent fail
   }

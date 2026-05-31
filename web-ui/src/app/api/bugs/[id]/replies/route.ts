@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { validateSession } from '@/lib/session'
 
 // POST /api/bugs/[id]/replies — add a reply to a bug report
+// C1: Now requires authentication
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // C1: Auth check
+  const user = await validateSession(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
   try {
     const { id } = await params
     const body = await req.json()
@@ -18,6 +26,11 @@ export async function POST(
     const existing = await db.bugReport.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Bug report not found' }, { status: 404 })
+    }
+
+    // Non-admin users can only reply to their own bugs
+    if (user.role !== 'admin' && existing.userId !== user.id) {
+      return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
     }
 
     const dbRole = authorRole === 'admin' ? 'admin' : 'user'

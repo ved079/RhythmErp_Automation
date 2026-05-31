@@ -7,9 +7,34 @@
  * - Run history, modules sync → Next.js native DB routes
  * - Screenshots → FastAPI via proxy
  * - Test cases → FastAPI via proxy
+ *
+ * C6: All state-changing requests include CSRF token from cookie.
  */
 
 const PROXY = "/api/proxy";
+
+/**
+ * C6: Get CSRF token from the csrf_token cookie for double-submit pattern.
+ * The middleware sets this cookie on every response.
+ */
+function getCsrfToken(): string {
+  if (typeof document === 'undefined') return ''
+  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)
+  return match ? decodeURIComponent(match[1]) : ''
+}
+
+/**
+ * C6: Add CSRF token header to fetch options for state-changing requests.
+ */
+function withCsrf(options: RequestInit = {}): RequestInit {
+  const csrfToken = getCsrfToken()
+  if (!csrfToken) return options
+
+  const headers = new Headers(options.headers || {})
+  headers.set('X-CSRF-Token', csrfToken)
+
+  return { ...options, headers }
+}
 
 // ─── FastAPI Types ───────────────────────────────────────
 
@@ -103,7 +128,7 @@ export async function fetchRunDetail(runId: string): Promise<RunHistoryItem | nu
 
 // --- Stop a running test ---
 export async function stopRun(runId: string): Promise<void> {
-  const res = await fetch(`${PROXY}?path=runs/${runId}/stop`, { method: "POST" });
+  const res = await fetch(`${PROXY}?path=runs/${runId}/stop`, withCsrf({ method: "POST" }));
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.detail || data.error || `HTTP ${res.status}`);
@@ -151,7 +176,7 @@ export async function startRun(
   onError: (err: Error) => void
 ) {
   try {
-    const res = await fetch(`${PROXY}?path=runs/start`, {
+    const res = await fetch(`${PROXY}?path=runs/start`, withCsrf({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -159,7 +184,7 @@ export async function startRun(
         sub_module: subModule,
         tests,
       }),
-    });
+    }));
 
     if (!res.ok || !res.body) {
       onError(new Error(`HTTP ${res.status}`));
@@ -291,7 +316,7 @@ export async function saveRunResults(summary: RunCompletionSummary, userId?: str
       : '—';
     const rate = summary.total > 0 ? Math.round((summary.passed / summary.total) * 10000) / 100 : 0;
 
-    const res = await fetch('/api/runs', {
+    const res = await fetch('/api/runs', withCsrf({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -311,7 +336,7 @@ export async function saveRunResults(summary: RunCompletionSummary, userId?: str
         createdBy: userId || null,
         userId: userId || null,
       }),
-    });
+    }));
     if (!res.ok) return null;
     return res.json();
   } catch (err) {
@@ -326,11 +351,11 @@ export async function saveRunResults(summary: RunCompletionSummary, userId?: str
  */
 export async function syncModulesToDB(modules: ApiModule[]): Promise<void> {
   try {
-    await fetch('/api/admin/modules/sync', {
+    await fetch('/api/admin/modules/sync', withCsrf({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ modules }),
-    });
+    }));
   } catch {
     // Silent fail — sync is non-critical
   }

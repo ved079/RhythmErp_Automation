@@ -7,7 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-const PROXY_API_KEY = process.env.PROXY_API_KEY || 'rhythmerp-proxy-key-change-in-production'
+// C4: No hardcoded fallback — must be set via environment variable
+const PROXY_API_KEY = process.env.PROXY_API_KEY || ''
 
 interface RunCallbackPayload {
   run_id: string

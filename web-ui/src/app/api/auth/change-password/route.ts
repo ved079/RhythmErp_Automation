@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { validateSession } from '@/lib/session'
+import { getClientIp } from '@/lib/rate-limit'
+import { createAuditLog } from '@/lib/admin-helpers'
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,19 +44,18 @@ export async function POST(request: NextRequest) {
       data: { password: hashedPassword },
     })
 
-    // Create audit log entry (non-critical — wrapped in try/catch
-    // because .catch() doesn't catch synchronous TypeErrors)
+    // H1: Create audit log entry with IP — do NOT log passwords
+    const clientIp = getClientIp(request)
     try {
-      await db.auditLog.create({
-        data: {
-          userId: user.id,
-          userName: user.name,
-          action: 'update',
-          targetType: 'user',
-          targetId: user.id,
-          targetLabel: user.email,
-          details: 'Password changed',
-        },
+      await createAuditLog({
+        userId: user.id,
+        userName: user.name,
+        action: 'password_change',
+        targetType: 'user',
+        targetId: user.id,
+        targetLabel: user.email,
+        details: 'Password changed by user',
+        ipAddress: clientIp,
       })
     } catch {} // non-critical
 

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { withCsrf } from '@/lib/csrf-client'
 
 interface FailureAnalysisResult {
   rootCause: string
@@ -50,7 +51,7 @@ export function AiFailureAnalysis({ open, onClose, testId, testName, error, modu
     setApiError(null)
 
     try {
-      const res = await fetch('/api/ai/failure-analysis', {
+      const res = await fetch('/api/ai/failure-analysis', withCsrf({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -61,7 +62,7 @@ export function AiFailureAnalysis({ open, onClose, testId, testName, error, modu
           stackTrace: stackTrace || undefined,
           recentRuns: [],
         }),
-      })
+      }))
 
       const data = await res.json()
       if (!res.ok || !data.success) {

@@ -46,11 +46,20 @@ function invalidateCachedSession(token: string): void {
   sessionCache.delete(token)
 }
 
+// ─── Session timeout constants ────────────────────────────
+// C7: Session cookie expires after 1 hour (access window).
+// DB session can last up to 7 days (refresh window — renewed on activity).
+const SESSION_COOKIE_MAX_AGE = 60 * 60         // 1 hour (access token equivalent)
+const SESSION_DB_MAX_AGE = 7 * 24 * 60 * 60    // 7 days (refresh token equivalent)
+
 /**
  * Validate that the request comes from an authenticated user (any role).
  * Returns the user object if valid, or null if not.
  * Automatically cleans up expired sessions.
  * Uses in-memory cache to avoid repeated DB queries for the same token.
+ *
+ * C7: Also renews the session expiry on each successful validation,
+ * implementing a sliding window (similar to refresh token rotation).
  */
 export async function validateSession(req: NextRequest): Promise<SessionUser | null> {
   const token = req.cookies.get('session_token')?.value
@@ -84,6 +93,18 @@ export async function validateSession(req: NextRequest): Promise<SessionUser | n
       moduleAccess: JSON.parse(session.user.moduleAccess || '[]'),
     }
 
+    // C7: Renew session expiry on activity (sliding window / refresh token rotation)
+    // Only renew if less than half the DB max age remains
+    const remainingMs = session.expiresAt.getTime() - Date.now()
+    const halfDbMaxAge = (SESSION_DB_MAX_AGE * 1000) / 2
+    if (remainingMs < halfDbMaxAge) {
+      const newExpiresAt = new Date(Date.now() + SESSION_DB_MAX_AGE * 1000)
+      await db.session.update({
+        where: { id: session.id },
+        data: { expiresAt: newExpiresAt },
+      }).catch(() => {}) // Non-critical
+    }
+
     setCachedSession(token, user)
     return user
   } catch (err) {
@@ -112,16 +133,26 @@ export function isProductionEnv(): boolean {
 
 /**
  * Get cookie options based on environment.
- * In production, set secure: true to require HTTPS.
+ * C7: Session cookie maxAge reduced to 1 hour.
+ * The DB session can last 7 days and gets renewed on activity.
+ * sameSite changed to 'strict' for C6 (CSRF hardening).
  */
 export function getCookieOptions() {
   return {
     httpOnly: true,
     secure: isProductionEnv(),
-    sameSite: 'lax' as const,
+    sameSite: 'strict' as const,  // C6: Changed from 'lax' to 'strict'
     path: '/',
-    maxAge: 7 * 24 * 60 * 60, // 7 days
+    maxAge: SESSION_COOKIE_MAX_AGE, // C7: 1 hour (was 7 days)
   }
+}
+
+/**
+ * Get cookie options for the DB session expiry (used when creating sessions).
+ * The DB session lasts longer than the cookie — acts as a refresh token.
+ */
+export function getDbSessionExpiry(): Date {
+  return new Date(Date.now() + SESSION_DB_MAX_AGE * 1000) // 7 days
 }
 
 /**

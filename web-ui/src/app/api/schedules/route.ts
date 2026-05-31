@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { validateSession } from '@/lib/session'
 
 function isMissingTableError(error: unknown): boolean {
   return error instanceof Error && 'code' in error && (error as any).code === 'P2021'
 }
 
 // GET /api/schedules — list all scheduled runs
-export async function GET() {
+// C1: Now requires authentication
+export async function GET(req: NextRequest) {
+  const user = await validateSession(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
   try {
     const runs = await db.scheduledRun.findMany({
       orderBy: { createdAt: 'desc' },
@@ -29,7 +36,13 @@ export async function GET() {
 }
 
 // POST /api/schedules — create a scheduled run
+// C1: Now requires authentication
 export async function POST(req: NextRequest) {
+  const user = await validateSession(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
   try {
     const body = await req.json()
     const { moduleId, moduleName, frequency, scheduledTime, testSelection, selectedTestIds, enabled, createdBy } = body

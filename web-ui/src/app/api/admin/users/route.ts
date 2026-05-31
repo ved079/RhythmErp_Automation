@@ -62,7 +62,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'A user with this email already exists' }, { status: 409 })
     }
 
-    const hashedPassword = await bcrypt.hash(password || 'changeme', 12)
+    // C4: Use env var for default password instead of hardcoded 'changeme'
+    const defaultPassword = process.env.DEFAULT_USER_PASSWORD || 'changeme'
+    const hashedPassword = await bcrypt.hash(password || defaultPassword, 12)
 
     const user = await db.user.create({
       data: {

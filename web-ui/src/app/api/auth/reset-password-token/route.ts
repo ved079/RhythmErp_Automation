@@ -4,8 +4,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
+import { createAuditLog } from '@/lib/admin-helpers'
 
 export async function POST(request: NextRequest) {
+  // C3: Rate limiting — 5 reset attempts per minute per IP
+  const clientIp = getClientIp(request)
+  const rateCheck = checkRateLimit(clientIp, 'reset-password', { maxRequests: 5, windowMs: 60_000 })
+  if (rateCheck.limited) {
+    return NextResponse.json(
+      { error: 'Too many reset attempts. Please try again later.' },
+      {
+        status: 429,
+        headers: { 'Retry-After': String(Math.ceil((rateCheck.retryAfterMs || 60_000) / 1000)) }
+      }
+    )
+  }
+
   try {
     const { email, otp, new_password, confirm_password } = await request.json()
 
@@ -83,18 +98,17 @@ export async function POST(request: NextRequest) {
     // Invalidate all sessions for this user
     await db.session.deleteMany({ where: { userId: user.id } }).catch(() => {})
 
-    // Create audit log (non-critical)
+    // H1: Create audit log with IP (do NOT log the password)
     try {
-      await db.auditLog.create({
-        data: {
-          userId: user.id,
-          userName: user.name,
-          action: 'reset_password',
-          targetType: 'user',
-          targetId: user.id,
-          targetLabel: user.email,
-          details: 'Password reset via forgot-password OTP',
-        },
+      await createAuditLog({
+        userId: user.id,
+        userName: user.name,
+        action: 'password_change',
+        targetType: 'user',
+        targetId: user.id,
+        targetLabel: user.email,
+        details: 'Password reset via forgot-password OTP',
+        ipAddress: clientIp,
       })
     } catch {}
 

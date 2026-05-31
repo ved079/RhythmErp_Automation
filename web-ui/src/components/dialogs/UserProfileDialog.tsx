@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import type { AuthUser } from '@/lib/types'
+import { withCsrf } from '@/lib/csrf-client'
 
 export function UserProfileDialog({
   open,
@@ -56,14 +57,14 @@ export function UserProfileDialog({
     }
     setChangingPassword(true)
     try {
-      const res = await fetch('/api/auth/change-password', {
+      const res = await fetch('/api/auth/change-password', withCsrf({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           current_password: currentPassword,
           new_password: newPassword,
         }),
-      })
+      }))
       const data = await res.json()
       if (!res.ok) {
         toast.error(data.error || 'Failed to change password')

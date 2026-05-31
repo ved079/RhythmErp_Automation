@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { User, Lock, Eye, EyeOff, XCircle, Loader2, CheckCircle2, KeyRound } from 'lucide-react'
 import { toast } from 'sonner'
+import { withCsrf } from '@/lib/csrf-client'
 
 // ─── Types ───────────────────────────────────────────────
 interface AuthUser {
@@ -116,11 +117,11 @@ function ForgotPasswordPage({ onBackToLogin }: { onBackToLogin: () => void }) {
       setLoading(true)
 
       try {
-        const res = await fetch('/api/auth/forgot-password', {
+        const res = await fetch('/api/auth/forgot-password', withCsrf({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email }),
-        })
+        }))
 
         const data = await res.json()
 
@@ -161,7 +162,7 @@ function ForgotPasswordPage({ onBackToLogin }: { onBackToLogin: () => void }) {
       setLoading(true)
 
       try {
-        const res = await fetch('/api/auth/reset-password-token', {
+        const res = await fetch('/api/auth/reset-password-token', withCsrf({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -170,7 +171,7 @@ function ForgotPasswordPage({ onBackToLogin }: { onBackToLogin: () => void }) {
             new_password: newPassword,
             confirm_password: confirmPassword,
           }),
-        })
+        }))
 
         const data = await res.json()
 
@@ -196,11 +197,11 @@ function ForgotPasswordPage({ onBackToLogin }: { onBackToLogin: () => void }) {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/auth/forgot-password', {
+      const res = await fetch('/api/auth/forgot-password', withCsrf({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
-      })
+      }))
 
       const data = await res.json()
 
@@ -585,11 +586,11 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
       setLoading(true)
 
       try {
-        const res = await fetch('/api/auth/login', {
+        const res = await fetch('/api/auth/login', withCsrf({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
-        })
+        }))
 
         const data = await res.json()
 

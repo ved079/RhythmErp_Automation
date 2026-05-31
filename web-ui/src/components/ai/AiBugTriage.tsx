@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { withCsrf } from '@/lib/csrf-client'
 
 interface BugTriageAnalysis {
   priority: string
@@ -57,7 +58,7 @@ export function AiBugTriage({ open, onClose, testId, testDescription, error, mod
     setLoading(true)
     setApiError(null)
     try {
-      const res = await fetch('/api/ai/bug-triage', {
+      const res = await fetch('/api/ai/bug-triage', withCsrf({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -67,7 +68,7 @@ export function AiBugTriage({ open, onClose, testId, testDescription, error, mod
           moduleName,
           userName,
         }),
-      })
+      }))
       const data = await res.json()
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Failed to analyze bug')
