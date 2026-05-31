@@ -203,16 +203,45 @@ export function ModuleAccessPicker({
 
   const toggleModule = useCallback((modId: string) => {
     setLocalValue(prev => {
-      if (prev.includes('all')) return [modId]
+      if (prev.includes('all')) {
+        // Convert "all" to explicit list and deselect the clicked module
+        const allIds = allLeaves.map(m => m.id).concat(standaloneModules.map(m => m.id))
+        return allIds.filter(id => id !== modId)
+      }
       if (prev.includes(modId)) return prev.filter(m => m !== modId)
       return [...prev, modId]
     })
-  }, [])
+  }, [allLeaves, standaloneModules])
 
-  const applyPreset = useCallback((preset: Preset) => {
-    const ids = resolvePresetIds(preset, allModules)
-    setLocalValue(ids)
-  }, [allModules])
+  const togglePreset = useCallback((preset: Preset) => {
+    // Full Access is a special case
+    if (preset.id === 'full-access') {
+      setLocalValue(prev => {
+        if (prev.includes('all')) return [] // Deselect all
+        return ['all'] // Select all
+      })
+      return
+    }
+
+    const presetIds = resolvePresetIds(preset, allModules)
+    setLocalValue(prev => {
+      // If "all" is selected, convert to explicit and deselect this preset's modules
+      if (prev.includes('all')) {
+        const allIds = allLeaves.map(m => m.id).concat(standaloneModules.map(m => m.id))
+        return allIds.filter(id => !presetIds.includes(id))
+      }
+
+      // Check if ALL preset modules are already selected
+      const allPresetSelected = presetIds.length > 0 && presetIds.every(id => prev.includes(id))
+      if (allPresetSelected) {
+        // Deselect: remove this preset's modules from current selection
+        return prev.filter(id => !presetIds.includes(id))
+      }
+      // Select: add this preset's modules to current selection (keep existing)
+      const toAdd = presetIds.filter(id => !prev.includes(id))
+      return [...prev, ...toAdd]
+    })
+  }, [allModules, allLeaves, standaloneModules])
 
   const toggleGroup = useCallback((groupId: string) => {
     setLocalValue(prev => {
@@ -319,14 +348,13 @@ export function ModuleAccessPicker({
                     ? isFullAccess
                     : !isFullAccess &&
                       resolvedIds.length > 0 &&
-                      resolvedIds.length === localValue.filter(id => id !== 'all').length &&
-                      resolvedIds.every(id => localValue.includes(id))
+                      resolvedIds.every(id => selectedSet.has(id))
 
                   return (
                     <button
                       key={preset.id}
                       type="button"
-                      onClick={() => applyPreset(preset)}
+                      onClick={() => togglePreset(preset)}
                       className={`group relative text-left rounded-lg border p-2.5 transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2E7D32] ${
                         isActive
                           ? 'border-[#2E7D32] bg-[#E8F5E9]'
