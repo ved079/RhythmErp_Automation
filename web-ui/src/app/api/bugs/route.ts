@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { validateSession } from '@/lib/session'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
 function isMissingTableError(error: unknown): boolean {
   return error instanceof Error && 'code' in error && (error as any).code === 'P2021'
@@ -50,6 +51,19 @@ export async function POST(req: NextRequest) {
     const user = await validateSession(req)
     if (!user) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    // C3: Rate limiting — 10 bug reports per minute per IP
+    const clientIp = getClientIp(req)
+    const rateCheck = checkRateLimit(clientIp, 'bug-report', { maxRequests: 10, windowMs: 60_000 })
+    if (rateCheck.limited) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        {
+          status: 429,
+          headers: { 'Retry-After': String(Math.ceil((rateCheck.retryAfterMs || 60_000) / 1000)) }
+        }
+      )
     }
 
     const body = await req.json()

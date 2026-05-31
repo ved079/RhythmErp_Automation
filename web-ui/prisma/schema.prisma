@@ -92,6 +92,8 @@ enum AuditAction {
   logout
   reset_password
   toggle
+  failed_login
+  password_change
 }
 
 enum ModuleStatus {
@@ -262,6 +264,7 @@ model AuditLog {
   targetId    String      @default("")
   targetLabel String      @default("")
   details     String      @default("")
+  ipAddress   String      @default("")
   createdAt   DateTime    @default(now())
 }
 

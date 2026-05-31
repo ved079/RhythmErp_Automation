@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
+import { withCsrf } from '@/lib/csrf-client'
 
 interface SuggestedTest {
   name: string
@@ -75,7 +76,7 @@ export function AiTestSuggestions({ failedTests, currentModule }: AiTestSuggesti
         },
       ]
 
-      const res = await fetch('/api/ai/test-suggestions', {
+      const res = await fetch('/api/ai/test-suggestions', withCsrf({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -87,7 +88,7 @@ export function AiTestSuggestions({ failedTests, currentModule }: AiTestSuggesti
           })),
           moduleHistory,
         }),
-      })
+      }))
 
       const data = await res.json()
       if (!res.ok || !data.success) {

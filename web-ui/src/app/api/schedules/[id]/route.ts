@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { validateSession } from '@/lib/session'
 
 // PATCH /api/schedules/[id] — update a scheduled run
+// C1: Now requires authentication
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await validateSession(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
   try {
     const { id } = await params
     const body = await req.json()
@@ -66,10 +73,16 @@ export async function PATCH(
 }
 
 // DELETE /api/schedules/[id] — delete a scheduled run
+// C1: Now requires authentication
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await validateSession(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
   try {
     const { id } = await params
 

@@ -5,6 +5,7 @@ import { Sparkles, Loader2, Wand2, AlertTriangle, Play, X, Terminal } from 'luci
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
+import { withCsrf } from '@/lib/csrf-client'
 
 interface NlRunInterpretation {
   understood: boolean
@@ -44,7 +45,7 @@ export function AiNlRunBar({ availableModules, availableTests, onApplySelection 
     setInterpretation(null)
 
     try {
-      const res = await fetch('/api/ai/nl-run', {
+      const res = await fetch('/api/ai/nl-run', withCsrf({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -52,7 +53,7 @@ export function AiNlRunBar({ availableModules, availableTests, onApplySelection 
           availableModules,
           availableTests,
         }),
-      })
+      }))
 
       const data = await res.json()
       if (!res.ok || !data.success) {

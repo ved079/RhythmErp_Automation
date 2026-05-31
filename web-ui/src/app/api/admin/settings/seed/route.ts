@@ -19,7 +19,7 @@ const DEFAULT_SETTINGS = [
   { key: 'webhook_url', label: 'Webhook URL', value: '', type: 'text' as const, description: 'Webhook URL for integration notifications', category: 'notifications', options: [] },
   { key: 'enable_scheduling', label: 'Enable Scheduling', value: 'true', type: 'boolean' as const, description: 'Allow scheduled test runs', category: 'scheduling', options: [] },
   { key: 'schedule_check_interval', label: 'Schedule Check Interval (minutes)', value: '5', type: 'number' as const, description: 'How often to check for scheduled runs', category: 'scheduling', options: [] },
-  { key: 'default_password', label: 'Default New User Password', value: 'changeme', type: 'text' as const, description: 'Default password assigned to new users', category: 'security', options: [] },
+  { key: 'default_password', label: 'Default New User Password', value: '', type: 'text' as const, description: 'Default password assigned to new users (leave empty to use DEFAULT_USER_PASSWORD env var)', category: 'security', options: [] },
   { key: 'session_timeout_days', label: 'Session Timeout (days)', value: '7', type: 'number' as const, description: 'Number of days before sessions expire', category: 'security', options: [] },
 ]
 

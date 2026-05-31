@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { validateSession } from '@/lib/session'
 
 function isMissingTableError(error: unknown): boolean {
   return error instanceof Error && 'code' in error && (error as any).code === 'P2021'
 }
 
 // GET /api/notifications — list all notifications (newest first, capped at 50)
-export async function GET() {
+// C1: Now requires authentication
+export async function GET(req: NextRequest) {
+  const user = await validateSession(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
   try {
     const notifications = await db.notification.findMany({
       orderBy: { createdAt: 'desc' },
@@ -24,7 +31,13 @@ export async function GET() {
 }
 
 // POST /api/notifications — create a notification
+// C1: Now requires authentication
 export async function POST(req: NextRequest) {
+  const user = await validateSession(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
   try {
     const body = await req.json()
     const { type, title, message, ticketId, userId } = body

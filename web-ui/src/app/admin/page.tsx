@@ -9,6 +9,7 @@ import {
   markReportReadByAdmin, getSLAStatus, type BugReport,
 } from '@/lib/bug-reports'
 import { fetchTestCases } from '@/lib/api'
+import { withCsrf } from '@/lib/csrf-client'
 import { ALL_SIDEBAR_MODULES } from '@/data/sidebarModules'
 import { ModuleAccessPicker, type ModuleItem } from '@/components/admin/ModuleAccessPicker'
 import { toast } from 'sonner'
@@ -357,7 +358,7 @@ export default function AdminPage() {
 
   // ─── Handlers ──────────────────────────────────────────
   const handleLogout = useCallback(async () => {
-    await fetch('/api/auth/logout', { method: 'POST' })
+    await fetch('/api/auth/logout', withCsrf({ method: 'POST' }))
     router.push('/')
   }, [router])
 
@@ -410,18 +411,18 @@ export default function AdminPage() {
   const handleSaveEnv = useCallback(async (envData: Partial<Environment>) => {
     try {
       if (editingEnv) {
-        const res = await fetch(`/api/admin/environments/${editingEnv.id}`, {
+        const res = await fetch(`/api/admin/environments/${editingEnv.id}`, withCsrf({
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(envData),
-        })
+        }))
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to update') }
         const updated = await res.json()
         setEnvironments(prev => prev.map(e => e.id === editingEnv.id ? { ...e, ...updated } : e))
         toast.success('Environment updated')
       } else {
-        const res = await fetch('/api/admin/environments', {
+        const res = await fetch('/api/admin/environments', withCsrf({
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...envData, status: 'active', color: envData.color || 'bg-green-500' }),
-        })
+        }))
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to create') }
         const created = await res.json()
         setEnvironments(prev => [...prev, { ...envData, id: created.id, name: created.name, baseUrl: created.baseUrl, browser: created.browser, status: created.status, color: created.color, lastUsed: created.lastUsed } as Environment])
@@ -434,10 +435,10 @@ export default function AdminPage() {
   const handleToggleEnv = useCallback(async (env: Environment) => {
     const newStatus = env.status === 'active' ? 'inactive' : 'active'
     try {
-      const res = await fetch(`/api/admin/environments/${env.id}`, {
+      const res = await fetch(`/api/admin/environments/${env.id}`, withCsrf({
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
-      })
+      }))
       if (!res.ok) throw new Error('Failed to toggle')
       setEnvironments(prev => prev.map(e => e.id === env.id ? { ...e, status: newStatus } : e))
       toast.success(`Environment ${newStatus}`)
@@ -448,19 +449,19 @@ export default function AdminPage() {
   const handleSaveUser = useCallback(async (userData: Partial<AdminUser> & { password?: string }) => {
     try {
       if (editingUser) {
-        const res = await fetch(`/api/admin/users/${editingUser.id}`, {
+        const res = await fetch(`/api/admin/users/${editingUser.id}`, withCsrf({
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: userData.name, email: userData.email, role: userData.role, status: userData.status, module_access: userData.moduleAccess }),
-        })
+        }))
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed') }
         const updated = await res.json()
         setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, name: updated.name, email: updated.email, role: updated.role, status: updated.status, moduleAccess: updated.moduleAccess } : u))
         toast.success('User updated')
       } else {
-        const res = await fetch('/api/admin/users', {
+        const res = await fetch('/api/admin/users', withCsrf({
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: userData.name, email: userData.email, password: userData.password || 'changeme', role: userData.role, module_access: userData.moduleAccess || [] }),
-        })
+        }))
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed') }
         const created = await res.json()
         setUsers(prev => [...prev, { id: created.id, email: created.email, name: created.name, role: created.role, status: created.status || 'active', moduleAccess: created.moduleAccess || userData.moduleAccess || [] } as AdminUser])
@@ -472,7 +473,7 @@ export default function AdminPage() {
 
   const handleResetPassword = useCallback(async (userId: string, password: string) => {
     try {
-      const res = await fetch(`/api/admin/users/${userId}/reset-password`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) })
+      const res = await fetch(`/api/admin/users/${userId}/reset-password`, withCsrf({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) }))
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to reset password') }
       toast.success(`Password reset to: ${password}`)
       setResetPasswordDialogOpen(false)
@@ -484,17 +485,17 @@ export default function AdminPage() {
     if (!deleteTarget) return
     try {
       if (deleteTarget.type === 'user') {
-        const res = await fetch(`/api/admin/users/${deleteTarget.id}`, { method: 'DELETE' })
+        const res = await fetch(`/api/admin/users/${deleteTarget.id}`, withCsrf({ method: 'DELETE' }))
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
         setUsers(prev => prev.filter(u => u.id !== deleteTarget.id))
         toast.success('User deleted')
       } else if (deleteTarget.type === 'environment') {
-        const res = await fetch(`/api/admin/environments/${deleteTarget.id}`, { method: 'DELETE' })
+        const res = await fetch(`/api/admin/environments/${deleteTarget.id}`, withCsrf({ method: 'DELETE' }))
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
         setEnvironments(prev => prev.filter(e => e.id !== deleteTarget.id))
         toast.success('Environment deleted')
       } else if (deleteTarget.type === 'module') {
-        const res = await fetch(`/api/admin/modules/${deleteTarget.id}`, { method: 'DELETE' })
+        const res = await fetch(`/api/admin/modules/${deleteTarget.id}`, withCsrf({ method: 'DELETE' }))
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
         setModules(prev => prev.filter(m => m.id !== deleteTarget.id))
         toast.success('Module deleted')
@@ -505,10 +506,10 @@ export default function AdminPage() {
 
   const handleSaveSetting = useCallback(async (setting: SystemSetting, newValue: string) => {
     try {
-      const res = await fetch(`/api/admin/settings/${setting.id}`, {
+      const res = await fetch(`/api/admin/settings/${setting.id}`, withCsrf({
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ value: newValue }),
-      })
+      }))
       if (!res.ok) throw new Error('Failed to save')
       setSettings(prev => prev.map(s => s.id === setting.id ? { ...s, value: newValue } : s))
       toast.success('Setting saved')
@@ -517,7 +518,7 @@ export default function AdminPage() {
 
   const handleSeedSettings = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/settings/seed', { method: 'POST' })
+      const res = await fetch('/api/admin/settings/seed', withCsrf({ method: 'POST' }))
       if (!res.ok) throw new Error('Failed to reset')
       const data = await res.json()
       setSettings(data.settings || [])
@@ -551,7 +552,7 @@ export default function AdminPage() {
   const handleSaveModule = useCallback(async (moduleData: Partial<AdminModule> & { name: string; label: string }) => {
     try {
       if (editingModule) {
-        const res = await fetch(`/api/admin/modules/${editingModule.id}`, {
+        const res = await fetch(`/api/admin/modules/${editingModule.id}`, withCsrf({
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: moduleData.name, label: moduleData.label,
@@ -559,12 +560,12 @@ export default function AdminPage() {
             description: moduleData.description || '', sortOrder: moduleData.sortOrder ?? 0,
             status: moduleData.status || 'active',
           }),
-        })
+        }))
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to update') }
         toast.success('Module updated')
         loadModules()
       } else {
-        const res = await fetch('/api/admin/modules', {
+        const res = await fetch('/api/admin/modules', withCsrf({
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: moduleData.name, label: moduleData.label,
@@ -572,7 +573,7 @@ export default function AdminPage() {
             description: moduleData.description || '', sortOrder: moduleData.sortOrder ?? 0,
             status: moduleData.status || 'active',
           }),
-        })
+        }))
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to create') }
         toast.success('Module created')
         loadModules()
@@ -583,7 +584,7 @@ export default function AdminPage() {
 
   const handleDeleteModule = useCallback(async (moduleId: string) => {
     try {
-      const res = await fetch(`/api/admin/modules/${moduleId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/admin/modules/${moduleId}`, withCsrf({ method: 'DELETE' }))
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
       setModules(prev => prev.filter(m => m.id !== moduleId))
       toast.success('Module deleted')
@@ -592,7 +593,7 @@ export default function AdminPage() {
 
   const handleSeedModules = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/modules/seed', { method: 'POST' })
+      const res = await fetch('/api/admin/modules/seed', withCsrf({ method: 'POST' }))
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to seed') }
       const data = await res.json()
       toast.success(`Modules seeded: ${data.created || 0} created, ${data.updated || 0} updated`)
@@ -604,10 +605,10 @@ export default function AdminPage() {
     const statusCycle: Record<string, AdminModule['status']> = { active: 'draft', draft: 'disabled', disabled: 'active' }
     const newStatus = statusCycle[mod.status] || 'active'
     try {
-      const res = await fetch(`/api/admin/modules/${mod.id}`, {
+      const res = await fetch(`/api/admin/modules/${mod.id}`, withCsrf({
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
-      })
+      }))
       if (!res.ok) throw new Error('Failed to toggle status')
       setModules(prev => prev.map(m => m.id === mod.id ? { ...m, status: newStatus } : m))
       toast.success(`Module status changed to ${newStatus}`)
@@ -620,15 +621,15 @@ export default function AdminPage() {
     if (ids.length === 0) return
     try {
       if (bulkActionType === 'activate') {
-        await Promise.all(ids.map(id => fetch(`/api/admin/users/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'active' }) })))
+        await Promise.all(ids.map(id => fetch(`/api/admin/users/${id}`, withCsrf({ method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'active' }) }))))
         setUsers(prev => prev.map(u => ids.includes(u.id) ? { ...u, status: 'active' as const } : u))
         toast.success(`${ids.length} user(s) activated`)
       } else if (bulkActionType === 'deactivate') {
-        await Promise.all(ids.map(id => fetch(`/api/admin/users/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'inactive' }) })))
+        await Promise.all(ids.map(id => fetch(`/api/admin/users/${id}`, withCsrf({ method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'inactive' }) }))))
         setUsers(prev => prev.map(u => ids.includes(u.id) ? { ...u, status: 'inactive' as const } : u))
         toast.success(`${ids.length} user(s) deactivated`)
       } else if (bulkActionType === 'delete') {
-        await Promise.all(ids.map(id => fetch(`/api/admin/users/${id}`, { method: 'DELETE' })))
+        await Promise.all(ids.map(id => fetch(`/api/admin/users/${id}`, withCsrf({ method: 'DELETE' }))))
         setUsers(prev => prev.filter(u => !ids.includes(u.id)))
         toast.success(`${ids.length} user(s) deleted`)
       }

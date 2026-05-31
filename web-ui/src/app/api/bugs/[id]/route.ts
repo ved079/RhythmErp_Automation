@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { validateSession } from '@/lib/session'
 
 type BugStatus = 'open' | 'in_progress' | 'fixed' | 'closed' | 'rejected'
 
 // PATCH /api/bugs/[id] — update status, assignment, etc.
+// C1: Now requires authentication
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // C1: Auth check
+  const user = await validateSession(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
   try {
     const { id } = await params
     const body = await req.json()
@@ -15,6 +23,11 @@ export async function PATCH(
     const existing = await db.bugReport.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Bug report not found' }, { status: 404 })
+    }
+
+    // Non-admin users can only update their own bugs
+    if (user.role !== 'admin' && existing.userId !== user.id) {
+      return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
     }
 
     // Build update data

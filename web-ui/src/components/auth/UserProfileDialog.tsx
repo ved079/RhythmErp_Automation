@@ -16,6 +16,7 @@ import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { User, Lock, Clock, Loader2, Shield } from 'lucide-react'
 import type { AuthUser } from '@/lib/types'
+import { withCsrf } from '@/lib/csrf-client'
 
 // ─── USER PROFILE DIALOG (Feature 2) ────────────────────
 function UserProfileDialog({
@@ -63,14 +64,14 @@ function UserProfileDialog({
     }
     setChangingPassword(true)
     try {
-      const res = await fetch('/api/auth/change-password', {
+      const res = await fetch('/api/auth/change-password', withCsrf({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           current_password: currentPassword,
           new_password: newPassword,
         }),
-      })
+      }))
       const data = await res.json()
       if (!res.ok) {
         toast.error(data.error || 'Failed to change password')

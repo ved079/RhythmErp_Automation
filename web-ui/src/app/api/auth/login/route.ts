@@ -2,9 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
-import { getCookieOptions, cleanupExpiredSessions } from '@/lib/session'
+import { getCookieOptions, getDbSessionExpiry, cleanupExpiredSessions } from '@/lib/session'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
+import { createAuditLog } from '@/lib/admin-helpers'
 
 export async function POST(request: NextRequest) {
+  // C3: Rate limiting — 5 login attempts per minute per IP
+  const clientIp = getClientIp(request)
+  const rateCheck = checkRateLimit(clientIp, 'login', { maxRequests: 5, windowMs: 60_000 })
+  if (rateCheck.limited) {
+    return NextResponse.json(
+      { error: 'Too many login attempts. Please try again later.' },
+      {
+        status: 429,
+        headers: { 'Retry-After': String(Math.ceil((rateCheck.retryAfterMs || 60_000) / 1000)) }
+      }
+    )
+  }
+
   try {
     const body = await request.json()
     const { email, password } = body
@@ -18,17 +33,50 @@ export async function POST(request: NextRequest) {
     })
 
     if (!user) {
+      // H1: Log failed login attempt with IP
+      await createAuditLog({
+        userId: 'unknown',
+        userName: email.toLowerCase().trim(),
+        action: 'failed_login',
+        targetType: 'session',
+        targetId: '',
+        targetLabel: email.toLowerCase().trim(),
+        details: 'Login failed: user not found',
+        ipAddress: clientIp,
+      }).catch(() => {})
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
     // Check if user is active
     if (user.status === 'inactive') {
+      // H1: Log failed login attempt with IP
+      await createAuditLog({
+        userId: user.id,
+        userName: user.name,
+        action: 'failed_login',
+        targetType: 'session',
+        targetId: user.id,
+        targetLabel: user.email,
+        details: 'Login failed: account deactivated',
+        ipAddress: clientIp,
+      }).catch(() => {})
       return NextResponse.json({ error: 'Account is deactivated. Contact admin.' }, { status: 403 })
     }
 
     const isValid = await bcrypt.compare(password, user.password)
 
     if (!isValid) {
+      // H1: Log failed login attempt with IP
+      await createAuditLog({
+        userId: user.id,
+        userName: user.name,
+        action: 'failed_login',
+        targetType: 'session',
+        targetId: user.id,
+        targetLabel: user.email,
+        details: 'Login failed: incorrect password',
+        ipAddress: clientIp,
+      }).catch(() => {})
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
@@ -38,9 +86,9 @@ export async function POST(request: NextRequest) {
       cleanupExpiredSessions(),
     ])
 
-    // Create new session
+    // C7: Create new session with proper expiry
     const token = crypto.randomBytes(32).toString('hex')
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+    const expiresAt = getDbSessionExpiry() // 7 days in DB
 
     await db.session.create({
       data: {
@@ -56,8 +104,7 @@ export async function POST(request: NextRequest) {
       data: { lastLogin: new Date() },
     }).catch(() => {}) // non-critical
 
-    // Create audit log entry for login (non-critical — wrapped in try/catch
-    // because db.auditLog may be undefined if the table doesn't exist yet)
+    // Create audit log entry for login (with IP)
     try {
       await db.auditLog.create({
         data: {
@@ -68,6 +115,7 @@ export async function POST(request: NextRequest) {
           targetId: user.id,
           targetLabel: user.email,
           details: `User logged in with role: ${user.role}`,
+          ipAddress: clientIp,
         },
       })
     } catch {} // non-critical

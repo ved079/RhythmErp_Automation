@@ -44,6 +44,7 @@ import { Sparkline } from '@/components/ui/sparkline'
 import Link from 'next/link'
 import Image from 'next/image'
 import type { ScreenshotEntry } from '@/components/screenshot/ScreenshotGallery'
+import { withCsrf } from '@/lib/csrf-client'
 
 // ─── Lazy-loaded components (code-split for faster initial load) ────
 // Tabs — only compiled when their tab is visited
@@ -440,10 +441,10 @@ export default function Home() {
           }
           return selectedModule
         })()
-        fetch('/api/runs', {
+        fetch('/api/runs', withCsrf({
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ moduleId: selectedModule, moduleName, passed, failed, total, duration: durationStr, rate: total > 0 ? Math.round((passed / total) * 100) : 0, results: tests.filter(t => t.status === 'passed' || t.status === 'failed').map(t => ({ testId: t.id, status: t.status })), status: 'completed', startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), createdBy: user?.id, userId: user?.id }),
-        }).then(() => { loadRunHistory() }).catch(() => {})
+        })).then(() => { loadRunHistory() }).catch(() => {})
         currentRunIdRef.current = null
       }
     }
@@ -457,7 +458,7 @@ export default function Home() {
         // Seed admin user in background — only once per browser session
         if (typeof window !== 'undefined' && !sessionStorage.getItem('seed_called')) {
           sessionStorage.setItem('seed_called', '1')
-          fetch('/api/auth/seed', { method: 'POST' }).catch(() => {})
+          fetch('/api/auth/seed', withCsrf({ method: 'POST' })).catch(() => {})
         }
 
         // Check auth immediately with timeout
@@ -484,7 +485,7 @@ export default function Home() {
   }, [])
 
   const handleLogout = useCallback(async () => {
-    await fetch('/api/auth/logout', { method: 'POST' }); setUser(null)
+    await fetch('/api/auth/logout', withCsrf({ method: 'POST' })); setUser(null)
   }, [])
 
   const toggleExpand = useCallback((id: string) => {
@@ -637,7 +638,7 @@ export default function Home() {
                     }
                     return selectedModule
                   })()
-                  fetch('/api/bugs', {
+                  fetch('/api/bugs', withCsrf({
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -651,7 +652,7 @@ export default function Home() {
                       reporterEmail: user?.email || '',
                       userId: user?.id,
                     }),
-                  }).then(async (res) => {
+                  })).then(async (res) => {
                     if (res.ok) {
                       const data = await res.json()
                       if (data.skipped) {

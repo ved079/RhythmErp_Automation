@@ -4,8 +4,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sendOtpEmail } from '@/lib/email'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
+  // C3: Rate limiting — 5 requests per minute per IP
+  const clientIp = getClientIp(request)
+  const rateCheck = checkRateLimit(clientIp, 'forgot-password', { maxRequests: 5, windowMs: 60_000 })
+  if (rateCheck.limited) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please try again later.' },
+      {
+        status: 429,
+        headers: { 'Retry-After': String(Math.ceil((rateCheck.retryAfterMs || 60_000) / 1000)) }
+      }
+    )
+  }
+
   try {
     const { email } = await request.json()
     if (!email || typeof email !== 'string') {
@@ -51,11 +65,12 @@ export async function POST(request: NextRequest) {
     const emailSent = await sendOtpEmail(normalizedEmail, otp, user.name)
 
     if (!emailSent) {
-      // Email failed — fall back to returning OTP in response (dev mode)
-      console.warn('[ForgotPassword] Email send failed, returning OTP in response (dev fallback)')
+      // C4: Do NOT return OTP in response — this was a security issue
+      // Log warning for admin investigation instead
+      console.warn('[ForgotPassword] Email send failed for:', normalizedEmail, '— OTP NOT returned in response for security')
+      // Still return generic success message to avoid revealing system state
       return NextResponse.json({
-        message: 'OTP generated. Email delivery failed — shown below for development.',
-        otp,
+        message: 'If your email exists in our system, an OTP has been sent.',
         emailSent: false,
       })
     }
