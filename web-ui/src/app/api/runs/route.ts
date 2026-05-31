@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { validateSession } from '@/lib/session'
 
 function isMissingTableError(error: unknown): boolean {
   return error instanceof Error && 'code' in error && (error as any).code === 'P2021'
@@ -8,11 +9,19 @@ function isMissingTableError(error: unknown): boolean {
 // GET /api/runs — list run history
 export async function GET(req: NextRequest) {
   try {
+    // ── Auth check ──
+    const user = await validateSession(req)
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
     const url = new URL(req.url)
     const moduleId = url.searchParams.get('moduleId')
     const limit = parseInt(url.searchParams.get('limit') || '50')
 
-    const where = moduleId ? { moduleId } : {}
+    // Non-admin users only see their own runs
+    const roleFilter = user.role === 'admin' ? {} : { userId: user.id }
+    const where = { ...roleFilter, ...(moduleId ? { moduleId } : {}) }
 
     const runs = await db.runHistory.findMany({
       where,
@@ -37,6 +46,12 @@ export async function GET(req: NextRequest) {
 // POST /api/runs — create a run history entry
 export async function POST(req: NextRequest) {
   try {
+    // ── Auth check ──
+    const user = await validateSession(req)
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
     const body = await req.json()
     const { moduleId, moduleName, passed, failed, total, duration, rate, results, status, startedAt, completedAt, createdBy } = body
 
@@ -60,7 +75,8 @@ export async function POST(req: NextRequest) {
         status: dbStatus,
         startedAt: startedAt ? new Date(startedAt) : new Date(),
         completedAt: completedAt ? new Date(completedAt) : null,
-        createdBy: createdBy || null,
+        createdBy: createdBy || user.id || null,
+        userId: user.id,
       },
     })
 

@@ -48,6 +48,7 @@ import type { ScreenshotEntry } from '@/components/screenshot/ScreenshotGallery'
 // ─── Lazy-loaded components (code-split for faster initial load) ────
 // Tabs — only compiled when their tab is visited
 const DashboardTab = dynamic(() => import('@/components/dashboard/DashboardTab').then(m => ({ default: m.DashboardTab })), { ssr: false })
+const PersonalDashboardTab = dynamic(() => import('@/components/dashboard/PersonalDashboardTab').then(m => ({ default: m.PersonalDashboardTab })), { ssr: false })
 const OperationsTab = dynamic(() => import('@/components/operations/OperationsTab').then(m => ({ default: m.OperationsTab })), { ssr: false })
 const TestRunnerTab = dynamic(() => import('@/components/test-runner/TestRunnerTab').then(m => ({ default: m.TestRunnerTab })), { ssr: false })
 const LiveExecutionTab = dynamic(() => import('@/components/live-execution/LiveExecutionTab').then(m => ({ default: m.LiveExecutionTab })), { ssr: false })
@@ -272,6 +273,7 @@ export default function Home() {
   const currentRunIdRef = useRef<string | null>(null)
   const [consoleLogs, setConsoleLogs] = useState<string[]>(['> Waiting for tests to start...', '> Select tests in Test Runner and click Run.'])
   const [bugReportsList, setBugReportsList] = useState<{ id: string; testId: string; desc: string; status: string }[]>([])
+  const [autoReportedTestIds, setAutoReportedTestIds] = useState<Set<string>>(new Set())
 
   // Load run history from Prisma
   const loadRunHistory = useCallback(async () => {
@@ -440,7 +442,7 @@ export default function Home() {
         })()
         fetch('/api/runs', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ moduleId: selectedModule, moduleName, passed, failed, total, duration: durationStr, rate: total > 0 ? Math.round((passed / total) * 100) : 0, results: tests.filter(t => t.status === 'passed' || t.status === 'failed').map(t => ({ testId: t.id, status: t.status })), status: 'completed', startedAt: new Date().toISOString(), completedAt: new Date().toISOString() }),
+          body: JSON.stringify({ moduleId: selectedModule, moduleName, passed, failed, total, duration: durationStr, rate: total > 0 ? Math.round((passed / total) * 100) : 0, results: tests.filter(t => t.status === 'passed' || t.status === 'failed').map(t => ({ testId: t.id, status: t.status })), status: 'completed', startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), createdBy: user?.id, userId: user?.id }),
         }).then(() => { loadRunHistory() }).catch(() => {})
         currentRunIdRef.current = null
       }
@@ -625,7 +627,44 @@ export default function Home() {
               const testId = testsToRun.find((t) => t.id.endsWith('::' + event.test_name))?.id || testsToRun.find((t) => t.id.includes(event.test_name || ''))?.id
               if (testId) {
                 setTests((prev) => prev.map((t) => t.id === testId ? { ...t, status: event.status === 'passed' ? ('passed' as const) : event.status === 'failed' ? ('failed' as const) : ('pending' as const), duration: event.duration ? `${(event.duration / 1000).toFixed(1)}s` : '--' } : t))
-                if (event.status === 'failed') toast.error(`Failed: ${event.test_name}`, { description: event.message || '', duration: 8000 })
+                if (event.status === 'failed') {
+                  toast.error(`Failed: ${event.test_name}`, { description: event.message || '', duration: 8000 })
+                  // Auto-report bug for failed test
+                  const moduleName = (() => {
+                    for (const mod of sidebarModules) {
+                      if (mod.id === selectedModule) return mod.label
+                      if (mod.children) { const child = mod.children.find(c => c.id === selectedModule); if (child) return child.label }
+                    }
+                    return selectedModule
+                  })()
+                  fetch('/api/bugs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      testId,
+                      testDescription: event.test_name,
+                      moduleName,
+                      error: event.message || 'Test failed during automated run',
+                      userNote: 'Auto-reported from failed test run',
+                      priority: 'medium',
+                      reporterName: user?.name || 'System',
+                      reporterEmail: user?.email || '',
+                      userId: user?.id,
+                    }),
+                  }).then(async (res) => {
+                    if (res.ok) {
+                      const data = await res.json()
+                      if (data.skipped) {
+                        // Duplicate already exists — still mark as auto-reported in UI
+                        setAutoReportedTestIds((prev) => { const next = new Set(prev); next.add(testId); return next })
+                      } else {
+                        setAutoReportedTestIds((prev) => { const next = new Set(prev); next.add(testId); return next })
+                        toast.info(`Bug auto-reported for: ${event.test_name}`, { duration: 4000 })
+                      }
+                      loadBugReports()
+                    }
+                  }).catch(() => {})
+                }
               }
             }
           } else if (event.type === 'run_end') { setRunningProgress('Run complete!'); setConsoleLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Run complete!`]) }
@@ -640,7 +679,7 @@ export default function Home() {
         (err) => { setIsRunning(false); setRunningProgress(''); toast.error('Connection failed', { description: err.message, duration: 8000 }) }
       )
     },
-    [isRunning, tests, testChecks, selectedModule, user, loadRunHistory, loadDashboardStats]
+    [isRunning, tests, testChecks, selectedModule, user, loadRunHistory, loadDashboardStats, sidebarModules, loadBugReports]
   )
 
   const runByPriority = useCallback((priority: TestPriority) => {
@@ -795,6 +834,68 @@ export default function Home() {
     )
   }
 
+  const renderPersonalDashboard = () => {
+    const stats = dashboardStats as Record<string, any> | null
+    const totalRuns = (stats?.totalRuns as number) ?? 0
+    const passRate = (stats?.passRate as number) ?? 0
+    const totalBugs = (stats?.totalBugs as number) ?? 0
+    const recentRuns = (stats?.recentRuns as Array<Record<string, any>>) ?? []
+    const recentBugs = (stats?.recentBugs as Array<Record<string, any>>) ?? []
+
+    // Compute modules tested from run history
+    const modulesTested = new Set(runHistory.map((r) => r.moduleId)).size
+
+    const personalStats = {
+      totalRuns,
+      passRate,
+      bugsReported: totalBugs,
+      modulesTested,
+      recentRuns: recentRuns.slice(0, 5).map((r) => ({
+        id: r.id as string,
+        moduleName: (r.moduleName as string) || '—',
+        passed: (r.passed as number) ?? 0,
+        failed: (r.failed as number) ?? 0,
+        date: (r.startedAt as string) || '',
+        rate: (r.rate as number) ?? 0,
+      })),
+      recentBugs: recentBugs.slice(0, 5).map((b) => ({
+        id: b.id as string,
+        testDescription: (b.testDescription as string) || (b.testId as string) || '',
+        moduleName: (b.moduleName as string) || '',
+        status: (b.status as string) || 'open',
+        createdAt: (b.createdAt as string) || '',
+      })),
+    }
+
+    return (
+      <div data-tour="dashboard" className="flex-1 min-h-0 overflow-auto">
+        <PersonalDashboardTab
+          userName={user?.name || 'User'}
+          userRole={user?.role || 'tester'}
+          stats={personalStats}
+          onRunTests={() => {
+            if (selectedModule === 'dashboard') {
+              const firstModule = sidebarModules.find(m => m.id !== 'dashboard' && m.id !== 'my-tickets')
+              if (firstModule) {
+                handleSelectModule(firstModule.id)
+                setTimeout(() => { setActiveTab('test-runner') }, 100)
+              }
+            }
+          }}
+          onReportBug={() => {
+            if (selectedModule === 'dashboard') {
+              const firstModule = sidebarModules.find(m => m.id !== 'dashboard' && m.id !== 'my-tickets')
+              if (firstModule) {
+                handleSelectModule(firstModule.id)
+              }
+            }
+          }}
+          onSelectModule={(moduleId) => handleSelectModule(moduleId)}
+        />
+      </div>
+    )
+  }
+
   // Loading / Login screen
   if (loading) {
     return (
@@ -899,7 +1000,7 @@ export default function Home() {
               <span className="text-[11px] text-gray-400 dark:text-gray-500"><kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-[10px] font-mono">Ctrl+B</kbd> to toggle</span>
             </div>
           )}
-          {selectedModule === 'dashboard' && renderDashboard()}
+          {selectedModule === 'dashboard' && (user?.role === 'admin' ? renderDashboard() : renderPersonalDashboard())}
           {selectedModule === 'my-tickets' && user && <MyTicketsTab userEmail={user.email} userName={user.name} />}
           {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -914,7 +1015,7 @@ export default function Home() {
                 {activeTab === 'operations' && <div data-tour="operations" className="h-full"><OperationsTab testGroups={currentTestGroups} testCasesModule={allTestCases[selectedModule?.toLowerCase().replace(' ', '_').replace('-', '_')]} /></div>}
                 {activeTab === 'test-runner' && <div data-tour="test-runner" className="h-full"><TestRunnerTab tests={tests} testChecks={testChecks} toggleTestCheck={toggleTestCheck} isRunning={isRunning} totalFailed={failedCount} onRun={(selectedOnly) => { runTests(selectedOnly); setActiveTab('live-execution') }} onRunByPriority={runByPriority} onRerunFailed={() => { const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { rerunTestIds(failedIds); runTests(true, failedIds); setActiveTab('live-execution') } }} /></div>}
                 {activeTab === 'live-execution' && <div data-tour="live-execution" className="h-full"><LiveExecutionTab tests={tests} testGroups={currentTestGroups} isRunning={isRunning} runningProgress={runningProgress} onStop={async () => { const runId = currentRunIdRef.current; if (runId) { try { await stopRun(runId); toast.success('Run stopped') } catch (err) { toast.error('Failed to stop run', { description: err instanceof Error ? err.message : 'Unknown error' }) } } setIsRunning(false) }} onBack={() => setActiveTab('test-runner')} onRerunFailed={() => { const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { rerunTestIds(failedIds); runTests(true, failedIds) } }} onScreenshotCaptured={(entry) => { setScreenshotEntries((prev) => { if (prev.length >= 50) return [entry, ...prev.slice(0, 49)]; return [entry, ...prev] }) }} /></div>}
-                {activeTab === 'results' && <div data-tour="results" className="h-full"><ResultsTab tests={tests} passedCount={passedCount} failedCount={failedCount} totalCount={tests.length} runHistory={runHistory} onReportTest={handleReportTest} bugReportsList={bugReportsList} onRunDetail={(run) => { setSelectedRunForDetail(run); setRunDetailDialogOpen(true) }} onCompareRuns={() => setRunComparisonOpen(true)} testGroups={currentTestGroups} moduleHealth={moduleHealth} moduleName={modulePath.name} /></div>}
+                {activeTab === 'results' && <div data-tour="results" className="h-full"><ResultsTab tests={tests} passedCount={passedCount} failedCount={failedCount} totalCount={tests.length} runHistory={runHistory} onReportTest={handleReportTest} bugReportsList={bugReportsList} onRunDetail={(run) => { setSelectedRunForDetail(run); setRunDetailDialogOpen(true) }} onCompareRuns={() => setRunComparisonOpen(true)} testGroups={currentTestGroups} moduleHealth={moduleHealth} moduleName={modulePath.name} autoReportedTestIds={autoReportedTestIds} /></div>}
                 {activeTab === 'screenshots' && (
                   <div data-tour="screenshots" className="flex flex-col h-full min-h-0">
                     <div className="p-4 shrink-0">

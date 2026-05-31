@@ -9,6 +9,7 @@ import {
 } from '@/lib/bug-reports'
 import { fetchTestCases } from '@/lib/api'
 import { ALL_SIDEBAR_MODULES } from '@/data/sidebarModules'
+import { ModuleAccessPicker, type ModuleItem } from '@/components/admin/ModuleAccessPicker'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -60,7 +61,7 @@ interface Environment {
 }
 interface AdminUser {
   id: string; email: string; name: string
-  role: 'admin' | 'qa_lead' | 'tester' | 'viewer' | 'client'
+  role: 'admin' | 'tester' | 'viewer' | 'client'
   status: 'active' | 'inactive'; lastLogin?: string; moduleAccess: string[]
 }
 interface SystemSetting {
@@ -76,7 +77,6 @@ interface AuditEntry {
 
 const roleConfig: Record<string, { label: string; color: string }> = {
   admin: { label: 'Admin', color: 'text-[#3F51B5] bg-[#E8EAF6] dark:text-[#7986CB] dark:bg-[#1A237E]/40' },
-  qa_lead: { label: 'QA Lead', color: 'text-[#00897B] bg-[#E0F2F1] dark:text-[#4DB6AC] dark:bg-[#004D40]/40' },
   tester: { label: 'Tester', color: 'text-[#2E7D32] bg-[#E8F5E9] dark:text-[#66BB6A] dark:bg-[#1B5E20]/40' },
   viewer: { label: 'Viewer', color: 'text-[#616161] bg-[#F5F5F5] dark:text-[#9E9E9E] dark:bg-[#424242]/40' },
   client: { label: 'Client', color: 'text-[#E65100] bg-[#FFF3E0] dark:text-[#FFB74D] dark:bg-[#BF360C]/40' },
@@ -180,7 +180,7 @@ export default function AdminPage() {
         const res = await fetch('/api/auth/me')
         if (!res.ok) { router.push('/'); return }
         const data = await res.json()
-        if (data.user.role !== 'admin' && data.user.role !== 'qa_lead') {
+        if (data.user.role !== 'admin') {
           router.push('/'); return
         }
         setUser(data.user)
@@ -2037,57 +2037,48 @@ function UserDialog({ open, onOpenChange, editingUser, onSave, allModules }: {
   const [role, setRole] = useState<string>(editingUser?.role || 'tester')
   const [status, setStatus] = useState<string>(editingUser?.status || 'active')
   const [moduleAccess, setModuleAccess] = useState<string[]>(editingUser?.moduleAccess || [])
+  const [modulePickerOpen, setModulePickerOpen] = useState(false)
 
-  const toggleModule = (modId: string) => {
-    setModuleAccess(prev => prev.includes('all')
-      ? [modId]
-      : prev.includes(modId) ? prev.filter(m => m !== modId) : [...prev, modId]
-    )
-  }
-
-  const toggleAll = () => {
-    setModuleAccess(prev => prev.includes('all') ? [] : ['all'])
-  }
-
-  // Use DB modules if available, otherwise fall back to ALL_SIDEBAR_MODULES
-  const effectiveModulesWithChildren: AdminModule[] = allModules.length > 0 ? allModules : (() => {
-    const result: AdminModule[] = []
-    for (const sm of ALL_SIDEBAR_MODULES) {
-      if (sm.id === 'dashboard' || sm.id === 'my-tickets') continue
-      result.push({
-        id: sm.id, name: sm.id, label: sm.label,
-        parentId: undefined, parentLabel: undefined,
-        testCount: 0, sortOrder: 0, status: 'active' as const,
-      })
-      if (sm.children) {
-        for (const child of sm.children) {
-          if (child.children) {
-            for (const grandChild of child.children) {
+  // Build ModuleItem[] for the ModuleAccessPicker from DB modules or sidebar fallback
+  const pickerModules: ModuleItem[] = useMemo(() => {
+    const source: AdminModule[] = allModules.length > 0 ? allModules : (() => {
+      const result: AdminModule[] = []
+      for (const sm of ALL_SIDEBAR_MODULES) {
+        if (sm.id === 'dashboard' || sm.id === 'my-tickets') continue
+        result.push({
+          id: sm.id, name: sm.id, label: sm.label,
+          parentId: undefined, parentLabel: undefined,
+          testCount: 0, sortOrder: 0, status: 'active' as const,
+        })
+        if (sm.children) {
+          for (const child of sm.children) {
+            if (child.children) {
+              for (const grandChild of child.children) {
+                result.push({
+                  id: grandChild.id, name: grandChild.id, label: grandChild.label,
+                  parentId: child.id, parentLabel: child.label,
+                  testCount: 0, sortOrder: 0, status: 'active' as const,
+                })
+              }
               result.push({
-                id: grandChild.id, name: grandChild.id, label: grandChild.label,
-                parentId: child.id, parentLabel: child.label,
+                id: child.id, name: child.id, label: child.label,
+                parentId: sm.id, parentLabel: sm.label,
+                testCount: 0, sortOrder: 0, status: 'active' as const,
+              })
+            } else {
+              result.push({
+                id: child.id, name: child.id, label: child.label,
+                parentId: sm.id, parentLabel: sm.label,
                 testCount: 0, sortOrder: 0, status: 'active' as const,
               })
             }
-            result.push({
-              id: child.id, name: child.id, label: child.label,
-              parentId: sm.id, parentLabel: sm.label,
-              testCount: 0, sortOrder: 0, status: 'active' as const,
-            })
-          } else {
-            result.push({
-              id: child.id, name: child.id, label: child.label,
-              parentId: sm.id, parentLabel: sm.label,
-              testCount: 0, sortOrder: 0, status: 'active' as const,
-            })
           }
         }
       }
-    }
-    return result
-  })()
-
-  const parentModules = effectiveModulesWithChildren.filter(m => !m.parentId)
+      return result
+    })()
+    return source.map(m => ({ id: m.id, name: m.name, label: m.label, parentId: m.parentId, parentLabel: m.parentLabel }))
+  }, [allModules])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -2122,7 +2113,6 @@ function UserDialog({ open, onOpenChange, editingUser, onSave, allModules }: {
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="qa_lead">QA Lead</SelectItem>
                   <SelectItem value="tester">Tester</SelectItem>
                   <SelectItem value="viewer">Viewer</SelectItem>
                   <SelectItem value="client">Client</SelectItem>
@@ -2142,38 +2132,20 @@ function UserDialog({ open, onOpenChange, editingUser, onSave, allModules }: {
           </div>
           {/* Module Access */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-['Manrope']">Module Access</Label>
-              <Button variant="ghost" size="sm" className="h-6 text-[10px] text-[#3F51B5] font-['Roboto']" onClick={toggleAll}>
-                {moduleAccess.includes('all') ? 'Deselect All' : 'Select All'}
-              </Button>
-            </div>
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 max-h-[200px] overflow-y-auto">
-              <div className="space-y-2">
-                {parentModules.map(mod => {
-                  const children = effectiveModulesWithChildren.filter(m => m.parentId === mod.id)
-                  const isParentChecked = moduleAccess.includes('all') || moduleAccess.includes(mod.id)
-                  return (
-                    <div key={mod.id}>
-                      <div className="flex items-center gap-2">
-                        <Checkbox checked={isParentChecked} onCheckedChange={() => toggleModule(mod.id)} />
-                        <span className="text-xs font-medium text-[#333] dark:text-gray-100 font-['Manrope']">{mod.label}</span>
-                      </div>
-                      {children.length > 0 && (
-                        <div className="ml-6 mt-1 space-y-1">
-                          {children.map(child => (
-                            <div key={child.id} className="flex items-center gap-2">
-                              <Checkbox checked={moduleAccess.includes('all') || moduleAccess.includes(child.id)} onCheckedChange={() => toggleModule(child.id)} />
-                              <span className="text-[11px] text-[#545454] dark:text-gray-300 font-['Manrope']">{child.label}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+            <Label className="text-xs font-['Manrope']">Module Access</Label>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full justify-start text-left h-auto min-h-[36px] py-2 px-3 font-['Manrope'] text-xs"
+              onClick={() => setModulePickerOpen(true)}
+            >
+              <Shield className="size-4 mr-2 shrink-0 text-[#2E7D32]" />
+              {moduleAccess.includes('all')
+                ? 'Full Access (all modules)'
+                : moduleAccess.length === 0
+                  ? 'No modules selected — click to assign'
+                  : `${moduleAccess.length} module${moduleAccess.length !== 1 ? 's' : ''} selected`}
+            </Button>
           </div>
         </div>
         <DialogFooter>
@@ -2185,6 +2157,14 @@ function UserDialog({ open, onOpenChange, editingUser, onSave, allModules }: {
           </Button>
         </DialogFooter>
       </DialogContent>
+      <ModuleAccessPicker
+        open={modulePickerOpen}
+        onOpenChange={setModulePickerOpen}
+        value={moduleAccess}
+        onChange={setModuleAccess}
+        allModules={pickerModules}
+        userName={name || undefined}
+      />
     </Dialog>
   )
 }

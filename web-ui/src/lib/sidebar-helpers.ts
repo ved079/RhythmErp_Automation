@@ -45,13 +45,13 @@ export function buildSidebarModules(apiModules: ApiModule[]): SidebarModule[] {
 
 /**
  * Filter sidebar modules based on user's role and moduleAccess.
- * - admin/qa_lead: full access (all modules)
+ * - admin: full access (all modules)
  * - Others: only modules listed in moduleAccess (or 'all' for legacy)
  * - 'dashboard' and 'my-tickets' are always visible
  */
 export function filterSidebarByAccess(modules: SidebarModule[], user: AuthUser): SidebarModule[] {
-  // Admin and QA Lead get full access
-  if (user.role === 'admin' || user.role === 'qa_lead') return modules
+  // Admin gets full access
+  if (user.role === 'admin') return modules
 
   const access = user.moduleAccess || []
   // Legacy support: ['all'] means full access

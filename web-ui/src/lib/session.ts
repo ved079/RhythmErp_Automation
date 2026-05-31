@@ -93,13 +93,13 @@ export async function validateSession(req: NextRequest): Promise<SessionUser | n
 }
 
 /**
- * Validate that the request comes from an admin or qa_lead user.
+ * Validate that the request comes from an admin user.
  * Returns the user object if authorized, or null if not.
  */
 export async function validateAdminSession(req: NextRequest): Promise<SessionUser | null> {
   const user = await validateSession(req)
   if (!user) return null
-  if (user.role !== 'admin' && user.role !== 'qa_lead') return null
+  if (user.role !== 'admin') return null
   return user
 }
 

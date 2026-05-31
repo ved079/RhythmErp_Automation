@@ -309,6 +309,7 @@ export async function saveRunResults(summary: RunCompletionSummary, userId?: str
         startedAt: summary.startedAt,
         completedAt: summary.completedAt,
         createdBy: userId || null,
+        userId: userId || null,
       }),
     });
     if (!res.ok) return null;

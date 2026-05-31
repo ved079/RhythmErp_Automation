@@ -9,7 +9,6 @@ datasource db {
 
 enum UserRole {
   admin
-  qa_lead
   tester
   viewer
   client
@@ -115,6 +114,8 @@ model User {
 
   sessions        Session[]
   passwordResets  PasswordReset[]
+  runHistory      RunHistory[]
+  bugReports      BugReport[]
 }
 
 model Session {
@@ -142,9 +143,11 @@ model BugReport {
   assignedToName  String?
   readByUser      Boolean     @default(true)
   readByAdmin     Boolean     @default(false)
+  userId          String?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
+  user    User?    @relation(fields: [userId], references: [id])
   replies Reply[]
 }
 
@@ -198,6 +201,9 @@ model RunHistory {
   completedAt DateTime?
   status      RunStatus @default(pending)
   createdBy   String?
+  userId      String?
+
+  user User? @relation(fields: [userId], references: [id])
 }
 
 // ─── Admin: Environment Management ──────────────────────

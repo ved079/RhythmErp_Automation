@@ -12,7 +12,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
+  const isAdmin = user.role === 'admin'
+  const userId = user.id
+
   try {
+    // ── Build where clauses based on user role ──
+    const runWhere = isAdmin ? {} : { userId }
+    const bugWhere = isAdmin ? {} : { userId }
+
     // ── Run all independent queries in parallel ──
     const [
       runHistoryAggregate,
@@ -38,25 +45,26 @@ export async function GET(req: NextRequest) {
       db.runHistory.aggregate({
         _sum: { passed: true, failed: true, total: true },
         _count: true,
+        where: runWhere,
       }),
 
       // Total bugs
-      db.bugReport.count(),
+      db.bugReport.count({ where: bugWhere }),
 
       // Bugs by status
-      db.bugReport.count({ where: { status: 'open' } }),
-      db.bugReport.count({ where: { status: 'in_progress' } }),
-      db.bugReport.count({ where: { status: 'fixed' } }),
+      db.bugReport.count({ where: { ...bugWhere, status: 'open' } }),
+      db.bugReport.count({ where: { ...bugWhere, status: 'in_progress' } }),
+      db.bugReport.count({ where: { ...bugWhere, status: 'fixed' } }),
 
       // High priority bugs
-      db.bugReport.count({ where: { priority: 'high' } }),
+      db.bugReport.count({ where: { ...bugWhere, priority: 'high' } }),
 
       // Total runs (same as _count from aggregate, but explicit for clarity)
-      db.runHistory.count(),
+      db.runHistory.count({ where: runWhere }),
 
       // Runs by status
-      db.runHistory.count({ where: { status: 'completed' } }),
-      db.runHistory.count({ where: { status: 'failed' } }),
+      db.runHistory.count({ where: { ...runWhere, status: 'completed' } }),
+      db.runHistory.count({ where: { ...runWhere, status: 'failed' } }),
 
       // Active users
       db.user.count({ where: { status: 'active' } }),
@@ -69,6 +77,7 @@ export async function GET(req: NextRequest) {
 
       // Recent 10 runs
       db.runHistory.findMany({
+        where: runWhere,
         orderBy: { startedAt: 'desc' },
         take: 10,
         select: {
@@ -89,6 +98,7 @@ export async function GET(req: NextRequest) {
 
       // Recent 5 bugs
       db.bugReport.findMany({
+        where: bugWhere,
         orderBy: { createdAt: 'desc' },
         take: 5,
         select: {
@@ -108,6 +118,7 @@ export async function GET(req: NextRequest) {
 
       // All run history for moduleHealth & runTrend computation
       db.runHistory.findMany({
+        where: runWhere,
         select: {
           moduleName: true,
           passed: true,
@@ -122,6 +133,7 @@ export async function GET(req: NextRequest) {
       // Bugs from the last 7 days for bugTrend
       db.bugReport.findMany({
         where: {
+          ...bugWhere,
           createdAt: {
             gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
           },
@@ -135,12 +147,14 @@ export async function GET(req: NextRequest) {
       db.bugReport.groupBy({
         by: ['priority'],
         _count: { _all: true },
+        where: bugWhere,
       }),
 
       // Bug count grouped by status
       db.bugReport.groupBy({
         by: ['status'],
         _count: { _all: true },
+        where: bugWhere,
       }),
     ])
 

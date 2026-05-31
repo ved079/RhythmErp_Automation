@@ -1,6 +1,6 @@
 // ─── Admin API Helpers ──────────────────────────────────
 // Shared utilities for all /api/admin/* routes:
-// - Session validation (admin/qa_lead only) — delegates to session.ts
+// - Session validation (admin only) — delegates to session.ts
 // - Audit log creation
 
 import { NextRequest } from 'next/server'
@@ -11,7 +11,7 @@ import { validateAdminSession, type SessionUser } from '@/lib/session'
 export type AdminUser = SessionUser
 
 /**
- * Validate that the request comes from an authenticated admin or qa_lead user.
+ * Validate that the request comes from an authenticated admin user.
  * Returns the user object if valid, or an error response if not.
  */
 export async function validateAdmin(req: NextRequest): Promise<{ user: AdminUser } | { error: Response }> {

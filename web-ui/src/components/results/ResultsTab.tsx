@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { GitCompare, MoreVertical, Eye, MessageSquare, RotateCcw } from 'lucide-react'
+import { GitCompare, MoreVertical, Eye, MessageSquare, RotateCcw, Bug } from 'lucide-react'
 // AI icons — temporarily disabled
 // import { Sparkles, Brain } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,7 @@ export function ResultsTab({
   testGroups,
   moduleHealth,
   moduleName,
+  autoReportedTestIds,
 }: {
   tests: TestItem[]
   passedCount: number
@@ -46,6 +47,7 @@ export function ResultsTab({
   testGroups?: TestClassGroup[]
   moduleHealth?: ModuleHealth[]
   moduleName?: string
+  autoReportedTestIds?: Set<string>
 }) {
   const passRate = Math.round((passedCount / totalCount) * 100)
   const [resultFilter, setResultFilter] = useState<'all' | 'passed' | 'failed'>('all')
@@ -243,7 +245,12 @@ export function ResultsTab({
                       </TableCell>
                       <TableCell className="text-[12px] font-mono text-gray-500 dark:text-gray-400">{test.id}</TableCell>
                       <TableCell className={`text-[13px] ${test.status === 'failed' ? 'text-red-700 dark:text-red-400 font-medium' : 'text-gray-700 dark:text-gray-200'}`}>
-                        {test.name}
+                        <span className="inline-flex items-center gap-1.5">
+                          {test.name}
+                          {autoReportedTestIds?.has(test.id) && (
+                            <Bug className="size-3 text-[#F44336] dark:text-red-400 shrink-0" title="Auto-reported bug" />
+                          )}
+                        </span>
                       </TableCell>
                       <TableCell className="text-center text-[12px] font-mono text-gray-500 dark:text-gray-400">{test.duration}</TableCell>
                       <TableCell className="text-[12px] text-red-500 dark:text-red-400 max-w-[250px] truncate">
