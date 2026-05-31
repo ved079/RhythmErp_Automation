@@ -672,9 +672,7 @@ export default function AdminPage() {
     return (
       <div className="h-screen flex items-center justify-center bg-[#F1F2F7] dark:bg-gray-900">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#6777EF] flex items-center justify-center animate-pulse">
-            <span className="text-white text-lg font-bold font-['Roboto']">R</span>
-          </div>
+          <Image src="/agdi-logo-new.webp" width={40} height={40} className="object-contain animate-pulse" alt="agDi Logo" />
           <Loader2 className="size-5 text-[#6777EF] animate-spin" />
         </div>
       </div>
