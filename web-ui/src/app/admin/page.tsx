@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import {
@@ -76,7 +77,7 @@ interface AuditEntry {
 }
 
 const roleConfig: Record<string, { label: string; color: string }> = {
-  admin: { label: 'Admin', color: 'text-[#3F51B5] bg-[#E8EAF6] dark:text-[#7986CB] dark:bg-[#1A237E]/40' },
+  admin: { label: 'Admin', color: 'text-[#3F51B5] bg-[#E8EAF6] dark:text-[#7986CB] dark:bg-[#1A237E]/30' },
   tester: { label: 'Tester', color: 'text-[#2E7D32] bg-[#E8F5E9] dark:text-[#66BB6A] dark:bg-[#1B5E20]/40' },
   viewer: { label: 'Viewer', color: 'text-[#616161] bg-[#F5F5F5] dark:text-[#9E9E9E] dark:bg-[#424242]/40' },
   client: { label: 'Client', color: 'text-[#E65100] bg-[#FFF3E0] dark:text-[#FFB74D] dark:bg-[#BF360C]/40' },
@@ -84,7 +85,7 @@ const roleConfig: Record<string, { label: string; color: string }> = {
 
 const priorityConfig: Record<string, { label: string; color: string }> = {
   smoke: { label: 'Smoke', color: 'text-orange-700 bg-orange-100 dark:text-orange-300 dark:bg-orange-900/40' },
-  regression: { label: 'Regression', color: 'text-[#3F51B5] bg-[#E8EAF6] dark:text-[#7986CB] dark:bg-[#1A237E]/40' },
+  regression: { label: 'Regression', color: 'text-[#3F51B5] bg-[#E8EAF6] dark:text-[#7986CB] dark:bg-[#1A237E]/30' },
   sanity: { label: 'Sanity', color: 'text-purple-700 bg-purple-100 dark:text-purple-300 dark:bg-purple-900/40' },
 }
 
@@ -671,10 +672,10 @@ export default function AdminPage() {
     return (
       <div className="h-screen flex items-center justify-center bg-[#F1F2F7] dark:bg-gray-900">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#3F51B5] flex items-center justify-center animate-pulse">
+          <div className="w-10 h-10 rounded-xl bg-[#6777EF] flex items-center justify-center animate-pulse">
             <span className="text-white text-lg font-bold font-['Roboto']">R</span>
           </div>
-          <Loader2 className="size-5 text-[#3F51B5] animate-spin" />
+          <Loader2 className="size-5 text-[#6777EF] animate-spin" />
         </div>
       </div>
     )
@@ -694,10 +695,10 @@ export default function AdminPage() {
     const failPct = Math.round((failCount / total) * 100)
 
     const statCards = [
-      { label: 'Active Tests', value: stats.activeTests, icon: ClipboardList, color: '#3F51B5', bg: '#E8EAF6' },
-      { label: 'Modules', value: stats.totalModules, icon: FolderTree, color: '#00897B', bg: '#E0F2F1' },
-      { label: 'Environments', value: stats.activeEnvs, icon: Globe, color: '#F57C00', bg: '#FFF3E0' },
-      { label: 'Users', value: stats.activeUsers, icon: UsersIcon, color: '#7B1FA2', bg: '#F3E5F5' },
+      { label: 'Active Tests', value: stats.activeTests, icon: ClipboardList, color: '#4CAF50', bg: '#E8F5E9' },
+      { label: 'Modules', value: stats.totalModules, icon: FolderTree, color: '#3F51B5', bg: '#DFE9FB' },
+      { label: 'Environments', value: stats.activeEnvs, icon: Globe, color: '#FF9800', bg: '#FFF3E0' },
+      { label: 'Users', value: stats.activeUsers, icon: UsersIcon, color: '#F44336', bg: '#FFEBEE' },
     ]
 
     const allWidgets = [
@@ -720,7 +721,7 @@ export default function AdminPage() {
         {!hiddenWidgets.has('stat-cards') && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {statCards.map(c => (
-              <div key={c.label} className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5 flex items-center gap-4">
+              <div key={c.label} className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700 flex items-center gap-4">
                 <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: c.bg }}>
                   <c.icon className="size-5" style={{ color: c.color }} />
                 </div>
@@ -736,7 +737,7 @@ export default function AdminPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Pass Rate Donut */}
           {!hiddenWidgets.has('pass-rate') && (
-            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
               <h3 className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 mb-4">Pass Rate</h3>
               <div className="flex items-center justify-center">
                 <svg width="160" height="160" viewBox="0 0 160 160">
@@ -761,7 +762,7 @@ export default function AdminPage() {
 
           {/* Active Environments */}
           {!hiddenWidgets.has('environments') && (
-            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
               <h3 className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 mb-3">Active Environments</h3>
               {envLoaded ? (
                 <div className="space-y-2 max-h-[200px] overflow-y-auto">
@@ -783,7 +784,7 @@ export default function AdminPage() {
 
           {/* Recent Failures */}
           {!hiddenWidgets.has('recent-failures') && (
-            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+            <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
               <h3 className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 mb-3">Recent Failures</h3>
               {testsLoaded ? (
                 <div className="space-y-2 max-h-[200px] overflow-y-auto">
@@ -805,7 +806,7 @@ export default function AdminPage() {
 
         {/* Recent Audit */}
         {!hiddenWidgets.has('recent-activity') && (
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
             <h3 className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 mb-3">Recent Activity</h3>
             {auditLog.length > 0 ? (
               <div className="space-y-2">
@@ -863,7 +864,7 @@ export default function AdminPage() {
           <Badge variant="outline" className="text-xs font-['Manrope']">{filteredTests.length} tests</Badge>
         </div>
         {/* Filters */}
-        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-2.5 size-4 text-[#888]" />
@@ -898,7 +899,7 @@ export default function AdminPage() {
           </div>
         </div>
         {/* Table */}
-        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           {!testsLoaded ? (
             <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
           ) : filteredTests.length === 0 ? (
@@ -908,13 +909,13 @@ export default function AdminPage() {
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-[#DFE9FB] dark:bg-[#1A237E]/40 hover:bg-[#DFE9FB] dark:hover:bg-[#1A237E]/40">
-                      <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">ID</TableHead>
-                      <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Description</TableHead>
-                      <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Module</TableHead>
-                      <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Status</TableHead>
-                      <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Priority</TableHead>
-                      <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Last Result</TableHead>
+                    <TableRow className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <TableHead className="font-['Poppins'] text-xs">ID</TableHead>
+                      <TableHead className="font-['Poppins'] text-xs">Description</TableHead>
+                      <TableHead className="font-['Poppins'] text-xs">Module</TableHead>
+                      <TableHead className="font-['Poppins'] text-xs">Status</TableHead>
+                      <TableHead className="font-['Poppins'] text-xs">Priority</TableHead>
+                      <TableHead className="font-['Poppins'] text-xs">Last Result</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -985,7 +986,7 @@ export default function AdminPage() {
 
         {/* Stats row */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 flex items-center gap-3">
+          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700 flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-green-100 dark:bg-green-900/40">
               <CheckCircle2 className="size-4 text-green-700 dark:text-green-300" />
             </div>
@@ -994,7 +995,7 @@ export default function AdminPage() {
               <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Active</p>
             </div>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 flex items-center gap-3">
+          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700 flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-yellow-100 dark:bg-yellow-900/40">
               <Clock className="size-4 text-yellow-700 dark:text-yellow-300" />
             </div>
@@ -1003,7 +1004,7 @@ export default function AdminPage() {
               <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Draft</p>
             </div>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 flex items-center gap-3">
+          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700 flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-red-100 dark:bg-red-900/40">
               <XCircle className="size-4 text-red-700 dark:text-red-300" />
             </div>
@@ -1017,7 +1018,7 @@ export default function AdminPage() {
         {!modulesLoaded ? (
           <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
         ) : modules.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 text-center">
+          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 border border-gray-100 dark:border-gray-700 text-center">
             <FolderTree className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
             <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No modules configured</p>
             <p className="text-xs text-[#888] dark:text-gray-400 font-['Manrope'] mt-1">Click &quot;Seed Defaults&quot; to create default modules, or add one manually.</p>
@@ -1027,7 +1028,7 @@ export default function AdminPage() {
             {parents.map(parent => {
               const children = getChildren(parent.id)
               return (
-                <div key={parent.id} className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm overflow-hidden">
+                <div key={parent.id} className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                   <div className="flex items-center gap-3 p-4 bg-[#E8EAF6] dark:bg-[#1A237E]/30">
                     <FolderTree className="size-4 text-[#3F51B5]" />
                     <div className="flex-1 min-w-0">
@@ -1083,7 +1084,7 @@ export default function AdminPage() {
             })}
             {/* Orphan children (no parent found) */}
             {modules.filter(m => m.parentId && !modules.find(p => p.id === m.parentId)).length > 0 && (
-              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <div className="flex items-center gap-3 p-4 bg-orange-50 dark:bg-orange-900/20">
                   <AlertTriangle className="size-4 text-orange-600" />
                   <span className="text-sm font-semibold font-['Poppins'] text-orange-700 dark:text-orange-300">Orphaned Modules</span>
@@ -1151,7 +1152,7 @@ export default function AdminPage() {
           ))}
         </div>
         {/* Search & Filters */}
-        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-2.5 size-4 text-[#888]" />
@@ -1182,7 +1183,7 @@ export default function AdminPage() {
         {!bugsLoaded ? (
           <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 text-center">
+          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 border border-gray-100 dark:border-gray-700 text-center">
             <Inbox className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
             <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No bug reports found</p>
           </div>
@@ -1192,7 +1193,7 @@ export default function AdminPage() {
               const sla = getSLAStatus(bug.priority, bug.createdAt, bug.status)
               const isExpanded = expandedBug === bug.id
               return (
-                <div key={bug.id} className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm overflow-hidden">
+                <div key={bug.id} className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                   <button onClick={() => { setExpandedBug(isExpanded ? null : bug.id); if (!bug.readByAdmin) handleMarkBugRead(bug.id) }}
                     className="w-full flex items-center gap-3 p-4 text-left cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     {!bug.readByAdmin && <span className="w-2 h-2 rounded-full bg-[#3F51B5] shrink-0" />}
@@ -1277,14 +1278,14 @@ export default function AdminPage() {
       {!envLoaded ? (
         <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
       ) : environments.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 border border-gray-100 dark:border-gray-700 text-center">
           <Globe className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
           <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No environments configured</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {environments.map(env => (
-            <div key={env.id} className={`bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5 border-l-4 ${env.status === 'active' ? 'border-l-[#4CAF50]' : 'border-l-gray-400 dark:border-l-gray-600'}`}>
+            <div key={env.id} className={`bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700 border-l-4 ${env.status === 'active' ? 'border-l-[#4CAF50]' : 'border-l-gray-400 dark:border-l-gray-600'}`}>
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <span className={`w-3 h-3 rounded-full ${env.color || 'bg-green-500'}`} />
@@ -1351,23 +1352,23 @@ export default function AdminPage() {
       {!usersLoaded ? (
         <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="bg-[#DFE9FB] dark:bg-[#1A237E]/40 hover:bg-[#DFE9FB] dark:hover:bg-[#1A237E]/40">
-                  <TableHead className="w-10 text-[#3F51B5] dark:text-[#7986CB]">
+                <TableRow className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                  <TableHead className="w-10">
                     <Checkbox
                       checked={users.length > 0 && selectedUserIds.size === users.length}
                       onCheckedChange={toggleAllUsers}
                     />
                   </TableHead>
-                  <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">User</TableHead>
-                  <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Role</TableHead>
-                  <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Status</TableHead>
-                  <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Module Access</TableHead>
-                  <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Last Login</TableHead>
-                  <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Actions</TableHead>
+                  <TableHead className="font-['Poppins'] text-xs">User</TableHead>
+                  <TableHead className="font-['Poppins'] text-xs">Role</TableHead>
+                  <TableHead className="font-['Poppins'] text-xs">Status</TableHead>
+                  <TableHead className="font-['Poppins'] text-xs">Module Access</TableHead>
+                  <TableHead className="font-['Poppins'] text-xs">Last Login</TableHead>
+                  <TableHead className="font-['Poppins'] text-xs">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1381,7 +1382,7 @@ export default function AdminPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Avatar className="size-7"><AvatarFallback className="bg-[#E8EAF6] dark:bg-[#1A237E]/40 text-[#3F51B5] dark:text-[#7986CB] text-[10px] font-semibold">
+                        <Avatar className="size-7"><AvatarFallback className="bg-[#E8EAF6] dark:bg-[#1A237E]/30 text-[#3F51B5] dark:text-[#7986CB] text-[10px] font-semibold">
                           {u.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                         </AvatarFallback></Avatar>
                         <div>
@@ -1478,9 +1479,9 @@ export default function AdminPage() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* API Connectivity */}
-              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#E8EAF6] dark:bg-[#1A237E]/40">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#E8EAF6] dark:bg-[#1A237E]/30">
                     <Activity className="size-5 text-[#3F51B5] dark:text-[#7986CB]" />
                   </div>
                   <div>
@@ -1495,7 +1496,7 @@ export default function AdminPage() {
               </div>
 
               {/* Database Stats */}
-              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#E0F2F1] dark:bg-[#004D40]/40">
                     <Database className="size-5 text-[#00897B] dark:text-[#4DB6AC]" />
@@ -1517,7 +1518,7 @@ export default function AdminPage() {
               </div>
 
               {/* Disk Usage */}
-              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#FFF3E0] dark:bg-[#BF360C]/40">
                     <HardDrive className="size-5 text-[#F57C00] dark:text-[#FFB74D]" />
@@ -1532,7 +1533,7 @@ export default function AdminPage() {
               </div>
 
               {/* Last Run Status */}
-              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#F3E5F5] dark:bg-[#4A148C]/40">
                     <Zap className="size-5 text-[#7B1FA2] dark:text-[#CE93D8]" />
@@ -1555,7 +1556,7 @@ export default function AdminPage() {
               </div>
 
               {/* Uptime */}
-              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#E8F5E9] dark:bg-[#1B5E20]/40">
                     <Timer className="size-5 text-[#2E7D32] dark:text-[#66BB6A]" />
@@ -1571,9 +1572,9 @@ export default function AdminPage() {
               </div>
 
               {/* Active Modules & Test Cases */}
-              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-5">
+              <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#E8EAF6] dark:bg-[#1A237E]/40">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#E8EAF6] dark:bg-[#1A237E]/30">
                     <FolderTree className="size-5 text-[#3F51B5] dark:text-[#7986CB]" />
                   </div>
                   <div>
@@ -1624,7 +1625,7 @@ export default function AdminPage() {
           <Badge variant="outline" className="text-xs font-['Manrope']">{filteredAuditLog.length} entries</Badge>
         </div>
         {/* Filters */}
-        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-2.5 size-4 text-[#888]" />
@@ -1659,21 +1660,21 @@ export default function AdminPage() {
         {!auditLoaded ? (
           <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
         ) : filteredAuditLog.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 text-center">
+          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 border border-gray-100 dark:border-gray-700 text-center">
             <FileText className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
             <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No audit entries match your filters</p>
           </div>
         ) : (
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-[#DFE9FB] dark:bg-[#1A237E]/40 hover:bg-[#DFE9FB] dark:hover:bg-[#1A237E]/40">
-                    <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Timestamp</TableHead>
-                    <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">User</TableHead>
-                    <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Action</TableHead>
-                    <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Target</TableHead>
-                    <TableHead className="text-[#3F51B5] dark:text-[#7986CB] font-['Poppins'] text-xs">Details</TableHead>
+                  <TableRow className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <TableHead className="font-['Poppins'] text-xs">Timestamp</TableHead>
+                    <TableHead className="font-['Poppins'] text-xs">User</TableHead>
+                    <TableHead className="font-['Poppins'] text-xs">Action</TableHead>
+                    <TableHead className="font-['Poppins'] text-xs">Target</TableHead>
+                    <TableHead className="font-['Poppins'] text-xs">Details</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1715,45 +1716,43 @@ export default function AdminPage() {
   return (
     <div className="h-screen flex flex-col bg-[#F1F2F7] dark:bg-gray-900 overflow-hidden">
       {/* ─── HEADER ─────────────────────────────────── */}
-      <header className="h-[60px] bg-white dark:bg-gray-800 shrink-0 z-10 flex items-center px-4 shadow-sm">
+      <header className="h-[60px] bg-white dark:bg-gray-900 shrink-0 z-10 flex items-center px-4 border-b border-[#e0e0e0] dark:border-gray-700 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
         <div className="flex items-center gap-3 flex-1">
           <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="size-9 cursor-pointer shrink-0 text-[#545454] dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+            className="size-8 cursor-pointer shrink-0 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">
             <Menu className={`size-[18px] transition-transform duration-200 ${sidebarOpen ? '' : 'rotate-90'}`} />
           </Button>
           <Separator orientation="vertical" className="h-5" />
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#3F51B5] flex items-center justify-center">
-              <span className="text-white text-sm font-bold font-['Roboto']">R</span>
-            </div>
-            <span className="text-[15px] font-semibold text-[#333] dark:text-gray-100 tracking-tight font-['Poppins']">
-              Rhythm<span className="text-[#3F51B5]">ERP</span>
-              <span className="text-[#888] dark:text-gray-400 font-normal ml-1.5 text-[13px] font-['Manrope']">Admin Panel</span>
-            </span>
+            <Image src="/agdi-logo-new.webp" width={70} height={28} className="object-contain" alt="agDi Logo" />
+            <span className="text-[#888888] dark:text-gray-500 text-[13px] font-['Manrope'] ml-1">Admin Panel</span>
           </div>
-          <Badge className="bg-[#3F51B5] text-white text-[10px] font-semibold px-1.5 py-0 ml-1 border-0 font-['Roboto']">
+          <Badge className="bg-[#6777EF] text-white text-[10px] font-semibold px-1.5 py-0 ml-1 border-0">
             ADMIN
           </Badge>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => setTheme(isDark ? 'light' : 'dark')}
-            className="size-9 text-[#545454] dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+            className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer">
             {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </Button>
           <Button variant="ghost" size="icon" onClick={() => router.push('/')}
-            className="size-9 text-[#545454] dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+            className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
             title="Back to User Panel">
             <Home className="size-4" />
           </Button>
           <Separator orientation="vertical" className="h-5 mx-1" />
           <div className="flex items-center gap-2">
-            <Avatar className="size-8">
-              <AvatarFallback className="bg-[#E8EAF6] dark:bg-[#1A237E]/40 text-[#3F51B5] dark:text-[#7986CB] text-xs font-semibold">
+            <Avatar className="size-7">
+              <AvatarFallback className="bg-[#6777EF] text-white text-xs font-semibold">
                 {userInitials}
               </AvatarFallback>
             </Avatar>
-            <span className="text-xs text-[#545454] dark:text-gray-300 font-medium max-w-[120px] truncate font-['Manrope']">{user.name}</span>
-            <Button variant="ghost" size="icon" onClick={handleLogout} className="size-8 text-[#888] hover:text-[#F44336] cursor-pointer">
+            <div className="flex flex-col">
+              <span className="text-[12px] text-[#333333] dark:text-gray-200 font-medium max-w-[120px] truncate leading-tight">{user.name}</span>
+              <span className="text-[10px] text-[#888888] dark:text-gray-500 leading-tight">Admin</span>
+            </div>
+            <Button variant="ghost" size="icon" onClick={handleLogout} className="size-7 text-[#888888] hover:text-red-500 cursor-pointer">
               <LogOut className="size-4" />
             </Button>
           </div>
@@ -1764,13 +1763,13 @@ export default function AdminPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* ─── SIDEBAR ────────────────────────────── */}
         <div className={`shrink-0 transition-all duration-200 ease-in-out overflow-hidden ${sidebarOpen ? 'w-60' : 'w-0'}`}>
-          <aside className="w-60 bg-white dark:bg-gray-800 h-full flex flex-col" style={{ boxShadow: '2px 0 8px rgba(0,0,0,0.06)' }}>
-            <div className="px-3 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+          <aside className="w-60 bg-gradient-to-b from-[#F7FBF8] via-[#EAF5EC] to-[#D6EDDC] dark:from-[#1e293b] dark:via-[#1e293b] dark:to-[#1e293b] h-full flex flex-col font-['Poppins'] shadow-[-1px_0px_0px_#D4E3D9] dark:shadow-[-1px_0px_0px_#334155]">
+            <div className="px-3 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Shield className="size-3.5 text-[#3F51B5]" />
-                <span className="text-[13px] font-medium text-[#545454] dark:text-gray-300 font-['Poppins']">Admin Controls</span>
+                <Shield className="size-3.5 text-[#1B4332] dark:text-green-300" />
+                <span className="text-[13px] font-medium text-[#1B4332] dark:text-green-300 font-['Poppins']">Admin Controls</span>
               </div>
-              <button onClick={() => setSidebarOpen(false)} className="text-[#888] hover:text-[#545454] dark:hover:text-gray-300 transition-colors cursor-pointer p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
+              <button onClick={() => setSidebarOpen(false)} className="text-[#495584] dark:text-gray-400 hover:text-[#1B4332] dark:hover:text-green-300 transition-colors cursor-pointer p-0.5 rounded hover:bg-[rgba(82,183,136,0.08)]">
                 <ChevronLeft className="size-4" />
               </button>
             </div>
@@ -1783,8 +1782,8 @@ export default function AdminPage() {
                     <button key={item.id} onClick={() => setActiveSection(item.id)}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-['Poppins'] transition-all duration-150 cursor-pointer mb-0.5 ${
                         isActive
-                          ? 'bg-[#E8EAF6] dark:bg-[#1A237E]/30 text-[#3F51B5] dark:text-[#7986CB] border-l-[3px] border-[#3F51B5] -ml-[3px] pl-[18px]'
-                          : 'text-[#545454] dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-[#333] dark:hover:text-gray-100'
+                          ? 'bg-gradient-to-r from-[#DFF3E3] via-[#C8E6C9] to-[#B7E4C7] dark:bg-[#1B4332]/25 text-[#1B4332] dark:text-green-300 font-semibold shadow-[rgba(34,197,94,0.25)_2px_0px_4px_inset,rgba(34,197,94,0.15)_0px_2px_6px] rounded-[5px]'
+                          : 'text-[#545454] dark:text-gray-300 font-medium hover:text-[#6777EF] dark:hover:text-indigo-400 hover:bg-[rgba(82,183,136,0.08)] hover:shadow-[rgba(82,183,136,0.5)_2px_0px_inset] hover:rounded-[5px]'
                       }`}>
                       <Icon className="size-4 shrink-0" />
                       <span>{item.label}</span>
@@ -1793,6 +1792,9 @@ export default function AdminPage() {
                 })}
               </div>
             </ScrollArea>
+            <div className="relative shrink-0 overflow-hidden" style={{ height: 99 }}>
+              <Image src="/agri2.png" alt="" fill className="object-cover" sizes="280px" style={{ objectPosition: 'center 25%' }} />
+            </div>
           </aside>
         </div>
 
@@ -2293,14 +2295,14 @@ function SettingsSection({ settings, settingsLoaded, onSaveSetting, onSeedSettin
       {!settingsLoaded ? (
         <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
       ) : settings.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 border border-gray-100 dark:border-gray-700 text-center">
           <Settings className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
           <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No settings loaded</p>
         </div>
       ) : (
         <div className="space-y-6">
           {categories.map(cat => (
-            <div key={cat} className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm overflow-hidden">
+            <div key={cat} className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
               <div className="px-5 py-3 bg-[#E8EAF6] dark:bg-[#1A237E]/30">
                 <h3 className="text-sm font-semibold font-['Poppins'] text-[#3F51B5] dark:text-[#7986CB]">{cat}</h3>
               </div>
