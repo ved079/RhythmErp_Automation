@@ -61,6 +61,19 @@ export async function POST(request: NextRequest) {
     })
 
     if (!resetRecord) {
+      // H1: Log failed OTP attempt with IP
+      try {
+        await createAuditLog({
+          userId: 'unknown',
+          userName: normalizedEmail,
+          action: 'failed_login',
+          targetType: 'session',
+          targetId: '',
+          targetLabel: normalizedEmail,
+          details: 'Password reset failed: invalid OTP',
+          ipAddress: clientIp,
+        })
+      } catch {}
       return NextResponse.json({ error: 'Invalid OTP. Please check and try again.' }, { status: 400 })
     }
 

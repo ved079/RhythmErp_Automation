@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getCookieOptions } from '@/lib/session'
+import { getClientIp } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,6 +20,7 @@ export async function POST(request: NextRequest) {
 
       // Create audit log entry for logout
       if (session?.user) {
+        const clientIp = getClientIp(request)
         await db.auditLog.create({
           data: {
             userId: session.user.id,
@@ -28,6 +30,7 @@ export async function POST(request: NextRequest) {
             targetId: session.user.id,
             targetLabel: session.user.email,
             details: 'User logged out',
+            ipAddress: clientIp,
           },
         }).catch(() => {}) // non-critical
       }

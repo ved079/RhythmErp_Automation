@@ -21,7 +21,13 @@ export async function POST() {
 
   try {
     // C4: Use env var for seed admin password (no hardcoded secrets)
-    const seedPassword = process.env.SEED_ADMIN_PASSWORD || 'admin123'
+    const seedPassword = process.env.SEED_ADMIN_PASSWORD
+    if (!seedPassword) {
+      return NextResponse.json(
+        { error: 'SEED_ADMIN_PASSWORD env var is required. Set it before seeding.' },
+        { status: 500 }
+      )
+    }
     const seedEmail = 'admin@rhythmerp.com'
 
     const existing = await db.user.findUnique({

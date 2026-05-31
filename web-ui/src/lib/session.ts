@@ -47,9 +47,9 @@ function invalidateCachedSession(token: string): void {
 }
 
 // ─── Session timeout constants ────────────────────────────
-// C7: Session cookie expires after 1 hour (access window).
+// C7: Session cookie expires after 15 minutes (access window).
 // DB session can last up to 7 days (refresh window — renewed on activity).
-const SESSION_COOKIE_MAX_AGE = 60 * 60         // 1 hour (access token equivalent)
+const SESSION_COOKIE_MAX_AGE = 15 * 60         // 15 minutes (C7: access token equivalent)
 const SESSION_DB_MAX_AGE = 7 * 24 * 60 * 60    // 7 days (refresh token equivalent)
 
 /**
@@ -133,7 +133,7 @@ export function isProductionEnv(): boolean {
 
 /**
  * Get cookie options based on environment.
- * C7: Session cookie maxAge reduced to 1 hour.
+ * C7: Session cookie maxAge reduced to 15 minutes.
  * The DB session can last 7 days and gets renewed on activity.
  * sameSite changed to 'strict' for C6 (CSRF hardening).
  */
@@ -143,7 +143,7 @@ export function getCookieOptions() {
     secure: isProductionEnv(),
     sameSite: 'strict' as const,  // C6: Changed from 'lax' to 'strict'
     path: '/',
-    maxAge: SESSION_COOKIE_MAX_AGE, // C7: 1 hour (was 7 days)
+    maxAge: SESSION_COOKIE_MAX_AGE, // C7: 15 minutes (was 7 days)
   }
 }
 

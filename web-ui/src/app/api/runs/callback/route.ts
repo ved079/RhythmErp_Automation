@@ -9,6 +9,10 @@ import { db } from '@/lib/db'
 
 // C4: No hardcoded fallback — must be set via environment variable
 const PROXY_API_KEY = process.env.PROXY_API_KEY || ''
+// C4: Warn if PROXY_API_KEY is not set — required for production
+if (!process.env.PROXY_API_KEY && process.env.NODE_ENV === 'production') {
+  console.error('[SECURITY] PROXY_API_KEY is not set! Callback authentication is disabled.')
+}
 
 interface RunCallbackPayload {
   run_id: string

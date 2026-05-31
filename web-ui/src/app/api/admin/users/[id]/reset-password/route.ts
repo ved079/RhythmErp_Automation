@@ -66,6 +66,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const body = await req.json().catch(() => ({}))
     // C4: Use env var for default password instead of hardcoded 'changeme'
     const defaultPassword = process.env.DEFAULT_USER_PASSWORD || 'changeme'
+    // C4: In production, DEFAULT_USER_PASSWORD must be set via env
+    if (!process.env.DEFAULT_USER_PASSWORD && process.env.NODE_ENV === 'production') {
+      console.warn('[SECURITY] DEFAULT_USER_PASSWORD not set — using fallback is insecure in production')
+    }
     const newPassword = body.password || defaultPassword
 
     const hashedPassword = await bcrypt.hash(newPassword, 12)
@@ -90,7 +94,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       details: 'Password reset by admin',
     })
 
-    return NextResponse.json({ message: 'Password reset successfully', password: newPassword })
+    return NextResponse.json({ message: 'Password reset successfully' })
   } catch (err) {
     console.error('Reset password error:', err)
     return NextResponse.json({ error: 'Failed to reset password' }, { status: 500 })
