@@ -104,6 +104,6 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Match all API routes
-  matcher: ['/api/:path*'],
+  // Match all routes (API + pages) — CSRF cookie needs to be set on page loads too
+  matcher: ['/(api|.*)/:path*'],
 }

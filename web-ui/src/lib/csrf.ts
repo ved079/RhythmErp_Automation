@@ -9,16 +9,32 @@
 // This prevents CSRF attacks because a malicious site cannot:
 // - Read the csrf_token cookie (same-origin policy)
 // - Set custom headers on cross-origin requests (CORS preflight)
+//
+// Uses Web Crypto API (Edge Runtime compatible — no Node.js 'crypto')
 
 import { NextRequest, NextResponse } from 'next/server'
-import crypto from 'crypto'
 
 const CSRF_COOKIE_NAME = 'csrf_token'
 const CSRF_HEADER_NAME = 'x-csrf-token'
 
-/** Generate a cryptographically random CSRF token */
+/** Generate a cryptographically random CSRF token (Edge Runtime safe) */
 export function generateCsrfToken(): string {
-  return crypto.randomBytes(32).toString('hex')
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/**
+ * Timing-safe string comparison to prevent timing attacks.
+ * Works in Edge Runtime without Node.js crypto.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let result = 0
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  }
+  return result === 0
 }
 
 /**
@@ -55,13 +71,7 @@ export function validateCsrfToken(req: NextRequest): boolean {
   }
 
   // Use timing-safe comparison to prevent timing attacks
-  try {
-    const a = Buffer.from(cookieToken, 'hex')
-    const b = Buffer.from(headerToken, 'hex')
-    return a.length === b.length && crypto.timingSafeEqual(a, b)
-  } catch {
-    return false
-  }
+  return timingSafeEqual(cookieToken, headerToken)
 }
 
 /**
