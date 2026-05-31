@@ -132,19 +132,25 @@ export function ModuleAccessPicker({
     [allModules, parentIds]
   )
 
-  // All leaf modules (no children reference them)
+  // All leaf modules (no children reference them) — includes standalone
   const allLeaves = useMemo(
     () => allModules.filter(m => !parentIds.has(m.id)),
     [allModules, parentIds]
   )
 
-  // Standalone modules: no parentId, no children (neither group nor child)
+  // Standalone modules: no parentId AND no children (not a group, not a child)
   const standaloneModules = useMemo(
     () => allModules.filter(m => !m.parentId && !parentIds.has(m.id)),
     [allModules, parentIds]
   )
 
-  const totalModuleCount = allLeaves.length + standaloneModules.length
+  // All selectable module IDs (leaves + standalone, no duplicates)
+  const allSelectableIds = useMemo(
+    () => allLeaves.map(m => m.id),
+    [allLeaves]
+  )
+
+  const totalModuleCount = allLeaves.length
 
   // ─── Presets (resolved dynamically) ──────────────────────
   const presets: Preset[] = useMemo(() => [
@@ -205,16 +211,15 @@ export function ModuleAccessPicker({
     setLocalValue(prev => {
       if (prev.includes('all')) {
         // Convert "all" to explicit list and deselect the clicked module
-        const allIds = allLeaves.map(m => m.id).concat(standaloneModules.map(m => m.id))
-        return allIds.filter(id => id !== modId)
+        return allSelectableIds.filter(id => id !== modId)
       }
       if (prev.includes(modId)) return prev.filter(m => m !== modId)
       return [...prev, modId]
     })
-  }, [allLeaves, standaloneModules])
+  }, [allSelectableIds])
 
   const togglePreset = useCallback((preset: Preset) => {
-    // Full Access is a special case
+    // Full Access is a special toggle
     if (preset.id === 'full-access') {
       setLocalValue(prev => {
         if (prev.includes('all')) return [] // Deselect all
@@ -224,33 +229,34 @@ export function ModuleAccessPicker({
     }
 
     const presetIds = resolvePresetIds(preset, allModules)
+    if (presetIds.length === 0) return // nothing to toggle
+
     setLocalValue(prev => {
-      // If "all" is selected, convert to explicit and deselect this preset's modules
+      // If "all" is selected, convert to explicit list and deselect this preset's modules
       if (prev.includes('all')) {
-        const allIds = allLeaves.map(m => m.id).concat(standaloneModules.map(m => m.id))
-        return allIds.filter(id => !presetIds.includes(id))
+        return allSelectableIds.filter(id => !presetIds.includes(id))
       }
 
-      // Check if ALL preset modules are already selected
-      const allPresetSelected = presetIds.length > 0 && presetIds.every(id => prev.includes(id))
+      // Check if ALL preset modules are already selected → deselect them
+      const allPresetSelected = presetIds.every(id => prev.includes(id))
       if (allPresetSelected) {
-        // Deselect: remove this preset's modules from current selection
         return prev.filter(id => !presetIds.includes(id))
       }
-      // Select: add this preset's modules to current selection (keep existing)
+
+      // Otherwise, ADD this preset's modules to the current selection (keep existing)
       const toAdd = presetIds.filter(id => !prev.includes(id))
       return [...prev, ...toAdd]
     })
-  }, [allModules, allLeaves, standaloneModules])
+  }, [allModules, allSelectableIds])
 
   const toggleGroup = useCallback((groupId: string) => {
     setLocalValue(prev => {
       const groupIds = getAllDescendantIds(allModules, groupId)
+      if (groupIds.length === 0) return prev
       const allSelected = groupIds.every(id => prev.includes(id))
       if (prev.includes('all')) {
         // Switch from "all" to explicit: deselect this group
-        const everything = allLeaves.map(m => m.id)
-        return everything.filter(id => !groupIds.includes(id))
+        return allSelectableIds.filter(id => !groupIds.includes(id))
       }
       if (allSelected) {
         // Deselect all in group
@@ -260,13 +266,13 @@ export function ModuleAccessPicker({
       const toAdd = groupIds.filter(id => !prev.includes(id))
       return [...prev, ...toAdd]
     })
-  }, [allModules, allLeaves])
+  }, [allModules, allSelectableIds])
 
   // ─── Selected set for checking ───────────────────────────
   const selectedSet = useMemo(() => {
-    if (isFullAccess) return new Set(allLeaves.map(m => m.id))
+    if (isFullAccess) return new Set(allSelectableIds)
     return new Set(localValue)
-  }, [isFullAccess, localValue, allLeaves])
+  }, [isFullAccess, localValue, allSelectableIds])
 
   const selectedCount = isFullAccess ? totalModuleCount : localValue.filter(id => id !== 'all').length
 
