@@ -1,8 +1,9 @@
 // ─── /api/auth/forgot-password ──────────────────────────
-// POST — Request a password reset OTP
+// POST — Request a password reset OTP (sends via email)
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { sendOtpEmail } from '@/lib/email'
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,10 +27,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Invalidate any existing OTPs for this user
-    await db.passwordReset.updateMany({
-      where: { userId: user.id, used: false },
-      data: { used: true },
-    }).catch(() => {})
+    try {
+      await db.passwordReset.updateMany({
+        where: { userId: user.id, used: false },
+        data: { used: true },
+      })
+    } catch { /* empty */ }
 
     // Generate a 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString()
@@ -44,11 +47,22 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // In production, you would send an email with the OTP.
-    // For this internal tool, we return the OTP so it can be used directly.
+    // Send OTP via email
+    const emailSent = await sendOtpEmail(normalizedEmail, otp, user.name)
+
+    if (!emailSent) {
+      // Email failed — fall back to returning OTP in response (dev mode)
+      console.warn('[ForgotPassword] Email send failed, returning OTP in response (dev fallback)')
+      return NextResponse.json({
+        message: 'OTP generated. Email delivery failed — shown below for development.',
+        otp,
+        emailSent: false,
+      })
+    }
+
     return NextResponse.json({
-      message: 'OTP sent successfully',
-      otp,
+      message: 'OTP sent to your email address.',
+      emailSent: true,
     })
   } catch (error) {
     console.error('Forgot password error:', error)

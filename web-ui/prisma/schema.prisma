@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -268,7 +268,7 @@ model AuditLog {
 model PasswordReset {
   id        String   @id @default(cuid())
   email     String
-  otp       String   // 6-digit OTP code
+  otp       String
   userId    String
   used      Boolean  @default(false)
   expiresAt DateTime
