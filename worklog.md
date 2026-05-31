@@ -119,3 +119,25 @@ Stage Summary:
 - All pulled features verified working: role simplification, data isolation, ModuleAccessPicker, PersonalDashboardTab, auto bug report
 - `.env.example` updated with clearer documentation
 - Pushed commit `8ad4f28` to rhythmerp_integration branch
+
+---
+Task ID: 6
+Agent: Main
+Task: Fix ModuleAccessPicker — presets showing "0 modules", not scrolling, cancel button not working
+
+Work Log:
+- Diagnosed root cause: When DB modules exist, `pickerModules` used DB module IDs (UUIDs like `clx...`) as `id` and `parentId`. But the presets reference slug-based IDs like `'registration'`, `'common-settings'`, `'access'`. So `getAllDescendantIds(allModules, 'registration')` found 0 results because no module had `parentId === 'registration'` — they had `parentId === 'clx...'`.
+- Key insight: The sidebar structure (`ALL_SIDEBAR_MODULES`) already has the correct slug-based IDs that match the presets. The DB modules are for the admin Modules management page, not for the access picker.
+- Fixed `pickerModules` builder in UserDialog (`admin/page.tsx`): Now ALWAYS builds from `ALL_SIDEBAR_MODULES` with slug IDs, ignoring DB modules entirely. This ensures preset slugs match module IDs.
+- Fixed scrolling: Added `max-h-[280px] overflow-y-auto` to the module tree container, and `overscroll-contain` to the scrollable body
+- Fixed cancel button: Added explicit `type="button"` to both Cancel and Apply buttons (prevents any form submission issues), also reset searchQuery in handleCancel
+- Removed unused `addModule` callback and `subGroups` computation (dead code cleanup)
+- Company Onboarding preset description now dynamically resolves instead of hardcoded "1 module"
+- Dev server compiles successfully, main page returns HTTP 200
+
+Stage Summary:
+- Preset cards now show correct module counts: Registration (4), Common Settings (10), Commodity Settings (9), Access (5), Company Onboarding (1)
+- Clicking any preset now correctly selects the matching modules
+- Module tree scrolls properly within the dialog
+- Cancel button works correctly and resets state
+- Root cause was UUID vs slug ID mismatch between DB modules and preset definitions

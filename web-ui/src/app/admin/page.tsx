@@ -2039,46 +2039,41 @@ function UserDialog({ open, onOpenChange, editingUser, onSave, allModules }: {
   const [moduleAccess, setModuleAccess] = useState<string[]>(editingUser?.moduleAccess || [])
   const [modulePickerOpen, setModulePickerOpen] = useState(false)
 
-  // Build ModuleItem[] for the ModuleAccessPicker from DB modules or sidebar fallback
+  // Build ModuleItem[] for the ModuleAccessPicker — ALWAYS use sidebar structure
+  // so that preset slugs ('registration', 'common-settings', etc.) match module IDs.
+  // DB modules use UUIDs which break the preset resolution logic.
   const pickerModules: ModuleItem[] = useMemo(() => {
-    const source: AdminModule[] = allModules.length > 0 ? allModules : (() => {
-      const result: AdminModule[] = []
-      for (const sm of ALL_SIDEBAR_MODULES) {
-        if (sm.id === 'dashboard' || sm.id === 'my-tickets') continue
-        result.push({
-          id: sm.id, name: sm.id, label: sm.label,
-          parentId: undefined, parentLabel: undefined,
-          testCount: 0, sortOrder: 0, status: 'active' as const,
-        })
-        if (sm.children) {
-          for (const child of sm.children) {
-            if (child.children) {
-              for (const grandChild of child.children) {
-                result.push({
-                  id: grandChild.id, name: grandChild.id, label: grandChild.label,
-                  parentId: child.id, parentLabel: child.label,
-                  testCount: 0, sortOrder: 0, status: 'active' as const,
-                })
-              }
+    const result: ModuleItem[] = []
+    for (const sm of ALL_SIDEBAR_MODULES) {
+      if (sm.id === 'dashboard' || sm.id === 'my-tickets') continue
+      result.push({
+        id: sm.id, name: sm.id, label: sm.label,
+        parentId: undefined, parentLabel: undefined,
+      })
+      if (sm.children) {
+        for (const child of sm.children) {
+          if (child.children) {
+            for (const grandChild of child.children) {
               result.push({
-                id: child.id, name: child.id, label: child.label,
-                parentId: sm.id, parentLabel: sm.label,
-                testCount: 0, sortOrder: 0, status: 'active' as const,
-              })
-            } else {
-              result.push({
-                id: child.id, name: child.id, label: child.label,
-                parentId: sm.id, parentLabel: sm.label,
-                testCount: 0, sortOrder: 0, status: 'active' as const,
+                id: grandChild.id, name: grandChild.id, label: grandChild.label,
+                parentId: child.id, parentLabel: child.label,
               })
             }
+            result.push({
+              id: child.id, name: child.id, label: child.label,
+              parentId: sm.id, parentLabel: sm.label,
+            })
+          } else {
+            result.push({
+              id: child.id, name: child.id, label: child.label,
+              parentId: sm.id, parentLabel: sm.label,
+            })
           }
         }
       }
-      return result
-    })()
-    return source.map(m => ({ id: m.id, name: m.name, label: m.label, parentId: m.parentId, parentLabel: m.parentLabel }))
-  }, [allModules])
+    }
+    return result
+  }, [])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
