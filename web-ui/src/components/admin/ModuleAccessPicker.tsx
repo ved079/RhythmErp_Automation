@@ -20,7 +20,6 @@ import {
   Key,
   Search,
   X,
-  Plus,
   Check,
   ChevronRight,
 } from 'lucide-react'
@@ -133,12 +132,6 @@ export function ModuleAccessPicker({
     [allModules, parentIds]
   )
 
-  // Sub-groups: have children AND have a parentId
-  const subGroups = useMemo(
-    () => allModules.filter(m => m.parentId && parentIds.has(m.id)),
-    [allModules, parentIds]
-  )
-
   // All leaf modules (no children reference them)
   const allLeaves = useMemo(
     () => allModules.filter(m => !parentIds.has(m.id)),
@@ -194,7 +187,7 @@ export function ModuleAccessPicker({
     {
       id: 'company-onboarding',
       label: 'Company Onboarding',
-      description: '1 module',
+      description: `${getAllDescendantIds(allModules, 'company-onboarding').length || 1} module`,
       icon: <Building2 className="size-4" style={{ color: COLORS.primary }} />,
       parentGroupId: null,
       exactIds: ['company-onboarding'],
@@ -203,14 +196,6 @@ export function ModuleAccessPicker({
 
   // ─── Selection logic ─────────────────────────────────────
   const isFullAccess = localValue.includes('all')
-
-  const addModule = useCallback((modId: string) => {
-    setLocalValue(prev => {
-      if (prev.includes('all')) return [modId]
-      if (prev.includes(modId)) return prev
-      return [...prev, modId]
-    })
-  }, [])
 
   const removeModule = useCallback((modId: string) => {
     setLocalValue(prev => prev.filter(m => m !== modId))
@@ -292,6 +277,7 @@ export function ModuleAccessPicker({
   const handleCancel = useCallback(() => {
     // Reset to original value and close
     setLocalValue(value)
+    setSearchQuery('')
     onOpenChange(false)
   }, [value, onOpenChange])
 
@@ -318,7 +304,7 @@ export function ModuleAccessPicker({
         </DialogHeader>
 
         {/* Scrollable Body */}
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="flex-1 overflow-y-auto min-h-0 overscroll-contain">
           <div className="px-6 py-4 space-y-5">
             {/* ── Preset Cards ── */}
             <div>
@@ -394,7 +380,7 @@ export function ModuleAccessPicker({
                     <Badge
                       key={tag.id}
                       variant="secondary"
-                      className="font-['Manrope'] text-[10px] pl-2 pr-1 py-0.5 flex items-center gap-1 bg-[#E8F5E9] text-[#1B5E20] border border-[#C8E6C9]"
+                      className="font-['Manrope'] text-[10px] pl-2 pr-1 py-0.5 flex items-center gap-1 bg-[#E8F8E9] text-[#1B5E20] border border-[#C8E6C9]"
                     >
                       {tag.label}
                       <button
@@ -427,7 +413,7 @@ export function ModuleAccessPicker({
                 <span className="font-['Poppins'] text-[11px] font-semibold uppercase tracking-wider text-[#2E7D32] mb-2 block">
                   All Modules
                 </span>
-                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-[280px] overflow-y-auto">
                   <ModuleTreeNode
                     nodes={moduleTree}
                     selectedSet={selectedSet}
@@ -447,6 +433,7 @@ export function ModuleAccessPicker({
         {/* Footer — pinned at bottom */}
         <DialogFooter className="px-6 py-3 border-t border-gray-100 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-900">
           <Button
+            type="button"
             variant="outline"
             onClick={handleCancel}
             className="font-['Roboto'] text-xs h-8"
@@ -454,6 +441,7 @@ export function ModuleAccessPicker({
             Cancel
           </Button>
           <Button
+            type="button"
             onClick={handleApply}
             className="font-['Roboto'] text-xs h-8 text-white bg-[#2E7D32] hover:bg-[#1B5E20]"
           >
