@@ -727,32 +727,112 @@ class KnownBugs:
 # IMPORTANT: These IDs are instance-specific. Always verify with
 # GET /core/dynamic-screen-wrapper/<SCREEN_NAME>/?page_number=1&page_size=50
 # or use client.discover_structure("Supplier") before relying on them.
+# Default FK IDs for NON-cascading dropdowns (verified on tenant 599).
+# Cascading address FK IDs (state/district/taluka/village) are resolved
+# dynamically via get_random_address_chain() — see below.
 DEFAULT_SUPPLIER_FK_IDS = {
     "ownership_status_ref_id": 7,    # Private Limited Company
     "po_type_ref_id": 25,           # Domestic
     "default_currency_ref_id": 1,    # INR
     "payment_terms_ref_id": 26,     # 30 Days
-    "delivery_terms_ref_id": 129,   # Delivery (from live data)
-    "mode_of_delivery_ref_id": 30,  # (from live data)
+    "delivery_terms_ref_id": 129,   # Delivery
+    "mode_of_delivery_ref_id": 30,  # Truck
     "address_type": 43,             # Shipping (Billing=42)
-    "country_ref_id_id": 8,         # India (verified from live entry ID=86)
-    "state_ref_id_id": 82,          # Punjab (from live data) — Maharashtra=12 also valid
-    "district_ref_id_id": 764,      # Ludhiana district (from live data)
-    "sub_district_ref_id_id": 13939, # Ludhiana taluka (from live data)
-    "village_ref_id_id": 775472,    # Village (from live data)
+    "country_ref_id_id": 8,         # India
     "account_type": 1849,           # Current (Saving=1850)
-    "bank_doc_id": 1883,            # Cancelled Cheque/Passbook (from live data)
+    "bank_doc_id": 1883,            # Bank Statement
 }
 
 # Alternative ownership status IDs for variety:
 # Proprietorship=1263, Partnership=1262, Pvt Ltd=7, Individual=1853
 # PO Type: Domestic=25, Import=24
+
+
+# ──────────────────────────────────────────────
+# Cascading Address Pool
+# ──────────────────────────────────────────────
+# Each entry is a complete valid chain: state → district → taluka → village.
+# These are FK IDs verified against the live ERP.
 #
-# IMPORTANT: Cascading dropdown IDs are interdependent.
-# The IDs above (country=8, state=82, district=764, sub_district=13939, village=775472)
-# form ONE valid combination. If you change country/state, you MUST also update
-# district/taluka/village — use client.discover_structure("Supplier") or resolve
-# via the cascading dropdown API calls.
+# The pool is built from:
+#   1. Existing supplier entries (discover_structure)
+#   2. Captured encrypted queries from DevTools
+#   3. scripts/capture_cascade.py for easy expansion
+#
+# Country is always India (id=8) — not included per chain.
+
+_ADDRESS_CHAINS = [
+    # ── Punjab ──
+    {
+        "state_ref_id_id": 82,
+        "district_ref_id_id": 764,
+        "sub_district_ref_id_id": 13939,
+        "village_ref_id_id": 775472,
+    },
+    # ── Maharashtra / Akola district ──
+    {
+        "state_ref_id_id": 12,
+        "district_ref_id_id": 208,
+        "sub_district_ref_id_id": 12723,
+        "village_ref_id_id": 422597,
+    },
+    {
+        "state_ref_id_id": 12,
+        "district_ref_id_id": 208,
+        "sub_district_ref_id_id": 12725,
+        "village_ref_id_id": 422598,
+    },
+    {
+        "state_ref_id_id": 12,
+        "district_ref_id_id": 208,
+        "sub_district_ref_id_id": 12750,
+        "village_ref_id_id": 422600,
+    },
+    {
+        "state_ref_id_id": 12,
+        "district_ref_id_id": 208,
+        "sub_district_ref_id_id": 12754,
+        "village_ref_id_id": 422604,
+    },
+    {
+        "state_ref_id_id": 12,
+        "district_ref_id_id": 208,
+        "sub_district_ref_id_id": 12932,
+        "village_ref_id_id": 422620,
+    },
+    {
+        "state_ref_id_id": 12,
+        "district_ref_id_id": 208,
+        "sub_district_ref_id_id": 12971,
+        "village_ref_id_id": 422640,
+    },
+    {
+        "state_ref_id_id": 12,
+        "district_ref_id_id": 208,
+        "sub_district_ref_id_id": 13041,
+        "village_ref_id_id": 422660,
+    },
+]
+
+
+def get_random_address_chain() -> dict:
+    """Pick a random valid cascading address chain from the pool.
+
+    Returns a dict with state_ref_id_id, district_ref_id_id,
+    sub_district_ref_id_id, village_ref_id_id — all guaranteed
+    to be a valid combination for the ERP API.
+    """
+    return random.choice(_ADDRESS_CHAINS)
+
+
+def add_address_chain(chain: dict):
+    """Add a new valid address chain to the pool.
+
+    Used by scripts/capture_cascade.py or manual expansion.
+    Chain must include: state_ref_id_id, district_ref_id_id,
+    sub_district_ref_id_id, village_ref_id_id.
+    """
+    _ADDRESS_CHAINS.append(chain)
 
 
 def build_supplier_api_payload(
@@ -928,26 +1008,30 @@ def generate_supplier_api_payload(
     """
     One-shot: generate a complete Supplier API payload with random data.
 
-    Convenience function that combines generate_valid_supplier_data() and
-    build_supplier_api_payload() into a single call.
+    Automatically picks a random valid address chain from the pool
+    so each supplier gets a different state/district/taluka/village.
 
     Args:
         company_prefix: If provided, forces old prefix_timestamp naming.
                         If None (default), generates realistic Indian names.
         dropdown_ids: Override default FK IDs for dropdowns.
+                      Address chain FK IDs are auto-resolved unless
+                      explicitly overridden here.
 
     Returns:
         JSON payload ready for POST /core/dynamic-screen-wrapper/
-
-    Example:
-        client = RhythmERPAPIClient()
-        client.login()
-        payload = generate_supplier_api_payload()  # realistic names
-        client.create_entry(payload)
     """
     data = generate_valid_supplier_data(company_prefix)
+
+    # Merge: defaults + random address chain + caller overrides
+    ids = {
+        **DEFAULT_SUPPLIER_FK_IDS,
+        **get_random_address_chain(),
+        **(dropdown_ids or {}),
+    }
+
     return build_supplier_api_payload(
-        data["step1"], data["step2"], data["step3"], dropdown_ids
+        data["step1"], data["step2"], data["step3"], ids
     )
 
 
@@ -959,6 +1043,8 @@ def generate_supplier_api_payloads(
     """
     Generate multiple unique Supplier API payloads for batch creation.
 
+    Each payload gets a DIFFERENT random address chain automatically.
+
     Args:
         count: Number of payloads to generate.
         prefix: If provided, forces old prefix_timestamp naming.
@@ -967,12 +1053,6 @@ def generate_supplier_api_payloads(
 
     Returns:
         List of JSON payloads ready for batch_create().
-
-    Example:
-        client = RhythmERPAPIClient()
-        client.login()
-        payloads = generate_supplier_api_payloads(20)  # realistic names
-        client.batch_create(payloads)
     """
     payloads = []
     for i in range(count):
