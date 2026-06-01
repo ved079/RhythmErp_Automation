@@ -108,19 +108,36 @@ class UOMPage(BasePage):
         log.info("Hard refreshing page")
         self.driver.refresh()
         self._wait_for_page_ready()
-        self._force_close_panels()
         log.info("Page refreshed and ready")
 
     def _wait_for_page_ready(self):
-        """Wait for the UOM page search button or table to appear using explicit wait."""
+        """Wait for the UOM page to be fully interactive.
+        Waits for the search button to be CLICKABLE (not just present in DOM).
+        This ensures Angular has fully bootstrapped and the page is ready for interaction."""
         try:
+            # First wait for page to load (any element)
             WebDriverWait(self.driver, 15).until(
                 lambda d: d.find_elements("css selector", "button.search-btn") or
                           d.find_elements("css selector", "table#excel-table")
             )
-            log.info("Page ready (search button or table found)")
+            log.info("Page elements found in DOM, waiting for clickability...")
+
+            # Then wait for search button to be actually clickable
+            # This is critical after driver.refresh() — Angular needs time to bootstrap
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    EC.element_to_be_clickable(("css selector", "button.search-btn"))
+                )
+                log.info("Page ready (search button clickable)")
+            except Exception:
+                # Search button might not be on all pages — check table instead
+                log.info("Search button not clickable, checking table...")
+                WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located(("css selector", "table#excel-table"))
+                )
+                log.info("Page ready (table found, search button not available)")
         except Exception:
-            log.warning("Page ready check timed out after 15s")
+            log.warning("Page ready check timed out")
 
     # ================================================================
     # CREATE UOM
