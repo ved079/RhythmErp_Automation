@@ -134,13 +134,10 @@ _BANK_NAMES = [
 ]
 
 _BANK_CITIES = [
-    "Mumbai Fort", "Delhi Connaught Place", "Pune Camp",
-    "Ahmedabad CG Road", "Bangalore MG Road", "Chennai Mount Road",
-    "Hyderabad Ameerpet", "Kolkata Park Street", "Jaipur MI Road",
-    "Lucknow Hazratganj", "Nagpur Dharampeth", "Indore Sarafa",
-    "Chandigarh Sector 17", "Coimbatore RS Puram", "Vadodara Alkapuri",
-    "Surat Ring Road", "Ludhiana Civil Lines", "Bhopal New Market",
-    "Patna Fraser Road", "Rajkot Race Course",
+    "Mumbai", "Delhi", "Pune", "Ahmedabad", "Bangalore",
+    "Chennai", "Hyderabad", "Kolkata", "Jaipur", "Lucknow",
+    "Nagpur", "Indore", "Chandigarh", "Coimbatore", "Vadodara",
+    "Surat", "Ludhiana", "Bhopal", "Patna", "Rajkot",
 ]
 
 _STREET_NAMES = [
@@ -264,14 +261,11 @@ def generate_contact_person(prefix=None):
 
 
 def generate_office_number():
-    """Generate a realistic Indian landline number.
-    Format: STD code-number (e.g., 020-25531234).
+    """Return None for office number.
+    The ERP API rejects formatted landline numbers (e.g., 020-25531234).
+    Leave blank — the field is optional.
     """
-    std_codes = [
-        "020", "022", "011", "080", "040", "033",  # Pune, Mumbai, Delhi, Bangalore, Hyd, Kolkata
-        "0141", "0172", "0265", "079", "0241", "0253",  # Jaipur, Chandigarh, Vadodara, Ahmedabad, Nagpur, Nashik
-    ]
-    return f"{random.choice(std_codes)}-{random.randint(20000000, 29999999)}"
+    return None
 
 
 def generate_ifsc():
@@ -385,7 +379,7 @@ def generate_valid_step1_data(company_prefix=None):
         "is_gst_set_off": True,        # Default: Yes
         "is_tds_applicable": False,    # Default: No
         "contact_person": generate_contact_person(),
-        "office_number": generate_office_number(),
+        "office_number": None,              # API rejects formatted numbers — leave blank
         "payment_terms": None,         # Pick from live UI (optional)
         "delivery_terms": None,        # Pick from live UI (optional)
         "mode_of_delivery": None,      # Pick from live UI (optional)
@@ -465,7 +459,7 @@ def generate_valid_edit_data():
         "phone_number": generate_phone(),
         "pan_number": generate_pan(),
         "contact_person": generate_contact_person(),
-        "office_number": generate_office_number(),
+        "office_number": None,  # API rejects formatted numbers
     }
 
 
