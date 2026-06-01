@@ -74,7 +74,6 @@ def logged_in_driver(driver):
     login_page.wait_for_login_complete()
     log.info("RhythmERP login successful!")
     start_screenshot_broadcast(driver)
-    start_screenshot_broadcast(driver)
     log.info("RhythmERP login successful!")
 
     yield driver
@@ -91,18 +90,22 @@ def logged_in_driver(driver):
 _cs_store = CSReportStore()
 
 # ---- UOM Known Issues (discovered during validation testing) ----
+# Updated: Pattern C (backend error toast) no longer exists on live system.
+# Frontend now validates before submission, preventing 256+ char inputs
+# from reaching the backend. Bug #1 downgraded from High to Medium.
 _cs_store.record_issue(
-    severity="High",
+    severity="Medium",
     module="UOM",
     category="Backend",
-    description="255-char backend limit with generic error message. "
-                "Both UOM Code and Description reject 256+ characters with a "
-                "generic 'Failed to save record' error toast (Pattern C). "
-                "No field-level indication of the character limit.",
+    description="255-char backend limit. Previously showed generic 'Failed to save record' "
+                "error toast (Pattern C). Live system now validates at frontend level "
+                "before submission, showing Pattern A warning instead. However, "
+                "the error message still does not clearly indicate the character limit.",
     expected="System should show a clear field-level error indicating the "
              "255-character maximum limit before submission.",
-    actual="Generic 'Failed to save record' toast appears. User gets no "
-           "indication of why the save failed or what the limit is.",
+    actual="Frontend now prevents submission of 256+ char values (Pattern A), "
+           "but the error message is still generic ('Please correct the highlighted fields') "
+           "without specifying the character limit.",
     test_ref="Test 12, Test 14",
     status="Open",
 )
@@ -136,6 +139,71 @@ _cs_store.record_issue(
            "with ERROR log, then force-close handles it silently.",
     test_ref="Test 20, Test 21, Test 24, Test 25",
     status="Open",
+)
+# ---- UOM UI Changes (live system vs. original automation) ----
+_cs_store.record_issue(
+    severity="Info",
+    module="UOM",
+    category="UI Change",
+    description="Action buttons changed from separate columns (View/Edit/History) "
+                "to a single 3-dot menu dropdown in cdk-column-actions. "
+                "Automation code updated to use _click_action_menu_item() instead of "
+                "_click_action_button().",
+    expected="Separate action columns (cdk-column-view/edit/archive).",
+    actual="Single Actions column with 3-dot (⋮) menu dropdown.",
+    test_ref="All tests using click_view/edit/history_button",
+    status="Fixed",
+)
+_cs_store.record_issue(
+    severity="Info",
+    module="UOM",
+    category="UI Change",
+    description="UOM Code field type changed from type='character' (letters only) "
+                "to type='text' (accepts letters and numbers). Numbers are now allowed "
+                "in UOM codes on the live system.",
+    expected="type='character' — rejects numbers in UOM code.",
+    actual="type='text' — accepts numbers in UOM code. Test 22 now expects success.",
+    test_ref="Test 22",
+    status="Fixed",
+)
+_cs_store.record_issue(
+    severity="Info",
+    module="UOM",
+    category="UI Change",
+    description="UOM Description is no longer a required field. Empty descriptions "
+                "are accepted on both Create and Edit. Tests 8, 9, 17, 19 updated "
+                "to reflect this change.",
+    expected="Description is required — shows error when empty.",
+    actual="Description is optional — accepted when empty.",
+    test_ref="Test 8, Test 9, Test 17, Test 19",
+    status="Fixed",
+)
+_cs_store.record_issue(
+    severity="Info",
+    module="UOM",
+    category="UI Change",
+    description="SweetAlert2 Pattern A now has 4 buttons (×, OK, No, Cancel) "
+                "instead of just OK. Pattern B now has 4 buttons (×, Cancel, No, "
+                "Download Errors) instead of 2 (Cancel, Download Errors). "
+                "Pattern C (error toast) no longer exists — frontend validates "
+                "before submission.",
+    expected="Pattern A: 1 OK button. Pattern B: Cancel + Download Errors.",
+    actual="Pattern A: ×, OK, No, Cancel. Pattern B: ×, Cancel, No, Download Errors. "
+           "Pattern C removed (frontend validates first).",
+    test_ref="All validation tests",
+    status="Fixed",
+)
+_cs_store.record_issue(
+    severity="Info",
+    module="UOM",
+    category="UI Change",
+    description="mat-error text changed from 'UOM Code is required' to "
+                "'This field is required'. Generic message no longer includes "
+                "the field name.",
+    expected="'UOM Code is required'",
+    actual="'This field is required'",
+    test_ref="Test 7, Test 18",
+    status="Fixed",
 )
 
 

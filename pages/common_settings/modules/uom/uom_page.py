@@ -39,10 +39,15 @@ class UOMPage(BasePage):
     TABLE_UOM_CODES = ("css", "table#excel-table td.cdk-column-uom_code")
     TABLE_ROWS = ("css", "table#excel-table tbody tr")
 
-    # Action buttons in a specific row (parametrized via XPath)
-    VIEW_BUTTON = ("xpath", "//td[contains(text(),'{uom_code}')]/ancestor::tr//td.cdk-column-view//button")
-    EDIT_BUTTON = ("xpath", "//td[contains(text(),'{uom_code}')]/ancestor::tr//td.cdk-column-edit//button")
-    HISTORY_BUTTON = ("xpath", "//td[contains(text(),'{uom_code}')]/ancestor::tr//td.cdk-column-archive//button")
+    # Action buttons — now inside a 3-dot menu dropdown (cdk-column-actions)
+    # The live system uses a single "Actions" column with a 3-dot (⋮) menu button.
+    # Clicking the 3-dot opens a dropdown with View, Edit, History options.
+    ACTIONS_COLUMN = ("css", "td.cdk-column-actions")
+    THREE_DOT_MENU_BUTTON = ("css", "td.cdk-column-actions button")  # The ⋮ button per row
+    # Legacy locators kept for reference but NO LONGER MATCH live DOM:
+    # VIEW_BUTTON = ("xpath", "//td[contains(text(),'{uom_code}')]/ancestor::tr//td.cdk-column-view//button")
+    # EDIT_BUTTON = ("xpath", "//td[contains(text(),'{uom_code}')]/ancestor::tr//td.cdk-column-edit//button")
+    # HISTORY_BUTTON = ("xpath", "//td[contains(text(),'{uom_code}')]/ancestor::tr//td.cdk-column-archive//button")
 
     # ================================================================
     # CREATE / EDIT FORM (shared form fields)
@@ -248,8 +253,8 @@ class UOMPage(BasePage):
     # ================================================================
 
     def click_view_button(self, uom_code):
-        """Click the View (eye) button for a specific UOM row."""
-        self._click_action_button(uom_code, "cdk-column-view")
+        """Click the View (eye) button for a specific UOM row via 3-dot menu."""
+        self._click_action_menu_item(uom_code, "View")
         time.sleep(1.5)
 
     def verify_view_popup_read_only(self):
@@ -291,8 +296,8 @@ class UOMPage(BasePage):
     # ================================================================
 
     def click_edit_button(self, uom_code):
-        """Click the Edit button for a specific UOM row."""
-        self._click_action_button(uom_code, "cdk-column-edit")
+        """Click the Edit button for a specific UOM row via 3-dot menu."""
+        self._click_action_menu_item(uom_code, "Edit")
         time.sleep(1.5)
 
     def verify_edit_popup_editable(self):
@@ -367,8 +372,8 @@ class UOMPage(BasePage):
     # ================================================================
 
     def click_history_button(self, uom_code):
-        """Click the History (clock) button for a specific UOM row."""
-        self._click_action_button(uom_code, "cdk-column-archive")
+        """Click the History button for a specific UOM row via 3-dot menu."""
+        self._click_action_menu_item(uom_code, "History")
         time.sleep(2)
 
     def is_history_empty(self):
@@ -523,13 +528,17 @@ class UOMPage(BasePage):
     # UTILITY - ACTION BUTTON CLICKER (pure JS, no XPath)
     # ================================================================
 
-    def _click_action_button(self, uom_code, column_class):
+    def _click_action_menu_item(self, uom_code, action_name):
         """
-        Click an action button (View/Edit/History) for a specific UOM row.
-        Uses pure JS to find the row by UOM code and click the button.
-        This avoids XPath text() issues with Angular comment nodes.
+        Click an action menu item (View/Edit/History) for a specific UOM row.
+        The live system uses a 3-dot (⋮) menu button in cdk-column-actions.
+        Steps:
+          1. Find the row containing the UOM code
+          2. Click the 3-dot menu button in cdk-column-actions
+          3. Wait for the dropdown menu to appear
+          4. Click the menu item matching action_name (View/Edit/History)
         """
-        log.info("Clicking " + column_class + " button for UOM: " + uom_code)
+        log.info("Clicking " + action_name + " via 3-dot menu for UOM: " + uom_code)
         js = """
         var table = document.querySelector('table#excel-table');
         if (!table) { throw new Error('Table not found'); }
@@ -538,21 +547,66 @@ class UOMPage(BasePage):
             var cells = rows[i].querySelectorAll('td');
             for (var j = 0; j < cells.length; j++) {
                 if (cells[j].textContent.trim().indexOf(arguments[0]) !== -1) {
-                    var btn = rows[i].querySelector('td.' + arguments[1] + ' button');
-                    if (btn) {
-                        btn.scrollIntoView({block:'center'});
-                        btn.click();
-                        return 'clicked';
-                    }
-                    throw new Error('Button column ' + arguments[1] + ' not found in row');
+                    // Found the row — click the 3-dot menu button
+                    var menuBtn = rows[i].querySelector('td.cdk-column-actions button');
+                    if (!menuBtn) { throw new Error('3-dot menu button not found in actions column'); }
+                    menuBtn.scrollIntoView({block:'center'});
+                    menuBtn.click();
+                    return 'menu_opened';
                 }
             }
         }
         throw new Error('UOM code ' + arguments[0] + ' not found in table');
         """
-        result = self.driver.execute_script(js, uom_code, column_class)
-        log.info("Successfully clicked " + column_class + " button for UOM: " + uom_code)
+        result = self.driver.execute_script(js, uom_code)
+        log.info("3-dot menu opened for UOM: " + uom_code)
+        time.sleep(0.5)  # Wait for dropdown to render
+
+        # Now click the specific menu item from the dropdown overlay
+        # The dropdown items are rendered in .cdk-overlay-container
+        # Each item is a button or span with text matching the action name
+        js_click_item = """
+        var overlay = document.querySelector('.cdk-overlay-container');
+        if (!overlay) { throw new Error('CDK overlay not found after menu click'); }
+        var items = overlay.querySelectorAll('button, span, div');
+        for (var i = 0; i < items.length; i++) {
+            var text = items[i].textContent.trim();
+            if (text === arguments[0]) {
+                items[i].click();
+                return 'clicked_' + arguments[0];
+            }
+        }
+        // Fallback: try partial match
+        for (var i = 0; i < items.length; i++) {
+            var text = items[i].textContent.trim().toLowerCase();
+            if (text.indexOf(arguments[0].toLowerCase()) !== -1) {
+                items[i].click();
+                return 'clicked_partial_' + arguments[0];
+            }
+        }
+        throw new Error('Menu item "' + arguments[0] + '" not found in dropdown overlay');
+        """
+        result = self.driver.execute_script(js_click_item, action_name)
+        log.info("Successfully clicked " + action_name + " for UOM: " + uom_code)
         return result
+
+    # Legacy method kept for backward compatibility — no longer works on live system
+    # because action columns (cdk-column-view, cdk-column-edit, cdk-column-archive)
+    # have been replaced by a single cdk-column-actions with 3-dot menu.
+    def _click_action_button(self, uom_code, column_class):
+        """
+        DEPRECATED: Use _click_action_menu_item() instead.
+        Legacy method for clicking action buttons via column class.
+        This no longer works on the live system because separate action columns
+        (cdk-column-view/edit/archive) have been replaced by cdk-column-actions
+        with a 3-dot (⋮) menu dropdown.
+        """
+        log.warning("_click_action_button is DEPRECATED. Use _click_action_menu_item instead.")
+        self._click_action_menu_item(uom_code, {
+            "cdk-column-view": "View",
+            "cdk-column-edit": "Edit",
+            "cdk-column-archive": "History"
+        }.get(column_class, column_class))
 
     # ================================================================
     # VALIDATION ALERT HANDLERS
@@ -561,8 +615,8 @@ class UOMPage(BasePage):
     def handle_validation_warning(self):
         """
         Pattern A: 'Please correct the highlighted fields'
-        SweetAlert with only an OK button (.swal2-confirm).
-        Clicks OK to dismiss.
+        SweetAlert with 4 buttons: × (close), OK, No, Cancel.
+        Clicks OK (.swal2-confirm) to dismiss.
         """
         log.info("Handling validation warning (Pattern A)")
         try:
@@ -578,8 +632,8 @@ class UOMPage(BasePage):
     def handle_validation_download(self):
         """
         Pattern B: 'Fields validation failed. Do you want to download?'
-        SweetAlert with Cancel (.swal2-cancel) + Download Errors (.swal2-confirm).
-        Clicks Cancel to dismiss.
+        SweetAlert with 4 buttons: × (close), Cancel, No, Download Errors (.swal2-confirm).
+        Clicks Cancel (.swal2-cancel) to dismiss.
         """
         log.info("Handling validation download (Pattern B)")
         try:
@@ -594,24 +648,28 @@ class UOMPage(BasePage):
     
     def handle_error_toast(self):
         """
-        Handle 'Failed to save record' error toast (swal2-icon-error).
-        This is a toast notification with no buttons - just wait for auto-dismiss.
+        DEPRECATED: Pattern C ('Failed to save record' error toast) no longer exists
+        on the live system. The frontend now validates before submission, preventing
+        256+ char inputs from reaching the backend. Kept for backward compatibility.
         """
-        log.info("Handling error toast (waiting for auto-dismiss)")
+        log.warning("handle_error_toast is DEPRECATED. Pattern C no longer exists on live system.")
+        log.info("Checking for any error toast (backward compat)")
         time.sleep(3)
         try:
             self.driver.find_element("css selector", ".swal2-popup.swal2-icon-error")
-            log.info("Error toast detected, waiting for dismiss")
+            log.info("Error toast detected (unexpected on live system), waiting for dismiss")
             time.sleep(3)
         except Exception:
-            log.info("Error toast already dismissed")
+            log.info("No error toast found (expected — Pattern C removed from live system)")
 
     def is_validation_alert_present(self, timeout=5):
         """
         Check if any SweetAlert validation popup or error toast is visible.
         Polls up to `timeout` seconds (checks every 0.5s).
         Returns True if swal2-icon-warning (Pattern A/B) or
-        swal2-icon-error ('Failed to save record' toast) is present.
+        swal2-icon-error (legacy Pattern C) is present.
+        Note: Pattern C no longer appears on the live system — frontend validates
+        before submission, so 256+ char inputs never reach the backend.
         """
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:

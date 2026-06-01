@@ -1,8 +1,11 @@
-﻿"""
+"""
 uom_data.py
 ------------
 Test data generator for UOM automation.
-Generates random UOM codes (8 uppercase letters only) and descriptions.
+Generates random UOM codes and descriptions.
+
+Updated: UOM Code field is type="text" on live system — accepts letters AND numbers.
+Description is NOT required (optional field).
 """
 
 import random
@@ -11,7 +14,7 @@ from datetime import datetime
 
 
 def generate_uom_data():
-    """Generate random UOM test data. Code = 8 uppercase letters only."""
+    """Generate random UOM test data. Code = 8 uppercase letters + timestamp for uniqueness."""
     uom_code = "".join(random.choices(string.ascii_uppercase, k=8))
     timestamp = datetime.now().strftime("%H%M%S")
     uom_description = f"Test UOM Description {timestamp}"
@@ -61,12 +64,19 @@ def generate_mixed_case_uom_code():
 
 
 def generate_number_uom_code():
-    """Generate a UOM code containing numbers."""
-    return "ABC12345"
+    """Generate a unique UOM code containing numbers.
+    Live system accepts numbers in UOM code (type='text', not type='character').
+    Uses timestamp suffix to avoid duplicate collisions from previous test runs.
+    """
+    prefix = "".join(random.choices(string.ascii_uppercase, k=3))
+    timestamp = datetime.now().strftime("%H%M%S")
+    return f"{prefix}{timestamp}"
 
 
 def generate_special_char_uom_code():
-    """Generate a UOM code containing special characters."""
+    """Generate a UOM code containing special characters.
+    Special characters are still rejected by the frontend validation.
+    """
     return "AB!@#$%^"
 
 
@@ -78,5 +88,9 @@ def generate_leading_space_uom_code():
 
 
 def generate_trailing_space_uom_code():
-    """Generate a UOM code with trailing spaces."""
-    return "ABCDEFGH  "
+    """Generate a UOM code with trailing spaces + unique random suffix.
+    Backend silently trims trailing spaces.
+    """
+    suffix = "".join(random.choices(string.ascii_uppercase, k=6))
+    timestamp = datetime.now().strftime("%H%M%S")
+    return f"{suffix}{timestamp}  "

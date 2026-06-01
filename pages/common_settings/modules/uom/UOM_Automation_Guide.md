@@ -1,22 +1,22 @@
 # UOM — Screen Knowledge Document
 
 > **RhythmERP** | Common Settings > UOM
-> **Last Verified**: 14-May-2026 | **21/21 Tests Passing**
+> **Last Verified**: 01-Jun-2026 | **19/19 Validation Tests Updated**
 
 ---
 
 ## 1. Screen Overview
 
-**UOM (Unit of Measure)** is a master data screen in RhythmERP under **Common Settings**. It manages unit of measure records — each UOM has a Code, a Description, and a Status (Active/Inactive toggle). Unlike Designation or Vehicle Master, UOM has only 2 text fields plus a Status toggle, but features a unique 3-pattern SweetAlert2 system and a 255-character backend limit on both fields.
+**UOM (Unit of Measure)** is a master data screen in RhythmERP under **Common Settings**. It manages unit of measure records — each UOM has a Code, a Description, and a Status (Active/Inactive toggle). Unlike Designation or Vehicle Master, UOM has only 2 text fields plus a Status toggle, but features a unique 2-pattern SweetAlert2 system and a 255-character backend limit on both fields.
 
 | Detail | Value |
 |--------|-------|
 | **Navigation** | Sidebar → Common Settings → UOM |
 | **URL** | `https://rhythmerp.algorhythms.in/#/dynamic-screens/UOM` |
 | **Framework** | Angular Material (mat-form-field, mat-error, mat-table) |
-| **Alerts** | SweetAlert2 — **3 distinct patterns** (A, B, C) |
-| **Validation** | UOM Code required + `type="character"` pattern. UOM Description required (no pattern). Both have 255-char backend limit. |
-| **Known Bugs** | 3 (1 High, 1 Medium, 1 Low) |
+| **Alerts** | SweetAlert2 — **2 patterns** (A, B) + success toast. Pattern C no longer exists. |
+| **Validation** | UOM Code required + `type="text"` (accepts letters AND numbers). UOM Description **NOT required** (optional). Both have 255-char limit (frontend validates). |
+| **Known Bugs** | 2 (1 Medium, 1 Low) + 5 UI Changes documented |
 
 ### Key Differences from Designation / Vehicle Master
 
@@ -25,19 +25,19 @@
 | **Fields** | 5 (Name, Price, Type, Fuel, Description) | 3 (Name, Description, Status) | 2 + toggle (Code, Description, Status) |
 | **Dropdowns** | 2 mat-select dropdowns | None | None |
 | **Status** | N/A | Toggle switch | Toggle switch (`app-slide-toggle-v2`) |
-| **Inline Errors** | None (SweetAlert2 only) | Yes — "Invalid Name" mat-error | Yes — mat-error on Code; red border on Description |
+| **Inline Errors** | None (SweetAlert2 only) | Yes — "Invalid Name" mat-error | Yes — mat-error on Code ("This field is required"); Description has no error (optional) |
 | **Duplicate Check** | None (BUG) | None (BUG) | **YES** — Pattern B alert |
-| **SweetAlert2 Patterns** | 1 (validation) | 1 (validation) | **3** (A: validation, B: duplicate, C: backend error) |
-| **Backend Char Limit** | None | None | **255 chars** (both Code and Description) |
+| **SweetAlert2 Patterns** | 1 (validation) | 1 (validation) | **2** (A: validation, B: duplicate). Pattern C removed — frontend validates first. |
+| **Backend Char Limit** | None | None | **255 chars** (frontend validates before submit) |
 | **Space Trimming** | Not trimmed (BUG) | Not trimmed (BUG) | **Silently trimmed** (BUG — no warning) |
 
 ### What You Can Do on This Screen
 
 - **Create** a new UOM via ADD button → popup form → Submit
-- **Edit** an existing UOM via row Edit button → popup form → Update
-- **View** a UOM's details (read-only) via row View button
+- **Edit** an existing UOM via 3-dot menu → Edit → popup form → Update
+- **View** a UOM's details (read-only) via 3-dot menu → View
 - **Search** UOMs by code via toolbar search bar
-- **Check History** of changes via row History button → history popup
+- **Check History** of changes via 3-dot menu → History → history popup
 - **Toggle Status** between Active and Inactive
 
 ---
@@ -72,23 +72,23 @@ After clicking the Search toggle, an input bar appears:
 ### Table
 
 ```
-+------+------+---------+----------+------------------+--------+
-| View | Edit | History | UOM Code | UOM Description  | Status |
-|  btn |  btn |   btn   |          |                  |        |
-+------+------+---------+----------+------------------+--------+
-|  btn |  btn |   btn   |   MT     |  Metric Tonne    | Active |
-|  btn |  btn |   btn   |   KG     |  Kilogram        | Active |
-+------+------+---------+----------+------------------+--------+
++---------+----------+------------------+--------+
+| Actions | UOM Code | UOM Description  | Status |
+|   ⋮     |          |                  |        |
++---------+----------+------------------+--------+
+|   ⋮     |   MT     |  Metric Tonne    | Active |
+|   ⋮     |   KG     |  Kilogram        | Active |
++---------+----------+------------------+--------+
 ```
 
 | Column | CSS Class | Sortable? | Notes |
 |--------|-----------|-----------|-------|
-| View | `mat-column-view` | No | Action button column |
-| Edit | `mat-column-edit` | No | Action button column. Has `mattooltip="Click to edit"` |
-| **History** | **`mat-column-archive`** | No | **CRITICAL: CSS class is "archive" NOT "history"!** |
+| **Actions** | **`cdk-column-actions`** | No | **3-dot (⋮) menu dropdown with View/Edit/History options** |
 | UOM Code | `mat-column-uom_code` | Yes | Sort header present. Primary identifier. |
-| UOM Description | `mat-column-uom_description` | Yes | Sort header present. May be empty. |
+| UOM Description | `mat-column-uom_description` | Yes | Sort header present. May be empty (optional field). |
 | Status | `mat-column-status` | Yes | Shows "Active" or "Inactive" |
+
+**NOTE**: Previous columns `cdk-column-view`, `cdk-column-edit`, `cdk-column-archive` have been **removed** from the live system. They are replaced by a single `cdk-column-actions` with a 3-dot menu.
 
 ### Table Selectors
 
@@ -103,22 +103,22 @@ After clicking the Search toggle, an input bar appears:
 
 ### Row Action Buttons (Per Row)
 
-| Action | Position | Selector | Fallback |
-|--------|----------|----------|----------|
-| **View** | 1st button (index 0) | `td.mat-column-view button` | Pure JS: `_click_action_button(code, 'cdk-column-view')` |
-| **Edit** | 2nd button (index 1) | `td.mat-column-edit button` | Pure JS: `_click_action_button(code, 'cdk-column-edit')` |
-| **History** | 3rd button (index 2) | `td.mat-column-archive button` | Pure JS: `_click_action_button(code, 'cdk-column-archive')` |
+| Action | Menu Item Text | How to Click |
+|--------|---------------|-------------|
+| **View** | "View" | `_click_action_menu_item(code, 'View')` — opens 3-dot menu, then clicks View |
+| **Edit** | "Edit" | `_click_action_menu_item(code, 'Edit')` — opens 3-dot menu, then clicks Edit |
+| **History** | "History" | `_click_action_menu_item(code, 'History')` — opens 3-dot menu, then clicks History |
 
-### The `_click_action_button()` Method
+### The `_click_action_menu_item()` Method
 
-Unlike Designation and Vehicle Master which use standard Selenium clicks on action buttons, UOM uses a **pure JavaScript** approach via `_click_action_button(code, column_class)`. This method:
+The live system uses a **3-dot (⋮) menu** in `cdk-column-actions` instead of separate action button columns. The `_click_action_menu_item(code, action_name)` method handles this in 2 steps:
 
-1. Finds all table rows via `document.querySelectorAll('table tbody tr')`
-2. Iterates rows looking for one where any cell text matches the UOM code
-3. Once the row is found, finds the button inside `td.${column_class}`
-4. Clicks the button via `arguments[0].click()`
+1. **Open the 3-dot menu**: Finds the row by UOM code, then clicks the 3-dot menu button in `td.cdk-column-actions`
+2. **Click the menu item**: After the CDK overlay dropdown appears, clicks the item matching `action_name` ("View", "Edit", or "History")
 
-This approach is necessary because Angular Material's dynamic rendering can cause stale element issues with standard Selenium locators.
+The legacy `_click_action_button(code, column_class)` method still exists for backward compatibility but is **DEPRECATED** — it now delegates to `_click_action_menu_item()` with a column-to-action mapping.
+
+**IMPORTANT**: After clicking the 3-dot menu, the dropdown is rendered in `.cdk-overlay-container`. The method uses JavaScript to find and click the correct menu item from this overlay.
 
 ---
 
@@ -133,8 +133,8 @@ All three modes use the **same popup container** — only the field states and f
 |  UOM                    [Full] [X]           |  <- Header (.popup-header)
 +---------------------------------------------+
 |                                             |
-|  UOM Code *        [________________]       |  <- type="character" input
-|  UOM Description * [________________]       |  <- text input (required!)
+|  UOM Code *        [________________]       |  <- type="text" input (accepts letters AND numbers)
+|  UOM Description   [________________]       |  <- text input (NOT required — optional)
 |  Status            [=====O]  Active         |  <- app-slide-toggle-v2
 |                                             |
 +---------------------------------------------+
@@ -146,8 +146,8 @@ All three modes use the **same popup container** — only the field states and f
 
 | Field | Type | Required | Selector | Behavior |
 |-------|------|----------|----------|----------|
-| **UOM Code** | text input | YES | `input[name='UOM Code']` | `type="character"`. Letters only. Accepts lowercase and mixed case (saved as-is). Rejects digits and special chars. Shows `mat-error` inline. **255-char backend limit** — 256+ chars cause Pattern C error. **Leading spaces silently trimmed** by backend. |
-| **UOM Description** | text input | YES | `input[name='UOM Description']` | Accepts all characters including special chars. **255-char backend limit** — 256+ chars cause Pattern C error. No pattern validation. Shows red border on error but NO mat-error text. |
+| **UOM Code** | text input | YES | `input[name='UOM Code']` | `type="text"`. Accepts letters AND numbers. Accepts lowercase and mixed case (saved as-is). Rejects special chars only. Shows `mat-error` inline ("This field is required"). **255-char limit** — frontend validates before submit. **Leading spaces silently trimmed** by backend. |
+| **UOM Description** | text input | NO | `input[name='UOM Description']` | **NOT required** — optional field. Accepts all characters including special chars. **255-char limit** — frontend validates before submit. No mat-error text when empty. |
 | **Status** | toggle switch | NO (defaults Active) | `app-slide-toggle-v2 .slider` | Toggle between Active/Inactive. Default is Active. Click `.slider` via JS. |
 
 ### Status Toggle Selectors
@@ -193,13 +193,13 @@ View Mode:   No Submit/Update button + all fields disabled + Cancel only
 
 ---
 
-## 4. UOM Code Validation (type="character")
+## 4. UOM Code Validation (type="text")
 
-The UOM Code field uses Angular's `type="character"` attribute — the same as Designation's Name field. However, UOM's implementation has some key behavioral differences.
+The UOM Code field uses `type="text"` on the live system — it accepts **letters AND numbers**. Previously documented as `type="character"` which rejected digits, but the live system now allows numeric characters in codes.
 
-### What `type="character"` Does
+### What `type="text"` Accepts
 
-The `type="character"` attribute restricts input to **letters only**. Unlike Designation (which also allows spaces), UOM Code accepts purely alphabetic characters. When invalid content is detected, Angular shows inline validation errors.
+The `type="text"` attribute allows both alphabetic and numeric characters. Special characters are still rejected by frontend validation.
 
 ### Accepted Characters
 
@@ -208,8 +208,9 @@ The `type="character"` attribute restricts input to **letters only**. Unlike Des
 | Uppercase letters | A-Z | YES |
 | Lowercase letters | a-z | YES (saved as-is) |
 | Mixed case | AbCdEfGh | YES (saved as-is) |
+| Digits | 0-9 | **YES** — accepted (type="text") |
+| Alphanumeric | ABC12345 | **YES** — accepted |
 | Spaces | " " | **YES** (but trimmed by backend — BUG) |
-| Digits | 0-9 | **NO** — rejected |
 | Special chars | @#$%^&*! | **NO** — rejected |
 | Underscores | _ | **NO** — rejected |
 
@@ -218,7 +219,7 @@ The `type="character"` attribute restricts input to **letters only**. Unlike Des
 | Behavior | Designation Name | UOM Code |
 |----------|-----------------|----------|
 | Spaces in value | Accepted and preserved | Accepted but **silently trimmed by backend** |
-| Digits | Rejected (mat-error) | Rejected (mat-error) |
+| Digits | Rejected (mat-error) | **Accepted** (type="text") |
 | Special chars | Rejected (mat-error) | Rejected (mat-error) |
 | Lowercase | Accepted | **Accepted** (saved as-is, not uppercased) |
 | Mixed case | Accepted | **Accepted** (saved as-is) |
@@ -251,9 +252,9 @@ The UOM Description field behaves differently from UOM Code when invalid:
 
 | Aspect | UOM Code | UOM Description |
 |--------|----------|-----------------|
-| Error indicator | `mat-error` text ("UOM Code is required") | **Red border only** — no mat-error text |
-| CSS classes | `ng-invalid` + `mat-mdc-form-field-invalid` | `mat-mdc-form-field-invalid` + `cdk-text-field-invalid` |
-| Detection method | `get_mat_error_text()` finds mat-error | `has_field_error()` checks CSS classes only |
+| Error indicator | `mat-error` text ("This field is required") | **No error** — field is optional |
+| CSS classes | `ng-invalid` + `mat-mdc-form-field-invalid` | N/A (not required) |
+| Detection method | `get_mat_error_text()` finds mat-error | N/A (field is optional, no error expected) |
 
 ---
 

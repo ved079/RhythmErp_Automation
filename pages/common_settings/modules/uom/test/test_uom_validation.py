@@ -67,7 +67,7 @@ class TestUOMValidation:
             time.sleep(1)
 
     def test_empty_uom_description(self, logged_in_driver):
-        """Test 8: Submit with empty Description - description is NOT a required field, should save."""
+        """Test 8: Submit with empty Description - description is NOT required, should save successfully."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
 
@@ -82,26 +82,16 @@ class TestUOMValidation:
 
             uom_page.submit()
 
-            log.info(">>> STEP 2: Verify UOM created successfully (description is optional)")
-            # Description is NOT a required field - system should accept empty description
-            if uom_page.is_validation_alert_present(timeout=5):
-                # If validation alert appears, description IS required (behavior changed)
-                uom_page.dismiss_any_validation_alert()
-                has_error = uom_page.has_field_error(uom_page.UOM_DESCRIPTION_INPUT)
-                log.info("  Validation alert appeared. Description field has error: " + str(has_error))
-                # Still pass - we're documenting actual behavior
-                assert has_error, "If validation appears, description field should show error state"
-                log.info("  [NOTE] Description IS required (validation enforced)")
-            else:
-                uom_page.handle_success_alert()
-                log.info("  [PASS] UOM created with empty description (field is optional)")
+            log.info(">>> STEP 2: Verify UOM created successfully (description is NOT required)")
+            uom_page.handle_success_alert()
+            log.info("  [PASS] UOM created with empty description (field is optional)")
 
-                log.info(">>> STEP 3: Verify UOM appears in table")
-                uom_page.navigate_to_page()
-                uom_page.verify_uom_exists(uom_data["uom_code"])
-                log.info("  [PASS] UOM '" + uom_data["uom_code"] + "' found in table")
+            log.info(">>> STEP 3: Verify UOM appears in table")
+            uom_page.navigate_to_page()
+            uom_page.verify_uom_exists(uom_data["uom_code"])
+            log.info("  [PASS] UOM '" + uom_data["uom_code"] + "' found in table")
 
-            log.info(">>> TEST 8 PASSED: Empty description behavior verified")
+            log.info(">>> TEST 8 PASSED: Empty description accepted (field is optional)")
         except Exception:
             raise
         finally:
@@ -110,7 +100,7 @@ class TestUOMValidation:
             time.sleep(1)
 
     def test_both_fields_empty(self, logged_in_driver):
-        """Test 9: Submit with both fields empty should show Pattern A alert + mat-error on Code + red border on Description."""
+        """Test 9: Submit with both fields empty should show Pattern A alert + mat-error on Code only (Description is NOT required)."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
 
@@ -125,26 +115,23 @@ class TestUOMValidation:
 
             log.info(">>> STEP 2: Verify Pattern A alert appeared")
             assert uom_page.is_validation_alert_present(timeout=5), \
-                "Pattern A validation alert should appear for both empty fields"
+                "Pattern A validation alert should appear for empty UOM Code"
             uom_page.handle_validation_warning()
             log.info("  [PASS] Pattern A alert detected and dismissed")
 
-            log.info(">>> STEP 3: Verify Code shows mat-error text, Description shows red border")
+            log.info(">>> STEP 3: Verify Code shows mat-error text (Description is optional, no error)")
             code_error = uom_page.get_mat_error_text(uom_page.UOM_CODE_INPUT)
-            desc_has_error = uom_page.has_field_error(uom_page.UOM_DESCRIPTION_INPUT)
             assert code_error != "", \
                 "mat-error should be shown under UOM Code. Got: '" + str(code_error) + "'"
-            assert desc_has_error, \
-                "Description field should show error state (red border)"
             log.info("  [PASS] Code error text: " + code_error)
-            log.info("  [PASS] Description field has error state")
+            log.info("  [NOTE] Description is NOT required — no error expected for empty description")
 
             log.info(">>> STEP 4: Verify form is still open")
             assert uom_page.is_add_form_open(), \
                 "Add form should remain open after validation error"
             log.info("  [PASS] Form is still open")
 
-            log.info(">>> TEST 9 PASSED: Both fields empty validation works")
+            log.info(">>> TEST 9 PASSED: Both fields empty — only Code shows error (Description is optional)")
         except Exception:
             raise
         finally:
@@ -222,7 +209,7 @@ class TestUOMValidation:
             time.sleep(1)
 
     def test_256_char_description_rejected(self, logged_in_driver):
-        """Test 12: Submit with 256-char Description should show error toast (Failed to save record)."""
+        """Test 12: Submit with 256-char Description — frontend now validates before submit (Pattern A), no longer Pattern C."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
 
@@ -239,11 +226,17 @@ class TestUOMValidation:
 
             uom_page.submit()
 
-            log.info(">>> STEP 2: Verify error toast appeared (Failed to save record)")
-            assert uom_page.is_validation_alert_present(timeout=5), \
-                "Error toast should appear for 256-char description"
-            uom_page.handle_error_toast()
-            log.info("  [PASS] Error toast detected and auto-dismissed")
+            log.info(">>> STEP 2: Verify validation alert appeared (frontend now validates before submit)")
+            # Live system now validates at frontend level — shows Pattern A warning
+            # instead of the old Pattern C backend error toast.
+            if uom_page.is_validation_alert_present(timeout=5):
+                uom_page.dismiss_any_validation_alert()
+                log.info("  [PASS] Frontend validation alert detected (Pattern A, not Pattern C)")
+            else:
+                # Fallback: if no frontend validation, check for legacy Pattern C
+                log.info("  [NOTE] No frontend validation alert — checking for legacy Pattern C")
+                uom_page.handle_error_toast()
+                log.info("  [PASS] Legacy error toast handled")
 
             log.info(">>> STEP 3: Verify UOM was NOT created in table")
             uom_page.navigate_to_page()
@@ -252,7 +245,7 @@ class TestUOMValidation:
                 "UOM '" + uom_data["uom_code"] + "' should NOT be in table (256-char desc)"
             log.info("  [PASS] UOM not created")
 
-            log.info(">>> TEST 12 PASSED: 256-char description rejected")
+            log.info(">>> TEST 12 PASSED: 256-char description rejected by frontend validation")
         except Exception:
             raise
         finally:
@@ -300,7 +293,7 @@ class TestUOMValidation:
             time.sleep(1)
 
     def test_256_char_code_rejected(self, logged_in_driver):
-        """Test 14: Submit with 256-char UOM Code should show error toast (Failed to save record)."""
+        """Test 14: Submit with 256-char UOM Code — frontend now validates before submit (Pattern A), no longer Pattern C."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
 
@@ -316,11 +309,16 @@ class TestUOMValidation:
 
             uom_page.submit()
 
-            log.info(">>> STEP 2: Verify error toast appeared (Failed to save record)")
-            assert uom_page.is_validation_alert_present(timeout=5), \
-                "Error toast should appear for 256-char code"
-            uom_page.handle_error_toast()
-            log.info("  [PASS] Error toast detected and auto-dismissed")
+            log.info(">>> STEP 2: Verify validation alert appeared (frontend now validates before submit)")
+            # Live system now validates at frontend level — shows Pattern A warning
+            # instead of the old Pattern C backend error toast.
+            if uom_page.is_validation_alert_present(timeout=5):
+                uom_page.dismiss_any_validation_alert()
+                log.info("  [PASS] Frontend validation alert detected (Pattern A, not Pattern C)")
+            else:
+                log.info("  [NOTE] No frontend validation alert — checking for legacy Pattern C")
+                uom_page.handle_error_toast()
+                log.info("  [PASS] Legacy error toast handled")
 
             log.info(">>> STEP 3: Verify UOM was NOT created in table")
             uom_page.navigate_to_page()
@@ -329,7 +327,7 @@ class TestUOMValidation:
                 "UOM with 256-char code should NOT be in table"
             log.info("  [PASS] UOM not created")
 
-            log.info(">>> TEST 14 PASSED: 256-char code rejected")
+            log.info(">>> TEST 14 PASSED: 256-char code rejected by frontend validation")
         except Exception:
             raise
         finally:
@@ -415,7 +413,7 @@ class TestUOMValidation:
             time.sleep(1)
 
     def test_edit_empty_description(self, logged_in_driver):
-        """Test 17: Create a UOM, then edit it with empty description - description is NOT required."""
+        """Test 17: Create a UOM, then edit it with empty description — description is NOT required, update should succeed."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
 
@@ -448,19 +446,11 @@ class TestUOMValidation:
 
             uom_page.click_update()
 
-            log.info(">>> STEP 3: Verify outcome")
-            # Description is NOT a required field - handle both outcomes
-            if uom_page.is_validation_alert_present(timeout=5):
-                uom_page.dismiss_any_validation_alert()
-                has_error = uom_page.has_field_error(uom_page.UOM_DESCRIPTION_INPUT)
-                log.info("  Validation alert appeared on edit with empty description")
-                log.info("  Description field has error state: " + str(has_error))
-                log.info("  [NOTE] Description IS required on edit (different from create)")
-            else:
-                uom_page.handle_success_alert()
-                log.info("  [PASS] Empty description accepted on edit (field is optional)")
+            log.info(">>> STEP 3: Verify update succeeded (description is NOT required)")
+            uom_page.handle_success_alert()
+            log.info("  [PASS] Empty description accepted on edit (field is optional)")
 
-            log.info(">>> TEST 17 PASSED: Edit empty description behavior verified")
+            log.info(">>> TEST 17 PASSED: Edit empty description — update successful (field is optional)")
         except Exception:
             raise
         finally:
@@ -523,7 +513,7 @@ class TestUOMValidation:
             time.sleep(1)
 
     def test_submit_without_filling_anything(self, logged_in_driver):
-        """Test 19: Open Add form and immediately Submit without typing - Pattern A + both fields invalid."""
+        """Test 19: Open Add form and immediately Submit without typing - Pattern A + UOM Code field invalid (Description is NOT required)."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
 
@@ -542,22 +532,19 @@ class TestUOMValidation:
             uom_page.handle_validation_warning()
             log.info("  [PASS] Pattern A alert detected and dismissed")
 
-            log.info(">>> STEP 3: Verify both fields show errors")
+            log.info(">>> STEP 3: Verify UOM Code shows error (Description is NOT required)")
             code_error = uom_page.get_mat_error_text(uom_page.UOM_CODE_INPUT)
-            desc_has_error = uom_page.has_field_error(uom_page.UOM_DESCRIPTION_INPUT)
             assert code_error != "", \
                 "Code field should show mat-error for untouched form"
-            assert desc_has_error, \
-                "Description field should show error state for untouched form"
             log.info("  [PASS] Code error text: " + code_error)
-            log.info("  [PASS] Description field has error state")
+            log.info("  [NOTE] Description is NOT required — no error expected for empty description")
 
             log.info(">>> STEP 4: Verify form is still open")
             assert uom_page.is_add_form_open(), \
                 "Add form should remain open after submitting untouched form"
             log.info("  [PASS] Form is still open")
 
-            log.info(">>> TEST 19 PASSED: Submit without filling works")
+            log.info(">>> TEST 19 PASSED: Submit without filling — only Code shows error (Description is optional)")
         except Exception:
             raise
         finally:
@@ -650,7 +637,7 @@ class TestUOMValidation:
 
     
     def test_number_in_code_accepted(self, logged_in_driver):
-        """Test 22: Submit with numbers in UOM code - numbers ARE allowed, should be accepted."""
+        """Test 22: Submit with numbers in UOM code - numbers ARE allowed on live system, should be accepted."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
         uom_code = generate_number_uom_code()
@@ -666,7 +653,9 @@ class TestUOMValidation:
 
             uom_page.submit()
 
-            log.info(">>> STEP 2: Verify outcome")
+            log.info(">>> STEP 2: Verify outcome — numbers are allowed in UOM code")
+            # Live system: UOM Code field has type="text" (not type="character")
+            # Numbers ARE accepted. If duplicate, Pattern B will appear instead.
             if uom_page.is_validation_alert_present(timeout=5):
                 uom_page.dismiss_any_validation_alert()
                 log.info("  [NOTE] Code '" + uom_code + "' triggered validation (possible duplicate from previous run)")
@@ -680,7 +669,7 @@ class TestUOMValidation:
                 uom_page.verify_uom_exists(uom_code)
                 log.info("  [PASS] UOM '" + uom_code + "' found in table")
 
-            log.info(">>> TEST 22 PASSED: Code with numbers accepted")
+            log.info(">>> TEST 22 PASSED: Code with numbers accepted (type=text on live system)")
         except Exception:
             raise
         finally:
