@@ -464,3 +464,410 @@ def generate_emoji_name():
 def generate_unicode_name():
     """Return a company name with Unicode characters."""
     return "\u6d4b\u8bd5\u516c\u53f8 \u0422\u0435\u0441\u0442 \u30c6\u30b9\u30c8"
+
+
+# ──────────────────────────────────────────────
+# API Payload Builder
+# ──────────────────────────────────────────────
+# Converts the existing UI data format into the JSON payload
+# that POST /core/dynamic-screen-wrapper/ expects.
+#
+# CUSTOMER SCREEN STRUCTURE (from live API):
+#   {
+#     "id": "",
+#     "attribute_name": "Customer",
+#     <root-level fields>,
+#     "children": [
+#       {
+#         "stepper_name": "Additional Details",
+#         "is_stepper": true,
+#         "details": [],          <-- NOTE: empty! Fields on child object itself
+#         "children": [],
+#         <Additional Details fields directly here>
+#       },
+#       {
+#         "stepper_name": "Customer Details",
+#         "is_stepper": true,
+#         "details": [{ <Address row 1> }],
+#         "children": []
+#       },
+#       {
+#         "stepper_name": "Customer Bank Details",
+#         "is_stepper": true,
+#         "details": [{ <Bank row 1> }],
+#         "children": []
+#       }
+#     ]
+#   }
+#
+# KEY DIFFERENCE from Supplier:
+#   - Additional Details fields live ON the child object, NOT inside details[]
+#   - Root has supply_type_ref_id + sale_type_ref_id (instead of po_type_ref_id)
+#   - Extra fields: customer_type_ref_id, preferred_payment_method_ref_id,
+#     courier_terms_ref_id, gst_registration_type, deposit, qty/rate tolerance
+#
+# FIELD KEY MAPPING (verified 2026-06-01 from live API):
+#
+#   Root-level:
+#     party_reference        -> party_ref_id (null)
+#     ownership_status       -> ownership_status_ref_id (FK)
+#     company_name           -> name
+#     supply_type            -> supply_type_ref_id (FK)
+#     sale_type              -> sale_type_ref_id (FK)
+#     transaction_currency   -> default_currency_ref_id (FK)
+#     email                  -> email_id
+#     phone_number           -> mobile_no (int)
+#     pan_number             -> pan_no
+#     status                 -> status (boolean)
+#
+#   Additional Details (on child[0] directly, NOT in details[]):
+#     contact_person_name    -> display_name_as
+#     office_number          -> office_no
+#     preferred_payment_method -> preferred_payment_method_ref_id (FK)
+#     gst_registration_type  -> gst_registration_type (FK)
+#     payment_terms          -> payment_terms_ref_id (FK)
+#     delivery_terms         -> delivery_terms_ref_id (FK)
+#     mode_of_delivery       -> mode_of_delivery_ref_id (FK)
+#     courier_terms          -> courier_terms_ref_id (FK)
+#     deposite               -> deposit (float)
+#     quantity_tolerance     -> quantity_tolerance (float)
+#     rate_tolerance         -> rate_tolerance (float)
+#     is_tds_applicable      -> is_tds_applicable (boolean)
+#     is_gst_set_off         -> is_gst_set_off (boolean)
+#     customer_type          -> customer_type_ref_id (FK)
+#     customer_status        -> customer_status (FK)
+#     packing_material       -> packing_material_ref_id (FK)
+#
+#   Customer Details (in child[1].details[0]):
+#     Same as Supplier address fields
+#
+#   Customer Bank Details (in child[2].details[0]):
+#     Same as Supplier bank fields
+# ──────────────────────────────────────────────
+
+# Dropdown FK ID pools (verified on tenant 599)
+OWNERSHIP_STATUS_IDS = [5, 6, 7, 8, 9, 1262, 1263, 1853]
+#   5 = Cooperative Society, 6 = Limited, 7 = Private Limited Company,
+#   8 = Public Limited Company, 9 = Government, 1262 = Partnership,
+#   1263 = Proprietorship, 1853 = Individual
+
+SUPPLY_TYPE_IDS = [135, 136, 223, 225, 1494]
+#   135 = Inter-State, 136 = Intra-State, 223 = Import,
+#   225 = Domestic, 1494 = Export
+
+SALE_TYPE_IDS = [1264, 1265, 1266, 1267]
+#   1264 = Retail, 1265 = Wholesale, 1266 = Direct, 1267 = Consignment
+
+ADDRESS_TYPE_IDS = [43, 42]
+#   43 = Shipping, 42 = Billing
+
+ACCOUNT_TYPE_IDS = [1849, 1850]
+#   1849 = Current, 1850 = Saving
+
+BANK_DOC_IDS = [35, 36, 1883]
+#   35 = Passbook, 36 = Bank Statement, 1883 = Cancelled Cheque
+
+PAYMENT_TERMS_IDS = [26, 131, 549, 550, 551]
+#   26 = 30 Days, 131 = Immediate, 549/550/551 = other terms
+
+DELIVERY_TERMS_IDS = [129, 130]
+#   129 = Delivery, 130 = Spot
+
+MODE_OF_DELIVERY_IDS = [30, 31, 32, 33, 34]
+#   30 = Truck, 31 = Railway, 32 = Sea, 33 = Courier, 34 = Air
+
+PREFERRED_PAYMENT_METHOD_IDS = [53, 54, 55, 141, 143]
+#   Various payment methods
+
+COURIER_TERMS_IDS = [51, 52, 1252]
+#   Various courier terms
+
+GST_REGISTRATION_TYPE_IDS = [49, 50]
+#   49 = Unregistered, 50 = Regular
+
+# Fixed defaults
+DEFAULT_CURRENCY_REF_ID = 1   # INR
+DEFAULT_COUNTRY_REF_ID = 8    # India
+
+# Backward-compatible default FK IDs dict
+DEFAULT_CUSTOMER_FK_IDS = {
+    "ownership_status_ref_id": 7,            # Private Limited Company
+    "supply_type_ref_id": 225,              # Domestic
+    "sale_type_ref_id": 1265,               # Wholesale
+    "default_currency_ref_id": 1,            # INR
+    "address_type": 43,                      # Shipping
+    "country_ref_id_id": 8,                  # India
+    "account_type": 1849,                    # Current
+    "bank_doc_id": 36,                       # Bank Statement
+    "preferred_payment_method_ref_id": 55,
+    "gst_registration_type": 50,             # Regular
+    "payment_terms_ref_id": 131,             # Immediate
+    "delivery_terms_ref_id": 129,            # Delivery
+    "mode_of_delivery_ref_id": 30,           # Truck
+    "courier_terms_ref_id": 52,
+}
+
+
+def get_random_address_chain():
+    """Import and reuse the Supplier address chain pool."""
+    from pages.registration.modules.supplier.data.supplier_data import (
+        get_random_address_chain as _supplier_chain,
+    )
+    return _supplier_chain(verified_only=True)
+
+
+def generate_random_fk_ids() -> dict:
+    """Generate a set of random FK IDs for Customer dropdown variety."""
+    return {
+        "ownership_status_ref_id": random.choice(OWNERSHIP_STATUS_IDS),
+        "supply_type_ref_id": random.choice(SUPPLY_TYPE_IDS),
+        "sale_type_ref_id": random.choice(SALE_TYPE_IDS),
+        "default_currency_ref_id": DEFAULT_CURRENCY_REF_ID,
+        "address_type": random.choice(ADDRESS_TYPE_IDS),
+        "country_ref_id_id": DEFAULT_COUNTRY_REF_ID,
+        "account_type": random.choice(ACCOUNT_TYPE_IDS),
+        "bank_doc_id": random.choice(BANK_DOC_IDS),
+        "preferred_payment_method_ref_id": random.choice(PREFERRED_PAYMENT_METHOD_IDS),
+        "gst_registration_type": random.choice(GST_REGISTRATION_TYPE_IDS),
+        "payment_terms_ref_id": random.choice(PAYMENT_TERMS_IDS),
+        "delivery_terms_ref_id": random.choice(DELIVERY_TERMS_IDS),
+        "mode_of_delivery_ref_id": random.choice(MODE_OF_DELIVERY_IDS),
+        "courier_terms_ref_id": random.choice(COURIER_TERMS_IDS),
+    }
+
+
+def generate_luhn_gstin(state_code=None):
+    """Generate a valid GSTIN with Luhn mod-36 checksum.
+    Reuses the Supplier function for correctness.
+    """
+    from pages.registration.modules.supplier.data.supplier_data import generate_gstin
+    return generate_gstin(state_code)
+
+
+def generate_realistic_email():
+    """Generate a realistic Indian email (same style as Supplier)."""
+    from pages.registration.modules.supplier.data.supplier_data import generate_email
+    return generate_email()
+
+
+def generate_realistic_phone():
+    """Generate a valid 10-digit Indian mobile number."""
+    prefix = random.choice(["6", "7", "8", "9"])
+    return f"{prefix}{random.randint(100000000, 999999999)}"
+
+
+def generate_realistic_ifsc():
+    """Generate a valid IFSC code with realistic bank codes."""
+    from pages.registration.modules.supplier.data.supplier_data import generate_ifsc
+    return generate_ifsc()
+
+
+def build_customer_api_payload(
+    customer_data: dict = None,
+    dropdown_ids: dict = None,
+) -> dict:
+    """Build the complete Customer API payload from data + FK IDs.
+
+    Args:
+        customer_data: Dict from generate_valid_customer_data() or None for random.
+        dropdown_ids: Dict of FK IDs. Missing keys fall back to DEFAULT_CUSTOMER_FK_IDS.
+
+    Returns:
+        JSON payload ready for POST /core/dynamic-screen-wrapper/
+    """
+    ids = {**DEFAULT_CUSTOMER_FK_IDS, **(dropdown_ids or {})}
+
+    def _fk(key):
+        val = ids.get(key)
+        return val if val is not None else None
+
+    if customer_data is None:
+        customer_data = generate_valid_customer_data()
+
+    # Get address chain
+    address_chain = get_random_address_chain()
+
+    # ── Build Additional Details stepper ──
+    # NOTE: For Customer, Additional Details fields live on the child object
+    # itself (NOT inside details[]). The details[] array is empty.
+    additional_details = {}
+    additional_details["display_name_as"] = customer_data.get("contact_person_name", "") or None
+    additional_details["office_no"] = customer_data.get("office_number", "") or None
+    additional_details["is_tds_applicable"] = customer_data.get("is_tds_applicable", False)
+    additional_details["is_gst_set_off"] = True  # default
+    additional_details["customer_status"] = None
+    additional_details["customer_type_ref_id"] = None
+    additional_details["packing_material_ref_id"] = None
+    if _fk("preferred_payment_method_ref_id") is not None:
+        additional_details["preferred_payment_method_ref_id"] = _fk("preferred_payment_method_ref_id")
+    if _fk("gst_registration_type") is not None:
+        additional_details["gst_registration_type"] = _fk("gst_registration_type")
+    if _fk("payment_terms_ref_id") is not None:
+        additional_details["payment_terms_ref_id"] = _fk("payment_terms_ref_id")
+    if _fk("delivery_terms_ref_id") is not None:
+        additional_details["delivery_terms_ref_id"] = _fk("delivery_terms_ref_id")
+    if _fk("mode_of_delivery_ref_id") is not None:
+        additional_details["mode_of_delivery_ref_id"] = _fk("mode_of_delivery_ref_id")
+    if _fk("courier_terms_ref_id") is not None:
+        additional_details["courier_terms_ref_id"] = _fk("courier_terms_ref_id")
+
+    # Numeric fields
+    deposit = customer_data.get("deposite", "0")
+    try:
+        additional_details["deposit"] = float(deposit)
+    except (ValueError, TypeError):
+        additional_details["deposit"] = 0.0
+
+    qty_tol = customer_data.get("quantity_tolerance")
+    try:
+        additional_details["quantity_tolerance"] = float(qty_tol) if qty_tol else None
+    except (ValueError, TypeError):
+        additional_details["quantity_tolerance"] = None
+
+    rate_tol = customer_data.get("rate_tolerance")
+    try:
+        additional_details["rate_tolerance"] = float(rate_tol) if rate_tol else None
+    except (ValueError, TypeError):
+        additional_details["rate_tolerance"] = None
+
+    # ── Build Customer Details (Address) stepper ──
+    address_detail = {}
+    if _fk("address_type") is not None:
+        address_detail["address_type"] = _fk("address_type")
+    if _fk("country_ref_id_id") is not None:
+        address_detail["country_ref_id_id"] = _fk("country_ref_id_id")
+    # Use address chain FK IDs
+    address_detail["state_ref_id_id"] = address_chain.get("state_ref_id_id")
+    address_detail["district_ref_id_id"] = address_chain.get("district_ref_id_id")
+    address_detail["sub_district_ref_id_id"] = address_chain.get("sub_district_ref_id_id")
+    address_detail["village_ref_id_id"] = address_chain.get("village_ref_id_id")
+    address_detail["address"] = customer_data.get("address", generate_address())
+    pin = customer_data.get("pin_code", generate_pin_code())
+    address_detail["pin_code"] = int(pin) if pin and str(pin).isdigit() else None
+    address_detail["gstin"] = generate_luhn_gstin()
+    address_detail["same_as_above"] = None
+    address_detail["address2"] = None
+    address_detail["demo_details"] = None
+    address_detail["details"] = []
+
+    # ── Build Customer Bank Details stepper ──
+    bank_detail = {}
+    bank_detail["bank_name"] = customer_data.get("bank_name", "Bank") or None
+    # Branch name: must be alpha-only, no numbers/special chars (same rule as Supplier)
+    _BANK_CITIES = [
+        "Mumbai", "Delhi", "Pune", "Ahmedabad", "Bangalore",
+        "Chennai", "Hyderabad", "Kolkata", "Jaipur", "Lucknow",
+    ]
+    bank_detail["bank_branch_code"] = f"{random.choice(_BANK_CITIES)} Branch"
+    bank_detail["bank_ifsc_code"] = customer_data.get("ifsc_code", generate_realistic_ifsc()) or None
+    if _fk("account_type") is not None:
+        bank_detail["account_type"] = _fk("account_type")
+    # Account holder name: must be alpha-only, no special chars like &
+    raw_name = customer_data.get("company_name", "")
+    # Strip non-alpha characters (keep spaces)
+    safe_name = "".join(c for c in raw_name if c.isalpha() or c == " ").strip() or "Customer Account"
+    bank_detail["bank_account_holder_name"] = safe_name
+    # Account number: must be numeric, 9-16 digits
+    acct = customer_data.get("account_number", "")
+    if not acct or not str(acct).isdigit():
+        acct = str(random.randint(100000000000, 999999999999))
+    bank_detail["bank_account_no"] = int(acct)
+    if _fk("bank_doc_id") is not None:
+        bank_detail["bank_doc_id"] = _fk("bank_doc_id")
+    bank_detail["bank_attachment_path"] = None
+    bank_detail["details"] = []
+
+    # ── Assemble payload ──
+    payload = {
+        "id": "",
+        "attribute_name": "Customer",
+
+        # Root-level fields
+        "party_ref_id": None,
+        "ownership_status_ref_id": ids["ownership_status_ref_id"],
+        "name": customer_data.get("company_name", generate_company_name()),
+        "supply_type_ref_id": ids["supply_type_ref_id"],
+        "sale_type_ref_id": ids["sale_type_ref_id"],
+        "default_currency_ref_id": ids["default_currency_ref_id"],
+        "email_id": customer_data.get("email", generate_realistic_email()) or None,
+        "mobile_no": int(customer_data.get("phone_number", generate_realistic_phone()) or "0"),
+        "pan_no": customer_data.get("pan_number", generate_pan_number()),
+        "status": customer_data.get("status", True),
+        "vendor_code": None,
+        "ref_id": None,
+        "ref_type": None,
+
+        # Children array with stepper objects
+        "children": [
+            {
+                "stepper_name": "Additional Details",
+                "is_stepper": True,
+                "details": [],       # NOTE: empty for Customer — fields on child itself
+                "children": [],
+                **additional_details,  # Spread fields onto the child object
+            },
+            {
+                "stepper_name": "Customer Details",
+                "is_stepper": True,
+                "details": [address_detail],
+                "children": [],
+            },
+            {
+                "stepper_name": "Customer Bank Details",
+                "is_stepper": True,
+                "details": [bank_detail],
+                "children": [],
+            },
+        ],
+    }
+
+    return payload
+
+
+def generate_customer_api_payload(
+    name_prefix=None,
+    dropdown_ids: dict = None,
+) -> dict:
+    """One-shot: generate a complete Customer API payload with random data.
+
+    Automatically randomizes:
+      - Address chain (state/district/taluka/village)
+      - Ownership type, Supply type, Sale type
+      - Address type, Account type, Payment method
+      - Payment terms, Delivery terms, Mode of delivery
+      - Courier terms, GST registration type
+
+    Args:
+        name_prefix: If provided, forces old prefix_timestamp naming.
+        dropdown_ids: Override specific FK IDs.
+
+    Returns:
+        JSON payload ready for POST /core/dynamic-screen-wrapper/
+    """
+    customer_data = generate_valid_customer_data(name_prefix or "AutoCust")
+    # Use realistic email/phone (not the timestamp-based ones)
+    customer_data["email"] = generate_realistic_email()
+    customer_data["phone_number"] = generate_realistic_phone()
+    customer_data["gstin"] = generate_luhn_gstin()
+
+    ids = {
+        **generate_random_fk_ids(),
+        **get_random_address_chain(),
+        **(dropdown_ids or {}),
+    }
+
+    return build_customer_api_payload(customer_data, ids)
+
+
+def generate_customer_api_payloads(
+    count: int = 20,
+    prefix: str = None,
+    dropdown_ids: dict = None,
+) -> list:
+    """Generate multiple unique Customer API payloads for batch creation."""
+    payloads = []
+    for i in range(count):
+        payloads.append(
+            generate_customer_api_payload(prefix, dropdown_ids)
+        )
+    return payloads
