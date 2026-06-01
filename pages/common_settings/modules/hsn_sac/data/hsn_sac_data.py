@@ -172,14 +172,14 @@ def spaces_only_number_data() -> dict:
 #     "id": "",
 #     "attribute_name": "HSN SAC",
 #     "hsn_sac_no": "998312",
-#     "hsn_sac_type_ref_id": <FK ID>,
+#     "hsn_sac_type": <FK ID>,
 #     "description": "IT support services",
 #     "status": true
 #   }
 #
 # FIELD KEY MAPPING:
 #   hsn_sac_number     -> hsn_sac_no (text)
-#   hsn_sac_type       -> hsn_sac_type_ref_id (FK dropdown)
+#   hsn_sac_type       -> hsn_sac_type (FK dropdown)
 #   hsn_sac_description -> description (text)
 #   status              -> status (boolean)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -458,7 +458,7 @@ def build_hsn_sac_api_payload(data: dict = None, dropdown_ids: dict = None) -> d
 
     Args:
         data: Dict from generate_valid_hsn_sac_data() or None for random.
-        dropdown_ids: Dict of FK IDs. Must contain 'hsn_sac_type_ref_id'.
+        dropdown_ids: Dict of FK IDs. Must contain 'hsn_sac_type'.
                       Falls back to HSN_SAC_TYPE_IDS placeholder if not provided.
 
     Returns:
@@ -472,13 +472,13 @@ def build_hsn_sac_api_payload(data: dict = None, dropdown_ids: dict = None) -> d
     default_type_id = HSN_SAC_TYPE_IDS.get(hsn_type_name)
 
     ids = dropdown_ids or {}
-    type_ref_id = ids.get("hsn_sac_type_ref_id", default_type_id)
+    type_ref_id = ids.get("hsn_sac_type", default_type_id)
 
     payload = {
         "id": "",
         "attribute_name": "HSN SAC",
         "hsn_sac_no": data.get("hsn_sac_number", generate_hsn_sac_number()),
-        "hsn_sac_type_ref_id": type_ref_id,
+        "hsn_sac_type": type_ref_id,
         "description": data.get("hsn_sac_description", generate_hsn_sac_description()),
         "status": True,
     }
@@ -494,7 +494,7 @@ def generate_hsn_sac_api_payload(name_prefix: str = None, dropdown_ids: dict = N
 
     Args:
         name_prefix: Ignored (HSN SAC has no name field). Kept for API consistency.
-        dropdown_ids: Override specific FK IDs (e.g., hsn_sac_type_ref_id).
+        dropdown_ids: Override specific FK IDs (e.g., hsn_sac_type).
 
     Returns:
         JSON payload ready for POST /core/dynamic-screen-wrapper/

@@ -205,15 +205,15 @@ def very_long_description_data() -> dict:
 #   {
 #     "id": "",
 #     "attribute_name": "Error Code Mst",
-#     "error_code_type_ref_id": <FK_ID>,
+#     "error_code_type": <FK_ID>,
 #     "code": "FARM_INV_001",
 #     "description": "Farmer inventory error",
 #     "is_qty_amount": false,
 #     "status": true
 #   }
 #
-# FIELD KEY MAPPING (reasonable guess — to be verified by discover_all.py):
-#   error_code_type  -> error_code_type_ref_id (FK dropdown — 4 fixed options)
+# FIELD KEY MAPPING (verified from live API):
+#   error_code_type  -> error_code_type (FK dropdown — 4 fixed options)
 #   code             -> code (text, required)
 #   description      -> description (text, optional)
 #   is_qty_amt       -> is_qty_amount (boolean toggle)
@@ -355,7 +355,7 @@ def build_error_code_mst_api_payload(data=None, dropdown_ids=None):
     payload = {
         "id": "",
         "attribute_name": "Error Code Mst",
-        "error_code_type_ref_id": type_ref_id,
+        "error_code_type": type_ref_id,
         "code": data.get("code", ""),
         "description": data.get("description", "") or None,
         "is_qty_amount": is_qty_amount,

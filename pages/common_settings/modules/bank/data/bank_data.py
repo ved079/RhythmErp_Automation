@@ -434,13 +434,13 @@ SWAL_TITLE_UPDATED = "Your record has been updated successfully!"
 #     "branch_name": "5729175282",
 #     "branch_code": "528215",
 #     "account_no": "6922150211",
-#     "account_type_ref_id": 1849,
+#     "account_type": 1849,
 #     "swift_code": "SBININBB123",
 #     "iban_number": "IN91SBIN0001234",
 #     "ifsc_code": "SBIN0001234",
 #     "cash_credit_limit": 500000,
 #     "bank_address": "123 MG Road Mumbai",
-#     "gl_account_ref_id": <FK ID>,
+#     "account_ref_id": <FK ID>,
 #     "is_default_bank": false,
 #     "status": true
 #   }
@@ -451,13 +451,13 @@ SWAL_TITLE_UPDATED = "Your record has been updated successfully!"
 #   branch_name        -> branch_name (text, numeric per validation)
 #   branch_code        -> branch_code (text, alphanumeric)
 #   account_number     -> account_no (text, numeric)
-#   account_type       -> account_type_ref_id (FK: 1849=Current, 1850=Saving)
+#   account_type       -> account_type (FK: 1849=Current, 1850=Saving)
 #   swift_number       -> swift_code (text, optional)
 #   iban_number        -> iban_number (text, optional)
 #   ifsc_code          -> ifsc_code (text, 11 chars)
 #   cash_credit_limit  -> cash_credit_limit (numeric)
 #   bank_address       -> bank_address (text, alphanumeric+spaces)
-#   gl_account         -> gl_account_ref_id (FK, placeholder)
+#   gl_account         -> account_ref_id (FK, placeholder)
 #   is_default_bank    -> is_default_bank (boolean)
 #   status             -> status (boolean)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -469,7 +469,7 @@ ACCOUNT_TYPE_IDS = {
 }
 
 # ─── FK ID Placeholder (too many options, will fill from discovery) ──────────
-GL_ACCOUNT_REF_ID = None  # Placeholder — to be filled from discovery or live API
+ACCOUNT_REF_ID = None  # Placeholder — to be filled from discovery or live API
 
 # ─── Realistic Indian bank data pool ─────────────────────────────────────────
 REALISTIC_BANK_POOL = [
@@ -681,9 +681,9 @@ def build_bank_api_payload(data: dict = None, dropdown_ids: dict = None) -> dict
 
     Args:
         data: Dict from generate_valid_bank_data() or None for random.
-        dropdown_ids: Dict of FK IDs. Must contain 'account_type_ref_id'
-                      and 'gl_account_ref_id'. Falls back to ACCOUNT_TYPE_IDS /
-                      GL_ACCOUNT_REF_ID placeholders.
+        dropdown_ids: Dict of FK IDs. Must contain 'account_type'
+                      and 'account_ref_id'. Falls back to ACCOUNT_TYPE_IDS /
+                      ACCOUNT_REF_ID placeholders.
 
     Returns:
         JSON payload ready for POST /core/dynamic-screen-wrapper/
@@ -696,8 +696,8 @@ def build_bank_api_payload(data: dict = None, dropdown_ids: dict = None) -> dict
     default_account_type_id = ACCOUNT_TYPE_IDS.get(account_type_name)
 
     ids = dropdown_ids or {}
-    account_type_ref_id = ids.get("account_type_ref_id", default_account_type_id)
-    gl_account_ref_id = ids.get("gl_account_ref_id", GL_ACCOUNT_REF_ID)
+    account_type_id = ids.get("account_type", default_account_type_id)
+    account_ref_id = ids.get("account_ref_id", ACCOUNT_REF_ID)
 
     # Cash credit limit must be numeric
     try:
@@ -713,13 +713,13 @@ def build_bank_api_payload(data: dict = None, dropdown_ids: dict = None) -> dict
         "branch_name": data.get("branch_name", generate_branch_name()),
         "branch_code": data.get("branch_code", generate_branch_code()),
         "account_no": data.get("account_number", generate_account_number()),
-        "account_type_ref_id": account_type_ref_id,
+        "account_type": account_type_id,
         "swift_code": data.get("swift_number", generate_swift_number()) or None,
         "iban_number": data.get("iban_number", generate_iban_number()) or None,
         "ifsc_code": data.get("ifsc_code", generate_ifsc_code()),
         "cash_credit_limit": cash_credit_limit,
         "bank_address": data.get("bank_address", generate_bank_address()),
-        "gl_account_ref_id": gl_account_ref_id,
+        "account_ref_id": account_ref_id,
         "is_default_bank": data.get("is_default_bank", False),
         "status": data.get("status", True),
     }
@@ -736,7 +736,7 @@ def generate_bank_api_payload(name_prefix: str = None, dropdown_ids: dict = None
     Args:
         name_prefix: Ignored (Bank Name must be uppercase per validation).
                      Kept for API consistency.
-        dropdown_ids: Override specific FK IDs (e.g., account_type_ref_id, gl_account_ref_id).
+        dropdown_ids: Override specific FK IDs (e.g., account_type, account_ref_id).
 
     Returns:
         JSON payload ready for POST /core/dynamic-screen-wrapper/

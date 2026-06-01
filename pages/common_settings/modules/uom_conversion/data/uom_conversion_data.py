@@ -117,8 +117,8 @@ def generate_uom_conversion_data():
 #   {
 #     "id": "",
 #     "attribute_name": "UOM Conversion",
-#     "source_uom_ref_id": 1,       // FK: Source UOM
-#     "target_uom_ref_id": 2,       // FK: Target UOM
+#     "source_uom_code": "KG",        // String code (NOT FK ID)
+#     "target_uom_code": "Gram",      // String code (NOT FK ID)
 #     "conversion_factor": 1000.0,  // numeric, positive
 #     "status": true
 #   }
@@ -128,14 +128,17 @@ def generate_uom_conversion_data():
 # FIELD KEY MAPPING (verified from live API):
 #
 #   Root-level:
-#     source_uom           -> source_uom_ref_id (FK)
-#     target_uom           -> target_uom_ref_id (FK)
+#     source_uom           -> source_uom_code (STRING code, e.g. "KG", "LTR")
+#     target_uom           -> target_uom_code (STRING code, e.g. "Gram", "ML")
 #     conversion_factor    -> conversion_factor (float, positive)
 #     status               -> status (boolean)
 #
+# IMPORTANT: source_uom_code and target_uom_code are STRING codes,
+# NOT FK integer IDs. Pass the actual UOM code string directly.
+#
 # DEPENDENCY: UOM Conversion requires UOM entries to exist first.
-# The source_uom_ref_id and target_uom_ref_id must reference valid
-# UOM master entries. Use batch_create.py AFTER UOM entries are created.
+# The source_uom_code and target_uom_code must reference valid
+# UOM master code strings. Use batch_create.py AFTER UOM entries are created.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # ─── Dropdown FK ID pools (placeholder — to be filled from discovery) ────────
@@ -191,8 +194,8 @@ REALISTIC_UOM_CONVERSION_PAIRS = [
 
 # ─── Default FK IDs (placeholder — override after discovery) ─────────────────
 DEFAULT_UOM_CONVERSION_FK_IDS = {
-    "source_uom_ref_id": None,   # Must be filled from discovery
-    "target_uom_ref_id": None,   # Must be filled from discovery
+    "source_uom_code": None,   # String UOM code, e.g. "KG"
+    "target_uom_code": None,   # String UOM code, e.g. "Gram"
 }
 
 
@@ -200,12 +203,11 @@ def generate_realistic_conversion_pair(uom_ids: dict = None) -> dict:
     """Generate a realistic Indian UOM conversion pair with proper factor.
 
     Args:
-        uom_ids: Dict mapping UOM name string -> ref_id int.
-                 If None or empty, names are set but IDs remain None.
+        uom_ids: Ignored (kept for backward compatibility). UOM codes
+                 are now passed as string codes directly.
 
     Returns:
-        Dict with source_uom, target_uom, conversion_factor,
-        and optional source_uom_ref_id / target_uom_ref_id.
+        Dict with source_uom, target_uom, conversion_factor.
     """
     pair = random.choice(REALISTIC_UOM_CONVERSION_PAIRS)
     source_name, target_name, factor, _description = pair
@@ -216,10 +218,6 @@ def generate_realistic_conversion_pair(uom_ids: dict = None) -> dict:
         "conversion_factor": factor,
     }
 
-    if uom_ids:
-        result["source_uom_ref_id"] = uom_ids.get(source_name)
-        result["target_uom_ref_id"] = uom_ids.get(target_name)
-
     return result
 
 
@@ -227,16 +225,16 @@ def build_uom_conversion_api_payload(
     data: dict = None,
     dropdown_ids: dict = None,
 ) -> dict:
-    """Build the complete UOM Conversion API payload from data + FK IDs.
+    """Build the complete UOM Conversion API payload from data.
 
     Args:
         data: Dict with source_uom, target_uom, conversion_factor keys,
               or None for random realistic data.
-        dropdown_ids: Dict of FK IDs. Expected keys:
-                       - source_uom_ref_id (int)
-                       - target_uom_ref_id (int)
-                      If data contains UOM names, these can also be a dict
-                      mapping UOM name -> ref_id under the key "uom_ids".
+        dropdown_ids: Dict of override values. Expected keys:
+                       - source_uom_code (string UOM code)
+                       - target_uom_code (string UOM code)
+                      If not provided, source_uom and target_uom from data
+                      are used directly as string codes.
 
     Returns:
         JSON payload ready for POST /core/dynamic-screen-wrapper/
@@ -246,20 +244,15 @@ def build_uom_conversion_api_payload(
     if data is None:
         data = generate_uom_conversion_data()
 
-    # Try to resolve FK IDs from uom_ids if provided
-    uom_ids = ids.get("uom_ids", UOM_IDS)
+    # Determine source_uom_code — pass the UOM code string directly
+    source_code = ids.get("source_uom_code")
+    if source_code is None:
+        source_code = data.get("source_uom", "")
 
-    # Determine source_uom_ref_id
-    source_ref_id = ids.get("source_uom_ref_id")
-    if source_ref_id is None and uom_ids:
-        source_name = data.get("source_uom", "")
-        source_ref_id = uom_ids.get(source_name)
-
-    # Determine target_uom_ref_id
-    target_ref_id = ids.get("target_uom_ref_id")
-    if target_ref_id is None and uom_ids:
-        target_name = data.get("target_uom", "")
-        target_ref_id = uom_ids.get(target_name)
+    # Determine target_uom_code — pass the UOM code string directly
+    target_code = ids.get("target_uom_code")
+    if target_code is None:
+        target_code = data.get("target_uom", "")
 
     # Parse conversion_factor
     factor = data.get("conversion_factor", 1.0)
@@ -268,23 +261,14 @@ def build_uom_conversion_api_payload(
     except (ValueError, TypeError):
         factor = 1.0
 
-    # Ensure source and target are different
-    if source_ref_id is not None and target_ref_id is not None:
-        if source_ref_id == target_ref_id:
-            # Shift target_ref_id to a different one
-            if uom_ids:
-                other_ids = [v for v in uom_ids.values() if v != source_ref_id]
-                if other_ids:
-                    target_ref_id = random.choice(other_ids)
-
     # Assemble payload
     payload = {
         "id": "",
         "attribute_name": "UOM Conversion",
 
-        # Root-level fields
-        "source_uom_ref_id": source_ref_id,
-        "target_uom_ref_id": target_ref_id,
+        # Root-level fields (string codes, NOT FK IDs)
+        "source_uom_code": source_code,
+        "target_uom_code": target_code,
         "conversion_factor": factor,
         "status": data.get("status", True),
     }
@@ -304,17 +288,14 @@ def generate_uom_conversion_api_payload(
     Args:
         name_prefix: Ignored for UOM Conversion (no name field), kept for
                      API consistency with other modules.
-        dropdown_ids: Override specific FK IDs or provide "uom_ids" dict
-                      mapping UOM name -> ref_id.
+        dropdown_ids: Override specific UOM codes (e.g., source_uom_code,
+                      target_uom_code as string codes).
 
     Returns:
         JSON payload ready for POST /core/dynamic-screen-wrapper/
     """
-    ids = {**DEFAULT_UOM_CONVERSION_FK_IDS, **(dropdown_ids or {})}
-    uom_ids = ids.get("uom_ids", UOM_IDS)
-
     # Pick a realistic conversion pair
-    pair_data = generate_realistic_conversion_pair(uom_ids)
+    pair_data = generate_realistic_conversion_pair()
 
     # Build payload
     return build_uom_conversion_api_payload(pair_data, dropdown_ids)
@@ -335,14 +316,12 @@ def generate_uom_conversion_api_payloads(
         count: Number of payloads to generate (default 20).
         prefix: Ignored for UOM Conversion (no name field), kept for
                 API consistency with other modules.
-        dropdown_ids: Override specific FK IDs or provide "uom_ids" dict.
+        dropdown_ids: Override specific UOM codes (e.g., source_uom_code,
+                      target_uom_code as string codes).
 
     Returns:
         List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
     """
-    ids = {**DEFAULT_UOM_CONVERSION_FK_IDS, **(dropdown_ids or {})}
-    uom_ids = ids.get("uom_ids", UOM_IDS)
-
     # Build from realistic pairs first, then fall back to random
     available_pairs = list(REALISTIC_UOM_CONVERSION_PAIRS)
     random.shuffle(available_pairs)
@@ -362,15 +341,12 @@ def generate_uom_conversion_api_payloads(
                     "target_uom": target_name,
                     "conversion_factor": factor,
                 }
-                if uom_ids:
-                    pair_data["source_uom_ref_id"] = uom_ids.get(source_name)
-                    pair_data["target_uom_ref_id"] = uom_ids.get(target_name)
                 used_pairs.add(pair_key)
                 break
 
         if pair_data is None:
             # All realistic pairs used, generate random
-            pair_data = generate_realistic_conversion_pair(uom_ids)
+            pair_data = generate_realistic_conversion_pair()
 
         payload = build_uom_conversion_api_payload(pair_data, dropdown_ids)
         payloads.append(payload)

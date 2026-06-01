@@ -172,7 +172,7 @@ def extract_dropdown_fields(client: RhythmERPAPIClient, screen_name: str) -> lis
             "field_label": field.get("field_label", field.get("label", "")),
             "field_type": field.get("field_type", field.get("type", "")),
             "filter_dropdown_raw_query": fdrq if fdrq else None,
-            "options_count": len(options_ids) if isinstance(options_source, list) else 0,
+            "options_count": len(option_ids) if isinstance(options_source, list) else 0,
             "option_ids": option_ids,
         })
 
@@ -282,7 +282,7 @@ def _print_summary(screen_name: str, result: dict):
         for df in dd_fields:
             fkey = df["field_key"]
             opt_count = df["options_count"]
-            opt_ids = df["option_ids"]
+            opt_ids = df.get("option_ids", [])
             print(f"    - {fkey}  ({opt_count} option(s), IDs: {opt_ids})")
             # Show full filter_dropdown_raw_query options if available
             fdrq = df.get("filter_dropdown_raw_query")

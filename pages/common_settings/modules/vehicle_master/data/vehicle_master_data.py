@@ -147,8 +147,8 @@ def generate_duplicate_name_data(existing_name):
 #     "id": "",
 #     "attribute_name": "Vehicle Master",
 #     "name": "Tata Ace Gold",
-#     "price": 500000,
-#     "vehicle_type_ref_id": <FK ID>,
+#     "vehicle_price": 500000,
+#     "vehicle_type_id": <FK ID>,
 #     "fuel_type_ref_id": <FK ID>,
 #     "description": "Mini truck for last mile delivery",
 #     "status": true
@@ -156,8 +156,8 @@ def generate_duplicate_name_data(existing_name):
 #
 # FIELD KEY MAPPING:
 #   name          -> name (text)
-#   price         -> price (numeric)
-#   vehicle_type  -> vehicle_type_ref_id (FK dropdown)
+#   price         -> vehicle_price (numeric)
+#   vehicle_type  -> vehicle_type_id (FK dropdown)
 #   fuel_type     -> fuel_type_ref_id (FK dropdown)
 #   description   -> description (text)
 #   status        -> status (boolean)
@@ -333,7 +333,7 @@ def build_vehicle_master_api_payload(data: dict = None, dropdown_ids: dict = Non
 
     Args:
         data: Dict from generate_valid_vehicle_data() or None for random.
-        dropdown_ids: Dict of FK IDs. Must contain 'vehicle_type_ref_id'
+        dropdown_ids: Dict of FK IDs. Must contain 'vehicle_type_id'
                       and 'fuel_type_ref_id'. Falls back to placeholder dicts.
 
     Returns:
@@ -350,7 +350,7 @@ def build_vehicle_master_api_payload(data: dict = None, dropdown_ids: dict = Non
     default_fuel_type_id = FUEL_TYPE_IDS.get(fuel_type_name)
 
     ids = dropdown_ids or {}
-    vehicle_type_ref_id = ids.get("vehicle_type_ref_id", default_vehicle_type_id)
+    vehicle_type_id = ids.get("vehicle_type_id", default_vehicle_type_id)
     fuel_type_ref_id = ids.get("fuel_type_ref_id", default_fuel_type_id)
 
     # Price must be numeric
@@ -363,8 +363,8 @@ def build_vehicle_master_api_payload(data: dict = None, dropdown_ids: dict = Non
         "id": "",
         "attribute_name": "Vehicle Master",
         "name": data.get("name", generate_vehicle_name()),
-        "price": price,
-        "vehicle_type_ref_id": vehicle_type_ref_id,
+        "vehicle_price": price,
+        "vehicle_type_id": vehicle_type_id,
         "fuel_type_ref_id": fuel_type_ref_id,
         "description": data.get("description", generate_description()),
         "status": True,
@@ -380,7 +380,7 @@ def generate_vehicle_master_api_payload(name_prefix: str = None, dropdown_ids: d
 
     Args:
         name_prefix: If provided, prepended to the vehicle name.
-        dropdown_ids: Override specific FK IDs (e.g., vehicle_type_ref_id, fuel_type_ref_id).
+        dropdown_ids: Override specific FK IDs (e.g., vehicle_type_id, fuel_type_ref_id).
 
     Returns:
         JSON payload ready for POST /core/dynamic-screen-wrapper/

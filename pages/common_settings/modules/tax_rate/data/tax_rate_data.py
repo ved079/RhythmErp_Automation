@@ -373,13 +373,7 @@ def unselected_hsn_data() -> dict:
 #   {
 #     "id": "",
 #     "attribute_name": "Tax Rate",
-#     "tax_rate_name": "GST Rate Schedule 2026-A",
-#     "tax_type_ref_id": 1,          // FK: GST
-#     "tax_authority_ref_id": 1,     // FK: Tax Authority
-#     "from_date": "2026-06-01T00:00:00Z",
-#     "to_date": "2099-12-30T18:30:00Z",
-#     "revision_status": "effective",
-#     "status": true,
+#     "details": [],
 #     "children": [
 #       {
 #         "stepper_name": "Define Tax Rate Details",
@@ -392,7 +386,13 @@ def unselected_hsn_data() -> dict:
 #         ],
 #         "children": []
 #       }
-#     ]
+#     ],
+#     "tax_rate_name": "GST Rate Schedule 2026-A",
+#     "tax_type_ref_id": 1,          // FK: GST
+#     "tax_authority_ref_id": 1,     // FK: Tax Authority
+#     "from_date": "2026-06-01T00:00:00Z",
+#     "to_date": "2099-12-30T18:30:00Z",
+#     "revision_status": "effective"
 #   }
 #
 # FIELD KEY MAPPING (verified from live API):
@@ -404,7 +404,10 @@ def unselected_hsn_data() -> dict:
 #     from_date           -> from_date (ISO datetime string)
 #     to_date             -> to_date (ISO datetime string)
 #     revision_status     -> revision_status (string: "effective"/"draft")
-#     status              -> status (boolean)
+#     details             -> details (empty array [] at root level)
+#     children            -> children (array with stepper)
+#
+#   NOTE: NO "status" field at top level.
 #
 #   Sub-table (in child[0].details[]):
 #     hsn_number          -> hsn_sac_ref_id (FK)
@@ -671,15 +674,7 @@ def build_tax_rate_api_payload(
     payload = {
         "id": "",
         "attribute_name": "Tax Rate",
-
-        # Root-level fields
-        "tax_rate_name": header.get("tax_rate_name", generate_realistic_tax_rate_name()),
-        "tax_type_ref_id": ids.get("tax_type_ref_id", 1),
-        "tax_authority_ref_id": ids.get("tax_authority_ref_id"),
-        "from_date": from_date_iso,
-        "to_date": to_date_iso,
-        "revision_status": revision_status,
-        "status": header.get("status", True),
+        "details": [],
 
         # Children array with sub-table stepper
         "children": [
@@ -690,6 +685,14 @@ def build_tax_rate_api_payload(
                 "children": [],
             }
         ],
+
+        # Root-level fields
+        "tax_rate_name": header.get("tax_rate_name", generate_realistic_tax_rate_name()),
+        "tax_type_ref_id": ids.get("tax_type_ref_id", 1),
+        "tax_authority_ref_id": ids.get("tax_authority_ref_id"),
+        "from_date": from_date_iso,
+        "to_date": to_date_iso,
+        "revision_status": revision_status,
     }
 
     return payload
