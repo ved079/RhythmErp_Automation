@@ -76,3 +76,4 @@ web-ui/web-ui/
 tsconfig.tsbuildinfo
 bun.lock
 mini-services/
+uom_cross_verify.py
