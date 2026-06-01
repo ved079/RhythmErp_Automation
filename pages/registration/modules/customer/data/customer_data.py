@@ -74,11 +74,68 @@ from datetime import datetime
 # Core Data Generators
 # ──────────────────────────────────────────────
 
-def generate_company_name(prefix="AutoCust"):
-    """Generate a random company name with prefix and timestamp for uniqueness."""
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    rand = random.randint(100, 999)
-    return f"{prefix}_{timestamp}_{rand}"
+def generate_company_name(prefix=None):
+    """
+    Generate a realistic, unique-looking customer company name without numeric suffixes.
+    Uses large component pools and 7 different name patterns to maximize variety.
+    Collision probability is extremely low (millions of combinations).
+    Different from supplier data – uses retail/consumer-oriented words.
+    """
+    # ---- Component lists (customer-specific) ----
+    prefixes = [
+        "Shree", "Sai", "Om", "Guru", "Sri", "Mahalaxmi", "Nav", "Bharat",
+        "New", "Prime", "Royal", "Elite", "Global", "United", "Asian",
+        "Indian", "Modern", "Classic", "Evergreen", "Golden", "Silver", "Bright",
+        "Sunrise", "Lotus", "Neelgagan", "City", "Metro", "Star", "Supreme"
+    ]
+    core_names = [
+        "Traders", "General Store", "Supermarket", "Mart", "Bazaar", "Emporium",
+        "Plaza", "Galleria", "Outlet", "Showroom", "Centre", "Point", "Corner",
+        "Depot", "Junction", "Square", "Tower", "House", "Home", "Style", "Trends"
+    ]
+    places = [
+        "City", "Town", "Market", "High Street", "Main Road", "Station Road",
+        "Gandhi Nagar", "Laxmi Nagar", "Shivaji Path", "Nehru Place", "Connaught",
+        "Bandra", "Andheri", "Koramangala", "Indiranagar", "Salt Lake", "Rajajinagar"
+    ]
+    business_types = [
+        "Electronics", "Furniture", "Clothing", "Footwear", "Jewelry", "Gifts",
+        "Books", "Stationery", "Hardware", "Medical", "Pharmacy", "Optical",
+        "Mobile", "Computer", "Kitchen", "Home Decor", "Sports", "Toys", "Baby Care"
+    ]
+    suffixes = [
+        "Enterprises", "Industries", "Corporation", "Private Limited", "Limited",
+        "Traders", "Ventures", "Group", "Associates", "Solutions", "Services",
+        "Agencies", "Suppliers", "Merchants", "Dealers", "Distributors", "Store",
+        "Mart", "Supermarket", "Hypermarket", "Outlet", "Showroom", "Plaza"
+    ]
+    connectors = ["and", "&", "of"]
+
+    # ---- Name patterns (customer-oriented) ----
+    patterns = [
+        # Pattern 1: Prefix + Core Name + Business Type (e.g., "Shree Traders Electronics")
+        lambda: f"{random.choice(prefixes)} {random.choice(core_names)} {random.choice(business_types)}",
+        # Pattern 2: Place + Business Type + Suffix (e.g., "City Electronics Enterprises")
+        lambda: f"{random.choice(places)} {random.choice(business_types)} {random.choice(suffixes)}",
+        # Pattern 3: Prefix + Place + Business Type (e.g., "Shree City Electronics")
+        lambda: f"{random.choice(prefixes)} {random.choice(places)} {random.choice(business_types)}",
+        # Pattern 4: Place + Suffix (e.g., "City Enterprises")
+        lambda: f"{random.choice(places)} {random.choice(suffixes)}",
+        # Pattern 5: Prefix + Core Name + Suffix (e.g., "Om Traders Private Limited")
+        lambda: f"{random.choice(prefixes)} {random.choice(core_names)} {random.choice(suffixes)}",
+        # Pattern 6: Business Type + Connector + Business Type + Suffix (e.g., "Electronics and Furniture Mart")
+        lambda: f"{random.choice(business_types)} {random.choice(connectors)} {random.choice(business_types)} {random.choice(suffixes)}",
+        # Pattern 7: Core Name + of + Place (e.g., "Traders of Connaught")
+        lambda: f"{random.choice(core_names)} {random.choice(connectors)} {random.choice(places)}",
+    ]
+
+    pattern = random.choice(patterns)
+    name = pattern()
+    # Ensure name length is not too long (max 255 as per spec)
+    if len(name) > 255:
+        # fallback to a shorter pattern
+        return f"{random.choice(prefixes)} {random.choice(core_names)} {random.choice(suffixes)}"
+    return name
 
 
 def generate_email(prefix="autocust"):
@@ -169,7 +226,7 @@ def generate_valid_customer_data(name_prefix="AutoCust"):
         # Universal Fields
         "party_reference": None,            # Pick from live UI (optional)
         "ownership_status": None,           # Pick from live UI (REQUIRED)
-        "company_name": generate_company_name(name_prefix),
+        "company_name": generate_company_name(),
         "sale_type": None,                  # Pick from live UI (REQUIRED)
         "supply_type": None,                # Pick from live UI (REQUIRED)
         "transaction_currency": "INR",       # Pick from live UI (REQUIRED)
@@ -242,7 +299,7 @@ def generate_full_valid_customer_data(name_prefix="AutoCust"):
 def generate_valid_edit_data(name_prefix="EditCust"):
     """Generate valid data for Edit form — only fields we want to change."""
     return {
-        "company_name": generate_company_name(name_prefix),
+        "company_name": generate_company_name(),
         "email": generate_email(name_prefix.lower()),
         "phone_number": generate_phone_number(),
         "pan_number": generate_pan_number(),
@@ -368,7 +425,7 @@ def generate_empty_data():
 def generate_company_name_only_data(prefix="NameOnly"):
     """Return dict with only Company Name filled — for partial field validation."""
     return {
-        "company_name": generate_company_name(prefix),
+        "company_name": generate_company_name(),
         "ownership_status": "",
         "sale_type": "",
         "supply_type": "",
