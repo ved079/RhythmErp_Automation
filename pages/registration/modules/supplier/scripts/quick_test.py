@@ -4,18 +4,17 @@ quick_test.py
 -------------
 One-shot: verify API auth + discover Supplier structure + create 1 test entry.
 
-Usage (from project root):
-    python scripts/quick_test.py
-
-No interactive prompts — token is hardcoded below.
-Replace the TOKEN value if it expires (check DevTools → Network → any /core/ request).
+Usage:
+    python pages/registration/modules/supplier/scripts/quick_test.py
+    python pages/registration/modules/supplier/scripts/quick_test.py --token eyJhbGci...
 """
 
 import os
 import sys
 import json
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+# Add project root to path
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
 from common.erp_api_client import RhythmERPAPIClient
@@ -35,6 +34,12 @@ def main():
     log.separator()
     log.info("ERP API QUICK TEST")
     log.separator()
+
+    # Override token from --token flag if provided
+    for i, arg in enumerate(sys.argv):
+        if arg == "--token" and i + 1 < len(sys.argv):
+            global TOKEN
+            TOKEN = sys.argv[i + 1]
 
     # ── Step 1: Set auth from browser token ──
     client = RhythmERPAPIClient()
