@@ -556,21 +556,27 @@ DEFAULT_SUPPLIER_FK_IDS = {
     "po_type_ref_id": 25,           # Domestic
     "default_currency_ref_id": 1,    # INR
     "payment_terms_ref_id": 26,     # 30 Days
-    "delivery_terms_ref_id": None,  # Optional — resolve dynamically
-    "mode_of_delivery_ref_id": None, # Optional — resolve dynamically
+    "delivery_terms_ref_id": 129,   # Delivery (from live data)
+    "mode_of_delivery_ref_id": 30,  # (from live data)
     "address_type": 43,             # Shipping (Billing=42)
-    "country_ref_id_id": 1,         # India
-    "state_ref_id_id": 12,          # Maharashtra
-    "district_ref_id_id": None,     # Resolve dynamically via cascading dropdowns
-    "sub_district_ref_id_id": None, # Resolve dynamically via cascading dropdowns
-    "village_ref_id_id": None,      # Resolve dynamically via cascading dropdowns
+    "country_ref_id_id": 8,         # India (verified from live entry ID=86)
+    "state_ref_id_id": 82,          # Punjab (from live data) — Maharashtra=12 also valid
+    "district_ref_id_id": 764,      # Ludhiana district (from live data)
+    "sub_district_ref_id_id": 13939, # Ludhiana taluka (from live data)
+    "village_ref_id_id": 775472,    # Village (from live data)
     "account_type": 1849,           # Current (Saving=1850)
-    "bank_doc_id": None,            # Resolve dynamically — Cancelled Cheque/Passbook
+    "bank_doc_id": 1883,            # Cancelled Cheque/Passbook (from live data)
 }
 
 # Alternative ownership status IDs for variety:
 # Proprietorship=1263, Partnership=1262, Pvt Ltd=7, Individual=1853
 # PO Type: Domestic=25, Import=24
+#
+# IMPORTANT: Cascading dropdown IDs are interdependent.
+# The IDs above (country=8, state=82, district=764, sub_district=13939, village=775472)
+# form ONE valid combination. If you change country/state, you MUST also update
+# district/taluka/village — use client.discover_structure("Supplier") or resolve
+# via the cascading dropdown API calls.
 
 
 def build_supplier_api_payload(
@@ -632,7 +638,12 @@ def build_supplier_api_payload(
         val = ids.get(key)
         return val if val is not None else None
 
-    # Build Additional Details stepper details
+    # Build Additional Details stepper
+    # NOTE: The live API response shows that for Additional Details stepper,
+    # the fields are on the child object itself (NOT inside details[]).
+    # The details[] array is empty for Additional Details.
+    # However, for CREATE payloads, we put the fields inside details[]
+    # which is the standard pattern. The API handles both forms.
     additional_details = {}
     additional_details["display_name_as"] = step1_data.get("contact_person", "") or None
     additional_details["office_no"] = step1_data.get("office_number", "") or None
@@ -660,9 +671,13 @@ def build_supplier_api_payload(
     if _fk("village_ref_id_id") is not None:
         address_detail["village_ref_id_id"] = _fk("village_ref_id_id")
     address_detail["address"] = step2_data.get("address", "")
-    address_detail["pin_code"] = step2_data.get("pin_code", "") or None
+    # API returns pin_code as integer (e.g., 141001) — send as int
+    pin = step2_data.get("pin_code", "")
+    address_detail["pin_code"] = int(pin) if pin and pin.isdigit() else None
     address_detail["gstin"] = step2_data.get("gstin", "") or None
-    address_detail["same_as_above"] = False
+    address_detail["same_as_above"] = None  # API returns null, not False
+    address_detail["address2"] = None
+    address_detail["details"] = []
 
     # Build Bank Details stepper details
     bank_detail = {}
@@ -672,28 +687,39 @@ def build_supplier_api_payload(
     if _fk("account_type") is not None:
         bank_detail["account_type"] = _fk("account_type")
     bank_detail["bank_account_holder_name"] = step3_data.get("account_holder_name", "") or None
-    bank_detail["bank_account_no"] = step3_data.get("account_number", "") or None
+    # API returns bank_account_no as integer — send as int
+    acct = step3_data.get("account_number", "")
+    bank_detail["bank_account_no"] = int(acct) if acct and acct.isdigit() else None
     if _fk("bank_doc_id") is not None:
         bank_detail["bank_doc_id"] = _fk("bank_doc_id")
-    bank_detail["bank_attachment_path"] = ""
+    bank_detail["bank_attachment_path"] = None  # API returns null, not ""
+    bank_detail["details"] = []
 
     payload = {
         "id": "",
         "attribute_name": "Supplier",
 
         # Step 1 — Universal Fields (root level)
-        "party_ref_id": step1_data.get("party_reference", "") or None,
+        "party_ref_id": None,  # API returns null — skip Party Reference
         "ownership_status_ref_id": ids["ownership_status_ref_id"],
         "name": step1_data.get("company_name", ""),
         "po_type_ref_id": ids["po_type_ref_id"],
         "email_id": step1_data.get("email", "") or None,
-        "mobile_no": str(step1_data.get("phone_number", "")),
+        # API returns mobile_no as integer — send as int
+        "mobile_no": int(step1_data.get("phone_number", "0") or "0"),
         "default_currency_ref_id": ids["default_currency_ref_id"],
         "pan_no": step1_data.get("pan_number", ""),
         "is_msme_registered": step1_data.get("is_msme", False),
         "status": step1_data.get("status", True),
+        # Additional root-level fields seen in live API response
+        "vendor_code": None,
+        "fax": None,
+        "website_link": None,
+        "attachment": None,
+        "ref_id": None,
+        "ref_type": None,
 
-        # Children array with stepper objects (CORRECT structure per API reference)
+        # Children array with stepper objects (verified against live API)
         "children": [
             {
                 "stepper_name": "Additional Details",
