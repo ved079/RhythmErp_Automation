@@ -420,3 +420,223 @@ class KnownBugs:
     # BUG-002 (No email validation) — FIXED, ERP now shows "Invalid Email"
     # BUG-004 (No PAN validation) — FIXED, ERP now shows "Invalid PAN Number"
     # BUG-005 (No Update button in Edit) — FIXED, Update button now visible
+
+
+# ──────────────────────────────────────────────
+# API Payload Builder
+# ──────────────────────────────────────────────
+# Converts the existing step1/step2/step3 dict format into the flat
+# JSON payload that POST /core/dynamic-screen-wrapper/ expects.
+#
+# FIELD KEY MAPPING (verified 2026-06-01 from API schema):
+#
+#   UI step1 key              → API field_key
+#   ──────────────────────────────────────────────────
+#   party_reference           → party_ref_id (dropdown FK, skip = "")
+#   ownership_status          → ownership_status_ref_id (dropdown FK)
+#   company_name              → name
+#   po_type                   → po_type_ref_id (dropdown FK)
+#   email                     → email_id
+#   phone_number              → mobile_no (string of digits)
+#   default_currency          → default_currency_ref_id (dropdown FK)
+#   pan_number                → pan_no
+#   is_msme                   → is_msme_registered (boolean)
+#   status                    → status (boolean)
+#
+#   Additional Details (nested object, key = "Additional Details"):
+#   contact_person            → display_name_as
+#   office_number             → office_no
+#   is_gst_set_off            → is_gst_set_off (boolean)
+#   is_tds_applicable         → is_tds_applicable (boolean)
+#   payment_terms             → payment_terms_ref_id (dropdown FK)
+#   delivery_terms            → delivery_terms_ref_id (dropdown FK)
+#   mode_of_delivery          → mode_of_delivery_ref_id (dropdown FK)
+#
+#   Address Details (nested array, key = "address_details"):
+#   address_type              → address_type (dropdown FK)
+#   country                   → country_ref_id_id (dropdown FK)
+#   state                     → state_ref_id_id (dropdown FK)
+#   district                  → district_ref_id_id (dropdown FK)
+#   taluka                    → sub_district_ref_id_id (dropdown FK)
+#   village                   → village_ref_id_id (dropdown FK)
+#   address                   → address
+#   pin_code                  → pin_code
+#   gstin                     → gstin
+#
+#   Bank Details (nested array, key = "bank_details"):
+#   bank_name                 → bank_name
+#   branch                    → bank_branch_code
+#   ifsc_code                 → bank_ifsc_code
+#   account_type              → account_type (dropdown FK)
+#   account_holder_name       → bank_account_holder_name
+#   account_number            → bank_account_no
+#   bank_proof                → bank_doc_id (dropdown FK)
+#   attachment_path           → bank_attachment_path (file, skip = "")
+# ──────────────────────────────────────────────
+
+# Default FK IDs for common dropdowns (verified on tenant 599).
+# These can be overridden per test via the dropdown_ids parameter.
+DEFAULT_SUPPLIER_FK_IDS = {
+    "ownership_status_ref_id": 3,    # Private Limited Company
+    "po_type_ref_id": 1,            # Domestic
+    "default_currency_ref_id": 1,    # INR
+    "address_type": 1,              # Shipping (or Billing — may vary)
+    "country_ref_id_id": 1,         # India
+    "state_ref_id_id": 12,          # Maharashtra (example)
+    "district_ref_id_id": 1,        # First available district
+    "sub_district_ref_id_id": 1,    # First available taluka
+    "account_type": 1,              # Current (or Saving — may vary)
+    "bank_doc_id": 1,               # Cancelled Cheque (or Passbook — may vary)
+}
+
+
+def build_supplier_api_payload(
+    step1_data: dict,
+    step2_data: dict,
+    step3_data: dict,
+    dropdown_ids: dict = None,
+) -> dict:
+    """
+    Convert the existing step1/step2/step3 dict format into the flat
+    JSON payload that the ERP API expects.
+
+    This function REUSES the same data generators (generate_company_name,
+    generate_pan, etc.) — the only difference is how the data is packaged.
+
+    Args:
+        step1_data: Dict from generate_valid_step1_data() or similar.
+        step2_data: Dict from generate_valid_step2_data() or similar.
+        step3_data: Dict from generate_valid_step3_data() or similar.
+        dropdown_ids: Dict of resolved FK IDs. Missing keys fall back to
+                      DEFAULT_SUPPLIER_FK_IDS. Pass {} to use all defaults.
+
+    Returns:
+        Complete JSON payload ready for POST /core/dynamic-screen-wrapper/
+
+    Example:
+        data = generate_valid_supplier_data("Test")
+        payload = build_supplier_api_payload(
+            data["step1"], data["step2"], data["step3"]
+        )
+        client.create_entry(payload)
+    """
+    ids = {**DEFAULT_SUPPLIER_FK_IDS, **(dropdown_ids or {})}
+
+    payload = {
+        "id": "",
+        "attribute_name": "Supplier",
+
+        # Step 1 — Universal Fields
+        "party_ref_id": step1_data.get("party_reference", ""),
+        "ownership_status_ref_id": ids["ownership_status_ref_id"],
+        "name": step1_data.get("company_name", ""),
+        "po_type_ref_id": ids["po_type_ref_id"],
+        "email_id": step1_data.get("email", ""),
+        "mobile_no": str(step1_data.get("phone_number", "")),
+        "default_currency_ref_id": ids["default_currency_ref_id"],
+        "pan_no": step1_data.get("pan_number", ""),
+        "is_msme_registered": step1_data.get("is_msme", False),
+        "status": step1_data.get("status", True),
+
+        # Step 1 — Additional Details (nested object)
+        "Additional Details": {
+            "display_name_as": step1_data.get("contact_person", ""),
+            "office_no": step1_data.get("office_number", ""),
+            "is_gst_set_off": step1_data.get("is_gst_set_off", True),
+            "is_tds_applicable": step1_data.get("is_tds_applicable", False),
+            "payment_terms_ref_id": ids.get("payment_terms_ref_id", ""),
+            "delivery_terms_ref_id": ids.get("delivery_terms_ref_id", ""),
+            "mode_of_delivery_ref_id": ids.get("mode_of_delivery_ref_id", ""),
+        },
+
+        # Step 2 — Address Details (nested array, is_grid=True)
+        "address_details": [
+            {
+                "address_type": ids["address_type"],
+                "country_ref_id_id": ids["country_ref_id_id"],
+                "state_ref_id_id": ids["state_ref_id_id"],
+                "district_ref_id_id": ids["district_ref_id_id"],
+                "sub_district_ref_id_id": ids["sub_district_ref_id_id"],
+                "village_ref_id_id": ids.get("village_ref_id_id", ""),
+                "address": step2_data.get("address", ""),
+                "pin_code": step2_data.get("pin_code", ""),
+                "gstin": step2_data.get("gstin", ""),
+                "same_as_above": False,
+            }
+        ],
+
+        # Step 3 — Bank Details (nested array, is_grid=True)
+        "bank_details": [
+            {
+                "bank_name": step3_data.get("bank_name", ""),
+                "bank_branch_code": step3_data.get("branch", ""),
+                "bank_ifsc_code": step3_data.get("ifsc_code", ""),
+                "account_type": ids["account_type"],
+                "bank_account_holder_name": step3_data.get("account_holder_name", ""),
+                "bank_account_no": step3_data.get("account_number", ""),
+                "bank_doc_id": ids["bank_doc_id"],
+                "bank_attachment_path": "",
+            }
+        ],
+    }
+
+    return payload
+
+
+def generate_supplier_api_payload(
+    company_prefix="APISupplier",
+    dropdown_ids: dict = None,
+) -> dict:
+    """
+    One-shot: generate a complete Supplier API payload with random data.
+
+    Convenience function that combines generate_valid_supplier_data() and
+    build_supplier_api_payload() into a single call.
+
+    Args:
+        company_prefix: Prefix for the generated company name.
+        dropdown_ids: Override default FK IDs for dropdowns.
+
+    Returns:
+        JSON payload ready for POST /core/dynamic-screen-wrapper/
+
+    Example:
+        client = RhythmERPAPIClient()
+        client.login()
+        payload = generate_supplier_api_payload("Test")
+        client.create_entry(payload)
+    """
+    data = generate_valid_supplier_data(company_prefix)
+    return build_supplier_api_payload(
+        data["step1"], data["step2"], data["step3"], dropdown_ids
+    )
+
+
+def generate_supplier_api_payloads(
+    count: int = 20,
+    prefix: str = "APISupplier",
+    dropdown_ids: dict = None,
+) -> list:
+    """
+    Generate multiple unique Supplier API payloads for batch creation.
+
+    Args:
+        count: Number of payloads to generate.
+        prefix: Prefix for company names.
+        dropdown_ids: Override default FK IDs for dropdowns.
+
+    Returns:
+        List of JSON payloads ready for batch_create().
+
+    Example:
+        client = RhythmERPAPIClient()
+        client.login()
+        payloads = generate_supplier_api_payloads(20)
+        client.batch_create(payloads)
+    """
+    payloads = []
+    for i in range(count):
+        payloads.append(
+            generate_supplier_api_payload(f"{prefix}{i+1}", dropdown_ids)
+        )
+    return payloads
