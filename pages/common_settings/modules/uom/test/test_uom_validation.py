@@ -4,10 +4,10 @@ test_uom_validation.py
 Negative / validation tests for UOM.
 Tests: Empty fields, duplicate code, length limits, edge cases.
 
-Optimised (v2):
+Optimised (v3):
+- Smart finally blocks: only cleanup if form is actually open
 - Uses hard_refresh() instead of navigate_to_page() for fast page reset
 - Uses search_and_verify() for create/update verification (handles pagination)
-- Removed unnecessary time.sleep() from finally blocks
 - Fixed Test 12/14: fields auto-cutoff at 255 chars, 256-char input is truncated to 255
 """
 
@@ -31,6 +31,12 @@ from pages.common_settings.modules.uom.data.uom_data import (
 class TestUOMValidation:
     """Test suite for UOM input validation (negative tests)."""
 
+    def _cleanup(self, uom_page):
+        """Smart cleanup — only close form if it's still open, then refresh."""
+        if uom_page.is_add_form_open():
+            uom_page.force_close_form_popup()
+        uom_page.hard_refresh()
+
     def test_empty_uom_code(self, logged_in_driver):
         """Test 7: Submit with empty UOM Code should show Pattern A alert + mat-error."""
         driver = logged_in_driver
@@ -48,7 +54,7 @@ class TestUOMValidation:
             uom_page.submit()
 
             log.info(">>> STEP 2: Verify Pattern A alert appeared")
-            assert uom_page.is_validation_alert_present(timeout=5), \
+            assert uom_page.is_validation_alert_present(timeout=3), \
                 "Pattern A validation alert should appear for empty UOM Code"
             uom_page.handle_validation_warning()
             log.info("  [PASS] Pattern A alert detected and dismissed")
@@ -68,9 +74,7 @@ class TestUOMValidation:
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_empty_uom_description(self, logged_in_driver):
         """Test 8: Submit with empty Description - description is NOT required, should save successfully."""
@@ -101,9 +105,7 @@ class TestUOMValidation:
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_both_fields_empty(self, logged_in_driver):
         """Test 9: Submit with both fields empty should show Pattern A alert + mat-error on Code only."""
@@ -120,7 +122,7 @@ class TestUOMValidation:
             uom_page.submit()
 
             log.info(">>> STEP 2: Verify Pattern A alert appeared")
-            assert uom_page.is_validation_alert_present(timeout=5), \
+            assert uom_page.is_validation_alert_present(timeout=3), \
                 "Pattern A validation alert should appear for empty UOM Code"
             uom_page.handle_validation_warning()
             log.info("  [PASS] Pattern A alert detected and dismissed")
@@ -130,20 +132,17 @@ class TestUOMValidation:
             assert code_error != "", \
                 "mat-error should be shown under UOM Code. Got: '" + str(code_error) + "'"
             log.info("  [PASS] Code error text: " + code_error)
-            log.info("  [NOTE] Description is NOT required — no error expected for empty description")
 
             log.info(">>> STEP 4: Verify form is still open")
             assert uom_page.is_add_form_open(), \
                 "Add form should remain open after validation error"
             log.info("  [PASS] Form is still open")
 
-            log.info(">>> TEST 9 PASSED: Both fields empty — only Code shows error (Description is optional)")
+            log.info(">>> TEST 9 PASSED: Both fields empty — only Code shows error")
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_duplicate_code_MT(self, logged_in_driver):
         """Test 10: Submit with duplicate code 'MT' should show Pattern B alert."""
@@ -158,23 +157,20 @@ class TestUOMValidation:
 
             uom_page.type_text(uom_page.UOM_CODE_INPUT, duplicate_code)
             uom_page.type_text(uom_page.UOM_DESCRIPTION_INPUT, "Duplicate test for MT")
-            log.info("  Filled Code: " + duplicate_code + ", Description: Duplicate test")
 
             uom_page.submit()
 
-            log.info(">>> STEP 2: Verify Pattern B alert appeared (validation download)")
-            assert uom_page.is_validation_alert_present(timeout=5), \
+            log.info(">>> STEP 2: Verify Pattern B alert appeared")
+            assert uom_page.is_validation_alert_present(timeout=3), \
                 "Pattern B validation alert should appear for duplicate code '" + duplicate_code + "'"
             uom_page.handle_validation_download()
-            log.info("  [PASS] Pattern B alert detected and dismissed via Cancel")
+            log.info("  [PASS] Pattern B alert detected and dismissed")
 
             log.info(">>> TEST 10 PASSED: Duplicate code '" + duplicate_code + "' rejected")
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_duplicate_code_KG(self, logged_in_driver):
         """Test 11: Submit with duplicate code 'KG' should show Pattern B alert."""
@@ -189,26 +185,23 @@ class TestUOMValidation:
 
             uom_page.type_text(uom_page.UOM_CODE_INPUT, duplicate_code)
             uom_page.type_text(uom_page.UOM_DESCRIPTION_INPUT, "Duplicate test for KG")
-            log.info("  Filled Code: " + duplicate_code + ", Description: Duplicate test")
 
             uom_page.submit()
 
-            log.info(">>> STEP 2: Verify Pattern B alert appeared (validation download)")
-            assert uom_page.is_validation_alert_present(timeout=5), \
+            log.info(">>> STEP 2: Verify Pattern B alert appeared")
+            assert uom_page.is_validation_alert_present(timeout=3), \
                 "Pattern B validation alert should appear for duplicate code '" + duplicate_code + "'"
             uom_page.handle_validation_download()
-            log.info("  [PASS] Pattern B alert detected and dismissed via Cancel")
+            log.info("  [PASS] Pattern B alert detected and dismissed")
 
             log.info(">>> TEST 11 PASSED: Duplicate code '" + duplicate_code + "' rejected")
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_256_char_description_autocutoff(self, logged_in_driver):
-        """Test 12: 256-char Description auto-cutoffs to 255 — field has maxlength=255, so UOM is created with 255 chars."""
+        """Test 12: 256-char Description auto-cutoffs to 255 — UOM is created with 255 chars."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
 
@@ -231,22 +224,20 @@ class TestUOMValidation:
 
             uom_page.submit()
 
-            log.info(">>> STEP 2: Verify UOM created successfully (255-char description is valid)")
+            log.info(">>> STEP 2: Verify UOM created successfully")
             uom_page.handle_success_alert()
-            log.info("  [PASS] UOM created with 255-char description (auto-cutoff from 256)")
+            log.info("  [PASS] UOM created with 255-char description")
 
             log.info(">>> STEP 3: Search and verify UOM exists")
             uom_page.hard_refresh()
             uom_page.search_and_verify(uom_data["uom_code"])
             log.info("  [PASS] UOM '" + uom_data["uom_code"] + "' found via search")
 
-            log.info(">>> TEST 12 PASSED: 256-char description auto-cutoff to 255, UOM created successfully")
+            log.info(">>> TEST 12 PASSED: 256-char description auto-cutoff, UOM created")
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_255_char_description_accepted(self, logged_in_driver):
         """Test 13: Submit with 255-char Description should succeed, then edit back to normal."""
@@ -262,35 +253,29 @@ class TestUOMValidation:
             long_desc = generate_string_255()
             uom_page.type_text(uom_page.UOM_CODE_INPUT, uom_data["uom_code"])
             uom_page.type_text(uom_page.UOM_DESCRIPTION_INPUT, long_desc)
-            log.info("  Code: " + uom_data["uom_code"] + ", Description length: " + str(len(long_desc)))
 
             uom_page.submit()
 
             log.info(">>> STEP 2: Verify success - UOM created")
             uom_page.handle_success_alert()
-            log.info("  [PASS] UOM created with 255-char description")
 
-            log.info(">>> STEP 3: Search and verify UOM exists, then edit description back to normal")
+            log.info(">>> STEP 3: Search and verify, then edit back to normal")
             uom_page.hard_refresh()
             uom_page.search_and_verify(uom_data["uom_code"])
-            log.info("  [PASS] UOM '" + uom_data["uom_code"] + "' found via search")
 
             uom_page.click_edit_button(uom_data["uom_code"])
             uom_page.update_uom_description("Normal Description - cleaned up")
             uom_page.click_update()
             uom_page.handle_success_alert()
-            log.info("  [PASS] Description edited back to normal")
 
             log.info(">>> TEST 13 PASSED: 255-char description accepted + cleanup done")
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_256_char_code_autocutoff(self, logged_in_driver):
-        """Test 14: 256-char UOM Code auto-cutoffs to 255 — field has maxlength=255, so UOM is created with 255-char code."""
+        """Test 14: 256-char UOM Code auto-cutoffs to 255 — UOM is created with 255-char code."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
 
@@ -303,7 +288,6 @@ class TestUOMValidation:
             uom_page.type_text(uom_page.UOM_CODE_INPUT, long_code)
             uom_page.type_text(uom_page.UOM_DESCRIPTION_INPUT, "Test 256 char code autocutoff")
 
-            # Verify auto-cutoff: field should only contain 255 chars (maxlength=255)
             actual_code = uom_page.get_field_value(uom_page.UOM_CODE_INPUT)
             log.info("  Sent 256 chars, field contains: " + str(len(actual_code)) + " chars")
             assert len(actual_code) == 255, \
@@ -312,24 +296,20 @@ class TestUOMValidation:
 
             uom_page.submit()
 
-            log.info(">>> STEP 2: Verify UOM created successfully (255-char code is valid)")
+            log.info(">>> STEP 2: Verify UOM created successfully")
             uom_page.handle_success_alert()
-            log.info("  [PASS] UOM created with 255-char code (auto-cutoff from 256)")
 
             log.info(">>> STEP 3: Search and verify UOM exists")
             uom_page.hard_refresh()
-            # Search using first 20 chars of the 255-char code (search input may have limits)
             search_code = actual_code[:20]
             uom_page.search_and_verify(search_code)
             log.info("  [PASS] UOM found via search with prefix: '" + search_code + "'")
 
-            log.info(">>> TEST 14 PASSED: 256-char code auto-cutoff to 255, UOM created successfully")
+            log.info(">>> TEST 14 PASSED: 256-char code auto-cutoff, UOM created")
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_255_char_code_accepted(self, logged_in_driver):
         """Test 15: Submit with 255-char UOM Code should succeed."""
@@ -344,27 +324,21 @@ class TestUOMValidation:
             long_code = generate_string_255()
             uom_page.type_text(uom_page.UOM_CODE_INPUT, long_code)
             uom_page.type_text(uom_page.UOM_DESCRIPTION_INPUT, "Test 255 char code")
-            log.info("  Code length: " + str(len(long_code)) + ", Description: Test 255 char code")
 
             uom_page.submit()
 
             log.info(">>> STEP 2: Verify success - UOM created")
             uom_page.handle_success_alert()
-            log.info("  [PASS] Success alert handled - 255-char code accepted")
 
-            # Search using first 20 chars (search input may have limits)
             search_code = long_code[:20]
             uom_page.hard_refresh()
             uom_page.search_and_verify(search_code)
-            log.info("  [PASS] UOM found via search with prefix: '" + search_code + "'")
 
             log.info(">>> TEST 15 PASSED: 255-char code accepted and verified")
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     # ----------------------------------------------------------------
     # STEP 9: Edge Cases (Tests 16-19)
@@ -383,11 +357,9 @@ class TestUOMValidation:
             uom_data = generate_uom_data()
             uom_page.type_text(uom_page.UOM_CODE_INPUT, uom_data["uom_code"])
             uom_page.type_text(uom_page.UOM_DESCRIPTION_INPUT, "Cancel test description")
-            log.info("  Filled Code: " + uom_data["uom_code"] + ", Description: Cancel test description")
 
             log.info(">>> STEP 2: Click Cancel to close form without saving")
             uom_page.close_popup()
-            log.info("  Clicked Cancel button")
 
             log.info(">>> STEP 3: Search and verify UOM was NOT created")
             uom_page.hard_refresh()
@@ -395,18 +367,15 @@ class TestUOMValidation:
             exists = uom_page.is_uom_in_table(uom_data["uom_code"])
             assert not exists, \
                 "UOM '" + uom_data["uom_code"] + "' should NOT be in table after Cancel"
-            log.info("  [PASS] UOM '" + uom_data["uom_code"] + "' not in table")
 
             log.info(">>> TEST 16 PASSED: Cancel add form - UOM not created")
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_edit_empty_description(self, logged_in_driver):
-        """Test 17: Create a UOM, then edit it with empty description — description is NOT required, update should succeed."""
+        """Test 17: Create a UOM, then edit it with empty description — should succeed."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
 
@@ -420,9 +389,8 @@ class TestUOMValidation:
             uom_page.type_text(uom_page.UOM_DESCRIPTION_INPUT, "Temp description for edit test")
             uom_page.submit()
             uom_page.handle_success_alert()
-            log.info("  Created UOM: " + uom_data["uom_code"])
 
-            log.info(">>> STEP 2: Search for the UOM, then open edit form and clear description")
+            log.info(">>> STEP 2: Search, open edit, clear description")
             uom_page.hard_refresh()
             uom_page.search_and_verify(uom_data["uom_code"])
             uom_page.click_edit_button(uom_data["uom_code"])
@@ -436,24 +404,20 @@ class TestUOMValidation:
                 "arguments[0].dispatchEvent(new Event('change', {bubbles: true}));",
                 el
             )
-            log.info("  Cleared description field via JS")
 
             uom_page.click_update()
 
-            log.info(">>> STEP 3: Verify update succeeded (description is NOT required)")
+            log.info(">>> STEP 3: Verify update succeeded")
             uom_page.handle_success_alert()
-            log.info("  [PASS] Empty description accepted on edit (field is optional)")
 
-            log.info(">>> TEST 17 PASSED: Edit empty description — update successful (field is optional)")
+            log.info(">>> TEST 17 PASSED: Edit empty description — update successful")
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_edit_empty_code(self, logged_in_driver):
-        """Test 18: Create a UOM, then edit it with empty code - should show Pattern A alert + mat-error."""
+        """Test 18: Create a UOM, then edit it with empty code - should show Pattern A alert."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
 
@@ -467,9 +431,8 @@ class TestUOMValidation:
             uom_page.type_text(uom_page.UOM_DESCRIPTION_INPUT, "Temp description for code edit test")
             uom_page.submit()
             uom_page.handle_success_alert()
-            log.info("  Created UOM: " + uom_data["uom_code"])
 
-            log.info(">>> STEP 2: Search for the UOM, then open edit form and clear code")
+            log.info(">>> STEP 2: Search, open edit, clear code")
             uom_page.hard_refresh()
             uom_page.search_and_verify(uom_data["uom_code"])
             uom_page.click_edit_button(uom_data["uom_code"])
@@ -483,76 +446,61 @@ class TestUOMValidation:
                 "arguments[0].dispatchEvent(new Event('change', {bubbles: true}));",
                 el
             )
-            log.info("  Cleared code field via JS")
 
             uom_page.click_update()
 
             log.info(">>> STEP 3: Verify Pattern A alert appeared")
-            assert uom_page.is_validation_alert_present(timeout=5), \
+            assert uom_page.is_validation_alert_present(timeout=3), \
                 "Pattern A validation alert should appear for empty Code on edit"
             uom_page.handle_validation_warning()
-            log.info("  [PASS] Pattern A alert detected and dismissed")
 
             log.info(">>> STEP 4: Verify inline mat-error under Code field")
             error_text = uom_page.get_mat_error_text(uom_page.UOM_CODE_INPUT)
             assert error_text != "", \
-                "mat-error should be shown under Code field on edit. Got: '" + str(error_text) + "'"
-            log.info("  [PASS] mat-error text: " + error_text)
+                "mat-error should be shown under Code field on edit"
 
             log.info(">>> TEST 18 PASSED: Edit empty code validation works")
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_submit_without_filling_anything(self, logged_in_driver):
-        """Test 19: Open Add form and immediately Submit without typing - Pattern A + UOM Code field invalid."""
+        """Test 19: Open Add form and immediately Submit without typing - Pattern A."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
 
         try:
-            log.info(">>> STEP 1: Open Add form and submit immediately (no typing)")
+            log.info(">>> STEP 1: Open Add form and submit immediately")
             uom_page.navigate_to_page()
             uom_page.open_add_form()
-
-            log.info("  Form opened, submitting without filling any fields")
 
             uom_page.submit()
 
             log.info(">>> STEP 2: Verify Pattern A alert appeared")
-            assert uom_page.is_validation_alert_present(timeout=5), \
+            assert uom_page.is_validation_alert_present(timeout=3), \
                 "Pattern A validation alert should appear when submitting untouched form"
             uom_page.handle_validation_warning()
-            log.info("  [PASS] Pattern A alert detected and dismissed")
 
-            log.info(">>> STEP 3: Verify UOM Code shows error (Description is NOT required)")
+            log.info(">>> STEP 3: Verify UOM Code shows error")
             code_error = uom_page.get_mat_error_text(uom_page.UOM_CODE_INPUT)
-            assert code_error != "", \
-                "Code field should show mat-error for untouched form"
-            log.info("  [PASS] Code error text: " + code_error)
-            log.info("  [NOTE] Description is NOT required — no error expected for empty description")
+            assert code_error != "", "Code field should show mat-error"
 
             log.info(">>> STEP 4: Verify form is still open")
-            assert uom_page.is_add_form_open(), \
-                "Add form should remain open after submitting untouched form"
-            log.info("  [PASS] Form is still open")
+            assert uom_page.is_add_form_open(), "Add form should remain open"
 
-            log.info(">>> TEST 19 PASSED: Submit without filling — only Code shows error (Description is optional)")
+            log.info(">>> TEST 19 PASSED: Submit without filling — only Code shows error")
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     # ----------------------------------------------------------------
     # STEP 10: Input Format / Character Type Tests (Tests 20-25)
     # ----------------------------------------------------------------
 
     def test_lowercase_code_accepted(self, logged_in_driver):
-        """Test 20: Submit with lowercase UOM code - should be accepted and saved as-is."""
+        """Test 20: Submit with lowercase UOM code - should be accepted."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
         uom_code = generate_lowercase_uom_code()
@@ -564,20 +512,15 @@ class TestUOMValidation:
 
             uom_page.type_text(uom_page.UOM_CODE_INPUT, uom_code)
             uom_page.type_text(uom_page.UOM_DESCRIPTION_INPUT, "Lowercase code test")
-            log.info("  Filled Code: " + uom_code + ", Description: Lowercase code test")
 
             uom_page.submit()
 
             log.info(">>> STEP 2: Verify outcome")
-            if uom_page.is_validation_alert_present(timeout=5):
+            if uom_page.is_validation_alert_present(timeout=3):
                 uom_page.dismiss_any_validation_alert()
-                log.info("  [NOTE] Code '" + uom_code + "' triggered validation (possible duplicate from previous run)")
-                log.info("  [NOTE] Lowercase format IS valid - duplicate rejection confirms format is accepted")
+                log.info("  [NOTE] Code triggered validation (possible duplicate)")
             else:
                 uom_page.handle_success_alert()
-                log.info("  [PASS] Success alert handled")
-
-                log.info(">>> STEP 3: Search and verify UOM exists")
                 uom_page.hard_refresh()
                 uom_page.search_and_verify(uom_code)
                 log.info("  [PASS] UOM '" + uom_code + "' found via search")
@@ -586,12 +529,10 @@ class TestUOMValidation:
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_mixed_case_code_accepted(self, logged_in_driver):
-        """Test 21: Submit with mixed case UOM code - should be accepted and saved as-is."""
+        """Test 21: Submit with mixed case UOM code - should be accepted."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
         uom_code = generate_mixed_case_uom_code()
@@ -603,20 +544,15 @@ class TestUOMValidation:
 
             uom_page.type_text(uom_page.UOM_CODE_INPUT, uom_code)
             uom_page.type_text(uom_page.UOM_DESCRIPTION_INPUT, "Mixed case code test")
-            log.info("  Filled Code: " + uom_code + ", Description: Mixed case code test")
 
             uom_page.submit()
 
             log.info(">>> STEP 2: Verify outcome")
-            if uom_page.is_validation_alert_present(timeout=5):
+            if uom_page.is_validation_alert_present(timeout=3):
                 uom_page.dismiss_any_validation_alert()
-                log.info("  [NOTE] Code '" + uom_code + "' triggered validation (possible duplicate from previous run)")
-                log.info("  [NOTE] Mixed case format IS valid - duplicate rejection confirms format is accepted")
+                log.info("  [NOTE] Code triggered validation (possible duplicate)")
             else:
                 uom_page.handle_success_alert()
-                log.info("  [PASS] Success alert handled")
-
-                log.info(">>> STEP 3: Search and verify UOM exists")
                 uom_page.hard_refresh()
                 uom_page.search_and_verify(uom_code)
                 log.info("  [PASS] UOM '" + uom_code + "' found via search")
@@ -625,12 +561,10 @@ class TestUOMValidation:
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_number_in_code_accepted(self, logged_in_driver):
-        """Test 22: Submit with numbers in UOM code - numbers ARE allowed, should be accepted."""
+        """Test 22: Submit with numbers in UOM code - numbers ARE allowed."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
         uom_code = generate_number_uom_code()
@@ -642,31 +576,24 @@ class TestUOMValidation:
 
             uom_page.type_text(uom_page.UOM_CODE_INPUT, uom_code)
             uom_page.type_text(uom_page.UOM_DESCRIPTION_INPUT, "Number in code test")
-            log.info("  Filled Code: " + uom_code + ", Description: Number in code test")
 
             uom_page.submit()
 
-            log.info(">>> STEP 2: Verify outcome — numbers are allowed in UOM code")
-            if uom_page.is_validation_alert_present(timeout=5):
+            log.info(">>> STEP 2: Verify outcome")
+            if uom_page.is_validation_alert_present(timeout=3):
                 uom_page.dismiss_any_validation_alert()
-                log.info("  [NOTE] Code '" + uom_code + "' triggered validation (possible duplicate from previous run)")
-                log.info("  [NOTE] Number format IS valid - duplicate rejection confirms format is accepted")
+                log.info("  [NOTE] Code triggered validation (possible duplicate)")
             else:
                 uom_page.handle_success_alert()
-                log.info("  [PASS] Success alert handled")
-
-                log.info(">>> STEP 3: Search and verify UOM exists (handles pagination)")
                 uom_page.hard_refresh()
                 uom_page.search_and_verify(uom_code)
                 log.info("  [PASS] UOM '" + uom_code + "' found via search")
 
-            log.info(">>> TEST 22 PASSED: Code with numbers accepted (type=text on live system)")
+            log.info(">>> TEST 22 PASSED: Code with numbers accepted")
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_special_char_code_rejected(self, logged_in_driver):
         """Test 23: Submit with special characters in UOM code - should show Pattern A alert."""
@@ -681,34 +608,28 @@ class TestUOMValidation:
 
             uom_page.type_text(uom_page.UOM_CODE_INPUT, uom_code)
             uom_page.type_text(uom_page.UOM_DESCRIPTION_INPUT, "Special char code test")
-            log.info("  Filled Code: " + uom_code + ", Description: Special char code test")
 
             uom_page.submit()
 
             log.info(">>> STEP 2: Verify Pattern A alert appeared")
-            assert uom_page.is_validation_alert_present(timeout=5), \
+            assert uom_page.is_validation_alert_present(timeout=3), \
                 "Pattern A validation alert should appear for code with special characters"
             uom_page.handle_validation_warning()
-            log.info("  [PASS] Pattern A alert detected and dismissed")
 
             log.info(">>> STEP 3: Verify UOM was NOT created")
             uom_page.hard_refresh()
             uom_page.search_uom(uom_code)
             exists = uom_page.is_uom_in_table(uom_code)
-            assert not exists, \
-                "UOM '" + uom_code + "' should NOT be in table (special chars not allowed in code)"
-            log.info("  [PASS] UOM '" + uom_code + "' not in table")
+            assert not exists, "UOM should NOT be in table (special chars not allowed)"
 
             log.info(">>> TEST 23 PASSED: Code with special characters rejected")
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_leading_space_code_trimmed(self, logged_in_driver):
-        """Test 24: Submit with leading space in UOM code - system auto-trims leading spaces."""
+        """Test 24: Submit with leading space in UOM code - system auto-trims."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
         uom_code = generate_leading_space_uom_code()
@@ -721,20 +642,15 @@ class TestUOMValidation:
 
             uom_page.type_text(uom_page.UOM_CODE_INPUT, uom_code)
             uom_page.type_text(uom_page.UOM_DESCRIPTION_INPUT, "Leading space code test")
-            log.info("  Filled Code: '" + uom_code + "', Description: Leading space code test")
 
             uom_page.submit()
 
             log.info(">>> STEP 2: Verify outcome")
-            if uom_page.is_validation_alert_present(timeout=5):
+            if uom_page.is_validation_alert_present(timeout=3):
                 uom_page.dismiss_any_validation_alert()
-                log.info("  [NOTE] Code triggered validation - trimmed code '" + trimmed_code + "' may already exist")
-                log.info("  [NOTE] Leading space trimming IS confirmed by validation (duplicate = code format is valid)")
+                log.info("  [NOTE] Code triggered validation (trimmed code may already exist)")
             else:
                 uom_page.handle_success_alert()
-                log.info("  [PASS] Success alert handled")
-
-                log.info(">>> STEP 3: Search and verify UOM stored as trimmed version: '" + trimmed_code + "'")
                 uom_page.hard_refresh()
                 uom_page.search_and_verify(trimmed_code)
                 log.info("  [PASS] UOM found as trimmed code: '" + trimmed_code + "'")
@@ -743,12 +659,10 @@ class TestUOMValidation:
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)
 
     def test_special_char_description_accepted(self, logged_in_driver):
-        """Test 25: Submit with special characters in description - should be accepted and saved as-is."""
+        """Test 25: Submit with special characters in description - should be accepted."""
         driver = logged_in_driver
         uom_page = UOMPage(driver)
 
@@ -761,23 +675,18 @@ class TestUOMValidation:
             special_desc = generate_special_char_description()
             uom_page.type_text(uom_page.UOM_CODE_INPUT, uom_data["uom_code"])
             uom_page.type_text(uom_page.UOM_DESCRIPTION_INPUT, special_desc)
-            log.info("  Filled Code: " + uom_data["uom_code"] + ", Description: " + special_desc)
 
             uom_page.submit()
 
             log.info(">>> STEP 2: Verify success - UOM created")
             uom_page.handle_success_alert()
-            log.info("  [PASS] Success alert handled")
 
             log.info(">>> STEP 3: Search and verify UOM exists")
             uom_page.hard_refresh()
             uom_page.search_and_verify(uom_data["uom_code"])
-            log.info("  [PASS] UOM '" + uom_data["uom_code"] + "' found via search")
 
-            log.info(">>> TEST 25 PASSED: Special char description accepted and saved as-is")
+            log.info(">>> TEST 25 PASSED: Special char description accepted")
         except Exception:
             raise
         finally:
-            uom_page.force_close_form_popup()
-            uom_page.close_popup()
-            uom_page.hard_refresh()
+            self._cleanup(uom_page)

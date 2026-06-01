@@ -99,7 +99,6 @@ class UOMPage(BasePage):
         log.info("Navigating to UOM page")
         self.driver.get(self.UOM_PAGE_URL)
         self._wait_for_page_ready()
-        self._force_close_panels()
         log.info("Arrived at UOM page")
 
     def hard_refresh(self):
@@ -139,7 +138,6 @@ class UOMPage(BasePage):
         Uses JS click because button.erp-add-btn is often overlapped
         and never becomes Selenium-clickable (same issue as search button)."""
         log.info("Opening Add UOM form")
-        self._force_close_panels()
         # JS click — bypasses overlay/z-index issues
         js_click_add = """
         var btn = document.querySelector('button.erp-add-btn');
@@ -174,9 +172,9 @@ class UOMPage(BasePage):
         self.type_text(self.UOM_DESCRIPTION_INPUT, data["uom_description"])
 
     def submit(self):
-        """Click Submit on the Create form."""
+        """Click Submit on the Create form via JS click."""
         log.info("Clicking Submit")
-        self.click_with_retry(self.SUBMIT_BUTTON)
+        self._js_click_popup_button('Submit')
 
     # ================================================================
     # SEARCH
@@ -441,9 +439,9 @@ class UOMPage(BasePage):
         return status
 
     def click_update(self):
-        """Click the Update button on the Edit form."""
+        """Click the Update button on the Edit form via JS click."""
         log.info("Clicking Update")
-        self.click_with_retry(self.UPDATE_BUTTON)
+        self._js_click_popup_button('Update')
 
     # ================================================================
     # HISTORY
@@ -551,45 +549,50 @@ class UOMPage(BasePage):
     # ================================================================
 
     def close_popup(self):
-        """Close any popup by clicking Cancel button."""
+        """Close any popup by clicking Cancel button via JS."""
         log.info("Closing popup")
-        try:
-            self.click_with_retry(self.CANCEL_BUTTON)
-        except Exception:
-            log.warning("Could not click Cancel, trying to force close panels")
-            self._force_close_panels()
+        self.driver.execute_script("""
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.indexOf('Cancel') !== -1) {
+                        buttons[j].click();
+                        return 'clicked';
+                    }
+                }
+            }
+            return 'not found';
+        """)
 
     # ================================================================
     # SUCCESS ALERT (SweetAlert2)
     # ================================================================
 
     def handle_success_alert(self):
-        """
-        Handle SweetAlert2 success notification.
-        Waits for SweetAlert, clicks confirm to dismiss quickly.
-        """
+        """Handle SweetAlert2 success notification — fast dismiss."""
         log.info("Handling success alert")
+        # SweetAlert appears almost instantly — check with short timeout
         try:
-            swal = ("css", ".swal2-container")
-            if self.is_displayed(swal, timeout=5):
-                log.info("SweetAlert success detected")
-                try:
-                    confirm_btn = self.driver.find_element("css selector", ".swal2-confirm")
-                    self.driver.execute_script("arguments[0].click();", confirm_btn)
-                    log.info("Clicked SweetAlert confirm via JS")
-                except Exception:
-                    log.info("SweetAlert confirm not found, waiting for auto-dismiss")
-                # Wait for SweetAlert to disappear
-                try:
-                    WebDriverWait(self.driver, 5).until(
-                        EC.invisibility_of_element_located(("css selector", ".swal2-container"))
-                    )
-                except Exception:
-                    pass
-            else:
-                log.info("No SweetAlert found (may have auto-dismissed)")
-        except Exception as e:
-            log.warning("SweetAlert handling: " + str(e))
+            WebDriverWait(self.driver, 3).until(
+                EC.visibility_of_element_located(("css selector", ".swal2-container"))
+            )
+            log.info("SweetAlert detected, dismissing via JS")
+            # Click confirm button via JS (fast, bypasses overlay)
+            self.driver.execute_script("""
+                var btn = document.querySelector('.swal2-confirm');
+                if (btn) { btn.click(); return 'clicked'; }
+                return 'not found';
+            """)
+            # Wait for SweetAlert to disappear (short wait)
+            try:
+                WebDriverWait(self.driver, 3).until(
+                    EC.invisibility_of_element_located(("css selector", ".swal2-container"))
+                )
+            except Exception:
+                pass
+        except Exception:
+            log.info("No SweetAlert found (may have auto-dismissed)")
 
     # ================================================================
     # UTILITY - CDK OVERLAY CLEANUP
@@ -597,19 +600,10 @@ class UOMPage(BasePage):
 
     def _force_close_panels(self):
         """Remove any lingering CDK overlay panels that block clicks."""
-        try:
-            overlays = self.driver.find_elements(
-                "css selector", ".cdk-overlay-backdrop"
-            )
-            for overlay in overlays:
-                self.driver.execute_script("arguments[0].remove();", overlay)
-            panels = self.driver.find_elements(
-                "css selector", ".cdk-overlay-pane"
-            )
-            for panel in panels:
-                self.driver.execute_script("arguments[0].remove();", panel)
-        except Exception:
-            pass
+        self.driver.execute_script("""
+            document.querySelectorAll('.cdk-overlay-backdrop').forEach(function(el) { el.remove(); });
+            document.querySelectorAll('.cdk-overlay-pane').forEach(function(el) { el.remove(); });
+        """)
 
     # ================================================================
     # UTILITY - ACTION BUTTON CLICKER (pure JS, no XPath)
@@ -681,50 +675,14 @@ class UOMPage(BasePage):
     # ================================================================
 
     def handle_validation_warning(self):
-        """
-        Pattern A: 'Please correct the highlighted fields'
-        SweetAlert with 4 buttons: × (close), OK, No, Cancel.
-        Clicks OK (.swal2-confirm) to dismiss.
-        """
+        """Pattern A: Dismiss 'Please correct the highlighted fields' via JS click."""
         log.info("Handling validation warning (Pattern A)")
-        try:
-            self.driver.find_element("css selector", ".swal2-popup.swal2-icon-warning")
-            log.info("Validation warning SweetAlert detected")
-            confirm_btn = self.driver.find_element("css selector", ".swal2-confirm")
-            self.driver.execute_script("arguments[0].click();", confirm_btn)
-            log.info("Clicked OK to dismiss validation warning")
-            # Wait for SweetAlert to disappear
-            try:
-                WebDriverWait(self.driver, 3).until(
-                    EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
-                )
-            except Exception:
-                pass
-        except Exception as e:
-            log.warning("No validation warning found: " + str(e))
+        self._dismiss_swal(button=".swal2-confirm", label="OK")
 
     def handle_validation_download(self):
-        """
-        Pattern B: 'Fields validation failed. Do you want to download?'
-        SweetAlert with 4 buttons: × (close), Cancel, No, Download Errors (.swal2-confirm).
-        Clicks Cancel (.swal2-cancel) to dismiss.
-        """
+        """Pattern B: Dismiss 'Fields validation failed' via JS click on Cancel."""
         log.info("Handling validation download (Pattern B)")
-        try:
-            self.driver.find_element("css selector", ".swal2-popup.swal2-icon-warning")
-            log.info("Validation download SweetAlert detected")
-            cancel_btn = self.driver.find_element("css selector", ".swal2-cancel")
-            self.driver.execute_script("arguments[0].click();", cancel_btn)
-            log.info("Clicked Cancel to dismiss validation download popup")
-            # Wait for SweetAlert to disappear
-            try:
-                WebDriverWait(self.driver, 3).until(
-                    EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
-                )
-            except Exception:
-                pass
-        except Exception as e:
-            log.warning("No validation download popup found: " + str(e))
+        self._dismiss_swal(button=".swal2-cancel", label="Cancel")
 
     def handle_error_toast(self):
         """
@@ -747,53 +705,39 @@ class UOMPage(BasePage):
         except Exception:
             log.info("No error toast found (expected — Pattern C removed from live system)")
 
-    def is_validation_alert_present(self, timeout=5):
-        """
-        Check if any SweetAlert validation popup is visible.
-        Polls up to `timeout` seconds (checks every 0.3s).
-        Returns True if swal2-icon-warning or swal2-icon-error is present.
-        """
+    def is_validation_alert_present(self, timeout=3):
+        """Check if any SweetAlert validation popup is visible. Fast poll (0.2s)."""
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
             try:
-                elements = self.driver.find_elements(
-                    "css selector",
-                    ".swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error"
-                )
-                for el in elements:
-                    if el.is_displayed():
-                        return True
+                visible = self.driver.execute_script("""
+                    var el = document.querySelector('.swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error');
+                    return el && el.offsetParent !== null;
+                """)
+                if visible:
+                    return True
             except Exception:
                 pass
-            time.sleep(0.3)
+            time.sleep(0.2)
         return False
 
     def dismiss_any_validation_alert(self):
-        """
-        Dismiss any SweetAlert validation popup (Pattern A or Pattern B).
-        Pattern A: clicks OK (.swal2-confirm).
-        Pattern B: clicks Cancel (.swal2-cancel).
-        """
+        """Dismiss any SweetAlert validation popup — try Cancel first (Pattern B), then OK (Pattern A)."""
+        log.info("Dismissing any validation alert")
+        self.driver.execute_script("""
+            var cancel = document.querySelector('.swal2-cancel');
+            if (cancel) { cancel.click(); return 'Cancel'; }
+            var confirm = document.querySelector('.swal2-confirm');
+            if (confirm) { confirm.click(); return 'OK'; }
+            return 'none';
+        """)
+        # Wait for SweetAlert to disappear
         try:
-            self.driver.find_element("css selector", ".swal2-popup.swal2-icon-warning")
-            log.info("Validation SweetAlert detected, attempting to dismiss")
-            try:
-                cancel_btn = self.driver.find_element("css selector", ".swal2-cancel")
-                self.driver.execute_script("arguments[0].click();", cancel_btn)
-                log.info("Dismissed via Cancel button (Pattern B)")
-            except Exception:
-                confirm_btn = self.driver.find_element("css selector", ".swal2-confirm")
-                self.driver.execute_script("arguments[0].click();", confirm_btn)
-                log.info("Dismissed via OK button (Pattern A)")
-            # Wait for SweetAlert to disappear
-            try:
-                WebDriverWait(self.driver, 3).until(
-                    EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
-                )
-            except Exception:
-                pass
-        except Exception as e:
-            log.warning("No validation alert to dismiss: " + str(e))
+            WebDriverWait(self.driver, 2).until(
+                EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
+            )
+        except Exception:
+            pass
 
     def get_mat_error_text(self, field_locator):
         """
@@ -884,34 +828,77 @@ class UOMPage(BasePage):
 
     def is_add_form_open(self):
         """Check if the Add/Create UOM popup is currently open."""
-        try:
-            el = self.driver.find_element("css selector", "input[name='UOM Code']")
-            return el.is_displayed()
-        except Exception:
-            return False
+        return self.driver.execute_script("""
+            var el = document.querySelector("input[name='UOM Code']");
+            return el && el.offsetParent !== null;
+        """)
 
     def get_field_value(self, locator):
-        """Get the current value of an input field."""
+        """Get the current value of an input field via JS (fast)."""
         try:
             css_selector = locator[1] if locator[0] == "css" else ""
             if not css_selector:
                 return ""
-            el = self.driver.find_element("css selector", css_selector)
-            return el.get_attribute("value") or ""
+            return self.driver.execute_script(
+                "var el = document.querySelector(arguments[0]); "
+                "return el ? el.value : '';", css_selector
+            ) or ""
         except Exception:
             return ""
+
+    def _js_click_popup_button(self, button_text):
+        """Click a popup footer button (Submit/Update) via JS — bypasses overlay issues."""
+        js = """
+        var footers = document.querySelectorAll('.popup-footer');
+        for (var i = 0; i < footers.length; i++) {
+            var buttons = footers[i].querySelectorAll('button');
+            for (var j = 0; j < buttons.length; j++) {
+                if (buttons[j].textContent.trim().indexOf(arguments[0]) !== -1) {
+                    buttons[j].click();
+                    return 'clicked_' + arguments[0];
+                }
+            }
+        }
+        throw new Error('Button "' + arguments[0] + '" not found in popup footer');
+        """
+        try:
+            result = self.driver.execute_script(js, button_text)
+            log.info("JS click " + button_text + ": " + str(result))
+        except Exception as e:
+            log.warning("JS click failed for " + button_text + ", falling back to Selenium: " + str(e))
+            if button_text == 'Submit':
+                self.click_with_retry(self.SUBMIT_BUTTON)
+            elif button_text == 'Update':
+                self.click_with_retry(self.UPDATE_BUTTON)
+
+    def _dismiss_swal(self, button, label):
+        """Dismiss a SweetAlert popup by clicking the specified button via JS."""
+        try:
+            self.driver.find_element("css selector", ".swal2-popup")
+            self.driver.execute_script("""
+                var btn = document.querySelector(arguments[0]);
+                if (btn) { btn.click(); }
+            """, button)
+            log.info("Dismissed SweetAlert via " + label)
+            try:
+                WebDriverWait(self.driver, 2).until(
+                    EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
+                )
+            except Exception:
+                pass
+        except Exception as e:
+            log.warning("No SweetAlert to dismiss: " + str(e))
 
     def force_close_form_popup(self):
         """Force-close any open form popup by clicking the X button via JS."""
         log.info("Force closing form popup")
-        js = """
-        var popup = document.querySelector('div.edit_pop_up');
-        if (!popup) return 'no popup found';
-        var closeBtn = popup.querySelector('button[mat-icon-button] mat-icon');
-        if (!closeBtn) return 'no close button found';
-        var btn = closeBtn.closest('button');
-        if (btn) { btn.click(); return 'clicked close'; }
-        return 'could not click';
-        """
-        result = self.driver.execute_script(js)
+        result = self.driver.execute_script("""
+            var popup = document.querySelector('div.edit_pop_up');
+            if (!popup) return 'no popup found';
+            var closeBtn = popup.querySelector('button[mat-icon-button] mat-icon');
+            if (!closeBtn) return 'no close button found';
+            var btn = closeBtn.closest('button');
+            if (btn) { btn.click(); return 'clicked close'; }
+            return 'could not click';
+        """)
         log.info("Force close result: " + str(result))
