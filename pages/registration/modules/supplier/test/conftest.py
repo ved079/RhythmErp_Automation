@@ -33,8 +33,8 @@ from pages.common_settings.cs_report_generator import (
 # ================================================================
 # LOGIN CREDENTIALS — Supplier Screen (DIFFERENT from other screens!)
 # ================================================================
-SP_LOGIN_EMAIL = "Assistant@mail.com"
-SP_LOGIN_PASSWORD = "Vedant@12345"
+SP_LOGIN_EMAIL = "user@admin.com"
+SP_LOGIN_PASSWORD = "Tenant@123456789"
 SP_LOGIN_FACILITY_INDEX = 0  # RuralLife Producer Company
 
 
