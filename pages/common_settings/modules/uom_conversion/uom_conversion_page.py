@@ -5,11 +5,9 @@ Extends BasePage with pure-JS helpers for Angular Material MDC components.
 
 import time
 import random
-import random
 
 from common.base_page import BasePage
 from common.logger import log
-from config import EXPLICIT_WAIT
 
 
 class UOMConversionPage(BasePage):
@@ -249,18 +247,23 @@ class UOMConversionPage(BasePage):
     # ================================================================
 
     def click_save_button(self):
-        """Click the Submit button on the form popup."""
+        """Click the Submit or Update button on the form popup via JS."""
         js = """
         var footer = document.querySelector('div.popup-footer');
         if (!footer) throw new Error('Popup footer not found');
-        var btn = footer.querySelector('button[type="submit"]');
-        if (!btn) throw new Error('Submit button not found');
-        btn.click();
-        return 'clicked submit';
+        var buttons = footer.querySelectorAll('button');
+        for (var i = 0; i < buttons.length; i++) {
+            var txt = buttons[i].textContent.trim();
+            if (txt === 'Submit' || txt === 'Update') {
+                buttons[i].click();
+                return 'clicked ' + txt;
+            }
+        }
+        throw new Error('Submit/Update button not found in popup footer');
         """
-        self.driver.execute_script(js)
-        log.info("Clicked Submit button")
-        time.sleep(0.5)
+        result = self.driver.execute_script(js)
+        log.info(f"Clicked save button: {result}")
+        time.sleep(0.3)
 
     def click_cancel_button(self):
         """Click the Cancel button on the form popup."""
@@ -360,7 +363,7 @@ class UOMConversionPage(BasePage):
 
     def handle_validation_warning(self):
         """SweetAlert Pattern A: warning dialog with OK."""
-        time.sleep(0.5)
+        time.sleep(0.3)
         try:
             msg = self.driver.execute_script("""
                 var title = document.querySelector('.swal2-title');
@@ -369,14 +372,19 @@ class UOMConversionPage(BasePage):
                        (content ? ' - ' + content.textContent.trim() : '');
             """)
             log.info(f"Validation warning: {msg}")
-            self.close_popup()
+            # Pattern A uses .swal2-confirm ("OK") to dismiss
+            self.driver.execute_script("""
+                var btn = document.querySelector('.swal2-confirm');
+                if (btn) btn.click();
+            """)
+            time.sleep(0.3)
             return msg
         except Exception:
             return ""
 
     def handle_validation_download(self):
-        """SweetAlert Pattern B: dialog with Download + Cancel."""
-        time.sleep(0.5)
+        """SweetAlert Pattern B: dialog with Download Errors + Cancel."""
+        time.sleep(0.3)
         try:
             msg = self.driver.execute_script("""
                 var title = document.querySelector('.swal2-title');
@@ -385,13 +393,16 @@ class UOMConversionPage(BasePage):
                        (content ? ' - ' + content.textContent.trim() : '');
             """)
             log.info(f"Validation download: {msg}")
-            js_cancel = """
-            var btn = document.querySelector('.swal2-cancel');
-            if (btn) { btn.click(); return 'cancelled'; }
-            return 'no cancel button';
-            """
-            self.driver.execute_script(js_cancel)
-            time.sleep(0.5)
+            # Pattern B: click Cancel (.swal2-cancel) to dismiss WITHOUT downloading
+            self.driver.execute_script("""
+                var btn = document.querySelector('.swal2-cancel');
+                if (btn) { btn.click(); return 'cancelled'; }
+                // Fallback: deny button ("No")
+                btn = document.querySelector('.swal2-deny');
+                if (btn) { btn.click(); return 'denied'; }
+                return 'no cancel/deny button';
+            """)
+            time.sleep(0.3)
             return msg
         except Exception:
             return ""
@@ -626,7 +637,7 @@ class UOMConversionPage(BasePage):
     #  SUCCESS / VALIDATION ALERT HELPERS
     # ================================================================
 
-    def is_success_alert_present(self, timeout=5):
+    def is_success_alert_present(self, timeout=3):
         """Check if SweetAlert success popup appeared."""
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -648,7 +659,7 @@ class UOMConversionPage(BasePage):
             time.sleep(0.3)
         return False
 
-    def is_validation_alert_present(self, timeout=5):
+    def is_validation_alert_present(self, timeout=3):
         """Check if SweetAlert validation/warning popup appeared."""
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -668,13 +679,13 @@ class UOMConversionPage(BasePage):
 
     def handle_success_alert(self):
         """Click OK on success SweetAlert."""
-        time.sleep(0.5)
+        time.sleep(0.3)
         try:
             self.driver.execute_script("""
                 var btn = document.querySelector('.swal2-confirm');
                 if (btn) { btn.click(); return 'clicked'; }
             """)
-            time.sleep(0.5)
+            time.sleep(0.3)
         except Exception:
             pass
 
@@ -943,10 +954,37 @@ class UOMConversionPage(BasePage):
         log.info(result)
         time.sleep(0.5)
 
+    def _dismiss_sweetalert(self):
+        """Dismiss any visible SweetAlert popup using the correct handler.
+        Pattern A (Validation Failed - Please correct...): .swal2-confirm = OK
+        Pattern B (Validation Failed - Fields validation failed...Download): .swal2-cancel = Cancel
+        """
+        try:
+            content = self.driver.execute_script("""
+                var content = document.querySelector('.swal2-html-container');
+                return content ? content.textContent.trim() : '';
+            """) or ""
+            if 'download' in content.lower():
+                # Pattern B — click Cancel to avoid downloading
+                self.handle_validation_download()
+            else:
+                # Pattern A — click OK
+                self.handle_validation_warning()
+        except Exception:
+            # Fallback: try any dismiss button
+            try:
+                self.close_popup()
+            except Exception:
+                pass
+
     def create_fresh_record(self, factor=None, max_retries=5, raise_on_error=True):
         """
         Creates a new UOM conversion record with a fresh (non-duplicate) pair.
         Uses try-submit-catch-duplicate pattern - does NOT pre-read the table.
+
+        IMPORTANT: On success, the ERP closes the form silently (NO success popup).
+        We detect success by checking if the form closed after submit.
+
         Args:
             factor: If None, generates random integer 1-1000.
                     If provided, uses the given factor string/value.
@@ -977,22 +1015,33 @@ class UOMConversionPage(BasePage):
             self.enter_conversion_factor(actual_factor)
             self.submit()
 
-            # --- Success path ---
-            if self.is_success_alert_present(timeout=5):
+            # Wait briefly for ERP to process
+            time.sleep(1)
+
+            # --- Success path: form closed silently (no success popup) ---
+            if not self.is_form_open() and not self.is_sweetalert_visible():
+                log.info("Record created successfully (form closed silently): " + source + " -> " + target)
+                return {
+                    "source_uom": source, "target_uom": target,
+                    "conversion_factor": actual_factor, "success": True
+                }
+
+            # --- Check for success alert (rare, but handle it) ---
+            if self.is_success_alert_present(timeout=2):
                 self.handle_success_alert()
-                log.info("Record created successfully: " + source + " -> " + target)
+                log.info("Record created successfully (success alert): " + source + " -> " + target)
                 return {
                     "source_uom": source, "target_uom": target,
                     "conversion_factor": actual_factor, "success": True
                 }
 
             # --- Validation / duplicate path ---
-            if self.is_validation_alert_present(timeout=3):
+            if self.is_validation_alert_present(timeout=2):
                 last_error = self.get_swal_title()
                 log.warning("Validation alert on attempt " + str(attempt + 1) + ": " + str(last_error))
-                # Dismiss the SweetAlert popup
-                self.handle_success_alert()
-                time.sleep(0.5)
+                # Dismiss using the correct handler based on alert pattern
+                self._dismiss_sweetalert()
+                time.sleep(0.3)
 
                 if not raise_on_error:
                     # Caller wants to observe the error (Tests 10, 11, 13)
@@ -1006,14 +1055,13 @@ class UOMConversionPage(BasePage):
                 # Retry with a completely new random pair
                 log.info("Duplicate/error detected - closing form and retrying with new pair...")
                 self.force_close_form_popup()
-                time.sleep(0.5)
-                self.navigate_to_page()
+                time.sleep(0.3)
                 self.hard_refresh()
                 time.sleep(1)
                 continue
 
-            # --- No alert at all (unexpected) ---
-            last_error = "No alert appeared after submit"
+            # --- No alert and form still open (unexpected) ---
+            last_error = "No alert and form still open after submit"
             log.warning(last_error)
             self.force_close_form_popup()
             if not raise_on_error:
@@ -1130,15 +1178,26 @@ class UOMConversionPage(BasePage):
             return []
 
     def close_history_popup(self):
-        """Close the history popup."""
+        """Close the history popup by clicking Cancel button in footer."""
         try:
             self.driver.execute_script("""
-                var btn = document.querySelector('.swal2-confirm');
-                if (btn) { btn.click(); return 'swal2'; }
-                var close = document.querySelector('button[mat-icon-button] mat-icon[font]');
-                if (close && close.textContent.trim() === 'close') {
-                    close.click();
-                    return 'icon';
+                // Try Cancel button in popup footer
+                var footer = document.querySelector('div.overflow_model .popup-footer button');
+                if (footer) { footer.click(); return 'footer cancel'; }
+                // Try close icon in popup header
+                var popup = document.querySelector('div.overflow_model');
+                if (popup) {
+                    var actions = popup.querySelector('.popup-actions');
+                    if (actions) {
+                        var buttons = actions.querySelectorAll('button');
+                        for (var i = buttons.length - 1; i >= 0; i--) {
+                            var icon = buttons[i].querySelector('mat-icon');
+                            if (icon && icon.textContent.trim() === 'close') {
+                                buttons[i].click();
+                                return 'close icon';
+                            }
+                        }
+                    }
                 }
                 return 'none';
             """)
@@ -1148,16 +1207,25 @@ class UOMConversionPage(BasePage):
         self._force_close_panels()
 
     def verify_view_popup_read_only(self):
-        """Check if the view popup fields are disabled/read-only."""
+        """Check if the view popup fields are disabled/read-only.
+        Checks both input elements AND mat-select dropdowns."""
         try:
             return self.driver.execute_script("""
                 var fields = document.querySelectorAll('mat-form-field');
                 for (var i = 0; i < fields.length; i++) {
+                    // Check input elements (Conversion Factor)
                     var input = fields[i].querySelector('input');
                     if (input && !input.disabled && !input.readOnly) {
-                        var label = fields[i].querySelector('mat-label');
-                        var name = label ? label.textContent.trim() : 'unknown';
                         return false;
+                    }
+                    // Check mat-select dropdowns (Source UOM, Target UOM)
+                    var select = fields[i].querySelector('mat-select');
+                    if (select) {
+                        var ariaDisabled = select.getAttribute('aria-disabled');
+                        var classDisabled = select.classList.contains('mat-mdc-select-disabled');
+                        if (ariaDisabled !== 'true' && !classDisabled) {
+                            return false;
+                        }
                     }
                 }
                 return true;
