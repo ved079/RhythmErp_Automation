@@ -404,11 +404,14 @@ class TestUOMConversionValidation:
             page.navigate_to_page()
             page.open_add_form()
 
-            page.select_source_uom("KG")
-            page.select_target_uom("ML")
+            # Use dynamic UOM selection instead of hardcoded values
+            uoms = page.get_available_uoms_from_form()
+            source, target = random.sample(uoms, 2)
+            page.select_source_uom(source)
+            page.select_target_uom(target)
             special_value = generate_special_char_conversion_factor()
             page.enter_conversion_factor(special_value)
-            log.info("  Entered: " + special_value)
+            log.info("  Entered: " + source + " -> " + target + " = " + special_value)
 
             log.step(2, "Click Submit")
             page.submit()
@@ -933,10 +936,14 @@ class TestUOMConversionValidation:
 
             log.step(2, "Open Add form, fill all fields")
             page.open_add_form()
-            page.select_source_uom("KG")
-            page.select_target_uom("ML")
+
+            # Use dynamic UOM selection instead of hardcoded values
+            uoms = page.get_available_uoms_from_form()
+            source, target = random.sample(uoms, 2)
+            page.select_source_uom(source)
+            page.select_target_uom(target)
             page.enter_conversion_factor("42")
-            log.info("  Filled form with: KG -> ML = 42")
+            log.info("  Filled form with: " + source + " -> " + target + " = 42")
 
             log.step(3, "Click Cancel")
             page.close_popup()
