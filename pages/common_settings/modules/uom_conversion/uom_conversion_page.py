@@ -35,7 +35,10 @@ class UOMConversionPage(BasePage):
         while waited < 30:
             try:
                 has_add = self.driver.execute_script("""
-                    var icons = document.querySelectorAll('app-custom-header mat-icon');
+                    // Try .erp-add-btn first (most reliable), then fallback to icon search
+                    var addBtn = document.querySelector('app-custom-header .erp-add-btn');
+                    if (addBtn) return true;
+                    var icons = document.querySelectorAll('app-custom-header mat-icon, app-custom-header i.material-icons');
                     for (var i = 0; i < icons.length; i++) {
                         if (icons[i].textContent.trim() === 'add') return true;
                     }
@@ -70,7 +73,10 @@ class UOMConversionPage(BasePage):
         overlays and hard refresh the page.
         """
         js = """
-        var icons = document.querySelectorAll('app-custom-header mat-icon');
+        // Try .erp-add-btn first (most reliable), then fallback to icon click
+        var addBtn = document.querySelector('app-custom-header .erp-add-btn');
+        if (addBtn) { addBtn.click(); return 'clicked erp-add-btn'; }
+        var icons = document.querySelectorAll('app-custom-header mat-icon, app-custom-header i.material-icons');
         for (var i = 0; i < icons.length; i++) {
             if (icons[i].textContent.trim() === 'add') {
                 icons[i].click();
@@ -311,7 +317,7 @@ class UOMConversionPage(BasePage):
             if (actions) {
                 var buttons = actions.querySelectorAll('button');
                 for (var i = buttons.length - 1; i >= 0; i--) {
-                    var icon = buttons[i].querySelector('mat-icon');
+                    var icon = buttons[i].querySelector('mat-icon, i.material-icons');
                     if (icon && icon.textContent.trim() === 'close') {
                         buttons[i].click();
                         return 'clicked close icon';
@@ -544,7 +550,7 @@ class UOMConversionPage(BasePage):
     def refresh_page(self):
         """Click the REFRESH button."""
         js = """
-        var icons = document.querySelectorAll('app-custom-header mat-icon');
+        var icons = document.querySelectorAll('app-custom-header mat-icon, app-custom-header i.material-icons');
         for (var i = 0; i < icons.length; i++) {
             if (icons[i].textContent.trim() === 'refresh') {
                 icons[i].click();
