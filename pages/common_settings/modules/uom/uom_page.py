@@ -111,33 +111,24 @@ class UOMPage(BasePage):
         log.info("Page refreshed and ready")
 
     def _wait_for_page_ready(self):
-        """Wait for the UOM page to be fully interactive.
-        Waits for the search button to be CLICKABLE (not just present in DOM).
-        This ensures Angular has fully bootstrapped and the page is ready for interaction."""
+        """Wait for the UOM page table to appear.
+        We only wait for the table (not clickability of buttons) because
+        the search button is often overlapped and never Selenium-clickable.
+        We use JS clicks for the search button instead."""
         try:
-            # First wait for page to load (any element)
             WebDriverWait(self.driver, 15).until(
-                lambda d: d.find_elements("css selector", "button.search-btn") or
-                          d.find_elements("css selector", "table#excel-table")
+                lambda d: d.find_elements("css selector", "table#excel-table")
             )
-            log.info("Page elements found in DOM, waiting for clickability...")
-
-            # Then wait for search button to be actually clickable
-            # This is critical after driver.refresh() — Angular needs time to bootstrap
-            try:
-                WebDriverWait(self.driver, 10).until(
-                    EC.element_to_be_clickable(("css selector", "button.search-btn"))
-                )
-                log.info("Page ready (search button clickable)")
-            except Exception:
-                # Search button might not be on all pages — check table instead
-                log.info("Search button not clickable, checking table...")
-                WebDriverWait(self.driver, 5).until(
-                    EC.presence_of_element_located(("css selector", "table#excel-table"))
-                )
-                log.info("Page ready (table found, search button not available)")
+            log.info("Page ready (table found)")
         except Exception:
-            log.warning("Page ready check timed out")
+            # Fallback: check for search button
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    lambda d: d.find_elements("css selector", "button.search-btn")
+                )
+                log.info("Page ready (search button found, no table)")
+            except Exception:
+                log.warning("Page ready check timed out")
 
     # ================================================================
     # CREATE UOM
@@ -177,38 +168,60 @@ class UOMPage(BasePage):
     # ================================================================
 
     def search_uom(self, code):
-        """Search for a UOM code in the table. Waits for results to load."""
+        """Search for a UOM code in the table. Uses JS clicks to bypass overlay issues.
+        The search button (button.search-btn) is often overlapped on the live system
+        and never becomes Selenium-clickable, so we click it via JavaScript instead."""
         log.info(f"Searching for UOM: {code}")
 
-        # Step 1: Open search input if not already visible
+        # Step 1: Check if search input is already visible
+        search_input = None
         try:
-            search_input = self.driver.find_element("css selector", "input#erpSearchInput")
+            el = self.driver.find_element("css selector", "input#erpSearchInput")
             rect = self.driver.execute_script(
                 "var r = arguments[0].getBoundingClientRect(); "
-                "return r.width > 0 && r.height > 0;", search_input
+                "return r.width > 0 && r.height > 0;", el
             )
-            if not rect:
-                raise Exception("Not visible")
-            log.info("Search input already visible, skipping button click")
+            if rect:
+                search_input = el
+                log.info("Search input already visible, skipping button click")
         except Exception:
-            log.info("Search input not visible, clicking search button to open")
-            self.click_with_retry(self.SEARCH_BUTTON)
+            pass
+
+        # Step 2: If search input not visible, click search button via JS to open it
+        if search_input is None:
+            log.info("Search input not visible, clicking search button via JS")
+            js_click_search = """
+            var btn = document.querySelector('button.search-btn');
+            if (!btn) { throw new Error('Search button not found in DOM'); }
+            btn.scrollIntoView({block:'center'});
+            btn.click();
+            return 'clicked';
+            """
             try:
-                search_input = WebDriverWait(self.driver, 3).until(
+                result = self.driver.execute_script(js_click_search)
+                log.info("Search button clicked via JS: " + str(result))
+            except Exception as e:
+                log.error("Failed to click search button via JS: " + str(e))
+                return
+
+            # Wait for search input to become visible
+            try:
+                search_input = WebDriverWait(self.driver, 5).until(
                     EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
                 )
+                log.info("Search input became visible")
             except Exception:
                 log.warning("Search input did not become visible after clicking search button")
                 return
 
-        # Step 2: Clear existing value completely
+        # Step 3: Clear existing value completely
         self.driver.execute_script("arguments[0].value = '';", search_input)
         self.driver.execute_script(
             "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));",
             search_input,
         )
 
-        # Step 3: Set new value and fire Angular change events
+        # Step 4: Set new value and fire Angular change events
         self.driver.execute_script(
             "arguments[0].value = arguments[1];", search_input, code
         )
@@ -219,10 +232,16 @@ class UOMPage(BasePage):
                 search_input,
             )
 
-        # Step 4: Click the search button to actually submit/filter the table
-        self.click_with_retry(self.SEARCH_BUTTON)
+        # Step 5: Click the search button again via JS to submit/filter the table
+        js_click_search = """
+        var btn = document.querySelector('button.search-btn');
+        if (btn) { btn.click(); return 'clicked'; }
+        return 'not found';
+        """
+        self.driver.execute_script(js_click_search)
+        log.info("Search submit clicked via JS")
 
-        # Step 5: Wait for table to refresh (wait for rows to appear or search input to be ready again)
+        # Step 6: Wait for table to refresh
         try:
             WebDriverWait(self.driver, 5).until(
                 lambda d: d.find_elements("css selector", "table#excel-table tbody tr")
