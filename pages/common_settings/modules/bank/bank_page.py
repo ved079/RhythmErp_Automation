@@ -108,19 +108,19 @@ class BankPage(BasePage):
     TABLE_ROWS = ("css", "table#excel-table tbody tr")
     TABLE_BANK_NAME_CELLS = (
         "css",
-        "table#excel-table tbody td:nth-child(4)",
+        "table#excel-table tbody td.cdk-column-bank_name, table#excel-table tbody td:nth-child(2)",
     )
     TABLE_ACCOUNT_CELLS = (
         "css",
-        "table#excel-table tbody td:nth-child(5)",
+        "table#excel-table tbody td.cdk-column-account_number, table#excel-table tbody td:nth-child(3)",
     )
     TABLE_IFSC_CELLS = (
         "css",
-        "table#excel-table tbody td:nth-child(6)",
+        "table#excel-table tbody td.cdk-column-ifsc_code, table#excel-table tbody td:nth-child(4)",
     )
     TABLE_STATUS_CELLS = (
         "css",
-        "table#excel-table tbody td:nth-child(7)",
+        "table#excel-table tbody td.cdk-column-status, table#excel-table tbody td:nth-child(5)",
     )
     NO_DATA_ROW = (
         "css",
@@ -189,35 +189,20 @@ class BankPage(BasePage):
     # ==============================================================
     SUBMIT_BUTTON = (
         "xpath",
-        "//div[@class='popup-footer']//button[contains(.,'Submit')]",
+        "//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]",
     )
     UPDATE_BUTTON = (
         "xpath",
-        "//div[@class='popup-footer']//button[contains(.,'Update')]",
+        "//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]",
     )
     CANCEL_BUTTON = (
         "xpath",
-        "//div[@class='popup-footer']//button[contains(.,'Cancel')]",
+        "//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]",
     )
 
     # ==============================================================
-    #  LOCATORS — Row action buttons (parametrised by bank name)
+    #  LOCATORS — Row action buttons (now via 3-dot menu, see _click_action_button)
     # ==============================================================
-    VIEW_BUTTON = (
-        "xpath",
-        "//td[contains(text(),'{bank_name}')]"
-        "/ancestor::tr//td[1]//button",
-    )
-    EDIT_BUTTON = (
-        "xpath",
-        "//td[contains(text(),'{bank_name}')]"
-        "/ancestor::tr//td[2]//button",
-    )
-    HISTORY_BUTTON = (
-        "xpath",
-        "//td[contains(text(),'{bank_name}')]"
-        "/ancestor::tr//td[3]//button",
-    )
 
     # ==============================================================
     #  LOCATORS — SweetAlert2
@@ -907,7 +892,7 @@ class BankPage(BasePage):
         try:
             submit_btn = self.driver.find_element(
                 By.XPATH,
-                "//div[@class='popup-footer']//button[contains(.,'Submit')]"
+                "//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
             )
             self.driver.execute_script(
                 "arguments[0].scrollIntoView({block:'center'});"
@@ -919,7 +904,7 @@ class BankPage(BasePage):
             try:
                 update_btn = self.driver.find_element(
                     By.XPATH,
-                    "//div[@class='popup-footer']//button[contains(.,'Update')]"
+                    "//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]"
                 )
                 self.driver.execute_script(
                     "arguments[0].scrollIntoView({block:'center'});"
@@ -966,7 +951,7 @@ class BankPage(BasePage):
         try:
             submit_btn = self.driver.find_element(
                 By.XPATH,
-                "//div[@class='popup-footer']//button[contains(.,'Submit')]"
+                "//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
             )
             self.driver.execute_script(
                 "arguments[0].scrollIntoView({block:'center'});"
@@ -984,7 +969,7 @@ class BankPage(BasePage):
         try:
             update_btn = self.driver.find_element(
                 By.XPATH,
-                "//div[@class='popup-footer']//button[contains(.,'Update')]"
+                "//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]"
             )
             self.driver.execute_script(
                 "arguments[0].scrollIntoView({block:'center'});"
@@ -1001,7 +986,7 @@ class BankPage(BasePage):
         try:
             cancel_btn = self.driver.find_element(
                 By.XPATH,
-                "//div[@class='popup-footer']//button[contains(.,'Cancel')]"
+                "//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
             )
             self.driver.execute_script("arguments[0].click();", cancel_btn)
             self.wait_seconds(1)
@@ -1323,7 +1308,9 @@ class BankPage(BasePage):
         """Check if a bank with the given name exists in the table."""
         try:
             cells = self.driver.find_elements(
-                By.CSS_SELECTOR, "table#excel-table tbody td:nth-child(4)"
+                By.CSS_SELECTOR,
+                "table#excel-table tbody td.cdk-column-bank_name, "
+                "table#excel-table tbody td:nth-child(2)"
             )
             for cell in cells:
                 try:
@@ -1340,7 +1327,9 @@ class BankPage(BasePage):
         names = []
         try:
             cells = self.driver.find_elements(
-                By.CSS_SELECTOR, "table#excel-table tbody td:nth-child(4)"
+                By.CSS_SELECTOR,
+                "table#excel-table tbody td.cdk-column-bank_name, "
+                "table#excel-table tbody td:nth-child(2)"
             )
             for cell in cells:
                 try:
@@ -1367,60 +1356,85 @@ class BankPage(BasePage):
     #  Row action buttons
     # ==============================================================
 
+    def _click_action_button(self, bank_name, action_icon):
+        """Click an action button for a specific row via the 3-dot (more_vert) menu.
+
+        The ERP uses a single ⋮ menu per row instead of separate action columns.
+        Step 1: Find the matching row by bank name text.
+        Step 2: Click the ⋮ (more_vert) menu trigger button on that row.
+        Step 3: Wait for the dropdown menu to appear.
+        Step 4: Click the menu item whose material-icons text matches action_icon
+                (e.g. 'visibility' for View, 'edit' for Edit, 'history' for History).
+        """
+        # Map friendly action names to the actual icon text in the ERP menu
+        icon_map = {
+            "view": "visibility",
+            "edit": "edit",
+            "history": "history",
+        }
+        icon_text = icon_map.get(action_icon, action_icon)
+
+        # Step 1 & 2: Find the row and click its ⋮ menu trigger
+        js_trigger = """
+        var rows = document.querySelectorAll('table#excel-table tbody tr.mat-mdc-row');
+        for (var i = 0; i < rows.length; i++) {
+            var nameCell = rows[i].querySelector('.cdk-column-bank_name');
+            if (nameCell && nameCell.textContent.trim().toLowerCase().includes(arguments[0].toLowerCase())) {
+                var trigger = rows[i].querySelector('.erp-row-trigger');
+                if (trigger) {
+                    trigger.click();
+                    return 'opened menu on row ' + i;
+                }
+            }
+        }
+        throw new Error('Row or action trigger not found for bank: ' + arguments[0]);
+        """
+        result = self.driver.execute_script(js_trigger, bank_name)
+        log.info(f"Action trigger click: {result}")
+        self.wait_seconds(0.8)  # Wait for Angular menu animation
+
+        # Step 3 & 4: Click the correct menu item by its icon text
+        js_menu_item = """
+        var menu = document.querySelector('.mat-mdc-menu-panel');
+        if (!menu) throw new Error('Menu panel not found after trigger click');
+        var items = menu.querySelectorAll('button.mat-mdc-menu-item');
+        for (var i = 0; i < items.length; i++) {
+            var icon = items[i].querySelector('i.material-icons');
+            if (icon && icon.textContent.trim() === arguments[0]) {
+                items[i].click();
+                return 'clicked menu item: ' + arguments[0];
+            }
+        }
+        throw new Error('Menu item with icon "' + arguments[0] + '" not found');
+        """
+        result = self.driver.execute_script(js_menu_item, icon_text)
+        log.info(f"Menu item click: {result}")
+        self.wait_seconds(2)
+
     def click_view_button(self, bank_name):
-        """Click the View button for a specific bank row."""
+        """Click the View button for a specific bank row via 3-dot menu."""
         log.info(f"Clicking View for: {bank_name}")
         self._force_close_panels()
         try:
-            btn = self.driver.find_element(
-                By.XPATH,
-                f"//td[contains(text(),'{bank_name}')]"
-                f"/ancestor::tr//td[1]//button",
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});"
-                "arguments[0].click();",
-                btn,
-            )
-            self.wait_seconds(2)
+            self._click_action_button(bank_name, 'view')
         except Exception as e:
             log.error(f"View button not found for '{bank_name}': {e}")
 
     def click_edit_button(self, bank_name):
-        """Click the Edit button for a specific bank row."""
+        """Click the Edit button for a specific bank row via 3-dot menu."""
         log.info(f"Clicking Edit for: {bank_name}")
         self._force_close_panels()
         try:
-            btn = self.driver.find_element(
-                By.XPATH,
-                f"//td[contains(text(),'{bank_name}')]"
-                f"/ancestor::tr//td[2]//button",
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});"
-                "arguments[0].click();",
-                btn,
-            )
-            self.wait_seconds(2)
+            self._click_action_button(bank_name, 'edit')
         except Exception as e:
             log.error(f"Edit button not found for '{bank_name}': {e}")
 
     def click_history_button(self, bank_name):
-        """Click the History button for a specific bank row."""
+        """Click the History button for a specific bank row via 3-dot menu."""
         log.info(f"Clicking History for: {bank_name}")
         self._force_close_panels()
         try:
-            btn = self.driver.find_element(
-                By.XPATH,
-                f"//td[contains(text(),'{bank_name}')]"
-                f"/ancestor::tr//td[3]//button",
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});"
-                "arguments[0].click();",
-                btn,
-            )
-            self.wait_seconds(2)
+            self._click_action_button(bank_name, 'history')
         except Exception as e:
             log.error(f"History button not found for '{bank_name}': {e}")
 
@@ -1452,7 +1466,7 @@ class BankPage(BasePage):
             try:
                 toggle_btn = self.driver.find_element(
                     By.CSS_SELECTOR,
-                    "button.erp-outline-btn[aria-label='Search']:not(.search-btn)"
+                    "button[mattooltip='Search'], button[aria-label='Search']"
                 )
                 self.driver.execute_script("arguments[0].click();", toggle_btn)
                 self.wait_seconds(1)
@@ -1461,7 +1475,8 @@ class BankPage(BasePage):
 
             # Step 2: Find the search input
             search_input = self.driver.find_element(
-                By.CSS_SELECTOR, "input#erpSearchInput"
+                By.CSS_SELECTOR,
+                "input#erpSearchInput, input[aria-label='Search']"
             )
 
             # Use JS value-setter for Angular compatibility
@@ -1477,7 +1492,7 @@ class BankPage(BasePage):
 
             # Step 3: Click the search submit button
             search_btn = self.driver.find_element(
-                By.CSS_SELECTOR, "button.search-btn[aria-label='Search']"
+                By.CSS_SELECTOR, "button.search-btn, button[aria-label='Search']"
             )
             search_btn.click()
             self.wait_seconds(2)
@@ -1492,7 +1507,7 @@ class BankPage(BasePage):
             try:
                 toggle_btn = self.driver.find_element(
                     By.CSS_SELECTOR,
-                    "button.erp-outline-btn[aria-label='Search']:not(.search-btn)"
+                    "button[mattooltip='Search'], button[aria-label='Search']"
                 )
                 self.driver.execute_script("arguments[0].click();", toggle_btn)
                 self.wait_seconds(1)
@@ -1513,7 +1528,7 @@ class BankPage(BasePage):
             self.driver.execute_script(js, search_input)
             # Click search to submit empty = show all
             search_btn = self.driver.find_element(
-                By.CSS_SELECTOR, "button.search-btn[aria-label='Search']"
+                By.CSS_SELECTOR, "button.search-btn, button[aria-label='Search']"
             )
             search_btn.click()
             self.wait_seconds(2)
