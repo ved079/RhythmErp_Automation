@@ -135,10 +135,25 @@ class UOMPage(BasePage):
     # ================================================================
 
     def open_add_form(self):
-        """Click the Add button to open the Create UOM form popup."""
+        """Click the Add button to open the Create UOM form popup.
+        Uses JS click because button.erp-add-btn is often overlapped
+        and never becomes Selenium-clickable (same issue as search button)."""
         log.info("Opening Add UOM form")
         self._force_close_panels()
-        self.click_with_retry(self.ADD_BUTTON)
+        # JS click — bypasses overlay/z-index issues
+        js_click_add = """
+        var btn = document.querySelector('button.erp-add-btn');
+        if (!btn) { throw new Error('Add button not found in DOM'); }
+        btn.scrollIntoView({block:'center'});
+        btn.click();
+        return 'clicked';
+        """
+        try:
+            result = self.driver.execute_script(js_click_add)
+            log.info("Add button clicked via JS: " + str(result))
+        except Exception as e:
+            log.warning("JS click failed, falling back to Selenium click: " + str(e))
+            self.click_with_retry(self.ADD_BUTTON)
         # Wait for the form popup to appear
         try:
             WebDriverWait(self.driver, 5).until(
