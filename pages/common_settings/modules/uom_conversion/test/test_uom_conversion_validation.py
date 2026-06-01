@@ -76,9 +76,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -110,47 +110,62 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.ui
     def test_add_same_source_and_target(self, logged_in_driver):
-        """Test 3: Same UOM for source and target with factor = 1."""
+        """Test 3: Same UOM for source and target with factor = 1.
+        Uses a dynamically chosen UOM to avoid duplicate-pair errors."""
         driver = logged_in_driver
         page = UOMConversionPage(driver)
 
         try:
-            log.step(1, "Navigate to page and open Add form")
+            log.step(1, "Navigate to page, open Add form, read available UOMs")
             page.navigate_to_page()
-            page.open_add_form()
+            uoms = page.get_available_uoms()
+            # Pick a UOM that does NOT already have a same-source-target pair
+            existing = page.get_existing_pairs()
+            chosen_uom = None
+            for uom in uoms:
+                if (uom, uom) not in existing:
+                    chosen_uom = uom
+                    break
+            if not chosen_uom:
+                chosen_uom = uoms[0]  # fallback — observe what happens
 
-            log.step(2, "Select NOS -> NOS with factor 1")
-            page.select_source_uom("NOS")
-            page.select_target_uom("NOS")
+            log.step(2, "Select " + chosen_uom + " -> " + chosen_uom + " with factor 1")
+            page.open_add_form()
+            page.select_source_uom(chosen_uom)
+            page.select_target_uom(chosen_uom)
             page.enter_conversion_factor("1")
 
             log.step(3, "Click Submit")
             page.submit()
+            time.sleep(1)
 
-            log.step(4, "Observe system response (may succeed or reject as duplicate)")
-            time.sleep(2)
-            alert_title = page.get_swal_title()
-            log.info("  [OBSERVE] Alert after same UOM submit: " + str(alert_title))
-            if alert_title:
-                page.handle_success_alert() if "successfully" in alert_title.lower() else page.handle_validation_warning()
-                page.handle_error_toast()
+            log.step(4, "Observe system response (form closes = success, alert = rejection)")
+            if not page.is_form_open() and not page.is_sweetalert_visible():
+                log.info("  [PASS] Same-source-target pair accepted (form closed silently)")
+            elif page.is_validation_alert_present(timeout=2):
+                alert_title = page.get_swal_title()
+                log.info("  [OBSERVE] Alert after same UOM submit: " + str(alert_title))
+                page._dismiss_sweetalert()
+            elif page.is_success_alert_present(timeout=2):
+                page.handle_success_alert()
+                log.info("  [PASS] Success alert for same-source-target pair")
             log.info("  [PASS] System responded to same-source-and-target submission")
 
             log.info(">>> TEST 3 PASSED: Same source/target observed")
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     # ================================================================
     # GROUP B — VALIDATION (ADD)
@@ -197,9 +212,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -240,9 +255,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.smoke
     @pytest.mark.sanity
@@ -285,9 +300,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -328,9 +343,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -371,9 +386,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -414,9 +429,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -445,9 +460,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -471,9 +486,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     # ================================================================
     # GROUP C — BOUNDARY / BUG (22+ digit factor)
@@ -501,9 +516,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -548,9 +563,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -606,9 +621,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     # ================================================================
     # GROUP D — EDIT FLOW
@@ -641,10 +656,12 @@ class TestUOMConversionValidation:
             page.click_update()
             time.sleep(1)
 
-            log.step(4, "Verify success alert")
-            assert page.is_success_alert_present(timeout=5), \
-                "Update should succeed with new valid factor"
-            page.handle_success_alert()
+            log.step(4, "Verify update succeeded (form closes silently, no success popup)")
+            time.sleep(1)
+            update_ok = (not page.is_form_open()) or page.is_success_alert_present(timeout=2)
+            assert update_ok, "Update should succeed with new valid factor"
+            if page.is_success_alert_present(timeout=1):
+                page.handle_success_alert()
             log.info("  [PASS] Update succeeded")
 
             log.step(5, "Verify new factor in table")
@@ -662,9 +679,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -712,9 +729,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -747,9 +764,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -800,9 +817,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     # ================================================================
     # GROUP E — HISTORY
@@ -848,9 +865,9 @@ class TestUOMConversionValidation:
             raise
         finally:
             page.close_history_popup()
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -890,9 +907,9 @@ class TestUOMConversionValidation:
             raise
         finally:
             page.close_history_popup()
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     # ================================================================
     # GROUP F — CANCEL FLOW
@@ -936,9 +953,9 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -987,6 +1004,6 @@ class TestUOMConversionValidation:
         except Exception:
             raise
         finally:
-            page.force_close_form_popup()
+            if page.is_form_open():
+                page.force_close_form_popup()
             page.close_popup()
-            time.sleep(1)
