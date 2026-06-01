@@ -417,3 +417,391 @@ SWAL_TITLE_VALIDATION_FAILED = "Validation Failed"
 SWAL_CONTENT_VALIDATION_FAILED = "Please correct the highlighted fields"
 SWAL_TITLE_SUCCESS = "Your record has been added successfully!"
 SWAL_TITLE_UPDATED = "Your record has been updated successfully!"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# API Payload Builder
+# ═══════════════════════════════════════════════════════════════════════════════
+# Converts UI data format into the JSON payload that
+# POST /core/dynamic-screen-wrapper/ expects.
+#
+# BANK SCREEN STRUCTURE (flat — no children/steppers):
+#   {
+#     "id": "",
+#     "attribute_name": "Bank",
+#     "bank_name": "STATE BANK OF INDIA",
+#     "bank_code": "5448",
+#     "branch_name": "5729175282",
+#     "branch_code": "528215",
+#     "account_no": "6922150211",
+#     "account_type_ref_id": 1849,
+#     "swift_code": "SBININBB123",
+#     "iban_number": "IN91SBIN0001234",
+#     "ifsc_code": "SBIN0001234",
+#     "cash_credit_limit": 500000,
+#     "bank_address": "123 MG Road Mumbai",
+#     "gl_account_ref_id": <FK ID>,
+#     "is_default_bank": false,
+#     "status": true
+#   }
+#
+# FIELD KEY MAPPING:
+#   bank_name          -> bank_name (text, uppercase only)
+#   bank_code          -> bank_code (text, alphanumeric)
+#   branch_name        -> branch_name (text, numeric per validation)
+#   branch_code        -> branch_code (text, alphanumeric)
+#   account_number     -> account_no (text, numeric)
+#   account_type       -> account_type_ref_id (FK: 1849=Current, 1850=Saving)
+#   swift_number       -> swift_code (text, optional)
+#   iban_number        -> iban_number (text, optional)
+#   ifsc_code          -> ifsc_code (text, 11 chars)
+#   cash_credit_limit  -> cash_credit_limit (numeric)
+#   bank_address       -> bank_address (text, alphanumeric+spaces)
+#   gl_account         -> gl_account_ref_id (FK, placeholder)
+#   is_default_bank    -> is_default_bank (boolean)
+#   status             -> status (boolean)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─── FK ID constants (verified on tenant 599) ────────────────────────────────
+ACCOUNT_TYPE_IDS = {
+    "Current": 1849,
+    "Saving": 1850,
+}
+
+# ─── FK ID Placeholder (too many options, will fill from discovery) ──────────
+GL_ACCOUNT_REF_ID = None  # Placeholder — to be filled from discovery or live API
+
+# ─── Realistic Indian bank data pool ─────────────────────────────────────────
+REALISTIC_BANK_POOL = [
+    {
+        "bank_name": "STATE BANK OF INDIA",
+        "bank_code": "0001",
+        "branch_name": "0023456789",
+        "branch_code": "SBIN01",
+        "ifsc_code": "SBIN0000001",
+        "swift_code": "SBININBB001",
+        "iban_number": "IN91SBIN0000001",
+        "bank_address": "1 Sansad Marg New Delhi",
+    },
+    {
+        "bank_name": "HDFC BANK",
+        "bank_code": "0248",
+        "branch_name": "0034567891",
+        "branch_code": "HDFC01",
+        "ifsc_code": "HDFC0000001",
+        "swift_code": "HDFCINBB001",
+        "iban_number": "IN91HDFC0000001",
+        "bank_address": "1 Ramdoot Sion Trombay Road Mumbai",
+    },
+    {
+        "bank_name": "ICICI BANK",
+        "bank_code": "0029",
+        "branch_name": "0045678912",
+        "branch_code": "ICIC01",
+        "ifsc_code": "ICIC0000001",
+        "swift_code": "ICICINBB001",
+        "iban_number": "IN91ICIC0000001",
+        "bank_address": "ICICI Bank Tower Bandra Kurla Complex Mumbai",
+    },
+    {
+        "bank_name": "BANK OF BARODA",
+        "bank_code": "0020",
+        "branch_name": "0056789123",
+        "branch_code": "BARB01",
+        "ifsc_code": "BARB0000001",
+        "swift_code": "BARBINBB001",
+        "iban_number": "IN91BARB0000001",
+        "bank_address": "12 Sayajigunj Vadodara Gujarat",
+    },
+    {
+        "bank_name": "PUNJAB NATIONAL BANK",
+        "bank_code": "0026",
+        "branch_name": "0067891234",
+        "branch_code": "PUNB01",
+        "ifsc_code": "PUNB0000001",
+        "swift_code": "PUNBINBB001",
+        "iban_number": "IN91PUNB0000001",
+        "bank_address": "7 Bhikaiji Cama Place New Delhi",
+    },
+    {
+        "bank_name": "CANARA BANK",
+        "bank_code": "0017",
+        "branch_name": "0078912345",
+        "branch_code": "CNRB01",
+        "ifsc_code": "CNRB0000001",
+        "swift_code": "CNRBINBB001",
+        "iban_number": "IN91CNRB0000001",
+        "bank_address": "14 JC Road Bangalore Karnataka",
+    },
+    {
+        "bank_name": "UNION BANK OF INDIA",
+        "bank_code": "0031",
+        "branch_name": "0089123456",
+        "branch_code": "UBIN01",
+        "ifsc_code": "UBIN0000001",
+        "swift_code": "UBININBB001",
+        "iban_number": "IN91UBIN0000001",
+        "bank_address": "239 Vidhan Bhavan Marg Mumbai",
+    },
+    {
+        "bank_name": "BANK OF INDIA",
+        "bank_code": "0022",
+        "branch_name": "0091234567",
+        "branch_code": "BKID01",
+        "ifsc_code": "BKID0000001",
+        "swift_code": "BKIDINBB001",
+        "iban_number": "IN91BKID0000001",
+        "bank_address": "Star House BKC Mumbai",
+    },
+    {
+        "bank_name": "INDIAN BANK",
+        "bank_code": "0033",
+        "branch_name": "0012345678",
+        "branch_code": "IDIB01",
+        "ifsc_code": "IDIB0000001",
+        "swift_code": "IDIBINBB001",
+        "iban_number": "IN91IDIB0000001",
+        "bank_address": "66 Mount Road Chennai Tamil Nadu",
+    },
+    {
+        "bank_name": "CENTRAL BANK OF INDIA",
+        "bank_code": "0019",
+        "branch_name": "0023456780",
+        "branch_code": "CBIN01",
+        "ifsc_code": "CBIN0000001",
+        "swift_code": "CBININBB001",
+        "iban_number": "IN91CBIN0000001",
+        "bank_address": "MG Road Fort Mumbai",
+    },
+    {
+        "bank_name": "UCO BANK",
+        "bank_code": "0030",
+        "branch_name": "0034567801",
+        "branch_code": "UCBA01",
+        "ifsc_code": "UCBA0000001",
+        "swift_code": "UCBAINBB001",
+        "iban_number": "IN91UCBA0000001",
+        "bank_address": "10 BTM Sarani Kolkata West Bengal",
+    },
+    {
+        "bank_name": "INDIAN OVERSEAS BANK",
+        "bank_code": "0032",
+        "branch_name": "0045678012",
+        "branch_code": "IOBA01",
+        "ifsc_code": "IOBA0000001",
+        "swift_code": "IOBAINBB001",
+        "iban_number": "IN91IOBA0000001",
+        "bank_address": "763 Anna Salai Chennai Tamil Nadu",
+    },
+    {
+        "bank_name": "FEDERAL BANK",
+        "bank_code": "0046",
+        "branch_name": "0056780123",
+        "branch_code": "FDRL01",
+        "ifsc_code": "FDRL0000001",
+        "swift_code": "FDRLINBB001",
+        "iban_number": "IN91FDRL0000001",
+        "bank_address": "Federal Towers Aluva Kerala",
+    },
+    {
+        "bank_name": "KOTAK MAHINDRA BANK",
+        "bank_code": "0999",
+        "branch_name": "0067801234",
+        "branch_code": "KKBK01",
+        "ifsc_code": "KKBK0000001",
+        "swift_code": "KKBKINBB001",
+        "iban_number": "IN91KKBK0000001",
+        "bank_address": "27 BKC Mumbai Maharashtra",
+    },
+    {
+        "bank_name": "AXIS BANK",
+        "bank_code": "0063",
+        "branch_name": "0078012345",
+        "branch_code": "UTIB01",
+        "ifsc_code": "UTIB0000001",
+        "swift_code": "AXISINBB001",
+        "iban_number": "IN91UTIB0000001",
+        "bank_address": "Axis House Worli Mumbai",
+    },
+    {
+        "bank_name": "YES BANK",
+        "bank_code": "0054",
+        "branch_name": "0080123456",
+        "branch_code": "YESB01",
+        "ifsc_code": "YESB0000001",
+        "swift_code": "YESBINBB001",
+        "iban_number": "IN91YESB0000001",
+        "bank_address": "Nehru Centre Worli Mumbai",
+    },
+    {
+        "bank_name": "IDBI BANK",
+        "bank_code": "0023",
+        "branch_name": "0091234056",
+        "branch_code": "IBKL01",
+        "ifsc_code": "IBKL0000001",
+        "swift_code": "IBKLINBB001",
+        "iban_number": "IN91IBKL0000001",
+        "bank_address": "IDBI Tower WTC Complex Mumbai",
+    },
+    {
+        "bank_name": "BANDHAN BANK",
+        "bank_code": "0078",
+        "branch_name": "0012345067",
+        "branch_code": "BDBL01",
+        "ifsc_code": "BDBL0000001",
+        "swift_code": "BDBLINBB001",
+        "iban_number": "IN91BDBL0000001",
+        "bank_address": "Bandhan Bank Tower Kolkata",
+    },
+    {
+        "bank_name": "INDUSIND BANK",
+        "bank_code": "0052",
+        "branch_name": "0023456078",
+        "branch_code": "INDB01",
+        "ifsc_code": "INDB0000001",
+        "swift_code": "INDBINBB001",
+        "iban_number": "IN91INDB0000001",
+        "bank_address": "IndusInd Tower Mumbai",
+    },
+    {
+        "bank_name": "RBL BANK",
+        "bank_code": "0061",
+        "branch_name": "0034567089",
+        "branch_code": "RATN01",
+        "ifsc_code": "RATN0000001",
+        "swift_code": "RATNINBB001",
+        "iban_number": "IN91RATN0000001",
+        "bank_address": "RBL House Kolbad Thane",
+    },
+]
+
+
+def build_bank_api_payload(data: dict = None, dropdown_ids: dict = None) -> dict:
+    """Build the Bank API payload from data + FK IDs.
+
+    Args:
+        data: Dict from generate_valid_bank_data() or None for random.
+        dropdown_ids: Dict of FK IDs. Must contain 'account_type_ref_id'
+                      and 'gl_account_ref_id'. Falls back to ACCOUNT_TYPE_IDS /
+                      GL_ACCOUNT_REF_ID placeholders.
+
+    Returns:
+        JSON payload ready for POST /core/dynamic-screen-wrapper/
+    """
+    if data is None:
+        data = generate_valid_bank_data()
+
+    # Resolve FK IDs
+    account_type_name = data.get("account_type", "Current")
+    default_account_type_id = ACCOUNT_TYPE_IDS.get(account_type_name)
+
+    ids = dropdown_ids or {}
+    account_type_ref_id = ids.get("account_type_ref_id", default_account_type_id)
+    gl_account_ref_id = ids.get("gl_account_ref_id", GL_ACCOUNT_REF_ID)
+
+    # Cash credit limit must be numeric
+    try:
+        cash_credit_limit = int(data.get("cash_credit_limit", generate_cash_credit_limit()))
+    except (ValueError, TypeError):
+        cash_credit_limit = int(generate_cash_credit_limit())
+
+    payload = {
+        "id": "",
+        "attribute_name": "Bank",
+        "bank_name": data.get("bank_name", generate_bank_name()),
+        "bank_code": data.get("bank_code", generate_bank_code()),
+        "branch_name": data.get("branch_name", generate_branch_name()),
+        "branch_code": data.get("branch_code", generate_branch_code()),
+        "account_no": data.get("account_number", generate_account_number()),
+        "account_type_ref_id": account_type_ref_id,
+        "swift_code": data.get("swift_number", generate_swift_number()) or None,
+        "iban_number": data.get("iban_number", generate_iban_number()) or None,
+        "ifsc_code": data.get("ifsc_code", generate_ifsc_code()),
+        "cash_credit_limit": cash_credit_limit,
+        "bank_address": data.get("bank_address", generate_bank_address()),
+        "gl_account_ref_id": gl_account_ref_id,
+        "is_default_bank": data.get("is_default_bank", False),
+        "status": data.get("status", True),
+    }
+    return payload
+
+
+def generate_bank_api_payload(name_prefix: str = None, dropdown_ids: dict = None) -> dict:
+    """One-shot: generate a complete Bank API payload with realistic Indian data.
+
+    Picks a random entry from REALISTIC_BANK_POOL for authentic Indian bank
+    names, IFSC codes, and addresses. Generates fresh account numbers and
+    other variable fields for uniqueness.
+
+    Args:
+        name_prefix: Ignored (Bank Name must be uppercase per validation).
+                     Kept for API consistency.
+        dropdown_ids: Override specific FK IDs (e.g., account_type_ref_id, gl_account_ref_id).
+
+    Returns:
+        JSON payload ready for POST /core/dynamic-screen-wrapper/
+    """
+    entry = random.choice(REALISTIC_BANK_POOL)
+
+    data = {
+        "bank_name": entry["bank_name"],
+        "bank_code": entry["bank_code"],
+        "branch_name": generate_branch_name(),  # Fresh numeric branch name per validation
+        "branch_code": entry["branch_code"],
+        "account_number": generate_account_number(),  # Fresh account number
+        "account_type": random.choice(["Current", "Saving"]),
+        "swift_number": entry.get("swift_code", generate_swift_number()),
+        "iban_number": entry.get("iban_number", generate_iban_number()),
+        "ifsc_code": generate_ifsc_code(entry["ifsc_code"][:4]),  # Use bank's IFSC prefix
+        "cash_credit_limit": generate_cash_credit_limit(),
+        "bank_address": entry["bank_address"],
+        "gl_account": None,
+        "is_default_bank": False,
+        "status": True,
+    }
+    return build_bank_api_payload(data, dropdown_ids)
+
+
+def generate_bank_api_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None) -> list:
+    """Generate multiple unique Bank API payloads for batch creation.
+
+    Picks unique entries from REALISTIC_BANK_POOL (without replacement).
+    If count exceeds pool size, wraps around with fresh generated data.
+
+    Args:
+        count: Number of payloads to generate (default 20).
+        prefix: Ignored (Bank Name must be uppercase per validation).
+        dropdown_ids: Override specific FK IDs.
+
+    Returns:
+        List of JSON payloads.
+    """
+    pool = list(REALISTIC_BANK_POOL)
+    random.shuffle(pool)
+
+    payloads = []
+    for i in range(count):
+        if i < len(pool):
+            entry = pool[i]
+        else:
+            entry = random.choice(REALISTIC_BANK_POOL)
+
+        data = {
+            "bank_name": entry["bank_name"],
+            "bank_code": entry["bank_code"],
+            "branch_name": generate_branch_name(),
+            "branch_code": entry["branch_code"],
+            "account_number": generate_account_number(),
+            "account_type": random.choice(["Current", "Saving"]),
+            "swift_number": entry.get("swift_code", generate_swift_number()),
+            "iban_number": entry.get("iban_number", generate_iban_number()),
+            "ifsc_code": generate_ifsc_code(entry["ifsc_code"][:4]),
+            "cash_credit_limit": generate_cash_credit_limit(),
+            "bank_address": entry["bank_address"],
+            "gl_account": None,
+            "is_default_bank": False,
+            "status": True,
+        }
+        payloads.append(build_bank_api_payload(data, dropdown_ids))
+
+    return payloads

@@ -117,3 +117,156 @@ def generate_name_only_data():
         'description': '',
         'status': True
     }
+
+
+# ──────────────────────────────────────────────
+# API Payload Builder
+# ──────────────────────────────────────────────
+# Converts the existing UI data format into the JSON payload
+# that POST /core/dynamic-screen-wrapper/ expects.
+#
+# DESIGNATION SCREEN STRUCTURE (flat — no children, no steppers):
+#   {
+#     "id": "",
+#     "attribute_name": "Designation",
+#     "name": "Manager",
+#     "description": "Senior management role",
+#     "status": true
+#   }
+#
+# FIELD KEY MAPPING (reasonable guess — to be verified by discover_all.py):
+#   name          -> name (text, required)
+#   description   -> description (text, optional)
+#   status        -> status (boolean, default true)
+# ──────────────────────────────────────────────
+
+# Realistic Indian job titles for API batch creation
+# Only letters and spaces (must pass type="character" validation)
+REALISTIC_DESIGNATION_NAMES = [
+    # Senior Management
+    "Managing Director", "Executive Director", "Chief Operating Officer",
+    "Chief Financial Officer", "Chief Executive Officer", "Vice President",
+    "Senior Vice President", "Associate Director", "Deputy General Manager",
+    # Middle Management
+    "General Manager", "Assistant General Manager", "Divisional Manager",
+    "Regional Manager", "Zonal Manager", "Branch Manager",
+    "Operations Manager", "Finance Manager", "HR Manager",
+    "Purchase Manager", "Sales Manager", "Marketing Manager",
+    "Warehouse Manager", "Logistics Manager", "Quality Manager",
+    "Production Manager", "Admin Manager", "IT Manager",
+    # Supervisory
+    "Senior Supervisor", "Supervisor", "Shift Supervisor",
+    "Floor Supervisor", "Store Supervisor", "Field Supervisor",
+    "Warehouse Supervisor", "Quality Supervisor", "Production Supervisor",
+    # Officers & Executives
+    "Senior Officer", "Officer", "Junior Officer",
+    "Executive", "Senior Executive", "Junior Executive",
+    "Accounts Officer", "Purchase Officer", "Sales Officer",
+    "Compliance Officer", "Legal Officer", "Technical Officer",
+    "Field Officer", "Extension Officer", "Welfare Officer",
+    # Coordinators & Analysts
+    "Coordinator", "Senior Coordinator", "Project Coordinator",
+    "Analyst", "Senior Analyst", "Business Analyst",
+    "Data Analyst", "Quality Analyst", "Research Analyst",
+    # Engineers & Technical
+    "Chief Engineer", "Senior Engineer", "Engineer",
+    "Junior Engineer", "Assistant Engineer", "Maintenance Engineer",
+    # Clerical & Administrative
+    "Senior Clerk", "Clerk", "Junior Clerk", "Office Clerk",
+    "Accountant", "Senior Accountant", "Junior Accountant",
+    "Cashier", "Receptionist", "Stenographer",
+    # Inspectors & Auditors
+    "Inspector", "Quality Inspector", "Field Inspector",
+    "Internal Auditor", "Tax Auditor",
+    # Technicians
+    "Senior Technician", "Technician", "Junior Technician",
+    "Lab Technician", "IT Technician",
+    # Specialized
+    "Farm Manager", "Agricultural Officer", "Procurement Specialist",
+    "Inventory Controller", "Storekeeper", "Godown Keeper",
+]
+
+# Track used names to avoid duplicates within a batch
+_used_designation_names = set()
+
+
+def generate_realistic_designation_name():
+    """Pick a random realistic Indian job title, ensuring no duplicates
+    within the current batch by appending a short suffix if needed."""
+    name = random.choice(REALISTIC_DESIGNATION_NAMES)
+    if name not in _used_designation_names:
+        _used_designation_names.add(name)
+        return name
+    # Duplicate — append a short alphabetic suffix
+    suffix = "".join(random.choices(string.ascii_uppercase, k=3))
+    unique_name = f"{name} {suffix}"
+    _used_designation_names.add(unique_name)
+    return unique_name
+
+
+def reset_designation_name_pool():
+    """Reset the used-name tracker (call before a new batch)."""
+    _used_designation_names.clear()
+
+
+def build_designation_api_payload(data=None, dropdown_ids=None):
+    """Build the Designation API payload from data dict.
+
+    Args:
+        data: Dict from generate_valid_designation_data() or None for random.
+        dropdown_ids: Not used for Designation (no dropdown FK fields).
+                      Kept for interface consistency.
+
+    Returns:
+        JSON payload ready for POST /core/dynamic-screen-wrapper/
+    """
+    if data is None:
+        data = generate_valid_designation_data()
+
+    payload = {
+        "id": "",
+        "attribute_name": "Designation",
+        "name": data.get("name", ""),
+        "description": data.get("description", "") or None,
+        "status": data.get("status", True),
+    }
+    return payload
+
+
+def generate_designation_api_payload(name_prefix=None, dropdown_ids=None):
+    """One-shot: generate a complete Designation API payload with realistic data.
+
+    Args:
+        name_prefix: Ignored (realistic names are used instead).
+        dropdown_ids: Not used for Designation.
+
+    Returns:
+        JSON payload ready for POST /core/dynamic-screen-wrapper/
+    """
+    name = generate_realistic_designation_name()
+    data = {
+        "name": name,
+        "description": f"Responsible for {name.lower()} duties and responsibilities",
+        "status": True,
+    }
+    return build_designation_api_payload(data, dropdown_ids)
+
+
+def generate_designation_api_payloads(count=20, prefix=None, dropdown_ids=None):
+    """Generate multiple unique Designation API payloads for batch creation.
+
+    Args:
+        count: Number of payloads to generate.
+        prefix: Ignored (realistic names are used instead).
+        dropdown_ids: Not used for Designation.
+
+    Returns:
+        List of JSON payloads.
+    """
+    reset_designation_name_pool()
+    payloads = []
+    for _ in range(count):
+        payloads.append(
+            generate_designation_api_payload(prefix, dropdown_ids)
+        )
+    return payloads

@@ -361,3 +361,412 @@ def unselected_hsn_data() -> dict:
         "header": generate_valid_tax_rate_data(),
         "sub_table_rows": [{"hsn_number": "", "tax_rate": 18.0}],
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# API Payload Builder
+# ═══════════════════════════════════════════════════════════════════════════════
+# Converts the existing UI data format into the JSON payload
+# that POST /core/dynamic-screen-wrapper/ expects.
+#
+# TAX RATE SCREEN STRUCTURE (from live API):
+#   {
+#     "id": "",
+#     "attribute_name": "Tax Rate",
+#     "tax_rate_name": "GST Rate Schedule 2026-A",
+#     "tax_type_ref_id": 1,          // FK: GST
+#     "tax_authority_ref_id": 1,     // FK: Tax Authority
+#     "from_date": "2026-06-01T00:00:00Z",
+#     "to_date": "2099-12-30T18:30:00Z",
+#     "revision_status": "effective",
+#     "status": true,
+#     "children": [
+#       {
+#         "stepper_name": "Define Tax Rate Details",
+#         "is_stepper": true,
+#         "details": [
+#           {
+#             "hsn_sac_ref_id": 1,     // FK: HSN SAC entry
+#             "tax_rate": 18.0          // percentage
+#           }
+#         ],
+#         "children": []
+#       }
+#     ]
+#   }
+#
+# FIELD KEY MAPPING (verified from live API):
+#
+#   Root-level:
+#     tax_rate_name       -> tax_rate_name (string)
+#     tax_type            -> tax_type_ref_id (FK)
+#     tax_authority       -> tax_authority_ref_id (FK)
+#     from_date           -> from_date (ISO datetime string)
+#     to_date             -> to_date (ISO datetime string)
+#     revision_status     -> revision_status (string: "effective"/"draft")
+#     status              -> status (boolean)
+#
+#   Sub-table (in child[0].details[]):
+#     hsn_number          -> hsn_sac_ref_id (FK)
+#     tax_rate            -> tax_rate (float, percentage)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─── Dropdown FK ID pools (placeholder — to be filled from discovery) ────────
+TAX_TYPE_IDS = {"GST": None}         # Only one option
+TAX_AUTHORITY_IDS = {}                # To be filled from discovery
+HSN_SAC_IDS = {}                      # To be filled from discovery
+
+# ─── Realistic Indian GST slab percentages ────────────────────────────────────
+GST_SLAB_RATES = [0.25, 1, 1.5, 3, 5, 6, 7.5, 12, 15, 18, 20, 25, 28]
+
+# ─── Realistic HSN codes (Indian commodity classifications) ──────────────────
+# Maps HSN code -> description for documentation; IDs must come from discovery
+REALISTIC_HSN_CODES = {
+    "0101":   "Live horses, asses, mules",
+    "0201":   "Meat of bovine animals, fresh",
+    "0302":   "Fish, fresh or chilled",
+    "0401":   "Milk and cream, not concentrated",
+    "0701":   "Potatoes, fresh or chilled",
+    "0801":   "Coconuts, Brazil nuts, cashew nuts",
+    "0901":   "Coffee, whether or not roasted",
+    "1001":   "Wheat and meslin",
+    "1005":   "Maize (corn)",
+    "1006":   "Rice",
+    "1101":   "Wheat or meslin flour",
+    "1201":   "Soya beans",
+    "1511":   "Palm oil and its fractions",
+    "1701":   "Cane or beet sugar",
+    "2106":   "Food preparations n.e.c.",
+    "2201":   "Waters, incl. mineral & aerated",
+    "2401":   "Unmanufactured tobacco",
+    "2523":   "Portland cement",
+    "2701":   "Coal; briquettes",
+    "2710":   "Petroleum oils & preparations",
+    "3004":   "Medicaments, packaged",
+    "3208":   "Paints and varnishes",
+    "3901":   "Polymers of ethylene",
+    "4011":   "New pneumatic tyres of rubber",
+    "4801":   "Newsprint in rolls or sheets",
+    "4819":   "Cartons, boxes, bags of paper",
+    "5201":   "Cotton, not carded or combed",
+    "6110":   "Sweaters, pullovers, knitwear",
+    "6203":   "Men's suits, trousers, etc.",
+    "7005":   "Float glass and surface ground",
+    "7108":   "Gold (incl. gold plated)",
+    "7208":   "Flat-rolled products of iron/steel",
+    "7308":   "Structures & parts of iron/steel",
+    "8415":   "Air conditioning machines",
+    "8471":   "Automatic data processing machines",
+    "8504":   "Electrical transformers",
+    "8517":   "Telephone sets; smartphones",
+    "8703":   "Motor cars and vehicles",
+    "8708":   "Parts and accessories of vehicles",
+    "9031":   "Measuring/checking instruments",
+    "9401":   "Seats (chairs, sofas)",
+    "9403":   "Furniture (desks, cabinets)",
+}
+
+# ─── Realistic Tax Rate Name patterns (Indian GST context) ───────────────────
+TAX_RATE_NAME_PREFIXES = [
+    "GST Schedule",
+    "GST Rate Schedule",
+    "Revised GST Rate",
+    "GST Tariff",
+    "Commodity Tax Structure",
+    "GST Rate Card",
+    "Indian GST Rate",
+    "GST Applicable Rate",
+    "Tax Rate Configuration",
+    "GST Commodity Schedule",
+]
+
+TAX_RATE_NAME_QUALIFIERS = [
+    "Q1", "Q2", "Q3", "Q4",
+    "FY 2026", "FY 2027",
+    "A", "B", "C", "D",
+    "Phase 1", "Phase 2",
+    "Effective", "Amended",
+    "Standard", "Revised",
+    "Notification", "Circular",
+]
+
+TAX_RATE_NAME_SUFFIXES = [
+    "2026", "2027",
+    "April", "October",
+    "v1", "v2",
+    "Part I", "Part II",
+]
+
+
+# ─── Default FK IDs (placeholder — override after discovery) ─────────────────
+DEFAULT_TAX_RATE_FK_IDS = {
+    "tax_type_ref_id": 1,            # GST (only option)
+    "tax_authority_ref_id": None,    # To be filled from discovery
+}
+
+
+def generate_realistic_tax_rate_name(prefix=None) -> str:
+    """Generate a realistic Indian Tax Rate Name.
+
+    Examples:
+      - "GST Schedule Q1 2026"
+      - "Revised GST Rate A"
+      - "Commodity Tax Structure B FY 2027"
+    """
+    if prefix:
+        return f"{prefix} {random.randint(1000, 9999)}"
+
+    pat = random.choice([
+        lambda: f"{random.choice(TAX_RATE_NAME_PREFIXES)} {random.choice(TAX_RATE_NAME_QUALIFIERS)} {random.choice(TAX_RATE_NAME_SUFFIXES)}",
+        lambda: f"{random.choice(TAX_RATE_NAME_PREFIXES)} {random.choice(TAX_RATE_NAME_QUALIFIERS)}",
+        lambda: f"{random.choice(TAX_RATE_NAME_PREFIXES)} {random.choice(TAX_RATE_NAME_SUFFIXES)}",
+    ])
+    return pat()
+
+
+def generate_from_date_iso() -> str:
+    """Generate an ISO datetime for from_date (today or recent past)."""
+    today = datetime.now()
+    # Randomly pick today or up to 30 days ago
+    offset = random.randint(0, 30)
+    from_dt = today - timedelta(days=offset)
+    return from_dt.strftime("%Y-%m-%dT00:00:00Z")
+
+
+def generate_realistic_gst_slab() -> float:
+    """Pick a random Indian GST slab rate."""
+    return float(random.choice(GST_SLAB_RATES))
+
+
+def generate_random_hsn_code() -> str:
+    """Pick a random realistic HSN code."""
+    return random.choice(list(REALISTIC_HSN_CODES.keys()))
+
+
+def generate_sub_table_detail_rows(
+    row_count: int = None,
+    hsn_sac_ids: dict = None,
+) -> list:
+    """Generate detail rows for the Tax Rate sub-table.
+
+    Args:
+        row_count: Number of rows (1-5, random if None).
+        hsn_sac_ids: Dict mapping HSN code string -> ref_id int.
+                     If None or empty, uses placeholder ID of 1.
+
+    Returns:
+        List of dicts with hsn_sac_ref_id and tax_rate.
+    """
+    if row_count is None:
+        row_count = random.randint(1, 4)
+    row_count = max(1, min(row_count, 5))
+
+    details = []
+    used_hsn = set()
+
+    for _ in range(row_count):
+        # Pick a unique HSN code for each row
+        hsn_code = generate_random_hsn_code()
+        attempts = 0
+        while hsn_code in used_hsn and attempts < 20:
+            hsn_code = generate_random_hsn_code()
+            attempts += 1
+        used_hsn.add(hsn_code)
+
+        # Look up the ref_id, fallback to 1 if not discovered yet
+        if hsn_sac_ids and hsn_code in hsn_sac_ids:
+            hsn_ref_id = hsn_sac_ids[hsn_code]
+        else:
+            hsn_ref_id = 1  # placeholder
+
+        details.append({
+            "hsn_sac_ref_id": hsn_ref_id,
+            "tax_rate": generate_realistic_gst_slab(),
+        })
+
+    return details
+
+
+def build_tax_rate_api_payload(
+    data: dict = None,
+    dropdown_ids: dict = None,
+) -> dict:
+    """Build the complete Tax Rate API payload from data + FK IDs.
+
+    Args:
+        data: Dict from generate_valid_tax_rate_data() or generate_create_test_data(),
+              or None for random.
+        dropdown_ids: Dict of FK IDs. Missing keys fall back to DEFAULT_TAX_RATE_FK_IDS.
+                     Expected keys:
+                       - tax_type_ref_id (int)
+                       - tax_authority_ref_id (int)
+                       - hsn_sac_ids (dict: HSN code -> ref_id)
+
+    Returns:
+        JSON payload ready for POST /core/dynamic-screen-wrapper/
+    """
+    ids = {**DEFAULT_TAX_RATE_FK_IDS, **(dropdown_ids or {})}
+
+    if data is None:
+        data = generate_create_test_data()
+
+    # Handle both flat and nested data formats
+    header = data.get("header", data) if isinstance(data, dict) and "header" in data else data
+    sub_rows = data.get("sub_table_rows", [generate_sub_table_row()]) if "sub_table_rows" in data else [generate_sub_table_row()]
+
+    # Extract HSN SAC IDs from dropdown_ids if provided
+    hsn_sac_ids = ids.get("hsn_sac_ids", HSN_SAC_IDS)
+
+    # Build sub-table detail rows
+    detail_rows = []
+    for row in sub_rows:
+        hsn_code = row.get("hsn_number", "")
+        if hsn_sac_ids and hsn_code in hsn_sac_ids:
+            hsn_ref_id = hsn_sac_ids[hsn_code]
+        else:
+            hsn_ref_id = 1  # placeholder
+
+        tax_rate_val = row.get("tax_rate", 18.0)
+        try:
+            tax_rate_val = float(tax_rate_val)
+        except (ValueError, TypeError):
+            tax_rate_val = 18.0
+
+        detail_rows.append({
+            "hsn_sac_ref_id": hsn_ref_id,
+            "tax_rate": tax_rate_val,
+        })
+
+    # If no detail rows were built, add at least one default
+    if not detail_rows:
+        detail_rows = generate_sub_table_detail_rows(1, hsn_sac_ids)
+
+    # Build from_date
+    from_date_str = header.get("from_date", "")
+    if from_date_str:
+        # Convert DD/MM/YYYY to ISO datetime
+        try:
+            from_dt = datetime.strptime(from_date_str, "%d/%m/%Y")
+            from_date_iso = from_dt.strftime("%Y-%m-%dT00:00:00Z")
+        except ValueError:
+            from_date_iso = generate_from_date_iso()
+    else:
+        from_date_iso = generate_from_date_iso()
+
+    # Build to_date (default: 2099-12-30T18:30:00Z)
+    to_date_str = header.get("to_date", "")
+    if to_date_str:
+        try:
+            to_dt = datetime.strptime(to_date_str, "%d/%m/%Y")
+            to_date_iso = to_dt.strftime("%Y-%m-%dT18:30:00Z")
+        except ValueError:
+            to_date_iso = DEFAULT_TO_DATE_ISO
+    else:
+        to_date_iso = DEFAULT_TO_DATE_ISO
+
+    # Revision status
+    revision_status = header.get("revision_status", "effective") or "effective"
+
+    # Assemble payload
+    payload = {
+        "id": "",
+        "attribute_name": "Tax Rate",
+
+        # Root-level fields
+        "tax_rate_name": header.get("tax_rate_name", generate_realistic_tax_rate_name()),
+        "tax_type_ref_id": ids.get("tax_type_ref_id", 1),
+        "tax_authority_ref_id": ids.get("tax_authority_ref_id"),
+        "from_date": from_date_iso,
+        "to_date": to_date_iso,
+        "revision_status": revision_status,
+        "status": header.get("status", True),
+
+        # Children array with sub-table stepper
+        "children": [
+            {
+                "stepper_name": "Define Tax Rate Details",
+                "is_stepper": True,
+                "details": detail_rows,
+                "children": [],
+            }
+        ],
+    }
+
+    return payload
+
+
+def generate_tax_rate_api_payload(
+    name_prefix=None,
+    dropdown_ids: dict = None,
+) -> dict:
+    """One-shot: generate a complete Tax Rate API payload with random data.
+
+    Automatically randomizes:
+      - Tax Rate Name (realistic Indian GST naming)
+      - From Date (today or recent)
+      - Revision Status (effective/draft)
+      - HSN codes with GST slab rates (5, 12, 18, 28, etc.)
+      - Number of detail rows (1-4)
+
+    Args:
+        name_prefix: If provided, uses old-style prefix+random naming.
+        dropdown_ids: Override specific FK IDs.
+
+    Returns:
+        JSON payload ready for POST /core/dynamic-screen-wrapper/
+    """
+    # Generate header data
+    header_data = {
+        "tax_rate_name": generate_realistic_tax_rate_name(name_prefix),
+        "tax_type": "GST",
+        "tax_authority": random.choice(TAX_AUTHORITY_OPTIONS),
+        "from_date": datetime.now().strftime("%d/%m/%Y"),
+        "to_date": "",
+        "revision_status": random.choice(["effective", "draft"]),
+    }
+
+    # Generate 1-4 sub-table rows with realistic GST slabs
+    row_count = random.randint(1, 4)
+    sub_rows = []
+    used_hsn = set()
+    for _ in range(row_count):
+        hsn = random.choice(HSN_NUMBER_OPTIONS)
+        attempts = 0
+        while hsn in used_hsn and attempts < 20:
+            hsn = random.choice(HSN_NUMBER_OPTIONS)
+            attempts += 1
+        used_hsn.add(hsn)
+        sub_rows.append({
+            "hsn_number": hsn,
+            "tax_rate": generate_realistic_gst_slab(),
+        })
+
+    data = {
+        "header": header_data,
+        "sub_table_rows": sub_rows,
+    }
+
+    return build_tax_rate_api_payload(data, dropdown_ids)
+
+
+def generate_tax_rate_api_payloads(
+    count: int = 20,
+    prefix: str = None,
+    dropdown_ids: dict = None,
+) -> list:
+    """Generate multiple unique Tax Rate API payloads for batch creation.
+
+    Args:
+        count: Number of payloads to generate (default 20).
+        prefix: Optional name prefix for all payloads.
+        dropdown_ids: Override specific FK IDs for all payloads.
+
+    Returns:
+        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
+    """
+    payloads = []
+    for i in range(count):
+        payloads.append(
+            generate_tax_rate_api_payload(prefix, dropdown_ids)
+        )
+    return payloads
