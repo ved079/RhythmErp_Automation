@@ -4,8 +4,11 @@ uom_data.py
 Test data generator for UOM automation.
 Generates random UOM codes and descriptions.
 
-Updated: UOM Code field is type="text" on live system — accepts letters AND numbers.
-Description is NOT required (optional field).
+Updated (v2):
+- UOM Code field: type="text", maxlength=255 (auto-cutoff at 255 chars)
+- UOM Description field: maxlength=255 (auto-cutoff at 255 chars)
+- Description is NOT required (optional field)
+- Numbers are allowed in UOM code
 """
 
 import random
@@ -35,12 +38,15 @@ def generate_updated_description():
 # ================================================================
 
 def generate_string_255():
-    """Generate a string of exactly 255 characters (uppercase letters)."""
+    """Generate a string of exactly 255 characters (uppercase letters).
+    This is the maximum length allowed by the field (maxlength=255)."""
     return "A" * 255
 
 
 def generate_string_256():
-    """Generate a string of exactly 256 characters (uppercase letters)."""
+    """Generate a string of exactly 256 characters (uppercase letters).
+    When typed into a maxlength=255 field, only 255 chars will be accepted
+    (auto-cutoff). Used to verify the auto-cutoff behavior."""
     return "A" * 256
 
 
@@ -75,13 +81,15 @@ def generate_number_uom_code():
 
 def generate_special_char_uom_code():
     """Generate a UOM code containing special characters.
-    Special characters are still rejected by the frontend validation.
+    Special characters are rejected by the frontend validation (Pattern A).
     """
     return "AB!@#$%^"
 
 
 def generate_leading_space_uom_code():
-    """Generate a UOM code with leading spaces + unique random suffix."""
+    """Generate a UOM code with leading spaces + unique random suffix.
+    Backend auto-trims leading/trailing spaces.
+    """
     suffix = "".join(random.choices(string.ascii_uppercase, k=6))
     timestamp = datetime.now().strftime("%H%M%S")
     return f"  {suffix}{timestamp}"

@@ -3,9 +3,18 @@ uom_page.py
 ------------
 Page Object for RhythmERP -> Common Settings -> UOM.
 Handles Create, View, Edit, and History operations on the UOM page.
+
+Optimised (v2):
+- Replaced most time.sleep() with explicit WebDriverWait
+- Added hard_refresh() for fast page reset between tests
+- search_and_verify() combines search + existence check
+- Reduced unnecessary waits throughout
 """
 
 import time
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from common.base_page import BasePage
 from common.logger import log
 from config import EXPLICIT_WAIT
@@ -40,14 +49,8 @@ class UOMPage(BasePage):
     TABLE_ROWS = ("css", "table#excel-table tbody tr")
 
     # Action buttons — now inside a 3-dot menu dropdown (cdk-column-actions)
-    # The live system uses a single "Actions" column with a 3-dot (⋮) menu button.
-    # Clicking the 3-dot opens a dropdown with View, Edit, History options.
     ACTIONS_COLUMN = ("css", "td.cdk-column-actions")
-    THREE_DOT_MENU_BUTTON = ("css", "td.cdk-column-actions button")  # The ⋮ button per row
-    # Legacy locators kept for reference but NO LONGER MATCH live DOM:
-    # VIEW_BUTTON = ("xpath", "//td[contains(text(),'{uom_code}')]/ancestor::tr//td.cdk-column-view//button")
-    # EDIT_BUTTON = ("xpath", "//td[contains(text(),'{uom_code}')]/ancestor::tr//td.cdk-column-edit//button")
-    # HISTORY_BUTTON = ("xpath", "//td[contains(text(),'{uom_code}')]/ancestor::tr//td.cdk-column-archive//button")
+    THREE_DOT_MENU_BUTTON = ("css", "td.cdk-column-actions button")
 
     # ================================================================
     # CREATE / EDIT FORM (shared form fields)
@@ -99,25 +102,25 @@ class UOMPage(BasePage):
         self._force_close_panels()
         log.info("Arrived at UOM page")
 
+    def hard_refresh(self):
+        """Hard refresh the current page (Ctrl+R) and wait for it to be ready.
+        Much faster than full navigate_to_page() for resetting between tests."""
+        log.info("Hard refreshing page")
+        self.driver.refresh()
+        self._wait_for_page_ready()
+        self._force_close_panels()
+        log.info("Page refreshed and ready")
+
     def _wait_for_page_ready(self):
-        """Wait up to 20s for the UOM page search button or table to appear."""
-        waited = 0
-        while waited < 20:
-            try:
-                self.driver.find_element("css selector", "button.search-btn")
-                log.info("Page ready (search button found) after " + str(waited) + "s")
-                return
-            except Exception:
-                pass
-            try:
-                self.driver.find_element("css selector", "table#excel-table")
-                log.info("Page ready (table found) after " + str(waited) + "s")
-                return
-            except Exception:
-                pass
-            time.sleep(1)
-            waited += 1
-        log.warning("Page ready check timed out after 20s")
+        """Wait for the UOM page search button or table to appear using explicit wait."""
+        try:
+            WebDriverWait(self.driver, 15).until(
+                lambda d: d.find_elements("css selector", "button.search-btn") or
+                          d.find_elements("css selector", "table#excel-table")
+            )
+            log.info("Page ready (search button or table found)")
+        except Exception:
+            log.warning("Page ready check timed out after 15s")
 
     # ================================================================
     # CREATE UOM
@@ -128,7 +131,14 @@ class UOMPage(BasePage):
         log.info("Opening Add UOM form")
         self._force_close_panels()
         self.click_with_retry(self.ADD_BUTTON)
-        time.sleep(1)
+        # Wait for the form popup to appear
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(("css selector", "input[name='UOM Code']"))
+            )
+            log.info("Add form opened")
+        except Exception:
+            log.warning("Add form may not have opened — UOM Code input not found")
 
     def fill_uom_form(self, data):
         """
@@ -139,23 +149,21 @@ class UOMPage(BasePage):
         log.info(f"Filling UOM form: {data}")
         self.type_text(self.UOM_CODE_INPUT, data["uom_code"])
         self.type_text(self.UOM_DESCRIPTION_INPUT, data["uom_description"])
-        time.sleep(0.5)
 
     def submit(self):
         """Click Submit on the Create form."""
         log.info("Clicking Submit")
         self.click_with_retry(self.SUBMIT_BUTTON)
-        time.sleep(1)
 
     # ================================================================
     # SEARCH
     # ================================================================
 
     def search_uom(self, code):
-    
+        """Search for a UOM code in the table. Waits for results to load."""
         log.info(f"Searching for UOM: {code}")
 
-        # Step 1: Check if search input is already visible; if not, click button to open it
+        # Step 1: Open search input if not already visible
         try:
             search_input = self.driver.find_element("css selector", "input#erpSearchInput")
             rect = self.driver.execute_script(
@@ -168,8 +176,13 @@ class UOMPage(BasePage):
         except Exception:
             log.info("Search input not visible, clicking search button to open")
             self.click_with_retry(self.SEARCH_BUTTON)
-            time.sleep(0.5)
-            search_input = self.find_visible_element(self.SEARCH_INPUT)
+            try:
+                search_input = WebDriverWait(self.driver, 3).until(
+                    EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
+                )
+            except Exception:
+                log.warning("Search input did not become visible after clicking search button")
+                return
 
         # Step 2: Clear existing value completely
         self.driver.execute_script("arguments[0].value = '';", search_input)
@@ -177,7 +190,6 @@ class UOMPage(BasePage):
             "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));",
             search_input,
         )
-        time.sleep(0.3)
 
         # Step 3: Set new value and fire Angular change events
         self.driver.execute_script(
@@ -189,23 +201,28 @@ class UOMPage(BasePage):
                 f"arguments[0].dispatchEvent(new Event('{event}', {{ bubbles: true }}));",
                 search_input,
             )
-        time.sleep(0.3)
 
         # Step 4: Click the search button to actually submit/filter the table
         self.click_with_retry(self.SEARCH_BUTTON)
-        time.sleep(2)
 
-        log.info(f"Search triggered for: {code}")
+        # Step 5: Wait for table to refresh (wait for rows to appear or search input to be ready again)
+        try:
+            WebDriverWait(self.driver, 5).until(
+                lambda d: d.find_elements("css selector", "table#excel-table tbody tr")
+            )
+        except Exception:
+            pass  # Table might be empty (no results)
 
+        log.info(f"Search completed for: {code}")
 
     def verify_uom_exists(self, code):
         """
-        Verify UOM code appears in the main table after search.
-        Polls up to 15s to handle slow Angular re-renders.
+        Verify UOM code appears in the main table.
+        Polls up to 10s to handle slow Angular re-renders.
         Also logs what IS in the table to help debug misses.
         """
         log.info(f"Verifying UOM '{code}' exists in table")
-        end_time = time.monotonic() + 15
+        end_time = time.monotonic() + 10
         last_seen = []
         while time.monotonic() < end_time:
             try:
@@ -225,10 +242,21 @@ class UOMPage(BasePage):
         log.error(f"UOM '{code}' NOT found. Table contents were: {last_seen}")
         raise AssertionError(f"UOM '{code}' NOT found in table after search. Last table rows: {last_seen}")
 
+    def search_and_verify(self, code):
+        """
+        Search for a UOM code, then verify it exists in the filtered results.
+        This is the recommended way to verify a create/update — uses search
+        instead of scanning all rows (handles pagination automatically).
+        Returns True if found.
+        """
+        log.info(f"Searching and verifying UOM: {code}")
+        self.search_uom(code)
+        return self.verify_uom_exists(code)
+
     def is_uom_in_table(self, code):
         """
-        Check if a UOM code exists in the main table (first page only).
-        Returns True if found, False if not. No logging or exceptions.
+        Check if a UOM code exists in the main table (current view only).
+        Returns True if found, False if not. No exceptions.
         """
         try:
             rows = self.find_elements(self.TABLE_ROWS)
@@ -240,13 +268,11 @@ class UOMPage(BasePage):
         except Exception:
             pass
         return False
-    
 
     def clear_search(self):
         """Clear the search input and refresh to get clean state."""
-        log.info("Clearing search - navigating fresh")
-        self.navigate_to_page()
-        time.sleep(1)
+        log.info("Clearing search - hard refreshing")
+        self.hard_refresh()
 
     # ================================================================
     # VIEW UOM
@@ -255,16 +281,17 @@ class UOMPage(BasePage):
     def click_view_button(self, uom_code):
         """Click the View (eye) button for a specific UOM row via 3-dot menu."""
         self._click_action_menu_item(uom_code, "View")
-        time.sleep(1.5)
+        # Wait for view popup to appear
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(("css selector", ".popup-header h3"))
+            )
+        except Exception:
+            pass
 
     def verify_view_popup_read_only(self):
         """
         Verify the View popup has fields disabled (read-only).
-        Checks:
-        1. UOM Code input has 'disabled' attribute
-        2. UOM Description input has 'disabled' attribute
-        3. No Submit/Update button is present
-        4. Cancel button IS present
         """
         log.info("Verifying View popup is read-only")
 
@@ -298,14 +325,17 @@ class UOMPage(BasePage):
     def click_edit_button(self, uom_code):
         """Click the Edit button for a specific UOM row via 3-dot menu."""
         self._click_action_menu_item(uom_code, "Edit")
-        time.sleep(1.5)
+        # Wait for edit popup to appear
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(("css selector", "input[name='UOM Code']"))
+            )
+        except Exception:
+            pass
 
     def verify_edit_popup_editable(self):
         """
         Verify the Edit popup has fields enabled.
-        Checks:
-        1. Update button IS present
-        2. Cancel button IS present
         """
         log.info("Verifying Edit popup is editable")
 
@@ -321,7 +351,6 @@ class UOMPage(BasePage):
         """Clear and type a new description in the Edit form."""
         log.info("Updating description to: " + str(new_description))
         self.type_text(self.UOM_DESCRIPTION_INPUT, new_description)
-        time.sleep(0.5)
 
     def toggle_status(self):
         """Click the status toggle (Active <-> Inactive) via .slider."""
@@ -347,7 +376,6 @@ class UOMPage(BasePage):
         """
         result = self.driver.execute_script(js)
         log.info("Toggle clicked: " + str(result))
-        time.sleep(0.5)
 
     def get_toggle_status(self):
         """Get current toggle state - Active or Inactive."""
@@ -365,7 +393,6 @@ class UOMPage(BasePage):
         """Click the Update button on the Edit form."""
         log.info("Clicking Update")
         self.click_with_retry(self.UPDATE_BUTTON)
-        time.sleep(1)
 
     # ================================================================
     # HISTORY
@@ -374,7 +401,13 @@ class UOMPage(BasePage):
     def click_history_button(self, uom_code):
         """Click the History button for a specific UOM row via 3-dot menu."""
         self._click_action_menu_item(uom_code, "History")
-        time.sleep(2)
+        # Wait for history popup to appear
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(("css selector", "app-dynamic-history"))
+            )
+        except Exception:
+            pass
 
     def is_history_empty(self):
         """
@@ -461,7 +494,6 @@ class UOMPage(BasePage):
         throw new Error('Cancel button not found in any popup-footer');
         """
         self.driver.execute_script(js)
-        time.sleep(1)
 
     # ================================================================
     # POPUP CLOSE (shared)
@@ -472,7 +504,6 @@ class UOMPage(BasePage):
         log.info("Closing popup")
         try:
             self.click_with_retry(self.CANCEL_BUTTON)
-            time.sleep(1)
         except Exception:
             log.warning("Could not click Cancel, trying to force close panels")
             self._force_close_panels()
@@ -484,8 +515,7 @@ class UOMPage(BasePage):
     def handle_success_alert(self):
         """
         Handle SweetAlert2 success notification.
-        Waits briefly for SweetAlert, tries to dismiss it quickly.
-        If confirm button not found, waits for auto-dismiss.
+        Waits for SweetAlert, clicks confirm to dismiss quickly.
         """
         log.info("Handling success alert")
         try:
@@ -498,7 +528,13 @@ class UOMPage(BasePage):
                     log.info("Clicked SweetAlert confirm via JS")
                 except Exception:
                     log.info("SweetAlert confirm not found, waiting for auto-dismiss")
-                time.sleep(3)
+                # Wait for SweetAlert to disappear
+                try:
+                    WebDriverWait(self.driver, 5).until(
+                        EC.invisibility_of_element_located(("css selector", ".swal2-container"))
+                    )
+                except Exception:
+                    pass
             else:
                 log.info("No SweetAlert found (may have auto-dismissed)")
         except Exception as e:
@@ -532,11 +568,6 @@ class UOMPage(BasePage):
         """
         Click an action menu item (View/Edit/History) for a specific UOM row.
         The live system uses a 3-dot (⋮) menu button in cdk-column-actions.
-        Steps:
-          1. Find the row containing the UOM code
-          2. Click the 3-dot menu button in cdk-column-actions
-          3. Wait for the dropdown menu to appear
-          4. Click the menu item matching action_name (View/Edit/History)
         """
         log.info("Clicking " + action_name + " via 3-dot menu for UOM: " + uom_code)
         js = """
@@ -547,7 +578,6 @@ class UOMPage(BasePage):
             var cells = rows[i].querySelectorAll('td');
             for (var j = 0; j < cells.length; j++) {
                 if (cells[j].textContent.trim().indexOf(arguments[0]) !== -1) {
-                    // Found the row — click the 3-dot menu button
                     var menuBtn = rows[i].querySelector('td.cdk-column-actions button');
                     if (!menuBtn) { throw new Error('3-dot menu button not found in actions column'); }
                     menuBtn.scrollIntoView({block:'center'});
@@ -560,11 +590,16 @@ class UOMPage(BasePage):
         """
         result = self.driver.execute_script(js, uom_code)
         log.info("3-dot menu opened for UOM: " + uom_code)
-        time.sleep(0.5)  # Wait for dropdown to render
 
-        # Now click the specific menu item from the dropdown overlay
-        # The dropdown items are rendered in .cdk-overlay-container
-        # Each item is a button or span with text matching the action name
+        # Wait briefly for dropdown to render
+        try:
+            WebDriverWait(self.driver, 2).until(
+                EC.presence_of_element_located(("css selector", ".cdk-overlay-container .cdk-overlay-pane"))
+            )
+        except Exception:
+            pass
+
+        # Click the specific menu item from the dropdown overlay
         js_click_item = """
         var overlay = document.querySelector('.cdk-overlay-container');
         if (!overlay) { throw new Error('CDK overlay not found after menu click'); }
@@ -590,24 +625,6 @@ class UOMPage(BasePage):
         log.info("Successfully clicked " + action_name + " for UOM: " + uom_code)
         return result
 
-    # Legacy method kept for backward compatibility — no longer works on live system
-    # because action columns (cdk-column-view, cdk-column-edit, cdk-column-archive)
-    # have been replaced by a single cdk-column-actions with 3-dot menu.
-    def _click_action_button(self, uom_code, column_class):
-        """
-        DEPRECATED: Use _click_action_menu_item() instead.
-        Legacy method for clicking action buttons via column class.
-        This no longer works on the live system because separate action columns
-        (cdk-column-view/edit/archive) have been replaced by cdk-column-actions
-        with a 3-dot (⋮) menu dropdown.
-        """
-        log.warning("_click_action_button is DEPRECATED. Use _click_action_menu_item instead.")
-        self._click_action_menu_item(uom_code, {
-            "cdk-column-view": "View",
-            "cdk-column-edit": "Edit",
-            "cdk-column-archive": "History"
-        }.get(column_class, column_class))
-
     # ================================================================
     # VALIDATION ALERT HANDLERS
     # ================================================================
@@ -625,7 +642,13 @@ class UOMPage(BasePage):
             confirm_btn = self.driver.find_element("css selector", ".swal2-confirm")
             self.driver.execute_script("arguments[0].click();", confirm_btn)
             log.info("Clicked OK to dismiss validation warning")
-            time.sleep(1)
+            # Wait for SweetAlert to disappear
+            try:
+                WebDriverWait(self.driver, 3).until(
+                    EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
+                )
+            except Exception:
+                pass
         except Exception as e:
             log.warning("No validation warning found: " + str(e))
 
@@ -642,34 +665,42 @@ class UOMPage(BasePage):
             cancel_btn = self.driver.find_element("css selector", ".swal2-cancel")
             self.driver.execute_script("arguments[0].click();", cancel_btn)
             log.info("Clicked Cancel to dismiss validation download popup")
-            time.sleep(1)
+            # Wait for SweetAlert to disappear
+            try:
+                WebDriverWait(self.driver, 3).until(
+                    EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
+                )
+            except Exception:
+                pass
         except Exception as e:
             log.warning("No validation download popup found: " + str(e))
-    
+
     def handle_error_toast(self):
         """
         DEPRECATED: Pattern C ('Failed to save record' error toast) no longer exists
-        on the live system. The frontend now validates before submission, preventing
-        256+ char inputs from reaching the backend. Kept for backward compatibility.
+        on the live system. Kept for backward compatibility.
         """
         log.warning("handle_error_toast is DEPRECATED. Pattern C no longer exists on live system.")
         log.info("Checking for any error toast (backward compat)")
-        time.sleep(3)
         try:
-            self.driver.find_element("css selector", ".swal2-popup.swal2-icon-error")
+            WebDriverWait(self.driver, 3).until(
+                EC.presence_of_element_located(("css selector", ".swal2-popup.swal2-icon-error"))
+            )
             log.info("Error toast detected (unexpected on live system), waiting for dismiss")
-            time.sleep(3)
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    EC.invisibility_of_element_located(("css selector", ".swal2-popup.swal2-icon-error"))
+                )
+            except Exception:
+                pass
         except Exception:
             log.info("No error toast found (expected — Pattern C removed from live system)")
 
     def is_validation_alert_present(self, timeout=5):
         """
-        Check if any SweetAlert validation popup or error toast is visible.
-        Polls up to `timeout` seconds (checks every 0.5s).
-        Returns True if swal2-icon-warning (Pattern A/B) or
-        swal2-icon-error (legacy Pattern C) is present.
-        Note: Pattern C no longer appears on the live system — frontend validates
-        before submission, so 256+ char inputs never reach the backend.
+        Check if any SweetAlert validation popup is visible.
+        Polls up to `timeout` seconds (checks every 0.3s).
+        Returns True if swal2-icon-warning or swal2-icon-error is present.
         """
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
@@ -683,7 +714,7 @@ class UOMPage(BasePage):
                         return True
             except Exception:
                 pass
-            time.sleep(0.5)
+            time.sleep(0.3)
         return False
 
     def dismiss_any_validation_alert(self):
@@ -703,7 +734,13 @@ class UOMPage(BasePage):
                 confirm_btn = self.driver.find_element("css selector", ".swal2-confirm")
                 self.driver.execute_script("arguments[0].click();", confirm_btn)
                 log.info("Dismissed via OK button (Pattern A)")
-            time.sleep(1)
+            # Wait for SweetAlert to disappear
+            try:
+                WebDriverWait(self.driver, 3).until(
+                    EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
+                )
+            except Exception:
+                pass
         except Exception as e:
             log.warning("No validation alert to dismiss: " + str(e))
 
@@ -711,8 +748,6 @@ class UOMPage(BasePage):
         """
         Get the mat-error text below a form field.
         Uses pure JS (no Selenium find_element) to avoid locator issues.
-        Walks up parentElement chain to find mat-error at any ancestor level.
-        Returns all error texts joined by ' | ', or empty string if none.
         """
         try:
             css_selector = field_locator[1] if field_locator[0] == "css" else ""
@@ -799,10 +834,21 @@ class UOMPage(BasePage):
     def is_add_form_open(self):
         """Check if the Add/Create UOM popup is currently open."""
         try:
-            self.driver.find_element("css selector", "input[name='UOM Code']")
-            return True
+            el = self.driver.find_element("css selector", "input[name='UOM Code']")
+            return el.is_displayed()
         except Exception:
             return False
+
+    def get_field_value(self, locator):
+        """Get the current value of an input field."""
+        try:
+            css_selector = locator[1] if locator[0] == "css" else ""
+            if not css_selector:
+                return ""
+            el = self.driver.find_element("css selector", css_selector)
+            return el.get_attribute("value") or ""
+        except Exception:
+            return ""
 
     def force_close_form_popup(self):
         """Force-close any open form popup by clicking the X button via JS."""
@@ -818,4 +864,3 @@ class UOMPage(BasePage):
         """
         result = self.driver.execute_script(js)
         log.info("Force close result: " + str(result))
-        time.sleep(0.5)

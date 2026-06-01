@@ -72,9 +72,14 @@ def logged_in_driver(driver):
     login_page.wait_seconds(3)
 
     login_page.wait_for_login_complete()
+
+    # Verify login actually succeeded (don't falsely report success)
+    if "login" in driver.current_url.lower():
+        log.error("Login did not complete — still on login page. URL: " + driver.current_url)
+        raise RuntimeError("RhythmERP login failed — still on login page after wait. Check credentials in .env")
+
     log.info("RhythmERP login successful!")
     start_screenshot_broadcast(driver)
-    log.info("RhythmERP login successful!")
 
     yield driver
 
@@ -90,22 +95,21 @@ def logged_in_driver(driver):
 _cs_store = CSReportStore()
 
 # ---- UOM Known Issues (discovered during validation testing) ----
-# Updated: Pattern C (backend error toast) no longer exists on live system.
-# Frontend now validates before submission, preventing 256+ char inputs
-# from reaching the backend. Bug #1 downgraded from High to Medium.
+# Updated: Both Code and Description fields have maxlength=255 (auto-cutoff).
+# 256+ char inputs are silently truncated to 255 without any warning.
+# Tests 12 and 14 now verify the auto-cutoff behavior instead of expecting rejection.
 _cs_store.record_issue(
-    severity="Medium",
+    severity="Low",
     module="UOM",
     category="Backend",
-    description="255-char backend limit. Previously showed generic 'Failed to save record' "
-                "error toast (Pattern C). Live system now validates at frontend level "
-                "before submission, showing Pattern A warning instead. However, "
-                "the error message still does not clearly indicate the character limit.",
-    expected="System should show a clear field-level error indicating the "
-             "255-character maximum limit before submission.",
-    actual="Frontend now prevents submission of 256+ char values (Pattern A), "
-           "but the error message is still generic ('Please correct the highlighted fields') "
-           "without specifying the character limit.",
+    description="Code and Description fields have maxlength=255 (auto-cutoff). "
+                "When typing 256+ chars, the field silently truncates to 255 "
+                "without any warning to the user. No validation error is shown — "
+                "the form submits successfully with the truncated value.",
+    expected="System should show a clear field-level warning when text is "
+             "auto-truncated, or at least indicate the 255-char maximum near the field.",
+    actual="Fields silently auto-cutoff at 255 chars. No warning, no error. "
+           "User may not realise their input was truncated.",
     test_ref="Test 12, Test 14",
     status="Open",
 )
