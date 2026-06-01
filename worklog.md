@@ -1,4 +1,4 @@
-# RhythmERP Security Sprint Worklog
+# RhythmERP Automation Worklog
 
 ---
 Task ID: 0
@@ -60,3 +60,23 @@ Stage Summary:
 - Passwords no longer leak in API responses
 - All failed login/OTP attempts now logged with IP
 - Logout entries now include IP address
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Resolve cascading address randomization for Supplier API batch creation
+
+Work Log:
+- Read existing _ADDRESS_CHAINS pool (8 verified + 10 unverified = 18 total, but unverified had guessed FK IDs)
+- Found harvested_chains.json from previous full_harvest.py run containing 24 verified chains from live Supplier entries
+- Updated _ADDRESS_CHAINS in supplier_data.py with all 24 harvested chains, all marked _verified=True
+- Removed all 10 unverified chains with guessed FK IDs (Gujarat, Rajasthan, Karnataka, Tamil Nadu, UP, MP, West Bengal, Telangana, Kerala)
+- New pool covers 6 unique states: Maharashtra(12), Punjab(82), State(98), State(101), State(103), State(107)
+- Tested batch create: 5/5 succeeded with randomized addresses across 4 different states
+
+Stage Summary:
+- Cascading address randomization is FULLY WORKING
+- Pool expanded from 8 verified chains to 24 verified chains (3x increase)
+- Each batch create now randomly picks state/district/taluka/village from 24 valid options
+- All dropdown FK IDs (ownership, PO type, address type, payment terms, etc.) also randomized
+- Latest batch: 5 suppliers created in ~3 seconds across states 12, 82, 98, 103

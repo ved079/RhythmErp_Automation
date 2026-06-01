@@ -727,9 +727,53 @@ class KnownBugs:
 # IMPORTANT: These IDs are instance-specific. Always verify with
 # GET /core/dynamic-screen-wrapper/<SCREEN_NAME>/?page_number=1&page_size=50
 # or use client.discover_structure("Supplier") before relying on them.
-# Default FK IDs for NON-cascading dropdowns (verified on tenant 599).
-# Cascading address FK IDs (state/district/taluka/village) are resolved
-# dynamically via get_random_address_chain() — see below.
+# ──────────────────────────────────────────────
+# Dropdown FK ID pools (verified on tenant 599)
+# ──────────────────────────────────────────────
+# Each pool contains all known valid IDs for that dropdown.
+# generate_supplier_api_payload() picks randomly from these
+# so that each entry looks different.
+
+OWNERSHIP_STATUS_IDS = [7, 1262, 1263, 1853]
+#   7 = Private Limited Company
+#   1262 = Partnership
+#   1263 = Proprietorship
+#   1853 = Individual
+
+PO_TYPE_IDS = [25, 24]
+#   25 = Domestic
+#   24 = Import
+
+ADDRESS_TYPE_IDS = [43, 42]
+#   43 = Shipping
+#   42 = Billing
+
+ACCOUNT_TYPE_IDS = [1849, 1850]
+#   1849 = Current
+#   1850 = Saving
+
+PAYMENT_TERMS_IDS = [26, 27, 28, 29, 30, 31, 32, 33, 34]
+#   26 = 30 Days, 27 = 60 Days, 28 = Advance,
+#   29 = Immediate, 30 = RTGS, 31 = Wallet,
+#   32 = 7 Days, 33 = 14 Days, 34 = 21 Days
+
+DELIVERY_TERMS_IDS = [129, 130]
+#   129 = Delivery
+#   130 = Spot
+
+MODE_OF_DELIVERY_IDS = [30, 31, 32, 33, 34]
+#   30 = Truck, 31 = Railway, 32 = Sea,
+#   33 = Courier, 34 = Air
+
+BANK_DOC_IDS = [1883, 1884]
+#   1883 = Bank Statement
+#   1884 = Cancelled Cheque
+
+# Fixed defaults (these never vary)
+DEFAULT_CURRENCY_REF_ID = 1   # INR
+DEFAULT_COUNTRY_REF_ID = 8    # India
+
+# Backward-compatible DEFAULT_SUPPLIER_FK_IDS dict (uses first option from each pool)
 DEFAULT_SUPPLIER_FK_IDS = {
     "ownership_status_ref_id": 7,    # Private Limited Company
     "po_type_ref_id": 25,           # Domestic
@@ -742,10 +786,6 @@ DEFAULT_SUPPLIER_FK_IDS = {
     "account_type": 1849,           # Current (Saving=1850)
     "bank_doc_id": 1883,            # Bank Statement
 }
-
-# Alternative ownership status IDs for variety:
-# Proprietorship=1263, Partnership=1262, Pvt Ltd=7, Individual=1853
-# PO Type: Domestic=25, Import=24
 
 
 # ──────────────────────────────────────────────
@@ -762,77 +802,243 @@ DEFAULT_SUPPLIER_FK_IDS = {
 # Country is always India (id=8) — not included per chain.
 
 _ADDRESS_CHAINS = [
-    # ── Punjab ──
+    # ──────────────────────────────────────────────────
+    # VERIFIED chains — harvested from live Supplier entries
+    # on tenant 599 via scripts/full_harvest.py
+    # All chains have been confirmed valid by the API.
+    # ──────────────────────────────────────────────────
+
+    # ── Maharashtra (state 12) / Akola district ──
     {
-        "state_ref_id_id": 82,
-        "district_ref_id_id": 764,
-        "sub_district_ref_id_id": 13939,
-        "village_ref_id_id": 775472,
+        "state_ref_id_id": 12,
+        "district_ref_id_id": 208,
+        "sub_district_ref_id_id": 13041,
+        "village_ref_id_id": 422660,
+        "_verified": True,
     },
-    # ── Maharashtra / Akola district ──
     {
         "state_ref_id_id": 12,
         "district_ref_id_id": 208,
         "sub_district_ref_id_id": 12723,
         "village_ref_id_id": 422597,
-    },
-    {
-        "state_ref_id_id": 12,
-        "district_ref_id_id": 208,
-        "sub_district_ref_id_id": 12725,
-        "village_ref_id_id": 422598,
+        "_verified": True,
     },
     {
         "state_ref_id_id": 12,
         "district_ref_id_id": 208,
         "sub_district_ref_id_id": 12750,
         "village_ref_id_id": 422600,
+        "_verified": True,
+    },
+
+    # ── Punjab (state 82) / multiple districts ──
+    {
+        "state_ref_id_id": 82,
+        "district_ref_id_id": 764,
+        "sub_district_ref_id_id": 13939,
+        "village_ref_id_id": 775472,
+        "_verified": True,
     },
     {
-        "state_ref_id_id": 12,
-        "district_ref_id_id": 208,
-        "sub_district_ref_id_id": 12754,
-        "village_ref_id_id": 422604,
+        "state_ref_id_id": 82,
+        "district_ref_id_id": 752,
+        "sub_district_ref_id_id": 13865,
+        "village_ref_id_id": 759006,
+        "_verified": True,
     },
     {
-        "state_ref_id_id": 12,
-        "district_ref_id_id": 208,
-        "sub_district_ref_id_id": 12932,
-        "village_ref_id_id": 422620,
+        "state_ref_id_id": 82,
+        "district_ref_id_id": 761,
+        "sub_district_ref_id_id": 14119,
+        "village_ref_id_id": 772475,
+        "_verified": True,
     },
     {
-        "state_ref_id_id": 12,
-        "district_ref_id_id": 208,
-        "sub_district_ref_id_id": 12971,
-        "village_ref_id_id": 422640,
+        "state_ref_id_id": 82,
+        "district_ref_id_id": 780,
+        "sub_district_ref_id_id": 13973,
+        "village_ref_id_id": 791665,
+        "_verified": True,
     },
     {
-        "state_ref_id_id": 12,
-        "district_ref_id_id": 208,
-        "sub_district_ref_id_id": 13041,
-        "village_ref_id_id": 422660,
+        "state_ref_id_id": 82,
+        "district_ref_id_id": 750,
+        "sub_district_ref_id_id": 14082,
+        "village_ref_id_id": 756839,
+        "_verified": True,
+    },
+    {
+        "state_ref_id_id": 82,
+        "district_ref_id_id": 743,
+        "sub_district_ref_id_id": 13803,
+        "village_ref_id_id": 744396,
+        "_verified": True,
+    },
+
+    # ── State 98 / multiple districts ──
+    {
+        "state_ref_id_id": 98,
+        "district_ref_id_id": 505,
+        "sub_district_ref_id_id": 11544,
+        "village_ref_id_id": 317896,
+        "_verified": True,
+    },
+    {
+        "state_ref_id_id": 98,
+        "district_ref_id_id": 479,
+        "sub_district_ref_id_id": 11462,
+        "village_ref_id_id": 303411,
+        "_verified": True,
+    },
+    {
+        "state_ref_id_id": 98,
+        "district_ref_id_id": 480,
+        "sub_district_ref_id_id": 11542,
+        "village_ref_id_id": 304232,
+        "_verified": True,
+    },
+    {
+        "state_ref_id_id": 98,
+        "district_ref_id_id": 494,
+        "sub_district_ref_id_id": 11279,
+        "village_ref_id_id": 311307,
+        "_verified": True,
+    },
+    {
+        "state_ref_id_id": 98,
+        "district_ref_id_id": 484,
+        "sub_district_ref_id_id": 11418,
+        "village_ref_id_id": 306563,
+        "_verified": True,
+    },
+    {
+        "state_ref_id_id": 98,
+        "district_ref_id_id": 502,
+        "sub_district_ref_id_id": 11472,
+        "village_ref_id_id": 315812,
+        "_verified": True,
+    },
+
+    # ── State 101 / multiple districts ──
+    {
+        "state_ref_id_id": 101,
+        "district_ref_id_id": 233,
+        "sub_district_ref_id_id": 12979,
+        "village_ref_id_id": None,
+        "_verified": True,
+    },
+    {
+        "state_ref_id_id": 101,
+        "district_ref_id_id": 229,
+        "sub_district_ref_id_id": 12726,
+        "village_ref_id_id": 445496,
+        "_verified": True,
+    },
+    {
+        "state_ref_id_id": 101,
+        "district_ref_id_id": 231,
+        "sub_district_ref_id_id": 13060,
+        "village_ref_id_id": 448915,
+        "_verified": True,
+    },
+    {
+        "state_ref_id_id": 101,
+        "district_ref_id_id": 222,
+        "sub_district_ref_id_id": 12729,
+        "village_ref_id_id": 438513,
+        "_verified": True,
+    },
+
+    # ── State 103 / multiple districts ──
+    {
+        "state_ref_id_id": 103,
+        "district_ref_id_id": 569,
+        "sub_district_ref_id_id": 12403,
+        "village_ref_id_id": 392606,
+        "_verified": True,
+    },
+    {
+        "state_ref_id_id": 103,
+        "district_ref_id_id": 575,
+        "sub_district_ref_id_id": 12554,
+        "village_ref_id_id": 398345,
+        "_verified": True,
+    },
+    {
+        "state_ref_id_id": 103,
+        "district_ref_id_id": 585,
+        "sub_district_ref_id_id": 12519,
+        "village_ref_id_id": 407745,
+        "_verified": True,
+    },
+
+    # ── State 107 / multiple districts ──
+    {
+        "state_ref_id_id": 107,
+        "district_ref_id_id": 796,
+        "sub_district_ref_id_id": 14523,
+        "village_ref_id_id": 497349,
+        "_verified": True,
+    },
+    {
+        "state_ref_id_id": 107,
+        "district_ref_id_id": 811,
+        "sub_district_ref_id_id": 14387,
+        "village_ref_id_id": 503970,
+        "_verified": True,
     },
 ]
 
 
-def get_random_address_chain() -> dict:
+def get_random_address_chain(verified_only: bool = True) -> dict:
     """Pick a random valid cascading address chain from the pool.
 
-    Returns a dict with state_ref_id_id, district_ref_id_id,
-    sub_district_ref_id_id, village_ref_id_id — all guaranteed
-    to be a valid combination for the ERP API.
+    By default, only returns VERIFIED chains (ones that have been
+    successfully used to create entries). Set verified_only=False
+    to include unverified chains (estimated FK IDs that may fail).
+
+    The returned dict includes state_ref_id_id, district_ref_id_id,
+    sub_district_ref_id_id, village_ref_id_id. The internal
+    "_verified" key is stripped before returning.
+
+    Args:
+        verified_only: If True (default), only pick from chains
+                       marked _verified=True. If False, pick from
+                       all chains (some may have invalid FK IDs).
+
+    Returns:
+        Dict with address chain FK IDs (no "_verified" key).
     """
-    return random.choice(_ADDRESS_CHAINS)
+    if verified_only:
+        pool = [c for c in _ADDRESS_CHAINS if c.get("_verified", False)]
+    else:
+        pool = _ADDRESS_CHAINS
+
+    if not pool:
+        # Fallback: use all chains if no verified ones exist
+        pool = _ADDRESS_CHAINS
+
+    chain = random.choice(pool)
+    # Strip the internal _verified flag before returning
+    return {k: v for k, v in chain.items() if k != "_verified"}
 
 
-def add_address_chain(chain: dict):
+def add_address_chain(chain: dict, verified: bool = True):
     """Add a new valid address chain to the pool.
 
-    Used by scripts/capture_cascade.py or manual expansion.
+    Used by scripts/harvest_addresses.py or scripts/verify_chains.py
+    to expand the pool with chains discovered from the live ERP.
+
     Chain must include: state_ref_id_id, district_ref_id_id,
     sub_district_ref_id_id, village_ref_id_id.
+
+    Args:
+        chain: Dict with the 4 FK ID keys.
+        verified: If True (default), marks this chain as verified
+                  (successfully used to create an entry).
     """
-    _ADDRESS_CHAINS.append(chain)
+    chain_copy = {**chain, "_verified": verified}
+    _ADDRESS_CHAINS.append(chain_copy)
 
 
 def build_supplier_api_payload(
@@ -1001,6 +1207,31 @@ def build_supplier_api_payload(
     return payload
 
 
+def generate_random_fk_ids() -> dict:
+    """Generate a set of random FK IDs for dropdown variety.
+
+    Each call returns a different combination so that batch-created
+    suppliers don't all share the same ownership type, PO type, etc.
+    This is what makes the data look realistic — a mix of Pvt Ltd,
+    Proprietorship, Domestic, Import, etc.
+
+    Returns:
+        Dict with all FK ID keys, values randomly chosen from their pools.
+    """
+    return {
+        "ownership_status_ref_id": random.choice(OWNERSHIP_STATUS_IDS),
+        "po_type_ref_id": random.choice(PO_TYPE_IDS),
+        "default_currency_ref_id": DEFAULT_CURRENCY_REF_ID,  # INR always
+        "payment_terms_ref_id": random.choice(PAYMENT_TERMS_IDS),
+        "delivery_terms_ref_id": random.choice(DELIVERY_TERMS_IDS),
+        "mode_of_delivery_ref_id": random.choice(MODE_OF_DELIVERY_IDS),
+        "address_type": random.choice(ADDRESS_TYPE_IDS),
+        "country_ref_id_id": DEFAULT_COUNTRY_REF_ID,  # India always
+        "account_type": random.choice(ACCOUNT_TYPE_IDS),
+        "bank_doc_id": random.choice(BANK_DOC_IDS),
+    }
+
+
 def generate_supplier_api_payload(
     company_prefix=None,
     dropdown_ids: dict = None,
@@ -1008,24 +1239,31 @@ def generate_supplier_api_payload(
     """
     One-shot: generate a complete Supplier API payload with random data.
 
-    Automatically picks a random valid address chain from the pool
-    so each supplier gets a different state/district/taluka/village.
+    Automatically randomizes:
+      - Address chain (state/district/taluka/village) from the pool
+      - Ownership type (Pvt Ltd, Proprietorship, Partnership, Individual)
+      - PO type (Domestic, Import)
+      - Address type (Shipping, Billing)
+      - Account type (Current, Saving)
+      - Payment terms, delivery terms, mode of delivery
+      - Bank proof type
+
+    Each call produces a payload that looks different from the last.
 
     Args:
         company_prefix: If provided, forces old prefix_timestamp naming.
                         If None (default), generates realistic Indian names.
-        dropdown_ids: Override default FK IDs for dropdowns.
-                      Address chain FK IDs are auto-resolved unless
-                      explicitly overridden here.
+        dropdown_ids: Override specific FK IDs. Takes precedence over
+                      random selection. Use to force specific values.
 
     Returns:
         JSON payload ready for POST /core/dynamic-screen-wrapper/
     """
     data = generate_valid_supplier_data(company_prefix)
 
-    # Merge: defaults + random address chain + caller overrides
+    # Merge: random FK IDs + random address chain + caller overrides
     ids = {
-        **DEFAULT_SUPPLIER_FK_IDS,
+        **generate_random_fk_ids(),
         **get_random_address_chain(),
         **(dropdown_ids or {}),
     }
