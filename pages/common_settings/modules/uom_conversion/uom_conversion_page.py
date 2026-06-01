@@ -491,30 +491,62 @@ class UOMConversionPage(BasePage):
         """
         return self.driver.execute_script(js, source_uom, target_uom)
 
-    def _click_action_button(self, row_source, row_target, action_column):
-        """Click an action button for a specific row."""
-        js = f"""
+    def _click_action_button(self, row_source, row_target, action_icon):
+        """Click an action button for a specific row via the 3-dot (more_vert) menu.
+
+        The ERP uses a single ⋮ menu per row instead of separate action columns.
+        Step 1: Find the matching row by source/target UOM text.
+        Step 2: Click the ⋮ (more_vert) menu trigger button on that row.
+        Step 3: Wait for the dropdown menu to appear.
+        Step 4: Click the menu item whose material-icons text matches action_icon
+                (e.g. 'visibility' for View, 'edit' for Edit, 'history' for History).
+        """
+        # Map friendly action names to the actual icon text in the ERP menu
+        icon_map = {
+            "view": "visibility",
+            "edit": "edit",
+            "history": "history",
+        }
+        icon_text = icon_map.get(action_icon, action_icon)
+
+        # Step 1 & 2: Find the row and click its ⋮ menu trigger
+        js_trigger = """
         var rows = document.querySelectorAll('table#excel-table tbody tr.mat-mdc-row');
-        for (var i = 0; i < rows.length; i++) {{
+        for (var i = 0; i < rows.length; i++) {
             var src = rows[i].querySelector('.cdk-column-source_uom_code');
             var tgt = rows[i].querySelector('.cdk-column-target_uom_code');
             if (src && tgt &&
                 src.textContent.trim() === arguments[0] &&
-                tgt.textContent.trim() === arguments[1]) {{
-                var cell = rows[i].querySelector('.cdk-column-{action_column}');
-                if (cell) {{
-                    var btn = cell.querySelector('button');
-                    if (btn) {{
-                        btn.click();
-                        return 'clicked {action_column} on row ' + i;
-                    }}
-                }}
-            }}
-        }}
-        throw new Error('Row or {action_column} button not found');
+                tgt.textContent.trim() === arguments[1]) {
+                var trigger = rows[i].querySelector('.erp-row-trigger');
+                if (trigger) {
+                    trigger.click();
+                    return 'opened menu on row ' + i;
+                }
+            }
+        }
+        throw new Error('Row or action trigger not found');
         """
-        result = self.driver.execute_script(js, row_source, row_target)
-        log.info(f"Action button click: {result}")
+        result = self.driver.execute_script(js_trigger, row_source, row_target)
+        log.info(f"Action trigger click: {result}")
+        time.sleep(0.8)  # Wait for Angular menu animation
+
+        # Step 3 & 4: Click the correct menu item by its icon text
+        js_menu_item = """
+        var menu = document.querySelector('.mat-mdc-menu-panel');
+        if (!menu) throw new Error('Menu panel not found after trigger click');
+        var items = menu.querySelectorAll('button.mat-mdc-menu-item');
+        for (var i = 0; i < items.length; i++) {
+            var icon = items[i].querySelector('i.material-icons');
+            if (icon && icon.textContent.trim() === arguments[0]) {
+                items[i].click();
+                return 'clicked menu item: ' + arguments[0];
+            }
+        }
+        throw new Error('Menu item with icon "' + arguments[0] + '" not found');
+        """
+        result = self.driver.execute_script(js_menu_item, icon_text)
+        log.info(f"Action menu item click: {result}")
         time.sleep(0.5)
         return result
 
@@ -525,7 +557,7 @@ class UOMConversionPage(BasePage):
         return self._click_action_button(row_source, row_target, "view")
 
     def click_history_button(self, row_source, row_target):
-        return self._click_action_button(row_source, row_target, "archive")
+        return self._click_action_button(row_source, row_target, "history")
 
     # ================================================================
     #  CDK OVERLAY CLEANUP
