@@ -127,14 +127,46 @@ def generate_account_number():
     return f"{random.randint(100000000000, 999999999999)}"
 
 
-def generate_gstin():
-    """Generate a valid Indian GSTIN (15 chars: 2 digits + PAN + 1 char + 1 char + 1 digit)."""
-    state_code = f"{random.randint(1, 37):02d}"
-    pan_part = generate_pan()
-    entity_num = str(random.randint(1, 9))
-    default_char = "Z"
-    check_code = str(random.randint(0, 9))
-    return f"{state_code}{pan_part}{entity_num}{default_char}{check_code}"
+def generate_gstin(state_code=None):
+    """Generate a valid Indian GSTIN with Luhn mod-36 checksum.
+
+    The ERP API validates GSTIN checksum — random chars will be REJECTED.
+    This function produces GSTINs that pass the Luhn mod-36 check.
+
+    Format: NN + 5L + 4D + 1L + 1[1-9A-Z] + Z + 1[0-9A-Z] (checksum)
+    Total: 15 characters.
+
+    Args:
+        state_code: 2-digit state code (default: random 01-37)
+    """
+    LUHN_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+    if state_code is None:
+        state_code = f"{random.randint(1, 37):02d}"
+    else:
+        state_code = f"{int(state_code):02d}"
+
+    body = (
+        state_code
+        + "".join(random.choices(string.ascii_uppercase, k=5))
+        + "".join(random.choices(string.digits, k=4))
+        + random.choice(string.ascii_uppercase)
+        + random.choice("123456789" + string.ascii_uppercase[9:])
+        + "Z"
+    )
+
+    # Luhn mod-36 checksum calculation
+    total = 0
+    for i, ch in enumerate(body):
+        val = LUHN_CHARS.index(ch)
+        if i % 2 == 1:
+            val *= 2
+            if val >= 36:
+                val -= 35
+        total += val
+
+    check = (36 - (total % 36)) % 36
+    return body + LUHN_CHARS[check]
 
 
 def generate_pin_code():
@@ -425,14 +457,45 @@ class KnownBugs:
 # ──────────────────────────────────────────────
 # API Payload Builder
 # ──────────────────────────────────────────────
-# Converts the existing step1/step2/step3 dict format into the flat
-# JSON payload that POST /core/dynamic-screen-wrapper/ expects.
+# Converts the existing step1/step2/step3 dict format into the JSON
+# payload that POST /core/dynamic-screen-wrapper/ expects.
 #
-# FIELD KEY MAPPING (verified 2026-06-01 from API schema):
+# COMPLEX SCREEN STRUCTURE (Supplier, Customer, etc.):
+#   The payload uses a `children` array with stepper objects.
+#   This is the CORRECT structure per the RhythmERP Universal API
+#   Reference v2.0 — the old flat structure was WRONG.
+#
+#   {
+#     "id": "",
+#     "attribute_name": "Supplier",
+#     <root-level fields from Step 1 Universal>,
+#     "children": [
+#       {
+#         "stepper_name": "Additional Details",
+#         "is_stepper": true,
+#         "details": [{ <Additional Details fields> }],
+#         "children": []
+#       },
+#       {
+#         "stepper_name": "Address Details",
+#         "is_stepper": true,
+#         "details": [{ <Address row 1> }, { <Address row 2> }],
+#         "children": []
+#       },
+#       {
+#         "stepper_name": "Bank Details",
+#         "is_stepper": true,
+#         "details": [{ <Bank row 1> }],
+#         "children": []
+#       }
+#     ]
+#   }
+#
+# FIELD KEY MAPPING (verified 2026-06-01 from API reference):
 #
 #   UI step1 key              → API field_key
 #   ──────────────────────────────────────────────────
-#   party_reference           → party_ref_id (dropdown FK, skip = "")
+#   party_reference           → party_ref_id (dropdown FK, skip = null)
 #   ownership_status          → ownership_status_ref_id (dropdown FK)
 #   company_name              → name
 #   po_type                   → po_type_ref_id (dropdown FK)
@@ -443,7 +506,7 @@ class KnownBugs:
 #   is_msme                   → is_msme_registered (boolean)
 #   status                    → status (boolean)
 #
-#   Additional Details (nested object, key = "Additional Details"):
+#   Additional Details (inside children[0].details[0]):
 #   contact_person            → display_name_as
 #   office_number             → office_no
 #   is_gst_set_off            → is_gst_set_off (boolean)
@@ -452,7 +515,7 @@ class KnownBugs:
 #   delivery_terms            → delivery_terms_ref_id (dropdown FK)
 #   mode_of_delivery          → mode_of_delivery_ref_id (dropdown FK)
 #
-#   Address Details (nested array, key = "address_details"):
+#   Address Details (inside children[1].details[0]):
 #   address_type              → address_type (dropdown FK)
 #   country                   → country_ref_id_id (dropdown FK)
 #   state                     → state_ref_id_id (dropdown FK)
@@ -463,7 +526,7 @@ class KnownBugs:
 #   pin_code                  → pin_code
 #   gstin                     → gstin
 #
-#   Bank Details (nested array, key = "bank_details"):
+#   Bank Details (inside children[2].details[0]):
 #   bank_name                 → bank_name
 #   branch                    → bank_branch_code
 #   ifsc_code                 → bank_ifsc_code
@@ -472,22 +535,42 @@ class KnownBugs:
 #   account_number            → bank_account_no
 #   bank_proof                → bank_doc_id (dropdown FK)
 #   attachment_path           → bank_attachment_path (file, skip = "")
+#
+# IMPORTANT RULES:
+#   - Use null (None) instead of "" for optional fields the API expects as null
+#   - Dropdown FK fields with None value are OMITTED from payload
+#   - "id" must be "" (empty string) for new entries
+#   - GSTIN must pass Luhn mod-36 checksum (use generate_gstin())
+#   - PAN must match [A-Z]{5}[0-9]{4}[A-Z] (use generate_pan())
 # ──────────────────────────────────────────────
 
 # Default FK IDs for common dropdowns (verified on tenant 599).
 # These can be overridden per test via the dropdown_ids parameter.
+# Source: RhythmERP Universal API Reference v2.0 (June 2026)
+#
+# IMPORTANT: These IDs are instance-specific. Always verify with
+# GET /core/dynamic-screen-wrapper/<SCREEN_NAME>/?page_number=1&page_size=50
+# or use client.discover_structure("Supplier") before relying on them.
 DEFAULT_SUPPLIER_FK_IDS = {
-    "ownership_status_ref_id": 3,    # Private Limited Company
-    "po_type_ref_id": 1,            # Domestic
+    "ownership_status_ref_id": 7,    # Private Limited Company
+    "po_type_ref_id": 25,           # Domestic
     "default_currency_ref_id": 1,    # INR
-    "address_type": 1,              # Shipping (or Billing — may vary)
+    "payment_terms_ref_id": 26,     # 30 Days
+    "delivery_terms_ref_id": None,  # Optional — resolve dynamically
+    "mode_of_delivery_ref_id": None, # Optional — resolve dynamically
+    "address_type": 43,             # Shipping (Billing=42)
     "country_ref_id_id": 1,         # India
-    "state_ref_id_id": 12,          # Maharashtra (example)
-    "district_ref_id_id": 1,        # First available district
-    "sub_district_ref_id_id": 1,    # First available taluka
-    "account_type": 1,              # Current (or Saving — may vary)
-    "bank_doc_id": 1,               # Cancelled Cheque (or Passbook — may vary)
+    "state_ref_id_id": 12,          # Maharashtra
+    "district_ref_id_id": None,     # Resolve dynamically via cascading dropdowns
+    "sub_district_ref_id_id": None, # Resolve dynamically via cascading dropdowns
+    "village_ref_id_id": None,      # Resolve dynamically via cascading dropdowns
+    "account_type": 1849,           # Current (Saving=1850)
+    "bank_doc_id": None,            # Resolve dynamically — Cancelled Cheque/Passbook
 }
+
+# Alternative ownership status IDs for variety:
+# Proprietorship=1263, Partnership=1262, Pvt Ltd=7, Individual=1853
+# PO Type: Domestic=25, Import=24
 
 
 def build_supplier_api_payload(
@@ -497,11 +580,32 @@ def build_supplier_api_payload(
     dropdown_ids: dict = None,
 ) -> dict:
     """
-    Convert the existing step1/step2/step3 dict format into the flat
-    JSON payload that the ERP API expects.
+    Convert the existing step1/step2/step3 dict format into the JSON
+    payload that the ERP API expects.
+
+    Uses the `children` array with stepper objects — this is the CORRECT
+    structure for complex screens (Supplier, Customer, etc.) as documented
+    in the RhythmERP Universal API Reference v2.0.
+
+    Structure:
+      {
+        "id": "",
+        "attribute_name": "Supplier",
+        <root-level fields>,
+        "children": [
+          {"stepper_name": "Additional Details", "is_stepper": true, "details": [...]},
+          {"stepper_name": "Address Details",    "is_stepper": true, "details": [...]},
+          {"stepper_name": "Bank Details",       "is_stepper": true, "details": [...]},
+        ]
+      }
 
     This function REUSES the same data generators (generate_company_name,
     generate_pan, etc.) — the only difference is how the data is packaged.
+
+    IMPORTANT: For optional dropdown FKs that are None in DEFAULT_SUPPLIER_FK_IDS,
+    you MUST resolve them via the API before calling this function, or pass
+    them explicitly in dropdown_ids. Fields with None will be omitted from
+    the payload to avoid sending null where the API expects an integer.
 
     Args:
         step1_data: Dict from generate_valid_step1_data() or similar.
@@ -522,61 +626,93 @@ def build_supplier_api_payload(
     """
     ids = {**DEFAULT_SUPPLIER_FK_IDS, **(dropdown_ids or {})}
 
+    # Helper: include FK field only if the value is not None
+    # (API rejects null where it expects an integer)
+    def _fk(key):
+        val = ids.get(key)
+        return val if val is not None else None
+
+    # Build Additional Details stepper details
+    additional_details = {}
+    additional_details["display_name_as"] = step1_data.get("contact_person", "") or None
+    additional_details["office_no"] = step1_data.get("office_number", "") or None
+    additional_details["is_gst_set_off"] = step1_data.get("is_gst_set_off", True)
+    additional_details["is_tds_applicable"] = step1_data.get("is_tds_applicable", False)
+    if _fk("payment_terms_ref_id") is not None:
+        additional_details["payment_terms_ref_id"] = _fk("payment_terms_ref_id")
+    if _fk("delivery_terms_ref_id") is not None:
+        additional_details["delivery_terms_ref_id"] = _fk("delivery_terms_ref_id")
+    if _fk("mode_of_delivery_ref_id") is not None:
+        additional_details["mode_of_delivery_ref_id"] = _fk("mode_of_delivery_ref_id")
+
+    # Build Address Details stepper details
+    address_detail = {}
+    if _fk("address_type") is not None:
+        address_detail["address_type"] = _fk("address_type")
+    if _fk("country_ref_id_id") is not None:
+        address_detail["country_ref_id_id"] = _fk("country_ref_id_id")
+    if _fk("state_ref_id_id") is not None:
+        address_detail["state_ref_id_id"] = _fk("state_ref_id_id")
+    if _fk("district_ref_id_id") is not None:
+        address_detail["district_ref_id_id"] = _fk("district_ref_id_id")
+    if _fk("sub_district_ref_id_id") is not None:
+        address_detail["sub_district_ref_id_id"] = _fk("sub_district_ref_id_id")
+    if _fk("village_ref_id_id") is not None:
+        address_detail["village_ref_id_id"] = _fk("village_ref_id_id")
+    address_detail["address"] = step2_data.get("address", "")
+    address_detail["pin_code"] = step2_data.get("pin_code", "") or None
+    address_detail["gstin"] = step2_data.get("gstin", "") or None
+    address_detail["same_as_above"] = False
+
+    # Build Bank Details stepper details
+    bank_detail = {}
+    bank_detail["bank_name"] = step3_data.get("bank_name", "") or None
+    bank_detail["bank_branch_code"] = step3_data.get("branch", "") or None
+    bank_detail["bank_ifsc_code"] = step3_data.get("ifsc_code", "") or None
+    if _fk("account_type") is not None:
+        bank_detail["account_type"] = _fk("account_type")
+    bank_detail["bank_account_holder_name"] = step3_data.get("account_holder_name", "") or None
+    bank_detail["bank_account_no"] = step3_data.get("account_number", "") or None
+    if _fk("bank_doc_id") is not None:
+        bank_detail["bank_doc_id"] = _fk("bank_doc_id")
+    bank_detail["bank_attachment_path"] = ""
+
     payload = {
         "id": "",
         "attribute_name": "Supplier",
 
-        # Step 1 — Universal Fields
-        "party_ref_id": step1_data.get("party_reference", ""),
+        # Step 1 — Universal Fields (root level)
+        "party_ref_id": step1_data.get("party_reference", "") or None,
         "ownership_status_ref_id": ids["ownership_status_ref_id"],
         "name": step1_data.get("company_name", ""),
         "po_type_ref_id": ids["po_type_ref_id"],
-        "email_id": step1_data.get("email", ""),
+        "email_id": step1_data.get("email", "") or None,
         "mobile_no": str(step1_data.get("phone_number", "")),
         "default_currency_ref_id": ids["default_currency_ref_id"],
         "pan_no": step1_data.get("pan_number", ""),
         "is_msme_registered": step1_data.get("is_msme", False),
         "status": step1_data.get("status", True),
 
-        # Step 1 — Additional Details (nested object)
-        "Additional Details": {
-            "display_name_as": step1_data.get("contact_person", ""),
-            "office_no": step1_data.get("office_number", ""),
-            "is_gst_set_off": step1_data.get("is_gst_set_off", True),
-            "is_tds_applicable": step1_data.get("is_tds_applicable", False),
-            "payment_terms_ref_id": ids.get("payment_terms_ref_id", ""),
-            "delivery_terms_ref_id": ids.get("delivery_terms_ref_id", ""),
-            "mode_of_delivery_ref_id": ids.get("mode_of_delivery_ref_id", ""),
-        },
-
-        # Step 2 — Address Details (nested array, is_grid=True)
-        "address_details": [
+        # Children array with stepper objects (CORRECT structure per API reference)
+        "children": [
             {
-                "address_type": ids["address_type"],
-                "country_ref_id_id": ids["country_ref_id_id"],
-                "state_ref_id_id": ids["state_ref_id_id"],
-                "district_ref_id_id": ids["district_ref_id_id"],
-                "sub_district_ref_id_id": ids["sub_district_ref_id_id"],
-                "village_ref_id_id": ids.get("village_ref_id_id", ""),
-                "address": step2_data.get("address", ""),
-                "pin_code": step2_data.get("pin_code", ""),
-                "gstin": step2_data.get("gstin", ""),
-                "same_as_above": False,
-            }
-        ],
-
-        # Step 3 — Bank Details (nested array, is_grid=True)
-        "bank_details": [
+                "stepper_name": "Additional Details",
+                "is_stepper": True,
+                "details": [additional_details],
+                "children": [],
+            },
             {
-                "bank_name": step3_data.get("bank_name", ""),
-                "bank_branch_code": step3_data.get("branch", ""),
-                "bank_ifsc_code": step3_data.get("ifsc_code", ""),
-                "account_type": ids["account_type"],
-                "bank_account_holder_name": step3_data.get("account_holder_name", ""),
-                "bank_account_no": step3_data.get("account_number", ""),
-                "bank_doc_id": ids["bank_doc_id"],
-                "bank_attachment_path": "",
-            }
+                "stepper_name": "Address Details",
+                "is_stepper": True,
+                "details": [address_detail],
+                "children": [],
+            },
+            {
+                "stepper_name": "Bank Details",
+                "is_stepper": True,
+                "details": [bank_detail],
+                "children": [],
+            },
         ],
     }
 

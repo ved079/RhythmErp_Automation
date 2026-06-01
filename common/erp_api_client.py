@@ -8,7 +8,8 @@ Uses the same endpoint that the Angular frontend uses:
   POST /core/dynamic-screen-wrapper/
 
 Authentication:
-  - Bearer token obtained via login API
+  - Bearer token obtained via /auth/login1/ (pure API, no browser needed)
+  - Token extracted from refresh_token cookie in Set-Cookie header
   - X-Tenant-ID header (e.g., "599")
 
 Usage:
@@ -20,11 +21,15 @@ Usage:
     client = RhythmERPAPIClient()
     client.login_from_browser(token="eyJ...", tenant_id="599")
 
+    # Discover a screen's payload structure:
+    structure = client.discover_structure("Supplier")
+
 Speed comparison:
   - UI via Selenium: 30-60 seconds per entry (flaky with Angular Material)
   - API via this client: ~0.3 seconds per entry (deterministic)
 """
 
+import re
 import requests
 import time
 from typing import List, Dict, Optional
@@ -74,10 +79,10 @@ class RhythmERPAPIClient:
         """
         Authenticate against the ERP and obtain a Bearer token.
 
-        The login flow mirrors what the Angular frontend does:
-        1. POST email + password to the login endpoint
-        2. Extract the access token from the response
-        3. Set Authorization + X-Tenant-ID headers on the session
+        Uses the /auth/login1/ endpoint discovered from the ERP's auth flow.
+        The token is extracted from the refresh_token cookie in the
+        Set-Cookie response header — this is a valid JWT that works as
+        a Bearer token for all subsequent API calls.
 
         Returns:
             (token, tenant_id) tuple
@@ -95,15 +100,16 @@ class RhythmERPAPIClient:
                 "RHYTHMERP_PASSWORD in .env or pass them directly."
             )
 
-        # Step 1: Hit the login page to get a session
-        login_url = f"{self.BASE_URL}/api/auth/login/"
+        # POST to /auth/login1/ with username, password, and tenant
+        login_url = f"{self.BASE_URL}/auth/login1/"
 
         try:
             resp = self.session.post(
                 login_url,
                 json={
-                    "email": self.username,
+                    "username": self.username,
                     "password": self.password,
+                    "tenant": self.tenant_id,
                 },
                 timeout=30,
             )
@@ -113,32 +119,37 @@ class RhythmERPAPIClient:
                 "Check network or VPN connection."
             )
 
-        # Step 2: Try to extract token from response
-        if resp.status_code == 200:
-            data = resp.json()
-            self.token = (
-                data.get("access")
-                or data.get("token")
-                or data.get("key")
-                or data.get("auth_token")
-            )
-        else:
-            # The login endpoint might be different — try the session approach
-            # where we use the same cookie-based auth as the browser
+        # Extract JWT from the refresh_token cookie in Set-Cookie header
+        set_cookie = resp.headers.get("Set-Cookie", "")
+        match = re.search(r'refresh_token=([^;]+)', set_cookie)
+
+        if not match:
+            # Fallback: try extracting from response body (some versions)
+            if resp.status_code == 200:
+                data = resp.json()
+                self.token = (
+                    data.get("access")
+                    or data.get("token")
+                    or data.get("key")
+                    or data.get("auth_token")
+                )
+                if self.token:
+                    self._set_session_headers()
+                    self._logged_in = True
+                    log.info(
+                        f"[API] Login successful (body token). "
+                        f"Tenant: {self.tenant_id}"
+                    )
+                    return self.token, self.tenant_id
+
             log.warning(
-                f"[API] Standard login returned {resp.status_code}. "
-                "Trying session-based auth..."
+                f"[API] /auth/login1/ returned {resp.status_code}. "
+                "Trying fallback endpoints..."
             )
-            self._session_login()
+            self._fallback_login()
             return self.token, self.tenant_id
 
-        if not self.token:
-            raise ValueError(
-                f"Could not extract token from login response. "
-                f"Status: {resp.status_code}, Body: {resp.text[:200]}"
-            )
-
-        # Step 3: Set session headers
+        self.token = match.group(1)
         self._set_session_headers()
         self._logged_in = True
 
@@ -148,43 +159,47 @@ class RhythmERPAPIClient:
         )
         return self.token, self.tenant_id
 
-    def _session_login(self):
+    def _fallback_login(self):
         """
-        Fallback: obtain a token by doing a browser-like login flow.
-        POSTs credentials to the login page and extracts the token
-        from the response cookies or localStorage equivalent.
+        Fallback: try alternative login endpoints if /auth/login1/ fails.
+
+        Tries older/different API paths and extracts token from
+        response body or cookies.
         """
-        # Try the login URL that the Angular app uses
         login_urls = [
+            f"{self.BASE_URL}/api/auth/login/",
             f"{self.BASE_URL}/api/token/",
             f"{self.BASE_URL}/api/v1/auth/login/",
-            f"{self.BASE_URL}/api/auth/login/",
         ]
 
         for url in login_urls:
             try:
-                resp = self.session.post(
-                    url,
-                    json={
-                        "email": self.username,
-                        "password": self.password,
-                    },
-                    timeout=30,
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    self.token = (
-                        data.get("access")
-                        or data.get("token")
-                        or data.get("key")
-                    )
-                    if self.token:
-                        self._set_session_headers()
-                        self._logged_in = True
-                        log.info(
-                            f"[API] Session login successful via {url}"
-                        )
-                        return
+                # Try with "username" key first (same as login1)
+                for payload_keys in [
+                    {"username": self.username, "password": self.password, "tenant": self.tenant_id},
+                    {"email": self.username, "password": self.password},
+                ]:
+                    resp = self.session.post(url, json=payload_keys, timeout=30)
+
+                    if resp.status_code == 200:
+                        # Try cookie first
+                        set_cookie = resp.headers.get("Set-Cookie", "")
+                        match = re.search(r'refresh_token=([^;]+)', set_cookie)
+                        if match:
+                            self.token = match.group(1)
+                        else:
+                            data = resp.json()
+                            self.token = (
+                                data.get("access")
+                                or data.get("token")
+                                or data.get("key")
+                            )
+
+                        if self.token:
+                            self._set_session_headers()
+                            self._logged_in = True
+                            log.info(f"[API] Fallback login successful via {url}")
+                            return
             except Exception:
                 continue
 
@@ -492,6 +507,105 @@ class RhythmERPAPIClient:
         except Exception as e:
             log.error(f"[API] List error: {e}")
             return None
+
+    def get_entry(self, screen_name: str, entry_id) -> Optional[Dict]:
+        """
+        Get a detailed entry by ID.
+
+        This is the MOST IMPORTANT method for discovering payload structure.
+        The response shows the FULL JSON including nested children arrays.
+
+        Args:
+            screen_name: Screen name (e.g., "Supplier")
+            entry_id: The entry's ID (from list_entries)
+
+        Returns:
+            Complete entry dict with all fields and nested structures, or None.
+        """
+        self._ensure_auth()
+
+        try:
+            resp = self.session.get(
+                f"{self.BASE_URL}{self.API_ENDPOINT}{screen_name}/{entry_id}/",
+                timeout=30,
+            )
+            if resp.status_code == 200:
+                return resp.json()
+            log.warning(
+                f"[API] Get entry failed for {screen_name}/{entry_id}: "
+                f"{resp.status_code}"
+            )
+            return None
+        except Exception as e:
+            log.error(f"[API] Get entry error: {e}")
+            return None
+
+    def discover_structure(self, screen_name: str) -> Optional[Dict]:
+        """
+        Auto-discover the payload structure for a screen.
+
+        Fetches the list endpoint to find an existing entry, then fetches
+        the detailed entry to reveal the full JSON structure including
+        nested children arrays and stepper objects.
+
+        Use this when adding API support for a NEW screen:
+          1. Call discover_structure("NewScreen")
+          2. Study the returned dict
+          3. If it has 'children' with 'stepper_name' -> complex screen
+          4. If flat with no children -> simple screen
+          5. Copy the structure as your payload template
+
+        Args:
+            screen_name: Screen name (e.g., "Supplier", "Customer")
+
+        Returns:
+            Detailed entry dict (use as template), or None if no entries exist.
+        """
+        self._ensure_auth()
+
+        log.info(f"[API] Discovering structure for '{screen_name}'...")
+
+        # Step 1: Get list of existing entries
+        data = self.list_entries(screen_name, page=1, page_size=5)
+        if not data:
+            log.warning(f"[API] Could not list entries for '{screen_name}'")
+            return None
+
+        items = data.get("screenmatlistingdata_set", [])
+        if not items:
+            log.warning(
+                f"[API] No existing entries for '{screen_name}'. "
+                "Create one manually via UI first, then re-run."
+            )
+            return None
+
+        # Step 2: Get detailed entry for the first item
+        entry_id = items[0].get("id")
+        if not entry_id:
+            log.warning("[API] First entry has no ID")
+            return None
+
+        detail = self.get_entry(screen_name, entry_id)
+        if detail:
+            # Log structure hints
+            has_children = "children" in detail and bool(detail["children"])
+            if has_children:
+                stepper_names = [
+                    c.get("stepper_name", "?")
+                    for c in detail.get("children", [])
+                ]
+                log.info(
+                    f"[API] Complex screen: {len(detail['children'])} stepper(s) "
+                    f"— {stepper_names}"
+                )
+            else:
+                log.info("[API] Simple screen: flat structure (no children/steppers)")
+
+            log.info(
+                f"[API] Top-level keys: {list(detail.keys())}"
+            )
+
+        return detail
 
     def entry_exists(self, screen_name: str, name: str) -> bool:
         """
