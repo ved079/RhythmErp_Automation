@@ -404,10 +404,12 @@ class TestUOMConversionValidation:
             page.navigate_to_page()
             page.open_add_form()
 
-            # Use dynamic UOM selection instead of hardcoded values
-            uoms = page.get_available_uoms_from_form()
+            # Read UOMs from the already-open form dropdown (leaves dropdown open),
+            # then select from the open panel — same pattern as create_fresh_record
+            uoms = page._read_dropdown_uoms()
             source, target = random.sample(uoms, 2)
-            page.select_source_uom(source)
+            page._select_from_open_panel(source)
+            time.sleep(0.5)
             page.select_target_uom(target)
             special_value = generate_special_char_conversion_factor()
             page.enter_conversion_factor(special_value)
@@ -552,7 +554,7 @@ class TestUOMConversionValidation:
             page.search_table(data["source_uom"])
             time.sleep(1)
             row = page.find_table_row(data["source_uom"], data["target_uom"])
-            if row is not None:
+            if row >= 0:
                 page.click_row_edit(data["source_uom"], data["target_uom"])
                 time.sleep(1)
                 displayed_value = page.get_conversion_factor_value()
@@ -672,7 +674,7 @@ class TestUOMConversionValidation:
             page.search_table(data["source_uom"])
             time.sleep(1)
             row = page.find_table_row(data["source_uom"], data["target_uom"])
-            assert row is not None, "Record not found after update"
+            assert row >= 0, "Record not found after update"
             table_factor = page.get_conversion_factor_from_row(row)
             assert table_factor == "7", \
                 "Table should show updated factor '7', got: '" + str(table_factor) + "'"
@@ -791,7 +793,7 @@ class TestUOMConversionValidation:
             page.search_table(data["source_uom"])
             time.sleep(1)
             row = page.find_table_row(data["source_uom"], data["target_uom"])
-            assert row is not None, "Record not found"
+            assert row >= 0, "Record not found in table (search: " + data["source_uom"] + " -> " + data["target_uom"] + ")"
             original_factor = page.get_conversion_factor_from_row(row)
             log.info("  Original factor in table: " + original_factor)
 
@@ -810,7 +812,7 @@ class TestUOMConversionValidation:
             page.search_table(data["source_uom"])
             time.sleep(1)
             row_after = page.find_table_row(data["source_uom"], data["target_uom"])
-            assert row_after is not None, "Record not found after cancel"
+            assert row_after >= 0, "Record not found after cancel"
             current_factor = page.get_conversion_factor_from_row(row_after)
             assert current_factor == original_factor, \
                 "Factor changed after Cancel! Was '" + original_factor + "', now '" + current_factor + "'"
@@ -937,10 +939,12 @@ class TestUOMConversionValidation:
             log.step(2, "Open Add form, fill all fields")
             page.open_add_form()
 
-            # Use dynamic UOM selection instead of hardcoded values
-            uoms = page.get_available_uoms_from_form()
+            # Read UOMs from the already-open form dropdown (leaves dropdown open),
+            # then select from the open panel — same pattern as create_fresh_record
+            uoms = page._read_dropdown_uoms()
             source, target = random.sample(uoms, 2)
-            page.select_source_uom(source)
+            page._select_from_open_panel(source)
+            time.sleep(0.5)
             page.select_target_uom(target)
             page.enter_conversion_factor("42")
             log.info("  Filled form with: " + source + " -> " + target + " = 42")
@@ -983,9 +987,9 @@ class TestUOMConversionValidation:
             log.step(2, "Read original factor from table")
             page.navigate_to_page()
             page.search_table(data["source_uom"])
-            time.sleep(1)
+            time.sleep(2)
             row = page.find_table_row(data["source_uom"], data["target_uom"])
-            assert row is not None, "Record not found"
+            assert row >= 0, "Record not found in table"
             original_factor = page.get_conversion_factor_from_row(row)
             log.info("  Original factor: " + original_factor)
 
@@ -1001,7 +1005,7 @@ class TestUOMConversionValidation:
             page.search_table(data["source_uom"])
             time.sleep(1)
             row_after = page.find_table_row(data["source_uom"], data["target_uom"])
-            assert row_after is not None, "Record not found after cancel"
+            assert row_after >= 0, "Record not found after cancel"
             current_factor = page.get_conversion_factor_from_row(row_after)
             assert current_factor == original_factor, \
                 "Edit saved after Cancel! Was '" + original_factor + "', now '" + current_factor + "'"
