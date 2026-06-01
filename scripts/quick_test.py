@@ -102,7 +102,7 @@ def main():
                         if "bank_doc_id" in bank and bank["bank_doc_id"]:
                             resolved_ids["bank_doc_id"] = bank["bank_doc_id"]
 
-        payload = generate_supplier_api_payload("QuickTest", dropdown_ids=resolved_ids)
+        payload = generate_supplier_api_payload(dropdown_ids=resolved_ids)
         print(f"\nPayload preview:")
         print(json.dumps(payload, indent=2, default=str)[:2000])
 

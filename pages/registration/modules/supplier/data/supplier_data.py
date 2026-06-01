@@ -72,26 +72,172 @@ from datetime import datetime
 
 
 # ──────────────────────────────────────────────
-# Unique-name generators
+# Realistic Indian data pools
 # ──────────────────────────────────────────────
 
-def generate_company_name(prefix="AutoSupplier"):
-    """Generate a unique company name with prefix and timestamp."""
-    ts = datetime.now().strftime("%Y%m%d%H%M%S")
-    rand = random.randint(100, 999)
-    return f"{prefix}_{ts}_{rand}"
+_COMPANY_PREFIXES = [
+    "Shree", "Sri", "Maa", "Jai", "Om", "Baba", "New",
+    "Royal", "Supreme", "Golden", "Maha", "Divya", "Hari",
+    "Sai", "Guru", "Balaji", "Venkatesh", "Jagdamba",
+]
+
+_COMPANY_NAMES = [
+    "Ganesh", "Krishna", "Patel", "Sharma", "Agro", "Bharat",
+    "Lakshmi", "Durga", "Sai", "Ram", "Hanuman", "Amul",
+    "Narmada", "Godavari", "Yamuna", "Sutlej", "Ganga",
+    "Kaveri", "Tapi", "Krishna", "Malabar", "Konkan",
+    "Maratha", "Rajput", "Chola", "Pallava", "Maurya",
+    "Indus", "Deccan", "Malwa", "Kalinga", "Vindhya",
+]
+
+_COMPANY_TYPES = [
+    "Traders", "Enterprises", "Industries", "Trading Co.",
+    "Supply Chain", "Agro", "Packaging", "Exports",
+    "Commodities", "Produce", "Foods", "Processing",
+    "Grain Processors", "Oil Mills", "Spice Merchants",
+    "Tea Traders", "Cotton Mills", "Sugar Works",
+]
+
+_COMPANY_SUFFIXES = [
+    "Pvt Ltd", "LLP", "Co.", "& Sons", "& Bros",
+    "Associates", "Group", "Corp", "", "", "",  # empty = no suffix
+]
+
+_FIRST_NAMES = [
+    "Rajesh", "Amit", "Suresh", "Mahesh", "Dinesh", "Ramesh",
+    "Vijay", "Sanjay", "Anil", "Sunil", "Mukesh", "Ashok",
+    "Deepak", "Manoj", "Prakash", "Ravi", "Kiran", "Nitin",
+    "Pankaj", "Vikram", "Ajay", "Rahul", "Sachin", "Rohit",
+    "Priya", "Sunita", "Anita", "Meena", "Rekha", "Pooja",
+    "Neha", "Swati", "Aarti", "Kavita", "Suman", "Geeta",
+]
+
+_LAST_NAMES = [
+    "Sharma", "Patel", "Kumar", "Singh", "Agarwal", "Gupta",
+    "Jain", "Shah", "Mehta", "Reddy", "Nair", "Iyer",
+    "Desai", "Kulkarni", "More", "Gaikwad", "Chavan",
+    "Pawar", "Jadhav", "Bhosale", "Rao", "Hegde", "Shetty",
+    "Hegde", "Bhat", "Pillai", "Menon", "Varma", "Chopra",
+]
+
+_EMAIL_DOMAINS = [
+    "gmail.com", "yahoo.co.in", "rediffmail.com", "hotmail.com",
+    "outlook.in", "ymail.com", "inbox.com",
+]
+
+_BANK_NAMES = [
+    "State Bank of India", "HDFC Bank", "ICICI Bank",
+    "Punjab National Bank", "Bank of Baroda", "Canara Bank",
+    "Union Bank of India", "Bank of India", "Axis Bank",
+    "Kotak Mahindra Bank", "Indian Bank", "Central Bank of India",
+    "UCO Bank", "Indian Overseas Bank", "Dena Bank",
+]
+
+_BANK_CITIES = [
+    "Mumbai Fort", "Delhi Connaught Place", "Pune Camp",
+    "Ahmedabad CG Road", "Bangalore MG Road", "Chennai Mount Road",
+    "Hyderabad Ameerpet", "Kolkata Park Street", "Jaipur MI Road",
+    "Lucknow Hazratganj", "Nagpur Dharampeth", "Indore Sarafa",
+    "Chandigarh Sector 17", "Coimbatore RS Puram", "Vadodara Alkapuri",
+    "Surat Ring Road", "Ludhiana Civil Lines", "Bhopal New Market",
+    "Patna Fraser Road", "Rajkot Race Course",
+]
+
+_STREET_NAMES = [
+    "MG Road", "Station Road", "Main Road", "Industrial Area",
+    "Gandhi Nagar", "Jawahar Chowk", "Shivaji Nagar",
+    "Subhash Marg", "Nehru Nagar", "Patel Colony",
+    "Ambedkar Road", "Tilak Road", "Laxmi Nagar",
+    "Sardar Patel Road", "Tagore Marg", "Guru Nanak Pura",
+    "Rani Laxmi Bai Marg", "Vivekanand Road", "Azad Nagar",
+    "Prabhat Road", "FC Road", "JM Road", "SB Road",
+    "FCI Godown Road", "APMC Market", "Grain Market Road",
+    "Cotton Market", "Transport Nagar", "Workshop Road",
+]
+
+_AREA_TYPES = [
+    "Industrial Area", "Commercial Zone", "Business Park",
+    "Trade Centre", "Market Yard", "Godown Road", "",
+]
+
+_CITY_NAMES = [
+    "Mumbai", "Delhi", "Pune", "Ahmedabad", "Bangalore",
+    "Chennai", "Hyderabad", "Kolkata", "Jaipur", "Lucknow",
+    "Nagpur", "Indore", "Chandigarh", "Coimbatore", "Vadodara",
+    "Surat", "Ludhiana", "Bhopal", "Patna", "Rajkot",
+]
+
+# Track generated names to prevent duplicates within a session
+_generated_names = set()
 
 
-def generate_email(prefix="autosp"):
-    """Generate a unique email address."""
-    ts = datetime.now().strftime("%Y%m%d%H%M%S")
+# ──────────────────────────────────────────────
+# Realistic Indian data generators
+# ──────────────────────────────────────────────
+
+def generate_company_name(prefix=None):
+    """Generate a realistic Indian company/supplier name.
+
+    Composes from pools: Prefix + Name + BusinessType + optional Suffix.
+    Falls back to "prefix_timestamp" if all combos exhausted.
+
+    Examples: "Shree Ganesh Trading Co.", "Royal Patel Industries",
+              "Om Sai Enterprises", "Supreme Bharat Supply Chain Pvt Ltd"
+
+    Args:
+        prefix: Optional override — if provided, uses the old
+                prefix_timestamp format for backward compatibility.
+    """
+    if prefix:
+        ts = datetime.now().strftime("%Y%m%d%H%M%S")
+        rand = random.randint(100, 999)
+        return f"{prefix}_{ts}_{rand}"
+
+    # Compose from realistic pools (4800+ combos, more than enough for 20-50)
+    for _ in range(200):  # try up to 200 times before fallback
+        name = random.choice(_COMPANY_PREFIXES)
+        name += " " + random.choice(_COMPANY_NAMES)
+        name += " " + random.choice(_COMPANY_TYPES)
+        suffix = random.choice(_COMPANY_SUFFIXES)
+        if suffix:
+            name += " " + suffix
+        if name not in _generated_names:
+            _generated_names.add(name)
+            return name
+
+    # Fallback (should never hit for < 1000 entries)
+    ts = datetime.now().strftime("%H%M%S")
     rand = random.randint(100, 999)
-    return f"{prefix}_{ts}_{rand}@supplier-test.com"
+    fallback = f"{random.choice(_COMPANY_PREFIXES)} {random.choice(_COMPANY_NAMES)} {random.choice(_COMPANY_TYPES)} {ts}{rand}"
+    _generated_names.add(fallback)
+    return fallback
+
+
+def generate_email(prefix=None):
+    """Generate a realistic Indian email address.
+
+    Examples: "rajesh.sharma@gmail.com", "patel.agro@rediffmail.com"
+    Falls back to "prefix_ts_rand@domain" if prefix is provided.
+    """
+    if prefix:
+        ts = datetime.now().strftime("%Y%m%d%H%M%S")
+        rand = random.randint(100, 999)
+        return f"{prefix}_{ts}_{rand}@supplier-test.com"
+
+    first = random.choice(_FIRST_NAMES).lower()
+    last = random.choice(_LAST_NAMES).lower()
+    domain = random.choice(_EMAIL_DOMAINS)
+    # Add a small random number for uniqueness
+    num = random.randint(1, 999)
+    return f"{first}.{last}{num}@{domain}"
 
 
 def generate_phone():
-    """Generate a valid 10-digit Indian phone number."""
-    return f"9{random.randint(100000000, 999999999)}"
+    """Generate a valid 10-digit Indian mobile number.
+    Starts with 6-9 (valid Indian mobile prefix).
+    """
+    prefix = random.choice(["6", "7", "8", "9"])
+    return f"{prefix}{random.randint(100000000, 999999999)}"
 
 
 def generate_pan():
@@ -104,26 +250,44 @@ def generate_pan():
     return f"{''.join(letters)}{''.join(digits)}{last_letter}"
 
 
-def generate_contact_person(prefix="Contact"):
-    """Generate a contact person name."""
-    ts = datetime.now().strftime("%H%M%S")
-    return f"{prefix}_{ts}"
+def generate_contact_person(prefix=None):
+    """Generate a realistic Indian contact person name.
+
+    Examples: "Rajesh Sharma", "Priya Patel", "Vijay Kulkarni"
+    Falls back to "prefix_timestamp" if prefix is provided.
+    """
+    if prefix:
+        ts = datetime.now().strftime("%H%M%S")
+        return f"{prefix}_{ts}"
+
+    return f"{random.choice(_FIRST_NAMES)} {random.choice(_LAST_NAMES)}"
 
 
 def generate_office_number():
-    """Generate an office number string."""
-    return f"0{random.randint(20, 29)}-{random.randint(10000000, 99999999)}"
+    """Generate a realistic Indian landline number.
+    Format: STD code-number (e.g., 020-25531234).
+    """
+    std_codes = [
+        "020", "022", "011", "080", "040", "033",  # Pune, Mumbai, Delhi, Bangalore, Hyd, Kolkata
+        "0141", "0172", "0265", "079", "0241", "0253",  # Jaipur, Chandigarh, Vadodara, Ahmedabad, Nagpur, Nashik
+    ]
+    return f"{random.choice(std_codes)}-{random.randint(20000000, 29999999)}"
 
 
 def generate_ifsc():
-    """Generate a valid IFSC code (4 letters + 0 + 6 alphanumeric)."""
-    bank_code = "".join(random.choices(string.ascii_uppercase, k=4))
+    """Generate a valid IFSC code (4 letters + 0 + 6 digits).
+    Uses realistic bank codes: SBIN, HDFC, ICIC, PUNB, BARB, etc.
+    """
+    bank_codes = [
+        "SBIN", "HDFC", "ICIC", "PUNB", "BARB", "CNRB",
+        "UBIN", "BKID", "UTIB", "KKBK", "INDB", "CBIN",
+    ]
     branch_code = "".join(random.choices(string.digits, k=6))
-    return f"{bank_code}0{branch_code}"
+    return f"{random.choice(bank_codes)}0{branch_code}"
 
 
 def generate_account_number():
-    """Generate a random bank account number."""
+    """Generate a random bank account number (9-16 digits)."""
     return f"{random.randint(100000000000, 999999999999)}"
 
 
@@ -175,21 +339,33 @@ def generate_pin_code():
 
 
 def generate_address():
-    """Generate a random address line."""
-    streets = [
-        "MG Road", "Station Road", "Main Street", "Park Avenue",
-        "Gandhi Nagar", "Jawahar Colony", "Industrial Area",
-        "Auto Test Lane", "Supply Chain Road", "Vendor Street"
-    ]
-    return f"{random.randint(1, 999)} {random.choice(streets)}"
+    """Generate a realistic Indian address line.
+
+    Examples: "42, MG Road, Industrial Area",
+              "Plot 17, Shivaji Nagar, Market Yard"
+    """
+    plot = random.choice([
+        f"{random.randint(1, 500)}",
+        f"Plot {random.randint(1, 200)}",
+        f"Shop {random.randint(1, 100)}",
+        f"Gala {random.randint(1, 50)}",
+        f"Unit {random.randint(1, 30)}",
+    ])
+    street = random.choice(_STREET_NAMES)
+    area = random.choice(_AREA_TYPES)
+    if area:
+        return f"{plot}, {street}, {area}"
+    return f"{plot}, {street}"
 
 
 # ──────────────────────────────────────────────
 # Complete Valid Data for Create (Step 1)
 # ──────────────────────────────────────────────
 
-def generate_valid_step1_data(company_prefix="AutoSupplier"):
+def generate_valid_step1_data(company_prefix=None):
     """Generate complete valid data for Step 1 (Universal + Additional Details).
+    Uses realistic Indian names by default. Pass company_prefix to use
+    the old prefix_timestamp format for backward compatibility.
     Dropdown values set to None — must be populated from live UI at runtime.
     """
     return {
@@ -198,7 +374,7 @@ def generate_valid_step1_data(company_prefix="AutoSupplier"):
         "ownership_status": None,      # Pick from live UI (REQUIRED)
         "company_name": generate_company_name(company_prefix),
         "po_type": None,               # Pick from live UI (REQUIRED): Domestic/Import
-        "email": generate_email("sp"),
+        "email": generate_email(),
         "phone_number": generate_phone(),
         "default_currency": "INR",      # Pick from live UI (REQUIRED)
         "pan_number": generate_pan(),
@@ -208,8 +384,8 @@ def generate_valid_step1_data(company_prefix="AutoSupplier"):
         # Additional Details
         "is_gst_set_off": True,        # Default: Yes
         "is_tds_applicable": False,    # Default: No
-        "contact_person": "Contact Person",
-        "office_number": "",
+        "contact_person": generate_contact_person(),
+        "office_number": generate_office_number(),
         "payment_terms": None,         # Pick from live UI (optional)
         "delivery_terms": None,        # Pick from live UI (optional)
         "mode_of_delivery": None,      # Pick from live UI (optional)
@@ -245,25 +421,31 @@ def generate_valid_step2_data():
         "address": generate_address(),
         "pin_code": generate_pin_code(),
         "gstin": generate_gstin(),
-    }
+    }  # no change to step2 structure — address/gstin/pin already realistic
 
 
 def generate_valid_step3_data():
-    """Generate valid data for Step 3 (Bank Details)."""
+    """Generate valid data for Step 3 (Bank Details).
+    Uses realistic Indian bank names, city branches, and contact person names.
+    """
+    bank = random.choice(_BANK_NAMES)
+    city = random.choice(_BANK_CITIES)
+    holder = f"{random.choice(_FIRST_NAMES)} {random.choice(_LAST_NAMES)}"
     return {
-        "bank_name": "Test Bank",
-        "branch": f"Branch {random.choice(['Main', 'City', 'Central', 'West', 'East'])}",
+        "bank_name": bank,
+        "branch": f"{city} Branch",
         "ifsc_code": generate_ifsc(),
         "account_type": None,          # Pick from live UI (optional): Current/Saving
-        "account_holder_name": "Account Holder",
+        "account_holder_name": holder,
         "account_number": generate_account_number(),
         "bank_proof": None,            # Pick from live UI (REQUIRED): Cancelled Cheque/Passbook
         "attachment_path": None,       # File path for upload (optional)
     }
 
 
-def generate_valid_supplier_data(company_prefix="AutoSupplier"):
+def generate_valid_supplier_data(company_prefix=None):
     """Generate complete valid data for ALL 3 steps.
+    Uses realistic Indian data by default. Pass company_prefix for old format.
     Used for end-to-end happy path tests.
     """
     return {
@@ -278,12 +460,12 @@ def generate_valid_edit_data():
     BUG-005: No Update button in Edit mode — this data may not be saveable.
     """
     return {
-        "company_name": generate_company_name("EditSup"),
-        "email": generate_email("edit"),
+        "company_name": generate_company_name(),
+        "email": generate_email(),
         "phone_number": generate_phone(),
         "pan_number": generate_pan(),
-        "contact_person": "Contact Person",
-        "office_number": "",
+        "contact_person": generate_contact_person(),
+        "office_number": generate_office_number(),
     }
 
 
@@ -746,7 +928,7 @@ def build_supplier_api_payload(
 
 
 def generate_supplier_api_payload(
-    company_prefix="APISupplier",
+    company_prefix=None,
     dropdown_ids: dict = None,
 ) -> dict:
     """
@@ -756,7 +938,8 @@ def generate_supplier_api_payload(
     build_supplier_api_payload() into a single call.
 
     Args:
-        company_prefix: Prefix for the generated company name.
+        company_prefix: If provided, forces old prefix_timestamp naming.
+                        If None (default), generates realistic Indian names.
         dropdown_ids: Override default FK IDs for dropdowns.
 
     Returns:
@@ -765,7 +948,7 @@ def generate_supplier_api_payload(
     Example:
         client = RhythmERPAPIClient()
         client.login()
-        payload = generate_supplier_api_payload("Test")
+        payload = generate_supplier_api_payload()  # realistic names
         client.create_entry(payload)
     """
     data = generate_valid_supplier_data(company_prefix)
@@ -776,7 +959,7 @@ def generate_supplier_api_payload(
 
 def generate_supplier_api_payloads(
     count: int = 20,
-    prefix: str = "APISupplier",
+    prefix: str = None,
     dropdown_ids: dict = None,
 ) -> list:
     """
@@ -784,7 +967,8 @@ def generate_supplier_api_payloads(
 
     Args:
         count: Number of payloads to generate.
-        prefix: Prefix for company names.
+        prefix: If provided, forces old prefix_timestamp naming.
+                If None (default), generates realistic Indian names.
         dropdown_ids: Override default FK IDs for dropdowns.
 
     Returns:
@@ -793,12 +977,12 @@ def generate_supplier_api_payloads(
     Example:
         client = RhythmERPAPIClient()
         client.login()
-        payloads = generate_supplier_api_payloads(20)
+        payloads = generate_supplier_api_payloads(20)  # realistic names
         client.batch_create(payloads)
     """
     payloads = []
     for i in range(count):
         payloads.append(
-            generate_supplier_api_payload(f"{prefix}{i+1}", dropdown_ids)
+            generate_supplier_api_payload(prefix, dropdown_ids)
         )
     return payloads
