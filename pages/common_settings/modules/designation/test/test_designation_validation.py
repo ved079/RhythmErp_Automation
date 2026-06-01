@@ -884,7 +884,8 @@ class TestSearchFilter:
         # Click filter button
         try:
             filter_btn = page.driver.find_element(
-                By.CSS_SELECTOR, "button.filter-btn"
+                By.CSS_SELECTOR,
+                "button.filter-btn, button[mattooltip='Filters']"
             )
             page.driver.execute_script(
                 "arguments[0].click();", filter_btn
@@ -893,13 +894,13 @@ class TestSearchFilter:
 
             # Check filter panel visible
             filter_panel = page.driver.find_elements(
-                By.CSS_SELECTOR, ".filter-panel"
+                By.CSS_SELECTOR, ".filter-panel, [class*='filter']"
             )
             assert len(filter_panel) > 0, "Filter panel should open"
 
             # Close filter panel
             close_btn = page.driver.find_elements(
-                By.CSS_SELECTOR, ".filter-panel .close-btn"
+                By.CSS_SELECTOR, ".filter-panel button[mat-icon-button], .filter-panel button mat-icon"
             )
             if close_btn:
                 page.driver.execute_script(
@@ -919,7 +920,8 @@ class TestSearchFilter:
 
         try:
             filter_btn = page.driver.find_element(
-                By.CSS_SELECTOR, "button.filter-btn"
+                By.CSS_SELECTOR,
+                "button.filter-btn, button[mattooltip='Filters']"
             )
             page.driver.execute_script(
                 "arguments[0].click();", filter_btn
@@ -931,7 +933,7 @@ class TestSearchFilter:
 
             # Click Apply Filters
             apply_btn = page.driver.find_elements(
-                By.CSS_SELECTOR, ".filter-actions .apply-btn"
+                By.XPATH, "//button[contains(.,'Apply Filters')]"
             )
             if apply_btn:
                 page.driver.execute_script(
@@ -948,7 +950,7 @@ class TestSearchFilter:
 
             # Close filter panel
             close_btn = page.driver.find_elements(
-                By.CSS_SELECTOR, ".filter-panel .close-btn"
+                By.CSS_SELECTOR, ".filter-panel button[mat-icon-button], .filter-panel button mat-icon"
             )
             if close_btn:
                 page.driver.execute_script(

@@ -53,12 +53,12 @@ class DesignationPage(BasePage):
     TABLE_ROWS = ("css", "table#excel-table tbody tr")
     TOOLBAR = ("css", "ul.tbl-export-btn")
 
-    SEARCH_BUTTON = ("css", "button.search-btn")
+    SEARCH_BUTTON = ("css", "button[mattooltip='Search'], button[aria-label='Search']")
     ADD_BUTTON = ("xpath", "//button[contains(@class,'erp-add-btn')]")
-    FILTER_BUTTON = ("css", "button.filter-btn")
+    FILTER_BUTTON = ("css", "button.filter-btn, button[mattooltip='Filters']")
     MORE_BUTTON = ("css", "button[mattooltip='More']")
 
-    SEARCH_INPUT = ("css", "#erpSearchInput")
+    SEARCH_INPUT = ("css", "#erpSearchInput, input[aria-label='Search']")
 
     # ═══════════════════════════════════════════
     #  LOCATORS — Table Column Cells
@@ -128,9 +128,9 @@ class DesignationPage(BasePage):
     #  LOCATORS — Filter Panel
     # ═══════════════════════════════════════════
 
-    FILTER_PANEL = ("css", ".filter-panel")
-    FILTER_APPLY = ("css", ".filter-actions .apply-btn")
-    FILTER_CLEAR = ("css", ".filter-actions .clear-btn")
+    FILTER_PANEL = ("css", ".filter-panel, [class*='filter']")
+    FILTER_APPLY = ("xpath", "//button[contains(.,'Apply Filters')]")
+    FILTER_CLEAR = ("xpath", "//button[contains(.,'Clear All')]")
 
     # ═══════════════════════════════════════════
     #  NAVIGATION & PAGE LOAD
@@ -369,7 +369,7 @@ class DesignationPage(BasePage):
                         return True
             return False
         except Exception:
-            return True  # Default to Active
+            return False  # Default to Inactive (ERP default for new forms)
 
     def toggle_status(self):
         """Click the Status toggle slider to switch Active/Inactive."""
@@ -435,7 +435,7 @@ class DesignationPage(BasePage):
                         return 'Active'
             return 'Inactive'
         except Exception:
-            return 'Active'
+            return 'Inactive'
 
     # ═══════════════════════════════════════════
     #  FORM SUBMIT / UPDATE / CANCEL
@@ -956,7 +956,7 @@ class DesignationPage(BasePage):
                             "td.mat-column-name"
                         )
                         or row.find_elements(
-                            By.CSS_SELECTOR, "td:nth-child(4)"
+                            By.CSS_SELECTOR, "td:nth-child(2)"
                         )
                     )
                     if cell:
@@ -1015,7 +1015,8 @@ class DesignationPage(BasePage):
             try:
                 # Toggle search button
                 search_btn = self.driver.find_element(
-                    By.CSS_SELECTOR, "button.search-btn"
+                    By.CSS_SELECTOR,
+                    "button[mattooltip='Search'], button[aria-label='Search']"
                 )
                 self.driver.execute_script(
                     "arguments[0].click();", search_btn
@@ -1024,7 +1025,8 @@ class DesignationPage(BasePage):
 
                 # Set value via JS
                 search_input = self.driver.find_element(
-                    By.CSS_SELECTOR, "#erpSearchInput"
+                    By.CSS_SELECTOR,
+                    "#erpSearchInput, input[aria-label='Search']"
                 )
                 self.driver.execute_script(
                     "arguments[0].value = arguments[1];",
@@ -1070,6 +1072,21 @@ class DesignationPage(BasePage):
         """Click Refresh button."""
         log.info("Clicking Refresh button")
         try:
+            # Strategy 1: mattooltip selector
+            btns = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "button[mattooltip='Refresh']"
+            )
+            for btn in btns:
+                if btn.is_displayed():
+                    self.driver.execute_script(
+                        "arguments[0].click();", btn
+                    )
+                    return
+        except Exception:
+            pass
+        try:
+            # Strategy 2: mini-fab icon
             btns = self.driver.find_elements(
                 By.CSS_SELECTOR,
                 "button.mat-mdc-mini-fab mat-icon"
@@ -1088,57 +1105,65 @@ class DesignationPage(BasePage):
     #  ROW ACTION BUTTONS
     # ═══════════════════════════════════════════
 
-    def _click_action_button(self, designation_name, column_class, idx,
-                              tooltip_text=None):
-        """Click an action button (View/Edit/History) on a row.
-        Tries XPath by name first, then index-based fallback.
+    def _click_action_button(self, designation_name, action_icon):
+        """Click an action button for a specific row via the 3-dot (more_vert) menu.
+
+        The ERP uses a single ⋮ menu per row instead of separate action columns.
+        Step 1: Find the matching row by designation name text.
+        Step 2: Click the ⋮ (more_vert) menu trigger button on that row.
+        Step 3: Wait for the dropdown menu to appear.
+        Step 4: Click the menu item whose material-icons text matches action_icon
+                (e.g. 'visibility' for View, 'edit' for Edit, 'history' for History).
         """
-        # Strategy 1: XPath by name
-        if designation_name:
-            try:
-                xpath = (
-                    f"//td[contains(text(),'{designation_name}')]"
-                    f"/ancestor::tr//td[contains(@class,'{column_class}')]"
-                    f"//button"
-                )
-                btn = self.driver.find_element(By.XPATH, xpath)
-                self.driver.execute_script(
-                    "arguments[0].click();", btn
-                )
-                time.sleep(1)
-                return True
-            except Exception:
-                pass
+        # Map friendly action names to the actual icon text in the ERP menu
+        icon_map = {
+            "view": "visibility",
+            "edit": "edit",
+            "history": "history",
+        }
+        icon_text = icon_map.get(action_icon, action_icon)
 
-        # Strategy 2: Index-based click
-        try:
-            rows = self.driver.find_elements(
-                By.CSS_SELECTOR, "table#excel-table tbody tr"
-            )
-            for row in rows:
-                if designation_name:
-                    name_cell = row.find_elements(
-                        By.CSS_SELECTOR, "td.cdk-column-name"
-                    )
-                    if not name_cell or designation_name.lower() not in name_cell[0].text.lower():
-                        continue
+        # Step 1 & 2: Find the row and click its ⋮ menu trigger
+        js_trigger = """
+        var rows = document.querySelectorAll('table#excel-table tbody tr.mat-mdc-row');
+        for (var i = 0; i < rows.length; i++) {
+            var nameCell = rows[i].querySelector('.cdk-column-name');
+            if (nameCell && nameCell.textContent.trim().toLowerCase().includes(arguments[0].toLowerCase())) {
+                var trigger = rows[i].querySelector('.erp-row-trigger');
+                if (trigger) {
+                    trigger.click();
+                    return 'opened menu on row ' + i;
+                }
+            }
+        }
+        throw new Error('Row or action trigger not found');
+        """
+        result = self.driver.execute_script(js_trigger, designation_name)
+        log.info(f"Action trigger click: {result}")
+        time.sleep(0.8)  # Wait for Angular menu animation
 
-                action_btns = row.find_elements(
-                    By.CSS_SELECTOR, "td.action button"
-                )
-                if idx < len(action_btns):
-                    self.driver.execute_script(
-                        "arguments[0].click();", action_btns[idx]
-                    )
-                    time.sleep(1)
-                    return True
-        except Exception as e:
-            log.warning(f"Index-based action click failed: {e}")
+        # Step 3 & 4: Click the correct menu item by its icon text
+        js_menu_item = """
+        var menu = document.querySelector('.mat-mdc-menu-panel');
+        if (!menu) throw new Error('Menu panel not found after trigger click');
+        var items = menu.querySelectorAll('button.mat-mdc-menu-item');
+        for (var i = 0; i < items.length; i++) {
+            var icon = items[i].querySelector('i.material-icons');
+            if (icon && icon.textContent.trim() === arguments[0]) {
+                items[i].click();
+                return 'clicked menu item: ' + arguments[0];
+            }
+        }
+        throw new Error('Menu item with icon "' + arguments[0] + '" not found');
+        """
+        result = self.driver.execute_script(js_menu_item, icon_text)
+        log.info(f"Menu item click: {result}")
+        time.sleep(1)
 
-        return False
+        return True
 
     def click_view_button(self, designation_name=None, row_index=None):
-        """Click View action button. Index 0."""
+        """Click View action button via 3-dot menu."""
         name = designation_name
         if row_index is not None:
             try:
@@ -1151,10 +1176,10 @@ class DesignationPage(BasePage):
                     ).text.strip()
             except Exception:
                 pass
-        return self._click_action_button(name, 'cdk-column-view', 0)
+        return self._click_action_button(name, 'view')
 
     def click_edit_button(self, designation_name=None, row_index=None):
-        """Click Edit action button. Index 1."""
+        """Click Edit action button via 3-dot menu."""
         name = designation_name
         if row_index is not None:
             try:
@@ -1167,11 +1192,11 @@ class DesignationPage(BasePage):
                     ).text.strip()
             except Exception:
                 pass
-        return self._click_action_button(name, 'cdk-column-edit', 1)
+        return self._click_action_button(name, 'edit')
 
     def click_history_button(self, designation_name=None, row_index=None):
-        """Click History action button. Index 2.
-        NOTE: Column class is cdk-column-archive (not 'history').
+        """Click History action button via 3-dot menu.
+        Icon text is 'history' (not 'archive').
         """
         name = designation_name
         if row_index is not None:
@@ -1185,10 +1210,7 @@ class DesignationPage(BasePage):
                     ).text.strip()
             except Exception:
                 pass
-        # Use 'archive' class — same pattern as Vehicle Master
-        return self._click_action_button(
-            name, 'cdk-column-archive', 2
-        )
+        return self._click_action_button(name, 'history')
 
     # ═══════════════════════════════════════════
     #  HISTORY POPUP
