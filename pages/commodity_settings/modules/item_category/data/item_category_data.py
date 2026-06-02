@@ -206,3 +206,226 @@ def generate_valid_edit_data(name_prefix="EditIC"):
         "item_description": generate_item_description(),
         "level": generate_level(),
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  API Batch Create — Data Pool + Payload Builder
+# ═══════════════════════════════════════════════════════════════════════════════
+# Screen structure (discovered 2026-06-02):
+#   Item Category: item_code* (text, required, unique — the category name),
+#                  item_description (text, optional),
+#                  level* (integer, required — hierarchy level 1/2/3),
+#                  status (boolean, no toggle shown but accepted in payload)
+#   FLAT screen — no steppers, no children, no FK dropdowns.
+#
+# Note on field naming:
+#   - UI label says "Item Category" but the API field key is "item_code"
+#   - UI label says "Item Description" but the API field key is "item_description"
+#   - Level is an integer (1 = top-level, 2 = sub-category, 3 = sub-sub-category)
+#
+# Existing entries in ERP (as of 2026-06-02, 26 total):
+#   Level 1: Food Grains, Pulses & Legumes, Spices & Condiments, Oilseeds,
+#            Dairy Products, Textile Raw Materials, Green Veggies
+#   Level 2: Rice Varieties, Wheat Products, Millets, Fresh Produce,
+#            Packaged Foods, Construction Materials, Chemical Products,
+#            Fertilizers, Pesticides, Agriculture Items, FMCG Items,
+#            Electrical Items, Hardware Items, Office & Stationery Items
+#   Level 3: Basmati Rice, Non-Basmati Rice, Chickpeas, Turmeric, Cotton Raw
+#
+# This data pool provides additional category entries NOT already in the system.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Each entry is a tuple: (item_code, item_description, level)
+# level: 1 = top-level category, 2 = sub-category, 3 = sub-sub-category
+
+ITEM_CATEGORY_API_DATA = [
+    # ── Level 1: Top-Level Categories ───────────────────────────────────
+    ("Beverages", "Tea, coffee, juices and drink products", 1),
+    ("Sugar & Sweeteners", "Sugar, jaggery, honey and sweetener products", 1),
+    ("Animal Feed", "Cattle feed, poultry feed and fodder products", 1),
+    ("Forestry Products", "Timber, bamboo and forest produce", 1),
+    ("Marine Products", "Fish, shrimp and seafood products", 1),
+    ("Pharmaceuticals", "Medicines and pharmaceutical raw materials", 1),
+    ("Packaging Materials", "Bags, containers and packaging supplies", 1),
+    ("Automotive Parts", "Vehicle spare parts and accessories", 1),
+
+    # ── Level 2: Sub-Categories ─────────────────────────────────────────
+    # Under Food Grains
+    ("Coarse Cereals", "Maize, barley, oats and other coarse grains", 2),
+    ("Paddy Rice", "Raw paddy and unprocessed rice", 2),
+
+    # Under Pulses & Legumes
+    ("Gram Varieties", "Chana, moong, urad and other gram types", 2),
+    ("Lentil Varieties", "Masoor, toor and other lentil types", 2),
+
+    # Under Spices & Condiments
+    ("Whole Spices", "Unprocessed whole spice products", 2),
+    ("Ground Spices", "Processed and ground spice powders", 2),
+    ("Dry Fruits & Nuts", "Almond, cashew, raisin and dried fruit products", 2),
+
+    # Under Oilseeds
+    ("Edible Oils", "Refined and cold-pressed edible oils", 2),
+    ("Oilseed Cakes", "Expeller cakes and oilseed meal byproducts", 2),
+
+    # Under Sugar & Sweeteners
+    ("Raw Sugar", "Unrefined and raw sugar products", 2),
+    ("Jaggery Products", "Traditional jaggery and gur products", 2),
+
+    # Under Dairy Products
+    ("Milk Products", "Milk, curd, paneer and fresh dairy", 2),
+    ("Butter & Ghee", "Butter, ghee and clarified fat products", 2),
+
+    # Under Beverages
+    ("Tea Products", "Tea leaves, dust and blended teas", 2),
+    ("Coffee Products", "Green beans, roasted and ground coffee", 2),
+
+    # Under Animal Feed
+    ("Cattle Feed", "Dairy cattle feed and supplements", 2),
+    ("Poultry Feed", "Broiler and layer poultry feed", 2),
+
+    # Under Packaging Materials
+    ("Woven Sacks", "PP woven bags and sacks for packing", 2),
+    ("Jute Bags", "Traditional jute bags and packaging", 2),
+
+    # Under Marine Products
+    ("Freshwater Fish", "Rohu, katla and other freshwater fish", 2),
+    ("Shrimp & Prawns", "Vannamei and black tiger shrimp products", 2),
+
+    # Under Textile Raw Materials
+    ("Cotton Fiber", "Raw cotton and lint for textile mills", 2),
+    ("Jute Fiber", "Raw jute fiber for sacks and textiles", 2),
+
+    # Under Forestry Products
+    ("Timber Products", "Processed timber and wood products", 2),
+    ("Bamboo Products", "Bamboo poles, sticks and crafted items", 2),
+
+    # Under Construction Materials
+    ("Cement Products", "OPC, PPC and specialty cements", 2),
+    ("Steel Products", "TMT bars, structural steel and rebar", 2),
+
+    # Under Chemical Products
+    ("Agrochemicals", "Pesticides, herbicides and fungicides", 2),
+    ("Industrial Chemicals", "Solvents, acids and industrial reagents", 2),
+
+    # Under Fertilizers
+    ("Organic Fertilizers", "Vermicompost, bio-fertilizers and organic manure", 2),
+    ("Chemical Fertilizers", "NPK, urea, DAP and chemical nutrient blends", 2),
+
+    # Under Pharmaceuticals
+    ("OTC Medicines", "Over-the-counter medicines and health products", 2),
+    ("Pharma Raw Materials", "API and excipient raw materials for pharma", 2),
+
+    # ── Level 3: Sub-Sub-Categories ─────────────────────────────────────
+    # Under Whole Spices
+    ("Black Pepper Whole", "Whole black peppercorn for grinding", 3),
+    ("Cardamom Whole", "Green and black cardamom pods", 3),
+
+    # Under Edible Oils
+    ("Mustard Oil", "Cold-pressed and refined mustard oil", 3),
+    ("Soybean Oil", "Refined soybean cooking oil", 3),
+    ("Groundnut Oil", "Cold-pressed and filtered groundnut oil", 3),
+    ("Sunflower Oil", "Refined sunflower cooking oil", 3),
+
+    # Under Tea Products
+    ("CTC Tea", "Crush-tear-curl processed black tea", 3),
+    ("Orthodox Tea", "Traditional whole-leaf processed tea", 3),
+    ("Green Tea", "Unoxidized tea leaves for health beverages", 3),
+
+    # Under Coffee Products
+    ("Arabica Coffee", "Premium Arabica coffee beans and powder", 3),
+    ("Robusta Coffee", "Strong Robusta coffee beans and powder", 3),
+
+    # Under Woven Sacks
+    ("PP Woven Bags", "Polypropylene woven bags for grain storage", 3),
+    ("HDPE Bags", "High-density polyethylene packaging bags", 3),
+
+    # Under Organic Fertilizers
+    ("Vermicompost", "Earthworm-processed organic compost", 3),
+    ("Bio Fertilizers", "Nitrogen-fixing and phosphate-solubilizing biofertilizers", 3),
+
+    # Under Jaggery Products
+    ("Palm Jaggery", "Traditional palm jaggery blocks", 3),
+    ("Sugarcane Jaggery", "Cane jaggery and gur products", 3),
+
+    # Under Cotton Fiber
+    ("Raw Cotton Bales", "Compressed raw cotton bales for mills", 3),
+    ("Cotton Seed", "Cotton seed for oil extraction and feed", 3),
+
+    # Under Freshwater Fish
+    ("Rohu Fish", "Freshwater rohu for domestic markets", 3),
+    ("Katla Fish", "Freshwater katla for domestic markets", 3),
+
+    # Under Cement Products
+    ("OPC Cement", "Ordinary Portland Cement 43 and 53 grade", 3),
+    ("PPC Cement", "Pozzolana Portland Cement for general use", 3),
+
+    # Under Chemical Fertilizers
+    ("Urea Fertilizer", "Nitrogen-rich urea for crop application", 3),
+    ("DAP Fertilizer", "Di-ammonium phosphate for soil nutrition", 3),
+    ("NPK Blends", "Balanced NPK fertilizer mixtures", 3),
+
+    # Under Cattle Feed
+    ("Dairy Cattle Pellets", "Compressed feed pellets for dairy cattle", 3),
+    ("Calf Starter Feed", "Nutritional starter feed for young calves", 3),
+
+    # Under Poultry Feed
+    ("Broiler Feed", "High-protein feed for broiler chickens", 3),
+    ("Layer Feed", "Calcium-enriched feed for egg-laying hens", 3),
+]
+
+
+def build_item_category_api_payload(item_code: str, item_description: str = "", level: int = 1, status: bool = True) -> dict:
+    """
+    Build a single API payload for Item Category.
+
+    Args:
+        item_code: Category name (e.g., "Beverages") — maps to the "Item Category" UI field
+        item_description: Optional description text
+        level: Hierarchy level (1=top, 2=sub, 3=sub-sub)
+        status: True for Active (default)
+
+    Returns:
+        dict: API payload with attribute_name set to "Item Category"
+    """
+    return {
+        "id": "",
+        "attribute_name": "Item Category",
+        "item_code": item_code,
+        "item_description": item_description,
+        "level": level,
+        "status": status,
+    }
+
+
+def generate_item_category_payloads(count: int = 10, offset: int = 0) -> list:
+    """
+    Generate N API payloads for Item Category.
+
+    Args:
+        count: Number of payloads to generate
+        offset: Start index in the data pool (to skip already-used entries)
+
+    Returns:
+        list[dict]: List of API payloads ready for batch_create
+    """
+    pool = ITEM_CATEGORY_API_DATA
+    payloads = []
+
+    for i in range(count):
+        idx = (offset + i) % len(pool)
+        item_code, item_description, level = pool[idx]
+
+        # Handle potential duplicate names when wrapping around
+        if (offset + i) >= len(pool):
+            wrap_count = (offset + i) // len(pool) + 1
+            item_code = f"{item_code} (Batch {wrap_count})"
+
+        payloads.append(
+            build_item_category_api_payload(
+                item_code=item_code,
+                item_description=item_description,
+                level=level,
+            )
+        )
+
+    return payloads
