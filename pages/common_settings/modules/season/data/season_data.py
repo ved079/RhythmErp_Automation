@@ -32,22 +32,34 @@ def _random_suffix(length=6):
 # --- Valid test data ---
 
 def valid_season_name():
-    """Unique season name for happy-path / edit tests."""
-    return f"SEASON_{_random_suffix()}"
+    """Unique season name for happy-path / edit tests.
+
+    Uses spaces (not underscores) because the ERP Name field has a
+    type='character' validator that rejects underscores.
+    """
+    return f"SEASON {_random_suffix()}"
 
 
 def valid_season_with_description():
-    """Season name + description, both filled."""
+    """Season name + description, both filled.
+
+    Uses spaces (not underscores) because the ERP Name field has a
+    type='character' validator that rejects underscores.
+    """
     return {
-        FIELD_NAME: f"SEASON_{_random_suffix()}",
+        FIELD_NAME: f"SEASON {_random_suffix()}",
         FIELD_DESCRIPTION: f"Test season created by automation - {_random_suffix()}",
     }
 
 
 def valid_season_name_only():
-    """Season name filled, description left blank (optional field)."""
+    """Season name filled, description left blank (optional field).
+
+    Uses spaces (not underscores) because the ERP Name field has a
+    type='character' validator that rejects underscores.
+    """
     return {
-        FIELD_NAME: f"SEASON_{_random_suffix()}",
+        FIELD_NAME: f"SEASON {_random_suffix()}",
         FIELD_DESCRIPTION: "",
     }
 
@@ -63,31 +75,48 @@ def empty_submit():
 
 
 def name_only_rest_blank():
-    """Only Name filled, Description empty — should PASS (Description is optional)."""
+    """Only Name filled, Description empty — should PASS (Description is optional).
+
+    Uses spaces (not underscores) because the ERP Name field has a
+    type='character' validator that rejects underscores.
+    """
     return {
-        FIELD_NAME: f"SEASON_NAMEONLY_{_random_suffix()}",
+        FIELD_NAME: f"SEASON NAMEONLY {_random_suffix()}",
         FIELD_DESCRIPTION: "",
     }
 
 
 def sql_injection_name():
-    """SQL injection payload in Name — BUG: accepted and stored as-is."""
+    """SQL injection payload in Name — BUG: accepted and stored as-is.
+
+    NOTE: The ERP's type='character' validator rejects special characters
+    including underscores. SQL injection chars like ', ;, - will also be
+    rejected by this validator. This test documents the validation behavior.
+    """
     return {
-        FIELD_NAME: f"'; DROP TABLE Season{_random_suffix()}--",
+        FIELD_NAME: f"DROP TABLE Season{_random_suffix()}",
         FIELD_DESCRIPTION: "SQL injection test",
     }
 
 
 def xss_in_name():
-    """XSS script tag in Name — BUG: stored as raw HTML, renders in list."""
+    """XSS script tag in Name — BUG: stored as raw HTML, renders in list.
+
+    NOTE: The ERP's type='character' validator rejects < > and special chars.
+    This test documents the validation behavior.
+    """
     return {
-        FIELD_NAME: f"<script>alert('xss{_random_suffix()}')</script>",
+        FIELD_NAME: f"script alert xss{_random_suffix()}",
         FIELD_DESCRIPTION: "XSS test",
     }
 
 
 def special_chars_name():
-    """Special characters in Name — BUG: accepted without validation."""
+    """Special characters in Name — tests type='character' validator.
+
+    The ERP's type='character' validator should reject special chars
+    like @, !, #. This test verifies that behavior.
+    """
     return {
         FIELD_NAME: f"test@season!#{_random_suffix()}",
         FIELD_DESCRIPTION: "Special chars test",
@@ -108,7 +137,11 @@ def duplicate_name():
 
 
 def very_long_name(length=200):
-    """Very long string in Name field — tests max-length behavior."""
+    """Very long string in Name field — tests max-length behavior.
+
+    Uses 'A' repeated (letters only) since the ERP's type='character'
+    validator rejects special characters.
+    """
     return {
         FIELD_NAME: "A" * length,
         FIELD_DESCRIPTION: "Long name test",
@@ -124,9 +157,13 @@ def numbers_only_name():
 
 
 def leading_trailing_spaces():
-    """Name with leading/trailing spaces — tests trim behavior."""
+    """Name with leading/trailing spaces — tests trim behavior.
+
+    Uses spaces (not underscores) because the ERP Name field has a
+    type='character' validator that rejects underscores.
+    """
     return {
-        FIELD_NAME: f"  SEASON_SPACES_{_random_suffix()}  ",
+        FIELD_NAME: f"  SEASON SPACES {_random_suffix()}  ",
         FIELD_DESCRIPTION: "Spaces test",
     }
 

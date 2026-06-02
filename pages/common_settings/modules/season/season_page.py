@@ -15,6 +15,12 @@ Key DOM findings:
   - History "No data" uses <img> + <p>, NOT div[style*='text-align']
   - Close/Fullscreen buttons in popup use <mat-icon>, NOT <i>
   - SweetAlert success toast blocks subsequent clicks until dismissed
+  - Name field has type='character' validator — REJECTS underscores and special chars
+  - On successful submit: form closes silently (NO SweetAlert), table auto-refreshes
+  - On validation failure: SweetAlert with title 'Validation Failed' appears, form stays open
+  - Add button: button.erp-add-btn (not just icon-based XPath)
+  - Refresh button: must use .//i descendant check (multiple erp-outline-btn exist)
+  - Close X button has type='submit' — clicking it can accidentally submit the form
 """
 
 import time
@@ -87,11 +93,12 @@ class SeasonPage(BasePage):
     # LOCATORS — List Page (live-verified 2026-06-02)
     # ================================================================
 
-    # Add button — uses <i class="material-icons">add</i>, NOT <mat-icon>
-    ADD_BUTTON = ("xpath", "//button[i[text()='add']]")
+    # Add button — uses <button class="erp-add-btn"><i class="material-icons">add</i> Add Season</button>
+    ADD_BUTTON = ("css", "button.erp-add-btn")
 
-    # Refresh button — same pattern: <i class="material-icons">refresh</i>
-    REFRESH_BUTTON = ("xpath", "//button[i[text()='refresh']]")
+    # Refresh button — multiple erp-outline-btn exist, must filter by child icon text
+    # XPath uses .//i to match <i> descendant, not just direct child
+    REFRESH_BUTTON = ("xpath", "//button[.//i[text()='refresh']]")
 
     # Data table
     TABLE = ("css", "table#excel-table")
@@ -141,17 +148,24 @@ class SeasonPage(BasePage):
     # ================================================================
 
     def navigate_to_season(self):
-        """Navigate directly to the Season screen via URL."""
+        """Navigate directly to the Season screen via URL.
+
+        After navigation, waits for either the table to appear or the page to
+        settle (empty table state). Also dismisses any stale overlays.
+        """
         from pages.common_settings.modules.season.data.season_data import SEASON_PAGE_URL
         log.info("Navigating to Season screen...")
         self._dismiss_overlays_and_popups()
         self.navigate_to(SEASON_PAGE_URL)
         try:
+            # Wait for table OR empty state — either means page loaded
             self.wait_for_visible(self.TABLE, timeout=15)
             self.wait_seconds(0.5)  # let Angular finish change detection
             log.info("Season screen loaded successfully")
         except Exception:
+            # Table might genuinely be empty — check we're on the right page
             log.warning("Table not found — page may still be loading or empty")
+            self.wait_seconds(2)  # extra wait for slow loads
             self.take_screenshot("season_page_load")
 
     # ================================================================
