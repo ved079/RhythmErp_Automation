@@ -303,3 +303,501 @@ def get_random_transaction_type():
 def get_all_transaction_types():
     """Return all Transaction Type options."""
     return TRANSACTION_TYPES.copy()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  API Batch Create — Data Pool + Payload Builder
+# ═══════════════════════════════════════════════════════════════════════════════
+# Screen structure (discovered 2026-06-02):
+#   Commodity Quality Parameter:
+#     HEADER fields:
+#       item_ref_id*      (FK dropdown → Item Master table)
+#       transaction_type* (FK dropdown → 8 hardcoded options)
+#       from_date*        (datetime, auto-filled to current timestamp on create)
+#       to_date*          (datetime, sentinel: 2099-12-30T18:30:00Z)
+#       revision_status   (text, optional)
+#
+#     DETAIL GRID — "Define Item Quality Parameter Details" (is_stepper=true, is_grid=true):
+#       quality_type*       (FK dropdown → Quality Parameter table)
+#       min_quality_value*  (decimal string, pattern: ^\d+(\.\d+)?$)
+#       max_quality_value*  (decimal string, pattern: ^\d+(\.\d+)?$)
+#       rate_percentage*    (toggle, default: false)
+#       multiplier*         (decimal string, pattern: ^\d+(\.\d+)?$)
+#
+#   UNIQUE CONSTRAINT: (item_ref_id, to_date) — duplicate combos are rejected.
+#
+#   PAYLOAD STRUCTURE (stepper with grid detail):
+#     {
+#       "id": "",
+#       "attribute_name": "Commodity Quality Parameter",
+#       "item_ref_id": <int>,
+#       "transaction_type": <int>,
+#       "from_date": "<ISO datetime>",   // server auto-sets on create
+#       "to_date": "2099-12-30T18:30:00Z",
+#       "revision_status": "<str or null>",
+#       "details": [],
+#       "children": [
+#         {
+#           "stepper_name": "Define Item Quality Parameter Details",
+#           "is_stepper": true,
+#           "details": [                    <--- DETAIL ROWS GO HERE
+#             {
+#               "quality_type": <int>,
+#               "min_quality_value": "<str>",
+#               "max_quality_value": "<str>",
+#               "rate_percentage": <bool>,
+#               "multiplier": "<str>"
+#             },
+#             ...
+#           ],
+#           "children": []                  <--- NOT used for grid rows
+#         }
+#       ]
+#     }
+#
+# FK Dropdown mappings (live from ERP as of 2026-06-02):
+#
+#   Item Master (item_ref_id) — 77 items total; 20 already used in CQP.
+#   Transaction Type — 8 options (see TRANSACTION_TYPE_ID_MAP below).
+#   Quality Parameter (quality_type) — 34 options (see QUALITY_PARAM_ID_MAP below).
+#
+# Existing entries in ERP (as of 2026-06-02, 23 total):
+#   IDs 49-73, covering item_ref_ids: 85,86,88,89,90,91,92,93,95,96,97,98,
+#   99,100,104,105,106,107,108,129. All use to_date=2099-12-30T18:30:00Z.
+#   None have quality parameter detail rows (all stepper details=[]).
+#
+# Data pool below covers UNUSED items with relevant quality parameters per
+# commodity category, ensuring each (item_ref_id, to_date) combo is unique.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── FK ID Mappings (from live ERP) ────────────────────────────────────
+
+# Transaction Type options (8 total)
+TRANSACTION_TYPE_ID_MAP = {
+    "Purchase": 154,
+    "Sales": 155,
+    "Stock Up": 217,
+    "Stock Transfer Up": 218,
+    "Return Stock Up": 219,
+    "Stock Down": 220,
+    "Stock Transfer Down": 221,
+    "Return Stock Down": 222,
+}
+
+# Item Master options (clean/useful items — excluding test/None/auto-generated items)
+ITEM_ID_MAP = {
+    # ── Agricultural Commodities ──────────────────────────────
+    "Sugarcane": 94,
+    "Groundnut": 95,
+    "Sunflower Seeds": 96,
+    "Mustard Seeds": 97,
+    "Green Gram": 98,
+    "Black Gram": 99,
+    "Chickpeas": 100,
+    "Turmeric Powder": 101,
+    "Red Chilli": 102,
+    "Coriander Seeds": 103,
+    "Cumin Seeds": 104,
+    "Onion": 105,
+    "Potato": 106,
+    "Tomato": 107,
+    "Mango": 108,
+    # ── Construction & Industrial ─────────────────────────────
+    "Iron Pipe": 130,
+    "Cement Bag": 131,
+    "Paint Bucket": 132,
+    "Nut Bolt Set": 133,
+    "PVC Pipe": 134,
+    "Drill Machine": 135,
+    "Hammer": 136,
+    "Welding Rod": 137,
+    "Measuring Tape": 138,
+    # ── FMCG / Household ─────────────────────────────────────
+    "Bath Soap": 109,
+    "Shampoo Bottle": 110,
+    "Hair Oil": 111,
+    "Toothpaste": 112,
+    "Detergent Powder": 113,
+    "Dish Wash Liquid": 114,
+    "Floor Cleaner": 115,
+    "Hand Wash": 116,
+    "Face Cream": 117,
+    "Talcum Powder": 118,
+    # ── Electrical & Appliances ──────────────────────────────
+    "LED Bulb": 119,
+    "Ceiling Fan": 120,
+    "Extension Board": 121,
+    "Electric Wire": 122,
+    "Switch Board": 123,
+    "Water Heater": 124,
+    "Mixer Grinder": 125,
+    "Electric Kettle": 126,
+    "Inverter Battery": 127,
+    "Solar Panel": 128,
+    # ── Office & Stationery ──────────────────────────────────
+    "A4 Paper": 139,
+    "Ball Pen": 140,
+    "Stapler": 141,
+    "Printer Ink": 142,
+    "File Folder": 143,
+    "Marker Pen": 145,
+    "Whiteboard": 146,
+    "Calculator": 147,
+}
+
+# Quality Parameter options (production-use only — excludes Test_QP entries)
+QUALITY_PARAM_ID_MAP = {
+    "Moisture Content": 1,
+    "Protein Content": 2,
+    "Foreign Matter": 3,
+    "Damaged Grains": 4,
+    "Broken Grains": 5,
+    "Weeviled Grains": 6,
+    "Admixture Content": 7,
+    "Oil Content": 8,
+    "Ash Content": 9,
+    "Fiber Content": 10,
+    "Gluten Content": 11,
+    "Fat Content": 12,
+    "Hardness Index": 13,
+    "Test Weight": 14,
+    "Impurities": 15,
+    "Insect Damage": 16,
+    "Mould Damage": 17,
+    "Germination Rate": 18,
+    "Shrivelled Grains": 19,
+    "Chalky Grains": 20,
+    "Bulk Density": 23,
+    "Particle Size": 24,
+    "Color Value": 27,
+    "Hardness": 28,
+    "Texture Score": 29,
+    "Thousand Grain Weight": 30,
+    "Hectoliter Weight": 31,
+    "Grain Uniformity": 32,
+    "Length-Breadth Ratio": 33,
+    "Grain Whiteness": 34,
+}
+
+# Items already used in CQP (item_ref_id values with to_date=2099-12-30T18:30:00Z)
+# These items CANNOT be reused with the same to_date; they can be reused
+# with a different to_date if needed.
+CQP_USED_ITEM_IDS = {85, 86, 88, 89, 90, 91, 92, 93, 95, 96, 97, 98,
+                     99, 100, 104, 105, 106, 107, 108, 129}
+
+
+# ── Data Pool ─────────────────────────────────────────────────────────
+# Each entry defines a complete CQP record:
+#   (item_name, transaction_type, revision_status, quality_params)
+#
+# quality_params is a list of tuples:
+#   (quality_parameter_name, min_value, max_value, rate_percentage, multiplier)
+#
+# The min_value, max_value, and multiplier are strings matching the pattern
+# ^\d+(\.\d+)?$ as required by the ERP validation.
+#
+# Items are chosen from ITEM_ID_MAP that are NOT in CQP_USED_ITEM_IDS,
+# ensuring no (item_ref_id, to_date) duplicate conflict with the sentinel
+# to_date=2099-12-30T18:30:00Z.
+
+COMMODITY_QUALITY_PARAMETER_API_DATA = [
+    # ── Agricultural Commodities — Cereals & Grains ────────────────────
+    ("Sugarcane", "Purchase", "Rev-001", [
+        ("Moisture Content", "10", "15", True, "1.0"),
+        ("Foreign Matter", "0", "2", True, "0.5"),
+        ("Fiber Content", "10", "14", True, "1.5"),
+    ]),
+    # NOTE: Groundnut(95), Sunflower Seeds(96), Mustard Seeds(97), Green Gram(98),
+    # Black Gram(99), Chickpeas(100) are already used in CQP with to_date=2099-12-30.
+    # Using only items NOT in CQP_USED_ITEM_IDS to avoid unique constraint violations.
+    ("Turmeric Powder", "Purchase", "Rev-001", [
+        ("Moisture Content", "8", "10", True, "1.0"),
+        ("Foreign Matter", "0", "1", True, "0.5"),
+        ("Color Value", "70", "90", True, "2.0"),
+    ]),
+    ("Red Chilli", "Purchase", "Rev-001", [
+        ("Moisture Content", "10", "14", True, "1.0"),
+        ("Color Value", "60", "80", True, "2.0"),
+        ("Foreign Matter", "0", "2", True, "0.5"),
+    ]),
+    ("Coriander Seeds", "Sales", "Rev-001", [
+        ("Moisture Content", "6", "9", True, "1.0"),
+        ("Foreign Matter", "0", "1", True, "0.5"),
+        ("Damaged Grains", "0", "2", True, "1.0"),
+    ]),
+
+    # NOTE: Onion(105), Potato(106), Tomato(107), Mango(108) are already used
+    # in CQP with to_date=2099-12-30. Skipped to avoid unique constraint violations.
+
+    # ── Construction & Industrial Materials ─────────────────────────────
+    ("Iron Pipe", "Purchase", "Rev-001", [
+        ("Hardness Index", "50", "70", True, "1.0"),
+        ("Impurities", "0", "2", True, "0.5"),
+    ]),
+    ("Cement Bag", "Purchase", "Rev-001", [
+        ("Moisture Content", "0", "1", True, "1.0"),
+        ("Foreign Matter", "0", "1", True, "0.5"),
+        ("Test Weight", "1440", "1500", True, "1.0"),
+    ]),
+    ("Paint Bucket", "Purchase", "Rev-001", [
+        ("Moisture Content", "0", "2", True, "1.0"),
+        ("Impurities", "0", "1", True, "0.5"),
+    ]),
+    ("Nut Bolt Set", "Purchase", "Rev-001", [
+        ("Hardness Index", "55", "75", True, "1.0"),
+        ("Impurities", "0", "1", True, "0.5"),
+    ]),
+    ("PVC Pipe", "Sales", "Rev-001", [
+        ("Hardness Index", "40", "60", True, "1.0"),
+        ("Impurities", "0", "1", True, "0.5"),
+    ]),
+    ("Drill Machine", "Purchase", "Rev-001", [
+        ("Hardness Index", "60", "80", True, "1.0"),
+    ]),
+    ("Hammer", "Purchase", "Rev-001", [
+        ("Hardness Index", "55", "75", True, "1.0"),
+        ("Impurities", "0", "1", True, "0.5"),
+    ]),
+    ("Welding Rod", "Purchase", "Rev-001", [
+        ("Moisture Content", "0", "1", True, "1.0"),
+        ("Impurities", "0", "2", True, "0.5"),
+    ]),
+    ("Measuring Tape", "Sales", "Rev-001", [
+        ("Impurities", "0", "1", True, "0.5"),
+    ]),
+
+    # ── FMCG / Household Products ──────────────────────────────────────
+    ("Bath Soap", "Purchase", "Rev-001", [
+        ("Moisture Content", "8", "15", True, "1.0"),
+        ("Fat Content", "50", "70", True, "2.0"),
+    ]),
+    ("Shampoo Bottle", "Purchase", "Rev-001", [
+        ("Moisture Content", "60", "80", True, "1.0"),
+        ("Foreign Matter", "0", "1", True, "0.5"),
+    ]),
+    ("Hair Oil", "Sales", "Rev-001", [
+        ("Moisture Content", "0", "2", True, "1.0"),
+        ("Oil Content", "90", "100", True, "2.0"),
+        ("Foreign Matter", "0", "1", True, "0.5"),
+    ]),
+    ("Toothpaste", "Purchase", "Rev-001", [
+        ("Moisture Content", "20", "35", True, "1.0"),
+        ("Foreign Matter", "0", "1", True, "0.5"),
+    ]),
+    ("Detergent Powder", "Purchase", "Rev-001", [
+        ("Moisture Content", "5", "12", True, "1.0"),
+        ("Foreign Matter", "0", "1", True, "0.5"),
+    ]),
+    ("Dish Wash Liquid", "Sales", "Rev-001", [
+        ("Moisture Content", "65", "80", True, "1.0"),
+        ("Foreign Matter", "0", "1", True, "0.5"),
+    ]),
+    ("Floor Cleaner", "Purchase", "Rev-001", [
+        ("Moisture Content", "70", "85", True, "1.0"),
+        ("Foreign Matter", "0", "1", True, "0.5"),
+    ]),
+    ("Hand Wash", "Purchase", "Rev-001", [
+        ("Moisture Content", "65", "80", True, "1.0"),
+    ]),
+    ("Face Cream", "Sales", "Rev-001", [
+        ("Moisture Content", "30", "50", True, "1.0"),
+        ("Fat Content", "15", "30", True, "2.0"),
+        ("Foreign Matter", "0", "1", True, "0.5"),
+    ]),
+    ("Talcum Powder", "Purchase", "Rev-001", [
+        ("Moisture Content", "0", "5", True, "1.0"),
+        ("Foreign Matter", "0", "1", True, "0.5"),
+    ]),
+
+    # ── Electrical & Appliances ────────────────────────────────────────
+    ("LED Bulb", "Purchase", "Rev-001", [
+        ("Impurities", "0", "1", True, "0.5"),
+        ("Hardness Index", "30", "50", True, "1.0"),
+    ]),
+    ("Ceiling Fan", "Purchase", "Rev-001", [
+        ("Hardness Index", "40", "60", True, "1.0"),
+        ("Impurities", "0", "1", True, "0.5"),
+    ]),
+    ("Extension Board", "Sales", "Rev-001", [
+        ("Hardness Index", "35", "55", True, "1.0"),
+    ]),
+    ("Electric Wire", "Purchase", "Rev-001", [
+        ("Impurities", "0", "1", True, "0.5"),
+        ("Moisture Content", "0", "1", True, "1.0"),
+    ]),
+    ("Switch Board", "Purchase", "Rev-001", [
+        ("Hardness Index", "35", "55", True, "1.0"),
+        ("Impurities", "0", "1", True, "0.5"),
+    ]),
+    ("Water Heater", "Purchase", "Rev-001", [
+        ("Hardness Index", "45", "65", True, "1.0"),
+        ("Impurities", "0", "2", True, "0.5"),
+    ]),
+    ("Mixer Grinder", "Sales", "Rev-001", [
+        ("Hardness Index", "50", "70", True, "1.0"),
+    ]),
+    ("Electric Kettle", "Purchase", "Rev-001", [
+        ("Hardness Index", "40", "60", True, "1.0"),
+        ("Impurities", "0", "1", True, "0.5"),
+    ]),
+    ("Inverter Battery", "Purchase", "Rev-001", [
+        ("Moisture Content", "0", "2", True, "1.0"),
+        ("Impurities", "0", "1", True, "0.5"),
+    ]),
+    ("Solar Panel", "Sales", "Rev-001", [
+        ("Hardness Index", "40", "60", True, "1.0"),
+        ("Impurities", "0", "1", True, "0.5"),
+    ]),
+
+    # ── Office & Stationery ────────────────────────────────────────────
+    ("A4 Paper", "Purchase", "Rev-001", [
+        ("Moisture Content", "4", "7", True, "1.0"),
+        ("Foreign Matter", "0", "1", True, "0.5"),
+    ]),
+    ("Ball Pen", "Purchase", "Rev-001", [
+        ("Impurities", "0", "1", True, "0.5"),
+    ]),
+    ("Stapler", "Purchase", "Rev-001", [
+        ("Hardness Index", "45", "65", True, "1.0"),
+    ]),
+    ("Printer Ink", "Sales", "Rev-001", [
+        ("Moisture Content", "50", "70", True, "1.0"),
+        ("Foreign Matter", "0", "1", True, "0.5"),
+    ]),
+    ("File Folder", "Purchase", "Rev-001", [
+        ("Moisture Content", "4", "8", True, "1.0"),
+    ]),
+    ("Marker Pen", "Purchase", "Rev-001", [
+        ("Moisture Content", "50", "70", True, "1.0"),
+    ]),
+    ("Whiteboard", "Sales", "Rev-001", [
+        ("Hardness Index", "30", "50", True, "1.0"),
+        ("Impurities", "0", "1", True, "0.5"),
+    ]),
+    ("Calculator", "Purchase", "Rev-001", [
+        ("Hardness Index", "35", "55", True, "1.0"),
+    ]),
+
+    # ── Additional items — Stock movement transaction types ──────────────
+    # These use the same item but with different transaction types.
+    # Since the unique constraint is (item_ref_id, to_date), these entries
+    # would fail with default to_date=2099-12-30. They use a different
+    # to_date to avoid the constraint. The batch_create script handles
+    # this by adjusting to_date automatically.
+]
+
+
+def build_cqp_api_payload(
+    item_ref_id: int,
+    transaction_type: int,
+    quality_params: list,
+    from_date: str = "2026-06-02T00:00:00Z",
+    to_date: str = "2099-12-30T18:30:00Z",
+    revision_status: str = None,
+) -> dict:
+    """
+    Build a single API payload for Commodity Quality Parameter.
+
+    Args:
+        item_ref_id: FK ID for Item Name dropdown (e.g., 106 for Potato)
+        transaction_type: FK ID for Transaction Type dropdown (e.g., 154 for Purchase)
+        quality_params: List of detail row dicts, each with keys:
+            quality_type (int), min_quality_value (str), max_quality_value (str),
+            rate_percentage (bool), multiplier (str)
+        from_date: ISO datetime string (server auto-sets on create)
+        to_date: ISO datetime string (default sentinel: 2099-12-30T18:30:00Z)
+        revision_status: Optional revision label (str or None)
+
+    Returns:
+        dict: API payload with attribute_name set to "Commodity Quality Parameter"
+    """
+    return {
+        "id": "",
+        "attribute_name": "Commodity Quality Parameter",
+        "item_ref_id": item_ref_id,
+        "transaction_type": transaction_type,
+        "from_date": from_date,
+        "to_date": to_date,
+        "revision_status": revision_status,
+        "details": [],
+        "children": [
+            {
+                "stepper_name": "Define Item Quality Parameter Details",
+                "is_stepper": True,
+                "details": quality_params,
+                "children": [],
+            }
+        ],
+    }
+
+
+def generate_cqp_payloads(count: int = 10, offset: int = 0) -> list:
+    """
+    Generate N API payloads for Commodity Quality Parameter.
+
+    Resolves FK dropdown names to live ERP IDs using the ID maps.
+    Validates that all FK fields resolve before building payloads.
+
+    Args:
+        count: Number of payloads to generate
+        offset: Start index in the data pool (to skip already-used entries)
+
+    Returns:
+        list[dict]: List of API payloads ready for batch_create
+    """
+    pool = COMMODITY_QUALITY_PARAMETER_API_DATA
+    payloads = []
+
+    for i in range(count):
+        idx = (offset + i) % len(pool)
+        entry = pool[idx]
+
+        item_name, txn_type_name, rev_status, qp_tuples = entry
+
+        # Resolve FK codes to ERP IDs
+        item_id = ITEM_ID_MAP.get(item_name)
+        txn_type_id = TRANSACTION_TYPE_ID_MAP.get(txn_type_name)
+
+        if item_id is None:
+            print(f"  WARNING: Item '{item_name}' not found in ITEM_ID_MAP, skipping")
+            continue
+        if txn_type_id is None:
+            print(f"  WARNING: Transaction Type '{txn_type_name}' not found in TRANSACTION_TYPE_ID_MAP, skipping")
+            continue
+
+        # Build detail rows from quality parameter tuples
+        detail_rows = []
+        for qp_name, min_val, max_val, rate_pct, mult in qp_tuples:
+            qp_id = QUALITY_PARAM_ID_MAP.get(qp_name)
+            if qp_id is None:
+                print(f"  WARNING: Quality Parameter '{qp_name}' not found in QUALITY_PARAM_ID_MAP, skipping row")
+                continue
+            detail_rows.append({
+                "quality_type": qp_id,
+                "min_quality_value": min_val,
+                "max_quality_value": max_val,
+                "rate_percentage": rate_pct,
+                "multiplier": mult,
+            })
+
+        # Handle potential duplicate (item_ref_id, to_date) combos when wrapping
+        # Use a different to_date for wrapped entries
+        to_date = "2099-12-30T18:30:00Z"
+        if (offset + i) >= len(pool):
+            wrap_count = (offset + i) // len(pool) + 1
+            # Shift the to_date by 1 year per wrap to avoid unique constraint violation
+            year = 2098 + wrap_count
+            to_date = f"{year}-12-30T18:30:00Z"
+            rev_status = f"{rev_status} (Batch {wrap_count})" if rev_status else f"Batch {wrap_count}"
+
+        payloads.append(
+            build_cqp_api_payload(
+                item_ref_id=item_id,
+                transaction_type=txn_type_id,
+                quality_params=detail_rows,
+                to_date=to_date,
+                revision_status=rev_status,
+            )
+        )
+
+    return payloads
