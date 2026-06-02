@@ -83,13 +83,10 @@ def logged_in_driver(driver):
     stop_screenshot_broadcast()
 
 
-@pytest.fixture
-def season_page(logged_in_driver):
-    """Season page object — fresh navigation for each test."""
-    from pages.common_settings.modules.season.season_page import SeasonPage
-    page = SeasonPage(logged_in_driver)
-    page.navigate_to_season()
-    yield page
+# NOTE: No per-test season_page fixture — each test creates its own
+# SeasonPage(logged_in_driver) and calls navigate_to_season() or
+# hard_refresh() as needed. This matches the UOM pattern and avoids
+# an unnecessary full page load for every test.
 
 
 # ================================================================
