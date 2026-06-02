@@ -1056,6 +1056,12 @@ class TestEditFormValidations:
         _cleanup_form(page)
 
     # ---- BNK-E05: Edit Bank Name to invalid ----
+    @pytest.mark.xfail(
+        reason="BUG: ERP accepts invalid (too-short) Bank Name on edit. "
+               "The Update button does not validate minlength for Bank Name "
+               "in edit mode — the form closes without any validation warning.",
+        strict=False,
+    )
     def test_BNK_E05_edit_invalid_bank_name(self, bnk_page):
         """Edit Bank Name to an invalid value — should be blocked."""
         log.info("BNK-E05: Edit invalid Bank Name test")

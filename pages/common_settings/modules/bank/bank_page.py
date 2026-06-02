@@ -509,8 +509,28 @@ class BankPage(BasePage):
         return False
 
     def click_refresh(self):
-        """Click the Refresh button."""
+        """Click the Refresh button.
+
+        Strategy 1: button[mattooltip='Refresh'] (primary — matches ERP pattern).
+        Strategy 2: mini-fab button with 'refresh' icon text (fallback).
+        Strategy 3: Navigate to page URL as last resort.
+        """
         log.info("Clicking Refresh button...")
+
+        # Strategy 1: mattooltip-based selector (same pattern as Designation/UOM)
+        try:
+            btn = self.driver.find_element(
+                By.CSS_SELECTOR, "button[mattooltip='Refresh']"
+            )
+            if btn.is_displayed():
+                self.driver.execute_script("arguments[0].click();", btn)
+                self.wait_seconds(2)
+                log.info("Refresh clicked via mattooltip")
+                return
+        except Exception:
+            pass
+
+        # Strategy 2: mini-fab button with refresh icon
         try:
             refresh_btns = self.driver.find_elements(
                 By.CSS_SELECTOR, "button.mat-mdc-mini-fab"
@@ -521,13 +541,21 @@ class BankPage(BasePage):
                     if icon.text.strip().lower() == "refresh" and btn.is_displayed():
                         self.driver.execute_script("arguments[0].click();", btn)
                         self.wait_seconds(2)
-                        log.info("Refresh clicked")
+                        log.info("Refresh clicked via mini-fab icon")
                         return
                 except Exception:
                     continue
         except Exception:
             pass
-        log.warning("Refresh button not found")
+
+        # Strategy 3: Navigate to page URL (hard refresh)
+        try:
+            log.warning("Refresh button not found — navigating to page URL")
+            self.navigate_to(self.PAGE_URL)
+            self._wait_for_page_ready()
+            log.info("Page reloaded via URL navigation")
+        except Exception as e:
+            log.error(f"All refresh strategies failed: {e}")
 
     # ==============================================================
     #  Form filling — JS value-setter for Angular compatibility
