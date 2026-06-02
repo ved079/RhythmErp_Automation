@@ -4,21 +4,21 @@ season_page.py
 Page Object Model for RhythmERP Season screen (Common Settings).
 Extends BasePage with Season-specific locators and methods.
 
+Optimised (v3) — UOM-pattern speed improvements:
+- hard_refresh() for fast page reset (Ctrl+R instead of full URL load)
+- Pure JS for ALL interactions (no Selenium click chain overhead)
+- is_form_open() uses JS offsetParent check (instant, no WebDriverWait)
+- search_and_verify() combines search + existence check (handles pagination)
+- Eliminated most wait_seconds() calls
+- clear_search() uses hard_refresh() instead of navigate_to_season()
+- refresh_table() uses hard_refresh() instead of clicking Refresh button
+- _click_action_menu_item() is pure JS (find row → click kebab → click menu item)
+
 Fields: Name (required), Description (optional), Status (checkbox).
 Pattern: List view + popup form (Add / Edit / View).
-
-Live-verified: 2026-06-02 against https://rhythmerp.algorhythms.in
-Key DOM findings:
-  - Action buttons use kebab menu (more_vert) -> menu items, NOT tblActnBtn
-  - Icon elements are <i class="material-icons">, NOT <mat-icon>
-  - Table columns: Actions(1), Name(2), Description(3), Status(4)
-  - History "No data" uses <img> + <p>, NOT div[style*='text-align']
-  - Close/Fullscreen buttons in popup use <mat-icon>, NOT <i>
-  - SweetAlert success toast blocks subsequent clicks until dismissed
 """
 
 import time
-
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -51,32 +51,17 @@ class SeasonPage(BasePage):
     # ================================================================
     # LOCATORS — Form Popup
     # ================================================================
-
-    # --- Form Container ---
     FORM_POPUP = ("css", "div.edit_pop_up")
-    FORM_CONTENT = ("css", "div.edit_pop_up div.overflow_model")
-    FORM_HEADER_TITLE = ("css", "div.edit_pop_up .popup-header h3")
-
-    # --- Form Fields ---
-    NAME_INPUT = ("css", "div.edit_pop_up input[name='Name']")
-    DESCRIPTION_INPUT = ("css", "div.edit_pop_up input[name='Description']")
-
-    # Status checkbox (angular material checkbox inside the form)
+    NAME_INPUT = ("css", "input[name='Name']")
+    DESCRIPTION_INPUT = ("css", "input[name='Description']")
     STATUS_CHECKBOX = ("css", "div.edit_pop_up input[type='checkbox']")
-
-    # --- Form Buttons ---
     SUBMIT_BUTTON = ("css", "div.popup-footer button[type='submit']")
     CANCEL_BUTTON = ("css", "div.popup-footer button[type='button']")
-
-    # --- Popup Header Buttons ---
-    # Live DOM: <div class="popup-actions"><button><mat-icon>fullscreen</mat-icon></button><button><mat-icon>close</mat-icon></button></div>
     CLOSE_X_BUTTON = ("xpath", "//div[contains(@class,'popup-actions')]//button[mat-icon[text()='close']]")
-    FULLSCREEN_BUTTON = ("xpath", "//div[contains(@class,'popup-actions')]//button[mat-icon[text()='fullscreen']]")
 
     # ================================================================
     # LOCATORS — SweetAlert Popups
     # ================================================================
-
     SWEET_ALERT_POPUP = ("css", ".swal2-popup")
     SWEET_ALERT_TITLE = ("css", ".swal2-title")
     SWEET_ALERT_MESSAGE = ("css", ".swal2-html-container")
@@ -84,47 +69,21 @@ class SeasonPage(BasePage):
     SWEET_ALERT_CANCEL_BTN = ("css", "button.swal2-cancel")
 
     # ================================================================
-    # LOCATORS — List Page (live-verified 2026-06-02)
+    # LOCATORS — List Page
     # ================================================================
-
-    # Add button — uses <i class="material-icons">add</i>, NOT <mat-icon>
-    ADD_BUTTON = ("xpath", "//button[i[text()='add']]")
-
-    # Refresh button — same pattern: <i class="material-icons">refresh</i>
+    ADD_BUTTON = ("css", "button.erp-add-btn")
     REFRESH_BUTTON = ("xpath", "//button[i[text()='refresh']]")
-
-    # Data table
     TABLE = ("css", "table#excel-table")
-    TABLE_BODY = ("css", "table#excel-table tbody")
     TABLE_ROWS = ("css", "table#excel-table tbody tr")
 
-    # Kebab menu (more_vert) per row — opens context menu with View/Edit/History
-    _row_kebab = lambda self, row_index: (
-        "xpath",
-        f"(//table[@id='excel-table']//tbody//tr)[{row_index + 1}]"
-        f"//button[contains(@class,'erp-row-trigger')]"
-    )
-
-    # Menu items inside the CDK overlay after kebab click
-    _menu_view = ("xpath", "//div[contains(@class,'cdk-overlay')]//span[contains(text(),'View')]/ancestor::button")
-    _menu_edit = ("xpath", "//div[contains(@class,'cdk-overlay')]//span[contains(text(),'Edit')]/ancestor::button")
-    _menu_history = ("xpath", "//div[contains(@class,'cdk-overlay')]//span[contains(text(),'History')]/ancestor::button")
-
-    # Table cell text (row=0-based, col=1-based for XPath)
-    def _table_cell(self, row, col):
-        return ("xpath", f"(//table[@id='excel-table']//tbody//tr)[{row + 1}]/td[{col}]")
+    # Search
+    SEARCH_BUTTON = ("css", "button[aria-label='Search']")
+    SEARCH_INPUT = ("css", "input#erpSearchInput")
 
     # ================================================================
-    # LOCATORS - History Popup (live-verified 2026-06-02)
+    # LOCATORS - History Popup
     # ================================================================
-
     HISTORY_POPUP_TITLE = ("xpath", "//h3[contains(text(),'History')]")
-    HISTORY_TABLE_ROWS = ("css", "div.popup-overlay .scrollable-table-container tr")
-    # "No data" state: image + paragraphs (NOT div[style*='text-align'])
-    HISTORY_NO_DATA_IMG = ("css", "div.popup-overlay .scrollable-table-container img")
-    HISTORY_NO_DATA_TEXT = ("css", "div.popup-overlay .scrollable-table-container p")
-
-    # Cancel button: mat-button with label span "Cancel" inside popup-footer
     HISTORY_CANCEL_BUTTON = (
         "xpath",
         "//div[contains(@class,'popup-overlay')]"
@@ -132,52 +91,100 @@ class SeasonPage(BasePage):
         "//span[contains(@class,'mdc-button__label') and normalize-space(text())='Cancel']/.."
     )
 
-    # History search — same pattern as main search: button opens input
-    HISTORY_SEARCH_BUTTON = ("css", "div.popup-overlay button[aria-label='Search']")
-    HISTORY_SEARCH_INPUT = ("css", "div.popup-overlay input#erpSearchInput")
+    # ================================================================
+    # PAGE URL
+    # ================================================================
+    SEASON_PAGE_URL = "https://rhythmerp.algorhythms.in/#/dynamic-screens/Season"
 
     # ================================================================
     # NAVIGATION
     # ================================================================
 
     def navigate_to_season(self):
-        """Navigate directly to the Season screen via URL."""
-        from pages.common_settings.modules.season.data.season_data import SEASON_PAGE_URL
-        log.info("Navigating to Season screen...")
-        self._dismiss_overlays_and_popups()
-        self.navigate_to(SEASON_PAGE_URL)
+        """Navigate to Season page via direct URL."""
+        log.info("Navigating to Season page")
+        self.driver.get(self.SEASON_PAGE_URL)
+        self._wait_for_page_ready()
+        log.info("Arrived at Season page")
+
+    def hard_refresh(self):
+        """Hard refresh (Ctrl+R) — much faster than full navigate_to_season().
+        Use this for resetting between operations within a test."""
+        log.info("Hard refreshing page")
+        self.driver.refresh()
+        self._wait_for_page_ready()
+        log.info("Page refreshed and ready")
+
+    def _wait_for_page_ready(self):
+        """Wait for Season page table to appear. Fast — only checks DOM presence."""
         try:
-            self.wait_for_visible(self.TABLE, timeout=15)
-            self.wait_seconds(0.5)  # let Angular finish change detection
-            log.info("Season screen loaded successfully")
+            WebDriverWait(self.driver, 15).until(
+                lambda d: d.find_elements("css selector", "table#excel-table")
+            )
+            log.info("Page ready (table found)")
         except Exception:
-            log.warning("Table not found — page may still be loading or empty")
-            self.take_screenshot("season_page_load")
+            log.warning("Page ready check timed out")
 
     # ================================================================
     # ADD FORM — Open / Close
     # ================================================================
 
     def open_add_form(self):
-        """Click the Add (+) button to open the form popup."""
-        log.step(1, "Opening Add form")
-        self._dismiss_overlays_and_popups()
-        self.wait_seconds(0.3)
-        self._js_click(self.ADD_BUTTON)
-        self.wait_for_form_to_open()
-        log.info("Add form opened")
+        """Click Add button via JS — bypasses overlay/z-index issues."""
+        log.info("Opening Add form")
+        self.driver.execute_script("""
+            var btn = document.querySelector('button.erp-add-btn');
+            if (!btn) { throw new Error('Add button not found'); }
+            btn.scrollIntoView({block:'center'});
+            btn.click();
+        """)
+        # Wait for form popup to appear
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(("css selector", "input[name='Name']"))
+            )
+            log.info("Add form opened")
+        except Exception:
+            log.warning("Add form may not have opened — Name input not found")
+
+    def close_popup(self):
+        """Close any popup by clicking Cancel button via pure JS."""
+        log.info("Closing popup via Cancel")
+        self.driver.execute_script("""
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.indexOf('Cancel') !== -1) {
+                        buttons[j].click();
+                        return 'clicked';
+                    }
+                }
+            }
+            return 'not found';
+        """)
 
     def close_form_via_cancel(self):
-        """Click the Cancel button to close the form."""
-        log.info("Closing form via Cancel button")
-        self._js_click(self.CANCEL_BUTTON)
-        self.wait_for_form_to_close()
+        """Close form via Cancel button (alias for close_popup)."""
+        self.close_popup()
 
     def close_form_via_x(self):
-        """Click the X button to close the form."""
+        """Close form via X button using JS."""
         log.info("Closing form via X button")
-        self._js_click(self.CLOSE_X_BUTTON)
-        self.wait_for_form_to_close()
+        self.driver.execute_script("""
+            var closeBtn = document.querySelector('div.popup-actions button mat-icon');
+            if (closeBtn && closeBtn.textContent.trim() === 'close') {
+                closeBtn.closest('button').click();
+                return 'clicked';
+            }
+            // Fallback: try second button in popup-actions
+            var actions = document.querySelector('div.popup-actions');
+            if (actions) {
+                var btns = actions.querySelectorAll('button');
+                if (btns.length > 1) { btns[1].click(); return 'clicked_fallback'; }
+            }
+            return 'not found';
+        """)
 
     # ================================================================
     # FORM — Fill Fields
@@ -185,13 +192,13 @@ class SeasonPage(BasePage):
 
     def enter_name(self, name):
         """Type season name into the Name field."""
-        log.step(2, f"Entering Name: {name}")
+        log.info(f"Entering Name: {name}")
         self.type_text(self.NAME_INPUT, name, clear_first=True)
 
     def enter_description(self, description):
         """Type description into the Description field."""
-        log.step(3, f"Entering Description: {description}")
         if description:
+            log.info(f"Entering Description: {description}")
             self.type_text(self.DESCRIPTION_INPUT, description, clear_first=True)
         else:
             log.info("Description left blank (optional field)")
@@ -203,386 +210,464 @@ class SeasonPage(BasePage):
             self.enter_description(description)
 
     def clear_form(self):
-        """Clear all text fields in the form."""
+        """Clear all text fields in the form via JS."""
         log.info("Clearing form fields")
-        self.clear_field(self.NAME_INPUT)
-        self.clear_field(self.DESCRIPTION_INPUT)
+        self.driver.execute_script("""
+            var nameInput = document.querySelector("input[name='Name']");
+            var descInput = document.querySelector("input[name='Description']");
+            var nativeSet = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value'
+            ).set;
+            if (nameInput) {
+                nativeSet.call(nameInput, '');
+                nameInput.dispatchEvent(new Event('input', {bubbles: true}));
+                nameInput.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+            if (descInput) {
+                nativeSet.call(descInput, '');
+                descInput.dispatchEvent(new Event('input', {bubbles: true}));
+                descInput.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+        """)
 
     # ================================================================
-    # FORM — Submit / Update (unified post-submit handling)
+    # FORM — Submit / Update (pure JS, fast)
     # ================================================================
+
+    def _js_click_popup_button(self, button_text):
+        """Click a popup footer button (Submit/Update) via pure JS."""
+        self.driver.execute_script("""
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.trim().indexOf(arguments[0]) !== -1) {
+                        buttons[j].click();
+                        return 'clicked_' + arguments[0];
+                    }
+                }
+            }
+            throw new Error('Button "' + arguments[0] + '" not found in popup footer');
+        """, button_text)
+        log.info(f"JS-clicked {button_text}")
 
     def click_submit(self):
-        """Click the Submit button (Add mode) and handle post-submit state.
+        """Click Submit button via JS. Returns 'success', 'validation', or 'unknown'."""
+        log.info("Clicking Submit")
+        self._js_click_popup_button('Submit')
+        return self._handle_post_submit()
 
-        After clicking Submit, one of two things happens:
-        - Success: form closes, SweetAlert success toast appears (auto-dismisses)
-        - Validation Failed: SweetAlert warning stays, form stays open
+    def click_update(self):
+        """Click Update button via JS. Returns 'success', 'validation', or 'unknown'."""
+        log.info("Clicking Update")
+        self._js_click_popup_button('Update')
+        return self._handle_post_submit()
 
-        This method clicks Submit and then:
-        1. Checks if a validation alert appeared → if yes, returns "validation"
-        2. Waits for the form to close → if closed, dismisses any success toast
-        3. Returns "success" if form closed, "unknown" otherwise
+    def _handle_post_submit(self):
+        """Handle post-submit state: check for validation alert or form close.
+
+        Fast: checks SweetAlert via JS offsetParent (no WebDriverWait), then
+        checks form popup visibility via JS.
         """
-        log.step(4, "Clicking Submit button")
-        self._js_click(self.SUBMIT_BUTTON)
+        # Brief pause for Angular to process
+        time.sleep(0.5)
 
-        # Brief pause to let Angular process the click
-        self.wait_seconds(1)
-
-        # Check for validation alert first (form stays open on validation failure)
+        # Check for validation alert via JS (instant, no WebDriverWait)
         if self.is_validation_alert_present(timeout=3):
-            log.info("Validation Failed alert detected after submit")
+            log.info("Validation alert detected after submit")
             return "validation"
 
-        # Wait for form to close (success path)
-        try:
-            self.wait_for_form_to_close(timeout=10)
-            # Dismiss any lingering SweetAlert success toast that blocks clicks
+        # Wait for form to close (success path) — poll via JS
+        if self._wait_for_form_close_js(timeout=8):
             self._dismiss_any_sweet_alert()
             log.info("Submit successful — form closed")
             return "success"
-        except Exception:
-            # Check again for validation alert (sometimes delayed)
-            if self.is_validation_alert_present(timeout=2):
-                log.info("Delayed validation alert detected")
-                return "validation"
-            log.warning("Form did not close and no validation alert after submit")
-            return "unknown"
 
-    def click_update(self):
-        """Click the Update button (Edit mode) and handle post-update state.
-
-        Same logic as click_submit but for edit mode.
-        Returns "success", "validation", or "unknown".
-        """
-        log.step(4, "Clicking Update button")
-        self._js_click(self.SUBMIT_BUTTON)
-
-        self.wait_seconds(1)
-
-        if self.is_validation_alert_present(timeout=3):
-            log.info("Validation Failed alert detected after update")
+        # Double-check for delayed validation alert
+        if self.is_validation_alert_present(timeout=2):
             return "validation"
 
-        try:
-            self.wait_for_form_to_close(timeout=10)
-            self._dismiss_any_sweet_alert()
-            log.info("Update successful — form closed")
-            return "success"
-        except Exception:
-            if self.is_validation_alert_present(timeout=2):
-                return "validation"
-            log.warning("Form did not close and no validation alert after update")
-            return "unknown"
+        log.warning("Form did not close and no validation alert after submit")
+        return "unknown"
 
-    def submit_and_wait(self):
-        """Submit and wait for success — raises on validation failure.
+    def _wait_for_form_close_js(self, timeout=8):
+        """Wait for form popup to close using JS check (faster than WebDriverWait)."""
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            visible = self.driver.execute_script("""
+                var popup = document.querySelector('div.edit_pop_up');
+                return popup && popup.offsetParent !== null;
+            """)
+            if not visible:
+                return True
+            time.sleep(0.3)
+        return False
 
-        Convenience method for tests that expect the happy path.
-        Use click_submit() directly for tests that need to check validation.
-        """
-        result = self.click_submit()
-        if result == "validation":
-            self.handle_validation_alert()
+    # ================================================================
+    # SWEET ALERT — Detection & Handling (JS-first, fast)
+    # ================================================================
+
+    def is_validation_alert_present(self, timeout=3):
+        """Check for SweetAlert validation popup via JS (fast poll)."""
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
             try:
-                self.close_form_via_cancel()
+                visible = self.driver.execute_script("""
+                    var el = document.querySelector('.swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error');
+                    return el && el.offsetParent !== null;
+                """)
+                if visible:
+                    return True
             except Exception:
-                self._dismiss_overlays_and_popups()
-            raise AssertionError("Submit failed — validation alert appeared")
-        return result
-
-    # ================================================================
-    # SWEET ALERT — Detection & Handling
-    # ================================================================
-
-    def is_validation_alert_present(self, timeout=5):
-        """Check if SweetAlert 'Validation Failed' popup is visible."""
-        try:
-            WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located((By.CSS_SELECTOR, ".swal2-popup"))
-            )
-            title = self.get_text(self.SWEET_ALERT_TITLE)
-            if "Validation Failed" in title:
-                log.info("Validation Failed alert detected")
-                return True
-        except Exception:
-            pass
+                pass
+            time.sleep(0.2)
         return False
 
-    def is_success_alert_present(self, timeout=5):
-        """Check if SweetAlert success popup is visible."""
-        try:
-            WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located((By.CSS_SELECTOR, ".swal2-popup"))
-            )
-            title = self.get_text(self.SWEET_ALERT_TITLE)
-            if "successfully" in title.lower() or "success" in title.lower():
-                log.info(f"Success alert detected: {title}")
-                return True
-        except Exception:
-            pass
+    def is_success_alert_present(self, timeout=3):
+        """Check for SweetAlert success popup via JS."""
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            try:
+                visible = self.driver.execute_script("""
+                    var el = document.querySelector('.swal2-popup');
+                    if (!el || el.offsetParent === null) return false;
+                    var title = el.querySelector('.swal2-title');
+                    if (!title) return false;
+                    var t = title.textContent.toLowerCase();
+                    return t.indexOf('success') !== -1 || t.indexOf('successfully') !== -1;
+                """)
+                if visible:
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.2)
         return False
-
-    def is_any_alert_present(self, timeout=3):
-        """Check if any SweetAlert popup is visible."""
-        return self.is_displayed(self.SWEET_ALERT_POPUP, timeout=timeout)
 
     def get_alert_title(self):
-        """Get the title text from the current SweetAlert popup."""
-        try:
-            return self.get_text(self.SWEET_ALERT_TITLE)
-        except Exception:
-            return ""
+        """Get SweetAlert title text via JS."""
+        return self.driver.execute_script("""
+            var el = document.querySelector('.swal2-title');
+            return el ? el.textContent.trim() : '';
+        """)
 
     def get_alert_message(self):
-        """Get the message text from the current SweetAlert popup."""
-        try:
-            return self.get_text(self.SWEET_ALERT_MESSAGE)
-        except Exception:
-            return ""
+        """Get SweetAlert message text via JS."""
+        return self.driver.execute_script("""
+            var el = document.querySelector('.swal2-html-container');
+            return el ? el.textContent.trim() : '';
+        """)
 
     def handle_validation_alert(self):
-        """Click OK on the Validation Failed SweetAlert."""
-        log.info("Handling Validation Failed alert — clicking OK")
+        """Dismiss Validation Failed alert via JS."""
+        log.info("Dismissing validation alert")
+        self.driver.execute_script("""
+            var cancel = document.querySelector('.swal2-cancel');
+            if (cancel) { cancel.click(); return 'Cancel'; }
+            var confirm = document.querySelector('.swal2-confirm');
+            if (confirm) { confirm.click(); return 'OK'; }
+            return 'none';
+        """)
+        # Wait for SweetAlert to disappear
         try:
-            self._js_click(self.SWEET_ALERT_CONFIRM_BTN)
-            self.wait_seconds(0.5)
-        except Exception:
-            log.warning("Could not click validation alert OK button")
-
-    def wait_for_success_alert_to_dismiss(self, timeout=5):
-        """Wait for the success toast to auto-dismiss."""
-        log.info("Waiting for success toast to auto-dismiss...")
-        try:
-            WebDriverWait(self.driver, timeout).until(
-                EC.invisibility_of_element_located((By.CSS_SELECTOR, ".swal2-popup"))
+            WebDriverWait(self.driver, 2).until(
+                EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
             )
-            log.info("Success toast dismissed")
         except Exception:
-            # Force-dismiss if it doesn't auto-dismiss
-            self._dismiss_any_sweet_alert()
+            pass
 
     def handle_success_alert(self):
-        """Handle the success SweetAlert — wait for auto-dismiss or force close."""
-        self.wait_for_success_alert_to_dismiss()
+        """Handle SweetAlert success notification — fast dismiss."""
+        log.info("Handling success alert")
+        try:
+            WebDriverWait(self.driver, 3).until(
+                EC.visibility_of_element_located(("css selector", ".swal2-container"))
+            )
+            self.driver.execute_script("""
+                var btn = document.querySelector('.swal2-confirm');
+                if (btn) btn.click();
+            """)
+            try:
+                WebDriverWait(self.driver, 3).until(
+                    EC.invisibility_of_element_located(("css selector", ".swal2-container"))
+                )
+            except Exception:
+                pass
+        except Exception:
+            pass  # SweetAlert may have auto-dismissed
+
+    def _dismiss_any_sweet_alert(self):
+        """Dismiss any SweetAlert popup via JS."""
+        self.driver.execute_script("""
+            var cancel = document.querySelector('.swal2-cancel');
+            if (cancel) { cancel.click(); return 'Cancel'; }
+            var confirm = document.querySelector('.swal2-confirm');
+            if (confirm) { confirm.click(); return 'OK'; }
+            return 'none';
+        """)
 
     # ================================================================
-    # FORM — State Checks
+    # FORM — State Checks (JS-first, instant)
     # ================================================================
 
     def is_form_open(self):
-        """Check if the Season form popup is currently visible."""
-        return self.is_displayed(self.FORM_POPUP, timeout=3)
+        """Check if form popup is open via JS (instant, no WebDriverWait)."""
+        return self.driver.execute_script("""
+            var el = document.querySelector("input[name='Name']");
+            return el && el.offsetParent !== null;
+        """)
 
-    def wait_for_form_to_open(self, timeout=10):
-        """Wait until the form popup appears."""
-        try:
-            self.wait_for_visible(self.FORM_POPUP, timeout=timeout)
-            log.info("Form popup is now open")
-        except Exception:
-            log.error("Form popup did not open within timeout")
-            self.take_screenshot("form_not_opened")
-            raise
+    def wait_for_form_to_open(self, timeout=5):
+        """Wait until the form popup appears (JS poll)."""
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            if self.is_form_open():
+                return
+            time.sleep(0.2)
+        raise TimeoutException("Form popup did not open within timeout")
 
-    def wait_for_form_to_close(self, timeout=10):
-        """Wait until the form popup disappears."""
-        try:
-            self.wait_for_invisible(self.FORM_POPUP, timeout=timeout)
-            log.info("Form popup closed")
-        except Exception:
-            log.warning("Form popup still visible after timeout")
+    def wait_for_form_to_close(self, timeout=8):
+        """Wait until the form popup disappears (JS poll)."""
+        self._wait_for_form_close_js(timeout)
 
     def is_field_disabled(self, locator):
-        """Check if a form field is disabled (used for View mode)."""
-        try:
-            element = self.find_element(locator)
-            disabled = element.get_attribute("disabled")
-            aria_disabled = element.get_attribute("aria-disabled")
-            readonly = element.get_attribute("readonly")
-            return disabled == "true" or aria_disabled == "true" or readonly == "true"
-        except Exception:
+        """Check if a form field is disabled (for View mode)."""
+        css = locator[1] if locator[0] == "css" else ""
+        if not css:
             return False
+        return self.driver.execute_script("""
+            var el = document.querySelector(arguments[0]);
+            if (!el) return false;
+            return el.disabled || el.getAttribute('aria-disabled') === 'true'
+                || el.getAttribute('readonly') === 'true';
+        """, css)
 
     def is_form_in_view_mode(self):
-        """Check if the form is in View mode (no Submit/Update button visible)."""
-        try:
-            return not self.is_displayed(self.SUBMIT_BUTTON, timeout=3)
-        except Exception:
-            return True
+        """Check if form is in View mode (no Submit/Update button visible)."""
+        return self.driver.execute_script("""
+            var btn = document.querySelector("div.popup-footer button[type='submit']");
+            return !btn || btn.offsetParent === null;
+        """)
 
     # ================================================================
     # TABLE — Read Data
     # ================================================================
 
     def get_table_row_count(self):
-        """Get the number of data rows in the Season list table."""
-        try:
-            rows = self.find_elements(self.TABLE_ROWS)
-            count = len(rows)
-            log.info(f"Table has {count} row(s)")
-            return count
-        except Exception:
-            return 0
+        """Get row count via JS (instant)."""
+        rows = self.driver.find_elements("css selector", "table#excel-table tbody tr")
+        return len(rows)
 
     def get_cell_text(self, row_index, col_index):
-        """Get text from a specific table cell.
-
-        Args:
-            row_index: 0-based row index.
-            col_index: 1-based column index (XPath td[N]).
-        """
-        cell_locator = self._table_cell(row_index, col_index)
-        return self.get_text(cell_locator)
+        """Get cell text via JS (avoids StaleElementReferenceException)."""
+        return self.driver.execute_script("""
+            var rows = document.querySelectorAll('table#excel-table tbody tr');
+            if (arguments[0] >= rows.length) return '';
+            var cells = rows[arguments[0]].querySelectorAll('td');
+            if (arguments[1] - 1 >= cells.length) return '';
+            return cells[arguments[1] - 1].textContent.trim();
+        """, row_index, col_index)
 
     def find_row_by_name(self, name):
-        """Find a table row index by matching the Name column.
-
-        Returns:
-            int: 0-based row index, or -1 if not found.
-        """
-        row_count = self.get_table_row_count()
-        for i in range(row_count):
-            cell_text = self.get_cell_text(i, self.COL_NAME)
-            if cell_text.strip().lower() == name.strip().lower():
-                log.info(f"Found '{name}' at row {i}")
-                return i
-        log.warning(f"Record '{name}' not found in table")
-        return -1
+        """Find row index by Name column via JS (instant, no per-row Selenium calls)."""
+        return self.driver.execute_script("""
+            var rows = document.querySelectorAll('table#excel-table tbody tr');
+            var searchName = arguments[0].trim().toLowerCase();
+            for (var i = 0; i < rows.length; i++) {
+                var cells = rows[i].querySelectorAll('td');
+                if (cells.length >= 2) {
+                    var cellText = cells[1].textContent.trim().toLowerCase();
+                    if (cellText === searchName) return i;
+                }
+            }
+            return -1;
+        """, name)
 
     def is_record_present(self, name):
-        """Check if a season record exists in the table by Name."""
+        """Check if a season record exists by Name."""
         return self.find_row_by_name(name) != -1
 
     def get_name_from_row(self, row_index):
-        """Get the Name value from a specific row."""
         return self.get_cell_text(row_index, self.COL_NAME)
 
     def get_description_from_row(self, row_index):
-        """Get the Description value from a specific row."""
         return self.get_cell_text(row_index, self.COL_DESCRIPTION)
 
     def get_status_from_row(self, row_index):
-        """Get the Status value from a specific row."""
         return self.get_cell_text(row_index, self.COL_STATUS)
 
     # ================================================================
-    # TABLE — Row Actions via Kebab Menu (live-verified 2026-06-02)
+    # TABLE — Row Actions via Kebab Menu (pure JS, fast)
     # ================================================================
 
-    def _open_kebab_menu(self, row_index):
-        """Open the kebab menu for a specific row and wait for menu items."""
-        log.info(f"Opening kebab menu on row {row_index}")
-        kebab_locator = self._row_kebab(row_index)
+    def _click_action_menu_item(self, name, action_name):
+        """Click a kebab menu item (View/Edit/History) for a row found by Name.
+        Pure JS — finds row, clicks kebab, then clicks menu item. No Selenium."""
+        log.info(f"Clicking {action_name} via kebab menu for: {name}")
 
-        # Use JS click to avoid interception by overlays or other elements
-        self._js_click(kebab_locator)
+        # Step 1: Find the row and click the kebab menu button
+        result = self.driver.execute_script("""
+            var table = document.querySelector('table#excel-table');
+            if (!table) { throw new Error('Table not found'); }
+            var rows = table.querySelectorAll('tbody tr');
+            var searchName = arguments[0].trim().toLowerCase();
+            for (var i = 0; i < rows.length; i++) {
+                var cells = rows[i].querySelectorAll('td');
+                for (var j = 0; j < cells.length; j++) {
+                    if (cells[j].textContent.trim().toLowerCase() === searchName) {
+                        var menuBtn = rows[i].querySelector('button.erp-row-trigger');
+                        if (!menuBtn) { throw new Error('Kebab button not found in row'); }
+                        menuBtn.scrollIntoView({block:'center'});
+                        menuBtn.click();
+                        return 'menu_opened';
+                    }
+                }
+            }
+            throw new Error('Row with name "' + arguments[0] + '" not found in table');
+        """, name)
 
-        # Wait for the CDK overlay menu to appear
+        # Step 2: Wait for CDK overlay dropdown to render
         try:
-            WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, ".cdk-overlay-pane .mat-mdc-menu-item")
-                )
+            WebDriverWait(self.driver, 2).until(
+                EC.presence_of_element_located(("css selector", ".cdk-overlay-pane .mat-mdc-menu-item"))
             )
-            self.wait_seconds(0.3)  # let animation settle
-        except TimeoutException:
-            log.warning("Kebab menu overlay did not appear — retrying with standard click")
-            try:
-                self.click(kebab_locator)
-                WebDriverWait(self.driver, 5).until(
-                    EC.presence_of_element_located(
-                        (By.CSS_SELECTOR, ".cdk-overlay-pane .mat-mdc-menu-item")
-                    )
-                )
-                self.wait_seconds(0.3)
-            except Exception:
-                log.error("Kebab menu still not appearing after retry")
-
-    def _close_kebab_menu(self):
-        """Dismiss any open kebab menu overlay."""
-        try:
-            ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
-            self.wait_seconds(0.3)
         except Exception:
             pass
 
-    def click_view_button(self, row_index=0):
-        """Click the View button on a specific row via kebab menu."""
-        log.info(f"Clicking View on row {row_index}")
-        self._open_kebab_menu(row_index)
-        self._js_click(self._menu_view)
+        # Step 3: Click the specific menu item from the overlay
+        result = self.driver.execute_script("""
+            var overlay = document.querySelector('.cdk-overlay-container');
+            if (!overlay) { throw new Error('CDK overlay not found after menu click'); }
+            var items = overlay.querySelectorAll('button, span, div');
+            for (var i = 0; i < items.length; i++) {
+                var text = items[i].textContent.trim();
+                if (text === arguments[0]) {
+                    items[i].click();
+                    return 'clicked_' + arguments[0];
+                }
+            }
+            // Fallback: partial match
+            for (var i = 0; i < items.length; i++) {
+                var text = items[i].textContent.trim().toLowerCase();
+                if (text.indexOf(arguments[0].toLowerCase()) !== -1) {
+                    items[i].click();
+                    return 'clicked_partial_' + arguments[0];
+                }
+            }
+            throw new Error('Menu item "' + arguments[0] + '" not found in dropdown');
+        """, action_name)
+        log.info(f"Clicked {action_name} for {name}")
+
+    def click_view_button(self, name):
+        """Click View on a row found by Name."""
+        self._click_action_menu_item(name, "View")
         self.wait_for_form_to_open()
 
-    def click_edit_button(self, row_index=0):
-        """Click the Edit button on a specific row via kebab menu."""
-        log.info(f"Clicking Edit on row {row_index}")
-        self._open_kebab_menu(row_index)
-        self._js_click(self._menu_edit)
+    def click_edit_button(self, name):
+        """Click Edit on a row found by Name."""
+        self._click_action_menu_item(name, "Edit")
         self.wait_for_form_to_open()
 
-    def click_history_button(self, row_index=0):
-        """Click the History button on a specific row via kebab menu."""
-        log.info(f"Clicking History on row {row_index}")
-        self._open_kebab_menu(row_index)
-        self._js_click(self._menu_history)
+    def click_history_button(self, name):
+        """Click History on a row found by Name."""
+        self._click_action_menu_item(name, "History")
         self.wait_for_history_popup()
 
-    def close_history_popup(self):
-        """Close the History popup."""
-        self.close_history_via_cancel()
+    # Legacy row_index-based methods (kept for backward compat)
+    def click_view_button_by_index(self, row_index=0):
+        """Click View on row by index (legacy)."""
+        name = self.get_name_from_row(row_index)
+        self.click_view_button(name)
+
+    def click_edit_button_by_index(self, row_index=0):
+        """Click Edit on row by index (legacy)."""
+        name = self.get_name_from_row(row_index)
+        self.click_edit_button(name)
+
+    def click_history_button_by_index(self, row_index=0):
+        """Click History on row by index (legacy)."""
+        name = self.get_name_from_row(row_index)
+        self.click_history_button(name)
 
     # ================================================================
-    # HISTORY POPUP - Helper Methods
+    # HISTORY POPUP
     # ================================================================
 
     def is_history_popup_open(self, timeout=5):
-        """Check if History popup is currently open."""
-        return self.is_displayed(self.HISTORY_POPUP_TITLE, timeout=timeout)
+        """Check if History popup is open via JS."""
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            visible = self.driver.execute_script("""
+                var el = document.querySelector('app-dynamic-history h3, div.popup-overlay h3');
+                if (!el) return false;
+                return el.textContent.indexOf('History') !== -1 && el.offsetParent !== null;
+            """)
+            if visible:
+                return True
+            time.sleep(0.2)
+        return False
 
     def wait_for_history_popup(self, timeout=10):
-        """Wait for History popup to open and async content to settle.
-
-        Waits for EITHER a table row OR the 'No data' indicators (img or p)
-        to appear — all confirm the async load completed.
-        """
+        """Wait for History popup to open and content to settle."""
         try:
-            self.wait_for_visible(self.HISTORY_POPUP_TITLE, timeout=timeout)
+            WebDriverWait(self.driver, timeout).until(
+                lambda d: d.execute_script("""
+                    var el = document.querySelector('app-dynamic-history h3, div.popup-overlay h3');
+                    if (!el) return false;
+                    return el.textContent.indexOf('History') !== -1 && el.offsetParent !== null;
+                """)
+            )
             log.info("History popup opened")
-            try:
-                WebDriverWait(self.driver, 10).until(
-                    lambda d: (
-                        len(d.find_elements(By.CSS_SELECTOR,
-                            "div.popup-overlay .scrollable-table-container tr")) > 0
-                        or
-                        len(d.find_elements(By.CSS_SELECTOR,
-                            "div.popup-overlay .scrollable-table-container img")) > 0
-                        or
-                        len(d.find_elements(By.CSS_SELECTOR,
-                            "div.popup-overlay .scrollable-table-container p")) > 0
-                    )
-                )
-                log.info("History popup content loaded")
-            except Exception:
-                log.warning("History popup content did not settle within timeout")
         except Exception:
             log.error("History popup did not open")
-            self.take_screenshot("history_popup_not_opened")
             raise
 
     def get_history_title(self):
-        """Get the History popup title text."""
-        return self.get_text(self.HISTORY_POPUP_TITLE)
+        """Get History popup title via JS."""
+        return self.driver.execute_script("""
+            var el = document.querySelector('app-dynamic-history h3, div.popup-overlay h3');
+            return el ? el.textContent.trim() : '';
+        """)
+
+    def get_history_row_count(self):
+        """Get number of rows in the history table via JS."""
+        rows = self.driver.find_elements("css selector", "div.popup-overlay .scrollable-table-container tr")
+        return len(rows)
+
+    def get_history_cell_text(self, row_index, col_index):
+        """Get cell text from history table."""
+        try:
+            rows = self.driver.find_elements("css selector", "div.popup-overlay .scrollable-table-container tr")
+            if row_index < len(rows):
+                cells = rows[row_index].find_elements("css selector", "td, th")
+                if col_index < len(cells):
+                    return cells[col_index].text.strip()
+            return "ROW_NOT_FOUND"
+        except Exception:
+            return "ROW_NOT_FOUND"
+
+    def close_history_popup(self):
+        """Close History popup via JS."""
+        log.info("Closing History popup")
+        self.driver.execute_script("""
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.indexOf('Cancel') !== -1) {
+                        buttons[j].click();
+                        return 'clicked';
+                    }
+                }
+            }
+        """)
+
+    def close_history_via_cancel(self):
+        """Close History popup via Cancel button (alias)."""
+        self.close_history_popup()
 
     def search_in_history(self, text):
-        """Search within the History popup table.
-
-        Uses the same JS-based search pattern as the main search to
-        avoid stale element issues with Angular animations.
-        """
+        """Search within History popup via JS."""
         log.info(f"Searching in history for: {text}")
-
-        # Open search bar within history popup if not already open
         self.driver.execute_script("""
             var input = document.querySelector('div.popup-overlay #erpSearchInput');
             if (!input) {
@@ -590,9 +675,8 @@ class SeasonPage(BasePage):
                 if (btn) btn.click();
             }
         """)
-        self.wait_seconds(1)
+        time.sleep(0.5)
 
-        # Use JS to type and search (avoids stale elements)
         self.driver.execute_script("""
             var input = document.querySelector('div.popup-overlay #erpSearchInput');
             if (!input) input = document.querySelector('div.popup-overlay input[type="text"]');
@@ -609,314 +693,139 @@ class SeasonPage(BasePage):
                 }));
             }
         """, text)
-        self.wait_seconds(1.5)
-
-    def get_history_row_count(self):
-        """Get number of rows in the history table."""
-        try:
-            rows = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "div.popup-overlay .scrollable-table-container tr"
-            )
-            count = len(rows)
-            log.info(f"History table has {count} row(s)")
-            return count
-        except Exception as e:
-            log.warning(f"History table rows not found: {e}")
-            return 0
-
-    def get_history_cell_text(self, row_index, col_index):
-        """Get text from a specific history table cell (0-based).
-
-        History columns (0-indexed):
-            0 = View (button)
-            1 = Creation Time
-            2 = Updated Time
-            3 = Name
-            4 = Description
-            5 = Status
-        """
-        try:
-            rows = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "div.popup-overlay .scrollable-table-container tr"
-            )
-            if row_index < len(rows):
-                cells = rows[row_index].find_elements(By.CSS_SELECTOR, "td, th")
-                if col_index < len(cells):
-                    text = cells[col_index].text.strip()
-                    log.info(f"History cell [{row_index},{col_index}] = {text}")
-                    return text
-            text = "ROW_NOT_FOUND"
-            log.warning(f"History cell [{row_index},{col_index}] = {text}")
-            return text
-        except Exception as e:
-            log.warning(f"History cell [{row_index},{col_index}] error: {e}")
-            return "ROW_NOT_FOUND"
-
-    def close_history_via_cancel(self):
-        """Close the History popup via the Cancel button.
-
-        Falls back to Escape key if the button is not interactable.
-        """
-        log.info("Closing History popup via Cancel button")
-        try:
-            self._js_click(self.HISTORY_CANCEL_BUTTON)
-            self.wait_seconds(0.5)
-        except Exception:
-            log.warning("Cancel button not found in History popup, trying Escape")
-            ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
-            self.wait_seconds(0.5)
+        time.sleep(1)
 
     # ================================================================
-    # REFRESH / RELOAD TABLE
+    # REFRESH / RELOAD (fast)
     # ================================================================
 
     def refresh_table(self):
-        """Click the Refresh button to reload the table data."""
-        log.info("Refreshing Season table...")
-        # Ensure no overlays are blocking the refresh button
-        self._dismiss_any_sweet_alert()
-        try:
-            self._js_click(self.REFRESH_BUTTON)
-            self.wait_seconds(1.5)
-            log.info("Table refreshed")
-        except Exception:
-            log.warning("Refresh button not found, falling back to page refresh")
-            self.navigate_to_season()
+        """Refresh table via hard_refresh (fast — Ctrl+R instead of clicking Refresh button)."""
+        self.hard_refresh()
 
     # ================================================================
-    # SEARCH
+    # SEARCH (pure JS, fast)
     # ================================================================
-
-    SEARCH_BUTTON = ("css", "button[aria-label='Search']")
-    SEARCH_INPUT = ("css", "input#erpSearchInput")
-
-    def _open_search_bar(self):
-        """Open the search toggle bar and wait for the input to be DOM-stable."""
-        if self.is_displayed(self.SEARCH_INPUT, timeout=1):
-            return  # bar already open
-
-        self._js_click(self.SEARCH_BUTTON)
-
-        by, value = self._parse_locator(self.SEARCH_INPUT)
-
-        def input_is_stable(driver):
-            """Return element only once it's visible AND survives a second read."""
-            try:
-                el = driver.find_element(by, value)
-                if not el.is_displayed():
-                    return False
-                _ = el.get_attribute("id")
-                return el
-            except StaleElementReferenceException:
-                return False
-            except Exception:
-                return False
-
-        try:
-            WebDriverWait(self.driver, 8).until(input_is_stable)
-            self.wait_seconds(0.2)
-            log.info("Search bar open and stable")
-        except Exception:
-            log.warning("Search input did not stabilise within timeout")
 
     def search_record(self, text, exact=False):
-        """Search for a record in the Season table.
+        """Search for a record. Uses JS for all interactions.
+        Returns True if found."""
+        log.info(f"Searching for: {text} (exact={exact})")
 
-        Uses JS-based search to avoid stale element issues.
-        The Name column is td[2] (1-based XPath).
+        # Open search bar if needed
+        self.driver.execute_script("""
+            var input = document.querySelector('#erpSearchInput');
+            if (!input || input.offsetParent === null) {
+                var btn = document.querySelector('button[aria-label="Search"]');
+                if (btn) btn.click();
+            }
+        """)
 
-        Args:
-            text: Search query.
-            exact: If True, scans all rows for exact name match.
-
-        Returns:
-            bool: True if matching record(s) found.
-        """
+        # Wait for search input to appear
         try:
-            log.info(f"Searching for record: {text} (exact={exact})")
-
-            # Step 1: Open search bar if needed (pure JS — no stale risk)
-            self.driver.execute_script("""
-                var input = document.querySelector('#erpSearchInput');
-                if (!input) {
-                    document.querySelector('button[aria-label="Search"]').click();
-                }
-            """)
-
-            # Step 2: Wait for Angular to inject the input
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "#erpSearchInput"))
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(("css selector", "#erpSearchInput"))
             )
-            self.wait_seconds(0.5)
+        except Exception:
+            pass
 
-            # Step 3: Clear + Type + Enter — ALL in ONE JS call (atomic, no stale)
-            self.driver.execute_script("""
-                var input = document.querySelector('#erpSearchInput');
-                var nativeSetter = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype, 'value'
-                ).set;
+        time.sleep(0.3)
 
-                nativeSetter.call(input, '');
-                input.dispatchEvent(new Event('input', {bubbles: true}));
+        # Clear + Type + Enter via JS
+        self.driver.execute_script("""
+            var input = document.querySelector('#erpSearchInput');
+            if (!input) return;
+            var nativeSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value'
+            ).set;
+            nativeSetter.call(input, '');
+            input.dispatchEvent(new Event('input', {bubbles: true}));
+            nativeSetter.call(input, arguments[0]);
+            input.dispatchEvent(new Event('input', {bubbles: true}));
+            input.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true
+            }));
+        """, text)
 
-                nativeSetter.call(input, arguments[0]);
-                input.dispatchEvent(new Event('input', {bubbles: true}));
+        time.sleep(1)
 
-                input.dispatchEvent(new KeyboardEvent('keydown', {
-                    key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true
-                }));
-            """, text)
-
-            self.wait_seconds(1.5)
-
-            # Step 4: Check results — Name is column 2 (1-based XPath = td[2])
-            row_count = self.get_table_row_count()
-
-            if row_count == 0:
-                log.info(f"Search returned 0 results for '{text}'")
-                return False
-
-            if not exact:
-                first_name = ""
-                try:
-                    first_name = self.get_text(
-                        ("xpath", f"(//table[@id='excel-table']//tbody//tr)[1]/td[{self.COL_NAME}]")
-                    )
-                except Exception:
-                    first_name = "(could not read)"
-                log.info(f"Search found {row_count} result(s), first: '{first_name}'")
-                return True
-
-            # Exact mode: scan ALL visible rows for exact name match
-            text_lower = text.strip().lower()
-            for i in range(row_count):
-                try:
-                    row_name = self.get_text(
-                        ("xpath", f"(//table[@id='excel-table']//tbody//tr)[{i + 1}]/td[{self.COL_NAME}]")
-                    ).strip().lower()
-                    if row_name == text_lower:
-                        log.info(f"Exact match found at row {i}")
-                        return True
-                except Exception:
-                    continue
-            log.info(f"No exact match for '{text}' in {row_count} result(s)")
+        # Check results
+        row_count = self.get_table_row_count()
+        if row_count == 0:
+            log.info(f"Search returned 0 results for '{text}'")
             return False
 
-        except Exception as e:
-            log.error(f"[ERROR] Search failed: {e}")
-            return False
+        if not exact:
+            log.info(f"Search found {row_count} result(s)")
+            return True
+
+        # Exact mode: scan rows for exact name match (via JS)
+        return self.driver.execute_script("""
+            var rows = document.querySelectorAll('table#excel-table tbody tr');
+            var searchName = arguments[0].trim().toLowerCase();
+            for (var i = 0; i < rows.length; i++) {
+                var cells = rows[i].querySelectorAll('td');
+                if (cells.length >= 2) {
+                    if (cells[1].textContent.trim().toLowerCase() === searchName) return true;
+                }
+            }
+            return false;
+        """, text)
+
+    def search_and_verify(self, name):
+        """Search + verify a record exists. Polls up to 10s for slow renders.
+        Returns True if found."""
+        log.info(f"Searching and verifying: {name}")
+        self.search_record(name)
+        return self.verify_record_exists(name)
+
+    def verify_record_exists(self, name):
+        """Verify a record exists in the current table view. Polls up to 10s."""
+        end_time = time.monotonic() + 10
+        while time.monotonic() < end_time:
+            try:
+                found = self.driver.execute_script("""
+                    var rows = document.querySelectorAll('table#excel-table tbody tr');
+                    var searchName = arguments[0].trim().toLowerCase();
+                    for (var i = 0; i < rows.length; i++) {
+                        var cells = rows[i].querySelectorAll('td');
+                        for (var j = 0; j < cells.length; j++) {
+                            if (cells[j].textContent.trim().toLowerCase().indexOf(searchName) !== -1) return true;
+                        }
+                    }
+                    return false;
+                """, name)
+                if found:
+                    log.info(f"Record '{name}' found in table")
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.5)
+        log.error(f"Record '{name}' NOT found after 10s polling")
+        return False
 
     # ================================================================
-    # UTILITY - OVERLAY / PANEL CLEANUP (non-destructive)
+    # OVERLAY CLEANUP (non-destructive)
     # ================================================================
 
     def _dismiss_overlays_and_popups(self):
-        """Dismiss any open overlays, popups, or alerts using keyboard/JS clicks.
-
-        This is a NON-DESTRUCTIVE alternative to the old _force_close_panels()
-        which used DOM removal and corrupted Angular state.
-        """
-        # 1. Dismiss any SweetAlert first (it blocks everything)
+        """Dismiss any open overlays/popups using Escape key."""
+        # Dismiss SweetAlert first
         self._dismiss_any_sweet_alert()
-
-        # 2. Close any open form popup via Escape
-        try:
-            if self.is_displayed(self.FORM_POPUP, timeout=0.5):
-                ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
-                self.wait_seconds(0.3)
-                # If still open, try Cancel button
-                if self.is_displayed(self.FORM_POPUP, timeout=0.5):
-                    try:
-                        self._js_click(self.CANCEL_BUTTON)
-                        self.wait_seconds(0.3)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-
-        # 3. Close any open CDK overlay (kebab menu, dropdowns)
-        try:
-            ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
-            self.wait_seconds(0.2)
-        except Exception:
-            pass
-
-        # 4. Close any History popup
-        try:
-            if self.is_displayed(self.HISTORY_POPUP_TITLE, timeout=0.5):
-                ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
-                self.wait_seconds(0.3)
-        except Exception:
-            pass
+        # Close any open CDK overlay or popup
+        ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+        time.sleep(0.2)
 
     def _dismiss_any_sweet_alert(self):
-        """Dismiss any SweetAlert popup (OK or Cancel button)."""
-        try:
-            popup = self.driver.find_element("css selector", ".swal2-popup")
-            if not popup.is_displayed():
-                return
-            log.info("SweetAlert detected, attempting to dismiss")
-            # Try Cancel button first (for confirmation dialogs)
-            try:
-                cancel_btn = self.driver.find_element("css selector", ".swal2-cancel")
-                if cancel_btn.is_displayed():
-                    self.driver.execute_script("arguments[0].click();", cancel_btn)
-                    log.info("Dismissed via Cancel button")
-                    self.wait_seconds(0.5)
-                    return
-            except Exception:
-                pass
-            # Try Confirm/OK button (for validation alerts)
-            try:
-                confirm_btn = self.driver.find_element("css selector", ".swal2-confirm")
-                if confirm_btn.is_displayed():
-                    self.driver.execute_script("arguments[0].click();", confirm_btn)
-                    log.info("Dismissed via OK button")
-                    self.wait_seconds(0.5)
-                    return
-            except Exception:
-                pass
-            # Last resort: click outside the popup
-            ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
-            self.wait_seconds(0.3)
-        except Exception:
-            pass  # No SweetAlert present
+        """Dismiss any SweetAlert via JS."""
+        self.driver.execute_script("""
+            var cancel = document.querySelector('.swal2-cancel');
+            if (cancel) { cancel.click(); return; }
+            var confirm = document.querySelector('.swal2-confirm');
+            if (confirm) { confirm.click(); return; }
+        """)
 
     def clear_search(self):
-        """Clear the search filter by re-navigating to the Season screen.
-
-        Re-navigation is the most reliable reset. navigate_to_season() waits
-        for TABLE visibility before returning, so callers get a fully settled
-        DOM immediately after this call exits.
-        """
-        log.info("Clearing search filter...")
-        self._dismiss_overlays_and_popups()
-        self.navigate_to_season()
-
-    # ================================================================
-    # UTILITY - JS CLICK (interception-safe)
-    # ================================================================
-
-    def _js_click(self, locator):
-        """Click an element using JavaScript — immune to overlay interception.
-
-        Falls back to standard click() if JS click fails (e.g. element not in DOM).
-        """
-        by, value = self._parse_locator(locator)
-        try:
-            # First try to find the element
-            element = WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located((by, value))
-            )
-            # Use JS click to bypass any overlay interception
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();",
-                element
-            )
-            log.info(f"JS-clicked: {locator}")
-        except Exception:
-            # Fallback to standard click (which has its own overlay handling)
-            log.info(f"JS click failed, falling back to standard click: {locator}")
-            self.click(locator)
+        """Clear search filter via hard_refresh (fast)."""
+        log.info("Clearing search - hard refreshing")
+        self.hard_refresh()
