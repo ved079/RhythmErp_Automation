@@ -1,135 +1,69 @@
 #!/usr/bin/env python3
 """
-batch_create.py
----------------
-Main runner: create multiple Tax Authority entries via API with realistic Indian data.
+Tax Authority — Batch Create
 
-Just paste your Bearer token and go.
-
-Usage:
-    python pages/common_settings/modules/tax_authority/scripts/batch_create.py
-    python pages/common_settings/modules/tax_authority/scripts/batch_create.py --count 20
-    python pages/common_settings/modules/tax_authority/scripts/batch_create.py --token eyJhbGci...
+Screen: "Tax Authority" (flat, 2 FK dropdowns: tax_type_ref_id, country_ref_id)
+Auto-discovers FK IDs at startup.
 """
 
 import sys
 import os
 import time
 
-# Add project root to path (tax_authority/scripts → tax_authority → modules → common_settings → pages → project root)
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", ".."))
+# ── Path setup ────────────────────────────────────────────────────────
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "..", "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
-from common.erp_api_client import RhythmERPAPIClient
-from common.logger import log
-from pages.common_settings.modules.tax_authority.data.tax_authority_data import generate_tax_authority_api_payload
+from common.erp_api_client import ErpApiClient
+from common.fk_resolver import FkResolver
+from pages.common_settings.modules.tax_authority.data.tax_authority_data import (
+    generate_tax_authority_api_payloads,
+)
 
-TENANT_ID = "599"
-DEFAULT_COUNT = 10
-
-
-def parse_args():
-    args = {"token": None, "count": DEFAULT_COUNT, "dry_run": False}
-    i = 1
-    while i < len(sys.argv):
-        arg = sys.argv[i]
-        if arg == "--token" and i + 1 < len(sys.argv):
-            args["token"] = sys.argv[i + 1]
-            i += 2
-        elif arg == "--count" and i + 1 < len(sys.argv):
-            args["count"] = int(sys.argv[i + 1])
-            i += 2
-        elif arg == "--dry-run":
-            args["dry_run"] = True
-            i += 1
-        else:
-            i += 1
-    return args
-
-
-def batch_create(client, count, dry_run=False):
-    success = 0
-    fail = 0
-    countries_used = []
-    start = time.time()
-
-    print("=" * 70)
-    print(f"  TAX AUTHORITY BATCH CREATE — {count} entries")
-    print("=" * 70)
-
-    for i in range(count):
-        payload = generate_tax_authority_api_payload()
-        name = payload.get("name", "?")
-        tax_type_id = payload.get("tax_type_ref_id")
-        country_id = payload.get("country_ref_id")
-
-        countries_used.append(country_id)
-
-        if dry_run:
-            print(f'  [{i+1:2d}] [DRY] {name:45s} | TaxTypeID={tax_type_id} CountryID={country_id}')
-            success += 1
-            continue
-
-        result = client.create_entry(payload)
-        if result:
-            sid = result.get('id', '?')
-            print(f'  [{i+1:2d}] OK  {name:45s} | ID={sid} CountryID={country_id}')
-            success += 1
-        else:
-            print(f'  [{i+1:2d}] FAIL {name:45s}')
-            fail += 1
-
-        time.sleep(0.25)
-
-    elapsed = time.time() - start
-
-    print()
-    print("=" * 70)
-    print("  RESULTS")
-    print("=" * 70)
-    print(f"  Created:     {success}/{count} ({fail} failed)")
-    if not dry_run:
-        print(f"  Time:        {elapsed:.1f}s ({elapsed/count:.2f}s per entry)")
-    unique_countries = [c for c in set(countries_used) if c is not None]
-    print(f"  Countries:   {sorted(unique_countries)} ({len(unique_countries)} unique)")
-    print("=" * 70)
-
-    return success, fail
+SCREEN_NAME = "Tax Authority"
 
 
 def main():
-    args = parse_args()
-    token = args["token"]
-    count = args["count"]
-    dry_run = args["dry_run"]
+    print("=" * 70)
+    print(f"  {SCREEN_NAME.upper()} BATCH CREATE")
+    print("=" * 70)
 
-    if not token:
-        print("=" * 70)
-        print("  TAX AUTHORITY BATCH CREATE")
-        print("=" * 70)
-        print()
-        print("  No token provided. Get it from:")
-        print("  1. Open https://rhythmerp.algorhythms.in in Chrome")
-        print("  2. DevTools -> Network -> click any page")
-        print("  3. Find any /core/ request -> copy Authorization header")
-        print("  4. Paste the token value (after 'Bearer ')")
-        print()
-        token = input("  Token: ").strip()
-        if not token:
-            print("  No token entered. Exiting.")
-            return
+    api = ErpApiClient()
+    token = api.prompt_for_token()
+    api.set_session_from_token(token)
 
-    client = RhythmERPAPIClient()
-    client.login_from_browser(token=token, tenant_id=TENANT_ID)
+    # ── Resolve FK IDs ────────────────────────────────────────────────
+    print()
+    print("  Resolving FK IDs...")
+    resolver = FkResolver(api)
 
-    result = client.list_entries("Tax Authority", page=1, page_size=1)
-    if not result:
-        print("  Token invalid or expired. Get a new one from DevTools.")
-        client.close()
-        return
+    tax_type_ids = resolver.resolve("Tax Type")
+    print(f"    tax_type_ref_id: {len(tax_type_ids)} Tax Types found")
 
-    batch_create(client, count, dry_run)
-    client.close()
+    country_ids = resolver.resolve("Country")
+    print(f"    country_ref_id: {len(country_ids)} Countries found")
+
+    fk_ids = {
+        "tax_type_ref_id": tax_type_ids,
+        "country_ref_id": country_ids,
+    }
+
+    # ── Generate payloads ─────────────────────────────────────────────
+    count = 10
+    print()
+    print(f"  Generating {count} payloads...")
+    payloads = generate_tax_authority_api_payloads(count=count, fk_ids=fk_ids)
+
+    # ── Batch create ──────────────────────────────────────────────────
+    print()
+    print("=" * 70)
+    print(f"  {SCREEN_NAME.upper()} BATCH CREATE — {count} entries")
+    print("=" * 70)
+
+    results = api.batch_create(SCREEN_NAME, payloads)
+    api.print_results(results, SCREEN_NAME)
+    api.close()
 
 
 if __name__ == "__main__":

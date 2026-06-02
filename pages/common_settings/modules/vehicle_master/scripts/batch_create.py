@@ -1,140 +1,83 @@
 #!/usr/bin/env python3
 """
-batch_create.py
----------------
-Main runner: create multiple Vehicle Master entries via API with realistic Indian data.
+Vehicle Master — Batch Create
 
-Just paste your Bearer token and go.
-
-Usage:
-    python pages/common_settings/modules/vehicle_master/scripts/batch_create.py
-    python pages/common_settings/modules/vehicle_master/scripts/batch_create.py --count 20
-    python pages/common_settings/modules/vehicle_master/scripts/batch_create.py --token eyJhbGci...
+Screen: "Vehicle Master" (flat, 2 FK dropdowns: vehicle_type_id, fuel_type_ref_id)
+Auto-discovers FK IDs at startup.
 """
 
 import sys
 import os
 import time
 
-# Add project root to path (vehicle_master/scripts → vehicle_master → modules → common_settings → pages → project root)
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", ".."))
+# ── Path setup ────────────────────────────────────────────────────────
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "..", "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
-from common.erp_api_client import RhythmERPAPIClient
-from common.logger import log
-from pages.common_settings.modules.vehicle_master.data.vehicle_master_data import generate_vehicle_master_api_payload
+from common.erp_api_client import ErpApiClient
+from common.fk_resolver import FkResolver
+from pages.common_settings.modules.vehicle_master.data.vehicle_master_data import (
+    generate_vehicle_master_api_payloads,
+)
 
-TENANT_ID = "599"
-DEFAULT_COUNT = 10
-
-
-def parse_args():
-    args = {"token": None, "count": DEFAULT_COUNT, "dry_run": False}
-    i = 1
-    while i < len(sys.argv):
-        arg = sys.argv[i]
-        if arg == "--token" and i + 1 < len(sys.argv):
-            args["token"] = sys.argv[i + 1]
-            i += 2
-        elif arg == "--count" and i + 1 < len(sys.argv):
-            args["count"] = int(sys.argv[i + 1])
-            i += 2
-        elif arg == "--dry-run":
-            args["dry_run"] = True
-            i += 1
-        else:
-            i += 1
-    return args
-
-
-def batch_create(client, count, dry_run=False):
-    success = 0
-    fail = 0
-    vehicle_types_used = []
-    fuel_types_used = []
-    start = time.time()
-
-    print("=" * 70)
-    print(f"  VEHICLE MASTER BATCH CREATE — {count} entries")
-    print("=" * 70)
-
-    for i in range(count):
-        payload = generate_vehicle_master_api_payload()
-        name = payload.get("name", "?")
-        price = payload.get("price", 0)
-        vehicle_type_id = payload.get("vehicle_type_ref_id")
-        fuel_type_id = payload.get("fuel_type_ref_id")
-
-        vehicle_types_used.append(vehicle_type_id)
-        fuel_types_used.append(fuel_type_id)
-
-        if dry_run:
-            print(f'  [{i+1:2d}] [DRY] {name:40s} | Price={price:>10,} VTID={vehicle_type_id} FTID={fuel_type_id}')
-            success += 1
-            continue
-
-        result = client.create_entry(payload)
-        if result:
-            sid = result.get('id', '?')
-            print(f'  [{i+1:2d}] OK  {name:40s} | ID={sid} Price={price:>10,}')
-            success += 1
-        else:
-            print(f'  [{i+1:2d}] FAIL {name:40s} | Price={price:>10,}')
-            fail += 1
-
-        time.sleep(0.25)
-
-    elapsed = time.time() - start
-
-    print()
-    print("=" * 70)
-    print("  RESULTS")
-    print("=" * 70)
-    print(f"  Created:       {success}/{count} ({fail} failed)")
-    if not dry_run:
-        print(f"  Time:          {elapsed:.1f}s ({elapsed/count:.2f}s per entry)")
-    unique_vtypes = [t for t in set(vehicle_types_used) if t is not None]
-    unique_ftypes = [t for t in set(fuel_types_used) if t is not None]
-    print(f"  Vehicle types: {sorted(unique_vtypes)} ({len(unique_vtypes)} unique)")
-    print(f"  Fuel types:    {sorted(unique_ftypes)} ({len(unique_ftypes)} unique)")
-    print("=" * 70)
-
-    return success, fail
+SCREEN_NAME = "Vehicle Master"
 
 
 def main():
-    args = parse_args()
-    token = args["token"]
-    count = args["count"]
-    dry_run = args["dry_run"]
+    print("=" * 70)
+    print(f"  {SCREEN_NAME.upper()} BATCH CREATE")
+    print("=" * 70)
 
-    if not token:
-        print("=" * 70)
-        print("  VEHICLE MASTER BATCH CREATE")
-        print("=" * 70)
-        print()
-        print("  No token provided. Get it from:")
-        print("  1. Open https://rhythmerp.algorhythms.in in Chrome")
-        print("  2. DevTools -> Network -> click any page")
-        print("  3. Find any /core/ request -> copy Authorization header")
-        print("  4. Paste the token value (after 'Bearer ')")
-        print()
-        token = input("  Token: ").strip()
-        if not token:
-            print("  No token entered. Exiting.")
-            return
+    api = ErpApiClient()
+    token = api.prompt_for_token()
+    api.set_session_from_token(token)
 
-    client = RhythmERPAPIClient()
-    client.login_from_browser(token=token, tenant_id=TENANT_ID)
+    # ── Resolve FK IDs ────────────────────────────────────────────────
+    print()
+    print("  Resolving FK IDs...")
+    resolver = FkResolver(api)
 
-    result = client.list_entries("Vehicle Master", page=1, page_size=1)
-    if not result:
-        print("  Token invalid or expired. Get a new one from DevTools.")
-        client.close()
-        return
+    # Vehicle Type — try multiple names
+    vt_ids = {}
+    for attempt in ["Vehicle Type", "Vehicle Category", "Vehicle Master Type"]:
+        vt_ids = resolver.resolve(attempt)
+        if vt_ids:
+            print(f"    vehicle_type_id: Found {len(vt_ids)} values from '{attempt}'")
+            break
+    if not vt_ids:
+        print("    vehicle_type_id: NOT FOUND — will use placeholder IDs")
 
-    batch_create(client, count, dry_run)
-    client.close()
+    # Fuel Type
+    ft_ids = {}
+    for attempt in ["Fuel Type", "Fuel Type Master", "Fuel Category"]:
+        ft_ids = resolver.resolve(attempt)
+        if ft_ids:
+            print(f"    fuel_type_ref_id: Found {len(ft_ids)} values from '{attempt}'")
+            break
+    if not ft_ids:
+        print("    fuel_type_ref_id: NOT FOUND — will use placeholder IDs")
+
+    fk_ids = {
+        "vehicle_type_id": vt_ids,
+        "fuel_type_ref_id": ft_ids,
+    }
+
+    # ── Generate payloads ─────────────────────────────────────────────
+    count = 10
+    print()
+    print(f"  Generating {count} payloads...")
+    payloads = generate_vehicle_master_api_payloads(count=count, fk_ids=fk_ids)
+
+    # ── Batch create ──────────────────────────────────────────────────
+    print()
+    print("=" * 70)
+    print(f"  {SCREEN_NAME.upper()} BATCH CREATE — {count} entries")
+    print("=" * 70)
+
+    results = api.batch_create(SCREEN_NAME, payloads)
+    api.print_results(results, SCREEN_NAME)
+    api.close()
 
 
 if __name__ == "__main__":

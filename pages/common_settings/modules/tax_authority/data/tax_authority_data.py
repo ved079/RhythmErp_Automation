@@ -1,329 +1,100 @@
+#!/usr/bin/env python3
 """
-tax_authority_data.py
----------------------
-Test data generators and constants for Tax Authority screen automation.
-Each function returns data safe for a specific test scenario.
+Tax Authority — Data pool + API payload builder.
 
-Module: Common Settings > Tax Authority
-Fields: Tax Name (text), Tax Type (mat-select), Country (mat-select)
+Screen: "Tax Authority" (flat, 2 FK dropdowns: tax_type_ref_id, country_ref_id)
+Fields: tax_name, tax_type_ref_id, country_ref_id
+
+Discovered FK IDs (2026-06-02):
+  tax_type_ref_id:  GST=93
+  country_ref_id:   India=1 (+ 113 other countries)
 """
 
 import random
-import string
 
-
-# ================================================================
-# FIELD NAMES (match input[name="..."] on the ERP form)
-# ================================================================
-FIELD_TAX_NAME = "Tax Name"
-
-# Dropdown values
-TAX_TYPE_GST = "GST"
-
-# Country options (subset of 114 available — used for testing)
-COUNTRY_INDIA = "India"
-COUNTRY_DUBAI = "Dubai"
-COUNTRY_UNITED_STATES = "United States"
-COUNTRY_UNITED_KINGDOM = "United Kingdom"
-
-
-# ================================================================
-# SAFE DATA — these won't collide with existing records
-# ================================================================
-
-def _random_suffix(length=6):
-    """Generate a random alphabetic suffix to avoid collisions.
-    
-    IMPORTANT: Tax Name field only accepts alphabetic characters (no digits).
-    """
-    return ''.join(random.choices(string.ascii_uppercase, k=length))
-
-
-# --- Valid test data ---
-
-def valid_tax_authority_data():
-    """All 3 required fields filled with valid data.
-
-    Tax Name uses a random suffix to avoid collisions with existing records.
-    Tax Type is always GST (only option available).
-    Country defaults to India.
-    """
-    return {
-        FIELD_TAX_NAME: f"TaxAuth{_random_suffix()}",
-        "tax_type": TAX_TYPE_GST,
-        "country": COUNTRY_INDIA,
-    }
-
-
-def valid_tax_authority_dubai():
-    """Tax Authority with Dubai as country."""
-    data = valid_tax_authority_data()
-    data["country"] = COUNTRY_DUBAI
-    return data
-
-
-def valid_tax_authority_usa():
-    """Tax Authority with United States as country."""
-    data = valid_tax_authority_data()
-    data["country"] = COUNTRY_UNITED_STATES
-    return data
-
-
-# --- Edge-case / negative test data ---
-
-def invalid_empty_tax_name():
-    """Empty Tax Name — server rejects with Validation Failed."""
-    data = valid_tax_authority_data()
-    data[FIELD_TAX_NAME] = ""
-    return data
-
-
-def invalid_very_long_tax_name(length=200):
-    """Very long Tax Name (200 chars) — tests max-length behavior.
-
-    BUG: No maxlength restriction on Tax Name field (maxlength=-1).
-    Server may accept or reject extremely long names.
-    """
-    data = valid_tax_authority_data()
-    data[FIELD_TAX_NAME] = "A" * length
-    return data
-
-
-def special_chars_tax_name():
-    """Tax Name with special characters — tests input sanitization.
-
-    Checks if characters like @#$%^&*() are accepted or rejected.
-    """
-    data = valid_tax_authority_data()
-    data[FIELD_TAX_NAME] = f"Test@#$%^&*{_random_suffix()}"
-    return data
-
-
-def duplicate_tax_authority_data(existing_name):
-    """Duplicate Tax Name — tests duplicate detection.
-
-    Args:
-        existing_name: The name of an existing record to duplicate.
-    """
-    return {
-        FIELD_TAX_NAME: existing_name,
-        "tax_type": TAX_TYPE_GST,
-        "country": COUNTRY_INDIA,
-    }
-
-
-# ================================================================
-# EXPECTED ALERT MESSAGES
-# ================================================================
-VALIDATION_ALERT_TITLE = "Validation Failed"
-SUCCESS_ALERT_TITLE_ADD = "Your record has been added successfully!"
-SUCCESS_ALERT_TITLE_UPDATE = "Your record has been updated successfully!"
-
-
-# ================================================================
-# ERP NAVIGATION
-# ================================================================
-TAX_AUTHORITY_PAGE_URL = "https://rhythmerp.algorhythms.in/#/dynamic-screens/Tax%20Authority"
-BREADCRUMB_TEXT = "Common Settings / Tax Authority"
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# API Payload Builder
-# ═══════════════════════════════════════════════════════════════════════════════
-# Converts UI data format into the JSON payload that
-# POST /core/dynamic-screen-wrapper/ expects.
-#
-# TAX AUTHORITY SCREEN STRUCTURE (flat — no children/steppers):
-#   {
-#     "id": "",
-#     "attribute_name": "Tax Authority",
-#     "name": "GST Authority Mumbai",
-#     "tax_type_ref_id": <FK ID>,
-#     "country_ref_id": <FK ID>,
-#     "status": true
-#   }
-#
-# FIELD KEY MAPPING:
-#   Tax Name   -> name (text, alphabetic only!)
-#   tax_type   -> tax_type_ref_id (FK dropdown, only GST option)
-#   country    -> country_ref_id (FK dropdown, India=8)
-#   status     -> status (boolean)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# ─── FK ID Placeholders ──────────────────────────────────────────────────────
-TAX_TYPE_IDS = {
-    "GST": None,  # Only option — ID to be filled from discovery
-}
+# ── Real FK IDs from live ERP ────────────────────────────────────────
+TAX_TYPE_IDS = {"GST": 93}
 
 COUNTRY_IDS = {
-    "India": 8,
-    "Dubai": None,
-    "United States": None,
-    "United Kingdom": None,
+    "India": 1, "Dubai": 2, "Afghanistan": 3, "Algeria": 4, "Angola": 5,
+    "Argentina": 6, "Australia": 8, "Bahrain": 10, "Bhutan": 13, "Brazil": 16,
+    "Canada": 20, "China (offshore)": 25, "Colombia": 26, "Denmark": 32,
+    "Egypt": 34, "European Union": 38, "Hong Kong": 46, "Indonesia": 49,
+    "Israel": 52, "Kenya": 55, "Kuwait": 56, "Malaysia": 64, "Maldives": 65,
+    "Mexico": 67, "Myanmar": 70, "Nepal": 72, "New Zealand": 73, "Nigeria": 74,
+    "Oman": 77, "Pakistan": 78, "Philippines": 82, "Qatar": 84, "Russia": 86,
+    "Saudi Arabia": 89, "Singapore": 0, "South Africa": 94, "South Korea": 95,
+    "Sri Lanka": 96, "Sweden": 98, "Switzerland": 99, "Taiwan": 101,
+    "Thailand": 0, "Turkey": 105, "Ukraine": 106, "United Kingdom": 107,
+    "United States": 108, "Vietnam": 112,
 }
 
-# ─── Realistic Indian Tax Authority names ────────────────────────────────────
-# All alphabetic (no digits) as per field validation rule
-REALISTIC_TAX_AUTHORITY_NAMES = [
-    # GST authorities by region
-    "GST Authority Mumbai",
-    "GST Authority Delhi",
-    "GST Authority Pune",
-    "GST Authority Ahmedabad",
-    "GST Authority Bangalore",
-    "GST Authority Chennai",
-    "GST Authority Hyderabad",
-    "GST Authority Kolkata",
-    "GST Authority Jaipur",
-    "GST Authority Lucknow",
-    "GST Authority Nagpur",
-    "GST Authority Nashik",
-    "GST Authority Indore",
-    "GST Authority Bhopal",
-    "GST Authority Chandigarh",
-    "GST Authority Kochi",
-    "GST Authority Coimbatore",
-    "GST Authority Surat",
-    "GST Authority Vadodara",
-    "GST Authority Thane",
-    # Commissioner-level names
-    "Central GST Commissioner Mumbai",
-    "Central GST Commissioner Delhi",
-    "Central GST Commissioner Pune",
-    "Central GST Commissioner Bangalore",
-    "Central GST Commissioner Chennai",
-    "Central GST Commissioner Hyderabad",
-    "Central GST Commissioner Kolkata",
-    "Central GST Commissioner Jaipur",
-    "Central GST Commissioner Ahmedabad",
-    "Central GST Commissioner Lucknow",
-    # State GST department names
-    "State GST Department Maharashtra",
-    "State GST Department Gujarat",
-    "State GST Department Karnataka",
-    "State GST Department Tamil Nadu",
-    "State GST Department Uttar Pradesh",
-    "State GST Department Rajasthan",
-    "State GST Department Madhya Pradesh",
-    "State GST Department West Bengal",
-    "State GST Department Kerala",
-    "State GST Department Telangana",
-    # Additional realistic names
-    "GST Commissionerate Central Mumbai",
-    "GST Commissionerate South Mumbai",
-    "GST Commissionerate North Delhi",
-    "GST Commissionerate South Delhi",
-    "GST Audit Circle Pune",
-    "GST Audit Circle Ahmedabad",
-    "GST Division Nashik",
-    "GST Division Kolhapur",
-    "GST Range Aurangabad",
-    "GST Range Solapur",
-    # International (Dubai)
-    "Federal Tax Authority Dubai",
-    "Dubai Tax Administration",
-    "UAE Tax Authority",
-    # International (others)
-    "Internal Revenue Service United States",
-    "HM Revenue and Customs United Kingdom",
+# ── Realistic data pools ─────────────────────────────────────────────
+
+TAX_AUTHORITIES = [
+    {"tax_name": "CGST Authority",                "tax_type": "GST", "country": "India"},
+    {"tax_name": "SGST Authority",                 "tax_type": "GST", "country": "India"},
+    {"tax_name": "IGST Authority",                 "tax_type": "GST", "country": "India"},
+    {"tax_name": "GST Audit Office Mumbai",        "tax_type": "GST", "country": "India"},
+    {"tax_name": "GST Audit Office Delhi",         "tax_type": "GST", "country": "India"},
+    {"tax_name": "GST Commissionerate Pune",       "tax_type": "GST", "country": "India"},
+    {"tax_name": "GST Commissionerate Chennai",    "tax_type": "GST", "country": "India"},
+    {"tax_name": "GST Commissionerate Kolkata",    "tax_type": "GST", "country": "India"},
+    {"tax_name": "Central Tax Authority Bengaluru", "tax_type": "GST", "country": "India"},
+    {"tax_name": "Central Tax Authority Hyderabad", "tax_type": "GST", "country": "India"},
+    {"tax_name": "State Tax Authority Gujarat",    "tax_type": "GST", "country": "India"},
+    {"tax_name": "State Tax Authority Rajasthan",  "tax_type": "GST", "country": "India"},
+    {"tax_name": "State Tax Authority Maharashtra","tax_type": "GST", "country": "India"},
+    {"tax_name": "State Tax Authority Karnataka",  "tax_type": "GST", "country": "India"},
+    {"tax_name": "GST Refund Office Mumbai",       "tax_type": "GST", "country": "India"},
+    {"tax_name": "GST Refund Office Delhi",        "tax_type": "GST", "country": "India"},
+    {"tax_name": "Customs GST Authority",          "tax_type": "GST", "country": "India"},
+    {"tax_name": "GST Appellate Tribunal",         "tax_type": "GST", "country": "India"},
+    {"tax_name": "State Tax Authority Madhya Pradesh","tax_type": "GST","country": "India"},
+    {"tax_name": "GST Enforcement Wing",           "tax_type": "GST", "country": "India"},
 ]
 
 
-def build_tax_authority_api_payload(data: dict = None, dropdown_ids: dict = None) -> dict:
-    """Build the Tax Authority API payload from data + FK IDs.
+# ── Payload builder ──────────────────────────────────────────────────
 
-    Args:
-        data: Dict with 'Tax Name', 'tax_type', 'country' keys, or None for random.
-        dropdown_ids: Dict of FK IDs. Must contain 'tax_type_ref_id' and 'country_ref_id'.
-                      Falls back to TAX_TYPE_IDS / COUNTRY_IDS placeholders.
-
-    Returns:
-        JSON payload ready for POST /core/dynamic-screen-wrapper/
-    """
-    if data is None:
-        data = valid_tax_authority_data()
-
-    # Resolve FK IDs
-    tax_type_name = data.get("tax_type", TAX_TYPE_GST)
-    country_name = data.get("country", COUNTRY_INDIA)
-
-    default_tax_type_id = TAX_TYPE_IDS.get(tax_type_name)
-    default_country_id = COUNTRY_IDS.get(country_name)
-
-    ids = dropdown_ids or {}
-    tax_type_ref_id = ids.get("tax_type_ref_id", default_tax_type_id)
-    country_ref_id = ids.get("country_ref_id", default_country_id)
-
-    payload = {
+def build_tax_authority_api_payload(tax_name, tax_type_ref_id, country_ref_id):
+    """Build a single API payload for Tax Authority."""
+    return {
         "id": "",
-        "attribute_name": "Tax Authority",
-        "name": data.get(FIELD_TAX_NAME, f"TaxAuth{_random_suffix()}"),
+        "tax_name": tax_name,
         "tax_type_ref_id": tax_type_ref_id,
         "country_ref_id": country_ref_id,
-        "status": True,
+        "attribute_name": "Tax Authority",
     }
-    return payload
 
 
-def generate_tax_authority_api_payload(name_prefix: str = None, dropdown_ids: dict = None) -> dict:
-    """One-shot: generate a complete Tax Authority API payload with realistic data.
-
-    Picks a random name from REALISTIC_TAX_AUTHORITY_NAMES for authentic
-    Indian tax authority entries.
-
-    Args:
-        name_prefix: If provided, prepended to a random realistic name.
-        dropdown_ids: Override specific FK IDs (e.g., tax_type_ref_id, country_ref_id).
-
-    Returns:
-        JSON payload ready for POST /core/dynamic-screen-wrapper/
+def generate_tax_authority_api_payloads(count=10, fk_ids=None):
     """
-    name = random.choice(REALISTIC_TAX_AUTHORITY_NAMES)
-    if name_prefix:
-        name = f"{name_prefix} {name}"
-
-    data = {
-        FIELD_TAX_NAME: name,
-        "tax_type": TAX_TYPE_GST,
-        "country": COUNTRY_INDIA,
-    }
-    return build_tax_authority_api_payload(data, dropdown_ids)
-
-
-def generate_tax_authority_api_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None) -> list:
-    """Generate multiple unique Tax Authority API payloads for batch creation.
-
-    Picks unique entries from REALISTIC_TAX_AUTHORITY_NAMES (without
-    replacement). If count exceeds pool size, adds random suffix for
-    uniqueness.
-
-    Args:
-        count: Number of payloads to generate (default 20).
-        prefix: Optional prefix for each name.
-        dropdown_ids: Override specific FK IDs.
-
-    Returns:
-        List of JSON payloads.
+    Generate N API payloads for Tax Authority.
     """
-    pool = list(REALISTIC_TAX_AUTHORITY_NAMES)
-    random.shuffle(pool)
+    if fk_ids is None:
+        fk_ids = {}
+
+    # Merge FK IDs
+    tax_type_ids = {**TAX_TYPE_IDS, **fk_ids.get("tax_type_ref_id", {})}
+    country_ids = {**COUNTRY_IDS, **fk_ids.get("country_ref_id", {})}
+
+    gst_id = tax_type_ids.get("GST", 93)
+    india_id = country_ids.get("India", 1)
 
     payloads = []
+
     for i in range(count):
-        if i < len(pool):
-            name = pool[i]
-        else:
-            # Generate unique name beyond the pool
-            name = f"{random.choice(REALISTIC_TAX_AUTHORITY_NAMES)} {_random_suffix(4)}"
+        entry = TAX_AUTHORITIES[i % len(TAX_AUTHORITIES)]
 
-        if prefix:
-            name = f"{prefix} {name}"
+        tax_type_ref_id = tax_type_ids.get(entry["tax_type"], gst_id)
+        country_ref_id = country_ids.get(entry["country"], india_id)
 
-        data = {
-            FIELD_TAX_NAME: name,
-            "tax_type": TAX_TYPE_GST,
-            "country": COUNTRY_INDIA,
-        }
-        payloads.append(build_tax_authority_api_payload(data, dropdown_ids))
+        payload = build_tax_authority_api_payload(
+            tax_name=entry["tax_name"],
+            tax_type_ref_id=tax_type_ref_id,
+            country_ref_id=country_ref_id,
+        )
+        payloads.append(payload)
 
     return payloads

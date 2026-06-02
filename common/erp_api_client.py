@@ -635,3 +635,145 @@ class RhythmERPAPIClient:
         """Close the requests session."""
         self.session.close()
         log.info("[API] Session closed")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ErpApiClient — Thin wrapper for batch_create scripts
+# ═══════════════════════════════════════════════════════════════════════════════
+# The v2 batch_create scripts use this simpler interface:
+#   - prompt_for_token() + set_session_from_token(token)  instead of login()
+#   - batch_create(screen_name, payloads)                  instead of batch_create(payloads)
+#   - print_results(results, screen_name)                  for pretty printing
+#   - Results are [{success: bool, ...}, ...]              instead of [Dict|None, ...]
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ErpApiClient(RhythmERPAPIClient):
+    """
+    Convenience wrapper for API-first batch creation scripts.
+
+    Extends RhythmERPAPIClient with:
+      - prompt_for_token(): interactive token input from DevTools
+      - set_session_from_token(): quick auth setup
+      - batch_create(screen_name, payloads): takes screen_name + payloads,
+        returns [{success: bool, data/error: ...}, ...]
+      - print_results(): pretty-print batch results
+    """
+
+    def prompt_for_token(self) -> str:
+        """
+        Interactively prompt the user for their Bearer token.
+
+        The token can be captured from Chrome DevTools:
+          1. Open ERP in Chrome -> F12 -> Network tab
+          2. Click any XHR request to /core/...
+          3. Copy the Authorization header value (after "Bearer ")
+
+        Returns:
+            The token string entered by the user.
+        """
+        print()
+        print("  Paste your ERP token (from DevTools Authorization header):")
+        print("  (Look for 'Bearer xxx...' in any /core/ request)")
+        token = input("  Token: ").strip()
+        return token
+
+    def set_session_from_token(self, token: str, tenant_id: str = "599"):
+        """
+        Set the session using a Bearer token from DevTools.
+
+        Args:
+            token: Bearer token string (with or without "Bearer " prefix)
+            tenant_id: X-Tenant-ID value (default "599")
+        """
+        # Strip "Bearer " prefix if the user pasted the full header
+        if token.startswith("Bearer "):
+            token = token[7:]
+        self.login_from_browser(token, tenant_id)
+        print(f"  Session set. Tenant: {tenant_id}")
+
+    def batch_create(self, screen_name: str, payloads: list, delay: float = 0.3) -> list:
+        """
+        Create multiple entries on a specific screen.
+
+        Args:
+            screen_name: The ERP screen name (e.g., "Bank", "Tax Rate")
+            payloads: List of JSON payloads (each must include attribute_name)
+            delay: Seconds between requests
+
+        Returns:
+            List of result dicts: [{"success": True/False, "data": ..., "error": ...}, ...]
+        """
+        self._ensure_auth()
+
+        results = []
+        total = len(payloads)
+
+        print(f"  Creating {total} entries on '{screen_name}'...")
+
+        for i, payload in enumerate(payloads, 1):
+            # Get a display name for logging
+            entry_name = (
+                payload.get("name")
+                or payload.get("tax_name")
+                or payload.get("bank_name")
+                or payload.get("tax_rate_name")
+                or payload.get("company_name")
+                or f"entry-{i}"
+            )
+
+            print(f"    [{i}/{total}] {entry_name}...", end=" ", flush=True)
+
+            result = self.create_entry(payload)
+
+            if result is not None:
+                results.append({"success": True, "data": result})
+                print("OK")
+            else:
+                results.append({"success": False, "error": "Failed to save record"})
+                print("FAILED")
+
+            if delay and i < total:
+                time.sleep(delay)
+
+        return results
+
+    def print_results(self, results: list, screen_name: str):
+        """
+        Pretty-print batch creation results.
+
+        Args:
+            results: List of result dicts from batch_create()
+            screen_name: Screen name for display
+        """
+        created = sum(1 for r in results if r.get("success"))
+        failed = sum(1 for r in results if not r.get("success"))
+
+        print()
+        print(f"  {screen_name}: {created}/{len(results)} created", end="")
+        if failed:
+            print(f", {failed} failed")
+        else:
+            print()
+
+        # Show failure details
+        for i, r in enumerate(results):
+            if not r.get("success"):
+                print(f"    Entry {i+1}: {r.get('error', 'Unknown error')}")
+
+    def list_entries(self, screen_name: str, page_size: int = 200, **kwargs) -> dict:
+        """
+        List entries for a screen. Overrides parent to simplify the interface.
+
+        Args:
+            screen_name: Screen name
+            page_size: Number of entries per page (default 200 for FK resolution)
+
+        Returns:
+            Response dict with screenmatlistingdata_set
+        """
+        return super().list_entries(
+            screen_name,
+            page=kwargs.get("page", 1),
+            page_size=page_size,
+            search=kwargs.get("search", ""),
+        )
