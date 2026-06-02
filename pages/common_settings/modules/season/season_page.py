@@ -192,30 +192,41 @@ class SeasonPage(BasePage):
 
     def enter_name(self, name):
         """Type season name into the Name field.
-        Uses Ctrl+A + send_keys for reliable Angular reactive form handling.
+        Uses JS native setter to set value in one step (no intermediate empty state)
+        which avoids Angular's required-field validation firing on clear.
         Works for both Add (empty field) and Edit (pre-filled field)."""
         log.info(f"Entering Name: {name}")
-        element = self.find_visible_element(self.NAME_INPUT)
-        element.click()
-        # Ctrl+A selects all existing text, then typing replaces it
-        ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('a').key_up(Keys.CONTROL).perform()
-        time.sleep(0.1)
-        element.send_keys(name)
-        log.info(f"Typed '{name}' into: {self.NAME_INPUT}")
+        self.driver.execute_script("""
+            var el = document.querySelector("input[name='Name']");
+            if (!el) { throw new Error('Name input not found'); }
+            var nativeSet = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value'
+            ).set;
+            nativeSet.call(el, arguments[0]);
+            el.dispatchEvent(new Event('input', {bubbles: true}));
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+            el.dispatchEvent(new Event('blur', {bubbles: true}));
+        """, name)
+        log.info(f"JS-set '{name}' into: {self.NAME_INPUT}")
 
     def enter_description(self, description):
         """Type description into the Description field.
-        Uses Ctrl+A + send_keys for reliable Angular reactive form handling.
+        Uses JS native setter to set value in one step (no intermediate empty state).
         Works for both Add (empty field) and Edit (pre-filled field)."""
         if description:
             log.info(f"Entering Description: {description}")
-            element = self.find_visible_element(self.DESCRIPTION_INPUT)
-            element.click()
-            # Ctrl+A selects all existing text, then typing replaces it
-            ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('a').key_up(Keys.CONTROL).perform()
-            time.sleep(0.1)
-            element.send_keys(description)
-            log.info(f"Typed '{description}' into: {self.DESCRIPTION_INPUT}")
+            self.driver.execute_script("""
+                var el = document.querySelector("input[name='Description']");
+                if (!el) { throw new Error('Description input not found'); }
+                var nativeSet = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value'
+                ).set;
+                nativeSet.call(el, arguments[0]);
+                el.dispatchEvent(new Event('input', {bubbles: true}));
+                el.dispatchEvent(new Event('change', {bubbles: true}));
+                el.dispatchEvent(new Event('blur', {bubbles: true}));
+            """, description)
+            log.info(f"JS-set '{description}' into: {self.DESCRIPTION_INPUT}")
         else:
             log.info("Description left blank (optional field)")
 
@@ -290,7 +301,19 @@ class SeasonPage(BasePage):
 
         # Check for validation alert via JS (instant, no WebDriverWait)
         if self.is_validation_alert_present(timeout=3):
-            log.info("Validation alert detected after submit")
+            alert_title = self.get_alert_title()
+            alert_msg = self.get_alert_message()
+            log.info(f"Validation alert detected after submit — Title: '{alert_title}', Msg: '{alert_msg}'")
+            # Debug: log current field values to diagnose what Angular sees
+            field_values = self.driver.execute_script("""
+                var name = document.querySelector("input[name='Name']");
+                var desc = document.querySelector("input[name='Description']");
+                return {
+                    name: name ? name.value : 'NOT_FOUND',
+                    desc: desc ? desc.value : 'NOT_FOUND'
+                };
+            """)
+            log.info(f"DEBUG field values at validation: Name='{field_values.get('name')}', Desc='{field_values.get('desc')}'")
             return "validation"
 
         # Wait for form to close (success path) — poll via JS

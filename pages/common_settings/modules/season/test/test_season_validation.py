@@ -347,10 +347,21 @@ class TestSeasonEditFlow:
             page.click_edit_button(original_name)
             assert page.is_form_open(), "Edit form should be open"
 
-            # Step 3: Enter new data (fill_form uses Ctrl+A to replace existing values)
+            # Step 3: Enter new data (fill_form uses JS setter to replace existing values)
             new_name = f"EDITED_{original_name}"
             new_desc = f"Edited - {data['Description']}"
             page.fill_form(new_name, new_desc)
+
+            # Debug: verify Angular picked up the new values
+            field_debug = page.driver.execute_script("""
+                var name = document.querySelector("input[name='Name']");
+                var desc = document.querySelector("input[name='Description']");
+                return {
+                    name: name ? name.value : 'NOT_FOUND',
+                    desc: desc ? desc.value : 'NOT_FOUND'
+                };
+            """)
+            log.info(f"DEBUG after fill_form: Name='{field_debug.get('name')}', Desc='{field_debug.get('desc')}'")
 
             result = page.click_update()
             assert result == "success", f"Update should succeed, got: {result}"
