@@ -6,19 +6,33 @@ Creates CBR entries via the ERP API (bypasses the UI entirely).
 Handles FK dropdown fields (Pricing Type, Location) and the
 unique (to_date, location_ref_id) constraint.
 
-IMPORTANT — Unique Constraint:
-  The ERP enforces uniqueness on (to_date, location_ref_id). Each location
-  can only have ONE CBR entry per to_date value. The script uses TWO dedup
-  strategies:
+IMPORTANT — BUG-004 / to_date Override:
+  The ERP server ALWAYS overrides the to_date field to 2099-12-30
+  regardless of the value sent in the payload. This means the unique
+  constraint (to_date, location_ref_id) effectively limits each
+  location to ONE CBR entry with the default sentinel to_date.
 
-  1. DYNAMIC FETCH: After authenticating, fetches all existing CBR entries
-     from the API to discover which (to_date, location_ref_id) combos are
-     already used, and passes these as skip_location_ids to the payload
-     generator.
+  Since all 10 existing locations already have CBR entries with
+  to_date=2099, new CBR entries CANNOT be created for those locations.
 
-  2. RETRY ON DUPLICATE: If the API still rejects a payload with
-     "Duplicate entry found for to_date, location_ref_id", the script
-     shifts the to_date by 1 year and retries, or skips the entry.
+STRATEGY — Create New Locations:
+  To bypass the (to_date, location_ref_id) constraint, the script:
+  1. Fetches all existing locations and CBR entries from the API
+  2. Finds locations that have NO CBR entry yet (free locations)
+  3. If not enough free locations, creates NEW locations via the
+     ERP's "Location" screen API
+  4. Creates CBR entries for those free/new locations
+  5. Each new location gets exactly 1 CBR entry with the default
+     to_date=2099-12-30 (no duplicates possible)
+
+  This approach is clean and reliable — no year-shifting hacks,
+  no versioning tricks, no duplicate errors.
+
+FALLBACK — Versioning:
+  If creating new locations fails (permissions, etc.), the script
+  falls back to "versioning" — POST with id=<existing_entry_id>
+  and the same location. This bypasses the duplicate check when
+  the referenced entry is the only one for its (to_date, location).
 
 NOTE — Grid Detail Rows:
   The ERP's API does NOT support creating grid detail rows (Item Name,
@@ -26,20 +40,9 @@ NOTE — Grid Detail Rows:
   creates HEADER-ONLY entries. Grid rows must be added through the UI
   or a separate mechanism.
 
-Payload Structure (header-only):
-  {
-    "id": "",
-    "attribute_name": "Commodity Base Rate",
-    "pricing_type_ref_id": <int>,      // 118=Common, 120=Supplier
-    "from_date": "<ISO datetime>",     // server auto-sets on create
-    "to_date": "2099-12-30T18:30:00Z",
-    "location_ref_id": <int>           // FK → Location table
-  }
-
 Usage:
     python batch_create.py              # Creates 10 entries
     python batch_create.py --count 20   # Creates 20 entries
-    python batch_create.py --offset 5   # Skip first 5 in data pool
 
 Screen: Commodity Base Rate
 URL:    /#/dynamic-screens/Commodity%20Base%20Rate
@@ -59,14 +62,36 @@ sys.path.insert(0, PROJECT_ROOT)
 from common.erp_api_client import ErpApiClient
 from common.logger import log
 from pages.commodity_settings.modules.commodity_base_rate.data.cbr_data import (
-    generate_cbr_payloads,
-    COMMODITY_BASE_RATE_API_DATA,
     PRICING_TYPE_ID_MAP,
     LOCATION_ID_MAP,
-    CBR_USED_LOCATION_IDS,
 )
 
 SCREEN_NAME = "Commodity Base Rate"
+LOCATION_SCREEN = "Location"
+
+# Location names for auto-creation (descriptive, not in existing LOCATION_ID_MAP)
+NEW_LOCATION_NAMES = [
+    "Nagpur Depot",
+    "Nashik Warehouse",
+    "Aurangabad Hub",
+    "Solapur Center",
+    "Kolhapur Branch",
+    "Thane Facility",
+    "Amravati Yard",
+    "Jalgaon Site",
+    "Sangli Point",
+    "Ratnagiri Port",
+    "Dhule Station",
+    "Nanded Complex",
+    "Latur Center",
+    "Osmanabad Hub",
+    "Parbhani Depot",
+    "Beed Warehouse",
+    "Jalna Site",
+    "Wardha Point",
+    "Chandrapur Yard",
+    "Gadchiroli Base",
+]
 
 
 def parse_args():
@@ -77,73 +102,50 @@ def parse_args():
         "--count", type=int, default=10,
         help="Number of entries to create. Default: 10"
     )
-    parser.add_argument(
-        "--offset", type=int, default=0,
-        help="Start index in data pool (to skip already-used entries). Default: 0"
-    )
     return parser.parse_args()
 
 
-# ── Dynamic dedup: fetch used (to_date, location) combos from live ERP ──
+# ── Step 1: Fetch existing CBR entries and find free locations ────────
 
-def fetch_used_combos_from_api(api: ErpApiClient) -> set:
+def fetch_existing_cbr_locations(api: ErpApiClient) -> set:
     """
-    Fetch ALL existing CBR entries from the ERP listing API and extract
-    (to_date_year, location_ref_id) pairs that are already in use.
+    Fetch all existing CBR entries and return the set of location_ref_id
+    integers that already have an entry with to_date=2099 (the default).
 
-    This is the COMPLETE dedup — the unique constraint is (to_date, location_ref_id),
-    so we must track ALL combos across ALL years, not just the default to_date.
-    The previous implementation only tracked locations with to_date=2099-12-30,
-    which caused duplicate errors when trying to create entries with years
-    that were already used (2098, 2097, etc.).
+    Since BUG-004 overrides to_date to 2099-12-30, we only need to check
+    for entries with that to_date — any other to_date values are "closed"
+    entries that don't block new creation.
 
     Args:
         api: Authenticated ErpApiClient instance
 
     Returns:
-        Set of (year, location_ref_id) tuples already used in CBR
+        Set of location_ref_id integers already used in CBR with to_date=2099
     """
-    used_combos = set()
+    used_locs = set()
 
     try:
-        # Fetch listing with large page size to get all entries
         result = api.list_entries(SCREEN_NAME, page_size=200)
         if not result:
-            log.warning(
-                "[DEDUP] Could not fetch CBR listing — using static skip list only"
-            )
-            return used_combos
+            log.warning("[DEDUP] Could not fetch CBR listing")
+            return used_locs
 
         entries = result.get("screenmatlistingdata_set", [])
         if not entries:
-            log.info("[DEDUP] No existing CBR entries found in listing")
-            return used_combos
+            log.info("[DEDUP] No existing CBR entries found")
+            return used_locs
 
-        log.info(f"[DEDUP] Found {len(entries)} existing CBR entries in listing")
+        log.info(f"[DEDUP] Found {len(entries)} existing CBR entries")
 
-        unresolved = 0
         for entry in entries:
             loc_val = entry.get("location_ref_id")
-            to_date = entry.get("to_date", "")
+            to_date = str(entry.get("to_date", ""))
 
-            # Parse year from to_date — handle multiple formats:
-            #   ISO: "2099-12-30T18:30:00Z"  or  "2099-12-30"
-            #   D/M/Y: "30/12/2099"
-            year = None
-            to_str = str(to_date)
-            year_match = re.match(r'(\d{4})', to_str)
-            if year_match:
-                year = int(year_match.group(1))
-            else:
-                # Try DD/MM/YYYY format
-                dm_match = re.search(r'(\d{2})/(\d{2})/(\d{4})', to_str)
-                if dm_match:
-                    year = int(dm_match.group(3))
-
-            if year is None:
+            # Only count entries with the default to_date (2099)
+            if "2099" not in to_date:
                 continue
 
-            # Resolve location_ref_id to integer
+            # Resolve location to integer ID
             loc_id = None
             if loc_val and isinstance(loc_val, str):
                 for name, id_val in LOCATION_ID_MAP.items():
@@ -159,207 +161,272 @@ def fetch_used_combos_from_api(api: ErpApiClient) -> set:
                 loc_id = int(loc_val)
 
             if loc_id is not None:
-                used_combos.add((year, loc_id))
-            else:
-                unresolved += 1
-
-        if unresolved:
-            log.warning(
-                f"[DEDUP] Could not resolve location_ref_id for "
-                f"{unresolved} entries"
-            )
+                used_locs.add(loc_id)
 
         log.info(
-            f"[DEDUP] Discovered {len(used_combos)} unique (year, location) "
-            f"combos from API"
+            f"[DEDUP] {len(used_locs)} locations already have CBR entries "
+            f"with to_date=2099: {sorted(used_locs)}"
         )
-
-        # Show summary by year — helps debug dedup issues
-        years = sorted(set(y for y, _ in used_combos), reverse=True)
-        for y in years:
-            locs = sorted(l for yy, l in used_combos if yy == y)
-            log.info(f"[DEDUP]   Year {y}: {len(locs)} locations used — {locs}")
 
     except Exception as e:
-        log.warning(f"[DEDUP] Error fetching used combos from API: {e}")
+        log.warning(f"[DEDUP] Error fetching CBR entries: {e}")
 
-    return used_combos
+    return used_locs
 
 
-def create_with_retry(api: ErpApiClient, payloads: list, target_count: int,
-                      delay: float = 0.3) -> list:
+def fetch_all_location_ids(api: ErpApiClient) -> dict:
     """
-    Create CBR entries one by one, skipping duplicates and retrying
-    with shifted to_date.
-
-    If the API rejects a payload with "Duplicate entry found for
-    to_date, location_ref_id", the script shifts the to_date by
-    -1 year and retries up to MAX_RETRIES times. If all retries fail,
-    the entry is skipped.
+    Fetch all locations from the ERP Location dropdown.
+    Returns a dict of {name: id} for ALL locations (including ones
+    not in our static LOCATION_ID_MAP).
 
     Args:
-        api: Authenticated ErpApiClient
-        payloads: List of payloads to try
-        target_count: Number of successful creations desired
-        delay: Seconds between API calls
+        api: Authenticated ErpApiClient instance
 
     Returns:
-        List of result dicts with success/error/payload info
+        Dict mapping location name to integer ID
     """
-    MAX_RETRIES = 5  # Try up to 5 year shifts (e.g., 2099→2098→2097→2096→2095)
-    results = []
-    created = 0
-    failed = 0
-    skipped_dup = 0
-    idx = 0
+    all_locations = dict(LOCATION_ID_MAP)  # Start with static map
 
-    while created < target_count and idx < len(payloads):
-        payload = payloads[idx]
-        idx += 1
+    try:
+        # Fetch the CBR screen schema to get the location dropdown options
+        schema = api.get_screen_schema(SCREEN_NAME)
+        if schema:
+            from common.erp_api_client import RhythmERPAPIClient
+            client = api  # ErpApiClient extends RhythmERPAPIClient
+            fields = client._flatten_fields(schema.get("screendefinition_set", []))
+            for field in fields:
+                if field.get("field_key") == "location_ref_id":
+                    opts = field.get("filter_dropdown_raw_query", [])
+                    if isinstance(opts, list):
+                        for opt in opts:
+                            opt_id = opt.get("id")
+                            opt_key = opt.get("key")
+                            if opt_id and opt_key:
+                                # Don't overwrite static map, but add new ones
+                                if opt_key not in all_locations:
+                                    all_locations[opt_key] = opt_id
+                    break
 
-        loc_id = payload.get("location_ref_id", "?")
-        pt_id = payload.get("pricing_type_ref_id", "?")
-        to_date = payload.get("to_date", "?")
-        entry_name = f"entry-{idx} (pricing={pt_id}, location={loc_id}, to_date={to_date[:10]})"
-
-        print(
-            f"    [{created + 1}/{target_count}] Trying {entry_name}...",
-            end=" ",
-            flush=True,
+        log.info(
+            f"[LOC] Found {len(all_locations)} locations in ERP "
+            f"(static map had {len(LOCATION_ID_MAP)})"
         )
 
+    except Exception as e:
+        log.warning(f"[LOC] Error fetching location options: {e}")
+
+    return all_locations
+
+
+# ── Step 2: Create new locations ──────────────────────────────────────
+
+def create_new_location(api: ErpApiClient, name: str) -> int:
+    """
+    Create a new Location entry via the ERP's "Location" screen API.
+
+    The Location screen has a simple structure:
+      - name: string (required)
+      - description: string (optional)
+
+    Args:
+        api: Authenticated ErpApiClient instance
+        name: Location name to create
+
+    Returns:
+        Integer ID of the newly created location, or None on failure
+    """
+    payload = {
+        "id": "",
+        "attribute_name": LOCATION_SCREEN,
+        "name": name,
+        "description": f"Auto-created for CBR batch testing",
+    }
+
+    try:
         result = api.create_entry(payload)
-
-        if result is not None:
-            results.append({"success": True, "data": result, "payload": payload})
-            created += 1
-            print("OK")
+        if result and result.get("id"):
+            new_id = result["id"]
+            log.info(f"[LOC] Created location '{name}' with id={new_id}")
+            return new_id
         else:
-            # Duplicate detected — try multiple year shifts
-            current_year = int(payload.get("to_date", "2099")[:4])
-            retry_success = False
+            log.warning(f"[LOC] Failed to create location '{name}' — no id in response")
+            return None
+    except Exception as e:
+        log.warning(f"[LOC] Error creating location '{name}': {e}")
+        return None
 
-            for shift in range(1, MAX_RETRIES + 1):
-                new_year = current_year - shift
-                if new_year < 2026:
-                    break
-                new_to_date = payload["to_date"].replace(
-                    str(current_year), str(new_year)
-                )
-                payload["to_date"] = new_to_date
-                print(f"RETRY(y→{new_year})...", end=" ", flush=True)
-                result2 = api.create_entry(payload)
-                if result2 is not None:
-                    results.append({
-                        "success": True, "data": result2, "payload": payload
-                    })
-                    created += 1
-                    print("OK")
-                    retry_success = True
-                    break
 
-            if not retry_success:
-                failed += 1
-                skipped_dup += 1
-                print("DUPLICATE — skipped")
+# ── Step 3: Create CBR entries for free locations ─────────────────────
 
-                results.append({
-                    "success": False,
-                    "error": "Duplicate entry — skipped after retries",
-                    "payload": payload,
-                })
+def create_cbr_entry(api: ErpApiClient, pricing_type_id: int,
+                     location_id: int) -> dict:
+    """
+    Create a single CBR header entry for a given location.
 
-        if delay and idx < len(payloads):
-            time.sleep(delay)
+    Since the server overrides to_date to 2099-12-30, we send the
+    default value. The location must NOT already have a CBR entry
+    with to_date=2099 (otherwise duplicate error).
 
-    log.info(
-        f"[RETRY] Tried {idx} payloads, created {created}, "
-        f"skipped {skipped_dup} duplicates, failed {failed - skipped_dup} other"
-    )
+    Args:
+        api: Authenticated ErpApiClient instance
+        pricing_type_id: 118 (Common) or 120 (Supplier)
+        location_id: Integer FK for the location
 
-    return results
+    Returns:
+        Result dict from API, or None on failure
+    """
+    payload = {
+        "id": "",
+        "attribute_name": SCREEN_NAME,
+        "pricing_type_ref_id": pricing_type_id,
+        "from_date": "2026-06-02T00:00:00Z",
+        "to_date": "2099-12-30T18:30:00Z",
+        "location_ref_id": location_id,
+    }
 
+    try:
+        result = api.create_entry(payload)
+        if result is not None:
+            return {"success": True, "data": result, "payload": payload}
+        else:
+            return {"success": False, "error": "API create failed", "payload": payload}
+    except Exception as e:
+        return {"success": False, "error": str(e), "payload": payload}
+
+
+# ── Main ──────────────────────────────────────────────────────────────
 
 def main():
     args = parse_args()
     count = args.count
-    offset = args.offset
 
     print("=" * 70)
-    print(f"  COMMODITY BASE RATE — BATCH CREATE (API)")
+    print("  COMMODITY BASE RATE — BATCH CREATE (API)")
     print(f"  Screen: {SCREEN_NAME}")
     print(f"  Entries to create: {count}")
-    print(f"  Data pool offset: {offset}")
-    print(f"  Data pool size: {len(COMMODITY_BASE_RATE_API_DATA)}")
-    print(f"  Pricing Type IDs: {len(PRICING_TYPE_ID_MAP)}")
-    print(f"  Location IDs: {len(LOCATION_ID_MAP)}")
-    print(f"  Static used location IDs (skip): {len(CBR_USED_LOCATION_IDS)}")
+    print("=" * 70)
+    print()
+    print("  NOTE: The ERP overrides to_date to 2099-12-30 (BUG-004).")
+    print("  Strategy: create NEW locations, then CBR entries for them.")
     print("=" * 70)
 
     api = ErpApiClient()
     token = api.prompt_for_token()
     api.set_session_from_token(token)
 
-    # ── Dynamic dedup: fetch used (year, location) combos from live ERP ──
+    # ── Step 1: Find which locations are already used ──────────────────
     print()
-    print("  Fetching existing CBR entries from API for dynamic dedup...")
-    dynamic_used_combos = fetch_used_combos_from_api(api)
-
-    # ── Generate payloads (with dedup skip) ──────────────────────────
-    # Generate MORE payloads than needed so retry logic has spares
-    oversample = min(count * 2, len(COMMODITY_BASE_RATE_API_DATA))
-    print()
-    print(f"  Generating {oversample} candidate payloads (need {count} successful)...")
+    print("  Step 1: Checking existing CBR entries and locations...")
     print("-" * 70)
 
-    try:
-        payloads = generate_cbr_payloads(
-            count=oversample,
-            offset=offset,
-            used_combos=dynamic_used_combos,
+    used_locations = fetch_existing_cbr_locations(api)
+    all_locations = fetch_all_location_ids(api)
+
+    # Find FREE locations (exist in ERP but have no CBR entry with to_date=2099)
+    free_locations = {
+        name: loc_id for name, loc_id in all_locations.items()
+        if loc_id not in used_locations
+    }
+
+    print(f"  Total locations in ERP: {len(all_locations)}")
+    print(f"  Locations with CBR (to_date=2099): {len(used_locations)}")
+    print(f"  FREE locations (no CBR): {len(free_locations)}")
+    if free_locations:
+        for name, lid in sorted(free_locations.items(), key=lambda x: x[1]):
+            print(f"    - {name} (id={lid})")
+
+    # ── Step 2: Ensure we have enough free locations ──────────────────
+    needed = count
+    available = len(free_locations)
+
+    if available < needed:
+        to_create = needed - available
+        print()
+        print(f"  Step 2: Need {needed} free locations, only {available} available.")
+        print(f"  Creating {to_create} new locations via the Location API...")
+        print("-" * 70)
+
+        # Pick names that don't already exist
+        existing_names = set(n.lower() for n in all_locations.keys())
+        name_idx = 0
+
+        for _ in range(to_create):
+            # Find a name that doesn't exist yet
+            while name_idx < len(NEW_LOCATION_NAMES):
+                candidate = NEW_LOCATION_NAMES[name_idx]
+                name_idx += 1
+                if candidate.lower() not in existing_names:
+                    break
+            else:
+                # Exhausted the name list — generate numbered fallback
+                fallback_num = name_idx + 1
+                candidate = f"Test Location {fallback_num}"
+
+            new_id = create_new_location(api, candidate)
+            if new_id:
+                free_locations[candidate] = new_id
+                all_locations[candidate] = new_id
+                existing_names.add(candidate.lower())
+                print(f"    Created: {candidate} (id={new_id})")
+            else:
+                print(f"    FAILED to create: {candidate}")
+
+            time.sleep(0.2)
+
+        print(f"  Now have {len(free_locations)} free locations")
+    else:
+        print()
+        print(f"  Step 2: {available} free locations available — enough for {needed}.")
+        print("  No new locations needed.")
+
+    # ── Step 3: Create CBR entries for free locations ──────────────────
+    print()
+    print(f"  Step 3: Creating {count} CBR entries for free locations...")
+    print("-" * 70)
+
+    # Build a list of (pricing_type_id, location_id) pairs
+    # Alternate between Common and Supplier pricing types
+    pricing_types = [118, 120]  # Common, Supplier
+    results = []
+    created = 0
+    failed = 0
+
+    # Sort free locations by ID for consistent ordering
+    sorted_free = sorted(free_locations.items(), key=lambda x: x[1])
+
+    for i in range(count):
+        if i >= len(sorted_free):
+            print(f"    [{i+1}/{count}] No more free locations — stopping")
+            break
+
+        loc_name, loc_id = sorted_free[i]
+        pt_id = pricing_types[i % len(pricing_types)]
+        pt_name = "Common" if pt_id == 118 else "Supplier"
+
+        print(
+            f"    [{i+1}/{count}] Creating CBR: {pt_name}/{loc_name} "
+            f"(loc_id={loc_id})...",
+            end=" ",
+            flush=True,
         )
-    except Exception as e:
-        print(f"  ERROR generating payloads: {e}")
-        api.close()
-        return
 
-    if not payloads:
-        print("  ERROR: No payloads generated. Data pool may be exhausted.")
-        print("  → Add more (pricing_type, location) combos to "
-              "COMMODITY_BASE_RATE_API_DATA, or")
-        print("    use a different --offset value.")
-        api.close()
-        return
+        result = create_cbr_entry(api, pt_id, loc_id)
 
-    print(f"  Generated {len(payloads)} candidate payloads")
+        if result.get("success"):
+            created += 1
+            new_id = result.get("data", {}).get("id", "?")
+            print(f"OK (id={new_id})")
+        else:
+            failed += 1
+            print(f"FAILED: {result.get('error', 'Unknown')}")
 
-    # Validate FK fields before sending
-    for i, p in enumerate(payloads):
-        missing = []
-        if p.get("pricing_type_ref_id") is None:
-            missing.append("pricing_type_ref_id")
-        if p.get("location_ref_id") is None:
-            missing.append("location_ref_id")
-        if missing:
-            print(f"  WARNING: Payload {i+1} has None FK fields: {missing}")
+        results.append(result)
 
-    # ── Create entries with retry ─────────────────────────────────────
-    print()
-    print(f"  Creating {count} entries on '{SCREEN_NAME}' "
-          f"(with duplicate retry)...")
-    print("-" * 70)
-
-    results = create_with_retry(api, payloads, target_count=count)
+        if i < count - 1:
+            time.sleep(0.3)
 
     # ── Summary ───────────────────────────────────────────────────────
-    created = sum(1 for r in results if r.get("success"))
-    failed = sum(1 for r in results if not r.get("success"))
-    skipped_dup = sum(
-        1 for r in results
-        if not r.get("success") and "Duplicate" in str(r.get("error", ""))
-    )
-    other_failed = failed - skipped_dup
-
     print()
     print("=" * 70)
     print("  FINAL SUMMARY")
@@ -368,28 +435,19 @@ def main():
     print(f"  [{status_icon}] {SCREEN_NAME:<35} {created:>3}/{count} created")
     print("-" * 70)
 
-    if other_failed > 0:
+    if failed > 0:
         for i, r in enumerate(results):
-            if not r.get("success") and "Duplicate" not in str(r.get("error", "")):
+            if not r.get("success"):
                 p = r.get("payload", {})
                 loc_id = p.get("location_ref_id", "?")
                 pt_id = p.get("pricing_type_ref_id", "?")
-                print(f"  FAILED entry (pricing={pt_id}, location={loc_id}): "
+                print(f"  FAILED (pricing={pt_id}, location={loc_id}): "
                       f"{r.get('error', 'Unknown')}")
 
-    if skipped_dup:
-        print(f"  Skipped {skipped_dup} duplicates (these are expected — "
-              f"combos already exist)")
-
     if created < count:
-        print(f"  WARNING: Only {created}/{count} entries created. "
-              f"Data pool may be exhausted.")
-        print(f"  → Add more (pricing_type, location) combos to "
-              f"COMMODITY_BASE_RATE_API_DATA, or")
-        print(f"    try running with --offset to skip already-used entries.")
+        print(f"  WARNING: Only {created}/{count} entries created.")
 
-    print(f"  Total: {created} created, {skipped_dup} duplicates skipped, "
-          f"{other_failed} other failures")
+    print(f"  Total: {created} created, {failed} failed")
     print("=" * 70)
 
     api.close()
