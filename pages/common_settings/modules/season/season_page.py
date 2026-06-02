@@ -191,15 +191,31 @@ class SeasonPage(BasePage):
     # ================================================================
 
     def enter_name(self, name):
-        """Type season name into the Name field."""
+        """Type season name into the Name field.
+        Uses Ctrl+A + send_keys for reliable Angular reactive form handling.
+        Works for both Add (empty field) and Edit (pre-filled field)."""
         log.info(f"Entering Name: {name}")
-        self.type_text(self.NAME_INPUT, name, clear_first=True)
+        element = self.find_visible_element(self.NAME_INPUT)
+        element.click()
+        # Ctrl+A selects all existing text, then typing replaces it
+        ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('a').key_up(Keys.CONTROL).perform()
+        time.sleep(0.1)
+        element.send_keys(name)
+        log.info(f"Typed '{name}' into: {self.NAME_INPUT}")
 
     def enter_description(self, description):
-        """Type description into the Description field."""
+        """Type description into the Description field.
+        Uses Ctrl+A + send_keys for reliable Angular reactive form handling.
+        Works for both Add (empty field) and Edit (pre-filled field)."""
         if description:
             log.info(f"Entering Description: {description}")
-            self.type_text(self.DESCRIPTION_INPUT, description, clear_first=True)
+            element = self.find_visible_element(self.DESCRIPTION_INPUT)
+            element.click()
+            # Ctrl+A selects all existing text, then typing replaces it
+            ActionChains(self.driver).key_down(Keys.CONTROL).send_keys('a').key_up(Keys.CONTROL).perform()
+            time.sleep(0.1)
+            element.send_keys(description)
+            log.info(f"Typed '{description}' into: {self.DESCRIPTION_INPUT}")
         else:
             log.info("Description left blank (optional field)")
 
