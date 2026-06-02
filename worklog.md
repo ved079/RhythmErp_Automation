@@ -92,3 +92,27 @@ Stage Summary:
 - Created `/pages/commodity_settings/modules/item_category/scripts/batch_create.py` - batch creation script
 - All existing code untouched (Selenium generators, validation helpers, bug test data)
 - Payload structure: {id: "", attribute_name: "Item Category", item_code: "...", item_description: "...", level: 1, status: True}
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Create batch_create.py for Item Group screen
+
+Work Log:
+- Explored Item Group screen via ERP API
+- Discovered screen is FLAT with 2 fields: code (text, required, unique — the group code), description (text, required)
+- Screen ID: 55, table: `item_group`, no detail/sub-detail tables, no FK dropdowns
+- Note: UI label "Item Group" maps to API field "code"
+- 25 existing entries found (IG001 through PROC020 plus 5 legacy entries)
+- Created test entry ID=110 to verify payload structure
+- APPENDED API batch data to existing item_group_data.py (preserving all Selenium test data)
+- Created data pool with 75 realistic group entries (code + description format)
+- Built payload builder and batch create script
+- Tested: 5/5 entries created successfully (IDs 111-115: BEVG021 through MRNP025)
+- Verified no other modules broken
+
+Stage Summary:
+- APPENDED to `/pages/commodity_settings/modules/item_group/data/item_group_data.py` - added ITEM_GROUP_API_DATA (75 entries), build_item_group_api_payload(), generate_item_group_payloads()
+- Created `/pages/commodity_settings/modules/item_group/scripts/batch_create.py` - batch creation script
+- All existing code untouched (Selenium generators, validation helpers, SQL/XSS/unicode test data)
+- Payload structure: {id: "", attribute_name: "Item Group", code: "BEVG021", description: "Beverages Group"}
