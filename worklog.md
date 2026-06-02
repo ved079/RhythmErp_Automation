@@ -1,82 +1,44 @@
 # RhythmERP Automation Worklog
 
 ---
-Task ID: 0
-Agent: Main Agent
-Task: Audit codebase for security vulnerabilities C1–C7, H1–H2
-
-Work Log:
-- Explored all 41 API routes under src/app/api/
-- Read middleware.ts, session.ts, csrf.ts, rate-limit.ts, admin-helpers.ts
-- Read Prisma schema — AuditLog model already exists
-- Identified what's already implemented vs what needs fixing
-
-Stage Summary:
-- C1 (Auth): ✅ Already implemented — middleware checks session_token on all protected routes
-- C2 (RBAC): ✅ Already implemented — validateAdmin checks role=admin, returns 403
-- C3 (Rate limiting): ⚠️ Only login/forgot-password/reset-password have rate limiting — AI, bugs, schedules, change-password missing
-- C4 (Secrets): ⚠️ Weak fallbacks exist — SEED_ADMIN_PASSWORD falls back to 'admin123', PROXY_API_KEY to '', DEFAULT_USER_PASSWORD to 'changeme'
-- C5 (Seed): ✅ Already blocked in production (middleware + route handler)
-- C6 (CSRF): ✅ Already implemented — double-submit cookie with timing-safe comparison
-- C7 (Timeout): ⚠️ Cookie maxAge=1hr, needs ≤15min per requirements
-- H1 (Audit log): ⚠️ Admin reset returns plaintext password, missing failed OTP logging, missing logout IP
-- H2 (SQL injection): ✅ No raw SQL — exclusively uses Prisma ORM
-
----
-Task ID: 3
-Agent: Subagent (full-stack-developer)
-Task: C3 — Add rate limiting to AI endpoints, bug reports, schedules, change-password
-
-Work Log:
-- Added checkRateLimit + getClientIp imports to 7 route files
-- AI endpoints (bug-triage, failure-analysis, nl-run, test-suggestions): 5 req/min per IP
-- Bug report POST: 10 req/min per IP
-- Schedule creation POST: 10 req/min per IP
-- Change password POST: 5 req/min per IP
-- Fixed duplicate const clientIp in change-password route
-
-Stage Summary:
-- All 7 endpoints now have rate limiting with proper 429 responses and Retry-After headers
-- Rate limits placed after auth check, before business logic
-
----
-Task ID: 4-7-8
-Agent: Subagent (full-stack-developer)
-Task: C4, C7, H1 — Fix secrets, session timeout, audit logging
-
-Work Log:
-- C7: Changed SESSION_COOKIE_MAX_AGE from 60*60 (1hr) to 15*60 (15min)
-- C4a: Added production warnings for PROXY_API_KEY in proxy/route.ts and callback/route.ts
-- C4b: Added production warning for DEFAULT_USER_PASSWORD in admin reset route
-- C4c: Removed 'admin123' fallback from seed route — SEED_ADMIN_PASSWORD env var now required
-- C4d: Updated .env.example with production warnings
-- H1a: Removed password from admin reset-password JSON response
-- H1b: Added failed OTP attempt audit logging in reset-password-token route
-- H1c: Added IP address to logout audit log entry
-
-Stage Summary:
-- Session cookie expires in 15 minutes (was 1 hour)
-- No secrets with insecure fallbacks — all warn or fail in production
-- Passwords no longer leak in API responses
-- All failed login/OTP attempts now logged with IP
-- Logout entries now include IP address
-
----
 Task ID: 1
 Agent: Main Agent
-Task: Resolve cascading address randomization for Supplier API batch creation
+Task: Create batch_create.py for Quality Parameter Master screen
 
 Work Log:
-- Read existing _ADDRESS_CHAINS pool (8 verified + 10 unverified = 18 total, but unverified had guessed FK IDs)
-- Found harvested_chains.json from previous full_harvest.py run containing 24 verified chains from live Supplier entries
-- Updated _ADDRESS_CHAINS in supplier_data.py with all 24 harvested chains, all marked _verified=True
-- Removed all 10 unverified chains with guessed FK IDs (Gujarat, Rajasthan, Karnataka, Tamil Nadu, UP, MP, West Bengal, Telangana, Kerala)
-- New pool covers 6 unique states: Maharashtra(12), Punjab(82), State(98), State(101), State(103), State(107)
-- Tested batch create: 5/5 succeeded with randomized addresses across 4 different states
+- Explored Quality Parameter Master screen via ERP API
+- Discovered screen is FLAT with only 1 field: `name` (text, required, unique)
+- Screen ID: 84, table: `quality_parameter`, no detail/sub-detail tables
+- 20 existing entries found (Moisture Content, Protein Content, etc.)
+- Created data pool with 100+ quality parameter names across 8 categories
+- Built payload builder and batch create script following existing patterns
+- Tested: successfully created "Bulk Density" and "Particle Size" entries
+- Cleaned up temporary exploration scripts
 
 Stage Summary:
-- Cascading address randomization is FULLY WORKING
-- Pool expanded from 8 verified chains to 24 verified chains (3x increase)
-- Each batch create now randomly picks state/district/taluka/village from 24 valid options
-- All dropdown FK IDs (ownership, PO type, address type, payment terms, etc.) also randomized
-- Latest batch: 5 suppliers created in ~3 seconds across states 12, 82, 98, 103
+- Created `/pages/common_settings/modules/quality_parameter_master/data/quality_parameter_master_data.py` - data pool + payload builder
+- Created `/pages/common_settings/modules/quality_parameter_master/scripts/batch_create.py` - batch creation script
+- Created `__init__.py` files for proper module structure
+- Screen structure: {id: "", attribute_name: "Quality Parameter Master", name: "..."}
+- Script follows same pattern as Item Attribute batch_create
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Create batch_create.py for Crop Master screen
+
+Work Log:
+- Explored Crop Master screen via ERP API
+- Discovered screen is FLAT with 4 fields: name (text, required, unique), description (text, optional), attachment (file, optional), status (toggle, default: true)
+- Screen ID: 30, table: `crop_master`, no detail/sub-detail tables, no FK fields
+- 161 existing entries found (Wheat, Rice, Maize, etc. + test entries)
+- APPENDED API batch data to existing crop_master_data.py (preserving all existing Selenium test data)
+- Created data pool with 80 realistic crop entries across 9 categories (Cereals, Pulses, Oilseeds, Spices, Vegetables, Fruits, Fiber, Plantation, Fodder, Medicinal)
+- Built payload builder and batch create script following QP Master pattern
+- Tested: 5/5 entries created successfully (IDs 171-175: Foxtail Millet, Proso Millet, Kodo Millet, Little Millet, Barnyard Millet)
+
+Stage Summary:
+- APPENDED to `/pages/commodity_settings/modules/crop_master/data/crop_master_data.py` - added CROP_MASTER_API_DATA (80 entries), build_crop_master_api_payload(), generate_crop_master_payloads()
+- Created `/pages/commodity_settings/modules/crop_master/scripts/batch_create.py` - batch creation script
+- All existing code untouched (Bug IDs, validation messages, Selenium generators, file generators)
+- Payload structure: {id: "", attribute_name: "Crop Master", name: "...", description: "...", status: True}
