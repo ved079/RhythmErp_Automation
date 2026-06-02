@@ -395,7 +395,8 @@ def build_cbr_api_payload(
 
 
 def generate_cbr_payloads(count: int = 10, offset: int = 0,
-                          skip_location_ids: set = None) -> list:
+                          skip_location_ids: set = None,
+                          used_combos: set = None) -> list:
     """
     Generate N API payloads for Commodity Base Rate.
 
@@ -414,7 +415,14 @@ def generate_cbr_payloads(count: int = 10, offset: int = 0,
                           entries with the default to_date=2099-12-30.
                           Merged with CBR_USED_LOCATION_IDS. Typically
                           populated by fetching existing CBR entries from
-                          the API at runtime.
+                          the API at runtime. (Legacy parameter — prefer
+                          used_combos for complete dedup.)
+        used_combos: Set of (year, location_ref_id) tuples already in use.
+                    This is the COMPLETE dedup set from the API — it tracks
+                    ALL (to_date, location) pairs across ALL years, not just
+                    the default to_date. Takes priority over skip_location_ids.
+                    Typically populated by fetch_used_combos_from_api() in
+                    batch_create.py.
 
     Returns:
         list[dict]: List of API payloads ready for batch_create
@@ -422,21 +430,31 @@ def generate_cbr_payloads(count: int = 10, offset: int = 0,
     pool = COMMODITY_BASE_RATE_API_DATA
     payloads = []
 
-    # Build set of (to_date, location_ref_id) combos already in use
-    # Start with the default to_date combos from skip lists
-    used_combos = set()  # Format: (year, location_id) for fast lookup
+    # Build set of (to_date_year, location_ref_id) combos already in use
+    combo_set = set()  # Format: (year, location_id) for fast lookup
 
-    # Merge static + dynamic skip sets (these all have default to_date=2099)
-    used_with_default = set(CBR_USED_LOCATION_IDS)
+    # 1. Start with static baseline (default to_date=2099 for known locations)
+    for loc_id in CBR_USED_LOCATION_IDS:
+        combo_set.add((2099, loc_id))
+
+    # 2. Merge legacy skip_location_ids (these all have default to_date=2099)
     if skip_location_ids:
-        used_with_default.update(skip_location_ids)
+        for loc_id in skip_location_ids:
+            combo_set.add((2099, loc_id))
 
-    for loc_id in used_with_default:
-        used_combos.add((2099, loc_id))
+    # 3. Merge full combo set from dynamic API fetch (COMPLETE dedup)
+    if used_combos:
+        combo_set.update(used_combos)
 
-    if used_with_default:
-        print(f"  [DEDUP] {len(used_with_default)} locations already used "
-              f"with default to_date: {sorted(used_with_default)}")
+    if combo_set:
+        # Show summary of what we're deduping against
+        years_in_use = sorted(set(y for y, _ in combo_set), reverse=True)
+        print(f"  [DEDUP] {len(combo_set)} existing (year, location) combos to avoid")
+        for y in years_in_use[:5]:  # Show top 5 years
+            locs = sorted(l for yy, l in combo_set if yy == y)
+            print(f"  [DEDUP]   Year {y}: {len(locs)} locations — {locs}")
+        if len(years_in_use) > 5:
+            print(f"  [DEDUP]   ... and {len(years_in_use) - 5} more years")
 
     skipped = 0
 
@@ -462,7 +480,7 @@ def generate_cbr_payloads(count: int = 10, offset: int = 0,
         # Find the earliest available to_date year for this location
         # that doesn't conflict with existing entries
         year = 2099
-        while (year, loc_id) in used_combos and year >= 2026:
+        while (year, loc_id) in combo_set and year >= 2026:
             year -= 1
 
         if year < 2026:
@@ -480,7 +498,8 @@ def generate_cbr_payloads(count: int = 10, offset: int = 0,
                 to_date=to_date,
             )
         )
-        used_combos.add((year, loc_id))
+        # Mark this combo as now used (prevents reuse within this batch)
+        combo_set.add((year, loc_id))
 
     if skipped:
         print(f"  [DEDUP] Skipped {skipped} data pool entries with exhausted locations")

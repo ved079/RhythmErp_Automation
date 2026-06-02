@@ -47,6 +47,7 @@ URL:    /#/dynamic-screens/Commodity%20Base%20Rate
 
 import sys
 import os
+import re
 import argparse
 import time
 
@@ -85,22 +86,24 @@ def parse_args():
 
 # ── Dynamic dedup: fetch used (to_date, location) combos from live ERP ──
 
-def fetch_used_location_ids_from_api(api: ErpApiClient) -> set:
+def fetch_used_combos_from_api(api: ErpApiClient) -> set:
     """
-    Fetch existing CBR entries from the ERP listing API and extract
-    location_ref_id values that are already used with the default
-    to_date=2099-12-30T18:30:00Z.
+    Fetch ALL existing CBR entries from the ERP listing API and extract
+    (to_date_year, location_ref_id) pairs that are already in use.
 
-    This provides RUNTIME dedup — even if the static CBR_USED_LOCATION_IDS
-    is stale, the dynamic fetch ensures we don't create duplicates.
+    This is the COMPLETE dedup — the unique constraint is (to_date, location_ref_id),
+    so we must track ALL combos across ALL years, not just the default to_date.
+    The previous implementation only tracked locations with to_date=2099-12-30,
+    which caused duplicate errors when trying to create entries with years
+    that were already used (2098, 2097, etc.).
 
     Args:
         api: Authenticated ErpApiClient instance
 
     Returns:
-        Set of location_ref_id integers already used in CBR with default to_date
+        Set of (year, location_ref_id) tuples already used in CBR
     """
-    used_ids = set()
+    used_combos = set()
 
     try:
         # Fetch listing with large page size to get all entries
@@ -109,47 +112,78 @@ def fetch_used_location_ids_from_api(api: ErpApiClient) -> set:
             log.warning(
                 "[DEDUP] Could not fetch CBR listing — using static skip list only"
             )
-            return used_ids
+            return used_combos
 
         entries = result.get("screenmatlistingdata_set", [])
         if not entries:
             log.info("[DEDUP] No existing CBR entries found in listing")
-            return used_ids
+            return used_combos
 
         log.info(f"[DEDUP] Found {len(entries)} existing CBR entries in listing")
 
+        unresolved = 0
         for entry in entries:
-            # The listing response has location_ref_id as a string name
-            # We need to reverse-lookup the ID from LOCATION_ID_MAP
-            loc_name = entry.get("location_ref_id")
+            loc_val = entry.get("location_ref_id")
             to_date = entry.get("to_date", "")
 
-            # Only count entries with the default sentinel to_date
-            if "2099-12-30" in str(to_date):
-                # loc_name might be "Charholi" or "Charholi" (string)
-                if loc_name and isinstance(loc_name, str):
-                    for name, id_val in LOCATION_ID_MAP.items():
-                        if name.lower() == loc_name.lower():
-                            used_ids.add(id_val)
-                            break
-                    else:
-                        # Try direct integer conversion
-                        try:
-                            used_ids.add(int(loc_name))
-                        except (ValueError, TypeError):
-                            pass
-                elif isinstance(loc_name, (int, float)):
-                    used_ids.add(int(loc_name))
+            # Parse year from to_date — handle multiple formats:
+            #   ISO: "2099-12-30T18:30:00Z"  or  "2099-12-30"
+            #   D/M/Y: "30/12/2099"
+            year = None
+            to_str = str(to_date)
+            year_match = re.match(r'(\d{4})', to_str)
+            if year_match:
+                year = int(year_match.group(1))
+            else:
+                # Try DD/MM/YYYY format
+                dm_match = re.search(r'(\d{2})/(\d{2})/(\d{4})', to_str)
+                if dm_match:
+                    year = int(dm_match.group(3))
+
+            if year is None:
+                continue
+
+            # Resolve location_ref_id to integer
+            loc_id = None
+            if loc_val and isinstance(loc_val, str):
+                for name, id_val in LOCATION_ID_MAP.items():
+                    if name.lower() == loc_val.lower():
+                        loc_id = id_val
+                        break
+                if loc_id is None:
+                    try:
+                        loc_id = int(loc_val)
+                    except (ValueError, TypeError):
+                        pass
+            elif isinstance(loc_val, (int, float)):
+                loc_id = int(loc_val)
+
+            if loc_id is not None:
+                used_combos.add((year, loc_id))
+            else:
+                unresolved += 1
+
+        if unresolved:
+            log.warning(
+                f"[DEDUP] Could not resolve location_ref_id for "
+                f"{unresolved} entries"
+            )
 
         log.info(
-            f"[DEDUP] Discovered {len(used_ids)} used location_ref_ids "
-            f"with default to_date from API: {sorted(used_ids)}"
+            f"[DEDUP] Discovered {len(used_combos)} unique (year, location) "
+            f"combos from API"
         )
 
-    except Exception as e:
-        log.warning(f"[DEDUP] Error fetching used locations from API: {e}")
+        # Show summary by year — helps debug dedup issues
+        years = sorted(set(y for y, _ in used_combos), reverse=True)
+        for y in years:
+            locs = sorted(l for yy, l in used_combos if yy == y)
+            log.info(f"[DEDUP]   Year {y}: {len(locs)} locations used — {locs}")
 
-    return used_ids
+    except Exception as e:
+        log.warning(f"[DEDUP] Error fetching used combos from API: {e}")
+
+    return used_combos
 
 
 def create_with_retry(api: ErpApiClient, payloads: list, target_count: int,
@@ -160,7 +194,8 @@ def create_with_retry(api: ErpApiClient, payloads: list, target_count: int,
 
     If the API rejects a payload with "Duplicate entry found for
     to_date, location_ref_id", the script shifts the to_date by
-    -1 year and retries once. If it still fails, the entry is skipped.
+    -1 year and retries up to MAX_RETRIES times. If all retries fail,
+    the entry is skipped.
 
     Args:
         api: Authenticated ErpApiClient
@@ -171,6 +206,7 @@ def create_with_retry(api: ErpApiClient, payloads: list, target_count: int,
     Returns:
         List of result dicts with success/error/payload info
     """
+    MAX_RETRIES = 5  # Try up to 5 year shifts (e.g., 2099→2098→2097→2096→2095)
     results = []
     created = 0
     failed = 0
@@ -199,30 +235,39 @@ def create_with_retry(api: ErpApiClient, payloads: list, target_count: int,
             created += 1
             print("OK")
         else:
-            # Check if this was a duplicate error
-            # Try again with a shifted to_date
+            # Duplicate detected — try multiple year shifts
             current_year = int(payload.get("to_date", "2099")[:4])
-            new_year = current_year - 1
-            if new_year >= 2026:
-                new_to_date = payload["to_date"].replace(str(current_year), str(new_year))
+            retry_success = False
+
+            for shift in range(1, MAX_RETRIES + 1):
+                new_year = current_year - shift
+                if new_year < 2026:
+                    break
+                new_to_date = payload["to_date"].replace(
+                    str(current_year), str(new_year)
+                )
                 payload["to_date"] = new_to_date
-                print(f"RETRY (year→{new_year})...", end=" ", flush=True)
+                print(f"RETRY(y→{new_year})...", end=" ", flush=True)
                 result2 = api.create_entry(payload)
                 if result2 is not None:
-                    results.append({"success": True, "data": result2, "payload": payload})
+                    results.append({
+                        "success": True, "data": result2, "payload": payload
+                    })
                     created += 1
                     print("OK")
-                    continue
+                    retry_success = True
+                    break
 
-            failed += 1
-            skipped_dup += 1
-            print("DUPLICATE — skipped")
+            if not retry_success:
+                failed += 1
+                skipped_dup += 1
+                print("DUPLICATE — skipped")
 
-            results.append({
-                "success": False,
-                "error": "Duplicate entry — skipped after retry",
-                "payload": payload,
-            })
+                results.append({
+                    "success": False,
+                    "error": "Duplicate entry — skipped after retries",
+                    "payload": payload,
+                })
 
         if delay and idx < len(payloads):
             time.sleep(delay)
@@ -255,10 +300,10 @@ def main():
     token = api.prompt_for_token()
     api.set_session_from_token(token)
 
-    # ── Dynamic dedup: fetch used location IDs from live ERP ──────────
+    # ── Dynamic dedup: fetch used (year, location) combos from live ERP ──
     print()
     print("  Fetching existing CBR entries from API for dynamic dedup...")
-    dynamic_used_ids = fetch_used_location_ids_from_api(api)
+    dynamic_used_combos = fetch_used_combos_from_api(api)
 
     # ── Generate payloads (with dedup skip) ──────────────────────────
     # Generate MORE payloads than needed so retry logic has spares
@@ -271,7 +316,7 @@ def main():
         payloads = generate_cbr_payloads(
             count=oversample,
             offset=offset,
-            skip_location_ids=dynamic_used_ids,
+            used_combos=dynamic_used_combos,
         )
     except Exception as e:
         print(f"  ERROR generating payloads: {e}")
