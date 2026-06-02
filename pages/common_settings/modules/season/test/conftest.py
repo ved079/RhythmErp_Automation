@@ -58,21 +58,23 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    # Facility selection disabled — single-tenant setup (dropdown handled by double-click)
-    # if RHYTHMERP_FACILITY:
-    #     log.step(3, "Selecting facility: " + str(RHYTHMERP_FACILITY))
-    #     login_page.select_facility(RHYTHMERP_FACILITY)
-    # else:
-    #     log.step(3, "Selecting facility (blank - first option)")
-    #     login_page.select_facility(" ")
-
+    # Dismiss tenant dropdown before clicking Login (backend bug workaround)
+    # The dropdown auto-appears after email entry and intercepts the Login button click
+    login_page._dismiss_tenant_dropdown()
     login_page.wait_seconds(1)
 
     log.step(4, "Clicking Login button (double-click)")
     login_page.click_login()
     login_page.wait_seconds(3)
 
-    login_page.wait_for_login_complete()
+    # Verify login succeeded; retry once if still on login page
+    if not login_page.wait_for_login_complete(timeout=15):
+        log.warning("First login attempt may have failed — retrying...")
+        login_page._dismiss_tenant_dropdown()
+        login_page.click_login()
+        login_page.wait_seconds(3)
+        assert login_page.wait_for_login_complete(timeout=15), "Login failed after retry"
+
     log.info("RhythmERP login successful!")
     start_screenshot_broadcast(driver)
 

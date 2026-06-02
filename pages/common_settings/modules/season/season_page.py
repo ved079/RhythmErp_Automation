@@ -13,6 +13,8 @@ Key DOM findings:
   - Icon elements are <i class="material-icons">, NOT <mat-icon>
   - Table columns: Actions(1), Name(2), Description(3), Status(4)
   - History "No data" uses <img> + <p>, NOT div[style*='text-align']
+  - Close/Fullscreen buttons in popup use <mat-icon>, NOT <i>
+  - SweetAlert success toast blocks subsequent clicks until dismissed
 """
 
 import time
@@ -56,8 +58,8 @@ class SeasonPage(BasePage):
     FORM_HEADER_TITLE = ("css", "div.edit_pop_up .popup-header h3")
 
     # --- Form Fields ---
-    NAME_INPUT = ("css", "input[name='Name']")
-    DESCRIPTION_INPUT = ("css", "input[name='Description']")
+    NAME_INPUT = ("css", "div.edit_pop_up input[name='Name']")
+    DESCRIPTION_INPUT = ("css", "div.edit_pop_up input[name='Description']")
 
     # Status checkbox (angular material checkbox inside the form)
     STATUS_CHECKBOX = ("css", "div.edit_pop_up input[type='checkbox']")
@@ -67,8 +69,9 @@ class SeasonPage(BasePage):
     CANCEL_BUTTON = ("css", "div.popup-footer button[type='button']")
 
     # --- Popup Header Buttons ---
-    CLOSE_X_BUTTON = ("xpath", "//div[@class='popup-actions']//button[contains(.,'close')]")
-    FULLSCREEN_BUTTON = ("xpath", "//div[@class='popup-actions']//button[contains(.,'fullscreen')]")
+    # Live DOM: <div class="popup-actions"><button><mat-icon>fullscreen</mat-icon></button><button><mat-icon>close</mat-icon></button></div>
+    CLOSE_X_BUTTON = ("xpath", "//div[contains(@class,'popup-actions')]//button[mat-icon[text()='close']]")
+    FULLSCREEN_BUTTON = ("xpath", "//div[contains(@class,'popup-actions')]//button[mat-icon[text()='fullscreen']]")
 
     # ================================================================
     # LOCATORS — SweetAlert Popups
@@ -141,11 +144,11 @@ class SeasonPage(BasePage):
         """Navigate directly to the Season screen via URL."""
         from pages.common_settings.modules.season.data.season_data import SEASON_PAGE_URL
         log.info("Navigating to Season screen...")
-        self._force_close_panels()
+        self._dismiss_overlays_and_popups()
         self.navigate_to(SEASON_PAGE_URL)
         try:
             self.wait_for_visible(self.TABLE, timeout=15)
-            self.wait_seconds(1)  # let Angular finish change detection
+            self.wait_seconds(0.5)  # let Angular finish change detection
             log.info("Season screen loaded successfully")
         except Exception:
             log.warning("Table not found — page may still be loading or empty")
@@ -158,22 +161,22 @@ class SeasonPage(BasePage):
     def open_add_form(self):
         """Click the Add (+) button to open the form popup."""
         log.step(1, "Opening Add form")
-        self._force_close_panels()
-        self.wait_seconds(0.5)
-        self.click(self.ADD_BUTTON)
+        self._dismiss_overlays_and_popups()
+        self.wait_seconds(0.3)
+        self._js_click(self.ADD_BUTTON)
         self.wait_for_form_to_open()
         log.info("Add form opened")
 
     def close_form_via_cancel(self):
         """Click the Cancel button to close the form."""
         log.info("Closing form via Cancel button")
-        self.click(self.CANCEL_BUTTON)
+        self._js_click(self.CANCEL_BUTTON)
         self.wait_for_form_to_close()
 
     def close_form_via_x(self):
         """Click the X button to close the form."""
         log.info("Closing form via X button")
-        self.click(self.CLOSE_X_BUTTON)
+        self._js_click(self.CLOSE_X_BUTTON)
         self.wait_for_form_to_close()
 
     # ================================================================
@@ -206,18 +209,88 @@ class SeasonPage(BasePage):
         self.clear_field(self.DESCRIPTION_INPUT)
 
     # ================================================================
-    # FORM — Submit
+    # FORM — Submit / Update (unified post-submit handling)
     # ================================================================
 
     def click_submit(self):
-        """Click the Submit button (Add mode)."""
+        """Click the Submit button (Add mode) and handle post-submit state.
+
+        After clicking Submit, one of two things happens:
+        - Success: form closes, SweetAlert success toast appears (auto-dismisses)
+        - Validation Failed: SweetAlert warning stays, form stays open
+
+        This method clicks Submit and then:
+        1. Checks if a validation alert appeared → if yes, returns "validation"
+        2. Waits for the form to close → if closed, dismisses any success toast
+        3. Returns "success" if form closed, "unknown" otherwise
+        """
         log.step(4, "Clicking Submit button")
-        self.click(self.SUBMIT_BUTTON)
+        self._js_click(self.SUBMIT_BUTTON)
+
+        # Brief pause to let Angular process the click
+        self.wait_seconds(1)
+
+        # Check for validation alert first (form stays open on validation failure)
+        if self.is_validation_alert_present(timeout=3):
+            log.info("Validation Failed alert detected after submit")
+            return "validation"
+
+        # Wait for form to close (success path)
+        try:
+            self.wait_for_form_to_close(timeout=10)
+            # Dismiss any lingering SweetAlert success toast that blocks clicks
+            self._dismiss_any_sweet_alert()
+            log.info("Submit successful — form closed")
+            return "success"
+        except Exception:
+            # Check again for validation alert (sometimes delayed)
+            if self.is_validation_alert_present(timeout=2):
+                log.info("Delayed validation alert detected")
+                return "validation"
+            log.warning("Form did not close and no validation alert after submit")
+            return "unknown"
 
     def click_update(self):
-        """Click the Update button (Edit mode)."""
+        """Click the Update button (Edit mode) and handle post-update state.
+
+        Same logic as click_submit but for edit mode.
+        Returns "success", "validation", or "unknown".
+        """
         log.step(4, "Clicking Update button")
-        self.click(self.SUBMIT_BUTTON)
+        self._js_click(self.SUBMIT_BUTTON)
+
+        self.wait_seconds(1)
+
+        if self.is_validation_alert_present(timeout=3):
+            log.info("Validation Failed alert detected after update")
+            return "validation"
+
+        try:
+            self.wait_for_form_to_close(timeout=10)
+            self._dismiss_any_sweet_alert()
+            log.info("Update successful — form closed")
+            return "success"
+        except Exception:
+            if self.is_validation_alert_present(timeout=2):
+                return "validation"
+            log.warning("Form did not close and no validation alert after update")
+            return "unknown"
+
+    def submit_and_wait(self):
+        """Submit and wait for success — raises on validation failure.
+
+        Convenience method for tests that expect the happy path.
+        Use click_submit() directly for tests that need to check validation.
+        """
+        result = self.click_submit()
+        if result == "validation":
+            self.handle_validation_alert()
+            try:
+                self.close_form_via_cancel()
+            except Exception:
+                self._dismiss_overlays_and_popups()
+            raise AssertionError("Submit failed — validation alert appeared")
+        return result
 
     # ================================================================
     # SWEET ALERT — Detection & Handling
@@ -273,7 +346,7 @@ class SeasonPage(BasePage):
         """Click OK on the Validation Failed SweetAlert."""
         log.info("Handling Validation Failed alert — clicking OK")
         try:
-            self.click(self.SWEET_ALERT_CONFIRM_BTN)
+            self._js_click(self.SWEET_ALERT_CONFIRM_BTN)
             self.wait_seconds(0.5)
         except Exception:
             log.warning("Could not click validation alert OK button")
@@ -287,10 +360,11 @@ class SeasonPage(BasePage):
             )
             log.info("Success toast dismissed")
         except Exception:
-            log.warning("Success toast did not dismiss within timeout")
+            # Force-dismiss if it doesn't auto-dismiss
+            self._dismiss_any_sweet_alert()
 
     def handle_success_alert(self):
-        """Handle the success SweetAlert — wait for auto-dismiss."""
+        """Handle the success SweetAlert — wait for auto-dismiss or force close."""
         self.wait_for_success_alert_to_dismiss()
 
     # ================================================================
@@ -299,7 +373,7 @@ class SeasonPage(BasePage):
 
     def is_form_open(self):
         """Check if the Season form popup is currently visible."""
-        return self.is_displayed(self.FORM_POPUP, timeout=5)
+        return self.is_displayed(self.FORM_POPUP, timeout=3)
 
     def wait_for_form_to_open(self, timeout=10):
         """Wait until the form popup appears."""
@@ -316,7 +390,6 @@ class SeasonPage(BasePage):
         try:
             self.wait_for_invisible(self.FORM_POPUP, timeout=timeout)
             log.info("Form popup closed")
-            self.wait_seconds(0.5)
         except Exception:
             log.warning("Form popup still visible after timeout")
 
@@ -326,7 +399,8 @@ class SeasonPage(BasePage):
             element = self.find_element(locator)
             disabled = element.get_attribute("disabled")
             aria_disabled = element.get_attribute("aria-disabled")
-            return disabled == "true" or aria_disabled == "true"
+            readonly = element.get_attribute("readonly")
+            return disabled == "true" or aria_disabled == "true" or readonly == "true"
         except Exception:
             return False
 
@@ -395,15 +469,15 @@ class SeasonPage(BasePage):
     # ================================================================
     # TABLE — Row Actions via Kebab Menu (live-verified 2026-06-02)
     # ================================================================
-    # Live ERP uses a kebab menu (more_vert) per row that opens a
-    # CDK overlay with menu items: View, Edit, History.
-    # Old code used tblActnBtn class which NO LONGER EXISTS in the DOM.
 
     def _open_kebab_menu(self, row_index):
         """Open the kebab menu for a specific row and wait for menu items."""
         log.info(f"Opening kebab menu on row {row_index}")
         kebab_locator = self._row_kebab(row_index)
-        self.click(kebab_locator)
+
+        # Use JS click to avoid interception by overlays or other elements
+        self._js_click(kebab_locator)
+
         # Wait for the CDK overlay menu to appear
         try:
             WebDriverWait(self.driver, 5).until(
@@ -413,7 +487,17 @@ class SeasonPage(BasePage):
             )
             self.wait_seconds(0.3)  # let animation settle
         except TimeoutException:
-            log.warning("Kebab menu overlay did not appear")
+            log.warning("Kebab menu overlay did not appear — retrying with standard click")
+            try:
+                self.click(kebab_locator)
+                WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located(
+                        (By.CSS_SELECTOR, ".cdk-overlay-pane .mat-mdc-menu-item")
+                    )
+                )
+                self.wait_seconds(0.3)
+            except Exception:
+                log.error("Kebab menu still not appearing after retry")
 
     def _close_kebab_menu(self):
         """Dismiss any open kebab menu overlay."""
@@ -427,21 +511,21 @@ class SeasonPage(BasePage):
         """Click the View button on a specific row via kebab menu."""
         log.info(f"Clicking View on row {row_index}")
         self._open_kebab_menu(row_index)
-        self.click(self._menu_view)
+        self._js_click(self._menu_view)
         self.wait_for_form_to_open()
 
     def click_edit_button(self, row_index=0):
         """Click the Edit button on a specific row via kebab menu."""
         log.info(f"Clicking Edit on row {row_index}")
         self._open_kebab_menu(row_index)
-        self.click(self._menu_edit)
+        self._js_click(self._menu_edit)
         self.wait_for_form_to_open()
 
     def click_history_button(self, row_index=0):
         """Click the History button on a specific row via kebab menu."""
         log.info(f"Clicking History on row {row_index}")
         self._open_kebab_menu(row_index)
-        self.click(self._menu_history)
+        self._js_click(self._menu_history)
         self.wait_for_history_popup()
 
     def close_history_popup(self):
@@ -525,15 +609,10 @@ class SeasonPage(BasePage):
                 }));
             }
         """, text)
-        self.wait_seconds(2)
+        self.wait_seconds(1.5)
 
     def get_history_row_count(self):
-        """Get number of rows in the history table.
-
-        Uses direct find_elements (no wait) because wait_for_history_popup()
-        already confirmed the content is settled. Returns 0 if no table exists
-        (i.e. the 'No data' state is showing).
-        """
+        """Get number of rows in the history table."""
         try:
             rows = self.driver.find_elements(
                 By.CSS_SELECTOR,
@@ -578,55 +657,16 @@ class SeasonPage(BasePage):
     def close_history_via_cancel(self):
         """Close the History popup via the Cancel button.
 
-        The Cancel button in this popup is a mat-button (no type attribute).
-        We locate it via the mdc-button__label span text inside popup-footer.
         Falls back to Escape key if the button is not interactable.
         """
         log.info("Closing History popup via Cancel button")
         try:
-            self.click(self.HISTORY_CANCEL_BUTTON)
+            self._js_click(self.HISTORY_CANCEL_BUTTON)
             self.wait_seconds(0.5)
         except Exception:
             log.warning("Cancel button not found in History popup, trying Escape")
             ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
-
-    def _ensure_record_has_history(self):
-        """Create a record, edit it once, and return its final name.
-
-        The app only logs history rows on UPDATE events — a brand-new record
-        shows "No data available." in the history popup. Tests that need
-        history data must call this method first.
-        """
-        from pages.common_settings.modules.season.data.season_data import valid_season_with_description
-        data = valid_season_with_description()
-        name = data["Name"]
-
-        # Create
-        self.open_add_form()
-        self.fill_form(name, data["Description"])
-        self.click_submit()
-        self.wait_for_form_to_close(timeout=10)
-        self.refresh_table()
-        self.wait_seconds(1)
-        assert self.search_record(name), f"Prereq: could not create '{name}'"
-        log.info(f"Created '{name}' for history test")
-
-        # Edit (this is what creates the history row)
-        row_index = self.find_row_by_name(name)
-        assert row_index != -1, f"Prereq: row not found for '{name}'"
-        self.click_edit_button(row_index)
-        self.clear_form()
-        edited_name = f"HIST_{name}"
-        self.fill_form(edited_name, "Edited for history test")
-        self.click_update()
-        self.wait_for_form_to_close(timeout=10)
-        self.refresh_table()
-        self.wait_seconds(1)
-        assert self.search_record(edited_name), f"Prereq: edited record '{edited_name}' not found"
-        log.info(f"Edited to '{edited_name}' — history now has rows")
-
-        self.clear_search()
-        return edited_name
+            self.wait_seconds(0.5)
 
     # ================================================================
     # REFRESH / RELOAD TABLE
@@ -635,14 +675,15 @@ class SeasonPage(BasePage):
     def refresh_table(self):
         """Click the Refresh button to reload the table data."""
         log.info("Refreshing Season table...")
+        # Ensure no overlays are blocking the refresh button
+        self._dismiss_any_sweet_alert()
         try:
-            self.click(self.REFRESH_BUTTON)
-            self.wait_seconds(2)
+            self._js_click(self.REFRESH_BUTTON)
+            self.wait_seconds(1.5)
             log.info("Table refreshed")
         except Exception:
             log.warning("Refresh button not found, falling back to page refresh")
             self.navigate_to_season()
-            self.wait_seconds(2)
 
     # ================================================================
     # SEARCH
@@ -656,7 +697,7 @@ class SeasonPage(BasePage):
         if self.is_displayed(self.SEARCH_INPUT, timeout=1):
             return  # bar already open
 
-        self.click(self.SEARCH_BUTTON)
+        self._js_click(self.SEARCH_BUTTON)
 
         by, value = self._parse_locator(self.SEARCH_INPUT)
 
@@ -708,7 +749,7 @@ class SeasonPage(BasePage):
             WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "#erpSearchInput"))
             )
-            self.wait_seconds(1)
+            self.wait_seconds(0.5)
 
             # Step 3: Clear + Type + Enter — ALL in ONE JS call (atomic, no stale)
             self.driver.execute_script("""
@@ -728,7 +769,7 @@ class SeasonPage(BasePage):
                 }));
             """, text)
 
-            self.wait_seconds(2)
+            self.wait_seconds(1.5)
 
             # Step 4: Check results — Name is column 2 (1-based XPath = td[2])
             row_count = self.get_table_row_count()
@@ -768,46 +809,80 @@ class SeasonPage(BasePage):
             return False
 
     # ================================================================
-    # UTILITY - CDK OVERLAY CLEANUP
+    # UTILITY - OVERLAY / PANEL CLEANUP (non-destructive)
     # ================================================================
 
-    def _force_close_panels(self):
-        """Remove any lingering CDK overlay panels that block clicks."""
+    def _dismiss_overlays_and_popups(self):
+        """Dismiss any open overlays, popups, or alerts using keyboard/JS clicks.
+
+        This is a NON-DESTRUCTIVE alternative to the old _force_close_panels()
+        which used DOM removal and corrupted Angular state.
+        """
+        # 1. Dismiss any SweetAlert first (it blocks everything)
+        self._dismiss_any_sweet_alert()
+
+        # 2. Close any open form popup via Escape
         try:
-            overlays = self.driver.find_elements(
-                "css selector", ".cdk-overlay-backdrop"
-            )
-            for overlay in overlays:
-                self.driver.execute_script("arguments[0].remove();", overlay)
-            panels = self.driver.find_elements(
-                "css selector", ".cdk-overlay-pane"
-            )
-            for panel in panels:
-                self.driver.execute_script("arguments[0].remove();", panel)
-            # Also close any open form popups via JS
-            self.driver.execute_script("""
-                var popups = document.querySelectorAll('div.edit_pop_up');
-                popups.forEach(function(p) { p.remove(); });
-            """)
+            if self.is_displayed(self.FORM_POPUP, timeout=0.5):
+                ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+                self.wait_seconds(0.3)
+                # If still open, try Cancel button
+                if self.is_displayed(self.FORM_POPUP, timeout=0.5):
+                    try:
+                        self._js_click(self.CANCEL_BUTTON)
+                        self.wait_seconds(0.3)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # 3. Close any open CDK overlay (kebab menu, dropdowns)
+        try:
+            ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+            self.wait_seconds(0.2)
+        except Exception:
+            pass
+
+        # 4. Close any History popup
+        try:
+            if self.is_displayed(self.HISTORY_POPUP_TITLE, timeout=0.5):
+                ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+                self.wait_seconds(0.3)
         except Exception:
             pass
 
     def _dismiss_any_sweet_alert(self):
-        """Dismiss any SweetAlert popup (Pattern A or Pattern B)."""
+        """Dismiss any SweetAlert popup (OK or Cancel button)."""
         try:
-            self.driver.find_element("css selector", ".swal2-popup")
+            popup = self.driver.find_element("css selector", ".swal2-popup")
+            if not popup.is_displayed():
+                return
             log.info("SweetAlert detected, attempting to dismiss")
+            # Try Cancel button first (for confirmation dialogs)
             try:
                 cancel_btn = self.driver.find_element("css selector", ".swal2-cancel")
-                self.driver.execute_script("arguments[0].click();", cancel_btn)
-                log.info("Dismissed via Cancel button (Pattern B)")
+                if cancel_btn.is_displayed():
+                    self.driver.execute_script("arguments[0].click();", cancel_btn)
+                    log.info("Dismissed via Cancel button")
+                    self.wait_seconds(0.5)
+                    return
             except Exception:
+                pass
+            # Try Confirm/OK button (for validation alerts)
+            try:
                 confirm_btn = self.driver.find_element("css selector", ".swal2-confirm")
-                self.driver.execute_script("arguments[0].click();", confirm_btn)
-                log.info("Dismissed via OK button (Pattern A)")
-            self.wait_seconds(1)
+                if confirm_btn.is_displayed():
+                    self.driver.execute_script("arguments[0].click();", confirm_btn)
+                    log.info("Dismissed via OK button")
+                    self.wait_seconds(0.5)
+                    return
+            except Exception:
+                pass
+            # Last resort: click outside the popup
+            ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+            self.wait_seconds(0.3)
         except Exception:
-            pass
+            pass  # No SweetAlert present
 
     def clear_search(self):
         """Clear the search filter by re-navigating to the Season screen.
@@ -817,5 +892,31 @@ class SeasonPage(BasePage):
         DOM immediately after this call exits.
         """
         log.info("Clearing search filter...")
-        self._force_close_panels()
+        self._dismiss_overlays_and_popups()
         self.navigate_to_season()
+
+    # ================================================================
+    # UTILITY - JS CLICK (interception-safe)
+    # ================================================================
+
+    def _js_click(self, locator):
+        """Click an element using JavaScript — immune to overlay interception.
+
+        Falls back to standard click() if JS click fails (e.g. element not in DOM).
+        """
+        by, value = self._parse_locator(locator)
+        try:
+            # First try to find the element
+            element = WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located((by, value))
+            )
+            # Use JS click to bypass any overlay interception
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();",
+                element
+            )
+            log.info(f"JS-clicked: {locator}")
+        except Exception:
+            # Fallback to standard click (which has its own overlay handling)
+            log.info(f"JS click failed, falling back to standard click: {locator}")
+            self.click(locator)
