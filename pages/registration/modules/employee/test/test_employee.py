@@ -451,10 +451,10 @@ class TestEmployeeUI:
     """UI-based tests using Selenium — requires browser + ERP access."""
 
     @pytest.fixture(autouse=True)
-    def setup(self, driver, login):
+    def setup(self, logged_in_driver):
         """Navigate to Employee page before each test."""
         from pages.registration.modules.employee.employee_page import EmployeePage
-        self.page = EmployeePage(driver)
+        self.page = EmployeePage(logged_in_driver)
         self.page.navigate_to_page()
 
     def test_employee_page_loads(self):
