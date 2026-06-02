@@ -982,7 +982,8 @@ class TestEditFormValidations:
         if alert:
             log.info(f"Edit success: {alert}")
 
-        page.click_refresh()
+        # Full page reload (more reliable than refresh button click)
+        page.navigate_to_page()
         page.wait_seconds(2)
         found = page.is_bank_in_table(name)
         assert found, f"Edited bank '{name}' should still exist in table"
