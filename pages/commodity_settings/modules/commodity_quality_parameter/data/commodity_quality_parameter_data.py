@@ -482,13 +482,14 @@ QUALITY_PARAM_ID_MAP = {
 # Items already used in CQP (item_ref_id values with to_date=2099-12-30T18:30:00Z)
 # These items CANNOT be reused with the same to_date; they can be reused
 # with a different to_date if needed.
-# Updated 2026-06-02: Added 94, 101, 102, 103, 130 (discovered via API
-# duplicate errors).  Also added 131-135 (created by batch run on 2026-06-02).
-# NOTE: The batch_create.py script now also fetches used items dynamically
-# from the API at runtime — this static list is a safety net / baseline.
+# Updated 2026-06-02: Added 94,101,102,103,130 (discovered via API duplicate
+# errors). Added 131-135 (batch run #1).  Added 109-115,136-138 (batch run #2).
+# NOTE: The batch_create.py script also fetches used items dynamically from
+# the API at runtime — this static list is a safety net / baseline.
 CQP_USED_ITEM_IDS = {85, 86, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98,
-                     99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 129,
-                     130, 131, 132, 133, 134, 135}
+                     99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109,
+                     110, 111, 112, 113, 114, 115, 129, 130, 131, 132, 133,
+                     134, 135, 136, 137, 138}
 
 
 # ── Data Pool ─────────────────────────────────────────────────────────
