@@ -1101,22 +1101,30 @@ def build_supplier_api_payload(
         return val if val is not None else None
 
     # Build Additional Details stepper
-    # NOTE: The live API response shows that for Additional Details stepper,
-    # the fields are on the child object itself (NOT inside details[]).
-    # The details[] array is empty for Additional Details.
-    # However, for CREATE payloads, we put the fields inside details[]
-    # which is the standard pattern. The API handles both forms.
-    additional_details = {}
-    additional_details["display_name_as"] = step1_data.get("contact_person", "") or None
-    additional_details["office_no"] = step1_data.get("office_number", "") or None
-    additional_details["is_gst_set_off"] = step1_data.get("is_gst_set_off", True)
-    additional_details["is_tds_applicable"] = step1_data.get("is_tds_applicable", False)
+    # IMPORTANT: The live API response shows that for Additional Details stepper,
+    # the fields are on the stepper child object itself (NOT inside details[]).
+    # The details[] array is empty for Additional Details in the API response.
+    # For CREATE payloads, we MUST also put the fields directly on the stepper
+    # object — the API ignores them if they are inside details[].
+    # (Verified 2026-06-02: fields inside details[] were silently dropped,
+    #  causing Contact Person, Payment Terms, Delivery Terms, Mode Of Delivery
+    #  to appear blank in the View screen after API creation.)
+    additional_details_stepper = {
+        "stepper_name": "Additional Details",
+        "is_stepper": True,
+        "display_name_as": step1_data.get("contact_person", "") or None,
+        "office_no": step1_data.get("office_number", "") or None,
+        "is_gst_set_off": step1_data.get("is_gst_set_off", True),
+        "is_tds_applicable": step1_data.get("is_tds_applicable", False),
+        "details": [],
+        "children": [],
+    }
     if _fk("payment_terms_ref_id") is not None:
-        additional_details["payment_terms_ref_id"] = _fk("payment_terms_ref_id")
+        additional_details_stepper["payment_terms_ref_id"] = _fk("payment_terms_ref_id")
     if _fk("delivery_terms_ref_id") is not None:
-        additional_details["delivery_terms_ref_id"] = _fk("delivery_terms_ref_id")
+        additional_details_stepper["delivery_terms_ref_id"] = _fk("delivery_terms_ref_id")
     if _fk("mode_of_delivery_ref_id") is not None:
-        additional_details["mode_of_delivery_ref_id"] = _fk("mode_of_delivery_ref_id")
+        additional_details_stepper["mode_of_delivery_ref_id"] = _fk("mode_of_delivery_ref_id")
 
     # Build Address Details stepper details
     address_detail = {}
@@ -1183,12 +1191,7 @@ def build_supplier_api_payload(
 
         # Children array with stepper objects (verified against live API)
         "children": [
-            {
-                "stepper_name": "Additional Details",
-                "is_stepper": True,
-                "details": [additional_details],
-                "children": [],
-            },
+            additional_details_stepper,
             {
                 "stepper_name": "Address Details",
                 "is_stepper": True,
