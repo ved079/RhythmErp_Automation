@@ -1,4 +1,4 @@
-﻿"""
+"""
 conftest.py - Season Common Settings (RhythmERP)
 """
 
@@ -75,8 +75,6 @@ def logged_in_driver(driver):
     login_page.wait_for_login_complete()
     log.info("RhythmERP login successful!")
     start_screenshot_broadcast(driver)
-    start_screenshot_broadcast(driver)
-    log.info("RhythmERP login successful!")
 
     yield driver
 
@@ -99,10 +97,10 @@ def season_page(logged_in_driver):
 def pytest_configure(config):
     """Register custom pytest markers for Season module."""
     config.addinivalue_line("markers", "smoke: Core CRUD + critical path tests (4 tests)")
-    config.addinivalue_line("markers", "sanity: All 18 tests â€” full module sanity check")
-    config.addinivalue_line("markers", "regression: All 18 tests â€” full regression suite")
-    config.addinivalue_line("markers", "bug: Known bugs â€” SQL injection, XSS, duplicate alert, special chars, no max length (5 tests)")
-    config.addinivalue_line("markers", "ui: UI interaction tests â€” alerts, view mode, search, history, cancel, boundary (12 tests)")
+    config.addinivalue_line("markers", "sanity: All 18 tests — full module sanity check")
+    config.addinivalue_line("markers", "regression: All 18 tests — full regression suite")
+    config.addinivalue_line("markers", "bug: Known bugs — SQL injection, XSS, duplicate alert, special chars, no max length (5 tests)")
+    config.addinivalue_line("markers", "ui: UI interaction tests — alerts, view mode, search, history, cancel, boundary (12 tests)")
 
 
 # ================================================================

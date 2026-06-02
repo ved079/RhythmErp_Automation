@@ -6,6 +6,13 @@ Extends BasePage with Season-specific locators and methods.
 
 Fields: Name (required), Description (optional), Status (checkbox).
 Pattern: List view + popup form (Add / Edit / View).
+
+Live-verified: 2026-06-02 against https://rhythmerp.algorhythms.in
+Key DOM findings:
+  - Action buttons use kebab menu (more_vert) -> menu items, NOT tblActnBtn
+  - Icon elements are <i class="material-icons">, NOT <mat-icon>
+  - Table columns: Actions(1), Name(2), Description(3), Status(4)
+  - History "No data" uses <img> + <p>, NOT div[style*='text-align']
 """
 
 import time
@@ -13,8 +20,13 @@ import time
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import StaleElementReferenceException
+from selenium.common.exceptions import (
+    StaleElementReferenceException,
+    ElementClickInterceptedException,
+    TimeoutException,
+)
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 
 from common.base_page import BasePage
 from common.logger import log
@@ -24,6 +36,15 @@ class SeasonPage(BasePage):
     """
     Page Object for Common Settings > Season screen.
     """
+
+    # ================================================================
+    # COLUMN INDICES — 1-based for XPath td[N]
+    # Live DOM: Actions=td[1], Name=td[2], Description=td[3], Status=td[4]
+    # ================================================================
+    COL_ACTIONS = 1
+    COL_NAME = 2
+    COL_DESCRIPTION = 3
+    COL_STATUS = 4
 
     # ================================================================
     # LOCATORS — Form Popup
@@ -60,57 +81,45 @@ class SeasonPage(BasePage):
     SWEET_ALERT_CANCEL_BTN = ("css", "button.swal2-cancel")
 
     # ================================================================
-    # LOCATORS — List Page
+    # LOCATORS — List Page (live-verified 2026-06-02)
     # ================================================================
 
-    # Add button (plus icon in page header)
-    ADD_BUTTON = ("css", "app-custom-header mat-icon")
+    # Add button — uses <i class="material-icons">add</i>, NOT <mat-icon>
+    ADD_BUTTON = ("xpath", "//button[i[text()='add']]")
+
+    # Refresh button — same pattern: <i class="material-icons">refresh</i>
+    REFRESH_BUTTON = ("xpath", "//button[i[text()='refresh']]")
 
     # Data table
     TABLE = ("css", "table#excel-table")
     TABLE_BODY = ("css", "table#excel-table tbody")
     TABLE_ROWS = ("css", "table#excel-table tbody tr")
 
-    # Action buttons per row (View=1st, Edit=2nd, History=3rd)
-    def _view_button(self, row_index):
-        return ("xpath", f"(//button[contains(@class,'tblActnBtn')])[{row_index * 3 + 1}]")
+    # Kebab menu (more_vert) per row — opens context menu with View/Edit/History
+    _row_kebab = lambda self, row_index: (
+        "xpath",
+        f"(//table[@id='excel-table']//tbody//tr)[{row_index + 1}]"
+        f"//button[contains(@class,'erp-row-trigger')]"
+    )
 
-    def _edit_button(self, row_index):
-        return ("xpath", f"(//button[contains(@class,'tblActnBtn')])[{row_index * 3 + 2}]")
+    # Menu items inside the CDK overlay after kebab click
+    _menu_view = ("xpath", "//div[contains(@class,'cdk-overlay')]//span[contains(text(),'View')]/ancestor::button")
+    _menu_edit = ("xpath", "//div[contains(@class,'cdk-overlay')]//span[contains(text(),'Edit')]/ancestor::button")
+    _menu_history = ("xpath", "//div[contains(@class,'cdk-overlay')]//span[contains(text(),'History')]/ancestor::button")
 
-    def _history_button(self, row_index):
-        return ("xpath", f"(//button[contains(@class,'tblActnBtn')])[{row_index * 3 + 3}]")
-
-    # Table cell text (row=0-based, col=0-based)
+    # Table cell text (row=0-based, col=1-based for XPath)
     def _table_cell(self, row, col):
-        return ("xpath", f"(//table[@id='excel-table']//tbody//tr)[{row + 1}]/td[{col + 1}]")
+        return ("xpath", f"(//table[@id='excel-table']//tbody//tr)[{row + 1}]/td[{col}]")
 
     # ================================================================
-    # LOCATORS - History Popup
+    # LOCATORS - History Popup (live-verified 2026-06-02)
     # ================================================================
-    #
-    # Confirmed from real DOM dump (agent-browser live inspection):
-    #   section.content
-    #     div.popup-overlay
-    #       div.popup-content
-    #         div.popup-header > h3.popup-title  "Season History"
-    #         div.popup-body
-    #           app-dynamic-history
-    #             div.mainBody > div.container-fluid > ...
-    #               div.scrollable-table-container
-    #                 table > tbody > tr ...          ← data rows (standard tr/td)
-    #                 OR
-    #                 div (No data available)          ← empty state
-    #         div.popup-footer
-    #           button (Cancel)
-    #
-    # KEY: data rows live under .popup-overlay .scrollable-table-container tr
-    #      NOT under app-dynamic-table (that wrapper does NOT exist in live DOM).
 
-    HISTORY_POPUP_TITLE   = ("xpath", "//h3[contains(text(),'History')]")
-    HISTORY_SEARCH_INPUT  = ("css", "div.popup-overlay input[aria-label='Search box']")
-    HISTORY_TABLE_ROWS    = ("css", "div.popup-overlay .scrollable-table-container tr")
-    HISTORY_NO_DATA       = ("css", "div.popup-overlay .scrollable-table-container div[style*='text-align']")
+    HISTORY_POPUP_TITLE = ("xpath", "//h3[contains(text(),'History')]")
+    HISTORY_TABLE_ROWS = ("css", "div.popup-overlay .scrollable-table-container tr")
+    # "No data" state: image + paragraphs (NOT div[style*='text-align'])
+    HISTORY_NO_DATA_IMG = ("css", "div.popup-overlay .scrollable-table-container img")
+    HISTORY_NO_DATA_TEXT = ("css", "div.popup-overlay .scrollable-table-container p")
 
     # Cancel button: mat-button with label span "Cancel" inside popup-footer
     HISTORY_CANCEL_BUTTON = (
@@ -119,6 +128,10 @@ class SeasonPage(BasePage):
         "//div[contains(@class,'popup-footer')]"
         "//span[contains(@class,'mdc-button__label') and normalize-space(text())='Cancel']/.."
     )
+
+    # History search — same pattern as main search: button opens input
+    HISTORY_SEARCH_BUTTON = ("css", "div.popup-overlay button[aria-label='Search']")
+    HISTORY_SEARCH_INPUT = ("css", "div.popup-overlay input#erpSearchInput")
 
     # ================================================================
     # NAVIGATION
@@ -147,12 +160,7 @@ class SeasonPage(BasePage):
         log.step(1, "Opening Add form")
         self._force_close_panels()
         self.wait_seconds(0.5)
-        try:
-            add_btn = ("xpath", "//button[mat-icon[text()='add']]")
-            self.click(add_btn)
-        except Exception:
-            log.warning("Primary add button not found, trying fallback...")
-            self.click(self.ADD_BUTTON)
+        self.click(self.ADD_BUTTON)
         self.wait_for_form_to_open()
         log.info("Add form opened")
 
@@ -344,7 +352,12 @@ class SeasonPage(BasePage):
             return 0
 
     def get_cell_text(self, row_index, col_index):
-        """Get text from a specific table cell (0-based indices)."""
+        """Get text from a specific table cell.
+
+        Args:
+            row_index: 0-based row index.
+            col_index: 1-based column index (XPath td[N]).
+        """
         cell_locator = self._table_cell(row_index, col_index)
         return self.get_text(cell_locator)
 
@@ -356,7 +369,7 @@ class SeasonPage(BasePage):
         """
         row_count = self.get_table_row_count()
         for i in range(row_count):
-            cell_text = self.get_cell_text(i, 3)
+            cell_text = self.get_cell_text(i, self.COL_NAME)
             if cell_text.strip().lower() == name.strip().lower():
                 log.info(f"Found '{name}' at row {i}")
                 return i
@@ -368,37 +381,67 @@ class SeasonPage(BasePage):
         return self.find_row_by_name(name) != -1
 
     def get_name_from_row(self, row_index):
-        """Get the Name value from a specific row (column 3)."""
-        return self.get_cell_text(row_index, 3)
+        """Get the Name value from a specific row."""
+        return self.get_cell_text(row_index, self.COL_NAME)
 
     def get_description_from_row(self, row_index):
-        """Get the Description value from a specific row (column 4)."""
-        return self.get_cell_text(row_index, 4)
+        """Get the Description value from a specific row."""
+        return self.get_cell_text(row_index, self.COL_DESCRIPTION)
 
     def get_status_from_row(self, row_index):
-        """Get the Status value from a specific row (column 5)."""
-        return self.get_cell_text(row_index, 5)
+        """Get the Status value from a specific row."""
+        return self.get_cell_text(row_index, self.COL_STATUS)
 
     # ================================================================
-    # TABLE — Action Buttons (Edit / View / History)
+    # TABLE — Row Actions via Kebab Menu (live-verified 2026-06-02)
     # ================================================================
+    # Live ERP uses a kebab menu (more_vert) per row that opens a
+    # CDK overlay with menu items: View, Edit, History.
+    # Old code used tblActnBtn class which NO LONGER EXISTS in the DOM.
+
+    def _open_kebab_menu(self, row_index):
+        """Open the kebab menu for a specific row and wait for menu items."""
+        log.info(f"Opening kebab menu on row {row_index}")
+        kebab_locator = self._row_kebab(row_index)
+        self.click(kebab_locator)
+        # Wait for the CDK overlay menu to appear
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, ".cdk-overlay-pane .mat-mdc-menu-item")
+                )
+            )
+            self.wait_seconds(0.3)  # let animation settle
+        except TimeoutException:
+            log.warning("Kebab menu overlay did not appear")
+
+    def _close_kebab_menu(self):
+        """Dismiss any open kebab menu overlay."""
+        try:
+            ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+            self.wait_seconds(0.3)
+        except Exception:
+            pass
 
     def click_view_button(self, row_index=0):
-        """Click the View button on a specific row."""
-        log.info(f"Clicking View button on row {row_index}")
-        self.click(self._view_button(row_index))
+        """Click the View button on a specific row via kebab menu."""
+        log.info(f"Clicking View on row {row_index}")
+        self._open_kebab_menu(row_index)
+        self.click(self._menu_view)
         self.wait_for_form_to_open()
 
     def click_edit_button(self, row_index=0):
-        """Click the Edit button on a specific row."""
-        log.info(f"Clicking Edit button on row {row_index}")
-        self.click(self._edit_button(row_index))
+        """Click the Edit button on a specific row via kebab menu."""
+        log.info(f"Clicking Edit on row {row_index}")
+        self._open_kebab_menu(row_index)
+        self.click(self._menu_edit)
         self.wait_for_form_to_open()
 
     def click_history_button(self, row_index=0):
-        """Click the History button on a specific row."""
-        log.info(f"Clicking History button on row {row_index}")
-        self.click(self._history_button(row_index))
+        """Click the History button on a specific row via kebab menu."""
+        log.info(f"Clicking History on row {row_index}")
+        self._open_kebab_menu(row_index)
+        self.click(self._menu_history)
         self.wait_for_history_popup()
 
     def close_history_popup(self):
@@ -416,8 +459,8 @@ class SeasonPage(BasePage):
     def wait_for_history_popup(self, timeout=10):
         """Wait for History popup to open and async content to settle.
 
-        Waits for EITHER a table row OR the 'No data' div to appear —
-        both confirm the async load completed.
+        Waits for EITHER a table row OR the 'No data' indicators (img or p)
+        to appear — all confirm the async load completed.
         """
         try:
             self.wait_for_visible(self.HISTORY_POPUP_TITLE, timeout=timeout)
@@ -429,7 +472,10 @@ class SeasonPage(BasePage):
                             "div.popup-overlay .scrollable-table-container tr")) > 0
                         or
                         len(d.find_elements(By.CSS_SELECTOR,
-                            "div.popup-overlay .scrollable-table-container div[style*='text-align']")) > 0
+                            "div.popup-overlay .scrollable-table-container img")) > 0
+                        or
+                        len(d.find_elements(By.CSS_SELECTOR,
+                            "div.popup-overlay .scrollable-table-container p")) > 0
                     )
                 )
                 log.info("History popup content loaded")
@@ -445,11 +491,41 @@ class SeasonPage(BasePage):
         return self.get_text(self.HISTORY_POPUP_TITLE)
 
     def search_in_history(self, text):
-        """Search within the History popup table."""
+        """Search within the History popup table.
+
+        Uses the same JS-based search pattern as the main search to
+        avoid stale element issues with Angular animations.
+        """
         log.info(f"Searching in history for: {text}")
-        self.type_text(self.HISTORY_SEARCH_INPUT, text, clear_first=True)
-        self.press_enter(self.HISTORY_SEARCH_INPUT)
+
+        # Open search bar within history popup if not already open
+        self.driver.execute_script("""
+            var input = document.querySelector('div.popup-overlay #erpSearchInput');
+            if (!input) {
+                var btn = document.querySelector('div.popup-overlay button[aria-label="Search"]');
+                if (btn) btn.click();
+            }
+        """)
         self.wait_seconds(1)
+
+        # Use JS to type and search (avoids stale elements)
+        self.driver.execute_script("""
+            var input = document.querySelector('div.popup-overlay #erpSearchInput');
+            if (!input) input = document.querySelector('div.popup-overlay input[type="text"]');
+            if (input) {
+                var nativeSetter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value'
+                ).set;
+                nativeSetter.call(input, '');
+                input.dispatchEvent(new Event('input', {bubbles: true}));
+                nativeSetter.call(input, arguments[0]);
+                input.dispatchEvent(new Event('input', {bubbles: true}));
+                input.dispatchEvent(new KeyboardEvent('keydown', {
+                    key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true
+                }));
+            }
+        """, text)
+        self.wait_seconds(2)
 
     def get_history_row_count(self):
         """Get number of rows in the history table.
@@ -504,6 +580,7 @@ class SeasonPage(BasePage):
 
         The Cancel button in this popup is a mat-button (no type attribute).
         We locate it via the mdc-button__label span text inside popup-footer.
+        Falls back to Escape key if the button is not interactable.
         """
         log.info("Closing History popup via Cancel button")
         try:
@@ -511,23 +588,14 @@ class SeasonPage(BasePage):
             self.wait_seconds(0.5)
         except Exception:
             log.warning("Cancel button not found in History popup, trying Escape")
-            from selenium.webdriver.common.keys import Keys
-            from selenium.webdriver.common.action_chains import ActionChains
             ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
 
     def _ensure_record_has_history(self):
-        """
-        Create a record, edit it once, and return its final name.
+        """Create a record, edit it once, and return its final name.
 
-        WHY THIS IS NEEDED (T12 / T13):
         The app only logs history rows on UPDATE events — a brand-new record
-        shows "No data available." in the history popup. Tests T12 and T13
-        must call this method to get a row to click History on that will
-        actually have history data.
-
-        Call pattern in tests:
-            name = season_page._ensure_record_has_history()
-            # search for `name`, find its row, then click History
+        shows "No data available." in the history popup. Tests that need
+        history data must call this method first.
         """
         from pages.common_settings.modules.season.data.season_data import valid_season_with_description
         data = valid_season_with_description()
@@ -568,8 +636,7 @@ class SeasonPage(BasePage):
         """Click the Refresh button to reload the table data."""
         log.info("Refreshing Season table...")
         try:
-            refresh_btn = ("xpath", "//button[mat-icon[text()='refresh']]")
-            self.click(refresh_btn)
+            self.click(self.REFRESH_BUTTON)
             self.wait_seconds(2)
             log.info("Table refreshed")
         except Exception:
@@ -582,23 +649,10 @@ class SeasonPage(BasePage):
     # ================================================================
 
     SEARCH_BUTTON = ("css", "button[aria-label='Search']")
-    SEARCH_INPUT  = ("css", "input#erpSearchInput")
+    SEARCH_INPUT = ("css", "input#erpSearchInput")
 
     def _open_search_bar(self):
-        """
-        Open the search toggle bar and wait for the input to be DOM-stable.
-
-        ROOT CAUSE of T10/T11 stale element:
-        Angular destroys and recreates `input#erpSearchInput` during the
-        open animation. The old code did:
-          1. click(SEARCH_BUTTON)         ← succeeds
-          2. type_text(SEARCH_INPUT)      ← grabs element mid-animation
-                                            Angular replaces it → StaleElementReferenceException
-
-        Fix: after clicking, poll with a custom lambda that catches
-        StaleElementReferenceException and only returns the element once it
-        survives two consecutive attribute reads without going stale.
-        """
+        """Open the search toggle bar and wait for the input to be DOM-stable."""
         if self.is_displayed(self.SEARCH_INPUT, timeout=1):
             return  # bar already open
 
@@ -612,7 +666,6 @@ class SeasonPage(BasePage):
                 el = driver.find_element(by, value)
                 if not el.is_displayed():
                     return False
-                # If Angular replaced the node this raises StaleElementReferenceException
                 _ = el.get_attribute("id")
                 return el
             except StaleElementReferenceException:
@@ -628,6 +681,18 @@ class SeasonPage(BasePage):
             log.warning("Search input did not stabilise within timeout")
 
     def search_record(self, text, exact=False):
+        """Search for a record in the Season table.
+
+        Uses JS-based search to avoid stale element issues.
+        The Name column is td[2] (1-based XPath).
+
+        Args:
+            text: Search query.
+            exact: If True, scans all rows for exact name match.
+
+        Returns:
+            bool: True if matching record(s) found.
+        """
         try:
             log.info(f"Searching for record: {text} (exact={exact})")
 
@@ -652,15 +717,12 @@ class SeasonPage(BasePage):
                     window.HTMLInputElement.prototype, 'value'
                 ).set;
 
-                // Clear existing text
                 nativeSetter.call(input, '');
                 input.dispatchEvent(new Event('input', {bubbles: true}));
 
-                // Type new search text
                 nativeSetter.call(input, arguments[0]);
                 input.dispatchEvent(new Event('input', {bubbles: true}));
 
-                // Press Enter to search
                 input.dispatchEvent(new KeyboardEvent('keydown', {
                     key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true
                 }));
@@ -668,7 +730,7 @@ class SeasonPage(BasePage):
 
             self.wait_seconds(2)
 
-            # Step 4: Check results
+            # Step 4: Check results — Name is column 2 (1-based XPath = td[2])
             row_count = self.get_table_row_count()
 
             if row_count == 0:
@@ -676,11 +738,10 @@ class SeasonPage(BasePage):
                 return False
 
             if not exact:
-                # Default: any results = True (ERP does contains search)
                 first_name = ""
                 try:
                     first_name = self.get_text(
-                        ("xpath", "(//table[@id='excel-table']//tbody//tr)[1]/td[4]")
+                        ("xpath", f"(//table[@id='excel-table']//tbody//tr)[1]/td[{self.COL_NAME}]")
                     )
                 except Exception:
                     first_name = "(could not read)"
@@ -692,7 +753,7 @@ class SeasonPage(BasePage):
             for i in range(row_count):
                 try:
                     row_name = self.get_text(
-                        ("xpath", f"(//table[@id='excel-table']//tbody//tr)[{i + 1}]/td[4]")
+                        ("xpath", f"(//table[@id='excel-table']//tbody//tr)[{i + 1}]/td[{self.COL_NAME}]")
                     ).strip().lower()
                     if row_name == text_lower:
                         log.info(f"Exact match found at row {i}")
