@@ -243,3 +243,174 @@ def generate_code_with_mixed_case():
 def generate_single_char_code():
     """Generate a single-character code (minimum meaningful input)."""
     return random.choice(string.ascii_uppercase)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  API Batch Create — Data Pool + Payload Builder
+# ═══════════════════════════════════════════════════════════════════════════════
+# Screen structure (discovered 2026-06-02):
+#   Item Group: code* (text, required, unique — the group code),
+#               description* (text, required — the group description)
+#   FLAT screen — no steppers, no children, no FK dropdowns.
+#
+# Note: The UI label "Item Group" maps to the API field "code",
+#       and "Description" maps to "description".
+#
+# Existing entries in ERP (as of 2026-06-02, 26 total):
+#   IG001=Agriculture Products, AGRGRP01=FMCG Products, ELEGRP01=Electrical Equipment,
+#   PKGGRP01=Hardware Materials, TOOLGRP01=Office Stationery,
+#   GRN001=Food Grains Group, PULSE002=Pulses & Legumes Group,
+#   SPICE003=Spices & Condiments Group, OILS004=Oilseeds Group,
+#   DAIRY005=Dairy Products Group, TEXTL006=Textile Raw Materials Group,
+#   RICE007=Rice Varieties Group, WHEAT008=Wheat Products Group,
+#   MILL009=Millets Group, FRESH010=Fresh Produce Group,
+#   PACK011=Packaged Foods Group, CONST012=Construction Materials Group,
+#   CHEM013=Chemical Products Group, FERT014=Fertilizers Group,
+#   PEST015=Pesticides Group, TRAN016=Transport Services Group,
+#   STOR017=Storage Services Group, QC018=Quality Control Group,
+#   LOGS019=Logistics Services Group, PROC020=Processing Services Group
+#
+# This data pool provides additional group entries NOT already in the system.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Each entry is a tuple: (code, description)
+
+ITEM_GROUP_API_DATA = [
+    # ── Commodity Groups ────────────────────────────────────────────────
+    ("BEVG021", "Beverages Group"),
+    ("SUGR022", "Sugar & Sweeteners Group"),
+    ("ANFD023", "Animal Feed Group"),
+    ("FRST024", "Forestry Products Group"),
+    ("MRNP025", "Marine Products Group"),
+    ("PHRM026", "Pharmaceuticals Group"),
+    ("PKGM027", "Packaging Materials Group"),
+    ("AUTO028", "Automotive Parts Group"),
+    ("SEED029", "Seeds & Planting Material Group"),
+    ("FIBR030", "Fiber & Textile Products Group"),
+
+    # ── Sub-Commodity Groups ────────────────────────────────────────────
+    ("CRL031", "Coarse Cereals Group"),
+    ("PDDY032", "Paddy Rice Group"),
+    ("GRAM033", "Gram Varieties Group"),
+    ("LENT034", "Lentil Varieties Group"),
+    ("WSPC035", "Whole Spices Group"),
+    ("GSPC036", "Ground Spices Group"),
+    ("DRFR037", "Dry Fruits & Nuts Group"),
+    ("EDOL038", "Edible Oils Group"),
+    ("OLCA039", "Oilseed Cakes Group"),
+    ("RSUG040", "Raw Sugar Group"),
+
+    # ── Processing & Service Groups ─────────────────────────────────────
+    ("JAGG041", "Jaggery Products Group"),
+    ("MLKP042", "Milk Products Group"),
+    ("BTRG043", "Butter & Ghee Group"),
+    ("TEAP044", "Tea Products Group"),
+    ("COFF045", "Coffee Products Group"),
+    ("CTFD046", "Cattle Feed Group"),
+    ("PTFD047", "Poultry Feed Group"),
+    ("WVSK048", "Woven Sacks Group"),
+    ("JTBF049", "Jute Bags Group"),
+    ("FWFS050", "Freshwater Fish Group"),
+
+    # ── Industrial Groups ───────────────────────────────────────────────
+    ("SHRP051", "Shrimp & Prawns Group"),
+    ("CTFN052", "Cotton Fiber Group"),
+    ("JTFB053", "Jute Fiber Group"),
+    ("TMBR054", "Timber Products Group"),
+    ("BMBP055", "Bamboo Products Group"),
+    ("CMNT056", "Cement Products Group"),
+    ("STEL057", "Steel Products Group"),
+    ("AGCH058", "Agrochemicals Group"),
+    ("IDCH059", "Industrial Chemicals Group"),
+    ("ORGF060", "Organic Fertilizers Group"),
+
+    # ── Specialized Groups ──────────────────────────────────────────────
+    ("CHMF061", "Chemical Fertilizers Group"),
+    ("OTCM062", "OTC Medicines Group"),
+    ("PHRM063", "Pharma Raw Materials Group"),
+    ("BLKP064", "Black Pepper Whole Group"),
+    ("CRDM065", "Cardamom Whole Group"),
+    ("MSTO066", "Mustard Oil Group"),
+    ("SYBO067", "Soybean Oil Group"),
+    ("GNTO068", "Groundnut Oil Group"),
+    ("SNFO069", "Sunflower Oil Group"),
+    ("CTCT070", "CTC Tea Group"),
+
+    # ── Export & Premium Groups ─────────────────────────────────────────
+    ("ORTX071", "Orthodox Tea Group"),
+    ("GRNT072", "Green Tea Group"),
+    ("ARBC073", "Arabica Coffee Group"),
+    ("RBST074", "Robusta Coffee Group"),
+    ("PPWB075", "PP Woven Bags Group"),
+    ("HDPE076", "HDPE Bags Group"),
+    ("VRMC077", "Vermicompost Group"),
+    ("BIFR078", "Bio Fertilizers Group"),
+    ("PLJG079", "Palm Jaggery Group"),
+    ("SCJG080", "Sugarcane Jaggery Group"),
+
+    # ── Additional Groups ───────────────────────────────────────────────
+    ("RCBL081", "Raw Cotton Bales Group"),
+    ("CTSD082", "Cotton Seed Group"),
+    ("ROHU083", "Rohu Fish Group"),
+    ("KTLA084", "Katla Fish Group"),
+    ("OPCM085", "OPC Cement Group"),
+    ("PPCM086", "PPC Cement Group"),
+    ("UREA087", "Urea Fertilizer Group"),
+    ("DAPF088", "DAP Fertilizer Group"),
+    ("NPKB089", "NPK Blends Group"),
+    ("DCPL090", "Dairy Cattle Pellets Group"),
+    ("CSFD091", "Calf Starter Feed Group"),
+    ("BRFD092", "Broiler Feed Group"),
+    ("LYFD093", "Layer Feed Group"),
+    ("MEDI094", "Medical Equipment Group"),
+    ("SFTY095", "Safety Equipment Group"),
+]
+
+
+def build_item_group_api_payload(code: str, description: str = "") -> dict:
+    """
+    Build a single API payload for Item Group.
+
+    Args:
+        code: Group code (e.g., "BEVG021") — maps to the "Item Group" UI field
+        description: Group description text
+
+    Returns:
+        dict: API payload with attribute_name set to "Item Group"
+    """
+    return {
+        "id": "",
+        "attribute_name": "Item Group",
+        "code": code,
+        "description": description,
+    }
+
+
+def generate_item_group_payloads(count: int = 10, offset: int = 0) -> list:
+    """
+    Generate N API payloads for Item Group.
+
+    Args:
+        count: Number of payloads to generate
+        offset: Start index in the data pool (to skip already-used entries)
+
+    Returns:
+        list[dict]: List of API payloads ready for batch_create
+    """
+    pool = ITEM_GROUP_API_DATA
+    payloads = []
+
+    for i in range(count):
+        idx = (offset + i) % len(pool)
+        code, description = pool[idx]
+
+        # Handle potential duplicate codes when wrapping around
+        if (offset + i) >= len(pool):
+            wrap_count = (offset + i) // len(pool) + 1
+            code = f"{code}-B{wrap_count}"
+
+        payloads.append(
+            build_item_group_api_payload(code=code, description=description)
+        )
+
+    return payloads
