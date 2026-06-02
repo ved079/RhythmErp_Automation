@@ -24,7 +24,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from common.erp_api_client import ErpApiClient
 from common.fk_resolver import FkResolver
-from pages.common_settings.modules.item_attribute.data.item_attribute_data import (
+from pages.commodity_settings.modules.item_attribute.data.item_attribute_data import (
     generate_item_attribute_payloads,
     ATTRIBUTE_POOLS,
 )
