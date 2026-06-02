@@ -304,16 +304,66 @@ class SeasonPage(BasePage):
             alert_title = self.get_alert_title()
             alert_msg = self.get_alert_message()
             log.info(f"Validation alert detected after submit — Title: '{alert_title}', Msg: '{alert_msg}'")
-            # Debug: log current field values to diagnose what Angular sees
-            field_values = self.driver.execute_script("""
-                var name = document.querySelector("input[name='Name']");
-                var desc = document.querySelector("input[name='Description']");
-                return {
-                    name: name ? name.value : 'NOT_FOUND',
-                    desc: desc ? desc.value : 'NOT_FOUND'
-                };
+            # Debug: deep Angular state inspection
+            debug_info = self.driver.execute_script("""
+                var result = {};
+                // DOM values
+                var nameEl = document.querySelector("input[name='Name']");
+                var descEl = document.querySelector("input[name='Description']");
+                result.dom_name = nameEl ? nameEl.value : 'NOT_FOUND';
+                result.dom_desc = descEl ? descEl.value : 'NOT_FOUND';
+
+                // mat-error elements
+                var errors = document.querySelectorAll('mat-error, .mat-mdc-form-field-error');
+                result.mat_errors = [];
+                for (var i = 0; i < errors.length; i++) {
+                    result.mat_errors.push(errors[i].textContent.trim());
+                }
+
+                // ng-invalid classes
+                var invalids = document.querySelectorAll('.ng-invalid, .ng-touched');
+                result.ng_invalid_count = invalids.length;
+                result.ng_invalid_details = [];
+                for (var i = 0; i < invalids.length; i++) {
+                    var el = invalids[i];
+                    var tag = el.tagName + (el.getAttribute('name') ? '[name=' + el.getAttribute('name') + ']' : '');
+                    var classes = el.className;
+                    if (typeof classes === 'string' && (classes.indexOf('ng-invalid') !== -1 || classes.indexOf('ng-touched') !== -1)) {
+                        result.ng_invalid_details.push(tag + ' -> ' + classes.substring(0, 200));
+                    }
+                }
+
+                // Angular FormControl state (if accessible)
+                try {
+                    var formEl = document.querySelector('form');
+                    if (formEl) {
+                        var ngControl = formEl.__ngContext__;
+                        result.has_ng_context = !!ngControl;
+                    }
+                } catch(e) { result.ng_context_error = e.message; }
+
+                // Check all form inputs
+                var allInputs = document.querySelectorAll('.edit_pop_up input, .edit_pop_up textarea, .edit_pop_up select');
+                result.all_inputs = [];
+                for (var i = 0; i < allInputs.length; i++) {
+                    var inp = allInputs[i];
+                    result.all_inputs.push({
+                        name: inp.getAttribute('name') || inp.getAttribute('formcontrolname') || 'unnamed',
+                        type: inp.type || inp.tagName,
+                        value: inp.value,
+                        required: inp.required,
+                        disabled: inp.disabled,
+                        readOnly: inp.readOnly,
+                        classes: (inp.className || '').substring(0, 150)
+                    });
+                }
+
+                return result;
             """)
-            log.info(f"DEBUG field values at validation: Name='{field_values.get('name')}', Desc='{field_values.get('desc')}'")
+            log.info(f"DEBUG DOM values: Name='{debug_info.get('dom_name')}', Desc='{debug_info.get('dom_desc')}'")
+            log.info(f"DEBUG mat_errors: {debug_info.get('mat_errors')}")
+            log.info(f"DEBUG ng_invalid: count={debug_info.get('ng_invalid_count')}, details={debug_info.get('ng_invalid_details')}")
+            log.info(f"DEBUG all_inputs: {debug_info.get('all_inputs')}")
             return "validation"
 
         # Wait for form to close (success path) — poll via JS
