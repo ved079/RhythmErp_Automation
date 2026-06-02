@@ -482,8 +482,13 @@ QUALITY_PARAM_ID_MAP = {
 # Items already used in CQP (item_ref_id values with to_date=2099-12-30T18:30:00Z)
 # These items CANNOT be reused with the same to_date; they can be reused
 # with a different to_date if needed.
-CQP_USED_ITEM_IDS = {85, 86, 88, 89, 90, 91, 92, 93, 95, 96, 97, 98,
-                     99, 100, 104, 105, 106, 107, 108, 129}
+# Updated 2026-06-02: Added 94, 101, 102, 103, 130 (discovered via API
+# duplicate errors).  Also added 131-135 (created by batch run on 2026-06-02).
+# NOTE: The batch_create.py script now also fetches used items dynamically
+# from the API at runtime — this static list is a safety net / baseline.
+CQP_USED_ITEM_IDS = {85, 86, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98,
+                     99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 129,
+                     130, 131, 132, 133, 134, 135}
 
 
 # ── Data Pool ─────────────────────────────────────────────────────────
@@ -731,16 +736,22 @@ def build_cqp_api_payload(
     }
 
 
-def generate_cqp_payloads(count: int = 10, offset: int = 0) -> list:
+def generate_cqp_payloads(count: int = 10, offset: int = 0,
+                            skip_item_ids: set = None) -> list:
     """
     Generate N API payloads for Commodity Quality Parameter.
 
     Resolves FK dropdown names to live ERP IDs using the ID maps.
     Validates that all FK fields resolve before building payloads.
+    Skips items whose item_ref_id is in skip_item_ids (to avoid
+    duplicate (item_ref_id, to_date) constraint violations).
 
     Args:
         count: Number of payloads to generate
         offset: Start index in the data pool (to skip already-used entries)
+        skip_item_ids: Set of item_ref_id integers to skip (merged with
+                       CQP_USED_ITEM_IDS).  Typically populated by
+                       fetching existing CQP entries from the API at runtime.
 
     Returns:
         list[dict]: List of API payloads ready for batch_create
@@ -748,9 +759,23 @@ def generate_cqp_payloads(count: int = 10, offset: int = 0) -> list:
     pool = COMMODITY_QUALITY_PARAMETER_API_DATA
     payloads = []
 
-    for i in range(count):
-        idx = (offset + i) % len(pool)
+    # Merge static + dynamic skip sets
+    used_items = set(CQP_USED_ITEM_IDS)
+    if skip_item_ids:
+        used_items.update(skip_item_ids)
+
+    if used_items:
+        print(f"  [DEDUP] Skipping {len(used_items)} already-used item IDs: "
+              f"{sorted(used_items)}")
+
+    i = 0
+    scan_idx = offset
+    skipped = 0
+
+    while len(payloads) < count and scan_idx < (offset + len(pool) * 3):
+        idx = scan_idx % len(pool)
         entry = pool[idx]
+        scan_idx += 1
 
         item_name, txn_type_name, rev_status, qp_tuples = entry
 
@@ -763,6 +788,11 @@ def generate_cqp_payloads(count: int = 10, offset: int = 0) -> list:
             continue
         if txn_type_id is None:
             print(f"  WARNING: Transaction Type '{txn_type_name}' not found in TRANSACTION_TYPE_ID_MAP, skipping")
+            continue
+
+        # ── Skip items already used in CQP with default to_date ─────────
+        if item_id in used_items:
+            skipped += 1
             continue
 
         # Build detail rows from quality parameter tuples
@@ -783,8 +813,8 @@ def generate_cqp_payloads(count: int = 10, offset: int = 0) -> list:
         # Handle potential duplicate (item_ref_id, to_date) combos when wrapping
         # Use a different to_date for wrapped entries
         to_date = "2099-12-30T18:30:00Z"
-        if (offset + i) >= len(pool):
-            wrap_count = (offset + i) // len(pool) + 1
+        if scan_idx > (offset + len(pool)):
+            wrap_count = (scan_idx - offset) // len(pool) + 1
             # Shift the to_date by 1 year per wrap to avoid unique constraint violation
             year = 2098 + wrap_count
             to_date = f"{year}-12-30T18:30:00Z"
@@ -799,5 +829,13 @@ def generate_cqp_payloads(count: int = 10, offset: int = 0) -> list:
                 revision_status=rev_status,
             )
         )
+        i += 1
+
+    if skipped:
+        print(f"  [DEDUP] Skipped {skipped} data pool entries with used item IDs")
+
+    if len(payloads) < count:
+        print(f"  WARNING: Could only generate {len(payloads)} payloads "
+              f"(requested {count}). Data pool exhausted — add more items.")
 
     return payloads
