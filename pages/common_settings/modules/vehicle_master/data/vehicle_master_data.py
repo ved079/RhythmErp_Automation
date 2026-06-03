@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Vehicle Master — Data pool + API payload builder.
+Vehicle Master — Data pool + API payload builder + test data generators.
 
 Screen: "Vehicle Master" (flat, 2 FK dropdowns: vehicle_type_id, fuel_type_ref_id)
 Fields: name, vehicle_price, vehicle_type_id, fuel_type_ref_id, description
@@ -11,6 +11,8 @@ Discovered FK IDs (2026-06-02):
 """
 
 import random
+import string
+from datetime import datetime
 
 # ── Real FK IDs from live ERP ────────────────────────────────────────
 VEHICLE_TYPE_IDS = {
@@ -53,6 +55,142 @@ VEHICLES = [
     {"name": "Tata Yodha Pickup",      "price": 950000,  "vehicle_type": "Pickup",       "fuel_type": "Diesel",   "desc": "Rugged pickup for rural and semi-urban use"},
     {"name": "Ashok Leyland Bada Dost","price": 800000,  "vehicle_type": "Pickup",       "fuel_type": "Diesel",   "desc": "Light commercial vehicle for multi-use"},
 ]
+
+
+# ================================================================
+# TEST DATA GENERATORS — used by test_vehicle_master_validation.py
+# ================================================================
+
+def _timestamp_suffix():
+    """Return a compact timestamp for uniqueness."""
+    return datetime.now().strftime("%H%M%S")
+
+
+def _random_alpha(length=6):
+    """Return a random alphabetic string."""
+    return "".join(random.choices(string.ascii_uppercase, k=length))
+
+
+def generate_vehicle_name(prefix="VM"):
+    """Generate a unique vehicle name with prefix + random chars + timestamp."""
+    return f"{prefix}_{_random_alpha(4)}_{_timestamp_suffix()}"
+
+
+def generate_vehicle_price():
+    """Generate a random vehicle price (integer, 100000–5000000)."""
+    return str(random.randint(100000, 5000000))
+
+
+def generate_description(prefix="Test"):
+    """Generate a unique description string."""
+    return f"{prefix} Vehicle Description {_timestamp_suffix()}"
+
+
+def generate_valid_vehicle_data(prefix="VM"):
+    """Generate a complete valid vehicle data dict for Create form.
+    
+    Returns dict with keys: name, price, vehicle_type, fuel_type, description
+    """
+    vehicle = random.choice(VEHICLES)
+    ts = _timestamp_suffix()
+    return {
+        "name": f"{prefix}_{vehicle['name']}_{ts}",
+        "price": str(vehicle["price"]),
+        "vehicle_type": vehicle["vehicle_type"],
+        "fuel_type": vehicle["fuel_type"],
+        "description": f"{prefix} {vehicle['desc']} {ts}",
+    }
+
+
+def generate_valid_edit_data():
+    """Generate data suitable for editing a vehicle (description change)."""
+    return {
+        "description": f"Edited Description {_timestamp_suffix()}",
+    }
+
+
+def generate_empty_data():
+    """Return a dict with all empty/blank values."""
+    return {
+        "name": "",
+        "price": "",
+        "vehicle_type": "",
+        "fuel_type": "",
+        "description": "",
+    }
+
+
+def generate_name_only_data(prefix="NameOnly"):
+    """Return data with only the name filled in."""
+    return {
+        "name": generate_vehicle_name(prefix),
+        "price": "",
+        "vehicle_type": "",
+        "fuel_type": "",
+        "description": "",
+    }
+
+
+def generate_spaces_only(count=5):
+    """Return a string of only spaces."""
+    return " " * count
+
+
+def generate_zero_price():
+    """Return '0' as a price string."""
+    return "0"
+
+
+def generate_negative_price():
+    """Return a negative price string."""
+    return f"-{random.randint(100, 9999)}"
+
+
+def generate_alpha_price():
+    """Return alphabetic characters as price (invalid)."""
+    return f"abc{_random_alpha(3)}"
+
+
+def generate_decimal_price():
+    """Return a decimal price string (e.g., '1500.50')."""
+    return f"{random.randint(100, 9999)}.{random.randint(10, 99)}"
+
+
+def generate_price_with_special_chars():
+    """Return price with special characters (invalid)."""
+    return "500$%@"
+
+
+def generate_price_with_spaces():
+    """Return price with leading/trailing spaces."""
+    return f"  {random.randint(100, 9999)}  "
+
+
+def generate_special_char_name():
+    """Return a name with special characters."""
+    return f"Test!@#$%^&*_{_timestamp_suffix()}"
+
+
+def generate_string_255():
+    """Return a string of exactly 255 characters."""
+    return "A" * 255
+
+
+def generate_string_256():
+    """Return a string of exactly 256 characters."""
+    return "A" * 256
+
+
+def generate_duplicate_name_data(existing_name):
+    """Return valid data dict that uses an existing vehicle name (for dup test)."""
+    vehicle = random.choice(VEHICLES)
+    return {
+        "name": existing_name,
+        "price": str(vehicle["price"]),
+        "vehicle_type": vehicle["vehicle_type"],
+        "fuel_type": vehicle["fuel_type"],
+        "description": f"Dup test {_timestamp_suffix()}",
+    }
 
 
 # ── Payload builder ──────────────────────────────────────────────────

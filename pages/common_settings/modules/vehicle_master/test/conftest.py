@@ -14,7 +14,7 @@ from common.logger import log
 from common.browser_utils import get_driver
 from pages.login_screens.Login_Screens_.login_page import LoginPage
 from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
-from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
+from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHYTHMERP_FACILITY
 from pages.common_settings.cs_report_generator import CSReportStore, generate_cs_report
 
 
@@ -35,6 +35,46 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "ui: UI/popup/dropdown/visual behaviour tests (17 tests)"
     )
+
+
+# ================================================================
+# LOGIN HELPERS
+# ================================================================
+
+def _dismiss_tenant_dropdown(driver, login_page):
+    """Dismiss the tenant/facility dropdown that auto-opens after entering email.
+    This dropdown intercepts the Login button click, causing login to fail.
+    Strategy: press Escape to close it, then wait briefly.
+    """
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.common.by import By
+    try:
+        # Check if a mat-option or cdk-overlay is open
+        overlays = driver.find_elements(
+            By.CSS_SELECTOR,
+            "div.cdk-overlay-pane mat-option, "
+            "div.cdk-overlay-pane .mat-mdc-option"
+        )
+        if overlays:
+            log.info("Tenant dropdown detected, dismissing...")
+            # Press Escape to close it
+            driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+            login_page.wait_seconds(0.5)
+            # Also remove lingering overlays via JS
+            driver.execute_script("""
+                document.querySelectorAll('.cdk-overlay-backdrop').forEach(
+                    function(el) { el.remove(); }
+                );
+                document.querySelectorAll('.cdk-overlay-pane').forEach(
+                    function(el) {
+                        if (!el.querySelector('mat-dialog-container')) el.remove();
+                    }
+                );
+            """)
+            login_page.wait_seconds(0.3)
+            log.info("Tenant dropdown dismissed")
+    except Exception as e:
+        log.info(f"No tenant dropdown to dismiss: {e}")
 
 
 # ================================================================
@@ -80,6 +120,8 @@ def logged_in_driver(driver):
     # log.step(3, "Selecting facility (blank - first option)")
     # login_page.select_facility_by_index(index=0)
 
+    # Dismiss tenant dropdown that auto-opens after entering email
+    _dismiss_tenant_dropdown(driver, login_page)
     login_page.wait_seconds(1)
 
     log.step(4, "Clicking Login button")
@@ -87,10 +129,21 @@ def logged_in_driver(driver):
     login_page.wait_seconds(3)
 
     login_page.wait_for_login_complete()
+
+    # Verify login actually succeeded
+    if "login" in driver.current_url.lower():
+        log.error("Login did not complete — still on login page. Retrying...")
+        # Retry: dismiss dropdown and click login again
+        _dismiss_tenant_dropdown(driver, login_page)
+        login_page.click_login()
+        login_page.wait_seconds(3)
+        login_page.wait_for_login_complete()
+
+    if "login" in driver.current_url.lower():
+        raise RuntimeError("RhythmERP login failed — still on login page after retry. Check credentials in .env")
+
     log.info("RhythmERP login successful!")
     start_screenshot_broadcast(driver)
-    start_screenshot_broadcast(driver)
-    log.info("RhythmERP login successful!")
 
     yield driver
 
