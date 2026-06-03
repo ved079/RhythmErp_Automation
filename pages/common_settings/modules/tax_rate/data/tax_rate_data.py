@@ -183,3 +183,79 @@ def generate_tax_rate_api_payloads(count=10, fk_ids=None):
         payloads.append(payload)
 
     return payloads
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+# Tax Rate is the ONLY Common Settings screen with a stepper structure.
+# Root fields + 1 stepper child "Define Tax Rate Details" with detail lines.
+
+FIELD_VALIDATION_RULES = {
+    # Root fields
+    "tax_rate_name": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Tax rate name (e.g. 'GST 18%').",
+    },
+    "tax_type_ref_id": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(TAX_TYPE_IDS),
+        "note": "FK to Tax Type. Currently only GST=93.",
+    },
+    "tax_authority_ref_id": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(TAX_AUTHORITY_IDS),
+        "note": "FK to Tax Authority. 20 Indian GST authorities.",
+    },
+    "from_date": {
+        "type": "date",
+        "required": True,
+        "note": "Start date in ISO format (YYYY-MM-DD).",
+    },
+    "to_date": {
+        "type": "date",
+        "required": True,
+        "note": "End date in ISO format (YYYY-MM-DD).",
+    },
+    "revision_status": {
+        "type": "character",
+        "required": True,
+        "note": "Enum: 'Active' or other status values.",
+    },
+
+    # Stepper child: "Define Tax Rate Details" detail lines
+    "hsn_sac_number": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(HSN_SAC_NUMBER_IDS),
+        "note": "FK to HSN/SAC Number. In stepper detail lines.",
+    },
+    "tax_rate": {
+        "type": "number",
+        "required": True,
+        "note": "Tax rate percentage (decimal). In stepper detail lines.",
+    },
+}
+
+TAX_TYPE_NAMES = dict(TAX_TYPE_IDS)
+TAX_AUTHORITY_NAMES = dict(TAX_AUTHORITY_IDS)
+HSN_SAC_NUMBER_NAMES = dict(HSN_SAC_NUMBER_IDS)
+
+DEFAULT_TAX_RATE_FK_IDS = {
+    "tax_type_ref_id": TAX_TYPE_IDS,
+    "tax_authority_ref_id": TAX_AUTHORITY_IDS,
+    "hsn_sac_number": HSN_SAC_NUMBER_IDS,
+}
+
+REVISION_STATUS_OPTIONS = ["Active"]
+
+STEPPER_NAME = "Define Tax Rate Details"
+
+
+def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None) -> list:
+    """Generate a batch of unique Tax Rate API payloads."""
+    return generate_tax_rate_api_payloads(count=count, fk_ids=dropdown_ids)
