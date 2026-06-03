@@ -734,40 +734,76 @@ class KnownBugs:
 # generate_supplier_api_payload() picks randomly from these
 # so that each entry looks different.
 
-OWNERSHIP_STATUS_IDS = [7, 1262, 1263, 1853]
+OWNERSHIP_STATUS_IDS = [7, 8, 9, 1262, 1263, 1853]
 #   7 = Private Limited Company
+#   8 = Public Limited Company
+#   9 = Limited Liability Partnership
 #   1262 = Partnership
 #   1263 = Proprietorship
 #   1853 = Individual
+
+OWNERSHIP_STATUS_NAMES = {
+    7: "Private Limited Company",
+    8: "Public Limited Company",
+    9: "Limited Liability Partnership",
+    1262: "Partnership",
+    1263: "Proprietorship",
+    1853: "Individual",
+}
 
 PO_TYPE_IDS = [25, 24]
 #   25 = Domestic
 #   24 = Import
 
+PO_TYPE_NAMES = {25: "Domestic", 24: "Import"}
+
 ADDRESS_TYPE_IDS = [43, 42]
 #   43 = Shipping
 #   42 = Billing
 
+ADDRESS_TYPE_NAMES = {43: "Shipping", 42: "Billing"}
+
 ACCOUNT_TYPE_IDS = [1849, 1850]
 #   1849 = Current
 #   1850 = Saving
+
+ACCOUNT_TYPE_NAMES = {1849: "Current", 1850: "Saving"}
 
 PAYMENT_TERMS_IDS = [26, 131, 549, 550, 551]
 #   26 = 30 Days, 131 = Immediate
 #   549, 550, 551 = verified via live ERP (same as Customer screen)
 #   OLD IDs [27-34] were WRONG — they belonged to a different dropdown
 
+PAYMENT_TERMS_NAMES = {
+    26: "30 Days",
+    131: "Immediate",
+    549: "7 Days",
+    550: "14 Days",
+    551: "21 Days",
+}
+
 DELIVERY_TERMS_IDS = [129, 130]
 #   129 = Delivery
 #   130 = Spot
+
+DELIVERY_TERMS_NAMES = {129: "Delivery", 130: "Spot"}
 
 MODE_OF_DELIVERY_IDS = [30, 31, 32, 33, 34]
 #   30 = Truck, 31 = Railway, 32 = Sea,
 #   33 = Courier, 34 = Air
 
-BANK_DOC_IDS = [1883, 1884]
+MODE_OF_DELIVERY_NAMES = {30: "Truck", 31: "Railway", 32: "Sea", 33: "Courier", 34: "Air"}
+
+BANK_DOC_IDS = [36, 35, 1883]
+#   36 = Cancelled Cheque
+#   35 = Passbook
 #   1883 = Bank Statement
-#   1884 = Cancelled Cheque
+
+BANK_DOC_NAMES = {
+    36: "Cancelled Cheque",
+    35: "Passbook",
+    1883: "Bank Statement",
+}
 
 # Fixed defaults (these never vary)
 DEFAULT_CURRENCY_REF_ID = 1   # INR
@@ -1301,3 +1337,64 @@ def generate_supplier_api_payloads(
             generate_supplier_api_payload(prefix, dropdown_ids)
         )
     return payloads
+
+
+# ──────────────────────────────────────────────
+# Field Validation Rules (verified against ERP schema 2026-06-03)
+# ──────────────────────────────────────────────
+# Maps each API field_key to its validation properties.
+# Used by schema tests to verify code matches live ERP.
+
+FIELD_VALIDATION_RULES = {
+    # Step 1 — Root-level fields
+    "party_ref_id": {"type": "dropdown", "required": False, "fk_options_count": 143},
+    "ownership_status_ref_id": {"type": "dropdown", "required": True, "fk_options_count": 6},
+    "name": {"type": "character", "required": True, "max_length": 255, "pattern": None, "unique": False},
+    "po_type_ref_id": {"type": "dropdown", "required": True, "fk_options_count": 2},
+    "email_id": {"type": "character", "required": False, "max_length": 255, "pattern": r"^[^@]+@[^@]+\.[^@]+$", "unique": False},
+    "mobile_no": {"type": "integer", "required": True, "max_length": 255, "pattern": r"^[6-9]\d{9}$", "unique": False},
+    "default_currency_ref_id": {"type": "dropdown", "required": True, "fk_options_count": 114},
+    "pan_no": {"type": "character", "required": True, "max_length": 255, "pattern": r"^[A-Z]{5}[0-9]{4}[A-Z]$", "unique": True},
+    "is_msme_registered": {"type": "toggle", "required": False, "default": False},
+    "status": {"type": "toggle", "required": True, "default": True},
+    # Step 1 — Additional Details (children[0])
+    "display_name_as": {"type": "character", "required": False, "max_length": 255},
+    "office_no": {"type": "character", "required": False, "max_length": 255},
+    "payment_terms_ref_id": {"type": "dropdown", "required": False, "fk_options_count": 6},
+    "delivery_terms_ref_id": {"type": "dropdown", "required": False, "fk_options_count": 2},
+    "mode_of_delivery_ref_id": {"type": "dropdown", "required": False, "fk_options_count": 5},
+    "is_gst_set_off": {"type": "toggle", "required": False, "default": True},
+    "is_tds_applicable": {"type": "toggle", "required": False, "default": False},
+    # Step 2 — Address Details (children[1].details[])
+    "address_type": {"type": "dropdown", "required": True, "fk_options_count": 2},
+    "country_ref_id_id": {"type": "dropdown", "required": True, "fk_options_count": 30, "cascading": True},
+    "state_ref_id_id": {"type": "dropdown", "required": True, "fk_options_count": 0, "cascading": True},
+    "district_ref_id_id": {"type": "dropdown", "required": True, "fk_options_count": 0, "cascading": True},
+    "sub_district_ref_id_id": {"type": "dropdown", "required": True, "fk_options_count": 0, "cascading": True},
+    "village_ref_id_id": {"type": "dropdown", "required": False, "fk_options_count": 0, "cascading": True},
+    "address": {"type": "character", "required": True, "max_length": 255},
+    "pin_code": {"type": "character", "required": True, "max_length": 255},
+    "gstin": {"type": "character", "required": False, "max_length": 255, "pattern": r"^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"},
+    # Step 3 — Bank Details (children[2].details[])
+    "bank_name": {"type": "character", "required": True, "max_length": 255},
+    "bank_branch_code": {"type": "character", "required": False, "max_length": 255},
+    "bank_ifsc_code": {"type": "character", "required": False, "max_length": 255},
+    "account_type": {"type": "dropdown", "required": False, "fk_options_count": 2},
+    "bank_account_holder_name": {"type": "character", "required": True, "max_length": 255},
+    "bank_account_no": {"type": "character", "required": True, "max_length": 255},
+    "bank_doc_id": {"type": "dropdown", "required": True, "fk_options_count": 3},
+    "bank_attachment_path": {"type": "file", "required": False, "max_length": 255},
+}
+
+
+def generate_batch_payloads(count: int = 10, **kwargs) -> list:
+    """Generate N unique supplier API payloads.
+    
+    Args:
+        count: Number of payloads to generate.
+        **kwargs: Passed to each generate_supplier_api_payload() call.
+    
+    Returns:
+        List of payload dicts.
+    """
+    return [generate_supplier_api_payload(**kwargs) for _ in range(count)]
