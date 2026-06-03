@@ -486,7 +486,7 @@ def generate_unicode_name():
 #         <Additional Details fields directly here>
 #       },
 #       {
-#         "stepper_name": "Customer Details",
+#         "stepper_name": "Address Details",
 #         "is_stepper": true,
 #         "details": [{ <Address row 1> }],
 #         "children": []
@@ -719,7 +719,7 @@ FIELD_VALIDATION_RULES = {
     "customer_status": {"type": "dropdown", "required": False},
     "customer_type_ref_id": {"type": "dropdown", "required": False},
     "packing_material_ref_id": {"type": "dropdown", "required": False},
-    # Customer Details / Address (children[1].details[])
+    # Address Details / Address (children[1].details[])
     "address_type": {"type": "dropdown", "required": True, "fk_options_count": 2},
     "country_ref_id_id": {"type": "dropdown", "required": True, "fk_options_count": 30, "cascading": True},
     "state_ref_id_id": {"type": "dropdown", "required": True, "fk_options_count": 0, "cascading": True},
@@ -863,7 +863,7 @@ def build_customer_api_payload(
     except (ValueError, TypeError):
         additional_details["rate_tolerance"] = None
 
-    # ── Build Customer Details (Address) stepper ──
+    # ── Build Address Details (Address) stepper ──
     address_detail = {}
     if _fk("address_type") is not None:
         address_detail["address_type"] = _fk("address_type")
@@ -940,7 +940,7 @@ def build_customer_api_payload(
                 **additional_details,  # Spread fields onto the child object
             },
             {
-                "stepper_name": "Customer Details",
+                "stepper_name": "Address Details",
                 "is_stepper": True,
                 "details": [address_detail],
                 "children": [],

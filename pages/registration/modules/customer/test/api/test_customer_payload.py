@@ -60,7 +60,7 @@ class TestCustomerAPIPayload:
         children = payload["children"]
         assert len(children) == 3
         assert children[0]["stepper_name"] == "Additional Details"
-        assert children[1]["stepper_name"] == "Customer Details"
+        assert children[1]["stepper_name"] == "Address Details"
         assert children[2]["stepper_name"] == "Customer Bank Details"
 
     def test_payload_additional_details_on_stepper(self):

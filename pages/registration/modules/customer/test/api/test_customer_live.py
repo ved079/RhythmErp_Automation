@@ -80,5 +80,5 @@ class TestCustomerAPILive:
         if detail:
             stepper_names = [c.get("stepper_name") for c in detail["children"]]
             assert "Additional Details" in stepper_names
-            assert "Customer Details" in stepper_names
+            assert "Address Details" in stepper_names
             assert "Customer Bank Details" in stepper_names
