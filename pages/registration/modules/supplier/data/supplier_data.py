@@ -769,13 +769,14 @@ ACCOUNT_TYPE_IDS = [1849, 1850]
 
 ACCOUNT_TYPE_NAMES = {1849: "Current", 1850: "Saving"}
 
-PAYMENT_TERMS_IDS = [26, 131, 549, 550, 551]
-#   26 = 30 Days, 131 = Immediate
-#   549, 550, 551 = verified via live ERP (same as Customer screen)
-#   OLD IDs [27-34] were WRONG — they belonged to a different dropdown
+PAYMENT_TERMS_IDS = [26, 27, 131, 549, 550, 551]
+#   26 = 30 Days, 27 = 60 Days, 131 = Immediate
+#   549 = 7 Days, 550 = 14 Days, 551 = 21 Days
+#   OLD IDs [28-34] were WRONG — they belonged to a different dropdown
 
 PAYMENT_TERMS_NAMES = {
     26: "30 Days",
+    27: "60 Days",
     131: "Immediate",
     549: "7 Days",
     550: "14 Days",
