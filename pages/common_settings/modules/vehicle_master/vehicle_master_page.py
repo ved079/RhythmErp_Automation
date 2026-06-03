@@ -152,25 +152,13 @@ class VehicleMasterPage(BasePage):
     )
 
     # ==============================================================
-    #  LOCATORS — Row action buttons (parametrised by vehicle name)
+    #  LOCATORS — Row action buttons (3-dot kebab menu)
+    #  The live UI uses a ⋮ menu in cdk-column-actions, NOT
+    #  separate View/Edit/History button columns.
     # ==============================================================
-    VIEW_BUTTON = (
-        "xpath",
-        "//td[contains(text(),'{vehicle_name}')]"
-        "/ancestor::tr//td[contains(@class,'cdk-column-view')]"
-        "//button",
-    )
-    EDIT_BUTTON = (
-        "xpath",
-        "//td[contains(text(),'{vehicle_name}')]"
-        "/ancestor::tr//td[contains(@class,'cdk-column-edit')]"
-        "//button",
-    )
-    HISTORY_BUTTON = (
-        "xpath",
-        "//td[contains(text(),'{vehicle_name}')]"
-        "/ancestor::tr//td[contains(@class,'cdk-column-history')]"
-        "//button",
+    ACTION_MENU_TRIGGER = (
+        "css",
+        "td.cdk-column-actions button",
     )
 
     # ==============================================================
@@ -468,8 +456,40 @@ class VehicleMasterPage(BasePage):
         return False
 
     def click_refresh(self):
-        """Click the Refresh button."""
+        """Click the Refresh button. Tries multiple strategies."""
         log.info("Clicking Refresh button...")
+
+        # Strategy 1: JS — find by mattooltip attribute (most reliable)
+        try:
+            result = self.driver.execute_script("""
+            var btns = document.querySelectorAll('button[mattooltip]');
+            for (var i = 0; i < btns.length; i++) {
+                var tip = btns[i].getAttribute('mattooltip') || '';
+                if (tip.toLowerCase() === 'refresh') {
+                    btns[i].click();
+                    return 'refresh_clicked';
+                }
+            }
+            // Also try by mat-icon text
+            var allBtns = document.querySelectorAll('button.mat-mdc-mini-fab');
+            for (var i = 0; i < allBtns.length; i++) {
+                var icon = allBtns[i].querySelector('mat-icon');
+                if (icon && icon.textContent.trim().toLowerCase() === 'refresh'
+                    && allBtns[i].offsetParent !== null) {
+                    allBtns[i].click();
+                    return 'refresh_clicked_icon';
+                }
+            }
+            return null;
+            """)
+            if result:
+                self.wait_seconds(2)
+                log.info("Refresh clicked")
+                return
+        except Exception:
+            pass
+
+        # Strategy 2: Selenium find by icon
         try:
             refresh_btns = self.driver.find_elements(
                 By.CSS_SELECTOR, "button.mat-mdc-mini-fab"
@@ -602,25 +622,85 @@ class VehicleMasterPage(BasePage):
         log.info("Update clicked")
 
     def cancel(self):
-        """Click the Cancel button on the form."""
+        """Click the Cancel button on the form. Tries multiple strategies."""
         log.info("Clicking Cancel button...")
+
+        # Strategy 1: JS find Cancel in popup-footer
+        try:
+            result = self.driver.execute_script("""
+            var btns = document.querySelectorAll(
+                '.popup-footer button, .big-model button, '
+                + 'mat-dialog-container button'
+            );
+            for (var i = 0; i < btns.length; i++) {
+                if (btns[i].textContent.trim() === 'Cancel'
+                    && btns[i].offsetParent !== null) {
+                    btns[i].click();
+                    return 'cancel_clicked';
+                }
+            }
+            return null;
+            """)
+            if result:
+                self.wait_seconds(1)
+                log.info("Cancel clicked via JS")
+                return
+        except Exception:
+            pass
+
+        # Strategy 2: Original locator
         try:
             btn = self.find_visible_element(self.CANCEL_BUTTON, timeout=5)
             self.driver.execute_script("arguments[0].click();", btn)
+            self.wait_seconds(1)
+            return
         except Exception:
-            try:
-                btn = self.driver.find_element(
-                    By.XPATH,
-                    "//div[@class='popup-footer']//button[contains(.,'Cancel')]",
-                )
-                self.driver.execute_script("arguments[0].click();", btn)
-            except Exception:
-                self.click_with_retry(self.CANCEL_BUTTON)
-        self.wait_seconds(1)
+            pass
+
+        # Strategy 3: XPath fallback
+        try:
+            btn = self.driver.find_element(
+                By.XPATH,
+                "//div[@class='popup-footer']//button[contains(.,'Cancel')]",
+            )
+            self.driver.execute_script("arguments[0].click();", btn)
+            self.wait_seconds(1)
+            return
+        except Exception:
+            pass
+
+        log.warning("Cancel button not found via any strategy")
 
     def close_popup(self):
-        """Click the X (close) icon on the form header."""
+        """Click the X (close) icon on the form header.
+        Falls back to Cancel, then JS force close."""
         log.info("Closing popup via X button...")
+
+        # Strategy 1: Find close icon in popup header
+        try:
+            result = self.driver.execute_script("""
+            var icons = document.querySelectorAll(
+                '.big-model button mat-icon, '
+                + 'mat-dialog-container button mat-icon, '
+                + '.popup-wrapper button mat-icon'
+            );
+            for (var i = 0; i < icons.length; i++) {
+                if (icons[i].textContent.trim().toLowerCase() === 'close'
+                    && icons[i].offsetParent !== null) {
+                    var btn = icons[i].closest('button');
+                    if (btn) { btn.click(); return 'closed'; }
+                }
+            }
+            return null;
+            """)
+            if result:
+                self.wait_seconds(0.5)
+                log.info("Popup closed via X button (JS)")
+                return
+        except Exception:
+            pass
+
+        # Strategy 2: Selenium find close icons
         try:
             close_btns = self.driver.find_elements(
                 By.CSS_SELECTOR,
@@ -642,6 +722,8 @@ class VehicleMasterPage(BasePage):
                     continue
         except Exception:
             pass
+
+        # Strategy 3: Cancel button
         log.warning("X button not found, trying Cancel instead")
         self.cancel()
 
@@ -978,44 +1060,132 @@ class VehicleMasterPage(BasePage):
     #  Row action buttons — JS click via _click_action_button
     # ==============================================================
 
-    def _click_action_button(self, vehicle_name, action_xpath_template):
-        """Click a row action button (View/Edit/History) using
-        parametrised XPath. Falls back to index-based button click.
-        Pure JS click to avoid overlay interception.
-        """
-        self._force_close_panels()
-        xpath = action_xpath_template.format(vehicle_name=vehicle_name)
+    def _click_action_menu_item(self, vehicle_name, action_name):
+        """Click an action menu item (View/Edit/History) for a specific
+        vehicle row.  The live system uses a 3-dot (⋮) menu button in
+        cdk-column-actions — same pattern as UOM module.
 
-        # Strategy 1: Parametrised XPath
+        Steps:
+          1. JS: find the row containing vehicle_name, click its
+             3-dot menu button in cdk-column-actions
+          2. JS: find the overlay that appears, click the item whose
+             text matches action_name (e.g. 'View', 'Edit', 'History')
+        """
+        log.info(
+            f"Clicking {action_name} via 3-dot menu for: {vehicle_name}"
+        )
+        self._force_close_panels()
+
+        # Step 1: Open the 3-dot menu for the row matching vehicle_name
+        js_open_menu = """
+        var table = document.querySelector('table#excel-table');
+        if (!table) { throw new Error('Table not found'); }
+        var rows = table.querySelectorAll('tbody tr');
+        for (var i = 0; i < rows.length; i++) {
+            var cells = rows[i].querySelectorAll('td');
+            for (var j = 0; j < cells.length; j++) {
+                if (cells[j].textContent.trim().indexOf(arguments[0]) !== -1) {
+                    var menuBtn = rows[i].querySelector(
+                        'td.cdk-column-actions button'
+                    );
+                    if (!menuBtn) {
+                        throw new Error(
+                            '3-dot menu button not found in actions column'
+                        );
+                    }
+                    menuBtn.scrollIntoView({block:'center'});
+                    menuBtn.click();
+                    return 'menu_opened';
+                }
+            }
+        }
+        throw new Error(
+            'Vehicle "' + arguments[0] + '" not found in table'
+        );
+        """
         try:
-            btns = self.driver.find_elements(By.XPATH, xpath)
-            for btn in btns:
-                try:
-                    if btn.is_displayed():
-                        self.driver.execute_script(
-                            "arguments[0].click();", btn
-                        )
-                        self.wait_seconds(1)
-                        return True
-                except Exception:
-                    continue
+            self.driver.execute_script(js_open_menu, vehicle_name)
+        except Exception as e:
+            # Fallback: try by row index if name search fails
+            log.warning(f"3-dot menu open failed: {e}. Trying row index...")
+            row_idx = self.find_vehicle_row_index(vehicle_name)
+            if row_idx >= 0:
+                rows = self.driver.find_elements(
+                    By.CSS_SELECTOR, "table#excel-table tbody tr"
+                )
+                if row_idx < len(rows):
+                    menu_btn = rows[row_idx].find_element(
+                        By.CSS_SELECTOR, "td.cdk-column-actions button"
+                    )
+                    self.driver.execute_script(
+                        "arguments[0].scrollIntoView({block:'center'});"
+                        "arguments[0].click();",
+                        menu_btn,
+                    )
+            else:
+                raise
+
+        log.info(f"3-dot menu opened for: {vehicle_name}")
+
+        # Wait briefly for dropdown overlay to render
+        try:
+            WebDriverWait(self.driver, 2).until(
+                EC.presence_of_element_located((
+                    By.CSS_SELECTOR,
+                    ".cdk-overlay-container .cdk-overlay-pane",
+                ))
+            )
         except Exception:
             pass
+        self.wait_seconds(0.3)
 
-        # Strategy 2: Find row by name, click button by index
-        row_idx = self.find_vehicle_row_index(vehicle_name)
-        if row_idx >= 0:
-            return self._click_action_button_by_index(
-                row_idx, action_xpath_template
-            )
-
-        log.warning(
-            f"Action button not found for vehicle: {vehicle_name}"
+        # Step 2: Click the specific menu item from the dropdown overlay
+        js_click_item = """
+        var overlay = document.querySelector('.cdk-overlay-container');
+        if (!overlay) { throw new Error('CDK overlay not found after menu click'); }
+        var items = overlay.querySelectorAll('button, span, div');
+        for (var i = 0; i < items.length; i++) {
+            var text = items[i].textContent.trim();
+            if (text === arguments[0]) {
+                items[i].click();
+                return 'clicked_' + arguments[0];
+            }
+        }
+        // Fallback: try case-insensitive partial match
+        for (var i = 0; i < items.length; i++) {
+            var text = items[i].textContent.trim().toLowerCase();
+            if (text.indexOf(arguments[0].toLowerCase()) !== -1) {
+                items[i].click();
+                return 'clicked_partial_' + arguments[0];
+            }
+        }
+        throw new Error(
+            'Menu item "' + arguments[0] + '" not found in dropdown overlay'
+        );
+        """
+        result = self.driver.execute_script(js_click_item, action_name)
+        log.info(
+            f"Successfully clicked {action_name} for: {vehicle_name}"
         )
-        return False
+        self.wait_seconds(1)
+        return result
+
+    # -- DEPRECATED: kept for backward compat; delegates to kebab menu --
+
+    def _click_action_button(self, vehicle_name, action_xpath_template):
+        """DEPRECATED — delegates to _click_action_menu_item()."""
+        # Map legacy column keywords to action names
+        if "cdk-column-view" in action_xpath_template:
+            return self._click_action_menu_item(vehicle_name, "View")
+        elif "cdk-column-edit" in action_xpath_template:
+            return self._click_action_menu_item(vehicle_name, "Edit")
+        elif "cdk-column-history" in action_xpath_template:
+            return self._click_action_menu_item(vehicle_name, "History")
+        return self._click_action_menu_item(vehicle_name, "View")
 
     def _click_action_button_by_index(self, row_index, action_xpath_template):
-        """Fallback: click action button by row index position."""
+        """DEPRECATED — finds vehicle name by index, then uses
+        _click_action_menu_item()."""
         rows = self.driver.find_elements(
             By.CSS_SELECTOR, "table#excel-table tbody tr"
         )
@@ -1024,49 +1194,41 @@ class VehicleMasterPage(BasePage):
                 f"Row index {row_index} out of range "
                 f"(total rows: {len(rows)})"
             )
-        row = rows[row_index]
-        btns = row.find_elements(By.CSS_SELECTOR, "button")
-
-        # Determine which button based on the template keyword
+        # Try to find name in row
+        cells = rows[row_index].find_elements(By.TAG_NAME, "td")
+        name = ""
+        for cell in cells:
+            t = cell.text.strip()
+            if t:
+                name = t
+                break
         if "cdk-column-view" in action_xpath_template:
-            idx = 0
+            action = "View"
         elif "cdk-column-edit" in action_xpath_template:
-            idx = 1
+            action = "Edit"
         elif "cdk-column-history" in action_xpath_template:
-            idx = 2
+            action = "History"
         else:
-            idx = 0
-
-        if idx < len(btns):
-            self.driver.execute_script(
-                "arguments[0].click();", btns[idx]
-            )
-            self.wait_seconds(1)
-            return True
-        raise Exception(
-            f"Action button index {idx} not found in row {row_index}"
-        )
+            action = "View"
+        return self._click_action_menu_item(name, action)
 
     def click_view_button(self, vehicle_name=None, row_index=0):
         """Click the View button for a vehicle row."""
         log.info(f"Clicking View button for: {vehicle_name or row_index}...")
         if vehicle_name:
-            return self._click_action_button(
-                vehicle_name, self.VIEW_BUTTON[1]
-            )
+            return self._click_action_menu_item(vehicle_name, "View")
+        # row_index fallback
         return self._click_action_button_by_index(
-            row_index, self.VIEW_BUTTON[1]
+            row_index, "cdk-column-view"
         )
 
     def click_edit_button(self, vehicle_name=None, row_index=0):
         """Click the Edit button for a vehicle row."""
         log.info(f"Clicking Edit button for: {vehicle_name or row_index}...")
         if vehicle_name:
-            return self._click_action_button(
-                vehicle_name, self.EDIT_BUTTON[1]
-            )
+            return self._click_action_menu_item(vehicle_name, "Edit")
         return self._click_action_button_by_index(
-            row_index, self.EDIT_BUTTON[1]
+            row_index, "cdk-column-edit"
         )
 
     def click_history_button(self, vehicle_name=None, row_index=0):
@@ -1075,11 +1237,9 @@ class VehicleMasterPage(BasePage):
             f"Clicking History button for: {vehicle_name or row_index}..."
         )
         if vehicle_name:
-            return self._click_action_button(
-                vehicle_name, self.HISTORY_BUTTON[1]
-            )
+            return self._click_action_menu_item(vehicle_name, "History")
         return self._click_action_button_by_index(
-            row_index, self.HISTORY_BUTTON[1]
+            row_index, "cdk-column-history"
         )
 
     # ==============================================================
@@ -1133,6 +1293,30 @@ class VehicleMasterPage(BasePage):
     # ==============================================================
     #  Search functionality
     # ==============================================================
+
+    def hard_refresh(self):
+        """Fast page reset: navigate + full reload + wait for table.
+        Much faster than click_refresh() when a full state reset
+        is needed between tests."""
+        log.info("Hard refreshing Vehicle Master page...")
+        self.driver.get(self.PAGE_URL)
+        self.driver.refresh()
+        # Fast poll for table (0.2s intervals)
+        end = time.monotonic() + 15
+        while time.monotonic() < end:
+            try:
+                el = self.driver.execute_script(
+                    "var t = document.querySelector('table#excel-table');"
+                    "return t && t.offsetParent !== null;"
+                )
+                if el:
+                    break
+            except Exception:
+                pass
+            time.sleep(0.2)
+        # Brief wait for toolbar to bind
+        time.sleep(0.5)
+        log.info("Hard refresh complete")
 
     def search_vehicle(self, vehicle_name):
         """Search for a vehicle by name in the table search bar.
@@ -1188,17 +1372,35 @@ class VehicleMasterPage(BasePage):
     def clear_search(self):
         """Clear the search input and reset the table."""
         try:
-            search_input = self.driver.find_element(
-                By.CSS_SELECTOR,
-                ".erp-search-wrapper input, input#erpSearchInput",
-            )
-            if search_input.is_displayed():
-                search_input.clear()
-                # Press Enter to refresh results
-                search_input.send_keys(Keys.RETURN)
-                self.wait_seconds(1)
+            # JS clear + dispatch input event (Angular reactive form)
+            self.driver.execute_script("""
+            var i = document.querySelector(
+                '.erp-search-wrapper input, input#erpSearchInput'
+            );
+            if (i) {
+                var s = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value'
+                ).set;
+                s.call(i, '');
+                i.dispatchEvent(new Event('input', {bubbles: true}));
+                i.dispatchEvent(new KeyboardEvent('keydown',
+                    {key: 'Enter', keyCode: 13, bubbles: true}));
+            }
+            """)
+            self.wait_seconds(1)
         except Exception:
-            pass
+            # Fallback: Selenium clear
+            try:
+                search_input = self.driver.find_element(
+                    By.CSS_SELECTOR,
+                    ".erp-search-wrapper input, input#erpSearchInput",
+                )
+                if search_input.is_displayed():
+                    search_input.clear()
+                    search_input.send_keys(Keys.RETURN)
+                    self.wait_seconds(1)
+            except Exception:
+                pass
 
     def verify_vehicle_exists(self, vehicle_name):
         """Navigate to page, search, and verify a vehicle exists."""
