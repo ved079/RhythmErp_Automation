@@ -125,3 +125,63 @@ def generate_uom_conversion_api_payloads(count=10, fk_ids=None):
         payloads.append(payload)
 
     return payloads[:count]
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+# UOM Conversion is a flat screen — no children, no steppers.
+# 2 FK dropdowns (source_uom_code, target_uom_code) + 1 number field (conversion_factor).
+
+FIELD_VALIDATION_RULES = {
+    "source_uom_code": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(UOM_IDS),
+        "note": "FK to UOM screen. API sends integer ID, not string code.",
+    },
+    "target_uom_code": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(UOM_IDS),
+        "note": "FK to UOM screen. API sends integer ID, not string code. "
+                "Can be same as source (self-conversion allowed).",
+    },
+    "conversion_factor": {
+        "type": "number",
+        "required": True,
+        "note": "Decimal number. 21-digit values OK, 22+ digits cause "
+                "scientific notation display bug (record becomes uneditable). "
+                "Input type='character' in UI (no native number validation).",
+    },
+}
+
+# Default FK IDs for UOM Conversion (standardized naming pattern)
+DEFAULT_UOM_CONVERSION_FK_IDS = {
+    "source_uom_code": UOM_IDS,
+    "target_uom_code": UOM_IDS,
+}
+
+# UOM display names for schema tests (same dict, exposed for name verification)
+UOM_NAMES = dict(UOM_IDS)
+
+
+def generate_batch_payloads(
+    count: int = 20,
+    prefix: str = None,
+    dropdown_ids: dict = None,
+) -> list:
+    """Generate a batch of unique UOM Conversion API payloads.
+
+    Standardized batch generator matching the pattern used across all
+    RhythmERP modules (Customer, Supplier, Company Onboarding, etc.).
+
+    Args:
+        count: Number of payloads to generate.
+        prefix: Ignored for UOM Conversion (conversions are deterministic).
+        dropdown_ids: Override specific FK ID pools.
+
+    Returns:
+        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
+    """
+    return generate_uom_conversion_api_payloads(count=count, fk_ids=dropdown_ids)
