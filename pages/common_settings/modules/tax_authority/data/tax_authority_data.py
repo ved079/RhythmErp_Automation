@@ -98,3 +98,41 @@ def generate_tax_authority_api_payloads(count=10, fk_ids=None):
         payloads.append(payload)
 
     return payloads
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+FIELD_VALIDATION_RULES = {
+    "tax_name": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Tax authority name (e.g. 'CGST Authority').",
+    },
+    "tax_type_ref_id": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(TAX_TYPE_IDS),
+        "note": "FK to Tax Type. Currently only GST=93.",
+    },
+    "country_ref_id": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(COUNTRY_IDS),
+        "note": "FK to Country. 45+ countries, India=1.",
+    },
+}
+
+TAX_TYPE_NAMES = dict(TAX_TYPE_IDS)
+COUNTRY_NAMES = dict(COUNTRY_IDS)
+
+DEFAULT_TAX_AUTHORITY_FK_IDS = {
+    "tax_type_ref_id": TAX_TYPE_IDS,
+    "country_ref_id": COUNTRY_IDS,
+}
+
+
+def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None) -> list:
+    """Generate a batch of unique Tax Authority API payloads."""
+    return generate_tax_authority_api_payloads(count=count, fk_ids=dropdown_ids)

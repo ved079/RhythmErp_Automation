@@ -238,3 +238,51 @@ def generate_vehicle_master_api_payloads(count=10, fk_ids=None):
         payloads.append(payload)
 
     return payloads
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+FIELD_VALIDATION_RULES = {
+    "name": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+    },
+    "vehicle_price": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Numeric value as string. Input type='character' in UI.",
+    },
+    "vehicle_type_id": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(VEHICLE_TYPE_IDS),
+        "note": "FK to Vehicle Type. 5 options: Truck, Trailer, Tanker, Mini Truck, Pickup.",
+    },
+    "fuel_type_ref_id": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(FUEL_TYPE_IDS),
+        "note": "FK to Fuel Type. 5 options: Diesel, Petrol, CNG, Electric, LPG.",
+    },
+    "description": {
+        "type": "character",
+        "required": False,
+        "max_length": 255,
+    },
+}
+
+VEHICLE_TYPE_NAMES = dict(VEHICLE_TYPE_IDS)
+FUEL_TYPE_NAMES = dict(FUEL_TYPE_IDS)
+
+DEFAULT_VEHICLE_MASTER_FK_IDS = {
+    "vehicle_type_id": VEHICLE_TYPE_IDS,
+    "fuel_type_ref_id": FUEL_TYPE_IDS,
+}
+
+
+def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None) -> list:
+    """Generate a batch of unique Vehicle Master API payloads."""
+    return generate_vehicle_master_api_payloads(count=count, fk_ids=dropdown_ids)
