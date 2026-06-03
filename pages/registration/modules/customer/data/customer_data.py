@@ -608,6 +608,139 @@ DEFAULT_CUSTOMER_FK_IDS = {
 }
 
 
+# ──────────────────────────────────────────────
+# FK Name Mappings (human-readable labels for each ID)
+# ──────────────────────────────────────────────
+
+OWNERSHIP_STATUS_NAMES = {
+    5: "Cooperative Society",
+    6: "Limited",
+    7: "Private Limited Company",
+    8: "Public Limited Company",
+    9: "Government",
+    1262: "Partnership",
+    1263: "Proprietorship",
+    1853: "Individual",
+}
+
+SUPPLY_TYPE_NAMES = {
+    135: "Inter-State",
+    136: "Intra-State",
+    223: "Import",
+    225: "Domestic",
+    1494: "Export",
+}
+
+SALE_TYPE_NAMES = {
+    1264: "Retail",
+    1265: "Wholesale",
+    1266: "Direct",
+    1267: "Consignment",
+}
+
+ADDRESS_TYPE_NAMES = {43: "Shipping", 42: "Billing"}
+
+ACCOUNT_TYPE_NAMES = {1849: "Current", 1850: "Saving"}
+
+BANK_DOC_NAMES = {
+    35: "Passbook",
+    36: "Bank Statement",
+    1883: "Cancelled Cheque",
+}
+
+PAYMENT_TERMS_NAMES = {
+    26: "30 Days",
+    131: "Immediate",
+    549: "7 Days",
+    550: "14 Days",
+    551: "21 Days",
+}
+
+DELIVERY_TERMS_NAMES = {129: "Delivery", 130: "Spot"}
+
+MODE_OF_DELIVERY_NAMES = {
+    30: "Truck",
+    31: "Railway",
+    32: "Sea",
+    33: "Courier",
+    34: "Air",
+}
+
+PREFERRED_PAYMENT_METHOD_NAMES = {
+    53: "Cheque",
+    54: "Cash",
+    55: "NEFT/RTGS",
+    141: "UPI",
+    143: "Credit Note",
+}
+
+COURIER_TERMS_NAMES = {
+    51: "FOB",
+    52: "CIF",
+    1252: "Ex-Works",
+}
+
+GST_REGISTRATION_TYPE_NAMES = {
+    49: "Unregistered",
+    50: "Regular",
+}
+
+
+# ──────────────────────────────────────────────
+# Field Validation Rules (schema documentation)
+# ──────────────────────────────────────────────
+
+FIELD_VALIDATION_RULES = {
+    # Root-level fields
+    "party_ref_id": {"type": "dropdown", "required": False, "fk_options_count": 143},
+    "ownership_status_ref_id": {"type": "dropdown", "required": True, "fk_options_count": 8},
+    "name": {"type": "character", "required": True, "max_length": 255, "pattern": None, "unique": False},
+    "supply_type_ref_id": {"type": "dropdown", "required": True, "fk_options_count": 5},
+    "sale_type_ref_id": {"type": "dropdown", "required": True, "fk_options_count": 4},
+    "default_currency_ref_id": {"type": "dropdown", "required": True, "fk_options_count": 114},
+    "email_id": {"type": "character", "required": False, "max_length": 255, "pattern": r"^[^@]+@[^@]+\.[^@]+$", "unique": False},
+    "mobile_no": {"type": "integer", "required": True, "max_length": 255, "pattern": r"^[6-9]\d{9}$", "unique": False},
+    "pan_no": {"type": "character", "required": True, "max_length": 255, "pattern": r"^[A-Z]{5}[0-9]{4}[A-Z]$", "unique": True},
+    "status": {"type": "toggle", "required": True, "default": True},
+    # Additional Details (children[0] — fields on stepper object, NOT in details[])
+    "display_name_as": {"type": "character", "required": False, "max_length": 255},
+    "office_no": {"type": "character", "required": False, "max_length": 255},
+    "preferred_payment_method_ref_id": {"type": "dropdown", "required": False, "fk_options_count": 5},
+    "gst_registration_type": {"type": "dropdown", "required": False, "fk_options_count": 2},
+    "payment_terms_ref_id": {"type": "dropdown", "required": False, "fk_options_count": 5},
+    "delivery_terms_ref_id": {"type": "dropdown", "required": False, "fk_options_count": 2},
+    "mode_of_delivery_ref_id": {"type": "dropdown", "required": False, "fk_options_count": 5},
+    "courier_terms_ref_id": {"type": "dropdown", "required": False, "fk_options_count": 3},
+    "deposit": {"type": "numeric", "required": False, "default": 0},
+    "quantity_tolerance": {"type": "numeric", "required": False},
+    "rate_tolerance": {"type": "numeric", "required": False},
+    "is_tds_applicable": {"type": "toggle", "required": False, "default": False},
+    "is_gst_set_off": {"type": "toggle", "required": False, "default": True},
+    "customer_status": {"type": "dropdown", "required": False},
+    "customer_type_ref_id": {"type": "dropdown", "required": False},
+    "packing_material_ref_id": {"type": "dropdown", "required": False},
+    # Customer Details / Address (children[1].details[])
+    "address_type": {"type": "dropdown", "required": True, "fk_options_count": 2},
+    "country_ref_id_id": {"type": "dropdown", "required": True, "fk_options_count": 30, "cascading": True},
+    "state_ref_id_id": {"type": "dropdown", "required": True, "fk_options_count": 0, "cascading": True},
+    "district_ref_id_id": {"type": "dropdown", "required": True, "fk_options_count": 0, "cascading": True},
+    "sub_district_ref_id_id": {"type": "dropdown", "required": True, "fk_options_count": 0, "cascading": True},
+    "village_ref_id_id": {"type": "dropdown", "required": False, "fk_options_count": 0, "cascading": True},
+    "address": {"type": "character", "required": True, "max_length": 255},
+    "pin_code": {"type": "character", "required": True, "max_length": 255},
+    "gstin": {"type": "character", "required": False, "max_length": 255, "pattern": r"^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"},
+    # Customer Bank Details (children[2].details[])
+    "bank_name": {"type": "character", "required": True, "max_length": 255},
+    "bank_branch_code": {"type": "character", "required": False, "max_length": 255},
+    "bank_ifsc_code": {"type": "character", "required": False, "max_length": 255},
+    "account_type": {"type": "dropdown", "required": False, "fk_options_count": 2},
+    "bank_account_holder_name": {"type": "character", "required": True, "max_length": 255},
+    "bank_account_no": {"type": "character", "required": True, "max_length": 255},
+    "bank_doc_id": {"type": "dropdown", "required": True, "fk_options_count": 3},
+    "bank_attachment_path": {"type": "file", "required": False, "max_length": 255},
+}
+
+
 def get_random_address_chain():
     """Import and reuse the Supplier address chain pool."""
     from pages.registration.modules.supplier.data.supplier_data import (
@@ -871,3 +1004,19 @@ def generate_customer_api_payloads(
             generate_customer_api_payload(prefix, dropdown_ids)
         )
     return payloads
+
+
+def generate_batch_payloads(count: int = 10, **kwargs) -> list:
+    """Generate N unique Customer API payloads.
+
+    Alias for generate_customer_api_payloads() — matches the Supplier
+    module's naming convention for consistency across test code.
+
+    Args:
+        count: Number of payloads to generate.
+        **kwargs: Passed to each generate_customer_api_payload() call.
+
+    Returns:
+        List of payload dicts.
+    """
+    return [generate_customer_api_payload(**kwargs) for _ in range(count)]
