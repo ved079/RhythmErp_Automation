@@ -358,3 +358,68 @@ def generate_season_api_payloads(count=20, prefix=None, dropdown_ids=None):
             generate_season_api_payload(prefix, dropdown_ids)
         )
     return payloads
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+# Season is a flat screen — no children, no steppers, no FK dropdowns.
+# 3 fields: name (required), description (optional), status (toggle).
+
+FIELD_VALIDATION_RULES = {
+    "name": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Letters and spaces only (type='character'). Frontend rejects "
+                 "underscores, digits, special chars.",
+    },
+    "description": {
+        "type": "character",
+        "required": False,
+        "max_length": 255,
+        "note": "Optional field. Can be empty/null.",
+    },
+    "status": {
+        "type": "toggle",
+        "required": False,
+        "default": True,
+        "note": "Boolean toggle. True=Active, False=Inactive.",
+    },
+}
+
+# Status toggle options (display name -> API boolean value)
+STATUS_OPTIONS = {
+    "Active": True,
+    "Inactive": False,
+}
+
+# No FK dropdown pools — Season has zero FK fields
+DEFAULT_SEASON_FK_IDS = {}
+
+
+def generate_batch_payloads(
+    count: int = 20,
+    prefix: str = None,
+    dropdown_ids: dict = None,
+) -> list:
+    """Generate a batch of unique Season API payloads.
+
+    Standardized batch generator matching the pattern used across all
+    RhythmERP modules.
+
+    Args:
+        count: Number of payloads to generate.
+        prefix: Ignored for Season (realistic names are used instead).
+        dropdown_ids: Not used for Season (no FK dropdown fields).
+
+    Returns:
+        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
+    """
+    reset_season_name_pool()
+    payloads = []
+    for i in range(count):
+        payloads.append(
+            generate_season_api_payload(prefix, dropdown_ids)
+        )
+    return payloads
