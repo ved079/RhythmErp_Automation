@@ -160,3 +160,138 @@ def generate_bank_api_payloads(count=10, fk_ids=None):
         payloads.append(payload)
 
     return payloads
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+# Bank is a flat screen — no children, no steppers.
+# 12 text/number fields + 2 FK dropdowns + 2 toggles = 14 fields total.
+
+FIELD_VALIDATION_RULES = {
+    # Text fields
+    "bank_name": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Uppercase alpha only, >= 10 chars. Frontend rejects special chars.",
+    },
+    "bank_code": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Alphanumeric accepted.",
+    },
+    "branch_name": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+    },
+    "branch_code": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+    },
+    "account_number": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Numeric input (type='character' but accepts digits).",
+    },
+    "swift_number": {
+        "type": "character",
+        "required": False,
+        "max_length": 255,
+        "note": "Optional. SWIFT/BIC format.",
+    },
+    "iban_number": {
+        "type": "character",
+        "required": False,
+        "max_length": 255,
+        "note": "Optional. IBAN format.",
+    },
+    "ifsc_code": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Exactly 11 chars in standard IFSC format.",
+    },
+    "cash_credit_limit": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Numeric value. Required for Current accounts, can be None for Saving.",
+    },
+    "bank_address": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+    },
+
+    # FK Dropdowns
+    "account_type": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(ACCOUNT_TYPE_IDS),
+        "note": "2 options: Current (1849), Saving (1850).",
+    },
+    "account_ref_id": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(ACCOUNT_REF_IDS),
+        "note": "GL Account / Chart of Accounts. ~10 bank-related options in our pool.",
+    },
+
+    # Toggles
+    "is_default_bank": {
+        "type": "toggle",
+        "required": False,
+        "default": False,
+        "note": "Default: No (OFF).",
+    },
+    "status": {
+        "type": "toggle",
+        "required": False,
+        "default": True,
+        "note": "Default: Active (ON). Boolean in API payload.",
+    },
+}
+
+# Status toggle options (display name -> API boolean value)
+STATUS_OPTIONS = {
+    "Active": True,
+    "Inactive": False,
+}
+
+# Account Type display names for schema tests
+ACCOUNT_TYPE_NAMES = dict(ACCOUNT_TYPE_IDS)
+
+# GL Account display names for schema tests
+ACCOUNT_REF_NAMES = dict(ACCOUNT_REF_IDS)
+
+# Default FK IDs for Bank (standardized naming pattern)
+DEFAULT_BANK_FK_IDS = {
+    "account_type": ACCOUNT_TYPE_IDS,
+    "account_ref_id": ACCOUNT_REF_IDS,
+}
+
+
+def generate_batch_payloads(
+    count: int = 20,
+    prefix: str = None,
+    dropdown_ids: dict = None,
+) -> list:
+    """Generate a batch of unique Bank API payloads.
+
+    Standardized batch generator matching the pattern used across all
+    RhythmERP modules (Customer, Supplier, Company Onboarding, etc.).
+
+    Args:
+        count: Number of payloads to generate.
+        prefix: Ignored for Bank (realistic bank names are used instead).
+        dropdown_ids: Override specific FK ID pools.
+
+    Returns:
+        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
+    """
+    return generate_bank_api_payloads(count=count, fk_ids=dropdown_ids)
