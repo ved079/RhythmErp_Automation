@@ -21,6 +21,20 @@ ERROR_CODE_TYPE_IDS = {
 
 ERROR_CODE_TYPES = list(ERROR_CODE_TYPE_IDS.keys())
 
+# ── Page constants (used by error_code_mst_page.py) ──────────────────
+PAGE_URL = "https://rhythmerp.algorhythms.in/#/dynamic-screens/Error%20Code%20Mst"
+FIELD_ERROR_CODE_TYPE = "Error Code Type"
+FIELD_CODE = "Code"
+FIELD_DESCRIPTION = "Description"
+FIELD_IS_QTY_AMT = "Is Qty/Amount"
+VALIDATION_FAILED_TITLE = "Validation Failed"
+VALIDATION_FAILED_CONTENT = "Please correct the highlighted fields"
+POPUP_TITLE = "Error Code Mst"
+HISTORY_POPUP_TITLE = "Error Code Mst History"
+ERROR_CODE_TYPE_OPTIONS = list(ERROR_CODE_TYPE_IDS.keys())
+TOGGLE_AMOUNT = "Amount"
+TOGGLE_QUANTITY = "Qty"
+
 CODES_BY_TYPE = {
     "Farmer":       ["FM-DOC", "FM-KYC", "FM-LAND", "FM-BANK", "FM-VERIFY"],
     "Debit Note":   ["DN-REJ", "DN-SHORT", "DN-DAMG", "DN-PRICE", "DN-QTY"],
@@ -131,3 +145,56 @@ def generate_error_code_mst_api_payloads(count=10, fk_ids=None):
         payloads.append(payload)
 
     return payloads
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+# Error Code Mst is a flat screen — no children, no steppers.
+# 3 standard fields + 1 FK dropdown + 1 string enum = 5 fields.
+
+FIELD_VALIDATION_RULES = {
+    "error_code_type": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(ERROR_CODE_TYPE_IDS),
+        "note": "FK to Error Code Type. 4 options: Farmer, Debit Note, Credit Note, Workflow.",
+    },
+    "code": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Error code identifier. Alphanumeric with hyphens (e.g. FM-DOC, DN-REJ).",
+    },
+    "description": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Human-readable description of the error code.",
+    },
+    "is_qty_amount": {
+        "type": "character",
+        "required": True,
+        "note": "Enum: 'Qty' or 'Amount'. Determines how the error code is applied.",
+    },
+}
+
+# Error Code Type display names for schema tests
+ERROR_CODE_TYPE_NAMES = dict(ERROR_CODE_TYPE_IDS)
+
+# is_qty_amount options
+IS_QTY_AMOUNT_NAMES = ["Qty", "Amount"]
+
+# Default FK IDs for Error Code Mst
+DEFAULT_ERROR_CODE_MST_FK_IDS = {
+    "error_code_type": ERROR_CODE_TYPE_IDS,
+}
+
+
+def generate_batch_payloads(
+    count: int = 20,
+    prefix: str = None,
+    dropdown_ids: dict = None,
+) -> list:
+    """Generate a batch of unique Error Code Mst API payloads."""
+    return generate_error_code_mst_api_payloads(count=count, fk_ids=dropdown_ids)

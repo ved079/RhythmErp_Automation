@@ -187,3 +187,48 @@ def generate_hsn_sac_api_payloads(count=10, fk_ids=None):
         payloads.append(payload)
 
     return payloads
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+# HSN SAC is a flat screen — no children, no steppers.
+# 2 standard fields + 1 FK dropdown = 3 fields.
+
+FIELD_VALIDATION_RULES = {
+    "hsn_sac_no": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "HSN code (4+ digits) or SAC code (6 digits). Alphanumeric.",
+    },
+    "hsn_sac_type": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(HSN_SAC_TYPE_IDS),
+        "note": "FK to HSN/SAC Type. 4 options: Services, Transportation, Commission, Commodity.",
+    },
+    "hsn_sac_description": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Human-readable description of the HSN/SAC code.",
+    },
+}
+
+# HSN SAC Type display names for schema tests
+HSN_SAC_TYPE_NAMES = dict(HSN_SAC_TYPE_IDS)
+
+# Default FK IDs for HSN SAC
+DEFAULT_HSN_SAC_FK_IDS = {
+    "hsn_sac_type": HSN_SAC_TYPE_IDS,
+}
+
+
+def generate_batch_payloads(
+    count: int = 20,
+    prefix: str = None,
+    dropdown_ids: dict = None,
+) -> list:
+    """Generate a batch of unique HSN SAC API payloads."""
+    return generate_hsn_sac_api_payloads(count=count, fk_ids=dropdown_ids)
