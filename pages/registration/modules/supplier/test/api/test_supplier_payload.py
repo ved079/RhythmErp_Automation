@@ -42,12 +42,13 @@ class TestSupplierAPIPayload:
     """Verify that generated API payloads are structurally correct."""
 
     def test_payload_has_required_keys(self):
-        """Payload must include id, attribute_name, details, children."""
+        """Payload must include id, attribute_name, children (no root details — that's on steppers)."""
         payload = generate_supplier_api_payload()
         assert "id" in payload
         assert payload["id"] == ""
         assert payload["attribute_name"] == "Supplier"
-        assert "details" in payload
+        # Root payload does NOT have "details" — details[] lives inside each child stepper
+        assert "details" not in payload
         assert "children" in payload
 
     def test_payload_has_3_children_steppers(self):
