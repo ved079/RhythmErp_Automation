@@ -3,13 +3,109 @@ company_onboarding_data.py
 ---------------------------
 Test data for Company Onboarding screen.
 
-6 Steps:
+Location: Master Setup > Company Onboarding
+URL:      /#/dynamic-screens/Company%20Onboarding
+
+UI STEPPER LAYOUT (6 steps):
   Step 1 = Company Details (including Company Code — maxlength 4)
   Step 2 = Promoters
   Step 3 = Address
   Step 4 = Business Details
   Step 5 = Infrastructure
   Step 6 = Configuration (Base Currency)
+
+API STEPPER LAYOUT (5 steppers — Configuration merged into Company Details):
+  Stepper 0 = "Company Details"   (NOT a grid — fields on stepper object)
+  Stepper 1 = "Promoters Details" (GRID — rows in details[])
+  Stepper 2 = "Address Details"   (GRID — rows in details[])
+  Stepper 3 = "Business Activities" (GRID — rows in details[])
+  Stepper 4 = "Infrastructure Details" (GRID — rows in details[])
+
+API STRUCTURE (from live schema, verified 2026-06-03):
+  POST /core/dynamic-screen-wrapper/
+  {
+    "id": "",
+    "attribute_name": "Company Onboarding",
+    "name": "...",                    # Root: Company Name (REQ, max=255)
+    "user_type_id": 12,              # Root: Entity Group (FK, REQ)
+    "parent_id": null,                # Root: Parent Name (FK, REQ, dynamic)
+    "tenant_linked": [],              # Root: Company Linked (multiselect FK, REQ)
+    "level": "2",                     # Root: Level (REQ, max=10)
+    "is_parent": false,               # Root: Is Parent (toggle)
+    "children": [
+      {
+        "stepper_name": "Company Details",
+        "is_stepper": true,
+        "details": [],                # NOT a grid — fields ON stepper object
+        "children": [],
+        "tenant_short_name": "...",    # (REQ, max=255)
+        "tenant_code": "...",          # (REQ, max=4)
+        "contact_person_name": "...",  # (REQ, max=255)
+        "company_background": "...",   # (REQ, textarea)
+        "email_id": "...",             # (REQ, max=255, email pattern)
+        "phone_no": "...",             # (REQ, max=10)
+        "pan_no": "...",               # (REQ, max=15)
+        "tan_no": null,                # (max=15)
+        "gst_no": "...",               # (max=15)
+        "cin_no": "...",               # (REQ, max=21)
+        "plan_type_ref_id": null,      # (dropdown)
+        "is_2fa_applicable": false,    # (toggle)
+        "authentication_type": "email", # (dropdown: email|scanner)
+        "base_currency": 8,            # (REQ, FK, INR=8)
+      },
+      {
+        "stepper_name": "Promoters Details",
+        "is_stepper": true,
+        "details": [{ "promoter_name": "...", "remark": "..." }],
+        "children": [],
+      },
+      {
+        "stepper_name": "Address Details",
+        "is_stepper": true,
+        "details": [{
+          "address_type_ref_id": 1649,  # (FK, REQ)
+          "country": 8,                  # (FK, REQ, cascading)
+          "state": 98,                   # (FK, REQ, cascading)
+          "district": 480,               # (FK, REQ, cascading)
+          "taluka": 11542,               # (FK, REQ, cascading)
+          "address": "...",              # (REQ, max=255)
+          "pin_code": "411001",          # (REQ, max=6)
+        }],
+        "children": [],
+      },
+      {
+        "stepper_name": "Business Activities",
+        "is_stepper": true,
+        "details": [{
+          "business_model": "...",       # (max=100)
+          "market_linkages": "...",      # (max=255)
+          "line_of_business": "...",     # (max=255)
+          "additional_business_activities": "...", # (max=255)
+        }],
+        "children": [],
+      },
+      {
+        "stepper_name": "Infrastructure Details",
+        "is_stepper": true,
+        "details": [{
+          "infrastructure_type_ref_id": 1585, # (FK)
+          "location": "...",                  # (max=50)
+          "ownership_type": 531,              # (FK)
+          "remarks": "...",                   # (textarea)
+        }],
+        "children": [],
+      },
+    ]
+  }
+
+KEY RULES:
+  - Company Details stepper is NOT a grid: fields live ON the stepper object,
+    details[] must be empty (same pattern as Customer's Additional Details)
+  - All other steppers ARE grids: rows go in details[] arrays
+  - Base Currency is in Company Details stepper (NOT a separate Configuration stepper)
+  - authentication_type uses STRING values ("email" / "scanner"), not integer IDs
+  - parent_id and tenant_linked are dynamic (depend on tenant hierarchy)
+  - Address cascading: country -> state -> district -> taluka
 """
 
 import random
@@ -445,3 +541,402 @@ if __name__ == "__main__":
         print(f"    Entity Group : {company['entity_group']}")
         print(f"    Base Currency: {company['base_currency']}")
         print(f"    Email        : {company['email']}")
+
+    print("\n[API PAYLOAD SAMPLE]")
+    print("-" * 40)
+    import json
+    payload = generate_company_onboarding_api_payload()
+    print(json.dumps(payload, indent=2)[:1500])
+
+
+# ──────────────────────────────────────────────────────────────
+# API PAYLOAD INFRASTRUCTURE
+# ──────────────────────────────────────────────────────────────
+# Dropdown FK ID pools (verified on tenant 599, 2026-06-03)
+# ──────────────────────────────────────────────────────────────
+
+# Entity Group: only "Branch" available (level > current tenant)
+ENTITY_GROUP_IDS = [12]
+ENTITY_GROUP_NAMES = {12: "Branch"}
+
+# Authentication Type: STRING values (NOT integer IDs)
+AUTHENTICATION_TYPE_IDS = ["email", "scanner"]
+AUTHENTICATION_TYPE_NAMES = {"email": "Email", "scanner": "Scanner"}
+
+# Base Currency: 30 options from dynamic_models_country_mst
+BASE_CURRENCY_IDS = [8, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
+                     51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66]
+BASE_CURRENCY_NAMES = {
+    8: "INR", 38: "EGP", 39: "USD", 40: "GBP", 41: "CAD",
+    42: "AUD", 43: "EUR", 44: "EUR", 45: "JPY", 46: "CNY",
+    47: "BRL", 48: "RUB", 49: "EUR", 50: "EUR", 51: "MXN",
+    52: "KRW", 53: "IDR", 54: "SAR", 55: "ZAR", 56: "ARS",
+    57: "TRY", 58: "EUR", 59: "CHF", 60: "SEK", 61: "NOK",
+    62: "DKK", 63: "THB", 64: "MYR", 65: "SGD", 66: "NZD",
+}
+
+# Address Type
+ADDRESS_TYPE_IDS = [1649, 1650]
+ADDRESS_TYPE_NAMES = {1649: "Registered Address", 1650: "Corporate Address"}
+
+# Country: 30 options (same pool as Base Currency origin)
+COUNTRY_IDS = [54, 55, 56, 8, 57, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+               48, 49, 50, 51, 52, 53, 58, 59, 60, 61, 62, 63, 64, 65, 66]
+COUNTRY_NAMES = {
+    54: "Saudi Arabia", 55: "South Africa", 56: "Argentina", 8: "India",
+    57: "Turkey", 38: "Egypt", 39: "United States", 40: "United Kingdom",
+    41: "Canada", 42: "Australia", 43: "Germany", 44: "France",
+    45: "Japan", 46: "China", 47: "Brazil", 48: "Russia",
+    49: "Italy", 50: "Spain", 51: "Mexico", 52: "South Korea",
+    53: "Indonesia", 58: "Netherlands", 59: "Switzerland", 60: "Sweden",
+    61: "Norway", 62: "Denmark", 63: "Thailand", 64: "Malaysia",
+    65: "Singapore", 66: "New Zealand",
+}
+
+# Infrastructure Type
+INFRASTRUCTURE_TYPE_IDS = [1585, 1584, 1877, 1878, 1879]
+INFRASTRUCTURE_TYPE_NAMES = {
+    1585: "Office Building", 1584: "Warehouse",
+    1877: "Cold Storage Unit", 1878: "Processing Unit", 1879: "Other",
+}
+
+# Ownership Type
+OWNERSHIP_TYPE_IDS = [531, 530]
+OWNERSHIP_TYPE_NAMES = {531: "Leased", 530: "Owned"}
+
+# Fixed defaults
+DEFAULT_BASE_CURRENCY_ID = 8   # INR
+DEFAULT_COUNTRY_ID = 8         # India
+
+# Backward-compatible default FK IDs dict
+DEFAULT_CO_FK_IDS = {
+    "user_type_id": 12,               # Branch
+    "base_currency": DEFAULT_BASE_CURRENCY_ID,
+    "address_type_ref_id": 1649,       # Registered Address
+    "country": DEFAULT_COUNTRY_ID,     # India
+    "infrastructure_type_ref_id": 1585, # Office Building
+    "ownership_type": 531,             # Leased
+    "authentication_type": "email",     # Email (string, not int!)
+}
+
+
+# ──────────────────────────────────────────────────────────────
+# FK Name Mappings (human-readable labels for each ID)
+# ──────────────────────────────────────────────────────────────
+
+# (Names already defined above as _NAMES dicts)
+
+
+# ──────────────────────────────────────────────────────────────
+# Field Validation Rules (schema documentation)
+# ──────────────────────────────────────────────────────────────
+
+FIELD_VALIDATION_RULES = {
+    # Root-level fields
+    "name": {"type": "character", "required": True, "max_length": 255},
+    "user_type_id": {"type": "dropdown", "required": True, "fk_options_count": 1},
+    "parent_id": {"type": "dropdown", "required": True, "fk_options_count": 0,
+                  "note": "Dynamic — depends on tenant hierarchy"},
+    "tenant_linked": {"type": "multiselect", "required": True, "fk_options_count": 0,
+                      "note": "Dynamic — depends on tenant hierarchy"},
+    "level": {"type": "character", "required": True, "max_length": 10},
+    "is_parent": {"type": "toggle", "required": False, "default": False},
+
+    # Company Details stepper (fields ON stepper object, NOT in details[])
+    "tenant_short_name": {"type": "character", "required": True, "max_length": 255},
+    "tenant_code": {"type": "character", "required": True, "max_length": 4},
+    "contact_person_name": {"type": "character", "required": True, "max_length": 255},
+    "company_background": {"type": "textarea", "required": True, "max_length": 10000000},
+    "email_id": {"type": "character", "required": True, "max_length": 255,
+                 "pattern": r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"},
+    "phone_no": {"type": "character", "required": True, "max_length": 10},
+    "pan_no": {"type": "character", "required": True, "max_length": 15},
+    "tan_no": {"type": "character", "required": False, "max_length": 15},
+    "gst_no": {"type": "character", "required": False, "max_length": 15},
+    "cin_no": {"type": "character", "required": True, "max_length": 21},
+    "plan_type_ref_id": {"type": "dropdown", "required": False, "fk_options_count": 0},
+    "is_2fa_applicable": {"type": "toggle", "required": True, "default": False},
+    "authentication_type": {"type": "dropdown", "required": False, "fk_options_count": 2,
+                            "note": "String values: email, scanner"},
+    "base_currency": {"type": "dropdown", "required": True, "fk_options_count": 30},
+
+    # Promoters Details (children[1].details[])
+    "promoter_name": {"type": "character", "required": False, "max_length": 100},
+    "remark": {"type": "textarea", "required": False, "max_length": 10000000},
+
+    # Address Details (children[2].details[])
+    "address_type_ref_id": {"type": "dropdown", "required": True, "fk_options_count": 2},
+    "country": {"type": "dropdown", "required": True, "fk_options_count": 30, "cascading": True},
+    "state": {"type": "dropdown", "required": True, "fk_options_count": 0, "cascading": True},
+    "district": {"type": "dropdown", "required": True, "fk_options_count": 0, "cascading": True},
+    "taluka": {"type": "dropdown", "required": True, "fk_options_count": 0, "cascading": True},
+    "address": {"type": "character", "required": True, "max_length": 255},
+    "pin_code": {"type": "character", "required": True, "max_length": 6},
+
+    # Business Activities (children[3].details[])
+    "business_model": {"type": "character", "required": False, "max_length": 100},
+    "market_linkages": {"type": "character", "required": False, "max_length": 255},
+    "line_of_business": {"type": "character", "required": False, "max_length": 255},
+    "additional_business_activities": {"type": "character", "required": False, "max_length": 255},
+
+    # Infrastructure Details (children[4].details[])
+    "infrastructure_type_ref_id": {"type": "dropdown", "required": False, "fk_options_count": 5},
+    "location": {"type": "character", "required": False, "max_length": 50},
+    "ownership_type": {"type": "dropdown", "required": False, "fk_options_count": 2},
+    "remarks": {"type": "textarea", "required": False, "max_length": 10000000},
+}
+
+
+def get_random_address_chain():
+    """Import and reuse the Supplier address chain pool for cascading FK IDs."""
+    from pages.registration.modules.supplier.data.supplier_data import (
+        get_random_address_chain as _supplier_chain,
+    )
+    return _supplier_chain(verified_only=True)
+
+
+def generate_random_fk_ids() -> dict:
+    """Generate a set of random FK IDs for Company Onboarding dropdown variety."""
+    return {
+        "user_type_id": random.choice(ENTITY_GROUP_IDS),
+        "base_currency": DEFAULT_BASE_CURRENCY_ID,
+        "address_type_ref_id": random.choice(ADDRESS_TYPE_IDS),
+        "country": DEFAULT_COUNTRY_ID,
+        "infrastructure_type_ref_id": random.choice(INFRASTRUCTURE_TYPE_IDS),
+        "ownership_type": random.choice(OWNERSHIP_TYPE_IDS),
+        "authentication_type": random.choice(AUTHENTICATION_TYPE_IDS),
+    }
+
+
+def generate_luhn_gstin(state_code=None):
+    """Generate a valid GSTIN with Luhn mod-36 checksum.
+    Reuses the Supplier function for correctness.
+    """
+    from pages.registration.modules.supplier.data.supplier_data import generate_gstin
+    return generate_gstin(state_code)
+
+
+def generate_realistic_email():
+    """Generate a realistic email (same style as Supplier)."""
+    from pages.registration.modules.supplier.data.supplier_data import generate_email
+    return generate_email()
+
+
+def generate_realistic_phone():
+    """Generate a valid 10-digit Indian mobile number."""
+    prefix = random.choice(["6", "7", "8", "9"])
+    return f"{prefix}{random.randint(100000000, 999999999)}"
+
+
+def generate_pan():
+    """Generate a random PAN number in valid Indian format: ABCDE1234F."""
+    letters = "".join(random.choices(string.ascii_uppercase, k=5))
+    digits = "".join(random.choices(string.digits, k=4))
+    last_letter = random.choice(string.ascii_uppercase)
+    return f"{letters}{digits}{last_letter}"
+
+
+def generate_cin():
+    """Generate a random CIN in valid format: U12345MH2024PTC123456."""
+    cin_random = "".join(random.choices(string.digits, k=5))
+    cin_year = random.choice(["2020", "2021", "2022", "2023", "2024", "2025"])
+    cin_num = "".join(random.choices(string.digits, k=6))
+    return f"U{cin_random}MH{cin_year}PTC{cin_num}"
+
+
+def generate_company_name():
+    """Generate a unique company name."""
+    prefix = random.choice(COMPANY_PREFIXES)
+    middle = random.choice(COMPANY_MIDDLE_WORDS)
+    suffix = random.choice(COMPANY_SUFFIXES)
+    return f"{prefix} {middle} {suffix}"
+
+
+def build_company_onboarding_api_payload(
+    company_data: dict = None,
+    dropdown_ids: dict = None,
+) -> dict:
+    """Build the complete Company Onboarding API payload from data + FK IDs.
+
+    Args:
+        company_data: Dict from _generate_single_company() or None for random.
+        dropdown_ids: Dict of FK IDs. Missing keys fall back to DEFAULT_CO_FK_IDS.
+
+    Returns:
+        JSON payload ready for POST /core/dynamic-screen-wrapper/
+    """
+    ids = {**DEFAULT_CO_FK_IDS, **(dropdown_ids or {})}
+
+    def _fk(key):
+        val = ids.get(key)
+        return val if val is not None else None
+
+    if company_data is None:
+        company_data = _generate_single_company()
+
+    # Get address chain for cascading FK IDs
+    address_chain = get_random_address_chain()
+
+    # ── Build Company Details stepper ──
+    # NOTE: Company Details is NOT a grid, so fields go ON the stepper object,
+    # and details[] must be EMPTY. This is the same pattern as Customer's
+    # Additional Details stepper.
+    company_details = {}
+    company_details["tenant_short_name"] = company_data.get("company_short_name") or None
+    company_details["tenant_code"] = company_data.get("company_code") or None
+    company_details["contact_person_name"] = company_data.get("contact_name") or None
+    company_details["company_background"] = company_data.get("company_background") or None
+    company_details["email_id"] = company_data.get("email") or generate_realistic_email()
+    company_details["phone_no"] = company_data.get("mobile_number") or generate_realistic_phone()
+    company_details["pan_no"] = company_data.get("pan") or generate_pan()
+    company_details["tan_no"] = None
+    company_details["gst_no"] = company_data.get("gstin") or generate_luhn_gstin("27")
+    company_details["cin_no"] = company_data.get("cin") or generate_cin()
+    company_details["plan_type_ref_id"] = None
+    company_details["is_2fa_applicable"] = company_data.get("is_2fa", False)
+    company_details["authentication_type"] = _fk("authentication_type") or "email"
+    company_details["base_currency"] = _fk("base_currency") or DEFAULT_BASE_CURRENCY_ID
+
+    # ── Build Promoters Details (GRID — rows in details[]) ──
+    promoter_rows = []
+    for promoter in company_data.get("promoters", PROMOTER_DATA[:2]):
+        promoter_rows.append({
+            "promoter_name": promoter.get("name", ""),
+            "remark": promoter.get("remark", ""),
+        })
+
+    # ── Build Address Details (GRID — rows in details[]) ──
+    address_detail = {}
+    address_detail["address_type_ref_id"] = _fk("address_type_ref_id")
+    address_detail["country"] = _fk("country")
+    address_detail["state"] = address_chain.get("state_ref_id_id")
+    address_detail["district"] = address_chain.get("district_ref_id_id")
+    address_detail["taluka"] = address_chain.get("sub_district_ref_id_id")
+    address_detail["address"] = company_data.get("address") or "123 Test Street"
+    pin = company_data.get("pin_code") or "411001"
+    address_detail["pin_code"] = str(pin)
+
+    # ── Build Business Activities (GRID — rows in details[]) ──
+    business_detail = {}
+    business_detail["business_model"] = company_data.get("business_model") or BUSINESS_MODEL
+    business_detail["market_linkages"] = company_data.get("market_linkages") or MARKET_LINKAGES
+    business_detail["line_of_business"] = company_data.get("line_of_business") or LINE_OF_BUSINESS
+    business_detail["additional_business_activities"] = (
+        company_data.get("additional_business_activities") or ADDITIONAL_BUSINESS_ACTIVITIES
+    )
+
+    # ── Build Infrastructure Details (GRID — rows in details[]) ──
+    infra_detail = {}
+    infra_detail["infrastructure_type_ref_id"] = _fk("infrastructure_type_ref_id")
+    infra_detail["location"] = company_data.get("infra_location") or random.choice(INFRASTRUCTURE_LOCATIONS)
+    infra_detail["ownership_type"] = _fk("ownership_type")
+    infra_detail["remarks"] = None
+
+    # ── Assemble payload ──
+    payload = {
+        "id": "",
+        "attribute_name": "Company Onboarding",
+
+        # Root-level fields
+        "name": company_data.get("company_name") or generate_company_name(),
+        "user_type_id": ids["user_type_id"],
+        "parent_id": None,          # Dynamic — must be set at runtime
+        "tenant_linked": [],        # Dynamic — must be set at runtime
+        "level": "2",
+        "is_parent": False,
+
+        # Children array with stepper objects
+        "children": [
+            {
+                "stepper_name": "Company Details",
+                "is_stepper": True,
+                "details": [],            # NOT a grid — fields on stepper itself
+                "children": [],
+                **company_details,        # Spread fields onto the stepper object
+            },
+            {
+                "stepper_name": "Promoters Details",
+                "is_stepper": True,
+                "details": promoter_rows,
+                "children": [],
+            },
+            {
+                "stepper_name": "Address Details",
+                "is_stepper": True,
+                "details": [address_detail],
+                "children": [],
+            },
+            {
+                "stepper_name": "Business Activities",
+                "is_stepper": True,
+                "details": [business_detail],
+                "children": [],
+            },
+            {
+                "stepper_name": "Infrastructure Details",
+                "is_stepper": True,
+                "details": [infra_detail],
+                "children": [],
+            },
+        ],
+    }
+
+    return payload
+
+
+def generate_company_onboarding_api_payload(
+    name_prefix=None,
+    dropdown_ids: dict = None,
+) -> dict:
+    """One-shot: generate a complete Company Onboarding API payload with random data.
+
+    Automatically randomizes:
+      - Address chain (state/district/taluka)
+      - Infrastructure type, ownership type
+      - Address type, authentication type
+      - PAN, CIN, GSTIN, email, phone
+
+    Args:
+        name_prefix: Optional prefix for the company name.
+        dropdown_ids: Override specific FK IDs.
+
+    Returns:
+        JSON payload ready for POST /core/dynamic-screen-wrapper/
+    """
+    company_data = _generate_single_company()
+    if name_prefix:
+        company_data["company_name"] = f"{name_prefix} {company_data['company_name']}"
+
+    ids = {
+        **generate_random_fk_ids(),
+        **get_random_address_chain(),
+        **(dropdown_ids or {}),
+    }
+
+    return build_company_onboarding_api_payload(company_data, ids)
+
+
+def generate_batch_payloads(
+    count: int = 20,
+    prefix: str = None,
+    dropdown_ids: dict = None,
+) -> list:
+    """Generate a batch of unique Company Onboarding API payloads.
+
+    Args:
+        count: Number of payloads to generate.
+        prefix: Optional name prefix for all companies.
+        dropdown_ids: Override specific FK IDs for ALL payloads.
+
+    Returns:
+        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
+    """
+    payloads = []
+    for i in range(count):
+        pfx = prefix or f"CO{i+1:03d}"
+        payload = generate_company_onboarding_api_payload(
+            name_prefix=pfx,
+            dropdown_ids=dropdown_ids,
+        )
+        payloads.append(payload)
+    return payloads
