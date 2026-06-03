@@ -332,7 +332,8 @@ class VehicleMasterPage(BasePage):
             log.warning("Add form may not have opened — Name input not found")
 
     def click_refresh(self):
-        """Click the Refresh button via JS. Falls back to hard_refresh."""
+        """Click the Refresh button via JS. Falls back to hard_refresh.
+        Always waits for page to be ready after refresh."""
         log.info("Clicking Refresh button...")
         try:
             result = self.driver.execute_script("""
@@ -357,6 +358,8 @@ class VehicleMasterPage(BasePage):
             """)
             if result:
                 log.info("Refresh clicked")
+                # Wait for page to reload after refresh click
+                self._wait_for_page_ready()
                 return
         except Exception:
             pass
@@ -1144,14 +1147,19 @@ class VehicleMasterPage(BasePage):
 
         # Step 2: If not visible, click search button via JS
         if search_input is None:
+            # Ensure page is fully loaded before trying search
+            self._wait_for_page_ready()
             try:
-                self.driver.execute_script("""
+                result = self.driver.execute_script("""
                 var btn = document.querySelector('button.search-btn');
-                if (!btn) { throw new Error('Search button not found'); }
+                if (!btn) { return null; }
                 btn.scrollIntoView({block:'center'});
                 btn.click();
                 return 'clicked';
                 """)
+                if not result:
+                    log.error("Search button not found in DOM")
+                    return False
             except Exception as e:
                 log.error("Failed to click search button via JS: " + str(e))
                 return False
@@ -1423,10 +1431,10 @@ class VehicleMasterPage(BasePage):
                 el = self.driver.find_element(By.XPATH, select_locator[1])
                 self.driver.execute_script("arguments[0].click();", el)
 
-        # Wait for options to appear
+        # Wait for options to appear (visibility, not just presence)
         try:
-            WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located(
+            WebDriverWait(self.driver, 8).until(
+                EC.visibility_of_element_located(
                     (
                         By.CSS_SELECTOR,
                         "div[role='listbox'] mat-option, "
@@ -1438,6 +1446,9 @@ class VehicleMasterPage(BasePage):
             raise Exception(
                 f"No options loaded in '{label_name}' dropdown"
             )
+
+        # Small wait for Angular to populate option text content
+        time.sleep(0.3)
 
         # Read all option texts
         options = self.driver.find_elements(
