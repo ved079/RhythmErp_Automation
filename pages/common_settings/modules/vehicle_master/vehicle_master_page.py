@@ -25,6 +25,13 @@ KEY RULES:
   - Dropdown options read dynamically at runtime (never hardcode)
   - History search requires Enter key after typing
   - Stacked popups: History -> View (z-index 1001 over 1000)
+
+Optimised (v2) — UOM speed patterns applied:
+  - Replaced most time.sleep/wait_seconds with WebDriverWait
+  - hard_refresh() for fast page reset between tests
+  - JS-first interactions (offsetParent checks, JS clicks)
+  - Single-strategy methods instead of multi-fallback loops
+  - Reduced unnecessary waits throughout
 """
 
 import os
@@ -40,17 +47,15 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import (
     TimeoutException,
-    ElementClickInterceptedException,
     StaleElementReferenceException,
 )
 from common.base_page import BasePage
 from common.logger import log
-from config import RHYTHMERP_BASE_URL, EXPLICIT_WAIT
+from config import RHYTHMERP_BASE_URL
 
 # Global list to track every submission for reporting
 VM_SUBMISSIONS = []
@@ -62,10 +67,7 @@ class VehicleMasterPage(BasePage):
     # ==============================================================
     #  LOCATORS — Toolbar
     # ==============================================================
-    ADD_BUTTON = (
-        "css",
-        "button.erp-add-btn",
-    )
+    ADD_BUTTON = ("css", "button.erp-add-btn")
     SEARCH_TOGGLE = ("css", "button.search-btn, button[aria-label='Search']")
     REFRESH_BUTTON = ("css", "button[mattooltip='Refresh']")
 
@@ -153,13 +155,8 @@ class VehicleMasterPage(BasePage):
 
     # ==============================================================
     #  LOCATORS — Row action buttons (3-dot kebab menu)
-    #  The live UI uses a ⋮ menu in cdk-column-actions, NOT
-    #  separate View/Edit/History button columns.
     # ==============================================================
-    ACTION_MENU_TRIGGER = (
-        "css",
-        "td.cdk-column-actions button",
-    )
+    ACTION_MENU_TRIGGER = ("css", "td.cdk-column-actions button")
 
     # ==============================================================
     #  LOCATORS — History popup
@@ -195,11 +192,6 @@ class VehicleMasterPage(BasePage):
     #  LOCATORS — Validation errors
     # ==============================================================
     MAT_ERROR = ("css", "mat-error, .mat-mdc-form-field-error")
-    FIELD_ERROR = (
-        "xpath",
-        "//mat-label[contains(.,'{field_label}')]"
-        "/ancestor::mat-form-field//mat-error",
-    )
 
     # ==============================================================
     #  LOCATORS — Dropdown overlay
@@ -218,59 +210,50 @@ class VehicleMasterPage(BasePage):
     )
 
     # ==============================================================
-    #  Navigation & page load
+    #  Navigation & page load — FAST (UOM pattern)
     # ==============================================================
 
     def navigate_to_page(self):
-        """Navigate to the Vehicle Master listing page.
-        Force-refreshes to clear leftover Angular state from previous tests.
-        """
+        """Navigate to Vehicle Master page via direct URL + refresh (fast)."""
         log.info("Navigating to Vehicle Master page...")
-        
-        # Navigate to the URL
-        self.navigate_to(self.PAGE_URL)
-        
-        # Force a full page reload to clear any leftover
-        # Angular overlays / popups from the previous test.
-        # Without this, the SPA may keep stale state since the
-        # hash URL doesn't trigger a full reload.
+        self.driver.get(self.PAGE_URL)
         self.driver.refresh()
-        
+        self._wait_for_page_ready()
+
+    def hard_refresh(self):
+        """Hard refresh the current page and wait for ready.
+        Much faster than full navigate_to_page() for resetting between tests."""
+        log.info("Hard refreshing Vehicle Master page...")
+        self.driver.refresh()
         self._wait_for_page_ready()
 
     def _wait_for_page_ready(self):
-        """Wait until the Vehicle Master page is fully loaded:
-        1. Table renders
-        2. Toolbar buttons (including ADD) are clickable
-        """
-        # Step 1: Wait for table
+        """Wait for the page table to appear. Fast 15s WebDriverWait
+        with lambda — no extra sleeps."""
         try:
-            WebDriverWait(self.driver, EXPLICIT_WAIT).until(
-                EC.visibility_of_element_located(
-                    (By.CSS_SELECTOR, "table#excel-table")
-                )
+            WebDriverWait(self.driver, 15).until(
+                lambda d: d.find_elements("css selector", "table#excel-table")
             )
-            log.info("Vehicle Master table loaded")
-        except TimeoutException:
-            log.warning("Vehicle Master table not found, page may be empty")
-
-        # Step 2: Wait for toolbar to fully render (proves ADD button is ready)
-        try:
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, "ul.tbl-export-btn")
+            log.info("Page ready (table found)")
+        except Exception:
+            # Fallback: check for search button
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    lambda d: d.find_elements("css selector", "button.search-btn")
                 )
-            )
-            # Extra wait for Angular to bind mattooltip attributes
-            self.wait_seconds(1)
-            log.info("Vehicle Master toolbar ready")
-        except TimeoutException:
-            log.warning("Toolbar not found, ADD button may be delayed")
-            self.wait_seconds(3)
+                log.info("Page ready (search button found, no table)")
+            except Exception:
+                log.warning("Page ready check timed out")
 
     def is_page_loaded(self):
         """Check if the Vehicle Master listing page has loaded."""
-        return self.is_displayed(self.TABLE, timeout=10)
+        try:
+            return self.driver.execute_script(
+                "var t = document.querySelector('table#excel-table');"
+                "return t && t.offsetParent !== null;"
+            )
+        except Exception:
+            return False
 
     # ==============================================================
     #  Overlay cleanup — NEVER use Keys.ESCAPE
@@ -289,7 +272,6 @@ class VehicleMasterPage(BasePage):
                 if (!el.querySelector('mat-dialog-container')) el.remove();
             });
         """)
-        self.wait_seconds(0.2)
 
     def _close_select_panel(self):
         """Try backdrop click first; fall back to JS removal."""
@@ -302,7 +284,6 @@ class VehicleMasterPage(BasePage):
                 try:
                     if bd.is_displayed():
                         bd.click()
-                        self.wait_seconds(0.3)
                         return
                 except Exception:
                     pass
@@ -318,148 +299,41 @@ class VehicleMasterPage(BasePage):
             self._force_close_panels()
 
     # ==============================================================
-    #  Toolbar actions
+    #  Toolbar actions — JS-first (UOM pattern)
     # ==============================================================
 
     def open_add_form(self):
-        """Click the ADD (+) button to open the create form.
-        Uses multiple strategies with proper waits to handle
-        intermittent rendering delays.
+        """Click the ADD (+) button via JS click. Single strategy, fast."""
+        log.info("Opening Add Vehicle Master form...")
+        js_click_add = """
+        var btn = document.querySelector('button.erp-add-btn');
+        if (!btn) { throw new Error('Add button not found in DOM'); }
+        btn.scrollIntoView({block:'center'});
+        btn.click();
+        return 'clicked';
         """
-        log.info("Clicking ADD button...")
-
-        # Ensure toolbar is rendered
-        self._wait_for_toolbar()
-
-        # Strategy 1: button.erp-add-btn (matches actual HTML structure)
         try:
-            btn = self.driver.find_element(
-                By.CSS_SELECTOR, "button.erp-add-btn"
-            )
-            if btn.is_displayed():
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});"
-                    "arguments[0].click();",
-                    btn,
-                )
-                self.wait_seconds(1.5)
-                if self._is_form_popup_open():
-                    log.info("ADD form opened via mattooltip div button")
-                    return
-        except Exception:
-            pass
-
-        # Strategy 2: Find mini-fab button with 'add' icon
-        try:
-            add_btns = self.driver.find_elements(
-                By.CSS_SELECTOR, "button.mat-mdc-mini-fab"
-            )
-            for btn in add_btns:
-                try:
-                    icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
-                    if icon.text.strip().lower() == "add" and btn.is_displayed():
-                        self.driver.execute_script(
-                            "arguments[0].scrollIntoView({block:'center'});"
-                            "arguments[0].click();",
-                            btn,
-                        )
-                        self.wait_seconds(1.5)
-                        if self._is_form_popup_open():
-                            log.info("ADD form opened via mini-fab icon")
-                            return
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-        # Strategy 3: Click the button.erp-add-btn wrapper itself
-        try:
-            div = self.driver.find_element(
-                By.CSS_SELECTOR, "button.erp-add-btn"
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});"
-                "arguments[0].click();",
-                div,
-            )
-            self.wait_seconds(1.5)
-            if self._is_form_popup_open():
-                log.info("ADD form opened via mattooltip div wrapper")
-                return
-        except Exception:
-            pass
-
-        # Strategy 4: BasePage click_with_retry
-        try:
+            result = self.driver.execute_script(js_click_add)
+            log.info("Add button clicked via JS: " + str(result))
+        except Exception as e:
+            log.warning("JS click failed, falling back to Selenium: " + str(e))
             self.click_with_retry(self.ADD_BUTTON)
-            self.wait_seconds(1.5)
-            if self._is_form_popup_open():
-                log.info("ADD form opened via click_with_retry")
-                return
-        except Exception:
-            pass
-
-        raise Exception("ADD button not found or not clickable")
-
-    def _wait_for_toolbar(self):
-        """Wait for the toolbar and ADD button to be present and visible.
-        Retries with increasing waits to handle Angular rendering delays.
-        """
-        for attempt in range(3):
-            try:
-                # Check if ADD button container exists
-                add_container = self.driver.find_elements(
-                    By.CSS_SELECTOR, "button.erp-add-btn"
-                )
-                if add_container and add_container[0].is_displayed():
-                    return  # Toolbar is ready
-            except Exception:
-                pass
-
-            # Also try finding by icon
-            try:
-                mini_fabs = self.driver.find_elements(
-                    By.CSS_SELECTOR, "button.mat-mdc-mini-fab"
-                )
-                for btn in mini_fabs:
-                    try:
-                        icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
-                        if icon.text.strip().lower() == "add":
-                            return  # ADD button found
-                    except Exception:
-                        continue
-            except Exception:
-                pass
-
-            # Not found yet — wait and retry
-            log.info(f"Waiting for toolbar... attempt {attempt + 1}/3")
-            self.wait_seconds(2)
-
-        log.warning("Toolbar wait exhausted, ADD button may not be ready")
-
-    def _is_form_popup_open(self):
-        """Quick check if any form popup (big-model or dialog) is visible."""
+        # Wait for the form popup to appear
         try:
-            popups = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "div.big-model, mat-dialog-container, "
-                "div.cdk-overlay-container div.popup-wrapper",
+            WebDriverWait(self.driver, 5).until(
+                lambda d: d.execute_script(
+                    "var el = document.querySelector("
+                    "\"input[name='Name'], input[formcontrolname='name']\");"
+                    "return el && el.offsetParent !== null;"
+                )
             )
-            for p in popups:
-                try:
-                    if p.is_displayed():
-                        return True
-                except Exception:
-                    continue
+            log.info("Add form opened")
         except Exception:
-            pass
-        return False
+            log.warning("Add form may not have opened — Name input not found")
 
     def click_refresh(self):
-        """Click the Refresh button. Tries multiple strategies."""
+        """Click the Refresh button via JS. Falls back to hard_refresh."""
         log.info("Clicking Refresh button...")
-
-        # Strategy 1: JS — find by mattooltip attribute (most reliable)
         try:
             result = self.driver.execute_script("""
             var btns = document.querySelectorAll('button[mattooltip]');
@@ -470,7 +344,6 @@ class VehicleMasterPage(BasePage):
                     return 'refresh_clicked';
                 }
             }
-            // Also try by mat-icon text
             var allBtns = document.querySelectorAll('button.mat-mdc-mini-fab');
             for (var i = 0; i < allBtns.length; i++) {
                 var icon = allBtns[i].querySelector('mat-icon');
@@ -483,35 +356,13 @@ class VehicleMasterPage(BasePage):
             return null;
             """)
             if result:
-                self.wait_seconds(2)
                 log.info("Refresh clicked")
                 return
         except Exception:
             pass
-
-        # Strategy 2: Selenium find by icon
-        try:
-            refresh_btns = self.driver.find_elements(
-                By.CSS_SELECTOR, "button.mat-mdc-mini-fab"
-            )
-            for btn in refresh_btns:
-                try:
-                    icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
-                    if (
-                        icon.text.strip().lower() == "refresh"
-                        and btn.is_displayed()
-                    ):
-                        self.driver.execute_script(
-                            "arguments[0].click();", btn
-                        )
-                        self.wait_seconds(2)
-                        log.info("Refresh clicked")
-                        return
-                except Exception:
-                    continue
-        except Exception:
-            pass
-        log.warning("Refresh button not found")
+        # Fallback: hard refresh the page (guaranteed clean state)
+        log.warning("Refresh button not found, doing hard_refresh instead")
+        self.hard_refresh()
 
     # ==============================================================
     #  Fill form fields
@@ -519,8 +370,7 @@ class VehicleMasterPage(BasePage):
 
     def fill_vehicle_form(self, data):
         """Fill all fields on the Vehicle Master add/edit form.
-        Dropdown values: if None/empty, picks a random option from the live UI.
-        """
+        Dropdown values: if None/empty, picks a random option from the live UI."""
         log.info("Filling Vehicle Master form...")
 
         # Name
@@ -564,121 +414,54 @@ class VehicleMasterPage(BasePage):
         log.info("Vehicle Master form filled")
 
     # ==============================================================
-    #  Form submission & cancellation
+    #  Form submission & cancellation — JS-first (UOM pattern)
     # ==============================================================
 
     def submit(self):
-        """Click the Submit button on the Create form."""
+        """Click the Submit button via JS click (fast)."""
         log.info("Submitting Vehicle Master form...")
         self._force_close_panels()
-        try:
-            btn = self.find_visible_element(self.SUBMIT_BUTTON, timeout=5)
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});"
-                "arguments[0].click();",
-                btn,
-            )
-        except Exception:
-            try:
-                btn = self.driver.find_element(
-                    By.XPATH,
-                    "//div[@class='popup-footer']//button[contains(.,'Submit')]",
-                )
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});"
-                    "arguments[0].click();",
-                    btn,
-                )
-            except Exception:
-                self.click_with_retry(self.SUBMIT_BUTTON)
-        self.wait_seconds(2)
-        log.info("Submit clicked")
+        self._js_click_popup_button('Submit')
 
     def click_update(self):
-        """Click the Update button on the Edit form."""
+        """Click the Update button via JS click (fast)."""
         log.info("Clicking Update button...")
         self._force_close_panels()
-        try:
-            btn = self.find_visible_element(self.UPDATE_BUTTON, timeout=5)
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});"
-                "arguments[0].click();",
-                btn,
-            )
-        except Exception:
-            try:
-                btn = self.driver.find_element(
-                    By.XPATH,
-                    "//div[@class='popup-footer']//button[contains(.,'Update')]",
-                )
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});"
-                    "arguments[0].click();",
-                    btn,
-                )
-            except Exception:
-                self.click_with_retry(self.UPDATE_BUTTON)
-        self.wait_seconds(2)
-        log.info("Update clicked")
+        self._js_click_popup_button('Update')
 
     def cancel(self):
-        """Click the Cancel button on the form. Tries multiple strategies."""
+        """Click Cancel button via pure JS (fast)."""
         log.info("Clicking Cancel button...")
-
-        # Strategy 1: JS find Cancel in popup-footer
-        try:
-            result = self.driver.execute_script("""
-            var btns = document.querySelectorAll(
-                '.popup-footer button, .big-model button, '
-                + 'mat-dialog-container button'
-            );
-            for (var i = 0; i < btns.length; i++) {
-                if (btns[i].textContent.trim() === 'Cancel'
-                    && btns[i].offsetParent !== null) {
-                    btns[i].click();
-                    return 'cancel_clicked';
+        self.driver.execute_script("""
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.indexOf('Cancel') !== -1
+                        && buttons[j].offsetParent !== null) {
+                        buttons[j].click();
+                        return 'clicked';
+                    }
                 }
             }
-            return null;
-            """)
-            if result:
-                self.wait_seconds(1)
-                log.info("Cancel clicked via JS")
-                return
-        except Exception:
-            pass
-
-        # Strategy 2: Original locator
-        try:
-            btn = self.find_visible_element(self.CANCEL_BUTTON, timeout=5)
-            self.driver.execute_script("arguments[0].click();", btn)
-            self.wait_seconds(1)
-            return
-        except Exception:
-            pass
-
-        # Strategy 3: XPath fallback
-        try:
-            btn = self.driver.find_element(
-                By.XPATH,
-                "//div[@class='popup-footer']//button[contains(.,'Cancel')]",
-            )
-            self.driver.execute_script("arguments[0].click();", btn)
-            self.wait_seconds(1)
-            return
-        except Exception:
-            pass
-
-        log.warning("Cancel button not found via any strategy")
+            return 'not found';
+        """)
 
     def close_popup(self):
-        """Click the X (close) icon on the form header.
-        Falls back to Cancel, then JS force close."""
-        log.info("Closing popup via X button...")
-
-        # Strategy 1: Find close icon in popup header
-        try:
-            result = self.driver.execute_script("""
+        """Close any popup by clicking Cancel button via JS (fast)."""
+        log.info("Closing popup...")
+        self.driver.execute_script("""
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.indexOf('Cancel') !== -1) {
+                        buttons[j].click();
+                        return 'clicked';
+                    }
+                }
+            }
+            // Fallback: try X/close icon
             var icons = document.querySelectorAll(
                 '.big-model button mat-icon, '
                 + 'mat-dialog-container button mat-icon, '
@@ -688,126 +471,41 @@ class VehicleMasterPage(BasePage):
                 if (icons[i].textContent.trim().toLowerCase() === 'close'
                     && icons[i].offsetParent !== null) {
                     var btn = icons[i].closest('button');
-                    if (btn) { btn.click(); return 'closed'; }
+                    if (btn) { btn.click(); return 'closed_x'; }
                 }
             }
-            return null;
+            return 'not found';
+        """)
+
+    # ==============================================================
+    #  SweetAlert2 handlers — FAST (UOM pattern)
+    # ==============================================================
+
+    def handle_success_alert(self, timeout=15):
+        """Handle SweetAlert2 success notification — fast dismiss.
+        Returns the alert message text, or '' if no alert appeared."""
+        log.info("Handling success alert...")
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                EC.visibility_of_element_located(
+                    (By.CSS_SELECTOR, ".swal2-container")
+                )
+            )
+            # Read title text
+            msg = ""
+            try:
+                title_el = self.driver.find_element(By.CSS_SELECTOR, "#swal2-title")
+                msg = title_el.text.strip()
+            except Exception:
+                pass
+
+            log.info("SweetAlert detected, dismissing via JS")
+            self.driver.execute_script("""
+                var btn = document.querySelector('.swal2-confirm');
+                if (btn) { btn.click(); return 'clicked'; }
+                return 'not found';
             """)
-            if result:
-                self.wait_seconds(0.5)
-                log.info("Popup closed via X button (JS)")
-                return
-        except Exception:
-            pass
-
-        # Strategy 2: Selenium find close icons
-        try:
-            close_btns = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                ".big-model button mat-icon, mat-dialog-container button mat-icon",
-            )
-            for icon in close_btns:
-                try:
-                    if (
-                        icon.text.strip().lower() == "close"
-                        and icon.is_displayed()
-                    ):
-                        self.driver.execute_script(
-                            "arguments[0].closest('button').click();", icon
-                        )
-                        self.wait_seconds(0.5)
-                        log.info("Popup closed via X button")
-                        return
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-        # Strategy 3: Cancel button
-        log.warning("X button not found, trying Cancel instead")
-        self.cancel()
-
-    # ==============================================================
-    #  SweetAlert2 handlers
-    # ==============================================================
-
-    def handle_success_alert(self, timeout=EXPLICIT_WAIT):
-        """Wait for SweetAlert2 success popup, read message, click OK.
-        Returns the alert message text, or '' if no alert appeared.
-        """
-        log.info("Waiting for success alert...")
-        try:
-            wait = WebDriverWait(self.driver, timeout)
-            title_el = wait.until(
-                EC.visibility_of_element_located(
-                    (By.CSS_SELECTOR, "#swal2-title")
-                )
-            )
-            msg = title_el.text.strip()
-
-            # Click confirm — try multiple strategies
-            try:
-                confirm = WebDriverWait(self.driver, 10).until(
-                    EC.element_to_be_clickable(
-                        (By.CSS_SELECTOR, ".swal2-confirm")
-                    )
-                )
-                try:
-                    confirm.click()
-                except Exception:
-                    self.driver.execute_script(
-                        "arguments[0].click();", confirm
-                    )
-                log.info(f"Success alert handled: {msg}")
-            except Exception:
-                # Last resort: JS click any swal2-confirm on the page
-                try:
-                    self.driver.execute_script(
-                        "document.querySelectorAll('.swal2-confirm')"
-                        ".forEach(function(b){b.click();});"
-                    )
-                    log.info(f"Success alert handled via JS: {msg}")
-                except Exception:
-                    log.warning("Could not click swal2-confirm")
-
-            # Wait for alert to disappear
-            try:
-                WebDriverWait(self.driver, 10).until(
-                    EC.invisibility_of_element_located(
-                        (By.CSS_SELECTOR, ".swal2-container")
-                    )
-                )
-            except Exception:
-                pass
-
-            return msg
-
-        except TimeoutException:
-            log.info("No success alert appeared within timeout")
-            return ""
-
-    def handle_validation_warning(self, timeout=10):
-        """Handle SweetAlert2 validation warning popup.
-        Returns the warning message text, or ''.
-        """
-        log.info("Checking for validation warning...")
-        try:
-            wait = WebDriverWait(self.driver, timeout)
-            title_el = wait.until(
-                EC.visibility_of_element_located(
-                    (By.CSS_SELECTOR, "#swal2-title")
-                )
-            )
-            msg = title_el.text.strip()
-            try:
-                confirm = self.driver.find_element(
-                    By.CSS_SELECTOR, ".swal2-confirm"
-                )
-                self.driver.execute_script(
-                    "arguments[0].click();", confirm
-                )
-            except Exception:
-                pass
+            # Wait for SweetAlert to disappear (short wait)
             try:
                 WebDriverWait(self.driver, 5).until(
                     EC.invisibility_of_element_located(
@@ -816,15 +514,37 @@ class VehicleMasterPage(BasePage):
                 )
             except Exception:
                 pass
+            log.info(f"Success alert handled: {msg}")
+            return msg
+        except TimeoutException:
+            log.info("No success alert appeared within timeout")
+            return ""
+
+    def handle_validation_warning(self, timeout=5):
+        """Handle SweetAlert2 validation warning popup — fast dismiss.
+        Returns the warning message text, or ''."""
+        log.info("Checking for validation warning...")
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                EC.visibility_of_element_located(
+                    (By.CSS_SELECTOR, "#swal2-title")
+                )
+            )
+            msg = ""
+            try:
+                title_el = self.driver.find_element(By.CSS_SELECTOR, "#swal2-title")
+                msg = title_el.text.strip()
+            except Exception:
+                pass
+            self._dismiss_swal(button=".swal2-confirm", label="OK")
             log.info(f"Validation warning handled: {msg}")
             return msg
         except TimeoutException:
             return ""
 
-    def handle_error_toast(self, timeout=10):
+    def handle_error_toast(self, timeout=3):
         """Check for error toast notification.
-        Returns the toast message text, or ''.
-        """
+        Returns the toast message text, or ''."""
         log.info("Checking for error toast...")
         toast_loc = (
             "css",
@@ -837,9 +557,21 @@ class VehicleMasterPage(BasePage):
             return text
         return ""
 
-    def is_validation_alert_present(self, timeout=5):
-        """Check if any SweetAlert2 popup is currently visible."""
-        return self.is_displayed(self.SWAL_TITLE, timeout=timeout)
+    def is_validation_alert_present(self, timeout=3):
+        """Check if any SweetAlert2 popup is currently visible. Fast JS poll."""
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            try:
+                visible = self.driver.execute_script("""
+                    var el = document.querySelector('.swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error');
+                    return el && el.offsetParent !== null;
+                """)
+                if visible:
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.2)
+        return False
 
     # ==============================================================
     #  Field-level error checking
@@ -847,8 +579,7 @@ class VehicleMasterPage(BasePage):
 
     def get_mat_error_text(self):
         """Get all visible mat-error texts from the form.
-        Returns a list of error strings.
-        """
+        Returns a list of error strings."""
         errors = self.driver.find_elements(
             By.CSS_SELECTOR, "mat-error, .mat-mdc-form-field-error"
         )
@@ -865,9 +596,7 @@ class VehicleMasterPage(BasePage):
         return texts
 
     def has_field_error(self, field_label):
-        """Check if a specific form field has a visible mat-error.
-        Uses JS to walk up the parent chain from mat-label to mat-form-field.
-        """
+        """Check if a specific form field has a visible mat-error."""
         try:
             locator = (
                 "xpath",
@@ -879,16 +608,23 @@ class VehicleMasterPage(BasePage):
             return False
 
     # ==============================================================
-    #  Verification helpers
+    #  Verification helpers — JS-first (UOM pattern)
     # ==============================================================
 
     def is_add_form_open(self):
-        """Check if the Add form popup is currently visible."""
-        return self.is_displayed(self.NAME_INPUT, timeout=5)
+        """Check if the Add form popup is currently visible. Fast JS check."""
+        try:
+            return self.driver.execute_script(
+                "var el = document.querySelector("
+                "\"input[name='Name'], input[formcontrolname='name']\");"
+                "return el && el.offsetParent !== null;"
+            )
+        except Exception:
+            return False
 
     def is_form_closed(self):
         """Check if the form popup is no longer visible."""
-        return not self.is_displayed(self.NAME_INPUT, timeout=5)
+        return not self.is_add_form_open()
 
     def get_form_heading(self):
         """Read the heading text of the current popup."""
@@ -905,82 +641,131 @@ class VehicleMasterPage(BasePage):
     def is_view_mode(self):
         """Check if the currently open form is in View (read-only) mode."""
         try:
-            name_input = self.find_visible_element(self.NAME_INPUT, timeout=5)
-            return not name_input.is_enabled()
+            return self.driver.execute_script(
+                "var el = document.querySelector("
+                "\"input[name='Name'], input[formcontrolname='name']\");"
+                "return el && el.disabled;"
+            )
         except Exception:
             return False
 
     def is_edit_mode(self):
         """Check if the currently open form is in Edit mode
-        (Update button visible)."""
-        return self.is_displayed(self.UPDATE_BUTTON, timeout=5)
+        (Update button visible). Fast JS check."""
+        try:
+            return self.driver.execute_script("""
+                var footers = document.querySelectorAll('.popup-footer');
+                for (var i = 0; i < footers.length; i++) {
+                    var buttons = footers[i].querySelectorAll('button');
+                    for (var j = 0; j < buttons.length; j++) {
+                        if (buttons[j].textContent.indexOf('Update') !== -1
+                            && buttons[j].offsetParent !== null) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            """)
+        except Exception:
+            return False
 
     def get_form_field_values(self):
-        """Read all form field values from the currently open popup.
+        """Read all form field values from the currently open popup via JS.
         Returns a dict with keys: name, price, vehicle_type,
-        fuel_type, description.
-        """
-        values = {}
-
+        fuel_type, description."""
         try:
-            values["name"] = (
-                self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    "input[name='Name'], input[formcontrolname='name']",
-                ).get_attribute("value")
-                or ""
-            )
-        except Exception:
-            values["name"] = ""
+            result = self.driver.execute_script("""
+            var values = {};
+            var nameEl = document.querySelector(
+                "input[name='Name'], input[formcontrolname='name']"
+            );
+            values.name = nameEl ? nameEl.value : '';
 
-        try:
-            values["price"] = (
-                self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    "input[name='Vehicle Price'], "
-                    "input[formcontrolname='vehiclePrice']",
-                ).get_attribute("value")
-                or ""
-            )
-        except Exception:
-            values["price"] = ""
+            var priceEl = document.querySelector(
+                "input[name='Vehicle Price'], input[formcontrolname='vehiclePrice']"
+            );
+            values.price = priceEl ? priceEl.value : '';
 
-        try:
-            vt = self.driver.find_element(
-                By.XPATH,
-                "//mat-label[contains(.,'Vehicle Type')]"
-                "/ancestor::mat-form-field//mat-select",
-            )
-            values["vehicle_type"] = vt.text.strip()
-        except Exception:
-            values["vehicle_type"] = ""
+            try {
+                var vtLabel = document.evaluate(
+                    "//mat-label[contains(.,'Vehicle Type')]",
+                    document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null
+                ).singleNodeValue;
+                if (vtLabel) {
+                    var vtSelect = vtLabel.closest('mat-form-field')
+                        ? vtLabel.closest('mat-form-field').querySelector('mat-select')
+                        : null;
+                    values.vehicle_type = vtSelect ? vtSelect.textContent.trim() : '';
+                } else { values.vehicle_type = ''; }
+            } catch(e) { values.vehicle_type = ''; }
 
-        try:
-            ft = self.driver.find_element(
-                By.XPATH,
-                "//mat-label[contains(.,'Fuel Type')]"
-                "/ancestor::mat-form-field//mat-select",
-            )
-            values["fuel_type"] = ft.text.strip()
-        except Exception:
-            values["fuel_type"] = ""
+            try {
+                var ftLabel = document.evaluate(
+                    "//mat-label[contains(.,'Fuel Type')]",
+                    document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null
+                ).singleNodeValue;
+                if (ftLabel) {
+                    var ftSelect = ftLabel.closest('mat-form-field')
+                        ? ftLabel.closest('mat-form-field').querySelector('mat-select')
+                        : null;
+                    values.fuel_type = ftSelect ? ftSelect.textContent.trim() : '';
+                } else { values.fuel_type = ''; }
+            } catch(e) { values.fuel_type = ''; }
 
-        try:
-            values["description"] = (
-                self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    "input[name='Description'], "
-                    "textarea[formcontrolname='description']",
-                ).get_attribute("value")
-                or ""
-            )
-        except Exception:
-            values["description"] = ""
+            var descEl = document.querySelector(
+                "input[name='Description'], textarea[formcontrolname='description']"
+            );
+            values.description = descEl ? descEl.value : '';
 
-        return values
+            return JSON.stringify(values);
+            """)
+            import json
+            return json.loads(result) if result else {}
+        except Exception:
+            # Fallback to Selenium
+            values = {}
+            try:
+                values["name"] = (
+                    self.driver.find_element(By.CSS_SELECTOR,
+                        "input[name='Name'], input[formcontrolname='name']"
+                    ).get_attribute("value") or ""
+                )
+            except Exception:
+                values["name"] = ""
+            try:
+                values["price"] = (
+                    self.driver.find_element(By.CSS_SELECTOR,
+                        "input[name='Vehicle Price'], input[formcontrolname='vehiclePrice']"
+                    ).get_attribute("value") or ""
+                )
+            except Exception:
+                values["price"] = ""
+            try:
+                vt = self.driver.find_element(By.XPATH,
+                    "//mat-label[contains(.,'Vehicle Type')]"
+                    "/ancestor::mat-form-field//mat-select")
+                values["vehicle_type"] = vt.text.strip()
+            except Exception:
+                values["vehicle_type"] = ""
+            try:
+                ft = self.driver.find_element(By.XPATH,
+                    "//mat-label[contains(.,'Fuel Type')]"
+                    "/ancestor::mat-form-field//mat-select")
+                values["fuel_type"] = ft.text.strip()
+            except Exception:
+                values["fuel_type"] = ""
+            try:
+                values["description"] = (
+                    self.driver.find_element(By.CSS_SELECTOR,
+                        "input[name='Description'], textarea[formcontrolname='description']"
+                    ).get_attribute("value") or ""
+                )
+            except Exception:
+                values["description"] = ""
+            return values
 
     # ==============================================================
-    #  Table interactions
+    #  Table interactions — JS-first
     # ==============================================================
 
     def get_table_row_count(self):
@@ -1009,16 +794,27 @@ class VehicleMasterPage(BasePage):
         return names
 
     def is_vehicle_in_table(self, vehicle_name):
-        """Check if a vehicle with the given name appears in the table."""
-        names = self.get_all_vehicle_names()
-        return any(
-            vehicle_name.strip().lower() in n.lower() for n in names
-        )
+        """Check if a vehicle with the given name appears in the table.
+        Polls up to 10s to handle slow Angular re-renders."""
+        end_time = time.monotonic() + 10
+        while time.monotonic() < end_time:
+            try:
+                rows = self.driver.find_elements(
+                    By.CSS_SELECTOR, "table#excel-table tbody tr"
+                )
+                for row in rows:
+                    cells = row.find_elements(By.CSS_SELECTOR, "td")
+                    for cell in cells:
+                        if vehicle_name.strip().lower() in cell.text.strip().lower():
+                            return True
+            except Exception:
+                pass
+            time.sleep(0.5)
+        return False
 
     def find_vehicle_row_index(self, vehicle_name):
         """Find the 0-based row index for a vehicle by name.
-        Returns -1 if not found.
-        """
+        Returns -1 if not found."""
         rows = self.driver.find_elements(
             By.CSS_SELECTOR, "table#excel-table tbody tr"
         )
@@ -1037,8 +833,7 @@ class VehicleMasterPage(BasePage):
 
     def get_vehicle_details_from_row(self, row_index=0):
         """Read text from a table row. Returns dict with
-        name, price, description.
-        """
+        name, price, description."""
         rows = self.driver.find_elements(
             By.CSS_SELECTOR, "table#excel-table tbody tr"
         )
@@ -1057,23 +852,13 @@ class VehicleMasterPage(BasePage):
         return result
 
     # ==============================================================
-    #  Row action buttons — JS click via _click_action_button
+    #  Row action buttons — pure JS 3-dot menu (UOM pattern)
     # ==============================================================
 
     def _click_action_menu_item(self, vehicle_name, action_name):
         """Click an action menu item (View/Edit/History) for a specific
-        vehicle row.  The live system uses a 3-dot (⋮) menu button in
-        cdk-column-actions — same pattern as UOM module.
-
-        Steps:
-          1. JS: find the row containing vehicle_name, click its
-             3-dot menu button in cdk-column-actions
-          2. JS: find the overlay that appears, click the item whose
-             text matches action_name (e.g. 'View', 'Edit', 'History')
-        """
-        log.info(
-            f"Clicking {action_name} via 3-dot menu for: {vehicle_name}"
-        )
+        vehicle row. Pure JS — same pattern as UOM module."""
+        log.info(f"Clicking {action_name} via 3-dot menu for: {vehicle_name}")
         self._force_close_panels()
 
         # Step 1: Open the 3-dot menu for the row matching vehicle_name
@@ -1137,7 +922,6 @@ class VehicleMasterPage(BasePage):
             )
         except Exception:
             pass
-        self.wait_seconds(0.3)
 
         # Step 2: Click the specific menu item from the dropdown overlay
         js_click_item = """
@@ -1164,17 +948,13 @@ class VehicleMasterPage(BasePage):
         );
         """
         result = self.driver.execute_script(js_click_item, action_name)
-        log.info(
-            f"Successfully clicked {action_name} for: {vehicle_name}"
-        )
-        self.wait_seconds(1)
+        log.info(f"Successfully clicked {action_name} for: {vehicle_name}")
         return result
 
     # -- DEPRECATED: kept for backward compat; delegates to kebab menu --
 
     def _click_action_button(self, vehicle_name, action_xpath_template):
         """DEPRECATED — delegates to _click_action_menu_item()."""
-        # Map legacy column keywords to action names
         if "cdk-column-view" in action_xpath_template:
             return self._click_action_menu_item(vehicle_name, "View")
         elif "cdk-column-edit" in action_xpath_template:
@@ -1194,7 +974,6 @@ class VehicleMasterPage(BasePage):
                 f"Row index {row_index} out of range "
                 f"(total rows: {len(rows)})"
             )
-        # Try to find name in row
         cells = rows[row_index].find_elements(By.TAG_NAME, "td")
         name = ""
         for cell in cells:
@@ -1213,34 +992,67 @@ class VehicleMasterPage(BasePage):
         return self._click_action_menu_item(name, action)
 
     def click_view_button(self, vehicle_name=None, row_index=0):
-        """Click the View button for a vehicle row."""
+        """Click the View button for a vehicle row via 3-dot menu."""
         log.info(f"Clicking View button for: {vehicle_name or row_index}...")
         if vehicle_name:
-            return self._click_action_menu_item(vehicle_name, "View")
-        # row_index fallback
-        return self._click_action_button_by_index(
-            row_index, "cdk-column-view"
-        )
+            self._click_action_menu_item(vehicle_name, "View")
+        else:
+            self._click_action_button_by_index(row_index, "cdk-column-view")
+        # Wait for view popup to appear
+        try:
+            WebDriverWait(self.driver, 5).until(
+                lambda d: d.execute_script(
+                    "var el = document.querySelector("
+                    "\"input[name='Name'], input[formcontrolname='name']\");"
+                    "return el && el.offsetParent !== null;"
+                )
+            )
+        except Exception:
+            pass
 
     def click_edit_button(self, vehicle_name=None, row_index=0):
-        """Click the Edit button for a vehicle row."""
+        """Click the Edit button for a vehicle row via 3-dot menu."""
         log.info(f"Clicking Edit button for: {vehicle_name or row_index}...")
         if vehicle_name:
-            return self._click_action_menu_item(vehicle_name, "Edit")
-        return self._click_action_button_by_index(
-            row_index, "cdk-column-edit"
-        )
+            self._click_action_menu_item(vehicle_name, "Edit")
+        else:
+            self._click_action_button_by_index(row_index, "cdk-column-edit")
+        # Wait for edit popup to appear
+        try:
+            WebDriverWait(self.driver, 5).until(
+                lambda d: d.execute_script(
+                    "var el = document.querySelector("
+                    "\"input[name='Name'], input[formcontrolname='name']\");"
+                    "return el && el.offsetParent !== null;"
+                )
+            )
+        except Exception:
+            pass
 
     def click_history_button(self, vehicle_name=None, row_index=0):
-        """Click the History button for a vehicle row."""
-        log.info(
-            f"Clicking History button for: {vehicle_name or row_index}..."
-        )
+        """Click the History button for a vehicle row via 3-dot menu."""
+        log.info(f"Clicking History button for: {vehicle_name or row_index}...")
         if vehicle_name:
-            return self._click_action_menu_item(vehicle_name, "History")
-        return self._click_action_button_by_index(
-            row_index, "cdk-column-history"
-        )
+            self._click_action_menu_item(vehicle_name, "History")
+        else:
+            self._click_action_button_by_index(row_index, "cdk-column-history")
+        # Wait for history popup to appear
+        try:
+            WebDriverWait(self.driver, 5).until(
+                lambda d: d.execute_script(
+                    "var headings = document.querySelectorAll("
+                    "'h3.popup-title, .big-model h3, mat-dialog-container h3');"
+                    "for (var i = 0; i < headings.length; i++) {"
+                    "  if (headings[i].offsetParent !== null"
+                    "      && headings[i].textContent.toLowerCase()"
+                    "         .indexOf('history') !== -1)"
+                    "    return true;"
+                    "}"
+                    "return false;"
+                )
+            )
+        except Exception:
+            pass
 
     # ==============================================================
     #  View & Edit specific verifications
@@ -1248,159 +1060,156 @@ class VehicleMasterPage(BasePage):
 
     def verify_view_popup_read_only(self):
         """Verify that the View popup fields are read-only / disabled.
-        Returns True if all fields are non-editable.
-        """
+        Returns True if all fields are non-editable."""
         log.info("Verifying View popup is read-only...")
         all_readonly = True
 
         try:
-            name_input = self.find_visible_element(
-                self.NAME_INPUT, timeout=5
+            name_disabled = self.driver.execute_script(
+                "var el = document.querySelector("
+                "\"input[name='Name'], input[formcontrolname='name']\");"
+                "return el ? el.disabled : true;"
             )
-            if name_input.is_enabled():
+            if not name_disabled:
                 all_readonly = False
                 log.warning("Name field is editable in View mode")
         except Exception:
             pass
 
         try:
-            price_input = self.find_visible_element(
-                self.PRICE_INPUT, timeout=5
+            price_disabled = self.driver.execute_script(
+                "var el = document.querySelector("
+                "\"input[name='Vehicle Price'], input[formcontrolname='vehiclePrice']\");"
+                "return el ? el.disabled : true;"
             )
-            if price_input.is_enabled():
+            if not price_disabled:
                 all_readonly = False
                 log.warning("Price field is editable in View mode")
         except Exception:
             pass
 
-        # Submit should NOT be visible, Update should NOT be visible
-        if self.is_displayed(self.SUBMIT_BUTTON, timeout=2):
-            all_readonly = False
-            log.warning("Submit button visible in View mode")
-        if self.is_displayed(self.UPDATE_BUTTON, timeout=2):
-            all_readonly = False
-            log.warning("Update button visible in View mode")
+        # Submit/Update should NOT be visible
+        try:
+            has_submit = self.driver.execute_script("""
+                var footers = document.querySelectorAll('.popup-footer');
+                for (var i = 0; i < footers.length; i++) {
+                    var buttons = footers[i].querySelectorAll('button');
+                    for (var j = 0; j < buttons.length; j++) {
+                        if ((buttons[j].textContent.indexOf('Submit') !== -1
+                             || buttons[j].textContent.indexOf('Update') !== -1)
+                            && buttons[j].offsetParent !== null)
+                            return true;
+                    }
+                }
+                return false;
+            """)
+            if has_submit:
+                all_readonly = False
+                log.warning("Submit/Update button visible in View mode")
+        except Exception:
+            pass
 
         return all_readonly
 
     def verify_edit_popup_editable(self):
         """Verify that the Edit popup fields are editable.
-        Returns True if the Update button is visible (edit mode).
-        """
+        Returns True if the Update button is visible (edit mode)."""
         log.info("Verifying Edit popup is editable...")
-        return self.is_displayed(self.UPDATE_BUTTON, timeout=5)
+        return self.is_edit_mode()
 
     # ==============================================================
-    #  Search functionality
+    #  Search functionality — JS-first (UOM pattern)
     # ==============================================================
-
-    def hard_refresh(self):
-        """Fast page reset: navigate + full reload + wait for table.
-        Much faster than click_refresh() when a full state reset
-        is needed between tests."""
-        log.info("Hard refreshing Vehicle Master page...")
-        self.driver.get(self.PAGE_URL)
-        self.driver.refresh()
-        # Fast poll for table (0.2s intervals)
-        end = time.monotonic() + 15
-        while time.monotonic() < end:
-            try:
-                el = self.driver.execute_script(
-                    "var t = document.querySelector('table#excel-table');"
-                    "return t && t.offsetParent !== null;"
-                )
-                if el:
-                    break
-            except Exception:
-                pass
-            time.sleep(0.2)
-        # Brief wait for toolbar to bind
-        time.sleep(0.5)
-        log.info("Hard refresh complete")
 
     def search_vehicle(self, vehicle_name):
-        """Search for a vehicle by name in the table search bar.
-        Returns True if the vehicle is found in the table results.
-        """
+        """Search for a vehicle by name using JS clicks.
+        Returns True if the vehicle is found in the table results."""
         log.info(f"Searching for vehicle: {vehicle_name}")
+        self._force_close_panels()
+
+        # Step 1: Check if search input is already visible
+        search_input = None
         try:
-            self._force_close_panels()
-            self.wait_seconds(1)
-
-            # Toggle search bar open
-            self.driver.execute_script(
-                "var b = document.querySelector("
-                "'button.search-btn'); if(b) b.click();"
+            el = self.driver.find_element(
+                By.CSS_SELECTOR, "input#erpSearchInput, .erp-search-wrapper input"
             )
-            self.wait_seconds(1)
-
-            # Type search text via JS (Angular reactive form)
-            self.driver.execute_script(
-                "var i = document.querySelector("
-                "'.erp-search-wrapper input, "
-                "input#erpSearchInput');"
-                "if(i){"
-                "  i.focus();"
-                "  var s = Object.getOwnPropertyDescriptor("
-                "    window.HTMLInputElement.prototype,'value').set;"
-                "  s.call(i, arguments[0]);"
-                "  i.dispatchEvent(new Event('input',{bubbles:true}));"
-                "  i.dispatchEvent(new KeyboardEvent('keydown',"
-                "    {key:'Enter',keyCode:13,bubbles:true}));"
-                "}",
-                vehicle_name,
+            rect = self.driver.execute_script(
+                "var r = arguments[0].getBoundingClientRect(); "
+                "return r.width > 0 && r.height > 0;", el
             )
-            self.wait_seconds(3)
+            if rect:
+                search_input = el
+        except Exception:
+            pass
 
-            # Check results — retry a few times for slow Angular filtering
-            found = False
-            for _ in range(3):
-                found = self.is_vehicle_in_table(vehicle_name)
-                if found:
-                    break
-                self.wait_seconds(2)
-            if found:
-                log.info(f"Vehicle found in table: {vehicle_name}")
-            else:
-                log.warning(f"Vehicle NOT found in table: {vehicle_name}")
-            return found
+        # Step 2: If not visible, click search button via JS
+        if search_input is None:
+            try:
+                self.driver.execute_script("""
+                var btn = document.querySelector('button.search-btn');
+                if (!btn) { throw new Error('Search button not found'); }
+                btn.scrollIntoView({block:'center'});
+                btn.click();
+                return 'clicked';
+                """)
+            except Exception as e:
+                log.error("Failed to click search button via JS: " + str(e))
+                return False
 
-        except Exception as e:
-            log.error(f"Search failed: {e}")
-            return False
+            try:
+                search_input = WebDriverWait(self.driver, 5).until(
+                    EC.visibility_of_element_located((
+                        By.CSS_SELECTOR,
+                        "input#erpSearchInput, .erp-search-wrapper input"
+                    ))
+                )
+            except Exception:
+                log.warning("Search input did not become visible")
+                return False
+
+        # Step 3: Clear + set value + fire Angular events
+        self.driver.execute_script("arguments[0].value = '';", search_input)
+        self.driver.execute_script(
+            "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));",
+            search_input,
+        )
+        self.driver.execute_script(
+            "arguments[0].value = arguments[1];", search_input, vehicle_name
+        )
+        search_input.click()
+        for event in ["input", "keyup", "change"]:
+            self.driver.execute_script(
+                f"arguments[0].dispatchEvent(new Event('{event}', {{ bubbles: true }}));",
+                search_input,
+            )
+
+        # Step 4: Click search button again to submit
+        self.driver.execute_script("""
+            var btn = document.querySelector('button.search-btn');
+            if (btn) { btn.click(); return 'clicked'; }
+            return 'not found';
+        """)
+
+        # Step 5: Wait for table to refresh
+        try:
+            WebDriverWait(self.driver, 5).until(
+                lambda d: d.find_elements("css selector", "table#excel-table tbody tr")
+            )
+        except Exception:
+            pass
+
+        # Step 6: Check results with polling
+        found = self.is_vehicle_in_table(vehicle_name)
+        if found:
+            log.info(f"Vehicle found in table: {vehicle_name}")
+        else:
+            log.warning(f"Vehicle NOT found in table: {vehicle_name}")
+        return found
 
     def clear_search(self):
-        """Clear the search input and reset the table."""
-        try:
-            # JS clear + dispatch input event (Angular reactive form)
-            self.driver.execute_script("""
-            var i = document.querySelector(
-                '.erp-search-wrapper input, input#erpSearchInput'
-            );
-            if (i) {
-                var s = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype, 'value'
-                ).set;
-                s.call(i, '');
-                i.dispatchEvent(new Event('input', {bubbles: true}));
-                i.dispatchEvent(new KeyboardEvent('keydown',
-                    {key: 'Enter', keyCode: 13, bubbles: true}));
-            }
-            """)
-            self.wait_seconds(1)
-        except Exception:
-            # Fallback: Selenium clear
-            try:
-                search_input = self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    ".erp-search-wrapper input, input#erpSearchInput",
-                )
-                if search_input.is_displayed():
-                    search_input.clear()
-                    search_input.send_keys(Keys.RETURN)
-                    self.wait_seconds(1)
-            except Exception:
-                pass
+        """Clear search and reset — use hard_refresh (fast, guaranteed clean)."""
+        log.info("Clearing search - hard refreshing")
+        self.hard_refresh()
 
     def verify_vehicle_exists(self, vehicle_name):
         """Navigate to page, search, and verify a vehicle exists."""
@@ -1410,23 +1219,24 @@ class VehicleMasterPage(BasePage):
         return found
 
     # ==============================================================
-    #  History panel
+    #  History panel — JS-first (UOM pattern)
     # ==============================================================
 
     def is_history_popup_open(self):
-        """Check if the History popup is currently visible."""
+        """Check if the History popup is currently visible. Fast JS check."""
         try:
-            headings = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "h3.popup-title, .big-model h3, mat-dialog-container h3",
-            )
-            for h in headings:
-                try:
-                    if h.is_displayed() and "history" in h.text.lower():
-                        return True
-                except Exception:
-                    continue
-            return False
+            return self.driver.execute_script("""
+                var headings = document.querySelectorAll(
+                    'h3.popup-title, .big-model h3, mat-dialog-container h3'
+                );
+                for (var i = 0; i < headings.length; i++) {
+                    if (headings[i].offsetParent !== null
+                        && headings[i].textContent.toLowerCase()
+                           .indexOf('history') !== -1)
+                        return true;
+                }
+                return false;
+            """)
         except Exception:
             return False
 
@@ -1445,8 +1255,7 @@ class VehicleMasterPage(BasePage):
 
     def get_history_data(self):
         """Read all data from the history popup table.
-        Returns a list of dicts, one per row.
-        """
+        Returns a list of dicts, one per row."""
         rows = self.driver.find_elements(
             By.CSS_SELECTOR,
             ".big-model table tbody tr, "
@@ -1466,11 +1275,9 @@ class VehicleMasterPage(BasePage):
 
     def search_in_history(self, search_text):
         """Search within the history popup. Requires Enter key press.
-        Returns True if search was executed.
-        """
+        Returns True if search was executed."""
         log.info(f"Searching in history for: {search_text}")
         try:
-            # Find the search input inside the history popup
             search_inputs = self.driver.find_elements(
                 By.CSS_SELECTOR,
                 ".big-model input, mat-dialog-container input",
@@ -1480,14 +1287,11 @@ class VehicleMasterPage(BasePage):
                     if inp.is_displayed():
                         inp.clear()
                         inp.send_keys(search_text)
-                        # History search REQUIRES Enter key
                         inp.send_keys(Keys.RETURN)
-                        self.wait_seconds(1)
                         log.info("History search executed with Enter")
                         return True
                 except Exception:
                     continue
-
             log.warning("No search input found in history panel")
             return False
         except Exception as e:
@@ -1495,69 +1299,30 @@ class VehicleMasterPage(BasePage):
             return False
 
     def close_history_popup(self):
-        """Close the history popup via Cancel button, X icon, or JS force."""
+        """Close the history popup by clicking Cancel via pure JS (fast)."""
         log.info("Closing history popup...")
-
-        # Strategy 1: JS click the Cancel button in popup-footer
-        try:
-            self.driver.execute_script("""
-                var btns = document.querySelectorAll(
-                    '.popup-footer button'
-                );
-                for (var i = 0; i < btns.length; i++) {
-                    if (btns[i].textContent.includes('Cancel') ||
-                        btns[i].textContent.includes('Close')) {
-                        btns[i].click();
-                        break;
+        self.driver.execute_script("""
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.indexOf('Cancel') !== -1
+                        || buttons[j].textContent.indexOf('Close') !== -1) {
+                        buttons[j].click();
+                        return 'clicked';
                     }
                 }
-            """)
-            self.wait_seconds(1)
-            if not self.is_history_popup_open():
-                log.info("History popup closed via Cancel button (JS)")
-                return
-        except Exception:
-            pass
-
-        # Strategy 2: JS click the X icon in popup-header
-        try:
-            self.driver.execute_script("""
-                var icons = document.querySelectorAll(
-                    '.popup-header button mat-icon'
-                );
-                for (var i = 0; i < icons.length; i++) {
-                    if (icons[i].textContent.trim().toLowerCase() === 'close') {
-                        icons[i].closest('button').click();
-                        break;
-                    }
+            }
+            // Fallback: try X icon
+            var icons = document.querySelectorAll('.popup-header button mat-icon');
+            for (var i = 0; i < icons.length; i++) {
+                if (icons[i].textContent.trim().toLowerCase() === 'close') {
+                    icons[i].closest('button').click();
+                    return 'closed_x';
                 }
-            """)
-            self.wait_seconds(1)
-            if not self.is_history_popup_open():
-                log.info("History popup closed via X icon (JS)")
-                return
-        except Exception:
-            pass
-
-        # Strategy 3: JS force remove all popup containers + overlays
-        try:
-            self.driver.execute_script("""
-                document.querySelectorAll('.cdk-overlay-pane').forEach(function(el) { el.remove(); });
-                document.querySelectorAll('.cdk-overlay-backdrop').forEach(function(el) { el.remove(); });
-            """)
-            self.wait_seconds(0.5)
-        except Exception:
-            pass
-
-        if self.is_history_popup_open():
-            log.warning("Could not close history popup")
-        else:
-            log.info("History popup closed")
-
-        if self.is_history_popup_open():
-            log.warning("Could not close history popup")
-        else:
-            log.info("History popup closed")
+            }
+            throw new Error('Cancel/Close button not found in history popup');
+        """)
 
     # ==============================================================
     #  Dropdown helpers — dynamic option reading (NEVER hardcode)
@@ -1565,21 +1330,22 @@ class VehicleMasterPage(BasePage):
 
     def _select_mat_option(self, select_locator, option_text):
         """Open a mat-select dropdown and select a specific option by text.
-        Handles internal search textbox if present.
-        """
+        Handles internal search textbox if present."""
         log.info(f"Selecting '{option_text}' from dropdown...")
 
         # Click the mat-select trigger
         try:
             self.click(select_locator)
         except Exception:
-            # Fallback: click the trigger div directly
             trigger_xpath = (
                 f"{select_locator[1]}"
                 f"//div[contains(@class,'mat-mdc-select-trigger')]"
             )
-            self.driver.find_element(By.XPATH, trigger_xpath).click()
-        self.wait_seconds(0.5)
+            try:
+                self.driver.find_element(By.XPATH, trigger_xpath).click()
+            except Exception:
+                el = self.driver.find_element(By.XPATH, select_locator[1])
+                self.driver.execute_script("arguments[0].click();", el)
 
         # If dropdown has a search textbox, type into it
         try:
@@ -1593,7 +1359,6 @@ class VehicleMasterPage(BasePage):
                     if inp.is_displayed():
                         inp.clear()
                         inp.send_keys(option_text)
-                        self.wait_seconds(0.5)
                         break
                 except Exception:
                     continue
@@ -1609,7 +1374,6 @@ class VehicleMasterPage(BasePage):
             )
             self.click_with_retry(opt_locator)
         except Exception:
-            # Try role='option' fallback
             try:
                 opt_locator2 = (
                     "xpath",
@@ -1618,7 +1382,6 @@ class VehicleMasterPage(BasePage):
                 )
                 self.click_with_retry(opt_locator2)
             except Exception:
-                # Last resort: scroll and JS click
                 opts = self.driver.find_elements(
                     By.CSS_SELECTOR,
                     "div[role='listbox'] mat-option, "
@@ -1636,7 +1399,6 @@ class VehicleMasterPage(BasePage):
                     except Exception:
                         continue
 
-        self.wait_seconds(0.3)
         self._force_close_panels()
         log.info(f"Selected '{option_text}'")
 
@@ -1644,9 +1406,7 @@ class VehicleMasterPage(BasePage):
         self, select_locator, label_name, exclude=None
     ):
         """Open a mat-select dropdown and pick a random option.
-        Returns the selected option text.
-        Never hardcodes options — reads from live UI.
-        """
+        Returns the selected option text. Never hardcodes options."""
         log.info(f"Selecting random option from '{label_name}'...")
 
         # Click the mat-select trigger
@@ -1660,12 +1420,8 @@ class VehicleMasterPage(BasePage):
             try:
                 self.driver.find_element(By.XPATH, trigger_xpath).click()
             except Exception:
-                # JS click on the mat-select element itself
-                el = self.driver.find_element(
-                    By.XPATH, select_locator[1]
-                )
+                el = self.driver.find_element(By.XPATH, select_locator[1])
                 self.driver.execute_script("arguments[0].click();", el)
-        self.wait_seconds(0.5)
 
         # Wait for options to appear
         try:
@@ -1712,11 +1468,9 @@ class VehicleMasterPage(BasePage):
                     f"after excluding {exclude}"
                 )
 
-        # Pick a random option
+        # Pick a random option and click it
         selected = random.choice(option_texts)
         log.info(f"Random '{label_name}' selected: '{selected}'")
-
-        # Click the chosen option
         for opt in options:
             try:
                 if opt.text.strip() == selected:
@@ -1729,19 +1483,14 @@ class VehicleMasterPage(BasePage):
             except Exception:
                 continue
 
-        self.wait_seconds(0.3)
         self._force_close_panels()
         return selected
 
     def get_dropdown_options(self, select_locator):
         """Open a dropdown, read all option texts, then close it."""
         log.info("Reading dropdown options...")
-
-        # Close any leftover overlay panels first
         self._close_select_panel()
-        self.wait_seconds(0.3)
 
-        # Click the mat-select trigger
         try:
             self.click(select_locator)
         except Exception:
@@ -1752,30 +1501,20 @@ class VehicleMasterPage(BasePage):
             try:
                 self.driver.find_element(By.XPATH, trigger_xpath).click()
             except Exception:
-                el = self.driver.find_element(
-                    By.XPATH, select_locator[1]
-                )
+                el = self.driver.find_element(By.XPATH, select_locator[1])
                 self.driver.execute_script("arguments[0].click();", el)
-        self.wait_seconds(0.5)
 
-        # Wait for the VISIBLE dropdown panel to appear with options
         try:
             WebDriverWait(self.driver, 8).until(
                 EC.visibility_of_element_located(
-                    (
-                        By.CSS_SELECTOR,
-                        "div.mat-mdc-select-panel mat-option",
-                    )
+                    (By.CSS_SELECTOR, "div.mat-mdc-select-panel mat-option")
                 )
             )
-            self.wait_seconds(0.3)
         except TimeoutException:
-            log.warning("Timed out waiting for dropdown options to become visible")
+            log.warning("Timed out waiting for dropdown options")
 
-        # Read only VISIBLE options
         options = self.driver.find_elements(
-            By.CSS_SELECTOR,
-            "div.mat-mdc-select-panel mat-option",
+            By.CSS_SELECTOR, "div.mat-mdc-select-panel mat-option"
         )
         option_texts = []
         for opt in options:
@@ -1788,40 +1527,41 @@ class VehicleMasterPage(BasePage):
             except Exception:
                 continue
 
-        # Close the dropdown
         self._close_select_panel()
         log.info(f"Dropdown options: {option_texts}")
         return option_texts
+
     # ==============================================================
     #  Force close form popup (cleanup)
     # ==============================================================
 
     def force_close_form_popup(self):
-        """Force close any open form popup via JS.
-        Use as last resort when Cancel/Close buttons don't work.
-        """
+        """Force close any open form popup via JS."""
         log.info("Force closing form popup via JS...")
-        self.driver.execute_script("""
-            document.querySelectorAll(
-                'mat-dialog-container'
-            ).forEach(function(el) { el.remove(); });
-            document.querySelectorAll(
-                '.cdk-overlay-backdrop'
-            ).forEach(function(el) { el.remove(); });
-            document.querySelectorAll(
-                '.cdk-overlay-pane'
-            ).forEach(function(el) { el.remove(); });
+        result = self.driver.execute_script("""
+            var popup = document.querySelector('div.edit_pop_up');
+            if (popup) {
+                var closeBtn = popup.querySelector('button[mat-icon-button] mat-icon');
+                if (closeBtn) {
+                    var btn = closeBtn.closest('button');
+                    if (btn) { btn.click(); return 'clicked close'; }
+                }
+            }
+            // Fallback: remove all overlays
+            document.querySelectorAll('mat-dialog-container').forEach(function(el) { el.remove(); });
+            document.querySelectorAll('.cdk-overlay-backdrop').forEach(function(el) { el.remove(); });
+            document.querySelectorAll('.cdk-overlay-pane').forEach(function(el) { el.remove(); });
+            return 'force_removed';
         """)
-        self.wait_seconds(0.5)
+        log.info("Force close result: " + str(result))
 
     # ==============================================================
-    #  One-call convenience methods
+    #  One-call convenience methods — optimized with hard_refresh
     # ==============================================================
 
     def create_vehicle(self, vehicle_data):
         """One-call vehicle creation.
-        Returns result dict: status, error, message, data.
-        """
+        Returns result dict: status, error, message, data."""
         name = vehicle_data.get("name", "N/A")
         log.info(f"Creating vehicle: {name}")
         result = {
@@ -1839,12 +1579,11 @@ class VehicleMasterPage(BasePage):
             self.fill_vehicle_form(vehicle_data)
             self.submit()
 
-            msg = self.handle_success_alert(timeout=60)
+            msg = self.handle_success_alert(timeout=15)
             if msg:
                 result["message"] = msg
                 result["status"] = "PASSED"
             else:
-                self.wait_seconds(3)
                 if self.is_form_closed():
                     result["message"] = "Form closed (assumed success)"
                     result["status"] = "PASSED"
@@ -1874,23 +1613,15 @@ class VehicleMasterPage(BasePage):
 
     def edit_vehicle(self, vehicle_name, updated_data, row_index=0):
         """One-call vehicle edit. Clicks Edit, fills changed fields,
-        clicks Update.
-        Returns result dict: status, error, message.
-        """
+        clicks Update. Returns result dict: status, error, message."""
         log.info(f"Editing vehicle: {vehicle_name}")
         result = {"status": "FAILED", "error": "", "message": ""}
 
         try:
-            # First try to find the vehicle directly
             if not self.is_vehicle_in_table(vehicle_name):
-                # Search for it — might be on another page
                 self.search_vehicle(vehicle_name)
-                self.wait_seconds(1)
 
-            self.click_edit_button(
-                vehicle_name=vehicle_name, row_index=row_index
-            )
-            self.wait_seconds(1)
+            self.click_edit_button(vehicle_name=vehicle_name, row_index=row_index)
 
             if not self.is_edit_mode():
                 raise Exception("Edit form did not open (no Update button)")
@@ -1926,12 +1657,11 @@ class VehicleMasterPage(BasePage):
             self._force_close_panels()
             self.click_update()
 
-            msg = self.handle_success_alert(timeout=60)
+            msg = self.handle_success_alert(timeout=15)
             if msg:
                 result["message"] = msg
                 result["status"] = "PASSED"
             else:
-                self.wait_seconds(3)
                 if self.is_form_closed():
                     result["message"] = "Form closed (assumed success)"
                     result["status"] = "PASSED"
@@ -1946,18 +1676,15 @@ class VehicleMasterPage(BasePage):
 
     def view_vehicle(self, vehicle_name=None, row_index=0):
         """One-call vehicle view. Clicks View, reads fields,
-        closes popup. Returns dict of field values.
-        """
+        closes popup. Returns dict of field values."""
         log.info(f"Viewing vehicle: {vehicle_name or row_index}")
         try:
             self.click_view_button(
                 vehicle_name=vehicle_name, row_index=row_index
             )
-            self.wait_seconds(1)
             values = self.get_form_field_values()
             log.info(f"Vehicle details: {values}")
             self.close_popup()
-            self.wait_seconds(0.5)
             return values
         except Exception as e:
             log.error(f"Failed to view vehicle: {e}")
@@ -1966,8 +1693,7 @@ class VehicleMasterPage(BasePage):
     def check_history(self, vehicle_name=None, row_index=0,
                       search_text=None):
         """One-call history check. Opens History, reads row count,
-        optionally searches, then closes popup.
-        """
+        optionally searches, then closes popup."""
         log.info(f"Checking history for: {vehicle_name or row_index}")
         result = {
             "row_count": 0,
@@ -1977,26 +1703,20 @@ class VehicleMasterPage(BasePage):
         }
 
         try:
-            # First try to find the vehicle directly
             if vehicle_name and not self.is_vehicle_in_table(vehicle_name):
                 self.search_vehicle(vehicle_name)
-                self.wait_seconds(1)
 
             self.click_history_button(
                 vehicle_name=vehicle_name, row_index=row_index
             )
-            self.wait_seconds(1.5)
 
             result["row_count"] = self.get_history_row_count()
             result["data"] = self.get_history_data()
 
             if search_text:
-                result["search_found"] = self.search_in_history(
-                    search_text
-                )
+                result["search_found"] = self.search_in_history(search_text)
 
             self.close_history_popup()
-            self.wait_seconds(0.5)
 
         except Exception as e:
             result["error"] = str(e)
@@ -2004,13 +1724,12 @@ class VehicleMasterPage(BasePage):
         return result
 
     # ==============================================================
-    #  Bulk creation
+    #  Bulk creation — optimized with hard_refresh
     # ==============================================================
 
     def create_bulk_vehicles(self, vehicles_list, on_progress=None):
         """Create multiple vehicles in sequence.
-        Returns list of result dicts.
-        """
+        Returns list of result dicts."""
         total = len(vehicles_list)
         results = []
 
@@ -2024,15 +1743,13 @@ class VehicleMasterPage(BasePage):
             result["duration"] = round(elapsed, 1)
             results.append(result)
 
-            # Cleanup between creations
+            # Cleanup between creations — use hard_refresh (fast)
             try:
                 self.force_close_form_popup()
-                self.click_refresh()
-                self.wait_seconds(2)
+                self.hard_refresh()
             except Exception:
                 try:
                     self.navigate_to_page()
-                    self.wait_seconds(2)
                 except Exception:
                     pass
 
@@ -2046,4 +1763,50 @@ class VehicleMasterPage(BasePage):
             f" BULK COMPLETE: {passed}/{total} passed, {failed} failed"
         )
         log.separator()
-        return results
+
+    # ==============================================================
+    #  Internal utilities — UOM pattern
+    # ==============================================================
+
+    def _js_click_popup_button(self, button_text):
+        """Click a popup footer button (Submit/Update) via JS — bypasses overlay issues."""
+        js = """
+        var footers = document.querySelectorAll('.popup-footer');
+        for (var i = 0; i < footers.length; i++) {
+            var buttons = footers[i].querySelectorAll('button');
+            for (var j = 0; j < buttons.length; j++) {
+                if (buttons[j].textContent.trim().indexOf(arguments[0]) !== -1) {
+                    buttons[j].click();
+                    return 'clicked_' + arguments[0];
+                }
+            }
+        }
+        throw new Error('Button "' + arguments[0] + '" not found in popup footer');
+        """
+        try:
+            result = self.driver.execute_script(js, button_text)
+            log.info("JS click " + button_text + ": " + str(result))
+        except Exception as e:
+            log.warning("JS click failed for " + button_text + ", falling back to Selenium: " + str(e))
+            if button_text == 'Submit':
+                self.click_with_retry(self.SUBMIT_BUTTON)
+            elif button_text == 'Update':
+                self.click_with_retry(self.UPDATE_BUTTON)
+
+    def _dismiss_swal(self, button, label):
+        """Dismiss a SweetAlert popup by clicking the specified button via JS."""
+        try:
+            self.driver.find_element("css selector", ".swal2-popup")
+            self.driver.execute_script("""
+                var btn = document.querySelector(arguments[0]);
+                if (btn) { btn.click(); }
+            """, button)
+            log.info("Dismissed SweetAlert via " + label)
+            try:
+                WebDriverWait(self.driver, 2).until(
+                    EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
+                )
+            except Exception:
+                pass
+        except Exception as e:
+            log.warning("No SweetAlert to dismiss: " + str(e))
