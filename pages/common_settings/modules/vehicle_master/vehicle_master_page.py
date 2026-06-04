@@ -227,43 +227,25 @@ class VehicleMasterPage(BasePage):
         self._wait_for_page_ready()
 
     def _wait_for_page_ready(self):
-        """Wait for the page table, data rows, AND toolbar to be fully rendered.
-        Uses fast JS polling (0.3s intervals) to avoid blind sleeps.
-        Waits for: table element + at least 1 data row + search button VISIBLE.
-        The key fix: checks offsetParent !== null for toolbar buttons,
-        not just DOM existence — Angular renders the toolbar AFTER data."""
-        end = time.monotonic() + 20
-        while time.monotonic() < end:
+        """Wait for the page table to appear (UOM gold standard pattern).
+        We only wait for the table element — NOT toolbar or data rows.
+        The search/add buttons are JS-clicked regardless of visibility.
+        Toolbar offsetParent checks NEVER pass on this page (same as UOM),
+        so checking them just burns 20s every call."""
+        try:
+            WebDriverWait(self.driver, 15).until(
+                lambda d: d.find_elements("css selector", "table#excel-table")
+            )
+            log.info("Page ready (table found)")
+        except Exception:
+            # Fallback: check for search button
             try:
-                ready = self.driver.execute_script("""
-                    var table = document.querySelector('table#excel-table');
-                    if (!table || table.offsetParent === null) return {table: false};
-                    var rows = table.querySelectorAll('tbody tr');
-                    var hasData = false;
-                    for (var i = 0; i < rows.length; i++) {
-                        var cells = rows[i].querySelectorAll('td');
-                        for (var j = 0; j < cells.length; j++) {
-                            if (cells[j].textContent.trim()) { hasData = true; break; }
-                        }
-                        if (hasData) break;
-                    }
-                    var searchBtn = document.querySelector('button.search-btn');
-                    var addBtn = document.querySelector('button.erp-add-btn');
-                    var toolbarReady = (searchBtn && searchBtn.offsetParent !== null)
-                                      && (addBtn && addBtn.offsetParent !== null);
-                    return {
-                        table: true, data: hasData,
-                        toolbar: toolbarReady
-                    };
-                """)
-                if ready and ready.get('table') and ready.get('data') and ready.get('toolbar'):
-                    log.info("Page ready (table+data+toolbar visible)")
-                    return
+                WebDriverWait(self.driver, 5).until(
+                    lambda d: d.find_elements("css selector", "button.search-btn")
+                )
+                log.info("Page ready (search button found, no table)")
             except Exception:
-                pass
-            time.sleep(0.3)
-        # Fallback: if toolbar didn't become visible but we have data, continue
-        log.warning("Page ready: toolbar not fully visible within 20s, continuing anyway")
+                log.warning("Page ready check timed out")
 
     def is_page_loaded(self):
         """Check if the Vehicle Master listing page has loaded."""
@@ -352,47 +334,11 @@ class VehicleMasterPage(BasePage):
             log.warning("Add form may not have opened — Name input not found")
 
     def click_refresh(self):
-        """Click the Refresh button via JS. Falls back to hard_refresh.
-        After refresh click, waits for stale data to clear (table briefly
-        disappears), then waits for fresh data + toolbar to be ready."""
-        log.info("Clicking Refresh button...")
-        refresh_done = False
-        try:
-            result = self.driver.execute_script("""
-            var btns = document.querySelectorAll('button[mattooltip]');
-            for (var i = 0; i < btns.length; i++) {
-                var tip = btns[i].getAttribute('mattooltip') || '';
-                if (tip.toLowerCase() === 'refresh') {
-                    btns[i].click();
-                    return 'refresh_clicked';
-                }
-            }
-            var allBtns = document.querySelectorAll('button.mat-mdc-mini-fab');
-            for (var i = 0; i < allBtns.length; i++) {
-                var icon = allBtns[i].querySelector('mat-icon');
-                if (icon && icon.textContent.trim().toLowerCase() === 'refresh'
-                    && allBtns[i].offsetParent !== null) {
-                    allBtns[i].click();
-                    return 'refresh_clicked_icon';
-                }
-            }
-            return null;
-            """)
-            if result:
-                log.info("Refresh clicked")
-                refresh_done = True
-        except Exception:
-            pass
-
-        if not refresh_done:
-            log.warning("Refresh button not found, doing hard_refresh instead")
-            self.hard_refresh()
-            return
-
-        # Wait for Angular to process the refresh — brief pause for stale
-        # data to clear, then full page ready check
-        time.sleep(0.5)
-        self._wait_for_page_ready()
+        """Refresh the page using hard_refresh (browser refresh).
+        Angular's refresh button breaks the toolbar — search button
+        disappears from DOM permanently. Browser refresh is reliable."""
+        log.info("Refreshing page (hard_refresh)...")
+        self.hard_refresh()
 
     # ==============================================================
     #  Fill form fields
@@ -511,10 +457,10 @@ class VehicleMasterPage(BasePage):
     #  SweetAlert2 handlers — FAST (UOM pattern)
     # ==============================================================
 
-    def handle_success_alert(self, timeout=5):
+    def handle_success_alert(self, timeout=3):
         """Handle SweetAlert2 success notification — fast dismiss.
         Returns the alert message text, or '' if no alert appeared.
-        Default 5s timeout — success alerts appear within 1-2s."""
+        3s timeout (UOM pattern) — success alerts appear within 1s."""
         log.info("Handling success alert...")
         try:
             WebDriverWait(self.driver, timeout).until(
@@ -538,7 +484,7 @@ class VehicleMasterPage(BasePage):
             """)
             # Wait for SweetAlert to disappear (short wait)
             try:
-                WebDriverWait(self.driver, 3).until(
+                WebDriverWait(self.driver, 2).until(
                     EC.invisibility_of_element_located(
                         (By.CSS_SELECTOR, ".swal2-container")
                     )
@@ -551,7 +497,7 @@ class VehicleMasterPage(BasePage):
             log.info("No success alert appeared within timeout")
             return ""
 
-    def handle_validation_warning(self, timeout=5):
+    def handle_validation_warning(self, timeout=3):
         """Handle SweetAlert2 validation warning popup — fast dismiss.
         Returns the warning message text, or ''."""
         log.info("Checking for validation warning...")
@@ -826,8 +772,8 @@ class VehicleMasterPage(BasePage):
 
     def is_vehicle_in_table(self, vehicle_name):
         """Check if a vehicle with the given name appears in the table.
-        Polls up to 10s to handle slow Angular re-renders."""
-        end_time = time.monotonic() + 10
+        Polls up to 5s (fast, UOM pattern)."""
+        end_time = time.monotonic() + 5
         while time.monotonic() < end_time:
             try:
                 rows = self.driver.find_elements(
@@ -886,10 +832,9 @@ class VehicleMasterPage(BasePage):
     #  Row action buttons — pure JS 3-dot menu (UOM pattern)
     # ==============================================================
 
-    def _click_action_menu_item(self, vehicle_name, action_name, retries=5):
+    def _click_action_menu_item(self, vehicle_name, action_name, retries=3):
         """Click an action menu item (View/Edit/History) for a specific
-        vehicle row. Pure JS — retries with polling if data not yet loaded.
-        On later retries, does a hard_refresh to force Angular data reload."""
+        vehicle row. Pure JS — fast retries with short polling."""
         log.info(f"Clicking {action_name} via 3-dot menu for: {vehicle_name}")
         self._force_close_panels()
 
@@ -924,12 +869,7 @@ class VehicleMasterPage(BasePage):
                 pass
             if attempt < retries - 1:
                 log.info(f"Vehicle not in table yet, retrying ({attempt+1}/{retries})...")
-                # After 2nd failed attempt, do a hard_refresh to reload data
-                if attempt >= 2:
-                    log.info("Doing hard_refresh to force data reload...")
-                    self.hard_refresh()
-                else:
-                    time.sleep(1.5)
+                time.sleep(0.5)
 
         # Fallback: try by row index
         if not menu_opened:
@@ -1166,8 +1106,8 @@ class VehicleMasterPage(BasePage):
 
     def search_vehicle(self, vehicle_name):
         """Search for a vehicle by name using JS clicks (UOM pattern).
-        Uses pure JS to click the search button — bypasses offsetParent
-        visibility checks that fail when toolbar hasn't rendered yet.
+        Pure JS clicks bypass all offsetParent/visibility issues.
+        No extra _wait_for_page_ready() — that burns 20s for nothing.
         Returns True if the vehicle is found in the table results."""
         log.info(f"Searching for vehicle: {vehicle_name}")
         self._force_close_panels()
@@ -1189,26 +1129,32 @@ class VehicleMasterPage(BasePage):
             pass
 
         # Step 2: If search input not visible, click search button via JS (UOM pattern)
+        # Retry up to 5 times with 0.5s gap — search button might not be in DOM yet
         if search_input is None:
             log.info("Search input not visible, clicking search button via JS")
-            # Ensure page is fully loaded first
-            self._wait_for_page_ready()
-            # JS click — bypasses visibility/offsetParent issues entirely
-            js_click_search = """
-            var btn = document.querySelector('button.search-btn');
-            if (!btn) { return 'not_found'; }
-            btn.scrollIntoView({block:'center'});
-            btn.click();
-            return 'clicked';
-            """
-            try:
-                result = self.driver.execute_script(js_click_search)
-                log.info("Search button clicked via JS: " + str(result))
-                if result == 'not_found':
-                    log.error("Search button not found in DOM")
-                    return False
-            except Exception as e:
-                log.error("Failed to click search button via JS: " + str(e))
+            clicked = False
+            for attempt in range(5):
+                js_click_search = """
+                var btn = document.querySelector('button.search-btn');
+                if (!btn) { return 'not_found'; }
+                btn.scrollIntoView({block:'center'});
+                btn.click();
+                return 'clicked';
+                """
+                try:
+                    result = self.driver.execute_script(js_click_search)
+                    if result == 'clicked':
+                        clicked = True
+                        log.info("Search button clicked via JS: " + str(result))
+                        break
+                    else:
+                        log.info(f"Search button not in DOM, retry {attempt+1}/5...")
+                except Exception as e:
+                    log.info(f"Search button JS click failed, retry {attempt+1}/5: {e}")
+                time.sleep(0.5)
+
+            if not clicked:
+                log.error("Search button not found in DOM after 5 retries")
                 return False
 
             # Wait for search input to become visible
@@ -1224,7 +1170,7 @@ class VehicleMasterPage(BasePage):
                 log.warning("Search input did not become visible after clicking search button")
                 return False
 
-        # Step 3: Clear existing value completely
+        # Step 3: Clear existing value completely via JS
         self.driver.execute_script("arguments[0].value = '';", search_input)
         self.driver.execute_script(
             "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));",
@@ -1600,22 +1546,18 @@ class VehicleMasterPage(BasePage):
     # ==============================================================
 
     def force_close_form_popup(self):
-        """Force close any open form popup via JS."""
+        """Force close any open form popup via JS (UOM pattern).
+        Just clicks the close button — does NOT nuke overlay elements.
+        Removing .cdk-overlay-pane elements can destroy the page toolbar."""
         log.info("Force closing form popup via JS...")
         result = self.driver.execute_script("""
             var popup = document.querySelector('div.edit_pop_up');
-            if (popup) {
-                var closeBtn = popup.querySelector('button[mat-icon-button] mat-icon');
-                if (closeBtn) {
-                    var btn = closeBtn.closest('button');
-                    if (btn) { btn.click(); return 'clicked close'; }
-                }
-            }
-            // Fallback: remove all overlays
-            document.querySelectorAll('mat-dialog-container').forEach(function(el) { el.remove(); });
-            document.querySelectorAll('.cdk-overlay-backdrop').forEach(function(el) { el.remove(); });
-            document.querySelectorAll('.cdk-overlay-pane').forEach(function(el) { el.remove(); });
-            return 'force_removed';
+            if (!popup) return 'no popup found';
+            var closeBtn = popup.querySelector('button[mat-icon-button] mat-icon');
+            if (!closeBtn) return 'no close button found';
+            var btn = closeBtn.closest('button');
+            if (btn) { btn.click(); return 'clicked close'; }
+            return 'could not click';
         """)
         log.info("Force close result: " + str(result))
 
@@ -1643,7 +1585,7 @@ class VehicleMasterPage(BasePage):
             self.fill_vehicle_form(vehicle_data)
             self.submit()
 
-            msg = self.handle_success_alert(timeout=5)
+            msg = self.handle_success_alert(timeout=3)
             if msg:
                 result["message"] = msg
                 result["status"] = "PASSED"
@@ -1663,11 +1605,10 @@ class VehicleMasterPage(BasePage):
             result["error"] = str(e)
             log.error(f"Failed to create vehicle '{name}': {e}")
 
-        # Always clean up: remove any leftover overlays/swals
+        # Always clean up: remove any leftover SweetAlert only
         try:
             self.driver.execute_script("""
                 document.querySelectorAll('.swal2-container').forEach(function(el) { el.remove(); });
-                document.querySelectorAll('.cdk-overlay-backdrop').forEach(function(el) { el.remove(); });
             """)
         except Exception:
             pass
@@ -1721,7 +1662,7 @@ class VehicleMasterPage(BasePage):
             self._force_close_panels()
             self.click_update()
 
-            msg = self.handle_success_alert(timeout=5)
+            msg = self.handle_success_alert(timeout=3)
             if msg:
                 result["message"] = msg
                 result["status"] = "PASSED"
