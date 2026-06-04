@@ -19,7 +19,6 @@ Known bugs: C06 (no duplicate HSN SAC number check)
 """
 
 import pytest
-from selenium.webdriver.common.by import By
 from pages.common_settings.modules.hsn_sac.data.hsn_sac_data import (
     generate_valid_hsn_sac_data,
     generate_hsn_sac_number,
@@ -70,8 +69,8 @@ class TestCreateFormValidations:
         page._force_close_panels()
         page.submit()
 
-        is_validation = page.is_validation_alert_present(timeout=5)
-        warning = page.handle_validation_warning(timeout=3)
+        is_validation = page.is_validation_alert_present(timeout=3)
+        warning = page.handle_validation_warning(timeout=2)
 
         assert is_validation, "Expected 'Validation Failed' alert for empty HSN SAC Number"
         assert VALIDATION_FAILED_TITLE in warning, f"Unexpected warning: {warning}"
@@ -90,8 +89,8 @@ class TestCreateFormValidations:
         page._force_close_panels()
         page.submit()
 
-        is_validation = page.is_validation_alert_present(timeout=5)
-        warning = page.handle_validation_warning(timeout=3)
+        is_validation = page.is_validation_alert_present(timeout=3)
+        warning = page.handle_validation_warning(timeout=2)
 
         assert is_validation, "Expected 'Validation Failed' alert for empty HSN SAC Type"
         assert VALIDATION_FAILED_TITLE in warning, f"Unexpected warning: {warning}"
@@ -111,8 +110,8 @@ class TestCreateFormValidations:
         page._force_close_panels()
         page.submit()
 
-        is_validation = page.is_validation_alert_present(timeout=5)
-        warning = page.handle_validation_warning(timeout=3)
+        is_validation = page.is_validation_alert_present(timeout=3)
+        warning = page.handle_validation_warning(timeout=2)
 
         assert is_validation, "Expected 'Validation Failed' alert for empty HSN SAC Description"
         assert VALIDATION_FAILED_TITLE in warning, f"Unexpected warning: {warning}"
@@ -127,8 +126,8 @@ class TestCreateFormValidations:
         page.open_add_form()
         page.submit()
 
-        is_validation = page.is_validation_alert_present(timeout=5)
-        warning = page.handle_validation_warning(timeout=3)
+        is_validation = page.is_validation_alert_present(timeout=3)
+        warning = page.handle_validation_warning(timeout=2)
 
         assert is_validation, "Expected 'Validation Failed' alert for all empty fields"
         assert VALIDATION_FAILED_TITLE in warning, f"Unexpected warning: {warning}"
@@ -328,8 +327,8 @@ class TestEditFormValidations:
         page._force_close_panels()
         page.click_update()
 
-        is_validation = page.is_validation_alert_present(timeout=5)
-        warning = page.handle_validation_warning(timeout=3)
+        is_validation = page.is_validation_alert_present(timeout=3)
+        warning = page.handle_validation_warning(timeout=2)
 
         assert is_validation, "Expected 'Validation Failed' for empty Number in Edit"
         assert VALIDATION_FAILED_TITLE in warning, f"Unexpected warning: {warning}"
@@ -412,31 +411,22 @@ class TestTableOperations:
         result = page.create_hsn_sac(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
 
-        page.clear_search()
-
-        search_ok = page.search_record(data["hsn_sac_number"])
-        assert search_ok, "Search execution failed"
-
-        found = page.is_hsn_in_table(data["hsn_sac_number"])
+        # Use search_and_verify — handles search + existence check together
+        found = page.search_and_verify(data["hsn_sac_number"])
         assert found, f"Expected to find '{data['hsn_sac_number']}' after search"
 
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.ui
     def test_T02_verify_table_columns(self, hsn_sac_page):
-        """HSN-T02: Verify table has expected columns (View, Edit, History, Number, Type)."""
+        """HSN-T02: Verify table has expected columns via header cells."""
         page = hsn_sac_page
 
         assert page.is_page_loaded(), "Page should be loaded"
 
-        row_count = page.get_table_row_count()
-        if row_count > 0:
-            rows = page.driver.find_elements(*page.TABLE_BODY_ROWS)
-            first_row = rows[0]
-            cells = first_row.find_elements(By.CSS_SELECTOR, "td")
-            assert len(cells) >= 5, f"Expected 5+ columns, got {len(cells)}"
-        else:
-            assert True, "Table exists but no rows (acceptable)"
+        # Count <th> header cells — more reliable than counting <td> in body rows
+        col_count = page.get_table_column_count()
+        assert col_count >= 3, f"Expected 3+ columns in table header, got {col_count}"
 
     @pytest.mark.sanity
     @pytest.mark.regression

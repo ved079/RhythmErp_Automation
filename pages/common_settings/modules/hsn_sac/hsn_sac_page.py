@@ -120,8 +120,8 @@ class HsnSacPage:
 
     def _wait_for_page_ready(self):
         """Wait for page table + at least 1 data row with text content.
-        Fast polling (0.1s intervals), 5s timeout."""
-        end = time.monotonic() + 5
+        Fast polling (0.1s intervals), 3s timeout."""
+        end = time.monotonic() + 3
         while time.monotonic() < end:
             try:
                 ready = self.driver.execute_script("""
@@ -640,6 +640,19 @@ class HsnSacPage:
         except NoSuchElementException:
             return 0
 
+    def get_table_column_count(self):
+        """Count table columns via <th> header cells — more reliable than counting <td>.
+        Returns the number of header columns in the table."""
+        try:
+            return self.driver.execute_script("""
+                var table = document.querySelector('table#excel-table');
+                if (!table) return 0;
+                var headers = table.querySelectorAll('thead th');
+                return headers.length;
+            """) or 0
+        except Exception:
+            return 0
+
     def get_cell_text(self, row_index, css_class):
         """Read text from a table cell by row index and column CSS class."""
         try:
@@ -653,7 +666,7 @@ class HsnSacPage:
 
     def is_hsn_in_table(self, hsn_number):
         """Check if HSN SAC Number exists in table — pure JS, fast poll."""
-        end_time = time.monotonic() + 5
+        end_time = time.monotonic() + 3
         while time.monotonic() < end_time:
             try:
                 found = self.driver.execute_script("""
@@ -702,9 +715,13 @@ class HsnSacPage:
     # Search — JS-first (UOM pattern)
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def search_record(self, search_text, max_retries=2):
+    def search_record(self, search_text, max_retries=3):
         """Search table by HSN SAC Number. JS clicks for search toggle + submit.
         Returns True if search executed successfully."""
+        # Ensure page is ready before searching
+        if not self.is_page_loaded():
+            self._wait_for_page_ready()
+
         for attempt in range(max_retries):
             try:
                 # Check if search input already visible
@@ -722,16 +739,37 @@ class HsnSacPage:
 
                 # If not visible, click search toggle via JS
                 if search_input is None:
-                    self.driver.execute_script("""
+                    # Try JS click first
+                    clicked = self.driver.execute_script("""
                         var btn = document.querySelector('button.search-btn');
-                        if (btn) { btn.scrollIntoView({block:'center'}); btn.click(); }
+                        if (btn) { btn.scrollIntoView({block:'center'}); btn.click(); return true; }
+                        return false;
                     """)
+                    if not clicked:
+                        # Fallback: try mat-icon search button
+                        self.driver.execute_script("""
+                            var icons = document.querySelectorAll('button mat-icon');
+                            for (var i = 0; i < icons.length; i++) {
+                                if (icons[i].textContent.trim().toLowerCase() === 'search') {
+                                    var btn = icons[i].closest('button');
+                                    if (btn) { btn.click(); return; }
+                                }
+                            }
+                        """)
                     try:
-                        search_input = WebDriverWait(self.driver, 3).until(
+                        search_input = WebDriverWait(self.driver, 5).until(
                             EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
                         )
                     except Exception:
-                        continue
+                        # Fallback: try ActionChains click on search button
+                        try:
+                            btn = self.driver.find_element("css selector", "button.search-btn")
+                            ActionChains(self.driver).move_to_element(btn).click().perform()
+                            search_input = WebDriverWait(self.driver, 3).until(
+                                EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
+                            )
+                        except Exception:
+                            continue
 
                 # Clear + set value via JS
                 self.driver.execute_script("arguments[0].value = '';", search_input)
@@ -755,13 +793,8 @@ class HsnSacPage:
                     if (btn) btn.click();
                 """)
 
-                # Wait for table refresh
-                try:
-                    WebDriverWait(self.driver, 3).until(
-                        lambda d: d.find_elements("css selector", "table#excel-table tbody tr")
-                    )
-                except Exception:
-                    pass
+                # Wait for table refresh — brief pause
+                time.sleep(0.3)
 
                 return True
 
