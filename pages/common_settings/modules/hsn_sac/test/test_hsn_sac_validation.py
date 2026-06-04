@@ -69,7 +69,7 @@ class TestCreateFormValidations:
         page._force_close_panels()
         page.submit()
 
-        is_validation = page.is_validation_alert_present(timeout=3)
+        is_validation = page.is_validation_alert_present(timeout=2)
         warning = page.handle_validation_warning(timeout=2)
 
         assert is_validation, "Expected 'Validation Failed' alert for empty HSN SAC Number"
@@ -89,7 +89,7 @@ class TestCreateFormValidations:
         page._force_close_panels()
         page.submit()
 
-        is_validation = page.is_validation_alert_present(timeout=3)
+        is_validation = page.is_validation_alert_present(timeout=2)
         warning = page.handle_validation_warning(timeout=2)
 
         assert is_validation, "Expected 'Validation Failed' alert for empty HSN SAC Type"
@@ -110,7 +110,7 @@ class TestCreateFormValidations:
         page._force_close_panels()
         page.submit()
 
-        is_validation = page.is_validation_alert_present(timeout=3)
+        is_validation = page.is_validation_alert_present(timeout=2)
         warning = page.handle_validation_warning(timeout=2)
 
         assert is_validation, "Expected 'Validation Failed' alert for empty HSN SAC Description"
@@ -126,7 +126,7 @@ class TestCreateFormValidations:
         page.open_add_form()
         page.submit()
 
-        is_validation = page.is_validation_alert_present(timeout=3)
+        is_validation = page.is_validation_alert_present(timeout=2)
         warning = page.handle_validation_warning(timeout=2)
 
         assert is_validation, "Expected 'Validation Failed' alert for all empty fields"
@@ -327,7 +327,7 @@ class TestEditFormValidations:
         page._force_close_panels()
         page.click_update()
 
-        is_validation = page.is_validation_alert_present(timeout=3)
+        is_validation = page.is_validation_alert_present(timeout=2)
         warning = page.handle_validation_warning(timeout=2)
 
         assert is_validation, "Expected 'Validation Failed' for empty Number in Edit"

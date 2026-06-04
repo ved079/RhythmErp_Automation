@@ -184,7 +184,7 @@ class HsnSacPage:
                 raise Exception(f"Failed to open Add form: {e}")
         # Wait for form popup — fast offsetParent check
         try:
-            WebDriverWait(self.driver, 2).until(
+            WebDriverWait(self.driver, 1).until(
                 lambda d: d.execute_script(
                     "var el = document.querySelector('input[name=\"HSN SAC Number\"]');"
                     "return el && el.offsetParent !== null;"
@@ -444,7 +444,7 @@ class HsnSacPage:
     # SweetAlert2 — Handle Alerts — FAST (UOM pattern)
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def handle_success_alert(self, timeout=3):
+    def handle_success_alert(self, timeout=2):
         """Handle SweetAlert2 success — instant dismiss via JS.
         Returns the success message text or empty string."""
         try:
@@ -465,7 +465,7 @@ class HsnSacPage:
         except TimeoutException:
             return ""
 
-    def handle_validation_warning(self, timeout=3):
+    def handle_validation_warning(self, timeout=2):
         """Handle SweetAlert2 validation warning — instant dismiss via JS.
         Returns the warning title text or empty string."""
         try:
@@ -486,7 +486,7 @@ class HsnSacPage:
         except TimeoutException:
             return ""
 
-    def is_validation_alert_present(self, timeout=3):
+    def is_validation_alert_present(self, timeout=2):
         """Check if validation SweetAlert2 is visible — fast JS offsetParent poll."""
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
@@ -666,7 +666,7 @@ class HsnSacPage:
 
     def is_hsn_in_table(self, hsn_number):
         """Check if HSN SAC Number exists in table — pure JS, fast poll."""
-        end_time = time.monotonic() + 3
+        end_time = time.monotonic() + 2
         while time.monotonic() < end_time:
             try:
                 found = self.driver.execute_script("""
@@ -687,7 +687,7 @@ class HsnSacPage:
                     return True
             except Exception:
                 pass
-            time.sleep(0.2)
+            time.sleep(0.15)
         return False
 
     def find_hsn_row_index(self, hsn_number):
@@ -715,94 +715,58 @@ class HsnSacPage:
     # Search — JS-first (UOM pattern)
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def search_record(self, search_text, max_retries=3):
-        """Search table by HSN SAC Number. JS clicks for search toggle + submit.
-        Returns True if search executed successfully."""
-        # Ensure page is ready before searching
-        if not self.is_page_loaded():
-            self._wait_for_page_ready()
-
-        for attempt in range(max_retries):
-            try:
-                # Check if search input already visible
-                search_input = None
-                try:
-                    el = self.driver.find_element("css selector", "input#erpSearchInput")
-                    visible = self.driver.execute_script(
-                        "var r = arguments[0].getBoundingClientRect();"
-                        "return r.width > 0 && r.height > 0;", el
-                    )
-                    if visible:
-                        search_input = el
-                except Exception:
-                    pass
-
-                # If not visible, click search toggle via JS
-                if search_input is None:
-                    # Try JS click first
-                    clicked = self.driver.execute_script("""
-                        var btn = document.querySelector('button.search-btn');
-                        if (btn) { btn.scrollIntoView({block:'center'}); btn.click(); return true; }
-                        return false;
-                    """)
-                    if not clicked:
-                        # Fallback: try mat-icon search button
-                        self.driver.execute_script("""
-                            var icons = document.querySelectorAll('button mat-icon');
-                            for (var i = 0; i < icons.length; i++) {
-                                if (icons[i].textContent.trim().toLowerCase() === 'search') {
-                                    var btn = icons[i].closest('button');
-                                    if (btn) { btn.click(); return; }
-                                }
-                            }
-                        """)
-                    try:
-                        search_input = WebDriverWait(self.driver, 5).until(
-                            EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
-                        )
-                    except Exception:
-                        # Fallback: try ActionChains click on search button
-                        try:
-                            btn = self.driver.find_element("css selector", "button.search-btn")
-                            ActionChains(self.driver).move_to_element(btn).click().perform()
-                            search_input = WebDriverWait(self.driver, 3).until(
-                                EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
-                            )
-                        except Exception:
-                            continue
-
-                # Clear + set value via JS
-                self.driver.execute_script("arguments[0].value = '';", search_input)
-                self.driver.execute_script(
-                    "arguments[0].dispatchEvent(new Event('input', {bubbles: true}));",
-                    search_input
-                )
-                self.driver.execute_script(
-                    "arguments[0].value = arguments[1];", search_input, str(search_text)
-                )
-                search_input.click()
-                for event in ["input", "keyup", "change"]:
-                    self.driver.execute_script(
-                        f"arguments[0].dispatchEvent(new Event('{event}', {{bubbles: true}}));",
-                        search_input
-                    )
-
-                # Click search button to submit
-                self.driver.execute_script("""
+    def search_record(self, search_text):
+        """Search table by HSN SAC Number. All-in-one JS for max speed.
+        Returns True always (search is fire-and-forget)."""
+        # All-in-one JS: open search toggle, set value, fire events, click submit
+        self.driver.execute_script("""
+            // Step 1: Ensure search input is visible
+            var input = document.querySelector('input#erpSearchInput');
+            if (input) {
+                var rect = input.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) {
+                    // Input exists but hidden — click toggle
                     var btn = document.querySelector('button.search-btn');
                     if (btn) btn.click();
-                """)
+                }
+            } else {
+                // Input not in DOM yet — click toggle
+                var btn = document.querySelector('button.search-btn');
+                if (btn) btn.click();
+            }
+        """)
 
-                # Wait for table refresh — brief pause
-                time.sleep(0.3)
-
-                return True
-
+        # Wait for search input to appear (fast)
+        try:
+            search_input = WebDriverWait(self.driver, 3).until(
+                EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
+            )
+        except Exception:
+            # Fallback: try ActionChains click on search button
+            try:
+                btn = self.driver.find_element("css selector", "button.search-btn")
+                ActionChains(self.driver).move_to_element(btn).click().perform()
+                search_input = WebDriverWait(self.driver, 2).until(
+                    EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
+                )
             except Exception:
-                if attempt < max_retries - 1:
-                    time.sleep(0.5)
+                return False
 
-        return False
+        # Set value + fire events in ONE JS call
+        self.driver.execute_script("""
+            arguments[0].value = arguments[1];
+            arguments[0].dispatchEvent(new Event('input', {bubbles: true}));
+            arguments[0].dispatchEvent(new Event('keyup', {bubbles: true}));
+            arguments[0].dispatchEvent(new Event('change', {bubbles: true}));
+        """, search_input, str(search_text))
+
+        # Click search button to submit
+        self.driver.execute_script("""
+            var btn = document.querySelector('button.search-btn');
+            if (btn) btn.click();
+        """)
+
+        return True
 
     def search_and_verify(self, hsn_number):
         """Search for HSN number, then verify it exists in the filtered results.
@@ -958,7 +922,7 @@ class HsnSacPage:
             self._click_action_button_by_index(row_index, "View")
         # Wait for popup to appear
         try:
-            WebDriverWait(self.driver, 2).until(
+            WebDriverWait(self.driver, 1).until(
                 lambda d: d.execute_script(
                     "var el = document.querySelector('.big-model');"
                     "return el && el.offsetParent !== null;"
@@ -975,7 +939,7 @@ class HsnSacPage:
             self._click_action_button_by_index(row_index, "Edit")
         # Wait for edit popup to appear
         try:
-            WebDriverWait(self.driver, 2).until(
+            WebDriverWait(self.driver, 1).until(
                 lambda d: d.execute_script(
                     "var el = document.querySelector('input[name=\"HSN SAC Number\"]');"
                     "return el && el.offsetParent !== null;"
@@ -1167,7 +1131,7 @@ class HsnSacPage:
             self.click_history_button(row_index, hsn_number=hsn_number)
 
             # Wait for history popup — fast poll
-            end_time = time.monotonic() + 3
+            end_time = time.monotonic() + 2
             while time.monotonic() < end_time:
                 if self.is_history_popup_open():
                     break
