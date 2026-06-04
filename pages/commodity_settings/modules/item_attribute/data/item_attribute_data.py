@@ -606,3 +606,50 @@ def generate_edit_all_fields(attr_num=1):
     if attr_num == 1:
         data["base_uom"] = ""
     return data
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+# Item Attribute1 has 4 fields (including base_uom FK)
+# Item Attribute2-5 have 3 fields each (no FK)
+
+FIELD_VALIDATION_RULES = {
+    "name": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Attribute value name. Duplicates currently allowed (BUG-001).",
+    },
+    "description": {
+        "type": "character",
+        "required": False,
+        "max_length": 255,
+        "note": "Optional description of the attribute value.",
+    },
+    "base_uom": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(UOM_IDS),
+        "note": "FK to UOM. Only present on Item Attribute1. ~20 UOM options.",
+    },
+    "status": {
+        "type": "toggle",
+        "required": False,
+        "default": True,
+        "note": "Active/Inactive toggle. Default: Active (True).",
+    },
+}
+
+STATUS_OPTIONS = {"Active": True, "Inactive": False}
+
+UOM_NAMES = dict(UOM_IDS)
+
+DEFAULT_ITEM_ATTRIBUTE_FK_IDS = {
+    "base_uom": UOM_IDS,
+}
+
+
+def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None):
+    """Generate batch payloads for Item Attribute1 (the primary screen with FK)."""
+    return generate_item_attribute_payloads(attr_number=1, count=count, fk_ids=dropdown_ids)

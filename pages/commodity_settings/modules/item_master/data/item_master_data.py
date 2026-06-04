@@ -674,3 +674,170 @@ def generate_item_master_payloads(count=10, offset=0):
         payloads.append(payload)
 
     return payloads
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+# Item Master: 3-step stepper, 10 FK dropdowns
+# Root fields (17): name, code, description, item_category, item_group,
+#   item_type, item_attribute1-5, uom, hsn_sac_code, base_uom,
+#   base_uom_conversion, status
+# Stepper children (3): Additional Details, Define Item Master Details,
+#   Product Order Packeging Details
+
+FIELD_VALIDATION_RULES = {
+    # Root text fields
+    "name": {
+        "type": "character",
+        "required": False,
+        "max_length": 255,
+        "note": "AUTO-GENERATED from attributes. Readonly in UI.",
+    },
+    "code": {
+        "type": "character",
+        "required": False,
+        "max_length": 255,
+        "note": "AUTO-GENERATED but editable. Dash-separated attributes.",
+    },
+    "description": {
+        "type": "character",
+        "required": False,
+        "max_length": 255,
+        "note": "Optional description.",
+    },
+    "base_uom_conversion": {
+        "type": "character",
+        "required": True,
+        "max_length": 10,
+        "note": "Conversion factor as string. Max 10 chars.",
+    },
+    # FK Dropdowns (required)
+    "item_category": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(ITEM_CATEGORY_OPTIONS),
+        "note": "FK to Item Category. 26 options.",
+    },
+    "item_type": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(ITEM_TYPE_OPTIONS),
+        "note": "FK to Item Type. 2 options: Farm, Non Farm.",
+    },
+    "uom": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(UOM_OPTIONS),
+        "note": "FK to UOM. 20 options.",
+    },
+    "hsn_sac_code": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(HSN_SAC_CODE_OPTIONS),
+        "note": "FK to HSN SAC Code. 34 options.",
+    },
+    "base_uom": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(BASE_UOM_OPTIONS),
+        "note": "FK to UOM (same pool). 20 options.",
+    },
+    # FK Dropdowns (optional)
+    "item_group": {
+        "type": "dropdown",
+        "required": False,
+        "fk_options_count": len(ITEM_GROUP_OPTIONS),
+        "note": "FK to Item Group. 25 options. Optional.",
+    },
+    "item_attribute1": {
+        "type": "dropdown",
+        "required": False,
+        "fk_options_count": len(ITEM_ATTRIBUTE1_OPTIONS),
+        "note": "FK to Item Attribute1. 31 options. Optional.",
+    },
+    "item_attribute2": {
+        "type": "dropdown",
+        "required": False,
+        "fk_options_count": len(ITEM_ATTRIBUTE2_OPTIONS),
+        "note": "FK to Item Attribute2. 32 options. Optional.",
+    },
+    "item_attribute3": {
+        "type": "dropdown",
+        "required": False,
+        "fk_options_count": len(ITEM_ATTRIBUTE3_OPTIONS),
+        "note": "FK to Item Attribute3. 29 options. Optional.",
+    },
+    "item_attribute4": {
+        "type": "dropdown",
+        "required": False,
+        "fk_options_count": len(ITEM_ATTRIBUTE4_OPTIONS),
+        "note": "FK to Item Attribute4. 28 options. Optional.",
+    },
+    "item_attribute5": {
+        "type": "dropdown",
+        "required": False,
+        "fk_options_count": len(ITEM_ATTRIBUTE5_OPTIONS),
+        "note": "FK to Item Attribute5. 28 options. Optional.",
+    },
+    # Toggle
+    "status": {
+        "type": "toggle",
+        "required": False,
+        "default": True,
+        "note": "Active/Inactive toggle. Default: Active (True).",
+    },
+    # Stepper toggles (on children[0])
+    "is_critical": {
+        "type": "toggle",
+        "required": False,
+        "default": False,
+        "note": "On Additional Details stepper. Default: No (False).",
+    },
+    "include_wip_in_stock_cal": {
+        "type": "toggle",
+        "required": False,
+        "default": False,
+        "note": "On Additional Details stepper. Default: No (False).",
+    },
+    "is_packing_material": {
+        "type": "toggle",
+        "required": False,
+        "default": False,
+        "note": "On Additional Details stepper. Default: No (False).",
+    },
+}
+
+STATUS_OPTIONS = {"Active": True, "Inactive": False}
+
+# Name aliases for schema tests
+ITEM_CATEGORY_NAMES = dict(ITEM_CATEGORY_OPTIONS)
+ITEM_GROUP_NAMES = dict(ITEM_GROUP_OPTIONS)
+ITEM_TYPE_NAMES = dict(ITEM_TYPE_OPTIONS)
+ITEM_ATTRIBUTE1_NAMES = dict(ITEM_ATTRIBUTE1_OPTIONS)
+ITEM_ATTRIBUTE2_NAMES = dict(ITEM_ATTRIBUTE2_OPTIONS)
+ITEM_ATTRIBUTE3_NAMES = dict(ITEM_ATTRIBUTE3_OPTIONS)
+ITEM_ATTRIBUTE4_NAMES = dict(ITEM_ATTRIBUTE4_OPTIONS)
+ITEM_ATTRIBUTE5_NAMES = dict(ITEM_ATTRIBUTE5_OPTIONS)
+UOM_NAMES = dict(UOM_OPTIONS)
+HSN_SAC_CODE_NAMES = dict(HSN_SAC_CODE_OPTIONS)
+BASE_UOM_NAMES = dict(BASE_UOM_OPTIONS)
+
+STEPPER_NAMES = ["Additional Details", "Define Item Master Details", "Product Order Packeging Details"]
+
+DEFAULT_ITEM_MASTER_FK_IDS = {
+    "item_category": ITEM_CATEGORY_OPTIONS,
+    "item_group": ITEM_GROUP_OPTIONS,
+    "item_type": ITEM_TYPE_OPTIONS,
+    "item_attribute1": ITEM_ATTRIBUTE1_OPTIONS,
+    "item_attribute2": ITEM_ATTRIBUTE2_OPTIONS,
+    "item_attribute3": ITEM_ATTRIBUTE3_OPTIONS,
+    "item_attribute4": ITEM_ATTRIBUTE4_OPTIONS,
+    "item_attribute5": ITEM_ATTRIBUTE5_OPTIONS,
+    "uom": UOM_OPTIONS,
+    "hsn_sac_code": HSN_SAC_CODE_OPTIONS,
+    "base_uom": BASE_UOM_OPTIONS,
+}
+
+def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None):
+    return generate_item_master_payloads(count=count)

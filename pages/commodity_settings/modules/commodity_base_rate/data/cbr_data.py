@@ -510,3 +510,61 @@ def generate_cbr_payloads(count: int = 10, offset: int = 0,
               f"(pricing_type, location) combos.")
 
     return payloads
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+# Commodity Base Rate is a HEADER-ONLY flat screen — no children, no steppers.
+# The detail grid rows CANNOT be created via the main POST endpoint.
+# 2 date fields + 2 FK dropdowns = 4 payload fields (no status field).
+
+FIELD_VALIDATION_RULES = {
+    "pricing_type_ref_id": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(PRICING_TYPE_ID_MAP),
+        "note": "FK to Pricing Type. 2 options: Common=118, Supplier=120.",
+    },
+    "from_date": {
+        "type": "date",
+        "required": True,
+        "note": "ISO datetime. Server auto-sets on create.",
+    },
+    "to_date": {
+        "type": "date",
+        "required": True,
+        "note": "ISO datetime. Default sentinel: 2099-12-30T18:30:00Z.",
+    },
+    "location_ref_id": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(LOCATION_ID_MAP),
+        "note": "FK to Location. 10 options.",
+    },
+}
+
+PRICING_TYPE_NAMES = dict(PRICING_TYPE_ID_MAP)
+LOCATION_NAMES = dict(LOCATION_ID_MAP)
+
+DEFAULT_COMMODITY_BASE_RATE_FK_IDS = {
+    "pricing_type_ref_id": PRICING_TYPE_ID_MAP,
+    "location_ref_id": LOCATION_ID_MAP,
+}
+
+
+def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None) -> list:
+    """Generate a batch of unique Commodity Base Rate API payloads.
+
+    Standardized batch generator matching the pattern used across all
+    RhythmERP modules.
+
+    Args:
+        count: Number of payloads to generate.
+        prefix: Ignored for CBR (data pool provides names).
+        dropdown_ids: Override specific FK ID pools.
+
+    Returns:
+        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
+    """
+    return generate_cbr_payloads(count=count)

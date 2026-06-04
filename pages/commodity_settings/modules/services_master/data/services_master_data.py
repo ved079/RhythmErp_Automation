@@ -410,3 +410,77 @@ def generate_services_master_payloads(count: int = 10, offset: int = 0) -> list:
         )
 
     return payloads
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+# Services Master is a flat screen — no children, no steppers.
+# 2 character fields + 3 FK dropdowns + 1 toggle = 6 fields total.
+
+FIELD_VALIDATION_RULES = {
+    "name": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Service name. Duplicates currently allowed (BUG-005).",
+    },
+    "uom": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(UOM_ID_MAP),
+        "note": "FK to UOM. 9 options: KG, MT, QT, NOS, Litres, LTR, MTR, SET, KM.",
+    },
+    "base_uom": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(UOM_ID_MAP),
+        "note": "FK to UOM (same pool as uom). 9 options.",
+    },
+    "base_uom_conversion": {
+        "type": "character",
+        "required": True,
+        "max_length": 10,
+        "note": "Conversion factor as string. Max 10 chars. BUG-004: no type/range validation.",
+    },
+    "hsn_code": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(HSN_SAC_SERVICES_ID_MAP),
+        "note": "FK to HSN SAC Code (Services type). 6 options.",
+    },
+    "status": {
+        "type": "toggle",
+        "required": False,
+        "default": True,
+        "note": "Active/Inactive toggle. Default: Active (True).",
+    },
+}
+
+STATUS_OPTIONS = {"Active": True, "Inactive": False}
+
+UOM_NAMES = dict(UOM_ID_MAP)
+HSN_SAC_NAMES = dict(HSN_SAC_SERVICES_ID_MAP)
+
+DEFAULT_SERVICES_MASTER_FK_IDS = {
+    "uom": UOM_ID_MAP,
+    "base_uom": UOM_ID_MAP,
+    "hsn_code": HSN_SAC_SERVICES_ID_MAP,
+}
+
+
+def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None) -> list:
+    """Generate a batch of unique Services Master API payloads.
+
+    Standardized batch generator matching the pattern used across all
+    RhythmERP modules.
+
+    Args:
+        count: Number of payloads to generate.
+        prefix: Ignored for Services Master (realistic names are used instead).
+        dropdown_ids: Override specific FK ID pools.
+
+    Returns:
+        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
+    """
+    return generate_services_master_payloads(count=count)

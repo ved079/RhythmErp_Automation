@@ -1,0 +1,22 @@
+"""test_item_master_perf.py — Performance benchmarks for Item Master."""
+import time, pytest, sys, os
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", ".."))
+sys.path.insert(0, PROJECT_ROOT)
+from pages.commodity_settings.modules.item_master.data.item_master_data import (
+    generate_item_master_payloads, generate_batch_payloads,
+)
+
+@pytest.mark.performance
+class TestItemMasterPerformance:
+    def test_payload_speed(self):
+        start = time.perf_counter()
+        for _ in range(100): generate_item_master_payloads(count=1)
+        assert ((time.perf_counter() - start) / 100) * 1000 < 10
+
+    def test_batch_speed(self):
+        start = time.perf_counter()
+        generate_batch_payloads(count=100)
+        assert time.perf_counter() - start < 0.5
+
+    @pytest.mark.skip(reason="Live API CRUD tests blocked by workflow issue")
+    def test_batch_create_5(self, api_client): pass

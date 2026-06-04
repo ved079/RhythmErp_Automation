@@ -429,3 +429,64 @@ def generate_item_category_payloads(count: int = 10, offset: int = 0) -> list:
         )
 
     return payloads
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+# Item Category is a flat screen — no children, no steppers, no FK dropdowns.
+# 4 fields: item_code (required), item_description (required),
+#           level (required, number), status (optional, toggle).
+
+FIELD_VALIDATION_RULES = {
+    "item_code": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Item Category name. Maps to 'Item Category' UI label. API field key is item_code.",
+    },
+    "item_description": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Item Category description text.",
+    },
+    "level": {
+        "type": "number",
+        "required": True,
+        "note": "Hierarchy level: 1=top, 2=sub-category, 3=sub-sub-category. Integer.",
+    },
+    "status": {
+        "type": "toggle",
+        "required": False,
+        "default": True,
+        "note": "Active/Inactive toggle. Default: Active (True).",
+    },
+}
+
+# Status toggle options (display name -> API boolean value)
+STATUS_OPTIONS = {"Active": True, "Inactive": False}
+
+# No FK dropdown pools — Item Category has zero FK fields
+DEFAULT_ITEM_CATEGORY_FK_IDS = {}
+
+
+def generate_batch_payloads(
+    count: int = 20,
+    prefix: str = None,
+    dropdown_ids: dict = None,
+) -> list:
+    """Generate a batch of unique Item Category API payloads.
+
+    Standardized batch generator matching the pattern used across all
+    RhythmERP modules.
+
+    Args:
+        count: Number of payloads to generate.
+        prefix: Ignored for Item Category (realistic names from data pool are used).
+        dropdown_ids: Not used for Item Category (no FK dropdown fields).
+
+    Returns:
+        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
+    """
+    return generate_item_category_payloads(count=count)

@@ -414,3 +414,49 @@ def generate_item_group_payloads(count: int = 10, offset: int = 0) -> list:
         )
 
     return payloads
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+# Item Group is a flat screen — no children, no steppers, no FK dropdowns.
+# 2 fields: code (required), description (required).
+
+FIELD_VALIDATION_RULES = {
+    "code": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Item Group code. Maps to 'Item Group' UI label.",
+    },
+    "description": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Item Group description text.",
+    },
+}
+
+# No FK dropdown pools — Item Group has zero FK fields
+DEFAULT_ITEM_GROUP_FK_IDS = {}
+
+
+def generate_batch_payloads(
+    count: int = 20,
+    prefix: str = None,
+    dropdown_ids: dict = None,
+) -> list:
+    """Generate a batch of unique Item Group API payloads.
+
+    Standardized batch generator matching the pattern used across all
+    RhythmERP modules.
+
+    Args:
+        count: Number of payloads to generate.
+        prefix: Ignored for Item Group (realistic codes from data pool are used).
+        dropdown_ids: Not used for Item Group (no FK dropdown fields).
+
+    Returns:
+        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
+    """
+    return generate_item_group_payloads(count=count)

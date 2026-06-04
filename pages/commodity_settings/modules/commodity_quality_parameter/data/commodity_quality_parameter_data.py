@@ -840,3 +840,105 @@ def generate_cqp_payloads(count: int = 10, offset: int = 0,
               f"(requested {count}). Data pool exhausted — add more items.")
 
     return payloads
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+# Commodity Quality Parameter has a STEPPER structure.
+# Root fields: item_ref_id, transaction_type, from_date, to_date, revision_status
+# Stepper child "Define Item Quality Parameter Details":
+#   quality_type, min_quality_value, max_quality_value, rate_percentage, multiplier
+
+FIELD_VALIDATION_RULES = {
+    # Root fields
+    "item_ref_id": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(ITEM_ID_MAP),
+        "note": "FK to Item Master. ~35 items in clean pool.",
+    },
+    "transaction_type": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(TRANSACTION_TYPE_ID_MAP),
+        "note": "FK to Transaction Type. 8 options: Purchase, Sales, Stock Up, etc.",
+    },
+    "from_date": {
+        "type": "date",
+        "required": True,
+        "note": "ISO datetime. Server auto-sets on create.",
+    },
+    "to_date": {
+        "type": "date",
+        "required": True,
+        "note": "ISO datetime. Default sentinel: 2099-12-30T18:30:00Z.",
+    },
+    "revision_status": {
+        "type": "character",
+        "required": False,
+        "max_length": 255,
+        "note": "Optional revision label.",
+    },
+
+    # Stepper child: "Define Item Quality Parameter Details" detail lines
+    "quality_type": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(QUALITY_PARAM_ID_MAP),
+        "note": "FK to Quality Parameter. 30 options in stepper detail lines.",
+    },
+    "min_quality_value": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Min value string. In stepper detail lines.",
+    },
+    "max_quality_value": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Max value string. In stepper detail lines.",
+    },
+    "rate_percentage": {
+        "type": "toggle",
+        "required": False,
+        "default": False,
+        "note": "Is Rate/Percentage toggle in stepper detail lines. Default: False.",
+    },
+    "multiplier": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Multiplier value string. In stepper detail lines.",
+    },
+}
+
+ITEM_NAMES = dict(ITEM_ID_MAP)
+TRANSACTION_TYPE_NAMES = dict(TRANSACTION_TYPE_ID_MAP)
+QUALITY_PARAM_NAMES = dict(QUALITY_PARAM_ID_MAP)
+
+DEFAULT_COMMODITY_QUALITY_PARAMETER_FK_IDS = {
+    "item_ref_id": ITEM_ID_MAP,
+    "transaction_type": TRANSACTION_TYPE_ID_MAP,
+    "quality_type": QUALITY_PARAM_ID_MAP,
+}
+
+STEPPER_NAME = "Define Item Quality Parameter Details"
+
+
+def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None) -> list:
+    """Generate a batch of unique Commodity Quality Parameter API payloads.
+
+    Standardized batch generator matching the pattern used across all
+    RhythmERP modules.
+
+    Args:
+        count: Number of payloads to generate.
+        prefix: Ignored for CQP (data pool provides item/param combinations).
+        dropdown_ids: Override specific FK ID pools.
+
+    Returns:
+        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
+    """
+    return generate_cqp_payloads(count=count)

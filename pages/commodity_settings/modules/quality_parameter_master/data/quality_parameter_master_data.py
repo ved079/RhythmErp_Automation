@@ -429,3 +429,43 @@ def generate_name_with_emoji():
     """Generate a name containing emoji characters."""
     emojis = ["\u2728", "\u2705", "\u26a0", "\u274c", "\u2b50"]
     return f"QP{random.choice(emojis)}Test"
+
+
+# ──────────────────────────────────────────────
+# FIELD VALIDATION RULES (from live ERP schema)
+# ──────────────────────────────────────────────
+# Quality Parameter Master is a flat screen — no children, no steppers, no FK dropdowns.
+# Only 1 field: name (required, character).
+
+FIELD_VALIDATION_RULES = {
+    "name": {
+        "type": "character",
+        "required": True,
+        "max_length": 255,
+        "note": "Quality parameter name. Must be unique (BUG-002: duplicates currently allowed).",
+    },
+}
+
+# No FK dropdown pools — Quality Parameter Master has zero FK fields
+DEFAULT_QUALITY_PARAMETER_MASTER_FK_IDS = {}
+
+
+def generate_batch_payloads(
+    count: int = 20,
+    prefix: str = None,
+    dropdown_ids: dict = None,
+) -> list:
+    """Generate a batch of unique Quality Parameter Master API payloads.
+
+    Standardized batch generator matching the pattern used across all
+    RhythmERP modules.
+
+    Args:
+        count: Number of payloads to generate.
+        prefix: Ignored for QPM (realistic names from data pool are used).
+        dropdown_ids: Not used for QPM (no FK dropdown fields).
+
+    Returns:
+        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
+    """
+    return generate_quality_parameter_payloads(count=count)
