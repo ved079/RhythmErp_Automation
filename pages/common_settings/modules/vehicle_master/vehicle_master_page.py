@@ -229,7 +229,7 @@ class VehicleMasterPage(BasePage):
     def _wait_for_page_ready(self):
         """Wait for page table + at least 1 data row with text content.
         Fast polling (0.1s intervals), 8s timeout."""
-        end = time.monotonic() + 8
+        end = time.monotonic() + 5
         while time.monotonic() < end:
             try:
                 ready = self.driver.execute_script("""
@@ -336,7 +336,7 @@ class VehicleMasterPage(BasePage):
             self.click_with_retry(self.ADD_BUTTON)
         # Wait for the form popup to appear
         try:
-            WebDriverWait(self.driver, 3).until(
+            WebDriverWait(self.driver, 2).until(
                 lambda d: d.execute_script(
                     "var el = document.querySelector("
                     "\"input[name='Name'], input[formcontrolname='name']\");"
@@ -496,10 +496,10 @@ class VehicleMasterPage(BasePage):
     #  SweetAlert2 handlers — FAST (UOM pattern)
     # ==============================================================
 
-    def handle_success_alert(self, timeout=2):
+    def handle_success_alert(self, timeout=1):
         """Handle SweetAlert2 success notification — instant dismiss.
         Returns the alert message text, or '' if no alert appeared.
-        2s timeout — success alerts appear within 0.5s."""
+        1s timeout — success alerts appear within 0.3s."""
         log.info("Handling success alert...")
         try:
             WebDriverWait(self.driver, timeout).until(
@@ -525,9 +525,10 @@ class VehicleMasterPage(BasePage):
             log.info("No success alert appeared within timeout")
             return ""
 
-    def handle_validation_warning(self, timeout=2):
+    def handle_validation_warning(self, timeout=1):
         """Handle SweetAlert2 validation warning popup — instant dismiss.
-        Returns the warning message text, or ''."""
+        Returns the warning message text, or ''.
+        1s timeout — warnings appear within 0.3s."""
         log.info("Checking for validation warning...")
         try:
             WebDriverWait(self.driver, timeout).until(
@@ -551,7 +552,7 @@ class VehicleMasterPage(BasePage):
         except TimeoutException:
             return ""
 
-    def handle_error_toast(self, timeout=2):
+    def handle_error_toast(self, timeout=1):
         """Check for error toast notification.
         Returns the toast message text, or ''."""
         log.info("Checking for error toast...")
@@ -566,7 +567,7 @@ class VehicleMasterPage(BasePage):
             return text
         return ""
 
-    def is_validation_alert_present(self, timeout=2):
+    def is_validation_alert_present(self, timeout=1):
         """Check if any SweetAlert2 popup is currently visible. Fast JS poll."""
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
@@ -804,8 +805,8 @@ class VehicleMasterPage(BasePage):
 
     def is_vehicle_in_table(self, vehicle_name):
         """Check if a vehicle with the given name appears in the table.
-        Pure JS — faster than Selenium iteration. Polls up to 5s."""
-        end_time = time.monotonic() + 5
+        Pure JS — faster than Selenium iteration. Polls up to 3s."""
+        end_time = time.monotonic() + 3
         while time.monotonic() < end_time:
             try:
                 found = self.driver.execute_script("""
@@ -826,7 +827,7 @@ class VehicleMasterPage(BasePage):
                     return True
             except Exception:
                 pass
-            time.sleep(0.3)
+            time.sleep(0.2)
         return False
 
     def find_vehicle_row_index(self, vehicle_name):
@@ -877,8 +878,8 @@ class VehicleMasterPage(BasePage):
 
     def _click_action_menu_item(self, vehicle_name, action_name, retries=3):
         """Click an action menu item (View/Edit/History) for a specific
-        vehicle row. Pure JS — retries with 0.5s gaps. Does hard_refresh
-        on 2nd attempt if data hasn't loaded."""
+        vehicle row. Pure JS — fast polling. Uses search_vehicle as
+        fallback when vehicle not in current table view (pagination)."""
         log.info(f"Clicking {action_name} via 3-dot menu for: {vehicle_name}")
         self._force_close_panels()
 
@@ -913,14 +914,14 @@ class VehicleMasterPage(BasePage):
             except Exception:
                 pass
             if attempt < retries - 1:
-                log.info(f"Vehicle not in table yet, retrying ({attempt+1}/{retries})...")
-                if attempt >= 1:
-                    log.info("Doing hard_refresh to force data reload...")
-                    self.hard_refresh()
-                else:
-                    time.sleep(0.5)
+                log.info(f"Vehicle not in table view, trying search ({attempt+1}/{retries})...")
+                # Use search to find the vehicle (handles pagination)
+                try:
+                    self.search_vehicle(vehicle_name)
+                except Exception:
+                    pass
 
-        # Fallback: try by row index
+        # Fallback: try by row index after search
         if not menu_opened:
             log.warning(f"3-dot menu not found for '{vehicle_name}', trying row index...")
             row_idx = self.find_vehicle_row_index(vehicle_name)
@@ -945,7 +946,7 @@ class VehicleMasterPage(BasePage):
         log.info(f"3-dot menu opened for: {vehicle_name}")
 
         # Wait briefly for dropdown overlay to render
-        time.sleep(0.2)
+        time.sleep(0.1)
 
         # Step 2: Click the specific menu item from the dropdown overlay
         js_click_item = """
@@ -1024,7 +1025,7 @@ class VehicleMasterPage(BasePage):
             self._click_action_button_by_index(row_index, "cdk-column-view")
         # Wait for view popup to appear
         try:
-            WebDriverWait(self.driver, 3).until(
+            WebDriverWait(self.driver, 2).until(
                 lambda d: d.execute_script(
                     "var el = document.querySelector("
                     "\"input[name='Name'], input[formcontrolname='name']\");"
@@ -1043,7 +1044,7 @@ class VehicleMasterPage(BasePage):
             self._click_action_button_by_index(row_index, "cdk-column-edit")
         # Wait for edit popup to appear
         try:
-            WebDriverWait(self.driver, 3).until(
+            WebDriverWait(self.driver, 2).until(
                 lambda d: d.execute_script(
                     "var el = document.querySelector("
                     "\"input[name='Name'], input[formcontrolname='name']\");"
@@ -1062,7 +1063,7 @@ class VehicleMasterPage(BasePage):
             self._click_action_button_by_index(row_index, "cdk-column-history")
         # Wait for history popup to appear
         try:
-            WebDriverWait(self.driver, 3).until(
+            WebDriverWait(self.driver, 2).until(
                 lambda d: d.execute_script(
                     "var headings = document.querySelectorAll("
                     "'h3.popup-title, .big-model h3, mat-dialog-container h3');"
@@ -1264,7 +1265,7 @@ class VehicleMasterPage(BasePage):
         log.info("Search submit clicked via JS")
 
         # Step 4: Wait for table to refresh
-        time.sleep(0.2)
+        time.sleep(0.1)
 
         # Step 5: Check results with polling
         found = self.is_vehicle_in_table(vehicle_name)
@@ -1275,9 +1276,32 @@ class VehicleMasterPage(BasePage):
         return found
 
     def clear_search(self):
-        """Clear search and reset — use hard_refresh (fast, guaranteed clean)."""
-        log.info("Clearing search - hard refreshing")
-        self.hard_refresh()
+        """Clear search input via JS and reset table. Faster than hard_refresh."""
+        log.info("Clearing search via JS...")
+        try:
+            # Clear search input and trigger empty search via JS
+            self.driver.execute_script("""
+                var inp = document.querySelector('input#erpSearchInput, .erp-search-wrapper input');
+                if (inp) {
+                    inp.value = '';
+                    inp.dispatchEvent(new Event('input', { bubbles: true }));
+                    inp.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                // Click search button to submit empty search (resets table)
+                var selectors = [
+                    'button.search-btn',
+                    'button[aria-label="Search"]',
+                    'button[mattooltip="Search"]'
+                ];
+                for (var s = 0; s < selectors.length; s++) {
+                    var btn = document.querySelector(selectors[s]);
+                    if (btn) { btn.click(); break; }
+                }
+            """)
+            time.sleep(0.1)
+        except Exception:
+            log.info("JS clear failed, falling back to hard_refresh")
+            self.hard_refresh()
 
     def verify_vehicle_exists(self, vehicle_name):
         """Navigate to page, search, and verify a vehicle exists."""
@@ -1607,20 +1631,18 @@ class VehicleMasterPage(BasePage):
     # ==============================================================
 
     def force_close_form_popup(self):
-        """Force close any open form popup via JS (UOM pattern).
-        Just clicks the close button — does NOT nuke overlay elements.
-        Removing .cdk-overlay-pane elements can destroy the page toolbar."""
-        log.info("Force closing form popup via JS...")
+        """Force close any open form popup via JS. Instant — skips logging when no popup."""
         result = self.driver.execute_script("""
             var popup = document.querySelector('div.edit_pop_up');
-            if (!popup) return 'no popup found';
+            if (!popup) return 'no popup';
             var closeBtn = popup.querySelector('button[mat-icon-button] mat-icon');
-            if (!closeBtn) return 'no close button found';
+            if (!closeBtn) return 'no close btn';
             var btn = closeBtn.closest('button');
-            if (btn) { btn.click(); return 'clicked close'; }
-            return 'could not click';
+            if (btn) { btn.click(); return 'clicked'; }
+            return 'failed';
         """)
-        log.info("Force close result: " + str(result))
+        if result not in ('no popup', 'no close btn'):
+            log.info("Force close: " + str(result))
 
     # ==============================================================
     #  One-call convenience methods — optimized with hard_refresh
@@ -1646,7 +1668,7 @@ class VehicleMasterPage(BasePage):
             self.fill_vehicle_form(vehicle_data)
             self.submit()
 
-            msg = self.handle_success_alert(timeout=2)
+            msg = self.handle_success_alert(timeout=1)
             if msg:
                 result["message"] = msg
                 result["status"] = "PASSED"
@@ -1723,7 +1745,7 @@ class VehicleMasterPage(BasePage):
             self._force_close_panels()
             self.click_update()
 
-            msg = self.handle_success_alert(timeout=2)
+            msg = self.handle_success_alert(timeout=1)
             if msg:
                 result["message"] = msg
                 result["status"] = "PASSED"

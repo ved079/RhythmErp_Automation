@@ -152,15 +152,20 @@ def logged_in_driver(driver):
 
 @pytest.fixture
 def vehicle_master_page(logged_in_driver):
-    """Vehicle Master page object — hard refresh for speed.
-    First test uses full navigate, subsequent tests use hard_refresh.
-    Teardown does hard_refresh after each test for clean state."""
+    """Vehicle Master page object — optimized for speed.
+    Setup: navigate only if not already on page (teardown already refreshed).
+    Teardown: hard_refresh after each test for clean state (user requirement)."""
     from pages.common_settings.modules.vehicle_master.vehicle_master_page import VehicleMasterPage
     page = VehicleMasterPage(logged_in_driver)
     # Check if already on the Vehicle Master page
     current_url = logged_in_driver.current_url
     if "Vehicle%20Master" in current_url or "Vehicle Master" in current_url:
-        page.hard_refresh()
+        # Already on page — just verify it's ready (skip hard_refresh, teardown already did it)
+        try:
+            if not page.is_page_loaded():
+                page._wait_for_page_ready()
+        except Exception:
+            page.hard_refresh()
     else:
         page.navigate_to_page()
     yield page

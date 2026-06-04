@@ -64,7 +64,6 @@ from pages.common_settings.modules.vehicle_master.data.vehicle_master_data impor
 )
 from common.logger import log
 
-
 # ====================================================================
 # Helper: create a vehicle, refresh, and return its name
 # ====================================================================
@@ -76,14 +75,7 @@ def _create_prerequisite_vehicle(page, data=None):
     if data is None:
         data = generate_valid_vehicle_data("PreReq")
     result = page.create_vehicle(data)
-    # Cleanup form if still open
-    try:
-        page.force_close_form_popup()
-    except Exception:
-        pass
-    page.click_refresh()
     return data.get("name", ""), result
-
 
 # ====================================================================
 # PHASE 1: Create Form Validations (15 tests)
@@ -103,11 +95,9 @@ class TestCreateFormValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(0.3)
         assert page.is_add_form_open(), "Add form did not open"
 
         page.submit()
-        page.wait_seconds(0.3)
 
         errors = page.get_mat_error_text()
         form_still_open = page.is_add_form_open()
@@ -123,7 +113,7 @@ class TestCreateFormValidations:
         try:
             page.cancel()
         except Exception:
-            page.force_close_form_popup()
+            pass
 
     # ---- VM-C02: Submit with only Name ----
     @pytest.mark.sanity
@@ -135,10 +125,8 @@ class TestCreateFormValidations:
 
         data = generate_name_only_data("NameOnly")
         page.open_add_form()
-        page.wait_seconds(0.3)
         page.type_text(page.NAME_INPUT, data["name"], clear_first=True)
         page.submit()
-        page.wait_seconds(0.3)
 
         errors = page.get_mat_error_text()
         form_still_open = page.is_add_form_open()
@@ -150,7 +138,7 @@ class TestCreateFormValidations:
         try:
             page.cancel()
         except Exception:
-            page.force_close_form_popup()
+            pass
 
     # ---- VM-C03: Submit with only Price ----
     @pytest.mark.sanity
@@ -161,12 +149,10 @@ class TestCreateFormValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(0.3)
         page.type_text(
             page.PRICE_INPUT, generate_vehicle_price(), clear_first=True
         )
         page.submit()
-        page.wait_seconds(0.3)
 
         errors = page.get_mat_error_text()
         form_still_open = page.is_add_form_open()
@@ -178,7 +164,7 @@ class TestCreateFormValidations:
         try:
             page.cancel()
         except Exception:
-            page.force_close_form_popup()
+            pass
 
     # ---- VM-C04: Name with leading/trailing spaces ----
     @pytest.mark.sanity
@@ -211,12 +197,6 @@ class TestCreateFormValidations:
         else:
             log.info("Spaces were rejected — validation working")
 
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-
     # ---- VM-C05: Price = 0 ----
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -239,12 +219,6 @@ class TestCreateFormValidations:
             )
         else:
             log.info("Zero price rejected — validation working")
-
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
 
     # ---- VM-C06: Negative Price ----
     @pytest.mark.sanity
@@ -269,12 +243,6 @@ class TestCreateFormValidations:
         else:
             log.info("Negative price rejected — validation working")
 
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-
     # ---- VM-C07: Alphabets in Price ----
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -298,12 +266,6 @@ class TestCreateFormValidations:
         else:
             log.info("Alphabets rejected in Price — validation working")
 
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-
     # ---- VM-C08: Special characters in Price ----
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -325,12 +287,6 @@ class TestCreateFormValidations:
         else:
             log.info("Special chars rejected — validation working")
 
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-
     # ---- VM-C09: Duplicate Name ----
     @pytest.mark.smoke
     @pytest.mark.sanity
@@ -346,10 +302,6 @@ class TestCreateFormValidations:
         # Create first vehicle
         data1 = generate_valid_vehicle_data("Dup1")
         result1 = page.create_vehicle(data1)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
         page.click_refresh()
 
         # Try creating second with same name
@@ -362,12 +314,6 @@ class TestCreateFormValidations:
             )
         else:
             log.info("Duplicate name rejected — validation working")
-
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
 
     # ---- VM-C10: Special characters in Name ----
     @pytest.mark.sanity
@@ -392,12 +338,6 @@ class TestCreateFormValidations:
         else:
             log.info("Special chars rejected — validation working")
 
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-
     # ---- VM-C11: Very long Name (256 chars) ----
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -419,12 +359,6 @@ class TestCreateFormValidations:
         else:
             log.info("Long name rejected — validation working")
 
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-
     # ---- VM-C12: Without Vehicle Type dropdown ----
     @pytest.mark.smoke
     @pytest.mark.sanity
@@ -435,7 +369,6 @@ class TestCreateFormValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(0.3)
         # Fill everything EXCEPT Vehicle Type dropdown
         page.type_text(
             page.NAME_INPUT,
@@ -453,7 +386,6 @@ class TestCreateFormValidations:
         )
         page._force_close_panels()
         page.submit()
-        page.wait_seconds(0.3)
 
         errors = page.get_mat_error_text()
         form_still_open = page.is_add_form_open()
@@ -465,7 +397,7 @@ class TestCreateFormValidations:
         try:
             page.cancel()
         except Exception:
-            page.force_close_form_popup()
+            pass
 
     # ---- VM-C13: Without Fuel Type dropdown ----
     @pytest.mark.sanity
@@ -476,7 +408,6 @@ class TestCreateFormValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(0.3)
         page.type_text(
             page.NAME_INPUT,
             generate_vehicle_name("NoFType"),
@@ -493,7 +424,6 @@ class TestCreateFormValidations:
         )
         page._force_close_panels()
         page.submit()
-        page.wait_seconds(0.3)
 
         errors = page.get_mat_error_text()
         form_still_open = page.is_add_form_open()
@@ -505,7 +435,7 @@ class TestCreateFormValidations:
         try:
             page.cancel()
         except Exception:
-            page.force_close_form_popup()
+            pass
 
     # ---- VM-C14: Decimal Price ----
     @pytest.mark.sanity
@@ -525,12 +455,6 @@ class TestCreateFormValidations:
         else:
             log.info("Decimal price rejected")
 
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-
     # ---- VM-C15: Per-field inline error messages ----
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -544,9 +468,7 @@ class TestCreateFormValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(0.3)
         page.submit()
-        page.wait_seconds(0.3)
 
         # Check if Name field has its own error
         name_has_error = page.has_field_error("Name")
@@ -573,8 +495,7 @@ class TestCreateFormValidations:
         try:
             page.cancel()
         except Exception:
-            page.force_close_form_popup()
-
+            pass
 
 # ====================================================================
 # PHASE 2: Dropdown Validations (5 tests)
@@ -594,7 +515,6 @@ class TestDropdownValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(0.3)
 
         options = page.get_dropdown_options(page.VEHICLE_TYPE_SELECT)
 
@@ -604,7 +524,7 @@ class TestDropdownValidations:
         try:
             page.cancel()
         except Exception:
-            page.force_close_form_popup()
+            pass
 
     # ---- VM-D02: Fuel Type dropdown shows options ----
     @pytest.mark.sanity
@@ -616,7 +536,6 @@ class TestDropdownValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(0.3)
 
         options = page.get_dropdown_options(page.FUEL_TYPE_SELECT)
 
@@ -626,7 +545,7 @@ class TestDropdownValidations:
         try:
             page.cancel()
         except Exception:
-            page.force_close_form_popup()
+            pass
 
     # ---- VM-D03: Vehicle Type dropdown search ----
     @pytest.mark.sanity
@@ -638,7 +557,6 @@ class TestDropdownValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(0.3)
 
         # Get all options first
         all_options = page.get_dropdown_options(page.VEHICLE_TYPE_SELECT)
@@ -650,7 +568,7 @@ class TestDropdownValidations:
             page.click(page.VEHICLE_TYPE_SELECT)
         except Exception:
             pass
-        page.wait_seconds(0.2)
+        
 
         # Type partial text in the dropdown search box
         search_text = all_options[0][:3]  # first 3 chars of first option
@@ -665,7 +583,7 @@ class TestDropdownValidations:
                     if inp.is_displayed():
                         inp.clear()
                         inp.send_keys(search_text)
-                        page.wait_seconds(0.2)
+                        
                         break
                 except Exception:
                     continue
@@ -693,7 +611,7 @@ class TestDropdownValidations:
         try:
             page.cancel()
         except Exception:
-            page.force_close_form_popup()
+            pass
 
     # ---- VM-D04: Fuel Type dropdown search ----
     @pytest.mark.sanity
@@ -705,7 +623,6 @@ class TestDropdownValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(0.3)
 
         all_options = page.get_dropdown_options(page.FUEL_TYPE_SELECT)
         if not all_options:
@@ -715,7 +632,7 @@ class TestDropdownValidations:
             page.click(page.FUEL_TYPE_SELECT)
         except Exception:
             pass
-        page.wait_seconds(0.2)
+        
 
         search_text = all_options[0][:3]
         try:
@@ -729,7 +646,7 @@ class TestDropdownValidations:
                     if inp.is_displayed():
                         inp.clear()
                         inp.send_keys(search_text)
-                        page.wait_seconds(0.2)
+                        
                         break
                 except Exception:
                     continue
@@ -756,7 +673,7 @@ class TestDropdownValidations:
         try:
             page.cancel()
         except Exception:
-            page.force_close_form_popup()
+            pass
 
     # ---- VM-D05: Selecting option closes dropdown ----
     @pytest.mark.sanity
@@ -768,7 +685,6 @@ class TestDropdownValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(0.3)
 
         selected = page._select_random_from_dropdown(
             page.VEHICLE_TYPE_SELECT, "Vehicle Type"
@@ -785,8 +701,7 @@ class TestDropdownValidations:
         try:
             page.cancel()
         except Exception:
-            page.force_close_form_popup()
-
+            pass
 
 # ====================================================================
 # PHASE 3: Edit Form Validations (5 tests)
@@ -810,18 +725,10 @@ class TestEditFormValidations:
         # Create two vehicles
         data1 = generate_valid_vehicle_data("EditDup1")
         result1 = page.create_vehicle(data1)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
         page.click_refresh()
 
         data2 = generate_valid_vehicle_data("EditDup2")
         result2 = page.create_vehicle(data2)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
         page.click_refresh()
 
         # Edit second vehicle with first vehicle's name
@@ -837,12 +744,6 @@ class TestEditFormValidations:
         else:
             log.info("Duplicate name rejected in Edit — validation working")
 
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-
     # ---- VM-E02: Edit with Price = 0 ----
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -856,11 +757,6 @@ class TestEditFormValidations:
 
         data = generate_valid_vehicle_data("EditZero")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
 
         edit_result = page.edit_vehicle(
             data["name"],
@@ -873,12 +769,6 @@ class TestEditFormValidations:
             )
         else:
             log.info("Zero price rejected in Edit — validation working")
-
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
 
     # ---- VM-E03: Edit with negative Price ----
     @pytest.mark.sanity
@@ -893,11 +783,6 @@ class TestEditFormValidations:
 
         data = generate_valid_vehicle_data("EditNeg")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
 
         edit_result = page.edit_vehicle(
             data["name"],
@@ -911,12 +796,6 @@ class TestEditFormValidations:
         else:
             log.info("Negative price rejected in Edit — validation working")
 
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-
     # ---- VM-E04: Edit with alphabets in Price ----
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -928,11 +807,6 @@ class TestEditFormValidations:
 
         data = generate_valid_vehicle_data("EditAlpha")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
 
         edit_result = page.edit_vehicle(
             data["name"],
@@ -943,12 +817,6 @@ class TestEditFormValidations:
             log.warning("BUG: Alphabets accepted in Price field (Edit)")
         else:
             log.info("Alphabets rejected in Edit Price — validation working")
-
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
 
     # ---- VM-E05: Edit — verify pre-populated fields ----
     @pytest.mark.smoke
@@ -963,16 +831,10 @@ class TestEditFormValidations:
         # Fill with known values
         data["description"] = "PrePopulated Test Description"
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
         page.ensure_vehicle_visible(data["name"])
 
         # Click Edit
         page.click_edit_button(vehicle_name=data["name"])
-        page.wait_seconds(0.3)
 
         # Read form values
         form_values = page.get_form_field_values()
@@ -991,8 +853,7 @@ class TestEditFormValidations:
         try:
             page.cancel()
         except Exception:
-            page.force_close_form_popup()
-
+            pass
 
 # ====================================================================
 # PHASE 4: Search & Filter Edge Cases (5 tests)
@@ -1012,11 +873,6 @@ class TestSearchFilter:
 
         data = generate_valid_vehicle_data("SearchEx")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
 
         found = page.search_vehicle(data["name"])
         page.clear_search()
@@ -1034,11 +890,6 @@ class TestSearchFilter:
 
         data = generate_valid_vehicle_data("SearchPar")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
 
         partial = data["name"][:10]
         found = page.search_vehicle(partial)
@@ -1081,7 +932,7 @@ class TestSearchFilter:
                 By.CSS_SELECTOR, "button.filter-btn, button[mattooltip='Filter']"
             )
             page.driver.execute_script("arguments[0].click();", filter_btn)
-            page.wait_seconds(0.3)
+            page.wait_seconds(0.1)
 
             # Check if filter panel opened
             filter_panel = page.driver.find_elements(
@@ -1102,7 +953,6 @@ class TestSearchFilter:
                     page.driver.execute_script(
                         "arguments[0].click();", apply_btn
                     )
-                    page.wait_seconds(0.3)
                     log.warning(
                         "CRITICAL BUG: Apply Filters button "
                         "is non-functional"
@@ -1133,7 +983,7 @@ class TestSearchFilter:
                 By.CSS_SELECTOR, "button.filter-btn, button[mattooltip='Filter']"
             )
             page.driver.execute_script("arguments[0].click();", filter_btn)
-            page.wait_seconds(0.3)
+            page.wait_seconds(0.1)
 
             filter_panel = page.driver.find_elements(
                 By.CSS_SELECTOR,
@@ -1152,9 +1002,6 @@ class TestSearchFilter:
 
         except Exception as e:
             log.info(f"Filter button not found: {e}")
-
-        page.click_refresh()
-
 
 # ====================================================================
 # PHASE 5: Popup & UI Behaviors (5 tests)
@@ -1176,14 +1023,12 @@ class TestPopupUIBehaviors:
         before_count = page.get_table_row_count()
 
         page.open_add_form()
-        page.wait_seconds(0.3)
         assert page.is_add_form_open(), "Form did not open"
 
         # Fill form with data
         data = generate_valid_vehicle_data("CancelTest")
         page.fill_vehicle_form(data)
         page.cancel()
-        page.wait_seconds(0.3)
 
         after_count = page.get_table_row_count()
         assert after_count == before_count, (
@@ -1204,13 +1049,12 @@ class TestPopupUIBehaviors:
         before_count = page.get_table_row_count()
 
         page.open_add_form()
-        page.wait_seconds(0.3)
         assert page.is_add_form_open(), "Form did not open"
 
         data = generate_valid_vehicle_data("CloseTest")
         page.fill_vehicle_form(data)
         page.close_popup()
-        page.wait_seconds(0.2)
+        
 
         after_count = page.get_table_row_count()
         assert after_count == before_count, (
@@ -1231,15 +1075,9 @@ class TestPopupUIBehaviors:
 
         data = generate_valid_vehicle_data("ViewTest")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
         page.ensure_vehicle_visible(data["name"])
 
         page.click_view_button(vehicle_name=data["name"])
-        page.wait_seconds(0.3)
 
         is_readonly = page.verify_view_popup_read_only()
 
@@ -1249,7 +1087,7 @@ class TestPopupUIBehaviors:
         log.info("View popup correctly shows read-only fields")
 
         page.close_popup()
-        page.wait_seconds(0.2)
+        
 
     # ---- VM-P04: Edit popup shows editable fields ----
     @pytest.mark.sanity
@@ -1262,15 +1100,9 @@ class TestPopupUIBehaviors:
 
         data = generate_valid_vehicle_data("EditTest")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
         page.ensure_vehicle_visible(data["name"])
 
         page.click_edit_button(vehicle_name=data["name"])
-        page.wait_seconds(0.3)
 
         is_edit = page.verify_edit_popup_editable()
 
@@ -1280,7 +1112,7 @@ class TestPopupUIBehaviors:
         log.info("Edit popup correctly shows Update button")
 
         page.cancel()
-        page.wait_seconds(0.2)
+        
 
     # ---- VM-P05: History popup opens and shows records ----
     @pytest.mark.sanity
@@ -1293,11 +1125,6 @@ class TestPopupUIBehaviors:
 
         data = generate_valid_vehicle_data("HistTest")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
         page.ensure_vehicle_visible(data["name"])
 
         hist = page.check_history(vehicle_name=data["name"])
@@ -1311,7 +1138,6 @@ class TestPopupUIBehaviors:
             f"History popup opened successfully "
             f"(rows: {hist['row_count']})"
         )
-
 
 # ====================================================================
 # PHASE 6: History Validations (8 tests)
@@ -1331,11 +1157,6 @@ class TestHistoryValidations:
 
         data = generate_valid_vehicle_data("HistCrt")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
         page.ensure_vehicle_visible(data["name"])
 
         hist = page.check_history(vehicle_name=data["name"])
@@ -1363,11 +1184,6 @@ class TestHistoryValidations:
 
         data = generate_valid_vehicle_data("HistEdit")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
         page.ensure_vehicle_visible(data["name"])
 
         # Count history before edit
@@ -1380,11 +1196,6 @@ class TestHistoryValidations:
             data["name"],
             {"price": generate_vehicle_price()},
         )
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
         page.ensure_vehicle_visible(data["name"])
 
         # Count history after edit
@@ -1413,23 +1224,17 @@ class TestHistoryValidations:
 
         data = generate_valid_vehicle_data("HistSrch")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
         page.ensure_vehicle_visible(data["name"])
 
         # Open history and search
         page.click_history_button(vehicle_name=data["name"])
-        page.wait_seconds(0.3)
 
         search_done = page.search_in_history("a")
-        page.wait_seconds(0.3)
+        page.wait_seconds(0.1)
 
         # Close history
         page.close_history_popup()
-        page.wait_seconds(0.2)
+        
 
         if search_done:
             log.info("History search with Enter key works")
@@ -1449,27 +1254,20 @@ class TestHistoryValidations:
 
         data = generate_valid_vehicle_data("HistNoMt")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
         page.ensure_vehicle_visible(data["name"])
 
         # Open history
         page.click_history_button(vehicle_name=data["name"])
-        page.wait_seconds(0.3)
 
         rows_before = page.get_history_row_count()
 
         # Search with garbage text
         page.search_in_history(f"ZZZNONMATCH{int(time.time())}")
-        page.wait_seconds(0.3)
 
         rows_after = page.get_history_row_count()
 
         page.close_history_popup()
-        page.wait_seconds(0.2)
+        
 
         # After search with no match, rows should be 0 or less
         log.info(
@@ -1488,15 +1286,9 @@ class TestHistoryValidations:
 
         data = generate_valid_vehicle_data("HistCol")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
         page.ensure_vehicle_visible(data["name"])
 
         page.click_history_button(vehicle_name=data["name"])
-        page.wait_seconds(0.3)
 
         # Read history headers
         headers = page.driver.find_elements(
@@ -1507,7 +1299,7 @@ class TestHistoryValidations:
         header_texts = [h.text.strip() for h in headers if h.text.strip()]
 
         page.close_history_popup()
-        page.wait_seconds(0.2)
+        
 
         if header_texts:
             log.info(f"History columns: {header_texts}")
@@ -1529,20 +1321,13 @@ class TestHistoryValidations:
 
         data = generate_valid_vehicle_data("HistCls")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
         page.ensure_vehicle_visible(data["name"])
 
         page.click_history_button(vehicle_name=data["name"])
-        page.wait_seconds(0.3)
 
         assert page.is_history_popup_open(), "History popup not open"
 
         page.close_history_popup()
-        page.wait_seconds(0.3)
 
         assert not page.is_history_popup_open(), (
             "BUG: History popup still open after Close"
@@ -1560,21 +1345,15 @@ class TestHistoryValidations:
 
         data = generate_valid_vehicle_data("HistX")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
         page.ensure_vehicle_visible(data["name"])
 
         page.click_history_button(vehicle_name=data["name"])
-        page.wait_seconds(0.3)
 
         assert page.is_history_popup_open(), "History popup not open"
 
         # Click X icon
         page.close_popup()
-        page.wait_seconds(0.2)
+        
 
         assert not page.is_history_popup_open(), (
             "BUG: History popup still open after X click"
@@ -1595,25 +1374,14 @@ class TestHistoryValidations:
 
         data = generate_valid_vehicle_data("HistSort")
         result = page.create_vehicle(data)
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
 
         # Edit to create 2+ history rows
         edit_result = page.edit_vehicle(
             data["name"], {"price": generate_vehicle_price()}
         )
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
         page.ensure_vehicle_visible(data["name"])
 
         page.click_history_button(vehicle_name=data["name"])
-        page.wait_seconds(0.3)
 
         # Read first column data before sort
         rows_before = page.get_history_data()
@@ -1632,7 +1400,7 @@ class TestHistoryValidations:
                 page.driver.execute_script(
                     "arguments[0].click();", sortable_headers[0]
                 )
-                page.wait_seconds(0.3)
+                page.wait_seconds(0.1)
             except Exception:
                 pass
 
@@ -1643,7 +1411,7 @@ class TestHistoryValidations:
         ]
 
         page.close_history_popup()
-        page.wait_seconds(0.2)
+        
 
         # Check if order changed
         if first_col_before == first_col_after:
