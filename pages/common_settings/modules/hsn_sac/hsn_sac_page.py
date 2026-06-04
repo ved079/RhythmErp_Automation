@@ -21,19 +21,16 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
+from config import RHYTHMERP_BASE_URL
 from pages.common_settings.modules.hsn_sac.data.hsn_sac_data import (
-    PAGE_URL,
-    FIELD_HSN_NUMBER,
-    FIELD_HSN_TYPE,
-    FIELD_HSN_DESC,
     SUCCESS_ADD_MESSAGE,
     SUCCESS_UPDATE_MESSAGE,
     VALIDATION_FAILED_TITLE,
-    VALIDATION_FAILED_CONTENT,
-    POPUP_TITLE,
-    HISTORY_POPUP_TITLE,
     HSN_SAC_TYPE_OPTIONS,
 )
+
+# HSN SAC page URL — defined here like UOM (not in data file)
+PAGE_URL = f"{RHYTHMERP_BASE_URL}/#/dynamic-screens/HSN%20SAC"
 
 
 class HsnSacPage:
