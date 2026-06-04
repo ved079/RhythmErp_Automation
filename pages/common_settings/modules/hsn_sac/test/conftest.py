@@ -88,11 +88,17 @@ def hsn_sac_page(logged_in_driver):
     """
     Fresh HSN SAC page per test.
     Navigates to the HSN SAC page before each test.
+    Hard refreshes after each test for clean state.
     """
     from pages.common_settings.modules.hsn_sac.hsn_sac_page import HsnSacPage
     page = HsnSacPage(logged_in_driver)
     page.navigate_to_page()
     yield page
+    # Hard refresh after each test for clean state (UOM pattern)
+    try:
+        page.hard_refresh()
+    except Exception:
+        pass
 
 
 # ================================================================

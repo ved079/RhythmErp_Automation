@@ -1,6 +1,12 @@
 """
-test_hsn_sac_validation.py — HSN SAC Module Automated Tests
-============================================================
+test_hsn_sac_validation.py — HSN SAC Module Automated Tests (Optimised v2)
+==========================================================================
+UOM gold-standard speed patterns applied:
+  - Removed unnecessary time.sleep() calls
+  - Use search_and_verify() for combined search + existence check
+  - Fast validation alert checks with shorter timeouts
+  - Hard refresh in conftest teardown handles cleanup
+
 20 test cases across 5 classes, 0 xfail:
   - TestCreateFormValidations (6 tests): C01-C06
   - TestViewFormBehaviors (3 tests): V01-V03
@@ -12,7 +18,6 @@ Marker counts: smoke=4, sanity=20, regression=20, bug=1, ui=15
 Known bugs: C06 (no duplicate HSN SAC number check)
 """
 
-import time
 import pytest
 from selenium.webdriver.common.by import By
 from pages.common_settings.modules.hsn_sac.data.hsn_sac_data import (
@@ -46,7 +51,6 @@ class TestCreateFormValidations:
         """HSN-C01: Create HSN SAC with all 3 valid fields → success."""
         page = hsn_sac_page
         data = generate_valid_hsn_sac_data()
-        print(f"\n  Creating: {data['hsn_sac_number']} | {data['hsn_sac_type']} | {data['hsn_sac_description']}")
 
         result = page.create_hsn_sac(data)
 
@@ -62,13 +66,12 @@ class TestCreateFormValidations:
         data = missing_number_data()
 
         page.open_add_form()
-        time.sleep(1)
         page.fill_all_fields(data)
         page._force_close_panels()
         page.submit()
 
-        is_validation = page.is_validation_alert_present(timeout=10)
-        warning = page.handle_validation_warning(timeout=5)
+        is_validation = page.is_validation_alert_present(timeout=5)
+        warning = page.handle_validation_warning(timeout=3)
 
         assert is_validation, "Expected 'Validation Failed' alert for empty HSN SAC Number"
         assert VALIDATION_FAILED_TITLE in warning, f"Unexpected warning: {warning}"
@@ -82,14 +85,13 @@ class TestCreateFormValidations:
         data = missing_type_data()
 
         page.open_add_form()
-        time.sleep(1)
         page.fill_hsn_sac_number(data["hsn_sac_number"])
         page.fill_hsn_sac_description(data["hsn_sac_description"])
         page._force_close_panels()
         page.submit()
 
-        is_validation = page.is_validation_alert_present(timeout=10)
-        warning = page.handle_validation_warning(timeout=5)
+        is_validation = page.is_validation_alert_present(timeout=5)
+        warning = page.handle_validation_warning(timeout=3)
 
         assert is_validation, "Expected 'Validation Failed' alert for empty HSN SAC Type"
         assert VALIDATION_FAILED_TITLE in warning, f"Unexpected warning: {warning}"
@@ -103,15 +105,14 @@ class TestCreateFormValidations:
         data = missing_description_data()
 
         page.open_add_form()
-        time.sleep(1)
         page.select_hsn_sac_type(data["hsn_sac_type"])
         page._force_close_panels()
         page.fill_hsn_sac_number(data["hsn_sac_number"])
         page._force_close_panels()
         page.submit()
 
-        is_validation = page.is_validation_alert_present(timeout=10)
-        warning = page.handle_validation_warning(timeout=5)
+        is_validation = page.is_validation_alert_present(timeout=5)
+        warning = page.handle_validation_warning(timeout=3)
 
         assert is_validation, "Expected 'Validation Failed' alert for empty HSN SAC Description"
         assert VALIDATION_FAILED_TITLE in warning, f"Unexpected warning: {warning}"
@@ -124,11 +125,10 @@ class TestCreateFormValidations:
         page = hsn_sac_page
 
         page.open_add_form()
-        time.sleep(1)
         page.submit()
 
-        is_validation = page.is_validation_alert_present(timeout=10)
-        warning = page.handle_validation_warning(timeout=5)
+        is_validation = page.is_validation_alert_present(timeout=5)
+        warning = page.handle_validation_warning(timeout=3)
 
         assert is_validation, "Expected 'Validation Failed' alert for all empty fields"
         assert VALIDATION_FAILED_TITLE in warning, f"Unexpected warning: {warning}"
@@ -151,9 +151,8 @@ class TestCreateFormValidations:
 
         # System may allow or block duplicates — just verify no crash
         if result2["status"] == "failed":
-            if page.is_validation_alert_present(timeout=3):
-                page.handle_validation_warning()
-        print(f"  Duplicate behavior: status={result2['status']}, msg={result2.get('message','')}")
+            if page.is_validation_alert_present(timeout=2):
+                page.handle_validation_warning(timeout=2)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -174,11 +173,9 @@ class TestViewFormBehaviors:
         result = page.create_hsn_sac(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
 
-        page.search_record(data["hsn_sac_number"])
-        time.sleep(1.5)
-
+        # Search + click view
+        page.search_and_verify(data["hsn_sac_number"])
         page.click_view_button(0)
-        time.sleep(1.5)
 
         assert page.is_form_open(), "View popup did not open"
         assert page.is_view_mode(), "Should be in View mode (no Submit/Update button)"
@@ -200,15 +197,11 @@ class TestViewFormBehaviors:
         result = page.create_hsn_sac(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
 
-        page.search_record(data["hsn_sac_number"])
-        time.sleep(1.5)
-
+        page.search_and_verify(data["hsn_sac_number"])
         page.click_view_button(0)
-        time.sleep(1)
         assert page.is_form_open(), "View popup should be open"
 
         page.cancel()
-        time.sleep(1)
         assert page.is_form_closed(), "View popup should be closed after Cancel"
 
     @pytest.mark.sanity
@@ -222,15 +215,11 @@ class TestViewFormBehaviors:
         result = page.create_hsn_sac(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
 
-        page.search_record(data["hsn_sac_number"])
-        time.sleep(1.5)
-
+        page.search_and_verify(data["hsn_sac_number"])
         page.click_view_button(0)
-        time.sleep(1)
         assert page.is_form_open(), "View popup should be open"
 
         page.close_popup()
-        time.sleep(1)
         assert page.is_form_closed(), "View popup should be closed after X click"
 
 
@@ -251,8 +240,7 @@ class TestEditFormValidations:
         result = page.create_hsn_sac(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
 
-        page.search_record(data["hsn_sac_number"])
-        time.sleep(1.5)
+        page.search_and_verify(data["hsn_sac_number"])
 
         new_number = generate_hsn_sac_number()
         edit_data = {"hsn_sac_number": new_number}
@@ -272,8 +260,7 @@ class TestEditFormValidations:
         result = page.create_hsn_sac(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
 
-        page.search_record(data["hsn_sac_number"])
-        time.sleep(1.5)
+        page.search_and_verify(data["hsn_sac_number"])
 
         new_desc = f"Updated Desc {generate_hsn_sac_number()}"
         edit_data = {"hsn_sac_description": new_desc}
@@ -293,8 +280,7 @@ class TestEditFormValidations:
         result = page.create_hsn_sac(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
 
-        page.search_record(data["hsn_sac_number"])
-        time.sleep(1.5)
+        page.search_and_verify(data["hsn_sac_number"])
 
         original_type = data["hsn_sac_type"]
         new_type = [t for t in HSN_SAC_TYPE_OPTIONS if t != original_type][0]
@@ -315,8 +301,7 @@ class TestEditFormValidations:
         result = page.create_hsn_sac(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
 
-        page.search_record(data["hsn_sac_number"])
-        time.sleep(1.5)
+        page.search_and_verify(data["hsn_sac_number"])
 
         edit_data = generate_valid_hsn_sac_data()
         result = page.edit_hsn_sac(0, edit_data)
@@ -335,19 +320,16 @@ class TestEditFormValidations:
         result = page.create_hsn_sac(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
 
-        page.search_record(data["hsn_sac_number"])
-        time.sleep(1.5)
-
+        page.search_and_verify(data["hsn_sac_number"])
         page.click_edit_button(0)
-        time.sleep(1.5)
         assert page.is_edit_mode(), "Should be in Edit mode"
 
         page.fill_hsn_sac_number("")
         page._force_close_panels()
         page.click_update()
 
-        is_validation = page.is_validation_alert_present(timeout=10)
-        warning = page.handle_validation_warning(timeout=5)
+        is_validation = page.is_validation_alert_present(timeout=5)
+        warning = page.handle_validation_warning(timeout=3)
 
         assert is_validation, "Expected 'Validation Failed' for empty Number in Edit"
         assert VALIDATION_FAILED_TITLE in warning, f"Unexpected warning: {warning}"
@@ -370,11 +352,8 @@ class TestHistoryValidations:
         result = page.create_hsn_sac(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
 
-        page.search_record(data["hsn_sac_number"])
-        time.sleep(1.5)
-
+        page.search_and_verify(data["hsn_sac_number"])
         page.click_history_button(0)
-        time.sleep(1.5)
 
         assert page.is_history_popup_open(), "History popup did not open"
 
@@ -391,15 +370,11 @@ class TestHistoryValidations:
         result = page.create_hsn_sac(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
 
-        page.search_record(data["hsn_sac_number"])
-        time.sleep(1.5)
-
+        page.search_and_verify(data["hsn_sac_number"])
         page.click_history_button(0)
-        time.sleep(1.5)
         assert page.is_history_popup_open(), "History popup should be open"
 
         page.close_history_popup()
-        time.sleep(1)
         assert not page.is_history_popup_open(), "History popup should be closed"
 
     @pytest.mark.sanity
@@ -413,12 +388,9 @@ class TestHistoryValidations:
         result = page.create_hsn_sac(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
 
-        page.search_record(data["hsn_sac_number"])
-        time.sleep(1.5)
+        page.search_and_verify(data["hsn_sac_number"])
 
         history = page.check_history(0)
-        print(f"  History: rows={history['row_count']}, empty={history['is_empty']}, error={history['error']}")
-
         assert history["error"] == "", f"History check error: {history['error']}"
 
 
@@ -441,14 +413,12 @@ class TestTableOperations:
         assert result["status"] == "success", f"Create failed: {result['error']}"
 
         page.clear_search()
-        time.sleep(1)
 
         search_ok = page.search_record(data["hsn_sac_number"])
         assert search_ok, "Search execution failed"
 
-        time.sleep(1.5)
-        row_count = page.get_table_row_count()
-        assert row_count >= 1, f"Expected at least 1 row after search, got {row_count}"
+        found = page.is_hsn_in_table(data["hsn_sac_number"])
+        assert found, f"Expected to find '{data['hsn_sac_number']}' after search"
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -478,6 +448,5 @@ class TestTableOperations:
         assert page.is_page_loaded(), "Page should be loaded"
 
         page.click_refresh()
-        time.sleep(2)
 
         assert page.is_page_loaded(), "Page should still be loaded after refresh"
