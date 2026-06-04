@@ -227,25 +227,41 @@ class VehicleMasterPage(BasePage):
         self._wait_for_page_ready()
 
     def _wait_for_page_ready(self):
-        """Wait for the page table to appear (UOM gold standard pattern).
-        We only wait for the table element — NOT toolbar or data rows.
-        The search/add buttons are JS-clicked regardless of visibility.
-        Toolbar offsetParent checks NEVER pass on this page (same as UOM),
-        so checking them just burns 20s every call."""
-        try:
-            WebDriverWait(self.driver, 15).until(
-                lambda d: d.find_elements("css selector", "table#excel-table")
-            )
-            log.info("Page ready (table found)")
-        except Exception:
-            # Fallback: check for search button
+        """Wait for page table + at least 1 data row with text content.
+        Does NOT check toolbar offsetParent (never passes, burns 20s).
+        Data rows are needed for kebab menu clicks and search to work.
+        10s timeout — table + data typically appears in 2-5s."""
+        end = time.monotonic() + 10
+        while time.monotonic() < end:
             try:
-                WebDriverWait(self.driver, 5).until(
-                    lambda d: d.find_elements("css selector", "button.search-btn")
-                )
-                log.info("Page ready (search button found, no table)")
+                ready = self.driver.execute_script("""
+                    var table = document.querySelector('table#excel-table');
+                    if (!table) return {table: false};
+                    var rows = table.querySelectorAll('tbody tr');
+                    var hasData = false;
+                    for (var i = 0; i < rows.length; i++) {
+                        var cells = rows[i].querySelectorAll('td');
+                        for (var j = 0; j < cells.length; j++) {
+                            if (cells[j].textContent.trim()) { hasData = true; break; }
+                        }
+                        if (hasData) break;
+                    }
+                    return {table: true, data: hasData};
+                """)
+                if ready and ready.get('table') and ready.get('data'):
+                    log.info("Page ready (table+data found)")
+                    return
             except Exception:
-                log.warning("Page ready check timed out")
+                pass
+            time.sleep(0.3)
+        # Fallback: just table is enough if no data yet
+        try:
+            if self.driver.find_elements("css selector", "table#excel-table"):
+                log.info("Page ready (table found, no data yet)")
+                return
+        except Exception:
+            pass
+        log.warning("Page ready check timed out")
 
     def is_page_loaded(self):
         """Check if the Vehicle Master listing page has loaded."""
@@ -479,18 +495,10 @@ class VehicleMasterPage(BasePage):
             log.info("SweetAlert detected, dismissing via JS")
             self.driver.execute_script("""
                 var btn = document.querySelector('.swal2-confirm');
-                if (btn) { btn.click(); return 'clicked'; }
-                return 'not found';
+                if (btn) { btn.click(); }
+                // Immediately remove the SweetAlert container — no need to wait for animation
+                document.querySelectorAll('.swal2-container').forEach(function(el) { el.remove(); });
             """)
-            # Wait for SweetAlert to disappear (short wait)
-            try:
-                WebDriverWait(self.driver, 2).until(
-                    EC.invisibility_of_element_located(
-                        (By.CSS_SELECTOR, ".swal2-container")
-                    )
-                )
-            except Exception:
-                pass
             log.info(f"Success alert handled: {msg}")
             return msg
         except TimeoutException:
@@ -772,8 +780,8 @@ class VehicleMasterPage(BasePage):
 
     def is_vehicle_in_table(self, vehicle_name):
         """Check if a vehicle with the given name appears in the table.
-        Polls up to 5s (fast, UOM pattern)."""
-        end_time = time.monotonic() + 5
+        Polls up to 8s — data may take time to appear after search."""
+        end_time = time.monotonic() + 8
         while time.monotonic() < end_time:
             try:
                 rows = self.driver.find_elements(
@@ -832,9 +840,10 @@ class VehicleMasterPage(BasePage):
     #  Row action buttons — pure JS 3-dot menu (UOM pattern)
     # ==============================================================
 
-    def _click_action_menu_item(self, vehicle_name, action_name, retries=3):
+    def _click_action_menu_item(self, vehicle_name, action_name, retries=5):
         """Click an action menu item (View/Edit/History) for a specific
-        vehicle row. Pure JS — fast retries with short polling."""
+        vehicle row. Pure JS — retries with 1s gaps. Does hard_refresh
+        on 3rd attempt if data hasn't loaded."""
         log.info(f"Clicking {action_name} via 3-dot menu for: {vehicle_name}")
         self._force_close_panels()
 
@@ -869,7 +878,11 @@ class VehicleMasterPage(BasePage):
                 pass
             if attempt < retries - 1:
                 log.info(f"Vehicle not in table yet, retrying ({attempt+1}/{retries})...")
-                time.sleep(0.5)
+                if attempt >= 2:
+                    log.info("Doing hard_refresh to force data reload...")
+                    self.hard_refresh()
+                else:
+                    time.sleep(1)
 
         # Fallback: try by row index
         if not menu_opened:
@@ -1105,15 +1118,54 @@ class VehicleMasterPage(BasePage):
     # ==============================================================
 
     def search_vehicle(self, vehicle_name):
-        """Search for a vehicle by name using JS clicks (UOM pattern).
-        Pure JS clicks bypass all offsetParent/visibility issues.
-        No extra _wait_for_page_ready() — that burns 20s for nothing.
+        """Search for a vehicle by name using pure JS.
+        Tries multiple search button selectors (Vehicle Master uses
+        different selectors than UOM). Falls back to direct search
+        input manipulation if no toggle button found.
         Returns True if the vehicle is found in the table results."""
         log.info(f"Searching for vehicle: {vehicle_name}")
         self._force_close_panels()
 
-        # Step 1: Check if search input is already visible
+        # Step 1: Try to open the search input via toggle button (multiple selectors)
+        # Vehicle Master may use different search button selectors than UOM
+        js_open_search = """
+        // Try multiple selectors for the search toggle button
+        var selectors = [
+            'button.search-btn',
+            'button[aria-label="Search"]',
+            'button[mattooltip="Search"]',
+            'button[mattooltip="search"]',
+            '.erp-toolbar button[mat-icon-button]',
+            'button[ng-reflect-tooltip="Search"]'
+        ];
+        for (var s = 0; s < selectors.length; s++) {
+            var btn = document.querySelector(selectors[s]);
+            if (btn) {
+                btn.scrollIntoView({block:'center'});
+                btn.click();
+                return 'clicked_' + selectors[s];
+            }
+        }
+        // Also try clicking any toolbar button with search icon
+        var icons = document.querySelectorAll('button mat-icon');
+        for (var i = 0; i < icons.length; i++) {
+            var txt = icons[i].textContent.trim().toLowerCase();
+            if (txt === 'search') {
+                var b = icons[i].closest('button');
+                if (b) { b.click(); return 'clicked_search_icon'; }
+            }
+        }
+        // Check if search input already exists and is visible
+        var inp = document.querySelector('input#erpSearchInput');
+        if (inp) {
+            var rect = inp.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) return 'input_already_visible';
+        }
+        return 'not_found';
+        """
         search_input = None
+
+        # First check if search input is already visible
         try:
             el = self.driver.find_element(
                 By.CSS_SELECTOR, "input#erpSearchInput, .erp-search-wrapper input"
@@ -1128,38 +1180,14 @@ class VehicleMasterPage(BasePage):
         except Exception:
             pass
 
-        # Step 2: If search input not visible, click search button via JS (UOM pattern)
-        # Retry up to 5 times with 0.5s gap — search button might not be in DOM yet
         if search_input is None:
-            log.info("Search input not visible, clicking search button via JS")
-            clicked = False
-            for attempt in range(5):
-                js_click_search = """
-                var btn = document.querySelector('button.search-btn');
-                if (!btn) { return 'not_found'; }
-                btn.scrollIntoView({block:'center'});
-                btn.click();
-                return 'clicked';
-                """
-                try:
-                    result = self.driver.execute_script(js_click_search)
-                    if result == 'clicked':
-                        clicked = True
-                        log.info("Search button clicked via JS: " + str(result))
-                        break
-                    else:
-                        log.info(f"Search button not in DOM, retry {attempt+1}/5...")
-                except Exception as e:
-                    log.info(f"Search button JS click failed, retry {attempt+1}/5: {e}")
-                time.sleep(0.5)
+            # Try opening search via toggle button
+            result = self.driver.execute_script(js_open_search)
+            log.info("Search toggle result: " + str(result))
 
-            if not clicked:
-                log.error("Search button not found in DOM after 5 retries")
-                return False
-
-            # Wait for search input to become visible
+            # Wait for search input to appear/become visible
             try:
-                search_input = WebDriverWait(self.driver, 5).until(
+                search_input = WebDriverWait(self.driver, 3).until(
                     EC.visibility_of_element_located((
                         By.CSS_SELECTOR,
                         "input#erpSearchInput, .erp-search-wrapper input"
@@ -1167,45 +1195,50 @@ class VehicleMasterPage(BasePage):
                 )
                 log.info("Search input became visible")
             except Exception:
-                log.warning("Search input did not become visible after clicking search button")
-                return False
+                # Last resort: find the input regardless of visibility and use JS
+                log.info("Search input not visible, trying direct JS manipulation")
+                try:
+                    search_input = self.driver.find_element(
+                        By.CSS_SELECTOR, "input#erpSearchInput, .erp-search-wrapper input"
+                    )
+                except Exception:
+                    log.error("Search input not found in DOM at all")
+                    return False
 
-        # Step 3: Clear existing value completely via JS
-        self.driver.execute_script("arguments[0].value = '';", search_input)
-        self.driver.execute_script(
-            "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));",
-            search_input,
-        )
+        if search_input is None:
+            log.error("Could not find search input")
+            return False
 
-        # Step 4: Set new value and fire Angular change events
-        self.driver.execute_script(
-            "arguments[0].value = arguments[1];", search_input, vehicle_name
-        )
-        search_input.click()
-        for event in ["input", "keyup", "change"]:
-            self.driver.execute_script(
-                f"arguments[0].dispatchEvent(new Event('{event}', {{ bubbles: true }}));",
-                search_input,
-            )
+        # Step 2: Set search value via JS (works regardless of visibility)
+        self.driver.execute_script("""
+            var inp = arguments[0];
+            inp.value = '';
+            inp.dispatchEvent(new Event('input', { bubbles: true }));
+            inp.value = arguments[1];
+            inp.dispatchEvent(new Event('input', { bubbles: true }));
+            inp.dispatchEvent(new Event('keyup', { bubbles: true }));
+            inp.dispatchEvent(new Event('change', { bubbles: true }));
+        """, search_input, vehicle_name)
 
-        # Step 5: Click the search button again via JS to submit/filter
-        js_click_search = """
-        var btn = document.querySelector('button.search-btn');
-        if (btn) { btn.click(); return 'clicked'; }
-        return 'not found';
-        """
-        self.driver.execute_script(js_click_search)
+        # Step 3: Submit search via JS (try multiple selectors)
+        self.driver.execute_script("""
+            var selectors = [
+                'button.search-btn',
+                'button[aria-label="Search"]',
+                'button[mattooltip="Search"]',
+                'button[mattooltip="search"]'
+            ];
+            for (var s = 0; s < selectors.length; s++) {
+                var btn = document.querySelector(selectors[s]);
+                if (btn) { btn.click(); break; }
+            }
+        """)
         log.info("Search submit clicked via JS")
 
-        # Step 6: Wait for table to refresh
-        try:
-            WebDriverWait(self.driver, 5).until(
-                lambda d: d.find_elements("css selector", "table#excel-table tbody tr")
-            )
-        except Exception:
-            pass  # Table might be empty (no results)
+        # Step 4: Wait for table to refresh
+        time.sleep(0.5)
 
-        # Step 7: Check results with polling
+        # Step 5: Check results with polling
         found = self.is_vehicle_in_table(vehicle_name)
         if found:
             log.info(f"Vehicle found in table: {vehicle_name}")
