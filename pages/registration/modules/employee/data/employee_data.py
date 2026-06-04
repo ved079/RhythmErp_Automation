@@ -14,15 +14,15 @@ FIELD REFERENCE (FLAT FORM — NO STEPPERS):
      Validation: standard email regex
   4. Phone Number          (integer input, optional, maxlength=255)
      Validation: ^[6-9]\\d{9}$ — 10-digit Indian mobile starting with 6-9
-  5. Designation           (dropdown, optional) — FK to designation table (31 options)
+  5. Designation           (dropdown, optional) — FK to designation table (56 options)
   6. Department            (dropdown, optional) — FK to department table (0 options currently)
   7. Status                (toggle, REQUIRED, default=true) — Active/Inactive
 
-KEY RULES (verified 2026-06-02 on live app):
+KEY RULES (verified 2026-06-04 on live app):
   - FLAT FORM: No steppers, no children array — all fields at root level
   - Only `status` is required — all other fields are optional
   - party_ref_id auto-fills name, email, mobile via auto_patch_query
-  - Designation has 31 options; Department has 0 options currently
+  - Designation has 56 options; Department has 0 options currently
   - Employee Name must match ^[A-Za-z ]+$ (letters + spaces only)
   - Phone must be 10 digits starting with 6-9
   - Email must be valid format
@@ -91,7 +91,9 @@ _generated_names = set()
 # FK ID pools (verified on tenant 599, 2026-06-02)
 # ──────────────────────────────────────────────
 
-DESIGNATION_IDS = list(range(1, 32))
+DESIGNATION_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+                   21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+                   41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56]
 #   1  = Test Designation
 #   2  = Farm Supervisor
 #   3  = Warehouse Manager
@@ -122,7 +124,32 @@ DESIGNATION_IDS = list(range(1, 32))
 #   28 = HR Manager
 #   29 = Warehouse Supervisor
 #   30 = Managing Director
-#   31 = Godown Keeper
+#   31 = Godown Keeper 343
+#   32 = Divisional Manager0659490
+#   33 = Chief Operating Officer0659491
+#   34 = Warehouse Supervisor0659492
+#   35 = Junior Engineer0659493
+#   36 = Legal Officer0659494
+#   37 = Data Analyst0716230
+#   38 = Junior Engineer0716231
+#   39 = IT Manager0716232
+#   40 = Accounts Officer0716233
+#   41 = Managing Director0716234
+#   42 = Assistant General Manager0721300
+#   43 = Accounts Officer0721301
+#   44 = Agricultural Officer0721302
+#   45 = Junior Accountant0721303
+#   46 = Accounts Officer MTJ0721304
+#   47 = Senior Vice President0723340
+#   48 = Senior Technician0723341
+#   49 = Managing Director0723342
+#   50 = Agricultural Officer0723343
+#   51 = Welfare Officer0723344
+#   52 = Divisional Manager0729430
+#   53 = Assistant General Manager0729431
+#   54 = Senior Vice President0729432
+#   55 = Production Manager0729433
+#   56 = Chief Operating Officer0729434
 
 DESIGNATION_NAMES = {
     1: "Test Designation", 2: "Farm Supervisor", 3: "Warehouse Manager",
@@ -135,10 +162,24 @@ DESIGNATION_NAMES = {
     22: "Test Designation QA", 23: "Finance Manager", 24: "Clerk",
     25: "Engineer", 26: "Production Supervisor", 27: "Quality Analyst",
     28: "HR Manager", 29: "Warehouse Supervisor", 30: "Managing Director",
-    31: "Godown Keeper",
+    31: "Godown Keeper 343", 32: "Divisional Manager0659490",
+    33: "Chief Operating Officer0659491", 34: "Warehouse Supervisor0659492",
+    35: "Junior Engineer0659493", 36: "Legal Officer0659494",
+    37: "Data Analyst0716230", 38: "Junior Engineer0716231",
+    39: "IT Manager0716232", 40: "Accounts Officer0716233",
+    41: "Managing Director0716234", 42: "Assistant General Manager0721300",
+    43: "Accounts Officer0721301", 44: "Agricultural Officer0721302",
+    45: "Junior Accountant0721303", 46: "Accounts Officer MTJ0721304",
+    47: "Senior Vice President0723340", 48: "Senior Technician0723341",
+    49: "Managing Director0723342", 50: "Agricultural Officer0723343",
+    51: "Welfare Officer0723344", 52: "Divisional Manager0729430",
+    53: "Assistant General Manager0729431", 54: "Senior Vice President0729432",
+    55: "Production Manager0729433", 56: "Chief Operating Officer0729434",
 }
 
-# Party Reference IDs (113 valid options — excludes Customers)
+DESIGNATION_OPTIONS_COUNT = 56
+
+# Party Reference IDs (316 valid options in live ERP — sample pool below)
 # These are FK IDs for party_master entries
 PARTY_REF_IDS = [
     2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 21, 23, 26, 29, 30, 33,
@@ -593,7 +634,7 @@ FIELD_VALIDATION_RULES = {
         "label": "Designation",
         "type": "dropdown",
         "required": False,
-        "fk_options_count": 31,
+        "fk_options_count": 56,
     },
     "department": {
         "field_key": "department",

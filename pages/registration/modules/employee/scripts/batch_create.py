@@ -17,31 +17,23 @@ Usage:
 import sys
 import os
 import time
-import json
 
 # Add project root to path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
-from common.erp_api_client import RhythmERPAPIClient
-from common.logger import log
+from common.erp_api_client import ErpApiClient
 from pages.registration.modules.employee.data.employee_data import (
     generate_employee_api_payload,
-    DESIGNATION_NAMES,
 )
 
-# Default config — override with --token and --count flags
 TENANT_ID = "599"
 DEFAULT_COUNT = 10
 
 
 def parse_args():
     """Parse simple --key value args from sys.argv."""
-    args = {
-        "token": None,
-        "count": DEFAULT_COUNT,
-        "dry_run": False,
-    }
+    args = {"token": None, "count": DEFAULT_COUNT, "dry_run": False}
     i = 1
     while i < len(sys.argv):
         arg = sys.argv[i]
@@ -63,7 +55,7 @@ def batch_create(client, count, dry_run=False):
     """Create multiple Employee entries and report stats.
 
     Args:
-        client: Authenticated RhythmERPAPIClient instance.
+        client: Authenticated ErpApiClient instance.
         count: Number of Employee entries to create.
         dry_run: If True, generate payloads but don't POST.
 
@@ -81,25 +73,25 @@ def batch_create(client, count, dry_run=False):
 
     for i in range(count):
         payload = generate_employee_api_payload()
-        name = payload['name']
-        designation_id = payload.get('designation')
-        designation_name = DESIGNATION_NAMES.get(designation_id, "?")
-        designations_used.append(designation_name)
+        name = payload["name"]
+        designation = payload.get("designation")
+        designations_used.append(designation)
 
         if dry_run:
-            print(f'  [{i+1:2d}] [DRY] {name:30s} | Designation={designation_name}')
+            print(f"  [{i+1:2d}] [DRY] {name:40s} | Desig={designation}")
             success += 1
             continue
 
         result = client.create_entry(payload)
         if result:
-            print(f'  [{i+1:2d}] OK  {name:30s} | Designation={designation_name}')
+            entry_id = result.get("id", "?")
+            print(f"  [{i+1:2d}] OK  {name:40s} | ID={entry_id} Desig={designation}")
             success += 1
         else:
-            print(f'  [{i+1:2d}] FAIL {name:30s}')
+            print(f"  [{i+1:2d}] FAIL {name:40s}")
             fail += 1
 
-        time.sleep(0.2)
+        time.sleep(0.25)
 
     elapsed = time.time() - start
 
@@ -110,9 +102,7 @@ def batch_create(client, count, dry_run=False):
     print(f"  Created:     {success}/{count} ({fail} failed)")
     if not dry_run:
         print(f"  Time:        {elapsed:.1f}s ({elapsed/max(count,1):.2f}s per entry)")
-    # Show unique designations used
-    unique_designations = sorted(set(designations_used))
-    print(f"  Designations: {len(unique_designations)} unique — {unique_designations[:5]}{'...' if len(unique_designations) > 5 else ''}")
+    print(f"  Designations:{sorted(set(designations_used))} ({len(set(designations_used))} unique)")
     print("=" * 70)
 
     return success, fail
@@ -124,11 +114,6 @@ def main():
     count = args["count"]
     dry_run = args["dry_run"]
 
-    # Dry-run doesn't need a token
-    if dry_run:
-        batch_create(None, count, dry_run=True)
-        return
-
     if not token:
         print("=" * 70)
         print("  EMPLOYEE BATCH CREATE")
@@ -136,8 +121,8 @@ def main():
         print()
         print("  No token provided. Get it from:")
         print("  1. Open https://rhythmerp.algorhythms.in in Chrome")
-        print("  2. DevTools → Network → click any page")
-        print("  3. Find any /core/ request → copy Authorization header")
+        print("  2. DevTools -> Network -> click any page")
+        print("  3. Find any /core/ request -> copy Authorization header")
         print("  4. Paste the token value (after 'Bearer ')")
         print()
         token = input("  Token: ").strip()
@@ -145,10 +130,9 @@ def main():
             print("  No token entered. Exiting.")
             return
 
-    client = RhythmERPAPIClient()
-    client.login_from_browser(token=token, tenant_id=TENANT_ID)
+    client = ErpApiClient()
+    client.set_session_from_token(token)
 
-    # Quick auth check
     result = client.list_entries("Employee", page=1, page_size=1)
     if not result:
         print("  Token invalid or expired. Get a new one from DevTools.")
