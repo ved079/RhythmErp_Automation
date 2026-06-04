@@ -82,7 +82,6 @@ def _create_prerequisite_vehicle(page, data=None):
     except Exception:
         pass
     page.click_refresh()
-    page.wait_seconds(2)
     return data.get("name", ""), result
 
 
@@ -104,11 +103,11 @@ class TestCreateFormValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
         assert page.is_add_form_open(), "Add form did not open"
 
         page.submit()
-        page.wait_seconds(2)
+        page.wait_seconds(0.3)
 
         errors = page.get_mat_error_text()
         form_still_open = page.is_add_form_open()
@@ -136,10 +135,10 @@ class TestCreateFormValidations:
 
         data = generate_name_only_data("NameOnly")
         page.open_add_form()
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
         page.type_text(page.NAME_INPUT, data["name"], clear_first=True)
         page.submit()
-        page.wait_seconds(2)
+        page.wait_seconds(0.3)
 
         errors = page.get_mat_error_text()
         form_still_open = page.is_add_form_open()
@@ -162,12 +161,12 @@ class TestCreateFormValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
         page.type_text(
             page.PRICE_INPUT, generate_vehicle_price(), clear_first=True
         )
         page.submit()
-        page.wait_seconds(2)
+        page.wait_seconds(0.3)
 
         errors = page.get_mat_error_text()
         form_still_open = page.is_add_form_open()
@@ -201,7 +200,6 @@ class TestCreateFormValidations:
         if result["status"] == "PASSED":
             # Check if name was trimmed in the table
             page.click_refresh()
-            page.wait_seconds(2)
             names = page.get_all_vehicle_names()
             created_name = spaces_name.strip()
             # BUG: spaces not trimmed — name saved as-is with spaces
@@ -218,7 +216,6 @@ class TestCreateFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
     # ---- VM-C05: Price = 0 ----
     @pytest.mark.sanity
@@ -248,7 +245,6 @@ class TestCreateFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
     # ---- VM-C06: Negative Price ----
     @pytest.mark.sanity
@@ -278,7 +274,6 @@ class TestCreateFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
     # ---- VM-C07: Alphabets in Price ----
     @pytest.mark.sanity
@@ -308,7 +303,6 @@ class TestCreateFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
     # ---- VM-C08: Special characters in Price ----
     @pytest.mark.sanity
@@ -336,7 +330,6 @@ class TestCreateFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
     # ---- VM-C09: Duplicate Name ----
     @pytest.mark.smoke
@@ -358,7 +351,6 @@ class TestCreateFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
         # Try creating second with same name
         data2 = generate_duplicate_name_data(data1["name"])
@@ -376,7 +368,6 @@ class TestCreateFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
     # ---- VM-C10: Special characters in Name ----
     @pytest.mark.sanity
@@ -406,7 +397,6 @@ class TestCreateFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
     # ---- VM-C11: Very long Name (256 chars) ----
     @pytest.mark.sanity
@@ -434,7 +424,6 @@ class TestCreateFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
     # ---- VM-C12: Without Vehicle Type dropdown ----
     @pytest.mark.smoke
@@ -446,7 +435,7 @@ class TestCreateFormValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
         # Fill everything EXCEPT Vehicle Type dropdown
         page.type_text(
             page.NAME_INPUT,
@@ -464,7 +453,7 @@ class TestCreateFormValidations:
         )
         page._force_close_panels()
         page.submit()
-        page.wait_seconds(2)
+        page.wait_seconds(0.3)
 
         errors = page.get_mat_error_text()
         form_still_open = page.is_add_form_open()
@@ -487,7 +476,7 @@ class TestCreateFormValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
         page.type_text(
             page.NAME_INPUT,
             generate_vehicle_name("NoFType"),
@@ -504,7 +493,7 @@ class TestCreateFormValidations:
         )
         page._force_close_panels()
         page.submit()
-        page.wait_seconds(2)
+        page.wait_seconds(0.3)
 
         errors = page.get_mat_error_text()
         form_still_open = page.is_add_form_open()
@@ -541,7 +530,6 @@ class TestCreateFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
     # ---- VM-C15: Per-field inline error messages ----
     @pytest.mark.sanity
@@ -556,9 +544,9 @@ class TestCreateFormValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
         page.submit()
-        page.wait_seconds(2)
+        page.wait_seconds(0.3)
 
         # Check if Name field has its own error
         name_has_error = page.has_field_error("Name")
@@ -606,7 +594,7 @@ class TestDropdownValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
 
         options = page.get_dropdown_options(page.VEHICLE_TYPE_SELECT)
 
@@ -628,7 +616,7 @@ class TestDropdownValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
 
         options = page.get_dropdown_options(page.FUEL_TYPE_SELECT)
 
@@ -650,7 +638,7 @@ class TestDropdownValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
 
         # Get all options first
         all_options = page.get_dropdown_options(page.VEHICLE_TYPE_SELECT)
@@ -662,7 +650,7 @@ class TestDropdownValidations:
             page.click(page.VEHICLE_TYPE_SELECT)
         except Exception:
             pass
-        page.wait_seconds(0.5)
+        page.wait_seconds(0.2)
 
         # Type partial text in the dropdown search box
         search_text = all_options[0][:3]  # first 3 chars of first option
@@ -677,7 +665,7 @@ class TestDropdownValidations:
                     if inp.is_displayed():
                         inp.clear()
                         inp.send_keys(search_text)
-                        page.wait_seconds(0.5)
+                        page.wait_seconds(0.2)
                         break
                 except Exception:
                     continue
@@ -717,7 +705,7 @@ class TestDropdownValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
 
         all_options = page.get_dropdown_options(page.FUEL_TYPE_SELECT)
         if not all_options:
@@ -727,7 +715,7 @@ class TestDropdownValidations:
             page.click(page.FUEL_TYPE_SELECT)
         except Exception:
             pass
-        page.wait_seconds(0.5)
+        page.wait_seconds(0.2)
 
         search_text = all_options[0][:3]
         try:
@@ -741,7 +729,7 @@ class TestDropdownValidations:
                     if inp.is_displayed():
                         inp.clear()
                         inp.send_keys(search_text)
-                        page.wait_seconds(0.5)
+                        page.wait_seconds(0.2)
                         break
                 except Exception:
                     continue
@@ -780,7 +768,7 @@ class TestDropdownValidations:
         page = vehicle_master_page
 
         page.open_add_form()
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
 
         selected = page._select_random_from_dropdown(
             page.VEHICLE_TYPE_SELECT, "Vehicle Type"
@@ -827,7 +815,6 @@ class TestEditFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
         data2 = generate_valid_vehicle_data("EditDup2")
         result2 = page.create_vehicle(data2)
@@ -836,7 +823,6 @@ class TestEditFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
         # Edit second vehicle with first vehicle's name
         edit_result = page.edit_vehicle(
@@ -856,7 +842,6 @@ class TestEditFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
     # ---- VM-E02: Edit with Price = 0 ----
     @pytest.mark.sanity
@@ -876,7 +861,6 @@ class TestEditFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
         edit_result = page.edit_vehicle(
             data["name"],
@@ -895,7 +879,6 @@ class TestEditFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
     # ---- VM-E03: Edit with negative Price ----
     @pytest.mark.sanity
@@ -915,7 +898,6 @@ class TestEditFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
         edit_result = page.edit_vehicle(
             data["name"],
@@ -934,7 +916,6 @@ class TestEditFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
     # ---- VM-E04: Edit with alphabets in Price ----
     @pytest.mark.sanity
@@ -952,7 +933,6 @@ class TestEditFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
         edit_result = page.edit_vehicle(
             data["name"],
@@ -969,7 +949,6 @@ class TestEditFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
     # ---- VM-E05: Edit — verify pre-populated fields ----
     @pytest.mark.smoke
@@ -989,11 +968,11 @@ class TestEditFormValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
+        page.ensure_vehicle_visible(data["name"])
 
         # Click Edit
         page.click_edit_button(vehicle_name=data["name"])
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
 
         # Read form values
         form_values = page.get_form_field_values()
@@ -1038,7 +1017,6 @@ class TestSearchFilter:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
         found = page.search_vehicle(data["name"])
         page.clear_search()
@@ -1061,7 +1039,6 @@ class TestSearchFilter:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
         partial = data["name"][:10]
         found = page.search_vehicle(partial)
@@ -1104,7 +1081,7 @@ class TestSearchFilter:
                 By.CSS_SELECTOR, "button.filter-btn, button[mattooltip='Filter']"
             )
             page.driver.execute_script("arguments[0].click();", filter_btn)
-            page.wait_seconds(1)
+            page.wait_seconds(0.3)
 
             # Check if filter panel opened
             filter_panel = page.driver.find_elements(
@@ -1125,7 +1102,7 @@ class TestSearchFilter:
                     page.driver.execute_script(
                         "arguments[0].click();", apply_btn
                     )
-                    page.wait_seconds(2)
+                    page.wait_seconds(0.3)
                     log.warning(
                         "CRITICAL BUG: Apply Filters button "
                         "is non-functional"
@@ -1139,7 +1116,6 @@ class TestSearchFilter:
             log.info(f"Filter button not found: {e}")
 
         page.click_refresh()
-        page.wait_seconds(2)
 
     # ---- VM-S05: Filter by Fuel Type ----
     @pytest.mark.sanity
@@ -1157,7 +1133,7 @@ class TestSearchFilter:
                 By.CSS_SELECTOR, "button.filter-btn, button[mattooltip='Filter']"
             )
             page.driver.execute_script("arguments[0].click();", filter_btn)
-            page.wait_seconds(1)
+            page.wait_seconds(0.3)
 
             filter_panel = page.driver.find_elements(
                 By.CSS_SELECTOR,
@@ -1178,7 +1154,6 @@ class TestSearchFilter:
             log.info(f"Filter button not found: {e}")
 
         page.click_refresh()
-        page.wait_seconds(2)
 
 
 # ====================================================================
@@ -1201,14 +1176,14 @@ class TestPopupUIBehaviors:
         before_count = page.get_table_row_count()
 
         page.open_add_form()
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
         assert page.is_add_form_open(), "Form did not open"
 
         # Fill form with data
         data = generate_valid_vehicle_data("CancelTest")
         page.fill_vehicle_form(data)
         page.cancel()
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
 
         after_count = page.get_table_row_count()
         assert after_count == before_count, (
@@ -1229,13 +1204,13 @@ class TestPopupUIBehaviors:
         before_count = page.get_table_row_count()
 
         page.open_add_form()
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
         assert page.is_add_form_open(), "Form did not open"
 
         data = generate_valid_vehicle_data("CloseTest")
         page.fill_vehicle_form(data)
         page.close_popup()
-        page.wait_seconds(1)
+        page.wait_seconds(0.2)
 
         after_count = page.get_table_row_count()
         assert after_count == before_count, (
@@ -1261,10 +1236,10 @@ class TestPopupUIBehaviors:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
+        page.ensure_vehicle_visible(data["name"])
 
         page.click_view_button(vehicle_name=data["name"])
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
 
         is_readonly = page.verify_view_popup_read_only()
 
@@ -1274,7 +1249,7 @@ class TestPopupUIBehaviors:
         log.info("View popup correctly shows read-only fields")
 
         page.close_popup()
-        page.wait_seconds(0.5)
+        page.wait_seconds(0.2)
 
     # ---- VM-P04: Edit popup shows editable fields ----
     @pytest.mark.sanity
@@ -1292,10 +1267,10 @@ class TestPopupUIBehaviors:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
+        page.ensure_vehicle_visible(data["name"])
 
         page.click_edit_button(vehicle_name=data["name"])
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
 
         is_edit = page.verify_edit_popup_editable()
 
@@ -1305,7 +1280,7 @@ class TestPopupUIBehaviors:
         log.info("Edit popup correctly shows Update button")
 
         page.cancel()
-        page.wait_seconds(0.5)
+        page.wait_seconds(0.2)
 
     # ---- VM-P05: History popup opens and shows records ----
     @pytest.mark.sanity
@@ -1323,7 +1298,7 @@ class TestPopupUIBehaviors:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
+        page.ensure_vehicle_visible(data["name"])
 
         hist = page.check_history(vehicle_name=data["name"])
 
@@ -1361,7 +1336,7 @@ class TestHistoryValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
+        page.ensure_vehicle_visible(data["name"])
 
         hist = page.check_history(vehicle_name=data["name"])
 
@@ -1393,7 +1368,7 @@ class TestHistoryValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
+        page.ensure_vehicle_visible(data["name"])
 
         # Count history before edit
         hist_before = page.check_history(vehicle_name=data["name"])
@@ -1401,7 +1376,6 @@ class TestHistoryValidations:
 
         # Edit the vehicle
         page.click_refresh()
-        page.wait_seconds(2)
         edit_result = page.edit_vehicle(
             data["name"],
             {"price": generate_vehicle_price()},
@@ -1411,7 +1385,7 @@ class TestHistoryValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
+        page.ensure_vehicle_visible(data["name"])
 
         # Count history after edit
         hist_after = page.check_history(vehicle_name=data["name"])
@@ -1444,18 +1418,18 @@ class TestHistoryValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
+        page.ensure_vehicle_visible(data["name"])
 
         # Open history and search
         page.click_history_button(vehicle_name=data["name"])
-        page.wait_seconds(1.5)
+        page.wait_seconds(0.3)
 
         search_done = page.search_in_history("a")
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
 
         # Close history
         page.close_history_popup()
-        page.wait_seconds(0.5)
+        page.wait_seconds(0.2)
 
         if search_done:
             log.info("History search with Enter key works")
@@ -1480,22 +1454,22 @@ class TestHistoryValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
+        page.ensure_vehicle_visible(data["name"])
 
         # Open history
         page.click_history_button(vehicle_name=data["name"])
-        page.wait_seconds(1.5)
+        page.wait_seconds(0.3)
 
         rows_before = page.get_history_row_count()
 
         # Search with garbage text
         page.search_in_history(f"ZZZNONMATCH{int(time.time())}")
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
 
         rows_after = page.get_history_row_count()
 
         page.close_history_popup()
-        page.wait_seconds(0.5)
+        page.wait_seconds(0.2)
 
         # After search with no match, rows should be 0 or less
         log.info(
@@ -1519,10 +1493,10 @@ class TestHistoryValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
+        page.ensure_vehicle_visible(data["name"])
 
         page.click_history_button(vehicle_name=data["name"])
-        page.wait_seconds(1.5)
+        page.wait_seconds(0.3)
 
         # Read history headers
         headers = page.driver.find_elements(
@@ -1533,7 +1507,7 @@ class TestHistoryValidations:
         header_texts = [h.text.strip() for h in headers if h.text.strip()]
 
         page.close_history_popup()
-        page.wait_seconds(0.5)
+        page.wait_seconds(0.2)
 
         if header_texts:
             log.info(f"History columns: {header_texts}")
@@ -1560,15 +1534,15 @@ class TestHistoryValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
+        page.ensure_vehicle_visible(data["name"])
 
         page.click_history_button(vehicle_name=data["name"])
-        page.wait_seconds(1.5)
+        page.wait_seconds(0.3)
 
         assert page.is_history_popup_open(), "History popup not open"
 
         page.close_history_popup()
-        page.wait_seconds(1)
+        page.wait_seconds(0.3)
 
         assert not page.is_history_popup_open(), (
             "BUG: History popup still open after Close"
@@ -1591,16 +1565,16 @@ class TestHistoryValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
+        page.ensure_vehicle_visible(data["name"])
 
         page.click_history_button(vehicle_name=data["name"])
-        page.wait_seconds(1.5)
+        page.wait_seconds(0.3)
 
         assert page.is_history_popup_open(), "History popup not open"
 
         # Click X icon
         page.close_popup()
-        page.wait_seconds(1)
+        page.wait_seconds(0.2)
 
         assert not page.is_history_popup_open(), (
             "BUG: History popup still open after X click"
@@ -1626,7 +1600,6 @@ class TestHistoryValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
 
         # Edit to create 2+ history rows
         edit_result = page.edit_vehicle(
@@ -1637,10 +1610,10 @@ class TestHistoryValidations:
         except Exception:
             pass
         page.click_refresh()
-        page.wait_seconds(2)
+        page.ensure_vehicle_visible(data["name"])
 
         page.click_history_button(vehicle_name=data["name"])
-        page.wait_seconds(1.5)
+        page.wait_seconds(0.3)
 
         # Read first column data before sort
         rows_before = page.get_history_data()
@@ -1659,7 +1632,7 @@ class TestHistoryValidations:
                 page.driver.execute_script(
                     "arguments[0].click();", sortable_headers[0]
                 )
-                page.wait_seconds(1)
+                page.wait_seconds(0.3)
             except Exception:
                 pass
 
@@ -1670,7 +1643,7 @@ class TestHistoryValidations:
         ]
 
         page.close_history_popup()
-        page.wait_seconds(0.5)
+        page.wait_seconds(0.2)
 
         # Check if order changed
         if first_col_before == first_col_after:

@@ -228,10 +228,8 @@ class VehicleMasterPage(BasePage):
 
     def _wait_for_page_ready(self):
         """Wait for page table + at least 1 data row with text content.
-        Does NOT check toolbar offsetParent (never passes, burns 20s).
-        Data rows are needed for kebab menu clicks and search to work.
-        10s timeout — table + data typically appears in 2-5s."""
-        end = time.monotonic() + 10
+        Fast polling (0.1s intervals), 8s timeout."""
+        end = time.monotonic() + 8
         while time.monotonic() < end:
             try:
                 ready = self.driver.execute_script("""
@@ -253,7 +251,7 @@ class VehicleMasterPage(BasePage):
                     return
             except Exception:
                 pass
-            time.sleep(0.3)
+            time.sleep(0.1)
         # Fallback: just table is enough if no data yet
         try:
             if self.driver.find_elements("css selector", "table#excel-table"):
@@ -338,7 +336,7 @@ class VehicleMasterPage(BasePage):
             self.click_with_retry(self.ADD_BUTTON)
         # Wait for the form popup to appear
         try:
-            WebDriverWait(self.driver, 5).until(
+            WebDriverWait(self.driver, 3).until(
                 lambda d: d.execute_script(
                     "var el = document.querySelector("
                     "\"input[name='Name'], input[formcontrolname='name']\");"
@@ -355,6 +353,31 @@ class VehicleMasterPage(BasePage):
         disappears from DOM permanently. Browser refresh is reliable."""
         log.info("Refreshing page (hard_refresh)...")
         self.hard_refresh()
+
+    def ensure_vehicle_visible(self, vehicle_name, timeout=8):
+        """Ensure a specific vehicle is visible in the table.
+        Hard refreshes first, then if not found, uses search to filter.
+        This handles pagination — vehicle may be on a different page.
+        Returns True if found, raises Exception if not."""
+        log.info(f"Ensuring vehicle visible: {vehicle_name}")
+        # First try: check if already in table
+        if self.is_vehicle_in_table(vehicle_name):
+            log.info(f"Vehicle already visible: {vehicle_name}")
+            return True
+        # Second try: search for it
+        log.info("Vehicle not in current view, searching...")
+        self.search_vehicle(vehicle_name)
+        if self.is_vehicle_in_table(vehicle_name):
+            log.info(f"Vehicle found via search: {vehicle_name}")
+            return True
+        # Third try: hard refresh then search again
+        log.info("Vehicle still not found, hard refresh + search...")
+        self.hard_refresh()
+        self.search_vehicle(vehicle_name)
+        if self.is_vehicle_in_table(vehicle_name):
+            log.info(f"Vehicle found after refresh+search: {vehicle_name}")
+            return True
+        raise Exception(f"Vehicle '{vehicle_name}' not found in table after refresh+search")
 
     # ==============================================================
     #  Fill form fields
@@ -473,10 +496,10 @@ class VehicleMasterPage(BasePage):
     #  SweetAlert2 handlers — FAST (UOM pattern)
     # ==============================================================
 
-    def handle_success_alert(self, timeout=3):
-        """Handle SweetAlert2 success notification — fast dismiss.
+    def handle_success_alert(self, timeout=2):
+        """Handle SweetAlert2 success notification — instant dismiss.
         Returns the alert message text, or '' if no alert appeared.
-        3s timeout (UOM pattern) — success alerts appear within 1s."""
+        2s timeout — success alerts appear within 0.5s."""
         log.info("Handling success alert...")
         try:
             WebDriverWait(self.driver, timeout).until(
@@ -484,29 +507,26 @@ class VehicleMasterPage(BasePage):
                     (By.CSS_SELECTOR, ".swal2-container")
                 )
             )
-            # Read title text
-            msg = ""
-            try:
-                title_el = self.driver.find_element(By.CSS_SELECTOR, "#swal2-title")
-                msg = title_el.text.strip()
-            except Exception:
-                pass
-
-            log.info("SweetAlert detected, dismissing via JS")
-            self.driver.execute_script("""
+            # Read title + dismiss in ONE JS call (avoids round-trips)
+            result = self.driver.execute_script("""
+                var title = '';
+                var titleEl = document.querySelector('#swal2-title');
+                if (titleEl) title = titleEl.textContent.trim();
                 var btn = document.querySelector('.swal2-confirm');
-                if (btn) { btn.click(); }
-                // Immediately remove the SweetAlert container — no need to wait for animation
+                if (btn) btn.click();
+                // Immediately remove all SweetAlert containers
                 document.querySelectorAll('.swal2-container').forEach(function(el) { el.remove(); });
+                return title;
             """)
+            msg = result if result else ""
             log.info(f"Success alert handled: {msg}")
             return msg
         except TimeoutException:
             log.info("No success alert appeared within timeout")
             return ""
 
-    def handle_validation_warning(self, timeout=3):
-        """Handle SweetAlert2 validation warning popup — fast dismiss.
+    def handle_validation_warning(self, timeout=2):
+        """Handle SweetAlert2 validation warning popup — instant dismiss.
         Returns the warning message text, or ''."""
         log.info("Checking for validation warning...")
         try:
@@ -515,19 +535,23 @@ class VehicleMasterPage(BasePage):
                     (By.CSS_SELECTOR, "#swal2-title")
                 )
             )
-            msg = ""
-            try:
-                title_el = self.driver.find_element(By.CSS_SELECTOR, "#swal2-title")
-                msg = title_el.text.strip()
-            except Exception:
-                pass
-            self._dismiss_swal(button=".swal2-confirm", label="OK")
+            # Read + dismiss in one JS call
+            result = self.driver.execute_script("""
+                var title = '';
+                var titleEl = document.querySelector('#swal2-title');
+                if (titleEl) title = titleEl.textContent.trim();
+                var btn = document.querySelector('.swal2-confirm');
+                if (btn) btn.click();
+                document.querySelectorAll('.swal2-container').forEach(function(el) { el.remove(); });
+                return title;
+            """)
+            msg = result if result else ""
             log.info(f"Validation warning handled: {msg}")
             return msg
         except TimeoutException:
             return ""
 
-    def handle_error_toast(self, timeout=3):
+    def handle_error_toast(self, timeout=2):
         """Check for error toast notification.
         Returns the toast message text, or ''."""
         log.info("Checking for error toast...")
@@ -542,7 +566,7 @@ class VehicleMasterPage(BasePage):
             return text
         return ""
 
-    def is_validation_alert_present(self, timeout=3):
+    def is_validation_alert_present(self, timeout=2):
         """Check if any SweetAlert2 popup is currently visible. Fast JS poll."""
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
@@ -555,7 +579,7 @@ class VehicleMasterPage(BasePage):
                     return True
             except Exception:
                 pass
-            time.sleep(0.2)
+            time.sleep(0.1)
         return False
 
     # ==============================================================
@@ -588,7 +612,7 @@ class VehicleMasterPage(BasePage):
                 f"//mat-label[contains(.,'{field_label}')]"
                 "/ancestor::mat-form-field//mat-error",
             )
-            return self.is_displayed(locator, timeout=3)
+            return self.is_displayed(locator, timeout=1)
         except Exception:
             return False
 
@@ -780,41 +804,52 @@ class VehicleMasterPage(BasePage):
 
     def is_vehicle_in_table(self, vehicle_name):
         """Check if a vehicle with the given name appears in the table.
-        Polls up to 8s — data may take time to appear after search."""
-        end_time = time.monotonic() + 8
+        Pure JS — faster than Selenium iteration. Polls up to 5s."""
+        end_time = time.monotonic() + 5
         while time.monotonic() < end_time:
             try:
-                rows = self.driver.find_elements(
-                    By.CSS_SELECTOR, "table#excel-table tbody tr"
-                )
-                for row in rows:
-                    cells = row.find_elements(By.CSS_SELECTOR, "td")
-                    for cell in cells:
-                        if vehicle_name.strip().lower() in cell.text.strip().lower():
-                            return True
+                found = self.driver.execute_script("""
+                    var name = arguments[0].toLowerCase();
+                    var table = document.querySelector('table#excel-table');
+                    if (!table) return false;
+                    var rows = table.querySelectorAll('tbody tr');
+                    for (var i = 0; i < rows.length; i++) {
+                        var cells = rows[i].querySelectorAll('td');
+                        for (var j = 0; j < cells.length; j++) {
+                            if (cells[j].textContent.trim().toLowerCase().indexOf(name) !== -1)
+                                return true;
+                        }
+                    }
+                    return false;
+                """, vehicle_name)
+                if found:
+                    return True
             except Exception:
                 pass
-            time.sleep(0.5)
+            time.sleep(0.3)
         return False
 
     def find_vehicle_row_index(self, vehicle_name):
-        """Find the 0-based row index for a vehicle by name.
+        """Find the 0-based row index for a vehicle by name. Pure JS.
         Returns -1 if not found."""
-        rows = self.driver.find_elements(
-            By.CSS_SELECTOR, "table#excel-table tbody tr"
-        )
-        for i, row in enumerate(rows):
-            try:
-                cells = row.find_elements(By.TAG_NAME, "td")
-                for cell in cells:
-                    if (
-                        vehicle_name.strip().lower()
-                        in cell.text.strip().lower()
-                    ):
-                        return i
-            except StaleElementReferenceException:
-                continue
-        return -1
+        try:
+            idx = self.driver.execute_script("""
+                var name = arguments[0].toLowerCase();
+                var table = document.querySelector('table#excel-table');
+                if (!table) return -1;
+                var rows = table.querySelectorAll('tbody tr');
+                for (var i = 0; i < rows.length; i++) {
+                    var cells = rows[i].querySelectorAll('td');
+                    for (var j = 0; j < cells.length; j++) {
+                        if (cells[j].textContent.trim().toLowerCase().indexOf(name) !== -1)
+                            return i;
+                    }
+                }
+                return -1;
+            """, vehicle_name)
+            return idx if isinstance(idx, int) else -1
+        except Exception:
+            return -1
 
     def get_vehicle_details_from_row(self, row_index=0):
         """Read text from a table row. Returns dict with
@@ -840,22 +875,23 @@ class VehicleMasterPage(BasePage):
     #  Row action buttons — pure JS 3-dot menu (UOM pattern)
     # ==============================================================
 
-    def _click_action_menu_item(self, vehicle_name, action_name, retries=5):
+    def _click_action_menu_item(self, vehicle_name, action_name, retries=3):
         """Click an action menu item (View/Edit/History) for a specific
-        vehicle row. Pure JS — retries with 1s gaps. Does hard_refresh
-        on 3rd attempt if data hasn't loaded."""
+        vehicle row. Pure JS — retries with 0.5s gaps. Does hard_refresh
+        on 2nd attempt if data hasn't loaded."""
         log.info(f"Clicking {action_name} via 3-dot menu for: {vehicle_name}")
         self._force_close_panels()
 
         # Step 1: Open the 3-dot menu — JS returns null instead of throwing
         js_open_menu = """
+        var name = arguments[0].toLowerCase();
         var table = document.querySelector('table#excel-table');
         if (!table) return null;
         var rows = table.querySelectorAll('tbody tr');
         for (var i = 0; i < rows.length; i++) {
             var cells = rows[i].querySelectorAll('td');
             for (var j = 0; j < cells.length; j++) {
-                if (cells[j].textContent.trim().indexOf(arguments[0]) !== -1) {
+                if (cells[j].textContent.trim().toLowerCase().indexOf(name) !== -1) {
                     var menuBtn = rows[i].querySelector(
                         'td.cdk-column-actions button'
                     );
@@ -878,11 +914,11 @@ class VehicleMasterPage(BasePage):
                 pass
             if attempt < retries - 1:
                 log.info(f"Vehicle not in table yet, retrying ({attempt+1}/{retries})...")
-                if attempt >= 2:
+                if attempt >= 1:
                     log.info("Doing hard_refresh to force data reload...")
                     self.hard_refresh()
                 else:
-                    time.sleep(1)
+                    time.sleep(0.5)
 
         # Fallback: try by row index
         if not menu_opened:
@@ -909,15 +945,7 @@ class VehicleMasterPage(BasePage):
         log.info(f"3-dot menu opened for: {vehicle_name}")
 
         # Wait briefly for dropdown overlay to render
-        try:
-            WebDriverWait(self.driver, 2).until(
-                EC.presence_of_element_located((
-                    By.CSS_SELECTOR,
-                    ".cdk-overlay-container .cdk-overlay-pane",
-                ))
-            )
-        except Exception:
-            pass
+        time.sleep(0.2)
 
         # Step 2: Click the specific menu item from the dropdown overlay
         js_click_item = """
@@ -996,7 +1024,7 @@ class VehicleMasterPage(BasePage):
             self._click_action_button_by_index(row_index, "cdk-column-view")
         # Wait for view popup to appear
         try:
-            WebDriverWait(self.driver, 5).until(
+            WebDriverWait(self.driver, 3).until(
                 lambda d: d.execute_script(
                     "var el = document.querySelector("
                     "\"input[name='Name'], input[formcontrolname='name']\");"
@@ -1015,7 +1043,7 @@ class VehicleMasterPage(BasePage):
             self._click_action_button_by_index(row_index, "cdk-column-edit")
         # Wait for edit popup to appear
         try:
-            WebDriverWait(self.driver, 5).until(
+            WebDriverWait(self.driver, 3).until(
                 lambda d: d.execute_script(
                     "var el = document.querySelector("
                     "\"input[name='Name'], input[formcontrolname='name']\");"
@@ -1034,7 +1062,7 @@ class VehicleMasterPage(BasePage):
             self._click_action_button_by_index(row_index, "cdk-column-history")
         # Wait for history popup to appear
         try:
-            WebDriverWait(self.driver, 5).until(
+            WebDriverWait(self.driver, 3).until(
                 lambda d: d.execute_script(
                     "var headings = document.querySelectorAll("
                     "'h3.popup-title, .big-model h3, mat-dialog-container h3');"
@@ -1187,7 +1215,7 @@ class VehicleMasterPage(BasePage):
 
             # Wait for search input to appear/become visible
             try:
-                search_input = WebDriverWait(self.driver, 3).until(
+                search_input = WebDriverWait(self.driver, 2).until(
                     EC.visibility_of_element_located((
                         By.CSS_SELECTOR,
                         "input#erpSearchInput, .erp-search-wrapper input"
@@ -1236,7 +1264,7 @@ class VehicleMasterPage(BasePage):
         log.info("Search submit clicked via JS")
 
         # Step 4: Wait for table to refresh
-        time.sleep(0.5)
+        time.sleep(0.2)
 
         # Step 5: Check results with polling
         found = self.is_vehicle_in_table(vehicle_name)
@@ -1465,7 +1493,7 @@ class VehicleMasterPage(BasePage):
 
         # Wait for options to appear (visibility, not just presence)
         try:
-            WebDriverWait(self.driver, 8).until(
+            WebDriverWait(self.driver, 5).until(
                 EC.visibility_of_element_located(
                     (
                         By.CSS_SELECTOR,
@@ -1480,7 +1508,7 @@ class VehicleMasterPage(BasePage):
             )
 
         # Small wait for Angular to populate option text content
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Read all option texts
         options = self.driver.find_elements(
@@ -1548,7 +1576,7 @@ class VehicleMasterPage(BasePage):
                 self.driver.execute_script("arguments[0].click();", el)
 
         try:
-            WebDriverWait(self.driver, 8).until(
+            WebDriverWait(self.driver, 5).until(
                 EC.visibility_of_element_located(
                     (By.CSS_SELECTOR, "div.mat-mdc-select-panel mat-option")
                 )
@@ -1618,7 +1646,7 @@ class VehicleMasterPage(BasePage):
             self.fill_vehicle_form(vehicle_data)
             self.submit()
 
-            msg = self.handle_success_alert(timeout=3)
+            msg = self.handle_success_alert(timeout=2)
             if msg:
                 result["message"] = msg
                 result["status"] = "PASSED"
@@ -1638,11 +1666,11 @@ class VehicleMasterPage(BasePage):
             result["error"] = str(e)
             log.error(f"Failed to create vehicle '{name}': {e}")
 
-        # Always clean up: remove any leftover SweetAlert only
+        # Always clean up: nuke any leftover SweetAlert (instant)
         try:
-            self.driver.execute_script("""
-                document.querySelectorAll('.swal2-container').forEach(function(el) { el.remove(); });
-            """)
+            self.driver.execute_script(
+                "document.querySelectorAll('.swal2-container').forEach(function(el){el.remove();});"
+            )
         except Exception:
             pass
 
@@ -1695,7 +1723,7 @@ class VehicleMasterPage(BasePage):
             self._force_close_panels()
             self.click_update()
 
-            msg = self.handle_success_alert(timeout=3)
+            msg = self.handle_success_alert(timeout=2)
             if msg:
                 result["message"] = msg
                 result["status"] = "PASSED"
@@ -1832,19 +1860,15 @@ class VehicleMasterPage(BasePage):
                 self.click_with_retry(self.UPDATE_BUTTON)
 
     def _dismiss_swal(self, button, label):
-        """Dismiss a SweetAlert popup by clicking the specified button via JS."""
+        """Dismiss a SweetAlert popup by clicking the specified button via JS.
+        Instant — no wait for animation."""
         try:
             self.driver.find_element("css selector", ".swal2-popup")
             self.driver.execute_script("""
                 var btn = document.querySelector(arguments[0]);
-                if (btn) { btn.click(); }
+                if (btn) btn.click();
+                document.querySelectorAll('.swal2-container').forEach(function(el) { el.remove(); });
             """, button)
             log.info("Dismissed SweetAlert via " + label)
-            try:
-                WebDriverWait(self.driver, 2).until(
-                    EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
-                )
-            except Exception:
-                pass
         except Exception as e:
             log.warning("No SweetAlert to dismiss: " + str(e))
