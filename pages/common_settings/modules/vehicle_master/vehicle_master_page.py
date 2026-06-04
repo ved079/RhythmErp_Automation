@@ -228,22 +228,39 @@ class VehicleMasterPage(BasePage):
         self._wait_for_page_ready()
 
     def _wait_for_page_ready(self):
-        """Wait for the page table to appear. Fast 15s WebDriverWait
-        with lambda — no extra sleeps."""
-        try:
-            WebDriverWait(self.driver, 15).until(
-                lambda d: d.find_elements("css selector", "table#excel-table")
-            )
-            log.info("Page ready (table found)")
-        except Exception:
-            # Fallback: check for search button
+        """Wait for the page table AND data rows to appear.
+        Uses fast JS polling (0.3s intervals) to avoid blind sleeps.
+        Waits for: table element + at least 1 data row + search button."""
+        end = time.monotonic() + 15
+        while time.monotonic() < end:
             try:
-                WebDriverWait(self.driver, 5).until(
-                    lambda d: d.find_elements("css selector", "button.search-btn")
-                )
-                log.info("Page ready (search button found, no table)")
+                ready = self.driver.execute_script("""
+                    var table = document.querySelector('table#excel-table');
+                    if (!table || table.offsetParent === null) return 'no_table';
+                    var rows = table.querySelectorAll('tbody tr');
+                    var hasData = false;
+                    for (var i = 0; i < rows.length; i++) {
+                        var cells = rows[i].querySelectorAll('td');
+                        for (var j = 0; j < cells.length; j++) {
+                            if (cells[j].textContent.trim()) { hasData = true; break; }
+                        }
+                        if (hasData) break;
+                    }
+                    var searchBtn = document.querySelector('button.search-btn');
+                    var addBtn = document.querySelector('button.erp-add-btn');
+                    return {
+                        table: true, data: hasData,
+                        search: !!searchBtn, add: !!addBtn
+                    };
+                """)
+                if ready and ready.get('table') and ready.get('data'):
+                    log.info(f"Page ready (table+data+toolbar)")
+                    return
             except Exception:
-                log.warning("Page ready check timed out")
+                pass
+            time.sleep(0.3)
+        # Fallback: just table is enough (empty table scenario)
+        log.warning("Page ready: data rows not found within 15s, continuing anyway")
 
     def is_page_loaded(self):
         """Check if the Vehicle Master listing page has loaded."""
@@ -484,9 +501,10 @@ class VehicleMasterPage(BasePage):
     #  SweetAlert2 handlers — FAST (UOM pattern)
     # ==============================================================
 
-    def handle_success_alert(self, timeout=15):
+    def handle_success_alert(self, timeout=5):
         """Handle SweetAlert2 success notification — fast dismiss.
-        Returns the alert message text, or '' if no alert appeared."""
+        Returns the alert message text, or '' if no alert appeared.
+        Default 5s timeout — success alerts appear within 1-2s."""
         log.info("Handling success alert...")
         try:
             WebDriverWait(self.driver, timeout).until(
@@ -858,16 +876,16 @@ class VehicleMasterPage(BasePage):
     #  Row action buttons — pure JS 3-dot menu (UOM pattern)
     # ==============================================================
 
-    def _click_action_menu_item(self, vehicle_name, action_name):
+    def _click_action_menu_item(self, vehicle_name, action_name, retries=3):
         """Click an action menu item (View/Edit/History) for a specific
-        vehicle row. Pure JS — same pattern as UOM module."""
+        vehicle row. Pure JS — retries with polling if data not yet loaded."""
         log.info(f"Clicking {action_name} via 3-dot menu for: {vehicle_name}")
         self._force_close_panels()
 
-        # Step 1: Open the 3-dot menu for the row matching vehicle_name
+        # Step 1: Open the 3-dot menu — JS returns null instead of throwing
         js_open_menu = """
         var table = document.querySelector('table#excel-table');
-        if (!table) { throw new Error('Table not found'); }
+        if (!table) return null;
         var rows = table.querySelectorAll('tbody tr');
         for (var i = 0; i < rows.length; i++) {
             var cells = rows[i].querySelectorAll('td');
@@ -876,26 +894,30 @@ class VehicleMasterPage(BasePage):
                     var menuBtn = rows[i].querySelector(
                         'td.cdk-column-actions button'
                     );
-                    if (!menuBtn) {
-                        throw new Error(
-                            '3-dot menu button not found in actions column'
-                        );
-                    }
+                    if (!menuBtn) return null;
                     menuBtn.scrollIntoView({block:'center'});
                     menuBtn.click();
                     return 'menu_opened';
                 }
             }
         }
-        throw new Error(
-            'Vehicle "' + arguments[0] + '" not found in table'
-        );
+        return null;
         """
-        try:
-            self.driver.execute_script(js_open_menu, vehicle_name)
-        except Exception as e:
-            # Fallback: try by row index if name search fails
-            log.warning(f"3-dot menu open failed: {e}. Trying row index...")
+        menu_opened = None
+        for attempt in range(retries):
+            try:
+                menu_opened = self.driver.execute_script(js_open_menu, vehicle_name)
+                if menu_opened:
+                    break
+            except Exception:
+                pass
+            if attempt < retries - 1:
+                log.info(f"Vehicle not in table yet, retrying ({attempt+1}/{retries})...")
+                time.sleep(1)
+
+        # Fallback: try by row index
+        if not menu_opened:
+            log.warning(f"3-dot menu not found for '{vehicle_name}', trying row index...")
             row_idx = self.find_vehicle_row_index(vehicle_name)
             if row_idx >= 0:
                 rows = self.driver.find_elements(
@@ -910,8 +932,10 @@ class VehicleMasterPage(BasePage):
                         "arguments[0].click();",
                         menu_btn,
                     )
-            else:
-                raise
+                    menu_opened = 'menu_opened_via_index'
+
+        if not menu_opened:
+            raise Exception(f"Vehicle '{vehicle_name}' not found in table after {retries} retries")
 
         log.info(f"3-dot menu opened for: {vehicle_name}")
 
@@ -929,7 +953,7 @@ class VehicleMasterPage(BasePage):
         # Step 2: Click the specific menu item from the dropdown overlay
         js_click_item = """
         var overlay = document.querySelector('.cdk-overlay-container');
-        if (!overlay) { throw new Error('CDK overlay not found after menu click'); }
+        if (!overlay) return null;
         var items = overlay.querySelectorAll('button, span, div');
         for (var i = 0; i < items.length; i++) {
             var text = items[i].textContent.trim();
@@ -946,11 +970,11 @@ class VehicleMasterPage(BasePage):
                 return 'clicked_partial_' + arguments[0];
             }
         }
-        throw new Error(
-            'Menu item "' + arguments[0] + '" not found in dropdown overlay'
-        );
+        return null;
         """
         result = self.driver.execute_script(js_click_item, action_name)
+        if not result:
+            raise Exception(f"Menu item '{action_name}' not found in dropdown overlay")
         log.info(f"Successfully clicked {action_name} for: {vehicle_name}")
         return result
 
@@ -1147,22 +1171,44 @@ class VehicleMasterPage(BasePage):
 
         # Step 2: If not visible, click search button via JS
         if search_input is None:
-            # Ensure page is fully loaded before trying search
+            # Ensure page is fully loaded + wait for search button
             self._wait_for_page_ready()
-            try:
-                result = self.driver.execute_script("""
-                var btn = document.querySelector('button.search-btn');
-                if (!btn) { return null; }
-                btn.scrollIntoView({block:'center'});
-                btn.click();
-                return 'clicked';
-                """)
-                if not result:
-                    log.error("Search button not found in DOM")
+            # Wait for search button with polling
+            btn_found = False
+            for _ in range(10):
+                try:
+                    btn = self.driver.execute_script(
+                        "var b = document.querySelector('button.search-btn');"
+                        "return b && b.offsetParent !== null;"
+                    )
+                    if btn:
+                        btn_found = True
+                        break
+                except Exception:
+                    pass
+                time.sleep(0.5)
+
+            if not btn_found:
+                # Try search input directly (might be always visible)
+                try:
+                    search_input = self.driver.find_element(
+                        By.CSS_SELECTOR, "input#erpSearchInput, .erp-search-wrapper input"
+                    )
+                    if search_input.is_displayed():
+                        log.info("Search input found directly, skipping button click")
+                except Exception:
+                    log.error("Neither search button nor search input found")
                     return False
-            except Exception as e:
-                log.error("Failed to click search button via JS: " + str(e))
-                return False
+            else:
+                try:
+                    self.driver.execute_script("""
+                    var btn = document.querySelector('button.search-btn');
+                    if (btn) { btn.scrollIntoView({block:'center'}); btn.click(); }
+                    return 'clicked';
+                    """)
+                except Exception as e:
+                    log.error("Failed to click search button: " + str(e))
+                    return False
 
             try:
                 search_input = WebDriverWait(self.driver, 5).until(
@@ -1590,7 +1636,7 @@ class VehicleMasterPage(BasePage):
             self.fill_vehicle_form(vehicle_data)
             self.submit()
 
-            msg = self.handle_success_alert(timeout=15)
+            msg = self.handle_success_alert(timeout=5)
             if msg:
                 result["message"] = msg
                 result["status"] = "PASSED"
@@ -1668,7 +1714,7 @@ class VehicleMasterPage(BasePage):
             self._force_close_panels()
             self.click_update()
 
-            msg = self.handle_success_alert(timeout=15)
+            msg = self.handle_success_alert(timeout=5)
             if msg:
                 result["message"] = msg
                 result["status"] = "PASSED"
