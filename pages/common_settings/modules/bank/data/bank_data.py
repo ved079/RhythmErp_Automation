@@ -295,3 +295,251 @@ def generate_batch_payloads(
         List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
     """
     return generate_bank_api_payloads(count=count, fk_ids=dropdown_ids)
+
+
+# ── UI Validation Helpers (restored for test compatibility) ──
+
+# Validation message constants
+VALIDATION_MSG_REQUIRED = "This field is required"
+VALIDATION_MSG_INVALID_BANK_NAME = "Invalid Bank Name"
+VALIDATION_MSG_INVALID_BANK_CODE = "Invalid Bank Code"
+VALIDATION_MSG_INVALID_BRANCH_NAME = "Invalid Branch Name"
+VALIDATION_MSG_INVALID_IFSC = "Invalid IFSC Code"
+VALIDATION_MSG_INVALID_SWIFT = "Invalid Swift Number"
+VALIDATION_MSG_INVALID_IBAN = "Invalid IBAN Number"
+SWAL_TITLE_VALIDATION_FAILED = "Validation Failed"
+SWAL_TITLE_SUCCESS = "Success"
+
+_bnk_counter = 0
+
+
+def _bnk_next():
+    """Return and increment the bank counter."""
+    global _bnk_counter
+    _bnk_counter += 1
+    return _bnk_counter
+
+
+def generate_bank_name(prefix="BANK"):
+    """Return a valid uppercase alpha bank name (>= 10 chars)."""
+    n = _bnk_next()
+    # Pad to ensure at least 10 uppercase chars
+    base = f"{prefix}{n:04d}"
+    if len(base) < 10:
+        base = base + "X" * (10 - len(base))
+    return base.upper()
+
+
+def generate_bank_code():
+    """Return a valid alphanumeric bank code."""
+    n = _bnk_next()
+    return f"BNK{n:04d}"
+
+
+def generate_branch_name():
+    """Return a valid branch name (alphanumeric)."""
+    n = _bnk_next()
+    return f"Branch-{n:04d}"
+
+
+def generate_branch_code():
+    """Return a valid branch code."""
+    n = _bnk_next()
+    return f"BR{n:04d}"
+
+
+def generate_account_number():
+    """Return a valid 12-digit account number."""
+    return ''.join(random.choices(string.digits, k=12))
+
+
+def generate_ifsc_code():
+    """Return a valid 11-char IFSC code."""
+    bank = ''.join(random.choices(string.ascii_uppercase, k=4))
+    branch = ''.join(random.choices(string.digits, k=6))
+    return f"{bank}0{branch}"
+
+
+def generate_cash_credit_limit():
+    """Return a valid cash credit limit string."""
+    return str(random.choice([500000, 1000000, 2000000, 5000000]))
+
+
+def generate_bank_address():
+    """Return a valid bank address string."""
+    n = _bnk_next()
+    return f"Auto Test Address {n}, Mumbai"
+
+
+def generate_swift_number():
+    """Return a valid SWIFT/BIC code (8 or 11 chars)."""
+    return _gen_swift()
+
+
+def generate_iban_number():
+    """Return a valid IBAN number."""
+    bank = ''.join(random.choices(string.digits, k=10))
+    return f"IN{random.randint(10, 99)}BANK{bank}"
+
+
+def generate_spaces_only():
+    """Return spaces-only string for validation testing."""
+    return "     "
+
+
+def generate_string_255():
+    """Return a string of exactly 255 characters."""
+    return "A" * 255
+
+
+def generate_string_256():
+    """Return a string of exactly 256 characters."""
+    return "A" * 256
+
+
+def generate_special_char_name():
+    """Return a bank name with special characters (invalid)."""
+    return "BANK@#$%^TEST"
+
+
+def generate_special_char_value():
+    """Return a value with special characters (invalid)."""
+    return "@#$%^&*!"
+
+
+def generate_sql_injection():
+    """Return a SQL injection payload string."""
+    return "' OR 1=1; --"
+
+
+def generate_xss_payload():
+    """Return an XSS payload string."""
+    return '<script>alert("XSS")</script>'
+
+
+def generate_negative_limit():
+    """Return a negative cash credit limit string."""
+    return "-5000"
+
+
+def generate_zero_limit():
+    """Return a zero cash credit limit string."""
+    return "0"
+
+
+def generate_alpha_limit():
+    """Return an alphabetic cash credit limit string (invalid)."""
+    return "abcde"
+
+
+def generate_special_char_limit():
+    """Return a special character cash credit limit string (invalid)."""
+    return "@#$%"
+
+
+def generate_limit_with_spaces():
+    """Return a cash credit limit with spaces (invalid)."""
+    return "100 000"
+
+
+def generate_leading_trailing_spaces():
+    """Return a bank name with leading/trailing spaces."""
+    return "  BANKTESTXX  "
+
+
+def generate_lowercase_bank_name():
+    """Return a lowercase bank name (invalid per validation rules)."""
+    return "banktestlow"
+
+
+def generate_bank_name_with_digits():
+    """Return a bank name with digits (invalid per alpha-only rule)."""
+    return "BANK123TEST"
+
+
+def generate_bank_name_too_short():
+    """Return a bank name shorter than 10 chars (invalid)."""
+    return "SHORT"
+
+
+def generate_ifsc_too_short():
+    """Return an IFSC code shorter than 11 chars."""
+    return "SBIN0003"
+
+
+def generate_ifsc_too_long():
+    """Return an IFSC code longer than 11 chars."""
+    return "SBIN00003003"
+
+
+def generate_alpha_branch_name():
+    """Return an all-alpha branch name."""
+    return "MAINBRANCHX"
+
+
+def generate_alpha_account_number():
+    """Return an all-alpha account number (invalid)."""
+    return "ABCDEF12345"
+
+
+def generate_valid_bank_data(prefix="AUTO"):
+    """Return a complete valid bank data dict for create_bank."""
+    n = _bnk_next()
+    return {
+        "bank_name": generate_bank_name(prefix),
+        "bank_code": generate_bank_code(),
+        "branch_name": generate_branch_name(),
+        "branch_code": generate_branch_code(),
+        "account_number": generate_account_number(),
+        "account_type": random.choice(list(ACCOUNT_TYPE_IDS.keys())),
+        "swift_number": generate_swift_number(),
+        "iban_number": generate_iban_number(),
+        "ifsc_code": generate_ifsc_code(),
+        "cash_credit_limit": generate_cash_credit_limit(),
+        "bank_address": generate_bank_address(),
+        "gl_account": random.choice(list(ACCOUNT_REF_IDS.keys())),
+        "is_default_bank": False,
+        "status": True,
+    }
+
+
+def generate_valid_edit_data():
+    """Return a dict with editable fields for edit_record."""
+    return {
+        "bank_code": generate_bank_code(),
+        "branch_name": generate_branch_name(),
+        "branch_code": generate_branch_code(),
+        "bank_address": generate_bank_address(),
+    }
+
+
+def generate_empty_data():
+    """Return a dict with all required fields empty."""
+    return {
+        "bank_name": "",
+        "bank_code": "",
+        "branch_name": "",
+        "branch_code": "",
+        "account_number": "",
+        "account_type": "",
+        "ifsc_code": "",
+        "cash_credit_limit": "",
+        "bank_address": "",
+        "gl_account": "",
+    }
+
+
+def generate_partial_required_data():
+    """Return a dict with only some required fields filled."""
+    return {
+        "bank_name": generate_bank_name(),
+        "bank_code": generate_bank_code(),
+        "branch_name": "",
+        "branch_code": "",
+        "account_number": "",
+        "account_type": "",
+        "ifsc_code": "",
+        "cash_credit_limit": "",
+        "bank_address": "",
+        "gl_account": "",
+    }

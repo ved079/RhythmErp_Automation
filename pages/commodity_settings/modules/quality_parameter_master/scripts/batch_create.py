@@ -24,7 +24,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "..", "..", 
 sys.path.insert(0, PROJECT_ROOT)
 
 from common.erp_api_client import ErpApiClient
-from pages.common_settings.modules.quality_parameter_master.data.quality_parameter_master_data import (
+from pages.commodity_settings.modules.quality_parameter_master.data.quality_parameter_master_data import (
     generate_quality_parameter_payloads,
     QUALITY_PARAMETER_DATA,
 )

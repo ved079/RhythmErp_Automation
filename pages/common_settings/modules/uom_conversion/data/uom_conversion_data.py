@@ -185,3 +185,62 @@ def generate_batch_payloads(
         List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
     """
     return generate_uom_conversion_api_payloads(count=count, fk_ids=dropdown_ids)
+
+
+# ── UI Validation Helpers (restored for test compatibility) ──
+
+_counter = 0
+
+def _next_pair():
+    """Return a unique (source, target) pair from UOM_IDS."""
+    global _counter
+    keys = list(UOM_IDS.keys())
+    src = keys[_counter % len(keys)]
+    tgt = keys[(_counter + 1) % len(keys)]
+    _counter += 1
+    return src, tgt
+
+
+def generate_uom_conversion_data():
+    """Return a dict with source_uom, target_uom, conversion_factor for UI tests."""
+    src, tgt = _next_pair()
+    return {
+        "source_uom": src,
+        "target_uom": tgt,
+        "conversion_factor": "1",
+    }
+
+
+def generate_fresh_pair():
+    """Return a tuple of (source_uom, target_uom) from the UOM_IDS."""
+    return _next_pair()
+
+
+def generate_decimal_conversion_factor():
+    """Return a decimal conversion factor string."""
+    return "1.5"
+
+
+def generate_large_conversion_factor(n=22):
+    """Return a string of n digits for boundary testing."""
+    return "9" * n
+
+
+def generate_negative_conversion_factor():
+    """Return a negative conversion factor string."""
+    return "-5"
+
+
+def generate_zero_conversion_factor():
+    """Return a zero conversion factor string."""
+    return "0"
+
+
+def generate_text_conversion_factor():
+    """Return a text (non-numeric) conversion factor string."""
+    return "abc"
+
+
+def generate_special_char_conversion_factor():
+    """Return a special-character conversion factor string."""
+    return "@#$"
