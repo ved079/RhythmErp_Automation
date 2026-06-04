@@ -1,9 +1,10 @@
 """
-test_quality_parameter_master_perf.py — Performance benchmarks for Quality Parameter Master payload generation.
-No browser needed. Pure in-memory speed tests.
+test_quality_parameter_master_perf.py — Performance benchmarks + Live CRUD tests.
+No browser needed. In-memory speed tests + live API CRUD verification.
 """
 
 import time
+import datetime
 import pytest
 import sys
 import os
@@ -14,20 +15,21 @@ PROJECT_ROOT = os.path.abspath(
 sys.path.insert(0, PROJECT_ROOT)
 
 from pages.commodity_settings.modules.quality_parameter_master.data.quality_parameter_master_data import (
-    generate_quality_parameter_payloads,
-    generate_batch_payloads,
+    generate_quality_parameter_payloads, generate_batch_payloads,
 )
+
+SCREEN_NAME = "Quality Parameter Master"
 
 
 @pytest.mark.performance
 class TestQualityParameterMasterPerformance:
-    """Verify Quality Parameter Master payload generation meets speed benchmarks."""
+    """Verify Quality Parameter Master payload generation meets speed benchmarks and live CRUD."""
 
     def test_payload_generation_speed(self):
         """Single payload generation should complete in under 10ms."""
         start = time.perf_counter()
         for _ in range(100):
-            generate_quality_parameter_payloads(count=1)
+            generate_batch_payloads(count=1)
         elapsed = time.perf_counter() - start
         avg_ms = (elapsed / 100) * 1000
         assert avg_ms < 10, f"Average payload generation took {avg_ms:.2f}ms (expected < 10ms)"
@@ -39,7 +41,44 @@ class TestQualityParameterMasterPerformance:
         elapsed = time.perf_counter() - start
         assert elapsed < 0.5, f"Batch of 100 took {elapsed:.3f}s (expected < 0.5s)"
 
-    @pytest.mark.skip(reason="Live API CRUD tests blocked by workflow issue — will add later")
+    @pytest.mark.live_api
     def test_batch_create_5_quality_parameter_masters(self, api_client):
-        """Create 5 Quality Parameter Masters via API and verify they are persisted."""
-        pass
+        """Create, Read, and Update 5 Quality Parameter Master entries via live API."""
+        
+        payloads = generate_batch_payloads(count=5)
+        ts = datetime.datetime.now().strftime("%H%M%S")
+        for i, p in enumerate(payloads):
+            p["name"] = f"{p['name']}{ts}{i}"
+        assert len(payloads) >= 1, "Need at least 1 payload to test"
+        
+        created_ids = []
+        start = time.perf_counter()
+        
+        # ── CREATE phase ──
+        for i, payload in enumerate(payloads):
+            result = api_client.create_entry(payload)
+            assert result is not None, f"Create failed for payload {i+1}: {payload}"
+            entry_id = result.get("id")
+            assert entry_id, f"Created entry {i+1} has no id"
+            created_ids.append(entry_id)
+        
+        # ── READ phase ──
+        for i, entry_id in enumerate(created_ids):
+            detail = api_client.get_entry(SCREEN_NAME, entry_id)
+            assert detail is not None, f"Read failed for entry {entry_id}"
+            assert detail.get("id") == entry_id, f"ID mismatch: expected {entry_id}, got {detail.get('id')}"
+        
+        # ── UPDATE phase ──
+        for i, entry_id in enumerate(created_ids):
+            detail = api_client.get_entry(SCREEN_NAME, entry_id)
+            assert detail is not None, f"Read-back failed for entry {entry_id}"
+            # Modify a safe text field by appending "-UPD"
+            current_val = detail.get("name", "") or ""
+            update_payload = dict(detail)
+            update_payload["name"] = current_val + "-UPD"
+            updated = api_client.update_entry(entry_id, update_payload)
+            assert updated is not None, f"Update failed for entry {entry_id}"
+        
+        # ── Timing check ──
+        elapsed = time.perf_counter() - start
+        assert elapsed < 30, f"CRUD for 5 entries took {elapsed:.1f}s (expected < 30s)"

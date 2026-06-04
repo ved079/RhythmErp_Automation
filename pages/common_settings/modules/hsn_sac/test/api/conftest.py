@@ -17,6 +17,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "api: API payload and CRUD tests")
     config.addinivalue_line("markers", "schema: Schema and structure verification")
     config.addinivalue_line("markers", "performance: Speed and benchmark tests")
+    config.addinivalue_line("markers", "live_api: Live API CRUD tests against real ERP")
 
 
 @pytest.fixture(scope="session")
