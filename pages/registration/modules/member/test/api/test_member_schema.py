@@ -56,9 +56,9 @@ class TestMemberSchema:
         """Party Reference dropdown should have 329 options."""
         assert FIELD_VALIDATION_RULES["party_ref_id"]["fk_options_count"] == 329
 
-    def test_pan_is_not_unique(self):
-        """PAN should NOT be marked as unique (duplicates allowed)."""
-        assert FIELD_VALIDATION_RULES["pan_no"]["unique"] is False
+    def test_pan_is_unique(self):
+        """PAN should be marked as unique (server enforces uniqueness)."""
+        assert FIELD_VALIDATION_RULES["pan_no"]["unique"] is True
 
     def test_name_is_required(self):
         """Member Name should be marked as required."""

@@ -535,18 +535,25 @@ class TestMemberLiveCRUD:
         assert result is not None, "Empty payload was rejected"
         assert result.get("id"), "Empty payload entry has no ID"
 
-    def test_create_member_duplicate_pan_accepted(self, api_client):
-        """Verify API accepts duplicate PAN numbers (not unique)."""
+    def test_create_member_duplicate_pan_rejected(self, api_client):
+        """Verify API rejects duplicate PAN numbers (server enforces uniqueness)."""
         pan = generate_pan_number()
         # Create first member with this PAN
         payload1 = generate_member_api_payload(pan_no=pan)
         result1 = api_client.create_entry(payload1)
         assert result1 is not None
 
-        # Create second member with same PAN
+        # Create second member with same PAN — should be rejected
         payload2 = generate_member_api_payload(pan_no=pan)
         result2 = api_client.create_entry(payload2)
-        assert result2 is not None, "Duplicate PAN was rejected (expected: accepted)"
+        assert result2 is None, "Duplicate PAN was accepted (expected: rejected)"
+
+    def test_create_member_distinctive_number_must_be_integer(self, api_client):
+        """Verify API rejects string distinctive numbers like 'DN-001'."""
+        payload = generate_member_api_payload(distintive_number="DN-001")
+        result = api_client.create_entry(payload)
+        # Server rejects non-integer distinctive numbers
+        assert result is None, "String distinctive number was accepted (expected: rejected)"
 
     def test_create_member_short_phone_accepted(self, api_client):
         """Verify API accepts short phone numbers (no server-side length validation)."""

@@ -34,12 +34,13 @@ KYC DETAILS STEPPER (child grid — 3 fields per row):
 KEY RULES (verified 2026-06-04 on live app):
   - COMPLEX SCREEN: Has 1 stepper child (KYC Details) with grid rows
   - party_ref_id auto-fills prefix, name, PAN, phone, cessation, shares, and KYC
-  - Backend does NOT enforce required fields — empty payload returns 201
-  - PAN is NOT unique — duplicates allowed
+  - Backend ENFORCES some validations (unlike other screens):
+    * Name must match ^[A-Za-z ]+$ (letters and spaces only, no numbers/hyphens)
+    * Distinctive Number must be a pure INTEGER (no letters/dashes like "DN-001")
+    * Number and Class of Shares must be a STRING (e.g. "100 Equity"), not an integer
+    * PAN must be unique per Member screen ("'XXX' already exists")
   - Phone has NO server-side length validation — 3-digit numbers accepted
   - foli_number accepts both string and integer
-  - no_class_shares_held is character type (not integer) — e.g. "100 Equity"
-  - distintive_number accepts both string and integer
   - amount_paid_on_shares and percentage_of_shares are integer type
   - mobile_no is integer type (10-digit Indian mobile)
   - is_member_director is a toggle (boolean)
@@ -251,12 +252,13 @@ def generate_folio_number():
 
 
 def generate_distinctive_number():
-    """Generate a unique distinctive number string.
+    """Generate a distinctive number (INTEGER, not string).
 
-    Format: DN-{RANDOM}
+    The ERP validates that distinctive_number must be a pure integer.
+    String formats like "DN-12345" are rejected with "Invalid Distinctive Number".
+    Returns an integer.
     """
-    rand = random.randint(10000, 99999)
-    return f"DN-{rand}"
+    return random.randint(10000, 99999)
 
 
 def generate_share_class():
@@ -686,7 +688,7 @@ def build_member_api_payload(
         "pan_no": member_data.get("pan_no") or generate_pan_number(),
         "registration_date": member_data.get("registration_date") or generate_registration_date(),
         "no_class_shares_held": member_data.get("no_class_shares_held") or generate_share_class(),
-        "distintive_number": member_data.get("distinctive_number") or generate_distinctive_number(),
+        "distintive_number": member_data.get("distinctive_number") if member_data.get("distinctive_number") is not None else generate_distinctive_number(),
         "amount_paid_on_shares": member_data.get("amount_paid_on_shares") or generate_amount_paid(),
         "date_of_allotment": member_data.get("date_of_allotment") or generate_date_of_allotment(),
         "date_of_cessation": member_data.get("date_of_cessation", None),
@@ -791,6 +793,9 @@ FIELD_VALIDATION_RULES = {
         "required": True,
         "max_length": 255,
         "visible_in_table": True,
+        "pattern": r"^[A-Za-z ]+$",
+        "server_validated": True,
+        "validation_error": "Invalid Name",
     },
     "member_address": {
         "field_key": "member_address",
@@ -806,7 +811,7 @@ FIELD_VALIDATION_RULES = {
         "required": True,
         "max_length": 255,
         "visible_in_table": True,
-        "unique": False,  # Duplicates allowed (verified on live)
+        "unique": True,  # Server enforces: "'XXX' already exists"
     },
     "foli_number": {
         "field_key": "foli_number",
@@ -824,16 +829,20 @@ FIELD_VALIDATION_RULES = {
     "no_class_shares_held": {
         "field_key": "no_class_shares_held",
         "label": "Number and Class of Shares",
-        "type": "character",
+        "type": "character",  # MUST be string like "100 Equity", NOT integer
         "required": True,
+        "server_validated": True,
+        "validation_error": "Invalid Number and Class of Shares Held",
         "max_length": 255,
     },
     "distintive_number": {
         "field_key": "distintive_number",
         "label": "Distinctive Number",
-        "type": "character",
+        "type": "integer",  # MUST be pure integer, string formats like "DN-001" rejected
         "required": True,
         "max_length": 255,
+        "server_validated": True,
+        "validation_error": "Invalid Distinctive Number",
     },
     "amount_paid_on_shares": {
         "field_key": "amount_paid_on_shares",
