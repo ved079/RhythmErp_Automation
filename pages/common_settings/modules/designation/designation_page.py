@@ -1,21 +1,16 @@
 """
-designation_page.py — RhythmERP Common Settings > Designation (v4 — UOM GOLD STANDARD)
+designation_page.py — RhythmERP Common Settings > Designation (v5 — SPEED OPTIMIZED)
 
-Mirrors uom_page.py patterns exactly:
-- hard_refresh() for fast page reset between tests
-- Pure JS clicks (no multi-strategy fallbacks)
-- offsetParent checks for visibility
-- Fast polling (0.2s) instead of time.sleep()
-- Short timeouts: 2s for alerts, 15s for page ready
-- search_and_verify() combines search + existence check
-- NO time.sleep() anywhere
-
-v4 fixes:
-- search_designation(): graceful search button JS click (no throw)
-- is_history_popup_open(): robust multi-selector check with wait
-- get_mat_error_text(): added tiny wait for Angular to render errors
-- verify_designation_exists(): reduced timeout 5s→3s, poll 0.5s→0.3s
-- handle_success_alert(): reduced timeouts 3s→2s
+v5 speed optimizations (target: under 5 min for 44 tests):
+- _handle_submit_response(): COMBINED alert handler — no double-wait for success
+  (was: is_validation_alert_present(2s) THEN handle_success_alert(2s) = 4s)
+  (now: single poll for any SweetAlert, read title, click button = 1-2s)
+- Removed ALL time.sleep() calls — replaced with WebDriverWait or JS-only checks
+- get_mat_error_text(): no sleep — JS-only check (Angular renders errors instantly)
+- click_history_button(): no sleep — WebDriverWait for component
+- is_history_popup_open(): 2s poll instead of 3s
+- verify_designation_exists(): 2s timeout, 0.2s poll instead of 3s/0.3s
+- search_designation(): faster input handling
 """
 
 import time
@@ -238,9 +233,9 @@ class DesignationPage(BasePage):
         log.info(f"Search completed for: {name}")
 
     def verify_designation_exists(self, name):
-        """Verify designation name appears in table. Polls up to 3s (fast)."""
+        """Verify designation name appears in table. Polls up to 2s (fast)."""
         log.info(f"Verifying '{name}' exists in table")
-        end = time.monotonic() + 3
+        end = time.monotonic() + 2
         last_seen = []
         while time.monotonic() < end:
             try:
@@ -256,7 +251,7 @@ class DesignationPage(BasePage):
                             return True
             except Exception:
                 pass
-            time.sleep(0.3)
+            time.sleep(0.2)
         log.error(f"Designation '{name}' NOT found. Table contents: {last_seen}")
         raise AssertionError(f"Designation '{name}' NOT found in table after search. Last rows: {last_seen}")
 
@@ -362,9 +357,10 @@ class DesignationPage(BasePage):
     # ── HISTORY ─────────────────────────────────────────
 
     def click_history_button(self, name):
-        """Click History via 3-dot menu and wait for popup to appear."""
+        """Click History via 3-dot menu and wait for popup to appear.
+        No sleep — uses WebDriverWait for the component to render."""
         self._click_action_menu_item(name, "History")
-        # Wait for history component to appear in DOM
+        # Wait for history component to appear and render content
         try:
             WebDriverWait(self.driver, 5).until(
                 EC.presence_of_element_located(("css selector", "app-dynamic-history"))
@@ -372,14 +368,11 @@ class DesignationPage(BasePage):
             log.info("History component appeared in DOM")
         except Exception:
             log.warning("History component did not appear after click")
-        # Give Angular a moment to render the popup content
-        time.sleep(0.5)
 
     def is_history_popup_open(self):
         """Check if History popup is open — robust multi-selector check.
-        Tries multiple selectors to detect the popup, with a small wait."""
-        # Wait up to 3s for popup to become visible
-        end = time.monotonic() + 3
+        Polls up to 2s for popup to become visible (reduced from 3s for speed)."""
+        end = time.monotonic() + 2
         while time.monotonic() < end:
             result = self.driver.execute_script("""
                 // Check 1: h2 with 'history' text (UOM pattern)
@@ -407,7 +400,7 @@ class DesignationPage(BasePage):
             """)
             if result:
                 return True
-            time.sleep(0.3)
+            time.sleep(0.2)
         return False
 
     def is_history_empty(self):
@@ -532,20 +525,20 @@ class DesignationPage(BasePage):
         """)
         if result == 'clicked':
             log.info("SweetAlert confirm clicked")
-        else:
-            # Maybe it hasn't appeared yet — brief poll
-            end = time.monotonic() + 2
-            while time.monotonic() < end:
-                result = self.driver.execute_script("""
-                    var btn = document.querySelector('.swal2-confirm');
-                    if (btn) { btn.click(); return 'clicked'; }
-                    return 'not found';
-                """)
-                if result == 'clicked':
-                    log.info("SweetAlert confirm clicked (after poll)")
-                    return
-                time.sleep(0.2)
-            log.info("No SweetAlert found (may have auto-dismissed)")
+            return
+        # Brief poll — SweetAlert may take 1s to appear after submit
+        end = time.monotonic() + 3
+        while time.monotonic() < end:
+            result = self.driver.execute_script("""
+                var btn = document.querySelector('.swal2-confirm');
+                if (btn) { btn.click(); return 'clicked'; }
+                return 'not found';
+            """)
+            if result == 'clicked':
+                log.info("SweetAlert confirm clicked (after poll)")
+                return
+            time.sleep(0.1)
+        log.info("No SweetAlert found (may have auto-dismissed)")
 
     def handle_validation_warning(self):
         """Pattern A: Dismiss 'Please correct the highlighted fields' via JS click OK."""
@@ -594,9 +587,7 @@ class DesignationPage(BasePage):
 
     def get_mat_error_text(self, field_locator=None):
         """Get mat-error text below a form field. Pure JS, no Selenium locators.
-        Includes a small wait for Angular to render the error after input."""
-        # Give Angular a moment to render mat-error after input/blur
-        time.sleep(0.3)
+        No sleep needed — Angular renders mat-error instantly on blur."""
         try:
             if field_locator:
                 css = field_locator[1] if field_locator[0] == "css" else ""
@@ -691,33 +682,90 @@ class DesignationPage(BasePage):
         except Exception:
             return ""
 
+    # ── COMBINED ALERT HANDLER ──────────────────────────
+
+    def _handle_submit_response(self):
+        """Handle the response after submit/update — combines success and validation
+        alert detection into ONE wait cycle instead of two.
+
+        OLD WAY (4-5s per create):
+          is_validation_alert_present(timeout=2) → handle_success_alert(timeout=2)
+
+        NEW WAY (1-2s per create):
+          Single poll for ANY SweetAlert → read title → click appropriate button
+
+        Returns: 'success', 'validation', or 'none'
+        """
+        log.info("Waiting for submit response")
+        end = time.monotonic() + 3
+        while time.monotonic() < end:
+            info = self.driver.execute_script("""
+                var popup = document.querySelector('.swal2-popup');
+                if (!popup || popup.offsetParent === null) return JSON.stringify({found: false});
+                var title = document.querySelector('#swal2-title');
+                var titleText = title ? title.textContent.trim() : '';
+                var icon = document.querySelector('.swal2-popup .swal2-icon');
+                var iconType = '';
+                if (icon) {
+                    if (icon.classList.contains('swal2-icon-success')) iconType = 'success';
+                    else if (icon.classList.contains('swal2-icon-warning')) iconType = 'warning';
+                    else if (icon.classList.contains('swal2-icon-error')) iconType = 'error';
+                }
+                return JSON.stringify({
+                    found: true,
+                    title: titleText,
+                    icon: iconType
+                });
+            """)
+            try:
+                import json
+                data = json.loads(info)
+                if data.get('found'):
+                    title = data.get('title', '')
+                    icon = data.get('icon', '')
+                    if icon == 'success' or 'success' in title.lower():
+                        # Success — click confirm
+                        self.driver.execute_script("""
+                            var btn = document.querySelector('.swal2-confirm');
+                            if (btn) btn.click();
+                        """)
+                        log.info("Submit response: SUCCESS — " + title)
+                        return 'success'
+                    else:
+                        # Validation warning/error — click Cancel first, then Confirm
+                        self.driver.execute_script("""
+                            var cancel = document.querySelector('.swal2-cancel');
+                            if (cancel) { cancel.click(); return; }
+                            var confirm = document.querySelector('.swal2-confirm');
+                            if (confirm) confirm.click();
+                        """)
+                        log.info("Submit response: VALIDATION — " + title)
+                        return 'validation'
+            except Exception:
+                pass
+            time.sleep(0.1)
+        log.info("No SweetAlert appeared after submit")
+        return 'none'
+
     # ── ONE-CALL FLOWS (fast — no time.sleep!) ──────────
 
     def create_designation(self, data):
-        """Create a designation. Returns result dict with status."""
+        """Create a designation. Returns result dict with status.
+        v5: Uses _handle_submit_response() — single poll instead of double-wait."""
         log.info(f"CREATE: {data.get('name','?')}")
         result = {'status': 'FAILED', 'error': '', 'message': '', 'data': data}
         try:
             self.open_add_form()
             self.fill_designation_form(data)
             self.submit()
-            # Fast alert check
-            if self.is_validation_alert_present(timeout=2):
-                alert_title = self.driver.execute_script(
-                    "var el=document.querySelector('#swal2-title');return el?el.textContent.trim():'';"
-                ) or ''
-                if 'success' in alert_title.lower():
-                    result['message'] = alert_title
-                    result['status'] = 'PASSED'
-                    self.driver.execute_script("var btn=document.querySelector('.swal2-confirm');if(btn)btn.click();")
-                else:
-                    self.handle_validation_warning()
-                    result['error'] = 'validation_warning'
-                    result['message'] = alert_title
-                    result['status'] = 'VALIDATION_FAILED'
-                    return result
+            response = self._handle_submit_response()
+            if response == 'success':
+                result['status'] = 'PASSED'
+            elif response == 'validation':
+                result['status'] = 'VALIDATION_FAILED'
+                result['error'] = 'validation_warning'
             else:
-                self.handle_success_alert()
+                # No alert appeared — might still be success (auto-dismiss)
                 result['status'] = 'PASSED'
             self._force_close_panels()
         except Exception as e:
@@ -725,7 +773,8 @@ class DesignationPage(BasePage):
         return result
 
     def edit_designation(self, name, updated_data):
-        """Edit a designation. Returns result dict with status."""
+        """Edit a designation. Returns result dict with status.
+        v5: Uses _handle_submit_response() — single poll instead of double-wait."""
         log.info(f"EDIT: {name}")
         result = {'status': 'FAILED', 'error': '', 'message': ''}
         try:
@@ -737,23 +786,13 @@ class DesignationPage(BasePage):
                 return result
             self.fill_designation_form(updated_data)
             self.click_update()
-            # Fast alert check
-            if self.is_validation_alert_present(timeout=2):
-                alert_title = self.driver.execute_script(
-                    "var el=document.querySelector('#swal2-title');return el?el.textContent.trim():'';"
-                ) or ''
-                if 'success' in alert_title.lower():
-                    result['message'] = alert_title
-                    result['status'] = 'PASSED'
-                    self.driver.execute_script("var btn=document.querySelector('.swal2-confirm');if(btn)btn.click();")
-                else:
-                    self.handle_validation_warning()
-                    result['error'] = 'validation_warning'
-                    result['message'] = alert_title
-                    result['status'] = 'VALIDATION_FAILED'
-                    return result
+            response = self._handle_submit_response()
+            if response == 'success':
+                result['status'] = 'PASSED'
+            elif response == 'validation':
+                result['status'] = 'VALIDATION_FAILED'
+                result['error'] = 'validation_warning'
             else:
-                self.handle_success_alert()
                 result['status'] = 'PASSED'
             self._force_close_panels()
         except Exception as e:

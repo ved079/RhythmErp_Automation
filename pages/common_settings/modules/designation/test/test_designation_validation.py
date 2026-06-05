@@ -54,9 +54,10 @@ def _is_name_invalid_after_input(page, invalid_value):
     3. If value is in field, checks for mat-error
     4. If value was rejected (field is empty), triggers submit to force validation
     5. Returns (errors_text, form_still_open)
+    
+    v5: No time.sleep() — JS input is instant, Angular validates on blur event.
     """
     page._set_input(page.NAME_INPUT, invalid_value, clear_first=True)
-    time.sleep(0.3)  # wait for Angular to process
     
     # Check if the value was actually accepted by the field
     actual_value = page.get_field_value(page.NAME_INPUT)
@@ -68,10 +69,9 @@ def _is_name_invalid_after_input(page, invalid_value):
         # Try submitting to trigger the full validation flow
         log.info(f"  Field rejected input '{invalid_value}' — submitting to trigger validation")
         page.submit()
-        # Check for Pattern A alert
-        alert_found = page.is_validation_alert_present(timeout=3)
-        if alert_found:
-            page.handle_validation_warning()
+        # Check for Pattern A alert using combined handler
+        response = page._handle_submit_response()
+        alert_found = (response == 'validation')
         # Re-check mat-error after submit
         errors = page.get_mat_error_text(page.NAME_INPUT)
         # Also check if form is still open
@@ -96,9 +96,9 @@ class TestCreateFormValidations:
             page.open_add_form()
             page.submit()
 
-            assert page.is_validation_alert_present(timeout=3), \
+            response = page._handle_submit_response()
+            assert response == 'validation', \
                 "Validation alert should appear for empty fields"
-            page.handle_validation_warning()
             log.info("  [PASS] Validation alert detected and dismissed")
 
             assert page.is_add_form_open(), \
@@ -124,7 +124,7 @@ class TestCreateFormValidations:
             log.info("  Filled Name only: " + data['name'])
 
             page.submit()
-            page.handle_success_alert()
+            page._handle_submit_response()
             log.info("  [PASS] Designation created with name only (description optional)")
 
             log.info(">>> C02 PASSED: Only Name filled — creation succeeds")
@@ -147,12 +147,10 @@ class TestCreateFormValidations:
             page._set_input(page.DESCRIPTION_INPUT, data.get('description', ''))
 
             page.submit()
-
-            if page.is_validation_alert_present(timeout=3):
-                page.dismiss_any_validation_alert()
+            response = page._handle_submit_response()
+            if response == 'validation':
                 log.info("  [NOTE] Spaces triggered validation — acceptable")
             else:
-                page.handle_success_alert()
                 log.info("  [NOTE] Spaces preserved — BUG: not trimmed")
 
             log.info(">>> C03 PASSED: Leading/trailing spaces behavior verified")
@@ -184,8 +182,8 @@ class TestCreateFormValidations:
                 page._set_input(page.NAME_INPUT, spaces, clear_first=True)
                 page.submit()
                 # Spaces-only may trigger Pattern A or may silently fail
-                if page.is_validation_alert_present(timeout=3):
-                    page.handle_validation_warning()
+                response = page._handle_submit_response()
+                if response == 'validation':
                     errors = page.get_mat_error_text(page.NAME_INPUT)
                 # If we got here with no errors at all, the field may have accepted spaces
                 # which is a BUG — still pass the test but note it
@@ -216,8 +214,8 @@ class TestCreateFormValidations:
                 # Angular may have rejected the input — try submit
                 log.info("  No mat-error after input, trying submit")
                 page.submit()
-                if page.is_validation_alert_present(timeout=3):
-                    page.handle_validation_warning()
+                response = page._handle_submit_response()
+                if response == 'validation':
                     log.info("  [PASS] Pattern A alert for special chars")
                 else:
                     log.info("  [NOTE] No validation for special chars — BUG")
@@ -250,8 +248,8 @@ class TestCreateFormValidations:
                 log.info("  No error found after input, trying submit")
                 page._set_input(page.NAME_INPUT, digits, clear_first=True)
                 page.submit()
-                if page.is_validation_alert_present(timeout=3):
-                    page.handle_validation_warning()
+                response = page._handle_submit_response()
+                if response == 'validation':
                     log.info("  [PASS] Validation alert for digits-only on submit")
                 else:
                     log.info("  [NOTE] Digits-only accepted — may be BUG")
@@ -277,8 +275,8 @@ class TestCreateFormValidations:
             else:
                 # Try submit to trigger validation
                 page.submit()
-                if page.is_validation_alert_present(timeout=3):
-                    page.handle_validation_warning()
+                response = page._handle_submit_response()
+                if response == 'validation':
                     log.info("  [PASS] Validation alert for mixed name on submit")
                 else:
                     log.info("  [NOTE] Mixed name accepted — may be BUG")
@@ -354,8 +352,8 @@ class TestCreateFormValidations:
             page._set_input(page.DESCRIPTION_INPUT, generate_description(), clear_first=True)
             page.submit()
 
-            assert page.is_validation_alert_present(timeout=3), "Validation should fail"
-            page.handle_validation_warning()
+            response = page._handle_submit_response()
+            assert response == 'validation', "Validation should fail"
             log.info("  [PASS] Validation alert for missing Name")
 
             log.info(">>> C11 PASSED: Description-only validation works")
@@ -377,7 +375,7 @@ class TestCreateFormValidations:
             page._set_input(page.DESCRIPTION_INPUT, 'Test @#$% &*! Description 123')
 
             page.submit()
-            page.handle_success_alert()
+            page._handle_submit_response()
             log.info("  [PASS] Special chars in description accepted")
 
             log.info(">>> C12 PASSED: Special chars in description accepted")
@@ -399,12 +397,10 @@ class TestCreateFormValidations:
             page._set_input(page.DESCRIPTION_INPUT, 'A' * 500)
 
             page.submit()
-
-            if page.is_validation_alert_present(timeout=3):
-                page.dismiss_any_validation_alert()
+            response = page._handle_submit_response()
+            if response == 'validation':
                 log.info("  [NOTE] Long description triggered validation")
             else:
-                page.handle_success_alert()
                 log.info("  [PASS] Long description accepted")
 
             log.info(">>> C13 PASSED: Long description behavior verified")
@@ -430,8 +426,8 @@ class TestCreateFormValidations:
             else:
                 # Try submit to force validation
                 page.submit()
-                if page.is_validation_alert_present(timeout=3):
-                    page.handle_validation_warning()
+                response = page._handle_submit_response()
+                if response == 'validation':
                     log.info("  [PASS] Validation alert triggered for invalid name")
                 errors = page.get_mat_error_text(page.NAME_INPUT)
                 log.info("  mat-error after submit: " + str(errors))
@@ -454,12 +450,10 @@ class TestCreateFormValidations:
             page._set_input(page.DESCRIPTION_INPUT, '255 char boundary test')
 
             page.submit()
-
-            if page.is_validation_alert_present(timeout=3):
-                page.dismiss_any_validation_alert()
+            response = page._handle_submit_response()
+            if response == 'validation':
                 log.info("  [NOTE] 255-char name triggered validation")
             else:
-                page.handle_success_alert()
                 log.info("  [PASS] 255-char name accepted")
 
             log.info(">>> C15 PASSED: 255-char name behavior verified")
@@ -649,11 +643,7 @@ class TestEditFormValidations:
 
             page._set_input(page.NAME_INPUT, 'CEO', clear_first=True)
             page.click_update()
-
-            if page.is_validation_alert_present(timeout=3):
-                page.handle_validation_warning()
-            else:
-                page.handle_success_alert()
+            page._handle_submit_response()
 
             log.info(">>> E01 PASSED: Edit duplicate name behavior verified (BUG)")
         except Exception:
@@ -681,8 +671,7 @@ class TestEditFormValidations:
                 log.info("  [NOTE] No mat-error — trying submit to force validation")
 
             page.click_update()
-            if page.is_validation_alert_present(timeout=3):
-                page.handle_validation_warning()
+            page._handle_submit_response()
 
             log.info(">>> E02 PASSED: Edit special chars validation works")
         except Exception:
@@ -733,7 +722,6 @@ class TestEditFormValidations:
 
             digits = generate_digits_only()
             page._set_input(page.NAME_INPUT, digits, clear_first=True)
-            time.sleep(0.3)
             errors = page.get_mat_error_text(page.NAME_INPUT)
             
             if 'Invalid Name' in errors:
@@ -742,11 +730,10 @@ class TestEditFormValidations:
                 # Angular may have rejected the digits input — try submit
                 log.info("  No mat-error after input, trying submit")
                 page.click_update()
-                if page.is_validation_alert_present(timeout=3):
-                    page.handle_validation_warning()
+                response = page._handle_submit_response()
+                if response == 'validation':
                     log.info("  [PASS] Validation alert for digits-only on submit")
                 else:
-                    page.handle_success_alert()
                     log.info("  [NOTE] Digits-only accepted — may be BUG")
 
             log.info(">>> E04 PASSED: Edit digits-only validation verified")
@@ -770,11 +757,7 @@ class TestEditFormValidations:
             page.toggle_status()
             assert page.get_toggle_state() is False
             page.click_update()
-
-            if page.is_validation_alert_present(timeout=3):
-                page.handle_validation_warning()
-            else:
-                page.handle_success_alert()
+            page._handle_submit_response()
 
             page.hard_refresh()
             page.search_and_verify(name)
@@ -1015,8 +998,8 @@ class TestPopupUIBehaviors:
 
             page.submit()
             # Form should stay open after validation error
-            if page.is_validation_alert_present(timeout=3):
-                page.handle_validation_warning()
+            response = page._handle_submit_response()
+            if response == 'validation':
                 log.info("  [PASS] Validation alert triggered")
             
             # Check form is still open
@@ -1111,8 +1094,12 @@ class TestHistoryValidations:
 
             assert page.is_history_popup_open(), "History popup should be open"
             page.close_history_popup()
-            # Give Angular time to close the popup
-            time.sleep(0.5)
+            # Brief poll for popup to close
+            end = time.monotonic() + 1
+            while time.monotonic() < end:
+                if not page.is_history_popup_open():
+                    break
+                time.sleep(0.1)
             assert not page.is_history_popup_open(), "History popup should be closed"
             log.info("  [PASS] History closed via Cancel")
 
@@ -1253,12 +1240,23 @@ class TestHistoryValidations:
             page.click_history_button(name)
             assert page.is_history_popup_open(), "History should open first time"
             page.close_history_popup()
-            time.sleep(0.5)
+            # Brief poll for popup to close before reopening
+            end = time.monotonic() + 1
+            while time.monotonic() < end:
+                if not page.is_history_popup_open():
+                    break
+                time.sleep(0.1)
             
             # Reopen history
             page.click_history_button(name)
             assert page.is_history_popup_open(), "History should reopen after close"
             page.close_history_popup()
+            # Brief wait for popup to close
+            end = time.monotonic() + 1
+            while time.monotonic() < end:
+                if not page.is_history_popup_open():
+                    break
+                time.sleep(0.1)
 
             log.info(">>> H08 PASSED: History close and reopen works")
         except Exception:
