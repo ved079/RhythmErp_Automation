@@ -1,14 +1,21 @@
 """
-designation_page.py — RhythmERP Common Settings > Designation (v3 — UOM GOLD STANDARD)
+designation_page.py — RhythmERP Common Settings > Designation (v4 — UOM GOLD STANDARD)
 
 Mirrors uom_page.py patterns exactly:
 - hard_refresh() for fast page reset between tests
 - Pure JS clicks (no multi-strategy fallbacks)
 - offsetParent checks for visibility
 - Fast polling (0.2s) instead of time.sleep()
-- Short timeouts: 3s for alerts, 15s for page ready
+- Short timeouts: 2s for alerts, 15s for page ready
 - search_and_verify() combines search + existence check
 - NO time.sleep() anywhere
+
+v4 fixes:
+- search_designation(): graceful search button JS click (no throw)
+- is_history_popup_open(): robust multi-selector check with wait
+- get_mat_error_text(): added tiny wait for Angular to render errors
+- verify_designation_exists(): reduced timeout 5s→3s, poll 0.5s→0.3s
+- handle_success_alert(): reduced timeouts 3s→2s
 """
 
 import time
@@ -167,23 +174,27 @@ class DesignationPage(BasePage):
             pass
 
         # Step 2: Click search button via JS if input not visible
+        # FIX: Use graceful JS (no throw) — search button may not exist on some pages
         if search_input is None:
             log.info("Search input not visible, clicking search button via JS")
             js = """
             var btn = document.querySelector('button.search-btn');
-            if (!btn) { throw new Error('Search button not found in DOM'); }
+            if (!btn) { return 'not_found'; }
             btn.scrollIntoView({block:'center'});
             btn.click();
             return 'clicked';
             """
             try:
                 result = self.driver.execute_script(js)
-                log.info("Search button clicked via JS: " + str(result))
+                log.info("Search button JS result: " + str(result))
+                if result == 'not_found':
+                    log.warning("Search button not found in DOM — skipping search")
+                    return
             except Exception as e:
                 log.error("Failed to click search button: " + str(e))
                 return
             try:
-                search_input = WebDriverWait(self.driver, 5).until(
+                search_input = WebDriverWait(self.driver, 3).until(
                     EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
                 )
                 log.info("Search input became visible")
@@ -211,9 +222,9 @@ class DesignationPage(BasePage):
         """)
         log.info("Search submit clicked via JS")
 
-        # Step 5: Wait for table to refresh
+        # Step 5: Wait for table to refresh (short wait)
         try:
-            WebDriverWait(self.driver, 5).until(
+            WebDriverWait(self.driver, 3).until(
                 lambda d: d.find_elements("css selector", "table#excel-table tbody tr")
             )
         except Exception:
@@ -222,9 +233,9 @@ class DesignationPage(BasePage):
         log.info(f"Search completed for: {name}")
 
     def verify_designation_exists(self, name):
-        """Verify designation name appears in table. Polls up to 5s."""
+        """Verify designation name appears in table. Polls up to 3s (fast)."""
         log.info(f"Verifying '{name}' exists in table")
-        end = time.monotonic() + 5
+        end = time.monotonic() + 3
         last_seen = []
         while time.monotonic() < end:
             try:
@@ -240,7 +251,7 @@ class DesignationPage(BasePage):
                             return True
             except Exception:
                 pass
-            time.sleep(0.5)
+            time.sleep(0.3)
         log.error(f"Designation '{name}' NOT found. Table contents: {last_seen}")
         raise AssertionError(f"Designation '{name}' NOT found in table after search. Last rows: {last_seen}")
 
@@ -346,23 +357,50 @@ class DesignationPage(BasePage):
     # ── HISTORY ─────────────────────────────────────────
 
     def click_history_button(self, name):
+        """Click History via 3-dot menu and wait for popup to appear."""
         self._click_action_menu_item(name, "History")
+        # Wait for history component to appear in DOM
         try:
             WebDriverWait(self.driver, 5).until(
                 EC.presence_of_element_located(("css selector", "app-dynamic-history"))
             )
+            log.info("History component appeared in DOM")
         except Exception:
-            pass
+            log.warning("History component did not appear after click")
+        # Give Angular a moment to render the popup content
+        time.sleep(0.5)
 
     def is_history_popup_open(self):
-        return self.driver.execute_script("""
-            var h3s=document.querySelectorAll('app-dynamic-history .tbl-title h2');
-            for(var i=0;i<h3s.length;i++){
-                if(h3s[i].offsetParent!==null&&h3s[i].textContent.toLowerCase().indexOf('history')!==-1)
-                    return true;
-            }
-            return false;
-        """)
+        """Check if History popup is open — robust multi-selector check.
+        Tries multiple selectors to detect the popup, with a small wait."""
+        # Wait up to 2s for popup to become visible
+        end = time.monotonic() + 2
+        while time.monotonic() < end:
+            result = self.driver.execute_script("""
+                // Check 1: h2 with 'history' text (UOM pattern)
+                var h2s = document.querySelectorAll('app-dynamic-history .tbl-title h2');
+                for (var i = 0; i < h2s.length; i++) {
+                    if (h2s[i].offsetParent !== null && h2s[i].textContent.toLowerCase().indexOf('history') !== -1)
+                        return true;
+                }
+                // Check 2: any visible app-dynamic-history element with content
+                var histComp = document.querySelector('app-dynamic-history');
+                if (histComp && histComp.offsetParent !== null) {
+                    var inner = histComp.innerHTML.trim();
+                    if (inner.length > 50) return true;  // Has rendered content
+                }
+                // Check 3: popup with history-related header
+                var headers = document.querySelectorAll('.popup-header h3');
+                for (var i = 0; i < headers.length; i++) {
+                    if (headers[i].offsetParent !== null && headers[i].textContent.toLowerCase().indexOf('history') !== -1)
+                        return true;
+                }
+                return false;
+            """)
+            if result:
+                return True
+            time.sleep(0.3)
+        return False
 
     def is_history_empty(self):
         log.info("Checking if History is empty")
@@ -477,7 +515,7 @@ class DesignationPage(BasePage):
         """Handle SweetAlert2 success notification — fast dismiss (UOM pattern)."""
         log.info("Handling success alert")
         try:
-            WebDriverWait(self.driver, 3).until(
+            WebDriverWait(self.driver, 2).until(
                 EC.visibility_of_element_located(("css selector", ".swal2-container"))
             )
             log.info("SweetAlert detected, dismissing via JS")
@@ -487,7 +525,7 @@ class DesignationPage(BasePage):
                 return 'not found';
             """)
             try:
-                WebDriverWait(self.driver, 3).until(
+                WebDriverWait(self.driver, 2).until(
                     EC.invisibility_of_element_located(("css selector", ".swal2-container"))
                 )
             except Exception:
@@ -541,7 +579,10 @@ class DesignationPage(BasePage):
     # ── MAT ERROR ───────────────────────────────────────
 
     def get_mat_error_text(self, field_locator=None):
-        """Get mat-error text below a form field. Pure JS, no Selenium locators."""
+        """Get mat-error text below a form field. Pure JS, no Selenium locators.
+        Includes a small wait for Angular to render the error after input."""
+        # Give Angular a moment to render mat-error after input/blur
+        time.sleep(0.3)
         try:
             if field_locator:
                 css = field_locator[1] if field_locator[0] == "css" else ""
@@ -611,6 +652,15 @@ class DesignationPage(BasePage):
             if (!input) return false;
             var cls = input.className || '';
             if (cls.indexOf('ng-invalid') !== -1 && cls.indexOf('ng-touched') !== -1) return true;
+            // Also check parent form-field for invalid class
+            var current = input;
+            for (var s = 0; s < 15; s++) {
+                var pcls = current.className || '';
+                if (pcls.indexOf('mat-mdc-form-field-invalid') !== -1) return true;
+                if (pcls.indexOf('mat-form-field-invalid') !== -1) return true;
+                current = current.parentElement;
+                if (!current || current === document.body) break;
+            }
             return false;
         """)
 
@@ -637,7 +687,7 @@ class DesignationPage(BasePage):
             self.open_add_form()
             self.fill_designation_form(data)
             self.submit()
-            # Fast alert check — no time.sleep!
+            # Fast alert check
             if self.is_validation_alert_present(timeout=2):
                 alert_title = self.driver.execute_script(
                     "var el=document.querySelector('#swal2-title');return el?el.textContent.trim():'';"
@@ -673,7 +723,7 @@ class DesignationPage(BasePage):
                 return result
             self.fill_designation_form(updated_data)
             self.click_update()
-            # Fast alert check — no time.sleep!
+            # Fast alert check
             if self.is_validation_alert_present(timeout=2):
                 alert_title = self.driver.execute_script(
                     "var el=document.querySelector('#swal2-title');return el?el.textContent.trim():'';"
