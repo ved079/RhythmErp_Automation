@@ -136,6 +136,17 @@ _cs_store.record_issue(
     status="Open",
 )
 _cs_store.record_issue(
+    severity="Low",
+    module="Designation",
+    category="History",
+    description="History popup has no search input when history data is empty. "
+                "The search input only appears when there is data to search through.",
+    expected="Search input should always be visible in History popup.",
+    actual="No search input visible when history is empty (No data available).",
+    test_ref="H05",
+    status="Open",
+)
+_cs_store.record_issue(
     severity="Medium",
     module="Designation",
     category="Backend",

@@ -174,11 +174,15 @@ class DesignationPage(BasePage):
             pass
 
         # Step 2: Click search button via JS if input not visible
-        # FIX: Use graceful JS (no throw) — search button may not exist on some pages
+        # FIX: Try multiple search button selectors (some pages use different classes)
         if search_input is None:
             log.info("Search input not visible, clicking search button via JS")
             js = """
-            var btn = document.querySelector('button.search-btn');
+            // Try multiple selectors for search button
+            var btn = document.querySelector('button.search-btn')
+                || document.querySelector('button[mattooltip="Search"]')
+                || document.querySelector('button[mattooltip="search"]')
+                || document.querySelector('.search-btn');
             if (!btn) { return 'not_found'; }
             btn.scrollIntoView({block:'center'});
             btn.click();
@@ -188,7 +192,8 @@ class DesignationPage(BasePage):
                 result = self.driver.execute_script(js)
                 log.info("Search button JS result: " + str(result))
                 if result == 'not_found':
-                    log.warning("Search button not found in DOM — skipping search")
+                    log.warning("Search button not found in DOM — trying direct table scan")
+                    # Don't return — let verify_designation_exists scan the table
                     return
             except Exception as e:
                 log.error("Failed to click search button: " + str(e))
@@ -373,8 +378,8 @@ class DesignationPage(BasePage):
     def is_history_popup_open(self):
         """Check if History popup is open — robust multi-selector check.
         Tries multiple selectors to detect the popup, with a small wait."""
-        # Wait up to 2s for popup to become visible
-        end = time.monotonic() + 2
+        # Wait up to 3s for popup to become visible
+        end = time.monotonic() + 3
         while time.monotonic() < end:
             result = self.driver.execute_script("""
                 // Check 1: h2 with 'history' text (UOM pattern)
@@ -387,7 +392,7 @@ class DesignationPage(BasePage):
                 var histComp = document.querySelector('app-dynamic-history');
                 if (histComp && histComp.offsetParent !== null) {
                     var inner = histComp.innerHTML.trim();
-                    if (inner.length > 50) return true;  // Has rendered content
+                    if (inner.length > 50) return true;
                 }
                 // Check 3: popup with history-related header
                 var headers = document.querySelectorAll('.popup-header h3');
@@ -395,6 +400,9 @@ class DesignationPage(BasePage):
                     if (headers[i].offsetParent !== null && headers[i].textContent.toLowerCase().indexOf('history') !== -1)
                         return true;
                 }
+                // Check 4: any visible popup-footer inside app-dynamic-history
+                var histFooter = document.querySelector('app-dynamic-history .popup-footer');
+                if (histFooter && histFooter.offsetParent !== null) return true;
                 return false;
             """)
             if result:
@@ -512,25 +520,31 @@ class DesignationPage(BasePage):
     # ── SWEET ALERT ─────────────────────────────────────
 
     def handle_success_alert(self):
-        """Handle SweetAlert2 success notification — fast dismiss (UOM pattern)."""
+        """Handle SweetAlert2 success notification — ULTRA FAST dismiss.
+        Clicks confirm via JS and does NOT wait for SweetAlert to disappear.
+        The popup will auto-close — waiting wastes 4-6s per call."""
         log.info("Handling success alert")
-        try:
-            WebDriverWait(self.driver, 2).until(
-                EC.visibility_of_element_located(("css selector", ".swal2-container"))
-            )
-            log.info("SweetAlert detected, dismissing via JS")
-            self.driver.execute_script("""
-                var btn = document.querySelector('.swal2-confirm');
-                if (btn) { btn.click(); return 'clicked'; }
-                return 'not found';
-            """)
-            try:
-                WebDriverWait(self.driver, 2).until(
-                    EC.invisibility_of_element_located(("css selector", ".swal2-container"))
-                )
-            except Exception:
-                pass
-        except Exception:
+        # Click confirm immediately — don't wait for visibility first
+        result = self.driver.execute_script("""
+            var btn = document.querySelector('.swal2-confirm');
+            if (btn) { btn.click(); return 'clicked'; }
+            return 'not found';
+        """)
+        if result == 'clicked':
+            log.info("SweetAlert confirm clicked")
+        else:
+            # Maybe it hasn't appeared yet — brief poll
+            end = time.monotonic() + 2
+            while time.monotonic() < end:
+                result = self.driver.execute_script("""
+                    var btn = document.querySelector('.swal2-confirm');
+                    if (btn) { btn.click(); return 'clicked'; }
+                    return 'not found';
+                """)
+                if result == 'clicked':
+                    log.info("SweetAlert confirm clicked (after poll)")
+                    return
+                time.sleep(0.2)
             log.info("No SweetAlert found (may have auto-dismissed)")
 
     def handle_validation_warning(self):
