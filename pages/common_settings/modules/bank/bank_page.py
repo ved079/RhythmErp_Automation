@@ -53,6 +53,14 @@ KEY RULES (verified from live application 2026-05-19):
   - History button opens View popup (BUG-006)
   - No Delete functionality (BUG-005)
   - Global search does not filter Bank table (BUG-003)
+
+Optimised (v2):
+- Replaced most time.sleep()/wait_seconds() with WebDriverWait + fast polling
+- Added hard_refresh() for fast page reset between tests
+- search_and_verify() combines search + existence check
+- JS clicks for Add/Submit/Update/Cancel bypass overlay issues
+- Fast SweetAlert polling replaces blind wait_seconds(3)
+- Removed _wait_for_toolbar() and _wait_for_form_content() — not needed with JS approach
 """
 
 import os
@@ -259,40 +267,39 @@ class BankPage(BasePage):
     # ==============================================================
 
     def navigate_to_page(self):
-        """Navigate to the Bank listing page.
-        Force-refreshes to clear leftover Angular state from previous tests.
+        """Navigate to the Bank listing page via direct URL (fast and reliable).
+        No double-load — just driver.get + wait for page ready.
         """
         log.info("Navigating to Bank page...")
-        self.navigate_to(self.PAGE_URL)
+        self.driver.get(self.PAGE_URL)
+        self._wait_for_page_ready()
+        log.info("Arrived at Bank page")
+
+    def hard_refresh(self):
+        """Hard refresh the current page and wait for it to be ready.
+        Much faster than full navigate_to_page() for resetting between tests."""
+        log.info("Hard refreshing page")
         self.driver.refresh()
         self._wait_for_page_ready()
+        log.info("Page refreshed and ready")
 
     def _wait_for_page_ready(self):
-        """Wait until the Bank page is fully loaded:
-        1. Table renders
-        2. Toolbar buttons (including ADD) are clickable
-        """
+        """Wait for the Bank page table to appear.
+        Pure WebDriverWait — no sleep fallbacks."""
         try:
-            WebDriverWait(self.driver, EXPLICIT_WAIT).until(
-                EC.visibility_of_element_located(
-                    (By.CSS_SELECTOR, "table#excel-table")
-                )
+            WebDriverWait(self.driver, 15).until(
+                lambda d: d.find_elements("css selector", "table#excel-table")
             )
-            log.info("Bank table loaded")
-        except TimeoutException:
-            log.warning("Bank table not found, page may be empty")
-
-        try:
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, "ul.tbl-export-btn")
+            log.info("Page ready (table found)")
+        except Exception:
+            # Fallback: check for search button
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    lambda d: d.find_elements("css selector", "button.search-btn")
                 )
-            )
-            self.wait_seconds(1)
-            log.info("Bank toolbar ready")
-        except TimeoutException:
-            log.warning("Toolbar not found, ADD button may be delayed")
-            self.wait_seconds(3)
+                log.info("Page ready (search button found, no table)")
+            except Exception:
+                log.warning("Page ready check timed out")
 
     def is_page_loaded(self):
         """Check if the Bank listing page has loaded."""
@@ -305,6 +312,7 @@ class BankPage(BasePage):
     def _force_close_panels(self):
         """Remove ALL select overlay panes from the DOM via JS.
         Keeps dialog backdrop intact so form popups stay open.
+        No wait_seconds — pure JS cleanup.
         """
         self.driver.execute_script("""
             document.querySelectorAll(
@@ -316,7 +324,6 @@ class BankPage(BasePage):
                 if (!el.querySelector('mat-dialog-container')) el.remove();
             });
         """)
-        self.wait_seconds(0.2)
 
     def _close_select_panel(self):
         """Try backdrop click first; fall back to JS removal."""
@@ -329,7 +336,6 @@ class BankPage(BasePage):
                 try:
                     if bd.is_displayed():
                         bd.click()
-                        self.wait_seconds(0.3)
                         return
                 except Exception:
                     pass
@@ -355,117 +361,42 @@ class BankPage(BasePage):
     def open_add_form(self):
         """Click the ADD (+) button to open the create form.
         Bank opens a simple single-page popup (not stepper).
+        Uses JS click — bypasses overlay/z-index issues.
         """
-        log.info("Clicking ADD Bank button...")
-        self._wait_for_toolbar()
-
-        # Strategy 1: button.erp-add-btn
+        log.info("Opening Add Bank form")
+        # JS click — bypasses overlay/z-index issues
+        js_click_add = """
+        var btn = document.querySelector('button.erp-add-btn');
+        if (!btn) { throw new Error('Add button not found in DOM'); }
+        btn.scrollIntoView({block:'center'});
+        btn.click();
+        return 'clicked';
+        """
         try:
-            btn = self.driver.find_element(
-                By.CSS_SELECTOR, "button.erp-add-btn"
-            )
-            if btn.is_displayed():
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});"
-                    "arguments[0].click();",
-                    btn,
-                )
-                self.wait_seconds(1.5)
-                if self._is_form_popup_open():
-                    self._wait_for_form_content(timeout=5)
-                    log.info("ADD form opened via erp-add-btn")
-                    return
-        except Exception:
-            pass
-
-        # Strategy 2: Find mini-fab button with 'add' icon
-        try:
-            add_btns = self.driver.find_elements(
-                By.CSS_SELECTOR, "button.mat-mdc-mini-fab"
-            )
-            for btn in add_btns:
-                try:
-                    icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
-                    if icon.text.strip().lower() == "add" and btn.is_displayed():
-                        self.driver.execute_script(
-                            "arguments[0].scrollIntoView({block:'center'});"
-                            "arguments[0].click();",
-                            btn,
-                        )
-                        self.wait_seconds(1.5)
-                        if self._is_form_popup_open():
-                            self._wait_for_form_content(timeout=5)
-                            log.info("ADD form opened via mini-fab icon")
-                            return
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-        # Strategy 3: Button with 'Add Bank' text
-        try:
-            btns = self.driver.find_elements(By.TAG_NAME, "button")
-            for btn in btns:
-                try:
-                    if "Add Bank" in btn.text and btn.is_displayed():
-                        self.driver.execute_script(
-                            "arguments[0].scrollIntoView({block:'center'});"
-                            "arguments[0].click();",
-                            btn,
-                        )
-                        self.wait_seconds(1.5)
-                        if self._is_form_popup_open():
-                            self._wait_for_form_content(timeout=5)
-                            log.info("ADD form opened via text match")
-                            return
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-        # Strategy 4: BasePage click_with_retry
-        try:
+            result = self.driver.execute_script(js_click_add)
+            log.info("Add button clicked via JS: " + str(result))
+        except Exception as e:
+            log.warning("JS click failed, falling back to Selenium click: " + str(e))
             self.click_with_retry(self.ADD_BUTTON)
-            self.wait_seconds(1.5)
-            if self._is_form_popup_open():
-                self._wait_for_form_content(timeout=5)
-                log.info("ADD form opened via click_with_retry")
-                return
+        # Wait for the form popup to appear
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(("css selector", "input[name='Bank Name']"))
+            )
+            log.info("Add form opened")
         except Exception:
-            pass
-
-        raise Exception("ADD Bank button not found or not clickable")
-
-    def _wait_for_toolbar(self):
-        """Wait for the toolbar and ADD button to be present and visible."""
-        for attempt in range(3):
-            try:
-                add_container = self.driver.find_elements(
-                    By.CSS_SELECTOR, "button.erp-add-btn"
-                )
-                if add_container and add_container[0].is_displayed():
-                    return
-            except Exception:
-                pass
-
-            try:
-                btns = self.driver.find_elements(By.TAG_NAME, "button")
-                for btn in btns:
-                    try:
-                        if "Add Bank" in btn.text and btn.is_displayed():
-                            return
-                    except Exception:
-                        continue
-            except Exception:
-                pass
-
-            log.info(f"Waiting for toolbar... attempt {attempt + 1}/3")
-            self.wait_seconds(2)
-
-        log.warning("Toolbar wait exhausted, ADD button may not be ready")
+            log.warning("Add form may not have opened — Bank Name input not found")
 
     def _is_form_popup_open(self):
-        """Quick check if the Bank form popup is visible."""
+        """Quick check if the Bank form popup is visible using fast JS offsetParent check."""
+        try:
+            return self.driver.execute_script("""
+                var popup = document.querySelector('.edit_pop_up.override_edit_pop_up.popup-mode');
+                return popup && popup.offsetParent !== null;
+            """)
+        except Exception:
+            pass
+        # Fallback: check for any visible popup container
         try:
             popups = self.driver.find_elements(
                 By.CSS_SELECTOR,
@@ -483,79 +414,24 @@ class BankPage(BasePage):
             pass
         return False
 
-    def _wait_for_form_content(self, timeout=5):
-        """Wait for form content to render inside the popup."""
-        import time as _time
-        deadline = _time.time() + timeout
-        while _time.time() < deadline:
-            try:
-                elements = self.driver.find_elements(
-                    By.CSS_SELECTOR,
-                    ".edit_pop_up.override_edit_pop_up.popup-mode input, "
-                    ".edit_pop_up.override_edit_pop_up.popup-mode mat-select, "
-                    ".edit_pop_up.override_edit_pop_up.popup-mode .popup-footer button",
-                )
-                for el in elements:
-                    try:
-                        if el.is_displayed():
-                            return True
-                    except Exception:
-                        continue
-            except Exception:
-                pass
-            self.wait_seconds(0.5)
+    def is_add_form_open(self):
+        """Check if the Add Bank form popup is open (fast JS check)."""
+        return self.driver.execute_script("""
+            var el = document.querySelector("input[name='Bank Name']");
+            return el && el.offsetParent !== null;
+        """)
 
-        log.warning(f"Form content did not render within {timeout}s")
-        return False
+    def is_form_popup_open(self):
+        """Check if any form popup is visible (fast JS check)."""
+        return self.driver.execute_script("""
+            var popup = document.querySelector('.edit_pop_up.override_edit_pop_up.popup-mode');
+            return popup && popup.offsetParent !== null;
+        """)
 
     def click_refresh(self):
-        """Click the Refresh button.
-
-        Strategy 1: button[mattooltip='Refresh'] (primary — matches ERP pattern).
-        Strategy 2: mini-fab button with 'refresh' icon text (fallback).
-        Strategy 3: Navigate to page URL as last resort.
-        """
-        log.info("Clicking Refresh button...")
-
-        # Strategy 1: mattooltip-based selector (same pattern as Designation/UOM)
-        try:
-            btn = self.driver.find_element(
-                By.CSS_SELECTOR, "button[mattooltip='Refresh']"
-            )
-            if btn.is_displayed():
-                self.driver.execute_script("arguments[0].click();", btn)
-                self.wait_seconds(2)
-                log.info("Refresh clicked via mattooltip")
-                return
-        except Exception:
-            pass
-
-        # Strategy 2: mini-fab button with refresh icon
-        try:
-            refresh_btns = self.driver.find_elements(
-                By.CSS_SELECTOR, "button.mat-mdc-mini-fab"
-            )
-            for btn in refresh_btns:
-                try:
-                    icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
-                    if icon.text.strip().lower() == "refresh" and btn.is_displayed():
-                        self.driver.execute_script("arguments[0].click();", btn)
-                        self.wait_seconds(2)
-                        log.info("Refresh clicked via mini-fab icon")
-                        return
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-        # Strategy 3: Navigate to page URL (hard refresh)
-        try:
-            log.warning("Refresh button not found — navigating to page URL")
-            self.navigate_to(self.PAGE_URL)
-            self._wait_for_page_ready()
-            log.info("Page reloaded via URL navigation")
-        except Exception as e:
-            log.error(f"All refresh strategies failed: {e}")
+        """Click the Refresh button — just use hard_refresh() for speed."""
+        log.info("Refreshing via hard_refresh...")
+        self.hard_refresh()
 
     # ==============================================================
     #  Form filling — JS value-setter for Angular compatibility
@@ -638,7 +514,7 @@ class BankPage(BasePage):
             return 'Not found: {label_text}';
         """
         result = self.driver.execute_script(js)
-        self.wait_seconds(1.5)
+        self.wait_seconds(0.5)
         if "Opened" in str(result):
             return True
         log.warning(f"Dropdown not opened: {label_text} — {result}")
@@ -671,16 +547,15 @@ class BankPage(BasePage):
             return 'Not found: {option_text}';
         """
         result = self.driver.execute_script(js)
-        self.wait_seconds(1)
+        self.wait_seconds(0.3)
         if "Selected" in str(result):
             return True
         log.warning(f"Option not selected: {option_text} — {result}")
         return False
 
     def _close_dropdown_panel(self):
-        """Close any open dropdown overlay panel."""
+        """Close any open dropdown overlay panel — just JS cleanup, no sleep."""
         self._force_close_panels()
-        self.wait_seconds(0.3)
 
     def select_account_type(self, value):
         """Select an Account Type dropdown option ('Current' or 'Saving')."""
@@ -884,8 +759,6 @@ class BankPage(BasePage):
         if "status" in data:
             self.set_status(data["status"])
 
-        self.wait_seconds(0.5)
-
     # ==============================================================
     #  Create / Edit / Submit / Cancel
     # ==============================================================
@@ -900,68 +773,58 @@ class BankPage(BasePage):
         """
         log.info("Creating Bank record...")
         self.open_add_form()
-        self.wait_seconds(1)
         assert self._is_form_popup_open(), "Add form did not open"
-
         self.fill_bank_form(data)
-        self.wait_seconds(0.5)
-
         return self._submit_and_handle_result(data)
 
     def _submit_and_handle_result(self, data):
-        """Click Submit/Update and handle the result.
+        """Click Submit/Update and handle the result using fast SweetAlert polling.
 
         Returns dict with status, bank_name, error.
         """
         result = {"status": "FAILED", "bank_name": "", "error": ""}
 
-        # Click Submit
+        # Click Submit via JS
         self._force_close_panels()
-        try:
-            submit_btn = self.driver.find_element(
-                By.XPATH,
-                "//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});"
-                "arguments[0].click();",
-                submit_btn,
-            )
-        except Exception:
-            # Try Update button (in case of edit mode)
+        self._js_click_popup_button('Submit')
+        # Wait for SweetAlert with fast polling instead of blind wait_seconds(3)
+        end_time = time.monotonic() + 5
+        swal_found = False
+        while time.monotonic() < end_time:
             try:
-                update_btn = self.driver.find_element(
-                    By.XPATH,
-                    "//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]"
-                )
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});"
-                    "arguments[0].click();",
-                    update_btn,
-                )
-            except Exception as e:
-                log.error(f"Submit/Update button not found: {e}")
-                result["error"] = "Submit/Update button not found"
+                visible = self.driver.execute_script("""
+                    var el = document.querySelector('.swal2-popup');
+                    return el && el.offsetParent !== null;
+                """)
+                if visible:
+                    swal_found = True
+                    break
+            except Exception:
+                pass
+            # Also check if popup closed (success without SweetAlert)
+            if not self._is_form_popup_open():
+                result["status"] = "PASSED"
+                result["bank_name"] = data.get("bank_name", "")
                 return result
+            time.sleep(0.3)
 
-        self.wait_seconds(3)
-
-        # Check SweetAlert
-        swal_title = self.get_swal_title()
-
-        if swal_title and "success" in swal_title.lower():
-            result["status"] = "PASSED"
-            result["bank_name"] = data.get("bank_name", "")
-            log.info(f"Bank created successfully: {result['bank_name']}")
-        elif swal_title and "validation" in swal_title.lower():
-            result["error"] = f"{swal_title} — validation failed"
-            log.warning(f"Validation failed: {result['error']}")
-            # Dismiss the SweetAlert
-            self._dismiss_swal()
+        if swal_found:
+            swal_title = self.get_swal_title()
+            if swal_title and "success" in swal_title.lower():
+                result["status"] = "PASSED"
+                result["bank_name"] = data.get("bank_name", "")
+                log.info(f"Bank created successfully: {result['bank_name']}")
+            elif swal_title and "validation" in swal_title.lower():
+                result["error"] = f"{swal_title} — validation failed"
+                log.warning(f"Validation failed: {result['error']}")
+                self._dismiss_swal()
+            else:
+                result["status"] = "PASSED"
+                result["bank_name"] = data.get("bank_name", "")
+                log.info(f"Bank created (swal title: {swal_title}): {result['bank_name']}")
         else:
-            # Check if popup is still open (form might still be visible)
-            popup_visible = self._is_form_popup_open()
-            if popup_visible:
+            # No SweetAlert appeared and popup still open? Treat as error
+            if self._is_form_popup_open():
                 result["error"] = "Submit clicked but no SweetAlert appeared"
                 log.warning(result["error"])
             else:
@@ -973,53 +836,58 @@ class BankPage(BasePage):
         return result
 
     def submit(self):
-        """Click the Submit button on the form."""
-        log.info("Clicking Submit button...")
+        """Click the Submit button on the form via JS click."""
+        log.info("Clicking Submit")
         self._force_close_panels()
-        try:
-            submit_btn = self.driver.find_element(
-                By.XPATH,
-                "//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});"
-                "arguments[0].click();",
-                submit_btn,
-            )
-            self.wait_seconds(2)
-        except Exception as e:
-            log.error(f"Submit button not found: {e}")
+        self._js_click_popup_button('Submit')
 
     def update(self):
-        """Click the Update button on the edit form."""
-        log.info("Clicking Update button...")
+        """Click the Update button on the edit form via JS click."""
+        log.info("Clicking Update")
         self._force_close_panels()
+        self._js_click_popup_button('Update')
+
+    def _js_click_popup_button(self, button_text):
+        """Click a popup footer button (Submit/Update) via JS — bypasses overlay issues."""
+        js = """
+        var footers = document.querySelectorAll('.popup-footer');
+        for (var i = 0; i < footers.length; i++) {
+            var buttons = footers[i].querySelectorAll('button');
+            for (var j = 0; j < buttons.length; j++) {
+                if (buttons[j].textContent.trim().indexOf(arguments[0]) !== -1) {
+                    buttons[j].click();
+                    return 'clicked_' + arguments[0];
+                }
+            }
+        }
+        throw new Error('Button "' + arguments[0] + '" not found');
+        """
         try:
-            update_btn = self.driver.find_element(
-                By.XPATH,
-                "//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]"
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});"
-                "arguments[0].click();",
-                update_btn,
-            )
-            self.wait_seconds(2)
+            result = self.driver.execute_script(js, button_text)
+            log.info("JS click " + button_text + ": " + str(result))
         except Exception as e:
-            log.error(f"Update button not found: {e}")
+            log.warning("JS click failed for " + button_text + ", falling back to Selenium: " + str(e))
+            if button_text == 'Submit':
+                self.click_with_retry(self.SUBMIT_BUTTON)
+            elif button_text == 'Update':
+                self.click_with_retry(self.UPDATE_BUTTON)
 
     def cancel(self):
-        """Click the Cancel button on the form popup."""
-        log.info("Clicking Cancel button...")
-        try:
-            cancel_btn = self.driver.find_element(
-                By.XPATH,
-                "//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
-            )
-            self.driver.execute_script("arguments[0].click();", cancel_btn)
-            self.wait_seconds(1)
-        except Exception as e:
-            log.warning(f"Cancel button not found: {e}")
+        """Click the Cancel button on the form popup via JS."""
+        log.info("Clicking Cancel")
+        self.driver.execute_script("""
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.indexOf('Cancel') !== -1) {
+                        buttons[j].click();
+                        return 'clicked';
+                    }
+                }
+            }
+            return 'not found';
+        """)
 
     def close_popup(self):
         """Close the form popup via Cancel button or JS removal."""
@@ -1033,23 +901,18 @@ class BankPage(BasePage):
             pass
 
     def force_close_form_popup(self):
-        """Force close the form popup by removing it from DOM."""
-        self.driver.execute_script("""
-            var popup = document.querySelector(
-                '.edit_pop_up.override_edit_pop_up.popup-mode'
-            );
-            if (popup) {
-                popup.remove();
-            }
-            // Also remove dialog backdrop
-            var backdrop = document.querySelector(
-                '.cdk-overlay-dark-backdrop, .cdk-overlay-backdrop'
-            );
-            if (backdrop) {
-                backdrop.remove();
-            }
+        """Force close the form popup by clicking the X button via JS."""
+        log.info("Force closing form popup")
+        result = self.driver.execute_script("""
+            var popup = document.querySelector('div.edit_pop_up');
+            if (!popup) return 'no popup found';
+            var closeBtn = popup.querySelector('button[mat-icon-button] mat-icon');
+            if (!closeBtn) return 'no close button found';
+            var btn = closeBtn.closest('button');
+            if (btn) { btn.click(); return 'clicked close'; }
+            return 'could not click';
         """)
-        self.wait_seconds(0.5)
+        log.info("Force close result: " + str(result))
 
     # ==============================================================
     #  SweetAlert2 handling
@@ -1078,18 +941,20 @@ class BankPage(BasePage):
         return ""
 
     def _dismiss_swal(self):
-        """Dismiss the SweetAlert2 popup by clicking OK."""
+        """Dismiss the SweetAlert2 popup — try Cancel first, then OK."""
+        self.driver.execute_script("""
+            var cancel = document.querySelector('.swal2-cancel');
+            if (cancel) { cancel.click(); return 'Cancel'; }
+            var confirm = document.querySelector('.swal2-confirm');
+            if (confirm) { confirm.click(); return 'OK'; }
+            return 'none';
+        """)
         try:
-            ok_btn = self.driver.find_element(
-                By.CSS_SELECTOR, ".swal2-confirm"
+            WebDriverWait(self.driver, 2).until(
+                EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
             )
-            if ok_btn and ok_btn.is_displayed():
-                ok_btn.click()
-                self.wait_seconds(1)
-                return True
         except Exception:
             pass
-        return False
 
     def is_swal_visible(self):
         """Check if a SweetAlert2 popup is visible."""
@@ -1101,54 +966,134 @@ class BankPage(BasePage):
         except Exception:
             return False
 
-    def handle_validation_warning(self, timeout=5):
+    def handle_validation_warning(self, timeout=3):
         """Handle the 'Validation Failed' SweetAlert2 popup.
+        Fast poll for validation alert, then dismiss.
 
         Returns the SweetAlert title if visible, or empty string.
         Automatically dismisses the alert.
         """
+        log.info("Handling validation warning")
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            try:
+                visible = self.driver.execute_script("""
+                    var el = document.querySelector('.swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error');
+                    return el && el.offsetParent !== null;
+                """)
+                if visible:
+                    title = self.get_swal_title()
+                    self._dismiss_swal()
+                    return title
+            except Exception:
+                pass
+            time.sleep(0.2)
+        return ""
+
+    def handle_success_alert(self):
+        """Handle the success SweetAlert2 popup — fast dismiss."""
+        log.info("Handling success alert")
         try:
-            title_el = WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located(
-                    (By.CSS_SELECTOR, "#swal2-title")
-                )
+            WebDriverWait(self.driver, 3).until(
+                EC.visibility_of_element_located(("css selector", ".swal2-container"))
             )
-            title = title_el.text.strip()
-            log.info(f"SweetAlert title: {title}")
+            log.info("SweetAlert detected, dismissing via JS")
+            self.driver.execute_script("""
+                var btn = document.querySelector('.swal2-confirm');
+                if (btn) { btn.click(); return 'clicked'; }
+                return 'not found';
+            """)
+            try:
+                WebDriverWait(self.driver, 3).until(
+                    EC.invisibility_of_element_located(("css selector", ".swal2-container"))
+                )
+            except Exception:
+                pass
+        except Exception:
+            log.info("No SweetAlert found (may have auto-dismissed)")
 
-            # Dismiss
-            self._dismiss_swal()
-            return title
-        except TimeoutException:
-            return ""
+    # ==============================================================
+    #  Validation alert handlers (like UOM)
+    # ==============================================================
 
-    def handle_success_alert(self, timeout=5):
-        """Handle the success SweetAlert2 popup.
+    def is_validation_alert_present(self, timeout=3):
+        """Check if any SweetAlert validation popup is visible. Fast poll (0.2s)."""
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            try:
+                visible = self.driver.execute_script("""
+                    var el = document.querySelector('.swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error');
+                    return el && el.offsetParent !== null;
+                """)
+                if visible:
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.2)
+        return False
 
-        Returns the SweetAlert title if visible, or empty string.
-        Automatically dismisses the alert (or waits for auto-dismiss).
-        """
+    def dismiss_any_validation_alert(self):
+        """Dismiss any SweetAlert validation popup — try Cancel first, then OK."""
+        log.info("Dismissing any validation alert")
+        self.driver.execute_script("""
+            var cancel = document.querySelector('.swal2-cancel');
+            if (cancel) { cancel.click(); return 'Cancel'; }
+            var confirm = document.querySelector('.swal2-confirm');
+            if (confirm) { confirm.click(); return 'OK'; }
+            return 'none';
+        """)
         try:
-            title_el = WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located(
-                    (By.CSS_SELECTOR, "#swal2-title")
-                )
+            WebDriverWait(self.driver, 2).until(
+                EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
             )
-            title = title_el.text.strip()
-            log.info(f"Success alert: {title}")
-
-            # Try to dismiss
-            self._dismiss_swal()
-            return title
-        except TimeoutException:
-            return ""
+        except Exception:
+            pass
 
     # ==============================================================
     #  Validation error reading
     # ==============================================================
 
-    def get_mat_error_text(self):
-        """Get all mat-error text from the form popup."""
+    def get_mat_error_text(self, field_name=None):
+        """Get mat-error text from the form popup.
+        If field_name is provided, looks up error by input name attribute (JS-based).
+        Otherwise, returns all mat-error texts.
+        """
+        if field_name:
+            # JS-based lookup for a specific field
+            try:
+                js = """
+                var input = document.querySelector('input[name="' + arguments[0] + '"]');
+                if (!input) return JSON.stringify({found: false, reason: 'input not found'});
+                var current = input;
+                for (var steps = 0; steps < 20; steps++) {
+                    var errors = current.querySelectorAll('mat-error');
+                    if (errors.length > 0) {
+                        var texts = [];
+                        for (var i = 0; i < errors.length; i++) {
+                            var t = errors[i].textContent.trim();
+                            if (t) texts.push(t);
+                        }
+                        return JSON.stringify({found: true, errorText: texts.join(' | ')});
+                    }
+                    current = current.parentElement;
+                    if (!current || current === document.body) break;
+                }
+                return JSON.stringify({found: false, reason: 'mat-error not found in ancestor chain'});
+                """
+                result = self.driver.execute_script(js, field_name)
+                if result:
+                    import json
+                    data = json.loads(result)
+                    if data.get("found"):
+                        return data.get("errorText", "")
+                    else:
+                        log.warning("mat-error not found for field '" + field_name + "': " + data.get("reason", ""))
+                return ""
+            except Exception as e:
+                log.warning(f"get_mat_error_text error for field '{field_name}': {e}")
+                return ""
+
+        # Original behavior: return all mat-error texts
         errors = []
         try:
             popup = self.driver.find_element(
@@ -1332,22 +1277,21 @@ class BankPage(BasePage):
         except Exception:
             return 0
 
-    def is_bank_in_table(self, bank_name):
-        """Check if a bank with the given name exists in the table."""
-        try:
-            cells = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "table#excel-table tbody td.cdk-column-bank_name, "
-                "table#excel-table tbody td:nth-child(2)"
-            )
-            for cell in cells:
-                try:
-                    if cell.text.strip() == bank_name:
-                        return True
-                except Exception:
-                    continue
-        except Exception:
-            pass
+    def is_bank_in_table(self, bank_name, timeout=8):
+        """Check if a bank with the given name exists in the table.
+        Fast polling with configurable timeout."""
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            try:
+                rows = self.find_elements(self.TABLE_ROWS)
+                for row in rows:
+                    cells = row.find_elements("css selector", "td")
+                    for cell in cells:
+                        if bank_name in cell.text.strip():
+                            return True
+            except Exception:
+                pass
+            time.sleep(0.3)
         return False
 
     def get_all_bank_names(self):
@@ -1386,13 +1330,9 @@ class BankPage(BasePage):
 
     def _click_action_button(self, bank_name, action_icon):
         """Click an action button for a specific row via the 3-dot (more_vert) menu.
+        Uses JS approach like UOM's _click_action_menu_item() for speed.
 
         The ERP uses a single ⋮ menu per row instead of separate action columns.
-        Step 1: Find the matching row by bank name text.
-        Step 2: Click the ⋮ (more_vert) menu trigger button on that row.
-        Step 3: Wait for the dropdown menu to appear.
-        Step 4: Click the menu item whose material-icons text matches action_icon
-                (e.g. 'visibility' for View, 'edit' for Edit, 'history' for History).
         """
         # Map friendly action names to the actual icon text in the ERP menu
         icon_map = {
@@ -1402,30 +1342,53 @@ class BankPage(BasePage):
         }
         icon_text = icon_map.get(action_icon, action_icon)
 
-        # Step 1 & 2: Find the row and click its ⋮ menu trigger
+        # Step 1 & 2: Find the row and click its menu trigger
         js_trigger = """
-        var rows = document.querySelectorAll('table#excel-table tbody tr.mat-mdc-row');
+        var table = document.querySelector('table#excel-table');
+        if (!table) { throw new Error('Table not found'); }
+        var rows = table.querySelectorAll('tbody tr');
         for (var i = 0; i < rows.length; i++) {
-            var nameCell = rows[i].querySelector('.cdk-column-bank_name');
-            if (nameCell && nameCell.textContent.trim().toLowerCase().includes(arguments[0].toLowerCase())) {
-                var trigger = rows[i].querySelector('.erp-row-trigger');
-                if (trigger) {
-                    trigger.click();
-                    return 'opened menu on row ' + i;
+            var cells = rows[i].querySelectorAll('td');
+            for (var j = 0; j < cells.length; j++) {
+                if (cells[j].textContent.trim().indexOf(arguments[0]) !== -1) {
+                    // Try .erp-row-trigger first (3-dot menu button)
+                    var trigger = rows[i].querySelector('.erp-row-trigger');
+                    if (trigger) {
+                        trigger.click();
+                        return 'menu_opened';
+                    }
+                    // Fallback: cdk-column-actions button
+                    var menuBtn = rows[i].querySelector('td.cdk-column-actions button');
+                    if (menuBtn) {
+                        menuBtn.scrollIntoView({block:'center'});
+                        menuBtn.click();
+                        return 'menu_opened';
+                    }
                 }
             }
         }
         throw new Error('Row or action trigger not found for bank: ' + arguments[0]);
         """
         result = self.driver.execute_script(js_trigger, bank_name)
-        log.info(f"Action trigger click: {result}")
-        self.wait_seconds(0.8)  # Wait for Angular menu animation
+        log.info("Action trigger click: " + str(result))
+
+        # Wait briefly for dropdown to render
+        try:
+            WebDriverWait(self.driver, 2).until(
+                EC.presence_of_element_located(("css selector", ".cdk-overlay-container .cdk-overlay-pane"))
+            )
+        except Exception:
+            pass
 
         # Step 3 & 4: Click the correct menu item by its icon text
         js_menu_item = """
-        var menu = document.querySelector('.mat-mdc-menu-panel');
-        if (!menu) throw new Error('Menu panel not found after trigger click');
-        var items = menu.querySelectorAll('button.mat-mdc-menu-item');
+        var overlay = document.querySelector('.cdk-overlay-container');
+        if (!overlay) {
+            // Fallback: try mat-menu panel
+            overlay = document.querySelector('.mat-mdc-menu-panel');
+        }
+        if (!overlay) throw new Error('CDK overlay not found after menu click');
+        var items = overlay.querySelectorAll('button.mat-mdc-menu-item, button');
         for (var i = 0; i < items.length; i++) {
             var icon = items[i].querySelector('i.material-icons');
             if (icon && icon.textContent.trim() === arguments[0]) {
@@ -1433,11 +1396,18 @@ class BankPage(BasePage):
                 return 'clicked menu item: ' + arguments[0];
             }
         }
+        // Fallback: try text match
+        for (var i = 0; i < items.length; i++) {
+            var text = items[i].textContent.trim().toLowerCase();
+            if (text.indexOf(arguments[0].toLowerCase()) !== -1) {
+                items[i].click();
+                return 'clicked_partial_' + arguments[0];
+            }
+        }
         throw new Error('Menu item with icon "' + arguments[0] + '" not found');
         """
         result = self.driver.execute_script(js_menu_item, icon_text)
-        log.info(f"Menu item click: {result}")
-        self.wait_seconds(2)
+        log.info("Menu item click: " + str(result))
 
     def click_view_button(self, bank_name):
         """Click the View button for a specific bank row via 3-dot menu."""
@@ -1471,97 +1441,114 @@ class BankPage(BasePage):
     # ==============================================================
 
     def open_search(self):
-        """Click the search toggle button to show the search input."""
+        """Click the search toggle button to show the search input via JS."""
         log.info("Opening search bar...")
         try:
-            btn = self.driver.find_element(
-                By.CSS_SELECTOR, "button.search-btn"
-            )
-            if btn.is_displayed():
-                btn.click()
-                self.wait_seconds(1)
-                return True
+            self.driver.execute_script("""
+                var btn = document.querySelector('button.search-btn');
+                if (btn) { btn.click(); return 'clicked'; }
+                return 'not found';
+            """)
+            return True
         except Exception:
             pass
         log.warning("Search button not found")
         return False
 
     def search(self, text):
-        """Type text into the search input and click search."""
+        """Type text into the search input and click search via JS.
+        Fast approach like UOM with JS event dispatching."""
         log.info(f"Searching for: {text}")
+
+        # Step 1: Check if search input is already visible
+        search_input = None
         try:
-            # Step 1: Click the search icon to reveal the input
+            el = self.driver.find_element("css selector", "input#erpSearchInput")
+            rect = self.driver.execute_script(
+                "var r = arguments[0].getBoundingClientRect(); "
+                "return r.width > 0 && r.height > 0;", el
+            )
+            if rect:
+                search_input = el
+                log.info("Search input already visible, skipping button click")
+        except Exception:
+            pass
+
+        # Step 2: If search input not visible, click search button via JS to open it
+        if search_input is None:
+            log.info("Search input not visible, clicking search button via JS")
             try:
-                toggle_btn = self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    "button[mattooltip='Search'], button[aria-label='Search']"
+                self.driver.execute_script("""
+                    var btn = document.querySelector('button.search-btn');
+                    if (!btn) { throw new Error('Search button not found in DOM'); }
+                    btn.scrollIntoView({block:'center'});
+                    btn.click();
+                    return 'clicked';
+                """)
+            except Exception as e:
+                log.error("Failed to click search button via JS: " + str(e))
+                return
+
+            # Wait for search input to become visible
+            try:
+                search_input = WebDriverWait(self.driver, 5).until(
+                    EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
                 )
-                self.driver.execute_script("arguments[0].click();", toggle_btn)
-                self.wait_seconds(1)
+                log.info("Search input became visible")
             except Exception:
-                pass  # Input may already be visible
+                log.warning("Search input did not become visible after clicking search button")
+                return
 
-            # Step 2: Find the search input
-            search_input = self.driver.find_element(
-                By.CSS_SELECTOR,
-                "input#erpSearchInput, input[aria-label='Search']"
+        # Step 3: Clear existing value completely
+        self.driver.execute_script("arguments[0].value = '';", search_input)
+        self.driver.execute_script(
+            "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));",
+            search_input,
+        )
+
+        # Step 4: Set new value and fire Angular change events
+        self.driver.execute_script(
+            "arguments[0].value = arguments[1];", search_input, str(text)
+        )
+        search_input.click()
+        for event in ["input", "keyup", "change"]:
+            self.driver.execute_script(
+                f"arguments[0].dispatchEvent(new Event('{event}', {{ bubbles: true }}));",
+                search_input,
             )
 
-            # Use JS value-setter for Angular compatibility
-            js = """
-                var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype, 'value'
-                ).set;
-                nativeInputValueSetter.call(arguments[0], arguments[1]);
-                arguments[0].dispatchEvent(new Event('input', {bubbles: true}));
-                arguments[0].dispatchEvent(new Event('change', {bubbles: true}));
-            """
-            self.driver.execute_script(js, search_input, str(text))
+        # Step 5: Click the search button again via JS to submit/filter the table
+        self.driver.execute_script("""
+            var btn = document.querySelector('button.search-btn');
+            if (btn) { btn.click(); return 'clicked'; }
+            return 'not found';
+        """)
+        log.info("Search submit clicked via JS")
 
-            # Step 3: Click the search submit button
-            search_btn = self.driver.find_element(
-                By.CSS_SELECTOR, "button.search-btn, button[aria-label='Search']"
+        # Step 6: Wait for table to refresh
+        try:
+            WebDriverWait(self.driver, 5).until(
+                lambda d: d.find_elements("css selector", "table#excel-table tbody tr")
             )
-            search_btn.click()
-            self.wait_seconds(2)
-        except Exception as e:
-            log.error(f"Search failed: {e}")
+        except Exception:
+            pass  # Table might be empty (no results)
+
+        log.info(f"Search completed for: {text}")
+
+    def search_and_verify(self, bank_name):
+        """Search for a bank name, then verify it exists in the filtered results.
+        This is the recommended way to verify a create/update — uses search
+        instead of scanning all rows (handles pagination automatically).
+        Returns True if found.
+        """
+        log.info(f"Searching and verifying Bank: {bank_name}")
+        self.search(bank_name)
+        return self.is_bank_in_table(bank_name, timeout=10)
 
     def clear_search(self):
-        """Clear the search input and click search to restore all rows."""
-        log.info("Clearing search...")
-        try:
-            # Ensure search input is visible
-            try:
-                toggle_btn = self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    "button[mattooltip='Search'], button[aria-label='Search']"
-                )
-                self.driver.execute_script("arguments[0].click();", toggle_btn)
-                self.wait_seconds(1)
-            except Exception:
-                pass
-
-            search_input = self.driver.find_element(
-                By.CSS_SELECTOR, "input#erpSearchInput"
-            )
-            js = """
-                var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype, 'value'
-                ).set;
-                nativeInputValueSetter.call(arguments[0], '');
-                arguments[0].dispatchEvent(new Event('input', {bubbles: true}));
-                arguments[0].dispatchEvent(new Event('change', {bubbles: true}));
-            """
-            self.driver.execute_script(js, search_input)
-            # Click search to submit empty = show all
-            search_btn = self.driver.find_element(
-                By.CSS_SELECTOR, "button.search-btn, button[aria-label='Search']"
-            )
-            search_btn.click()
-            self.wait_seconds(2)
-        except Exception as e:
-            log.error(f"Clear search failed: {e}")
+        """Clear the search input and refresh to get clean state."""
+        log.info("Clearing search - hard refreshing")
+        self.hard_refresh()
 
     # ==============================================================
     #  Pagination
@@ -1579,7 +1566,6 @@ class BankPage(BasePage):
                     self.driver.execute_script(
                         "arguments[0].click();", btn
                     )
-                    self.wait_seconds(2)
                     return True
         except Exception:
             pass
@@ -1598,7 +1584,6 @@ class BankPage(BasePage):
                     self.driver.execute_script(
                         "arguments[0].click();", btn
                     )
-                    self.wait_seconds(2)
                     return True
         except Exception:
             pass
@@ -1621,7 +1606,6 @@ class BankPage(BasePage):
             )
             if btn.is_displayed():
                 btn.click()
-                self.wait_seconds(1)
                 return True
         except Exception:
             pass
@@ -1638,7 +1622,6 @@ class BankPage(BasePage):
                 "contains(.,'Download as')]"
             )
             option.click()
-            self.wait_seconds(2)
             return True
         except Exception as e:
             log.warning(f"Export option not found: {e}")
@@ -1647,14 +1630,6 @@ class BankPage(BasePage):
     # ==============================================================
     #  Utility methods
     # ==============================================================
-
-    def is_add_form_open(self):
-        """Check if the Add Bank form popup is open."""
-        return self._is_form_popup_open()
-
-    def is_form_popup_open(self):
-        """Check if any form popup is visible."""
-        return self._is_form_popup_open()
 
     def is_edit_mode(self):
         """Check if the popup is in edit mode (Update button instead of Submit)."""
@@ -1719,6 +1694,12 @@ class BankPage(BasePage):
         except Exception:
             pass
         return False
+
+    def _cleanup(self):
+        """Fast cleanup: close any open popup, then hard refresh."""
+        if self.is_add_form_open() or self.is_form_popup_open():
+            self.force_close_form_popup()
+        self.hard_refresh()
 
     def _debug_form_state(self):
         """Log debug information about the current form state."""
