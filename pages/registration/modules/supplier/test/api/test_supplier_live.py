@@ -24,6 +24,11 @@ class TestSupplierAPILive:
     def test_create_single_supplier(self, api_client):
         """Create a single Supplier via API and verify response."""
         payload = generate_supplier_api_payload()
+        # Verify payload has both Shipping and Billing addresses before sending
+        addr_details = payload["children"][1]["details"]
+        addr_types = [d["address_type"] for d in addr_details]
+        assert 43 in addr_types, "Payload must include Shipping address (43)"
+        assert 42 in addr_types, "Payload must include Billing address (42)"
         result = api_client.create_entry(payload)
         assert result is not None, "API create returned None (likely failure)"
 

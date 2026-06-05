@@ -72,15 +72,18 @@ class TestSupplierAPIPayload:
         assert "mode_of_delivery_ref_id" in additional
 
     def test_payload_address_in_details_array(self):
-        """Address rows must be in children[1].details[] array."""
+        """Address rows must be in children[1].details[] array — both Shipping and Billing."""
         payload = generate_supplier_api_payload()
         address_stepper = payload["children"][1]
-        assert len(address_stepper["details"]) >= 1
-        addr = address_stepper["details"][0]
-        assert "address_type" in addr
-        assert "country_ref_id_id" in addr
-        assert "state_ref_id_id" in addr
-        assert "address" in addr
+        assert len(address_stepper["details"]) >= 2, "ERP requires both Shipping and Billing address rows"
+        addr_types = [d["address_type"] for d in address_stepper["details"]]
+        assert 43 in addr_types, "Shipping address (type=43) is required"
+        assert 42 in addr_types, "Billing address (type=42) is required"
+        # Verify both rows have the same address chain FK fields
+        for addr in address_stepper["details"]:
+            assert "country_ref_id_id" in addr
+            assert "state_ref_id_id" in addr
+            assert "address" in addr
 
     def test_payload_bank_in_details_array(self):
         """Bank rows must be in children[2].details[] array."""

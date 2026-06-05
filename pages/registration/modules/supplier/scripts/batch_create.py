@@ -69,11 +69,13 @@ def batch_create(client, count, dry_run=False):
 
     for i in range(count):
         payload = generate_supplier_api_payload()
-        addr = payload['children'][1]['details'][0]
+        # Address details now has 2 rows: Shipping + Billing
+        addr_details = payload['children'][1]['details']
+        shipping_addr = next((a for a in addr_details if a.get('address_type') == 43), addr_details[0])
         bank = payload['children'][2]['details'][0]
 
-        state = addr.get('state_ref_id_id')
-        district = addr.get('district_ref_id_id')
+        state = shipping_addr.get('state_ref_id_id')
+        district = shipping_addr.get('district_ref_id_id')
         ownership = payload.get('ownership_status_ref_id')
         name = payload['name']
 

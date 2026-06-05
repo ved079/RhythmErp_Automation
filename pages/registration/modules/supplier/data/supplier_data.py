@@ -818,7 +818,8 @@ DEFAULT_SUPPLIER_FK_IDS = {
     "payment_terms_ref_id": 26,     # 30 Days
     "delivery_terms_ref_id": 129,   # Delivery
     "mode_of_delivery_ref_id": 30,  # Truck
-    "address_type": 43,             # Shipping (Billing=42)
+    "shipping_address_type": 43,     # Shipping (REQUIRED — ERP validates both present)
+    "billing_address_type": 42,      # Billing  (REQUIRED — ERP validates both present)
     "country_ref_id_id": 8,         # India
     "account_type": 1849,           # Current (Saving=1850)
     "bank_doc_id": 1883,            # Bank Statement
@@ -1164,27 +1165,38 @@ def build_supplier_api_payload(
         additional_details_stepper["mode_of_delivery_ref_id"] = _fk("mode_of_delivery_ref_id")
 
     # Build Address Details stepper details
-    address_detail = {}
-    if _fk("address_type") is not None:
-        address_detail["address_type"] = _fk("address_type")
-    if _fk("country_ref_id_id") is not None:
-        address_detail["country_ref_id_id"] = _fk("country_ref_id_id")
-    if _fk("state_ref_id_id") is not None:
-        address_detail["state_ref_id_id"] = _fk("state_ref_id_id")
-    if _fk("district_ref_id_id") is not None:
-        address_detail["district_ref_id_id"] = _fk("district_ref_id_id")
-    if _fk("sub_district_ref_id_id") is not None:
-        address_detail["sub_district_ref_id_id"] = _fk("sub_district_ref_id_id")
-    if _fk("village_ref_id_id") is not None:
-        address_detail["village_ref_id_id"] = _fk("village_ref_id_id")
-    address_detail["address"] = step2_data.get("address", "")
-    # API returns pin_code as integer (e.g., 141001) — send as int
-    pin = step2_data.get("pin_code", "")
-    address_detail["pin_code"] = int(pin) if pin and pin.isdigit() else None
-    address_detail["gstin"] = step2_data.get("gstin", "") or None
-    address_detail["same_as_above"] = None  # API returns null, not False
-    address_detail["address2"] = None
-    address_detail["details"] = []
+    # IMPORTANT (verified 2026-06-05): The ERP now REQUIRES both a Shipping
+    # AND a Billing address for Supplier roles. Sending only one type causes
+    # "Shipping address is required for Supplier roles" or
+    # "Billing address is required for Supplier roles" (400 Bad Request).
+    # The details[] array MUST contain at least 2 rows: one of each type.
+    def _build_address_row(addr_type_fk_key, step2_data, ids):
+        """Build a single address detail row."""
+        row = {}
+        if _fk(addr_type_fk_key) is not None:
+            row["address_type"] = _fk(addr_type_fk_key)
+        if _fk("country_ref_id_id") is not None:
+            row["country_ref_id_id"] = _fk("country_ref_id_id")
+        if _fk("state_ref_id_id") is not None:
+            row["state_ref_id_id"] = _fk("state_ref_id_id")
+        if _fk("district_ref_id_id") is not None:
+            row["district_ref_id_id"] = _fk("district_ref_id_id")
+        if _fk("sub_district_ref_id_id") is not None:
+            row["sub_district_ref_id_id"] = _fk("sub_district_ref_id_id")
+        if _fk("village_ref_id_id") is not None:
+            row["village_ref_id_id"] = _fk("village_ref_id_id")
+        row["address"] = step2_data.get("address", "")
+        # API returns pin_code as integer (e.g., 141001) — send as int
+        pin = step2_data.get("pin_code", "")
+        row["pin_code"] = int(pin) if pin and pin.isdigit() else None
+        row["gstin"] = step2_data.get("gstin", "") or None
+        row["same_as_above"] = None  # API returns null, not False
+        row["address2"] = None
+        row["details"] = []
+        return row
+
+    shipping_detail = _build_address_row("shipping_address_type", step2_data, ids)
+    billing_detail = _build_address_row("billing_address_type", step2_data, ids)
 
     # Build Bank Details stepper details
     bank_detail = {}
@@ -1232,7 +1244,7 @@ def build_supplier_api_payload(
             {
                 "stepper_name": "Address Details",
                 "is_stepper": True,
-                "details": [address_detail],
+                "details": [shipping_detail, billing_detail],
                 "children": [],
             },
             {
@@ -1265,7 +1277,8 @@ def generate_random_fk_ids() -> dict:
         "payment_terms_ref_id": random.choice(PAYMENT_TERMS_IDS),
         "delivery_terms_ref_id": random.choice(DELIVERY_TERMS_IDS),
         "mode_of_delivery_ref_id": random.choice(MODE_OF_DELIVERY_IDS),
-        "address_type": random.choice(ADDRESS_TYPE_IDS),
+        "shipping_address_type": 43,  # Shipping — always required by ERP
+        "billing_address_type": 42,   # Billing  — always required by ERP
         "country_ref_id_id": DEFAULT_COUNTRY_REF_ID,  # India always
         "account_type": random.choice(ACCOUNT_TYPE_IDS),
         "bank_doc_id": random.choice(BANK_DOC_IDS),
@@ -1367,7 +1380,7 @@ FIELD_VALIDATION_RULES = {
     "is_gst_set_off": {"type": "toggle", "required": False, "default": True},
     "is_tds_applicable": {"type": "toggle", "required": False, "default": False},
     # Step 2 — Address Details (children[1].details[])
-    "address_type": {"type": "dropdown", "required": True, "fk_options_count": 2},
+    "address_type": {"type": "dropdown", "required": True, "fk_options_count": 2, "note": "BOTH Shipping(43) AND Billing(42) required — ERP rejects if either missing"},
     "country_ref_id_id": {"type": "dropdown", "required": True, "fk_options_count": 30, "cascading": True},
     "state_ref_id_id": {"type": "dropdown", "required": True, "fk_options_count": 0, "cascading": True},
     "district_ref_id_id": {"type": "dropdown", "required": True, "fk_options_count": 0, "cascading": True},
