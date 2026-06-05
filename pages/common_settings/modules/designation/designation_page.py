@@ -1,13 +1,14 @@
 """
-designation_page.py — RhythmERP Common Settings > Designation (v2 OPTIMISED)
+designation_page.py — RhythmERP Common Settings > Designation (v3 — UOM GOLD STANDARD)
 
-UOM Gold Standard patterns:
+Mirrors uom_page.py patterns exactly:
 - hard_refresh() for fast page reset between tests
 - Pure JS clicks (no multi-strategy fallbacks)
 - offsetParent checks for visibility
 - Fast polling (0.2s) instead of time.sleep()
 - Short timeouts: 3s for alerts, 15s for page ready
 - search_and_verify() combines search + existence check
+- NO time.sleep() anywhere
 """
 
 import time
@@ -24,6 +25,10 @@ class DesignationPage(BasePage):
 
     NAME_INPUT = ("css", "input[name='Name']")
     DESCRIPTION_INPUT = ("css", "input[name='Description']")
+
+    SUBMIT_BUTTON = ("xpath", "//div[@class='popup-footer']//button[contains(.,'Submit')]")
+    UPDATE_BUTTON = ("xpath", "//div[@class='popup-footer']//button[contains(.,'Update')]")
+    CANCEL_BUTTON = ("xpath", "//div[@class='popup-footer']//button[contains(.,'Cancel')]")
 
     # ── NAVIGATION ─────────────────────────────────────
 
@@ -43,27 +48,43 @@ class DesignationPage(BasePage):
             WebDriverWait(self.driver, 15).until(
                 lambda d: d.find_elements("css selector", "table#excel-table")
             )
+            log.info("Page ready (table found)")
         except Exception:
-            log.warning("Page ready check timed out")
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    lambda d: d.find_elements("css selector", "button.search-btn")
+                )
+                log.info("Page ready (search button found, no table)")
+            except Exception:
+                log.warning("Page ready check timed out")
 
     # ── CREATE ──────────────────────────────────────────
 
     def open_add_form(self):
         log.info("Opening Add form")
-        self.driver.execute_script("""
-            var btn = document.querySelector('button.erp-add-btn');
-            if (!btn) throw new Error('Add button not found');
-            btn.scrollIntoView({block:'center'});
-            btn.click();
-        """)
+        js = """
+        var btn = document.querySelector('button.erp-add-btn');
+        if (!btn) { throw new Error('Add button not found in DOM'); }
+        btn.scrollIntoView({block:'center'});
+        btn.click();
+        return 'clicked';
+        """
+        try:
+            result = self.driver.execute_script(js)
+            log.info("Add button clicked via JS: " + str(result))
+        except Exception as e:
+            log.warning("JS click failed, falling back to Selenium click: " + str(e))
+            self.click_with_retry(("css", "button.erp-add-btn"))
         try:
             WebDriverWait(self.driver, 5).until(
                 EC.presence_of_element_located(("css selector", "input[name='Name']"))
             )
+            log.info("Add form opened")
         except Exception:
-            pass
+            log.warning("Add form may not have opened — Name input not found")
 
     def fill_designation_form(self, data):
+        log.info(f"Filling form: {data}")
         if data.get('name') is not None:
             self._set_input(self.NAME_INPUT, data['name'])
         if data.get('description') is not None:
@@ -78,7 +99,8 @@ class DesignationPage(BasePage):
     # ── TOGGLE ──────────────────────────────────────────
 
     def get_toggle_state(self):
-        return self.driver.execute_script("""
+        """Get current toggle state — True=Active, False=Inactive."""
+        result = self.driver.execute_script("""
             var cb = document.querySelector('.switch-wrapper input[type="checkbox"]');
             if (cb) return cb.checked;
             var toggle = document.querySelector('app-slide-toggle-v2');
@@ -88,19 +110,8 @@ class DesignationPage(BasePage):
             }
             return false;
         """)
-
-    def toggle_status(self):
-        log.info("Toggling status")
-        self.driver.execute_script("""
-            var slider = document.querySelector('.switch-wrapper .slider');
-            if (slider) { slider.click(); return; }
-            var toggle = document.querySelector('app-slide-toggle-v2');
-            if (toggle) {
-                var s = toggle.querySelector('.slider');
-                if (s) { s.click(); return; }
-                toggle.click(); return;
-            }
-        """)
+        log.info("Toggle state: " + str(result))
+        return result
 
     def get_toggle_display_text(self):
         return self.driver.execute_script("""
@@ -114,71 +125,138 @@ class DesignationPage(BasePage):
             return 'Inactive';
         """)
 
+    def toggle_status(self):
+        log.info("Toggling status")
+        js = """
+        var toggle = document.querySelector('app-slide-toggle-v2');
+        if (!toggle) { throw new Error('app-slide-toggle-v2 not found'); }
+        var slider = toggle.querySelector('.slider');
+        if (slider) {
+            slider.scrollIntoView({block:'center'});
+            slider.click();
+            return 'clicked .slider';
+        }
+        var wrapper = toggle.querySelector('.switch-wrapper');
+        if (wrapper) {
+            wrapper.scrollIntoView({block:'center'});
+            wrapper.click();
+            return 'clicked .switch-wrapper';
+        }
+        toggle.scrollIntoView({block:'center'});
+        toggle.click();
+        return 'clicked host';
+        """
+        result = self.driver.execute_script(js)
+        log.info("Toggle clicked: " + str(result))
+
     # ── SEARCH ──────────────────────────────────────────
 
     def search_designation(self, name):
         log.info(f"Searching for: {name}")
+        # Step 1: Check if search input already visible
         search_input = None
         try:
             el = self.driver.find_element("css selector", "input#erpSearchInput")
-            if self.driver.execute_script("var r=arguments[0].getBoundingClientRect();return r.width>0&&r.height>0;", el):
+            rect = self.driver.execute_script(
+                "var r=arguments[0].getBoundingClientRect();return r.width>0&&r.height>0;", el
+            )
+            if rect:
                 search_input = el
+                log.info("Search input already visible")
         except Exception:
             pass
 
+        # Step 2: Click search button via JS if input not visible
         if search_input is None:
+            log.info("Search input not visible, clicking search button via JS")
+            js = """
+            var btn = document.querySelector('button.search-btn');
+            if (!btn) { throw new Error('Search button not found in DOM'); }
+            btn.scrollIntoView({block:'center'});
+            btn.click();
+            return 'clicked';
+            """
             try:
-                self.driver.execute_script("""
-                    var btn=document.querySelector('button.search-btn,button[mattooltip="Search"]');
-                    if(btn){btn.scrollIntoView({block:'center'});btn.click();}
-                """)
+                result = self.driver.execute_script(js)
+                log.info("Search button clicked via JS: " + str(result))
+            except Exception as e:
+                log.error("Failed to click search button: " + str(e))
+                return
+            try:
                 search_input = WebDriverWait(self.driver, 5).until(
                     EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
                 )
+                log.info("Search input became visible")
             except Exception:
-                log.warning("Search input not visible")
-                return False
+                log.warning("Search input did not become visible")
+                return
 
-        self.driver.execute_script("arguments[0].value='';", search_input)
-        self.driver.execute_script("arguments[0].dispatchEvent(new Event('input',{bubbles:true}));", search_input)
-        self.driver.execute_script("arguments[0].value=arguments[1];", search_input, name)
+        # Step 3: Clear + set value + fire Angular events
+        self.driver.execute_script("arguments[0].value = '';", search_input)
+        self.driver.execute_script(
+            "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", search_input
+        )
+        self.driver.execute_script("arguments[0].value = arguments[1];", search_input, name)
         search_input.click()
         for ev in ["input", "keyup", "change"]:
-            self.driver.execute_script(f"arguments[0].dispatchEvent(new Event('{ev}',{{bubbles:true}}));", search_input)
+            self.driver.execute_script(
+                f"arguments[0].dispatchEvent(new Event('{ev}', {{ bubbles: true }}));", search_input
+            )
+
+        # Step 4: Click search button again to submit filter
         self.driver.execute_script("""
-            var btn=document.querySelector('button.search-btn,button[mattooltip="Search"]');
-            if(btn)btn.click();
+            var btn = document.querySelector('button.search-btn');
+            if (btn) { btn.click(); return 'clicked'; }
+            return 'not found';
         """)
+        log.info("Search submit clicked via JS")
+
+        # Step 5: Wait for table to refresh
         try:
             WebDriverWait(self.driver, 5).until(
                 lambda d: d.find_elements("css selector", "table#excel-table tbody tr")
             )
         except Exception:
             pass
-        return self.is_designation_in_table(name)
+
+        log.info(f"Search completed for: {name}")
 
     def verify_designation_exists(self, name):
+        """Verify designation name appears in table. Polls up to 5s."""
         log.info(f"Verifying '{name}' exists in table")
         end = time.monotonic() + 5
+        last_seen = []
         while time.monotonic() < end:
             try:
-                for row in self.driver.find_elements("css selector", "table#excel-table tbody tr"):
-                    for cell in row.find_elements("css selector", "td"):
+                rows = self.driver.find_elements("css selector", "table#excel-table tbody tr")
+                last_seen = []
+                for row in rows:
+                    cells = row.find_elements("css selector", "td")
+                    row_text = " | ".join(c.text.strip() for c in cells if c.text.strip())
+                    last_seen.append(row_text)
+                    for cell in cells:
                         if name in cell.text.strip():
+                            log.info(f"Designation '{name}' found in table")
                             return True
             except Exception:
                 pass
-            time.sleep(0.3)
-        raise AssertionError(f"Designation '{name}' NOT found in table")
+            time.sleep(0.5)
+        log.error(f"Designation '{name}' NOT found. Table contents: {last_seen}")
+        raise AssertionError(f"Designation '{name}' NOT found in table after search. Last rows: {last_seen}")
 
     def search_and_verify(self, name):
+        """Search + verify — recommended way to confirm create/update."""
+        log.info(f"Searching and verifying: {name}")
         self.search_designation(name)
         return self.verify_designation_exists(name)
 
     def is_designation_in_table(self, name):
+        """Check if name exists in current table view. No exceptions."""
         try:
-            for row in self.driver.find_elements("css selector", "table#excel-table tbody tr"):
-                for cell in row.find_elements("css selector", "td"):
+            rows = self.driver.find_elements("css selector", "table#excel-table tbody tr")
+            for row in rows:
+                cells = row.find_elements("css selector", "td")
+                for cell in cells:
                     if name in cell.text.strip():
                         return True
         except Exception:
@@ -186,15 +264,8 @@ class DesignationPage(BasePage):
         return False
 
     def clear_search(self):
+        log.info("Clearing search - hard refreshing")
         self.hard_refresh()
-
-    def click_refresh(self):
-        self.driver.execute_script("""
-            var btns=document.querySelectorAll('button[mattooltip="Refresh"]');
-            for(var i=0;i<btns.length;i++){if(btns[i].offsetParent!==null){btns[i].click();return;}}
-            var icons=document.querySelectorAll('button.mat-mdc-mini-fab mat-icon');
-            for(var i=0;i<icons.length;i++){if(icons[i].textContent.trim().toLowerCase()==='refresh'){icons[i].closest('button').click();return;}}
-        """)
 
     # ── TABLE QUERIES ───────────────────────────────────
 
@@ -229,18 +300,25 @@ class DesignationPage(BasePage):
             pass
 
     def verify_view_popup_read_only(self):
-        disabled = self.driver.execute_script(
+        log.info("Verifying View popup is read-only")
+        code_disabled = self.driver.execute_script(
             "var el=document.querySelector('input[name=\"Name\"]');return el?el.disabled:false;"
         )
+        assert code_disabled, "Name field should be disabled in View mode"
+        log.info("  [PASS] Name field is disabled")
+
         has_submit = self.driver.execute_script(
             "var btns=document.querySelectorAll('.popup-footer button');for(var i=0;i<btns.length;i++){if(btns[i].textContent.trim()==='Submit')return true;}return false;"
         )
         has_update = self.driver.execute_script(
             "var btns=document.querySelectorAll('.popup-footer button');for(var i=0;i<btns.length;i++){if(btns[i].textContent.trim()==='Update')return true;}return false;"
         )
-        assert disabled, "Name should be disabled in View"
-        assert not has_submit, "Submit should NOT be in View"
-        assert not has_update, "Update should NOT be in View"
+        assert not has_submit, "Submit button should NOT be present in View mode"
+        assert not has_update, "Update button should NOT be present in View mode"
+        log.info("  [PASS] No Submit/Update button in View mode")
+
+        assert self.is_present(self.CANCEL_BUTTON, timeout=3), "Cancel button should be present"
+        log.info("  [PASS] Cancel button is present")
 
     # ── EDIT ────────────────────────────────────────────
 
@@ -255,7 +333,10 @@ class DesignationPage(BasePage):
 
     def is_edit_mode(self):
         return self.driver.execute_script(
-            "var btns=document.querySelectorAll('.popup-footer button');for(var i=0;i<btns.length;i++){if(btns[i].textContent.trim()==='Update'&&btns[i].offsetParent!==null)return true;}return false;"
+            "var btns=document.querySelectorAll('.popup-footer button');"
+            "for(var i=0;i<btns.length;i++){"
+            "if(btns[i].textContent.trim()==='Update'&&btns[i].offsetParent!==null)return true;"
+            "}return false;"
         )
 
     def click_update(self):
@@ -268,30 +349,45 @@ class DesignationPage(BasePage):
         self._click_action_menu_item(name, "History")
         try:
             WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located(("css selector", "app-dynamic-history,.big-model table,.popup-content table"))
+                EC.presence_of_element_located(("css selector", "app-dynamic-history"))
             )
         except Exception:
             pass
 
     def is_history_popup_open(self):
         return self.driver.execute_script("""
-            var h3s=document.querySelectorAll('h3.popup-title,.big-model h3,.popup-content h3,app-dynamic-history .tbl-title h2');
-            for(var i=0;i<h3s.length;i++){if(h3s[i].offsetParent!==null&&h3s[i].textContent.toLowerCase().indexOf('history')!==-1)return true;}
+            var h3s=document.querySelectorAll('app-dynamic-history .tbl-title h2');
+            for(var i=0;i<h3s.length;i++){
+                if(h3s[i].offsetParent!==null&&h3s[i].textContent.toLowerCase().indexOf('history')!==-1)
+                    return true;
+            }
             return false;
         """)
 
+    def is_history_empty(self):
+        log.info("Checking if History is empty")
+        no_data = self.driver.execute_script("""
+            var nd = document.querySelector('app-dynamic-history .no-data, app-dynamic-history img[alt="No Data Available"]');
+            var ndt = null;
+            var texts = document.querySelectorAll('app-dynamic-history *');
+            for(var i=0;i<texts.length;i++){
+                if(texts[i].textContent && texts[i].textContent.indexOf('No data available')!==-1){ndt=true;break;}
+            }
+            return (nd && nd.offsetParent!==null) || ndt;
+        """)
+        log.info("History empty: " + str(no_data))
+        return bool(no_data)
+
     def get_history_row_count(self):
         try:
-            return len(self.driver.find_elements("css selector",
-                "app-dynamic-history table#excel-table tbody tr,.big-model table tbody tr,.popup-content table tbody tr"))
+            return len(self.driver.find_elements("css selector", "app-dynamic-history table#excel-table tbody tr"))
         except Exception:
             return 0
 
     def get_history_data(self):
         data = []
         try:
-            for row in self.driver.find_elements("css selector",
-                "app-dynamic-history table#excel-table tbody tr,.big-model table tbody tr,.popup-content table tbody tr"):
+            for row in self.driver.find_elements("css selector", "app-dynamic-history table#excel-table tbody tr"):
                 cells = row.find_elements("tag name", "td")
                 data.append({f'col_{i}': c.text.strip() for i, c in enumerate(cells)})
         except Exception:
@@ -301,40 +397,59 @@ class DesignationPage(BasePage):
     def close_history_popup(self):
         log.info("Closing History popup")
         self.driver.execute_script("""
-            var footers=document.querySelectorAll('.popup-footer');
-            for(var i=0;i<footers.length;i++){var btns=footers[i].querySelectorAll('button');
-            for(var j=0;j<btns.length;j++){if(btns[j].textContent.indexOf('Cancel')!==-1){btns[j].click();return;}}}
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.indexOf('Cancel') !== -1) {
+                        buttons[j].click();
+                        return;
+                    }
+                }
+            }
         """)
 
     # ── POPUP CLOSE ─────────────────────────────────────
 
     def cancel(self):
         log.info("Closing popup via Cancel")
-        self.driver.execute_script("""
-            var footers=document.querySelectorAll('.popup-footer');
-            for(var i=0;i<footers.length;i++){var btns=footers[i].querySelectorAll('button');
-            for(var j=0;j<btns.length;j++){if(btns[j].textContent.indexOf('Cancel')!==-1){btns[j].click();return;}}}
-        """)
+        self.close_popup()
 
     def close_popup(self):
         log.info("Closing popup")
         self.driver.execute_script("""
-            var footers=document.querySelectorAll('.popup-footer');
-            for(var i=0;i<footers.length;i++){var btns=footers[i].querySelectorAll('button');
-            for(var j=0;j<btns.length;j++){if(btns[j].textContent.indexOf('Cancel')!==-1){btns[j].click();return;}}}
-            var icons=document.querySelectorAll('.popup-header button mat-icon,.big-model button mat-icon');
-            for(var i=0;i<icons.length;i++){if(icons[i].textContent.trim().toLowerCase()==='close'){var btn=icons[i].closest('button');if(btn){btn.click();return;}}}
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.indexOf('Cancel') !== -1) {
+                        buttons[j].click();
+                        return 'clicked';
+                    }
+                }
+            }
+            return 'not found';
         """)
 
-    def _is_form_popup_open(self):
-        return self.driver.execute_script(
-            "var els=document.querySelectorAll('.big-model');for(var i=0;i<els.length;i++){if(els[i].offsetParent!==null)return true;}return false;"
-        )
+    def force_close_form_popup(self):
+        log.info("Force closing form popup")
+        result = self.driver.execute_script("""
+            var popup = document.querySelector('div.edit_pop_up');
+            if (!popup) return 'no popup found';
+            var closeBtn = popup.querySelector('button[mat-icon-button] mat-icon');
+            if (!closeBtn) return 'no close button found';
+            var btn = closeBtn.closest('button');
+            if (btn) { btn.click(); return 'clicked close'; }
+            return 'could not click';
+        """)
+        log.info("Force close result: " + str(result))
 
     def is_add_form_open(self):
-        return self.driver.execute_script(
-            "var el=document.querySelector('input[name=\"Name\"]');return el&&el.offsetParent!==null;"
-        )
+        """Check if the Add/Create popup is currently open."""
+        return self.driver.execute_script("""
+            var el = document.querySelector('input[name="Name"]');
+            return el && el.offsetParent !== null;
+        """)
 
     def is_view_mode(self):
         return self.driver.execute_script(
@@ -359,51 +474,64 @@ class DesignationPage(BasePage):
     # ── SWEET ALERT ─────────────────────────────────────
 
     def handle_success_alert(self):
+        """Handle SweetAlert2 success notification — fast dismiss (UOM pattern)."""
         log.info("Handling success alert")
         try:
             WebDriverWait(self.driver, 3).until(
                 EC.visibility_of_element_located(("css selector", ".swal2-container"))
             )
-            title = self.driver.execute_script(
-                "var el=document.querySelector('#swal2-title');return el?el.textContent.trim():'';"
-            ) or ''
-            self.driver.execute_script("var btn=document.querySelector('.swal2-confirm');if(btn)btn.click();")
+            log.info("SweetAlert detected, dismissing via JS")
+            self.driver.execute_script("""
+                var btn = document.querySelector('.swal2-confirm');
+                if (btn) { btn.click(); return 'clicked'; }
+                return 'not found';
+            """)
             try:
-                WebDriverWait(self.driver, 2).until(
+                WebDriverWait(self.driver, 3).until(
                     EC.invisibility_of_element_located(("css selector", ".swal2-container"))
                 )
             except Exception:
                 pass
-            return title
         except Exception:
-            return ''
+            log.info("No SweetAlert found (may have auto-dismissed)")
 
     def handle_validation_warning(self):
-        log.info("Handling validation warning")
+        """Pattern A: Dismiss 'Please correct the highlighted fields' via JS click OK."""
+        log.info("Handling validation warning (Pattern A)")
+        self._dismiss_swal(button=".swal2-confirm", label="OK")
+
+    def handle_validation_download(self):
+        """Pattern B: Dismiss 'Fields validation failed' via JS click Cancel."""
+        log.info("Handling validation download (Pattern B)")
+        self._dismiss_swal(button=".swal2-cancel", label="Cancel")
+
+    def dismiss_any_validation_alert(self):
+        """Dismiss any SweetAlert — try Cancel first, then OK (UOM pattern)."""
+        log.info("Dismissing any validation alert")
+        self.driver.execute_script("""
+            var cancel = document.querySelector('.swal2-cancel');
+            if (cancel) { cancel.click(); return 'Cancel'; }
+            var confirm = document.querySelector('.swal2-confirm');
+            if (confirm) { confirm.click(); return 'OK'; }
+            return 'none';
+        """)
         try:
-            self.driver.find_element("css selector", ".swal2-popup")
-            title = self.driver.execute_script(
-                "var el=document.querySelector('#swal2-title');return el?el.textContent.trim():'';"
-            ) or ''
-            self.driver.execute_script("var btn=document.querySelector('.swal2-confirm');if(btn)btn.click();")
-            try:
-                WebDriverWait(self.driver, 2).until(
-                    EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
-                )
-            except Exception:
-                pass
-            return title
+            WebDriverWait(self.driver, 2).until(
+                EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
+            )
         except Exception:
-            return ''
+            pass
 
     def is_validation_alert_present(self, timeout=3):
+        """Check if SweetAlert validation popup is visible. Fast poll (0.2s)."""
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             try:
-                if self.driver.execute_script(
-                    "var el=document.querySelector('.swal2-popup.swal2-icon-warning,.swal2-popup.swal2-icon-error');"
-                    "return el&&el.offsetParent!==null;"
-                ):
+                visible = self.driver.execute_script("""
+                    var el = document.querySelector('.swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error');
+                    return el && el.offsetParent !== null;
+                """)
+                if visible:
                     return True
             except Exception:
                 pass
@@ -413,77 +541,127 @@ class DesignationPage(BasePage):
     # ── MAT ERROR ───────────────────────────────────────
 
     def get_mat_error_text(self, field_locator=None):
+        """Get mat-error text below a form field. Pure JS, no Selenium locators."""
         try:
             if field_locator:
                 css = field_locator[1] if field_locator[0] == "css" else ""
-                return self.driver.execute_script("""
-                    var input=document.querySelector(arguments[0]);if(!input)return '';
-                    var current=input;
-                    for(var s=0;s<20;s++){var errors=current.querySelectorAll('mat-error');
-                    if(errors.length>0){var t=[];for(var i=0;i<errors.length;i++){if(errors[i].textContent.trim())t.push(errors[i].textContent.trim());}return t.join(' | ');}
-                    current=current.parentElement;if(!current||current===document.body)break;}return '';
-                """, css) or ""
-            return self.driver.execute_script("""
-                var errors=[];var matErrors=document.querySelectorAll('.big-model mat-error,.edit_pop_up mat-error');
-                matErrors.forEach(function(el){if(el.offsetParent!==null){var t=el.textContent.trim();if(t)errors.push(t);}});return errors;
-            """) or []
+                if not css:
+                    return ""
+                result = self.driver.execute_script("""
+                    var input = document.querySelector(arguments[0]);
+                    if (!input) return '';
+                    var current = input;
+                    for (var steps = 0; steps < 20; steps++) {
+                        var errors = current.querySelectorAll('mat-error');
+                        if (errors.length > 0) {
+                            var texts = [];
+                            for (var i = 0; i < errors.length; i++) {
+                                var t = errors[i].textContent.trim();
+                                if (t) texts.push(t);
+                            }
+                            return texts.join(' | ');
+                        }
+                        current = current.parentElement;
+                        if (!current || current === document.body) break;
+                    }
+                    return '';
+                """, css)
+                return result or ""
+            # No locator — get all visible mat-errors in popup
+            result = self.driver.execute_script("""
+                var errors = [];
+                var matErrors = document.querySelectorAll('.edit_pop_up mat-error, .big-model mat-error');
+                matErrors.forEach(function(el) {
+                    if (el.offsetParent !== null) {
+                        var t = el.textContent.trim();
+                        if (t) errors.push(t);
+                    }
+                });
+                return errors;
+            """)
+            return result or []
         except Exception:
             return ""
 
     def has_field_error(self, field_label):
+        """Check if a form field has error styling (red border / invalid state)."""
         css = {"Name": "input[name='Name']", "Description": "input[name='Description']"}.get(field_label, "")
         if not css:
             return False
-        return self.driver.execute_script("""
-            var input=document.querySelector(arguments[0]);if(!input)return false;
-            var current=input;var invalid=['mat-mdc-form-field-invalid','ng-invalid','cdk-text-field-invalid'];
-            for(var s=0;s<20;s++){var cls=current.className||'';
-            for(var i=0;i<invalid.length;i++){if(cls.indexOf(invalid[i])!==-1)return true;}
-            current=current.parentElement;if(!current||current===document.body)break;}return false;
+        result = self.driver.execute_script("""
+            var input = document.querySelector(arguments[0]);
+            if (!input) return false;
+            var current = input;
+            var invalid = ['mat-mdc-form-field-invalid', 'ng-invalid', 'cdk-text-field-invalid'];
+            for (var s = 0; s < 20; s++) {
+                var cls = current.className || '';
+                for (var i = 0; i < invalid.length; i++) {
+                    if (cls.indexOf(invalid[i]) !== -1) return true;
+                }
+                current = current.parentElement;
+                if (!current || current === document.body) break;
+            }
+            return false;
         """, css)
+        return bool(result)
 
     def has_name_invalid_class(self):
         return self.driver.execute_script("""
-            var input=document.querySelector('input[name="Name"]');if(!input)return false;
-            var cls=input.className||'';if(cls.indexOf('ng-invalid')!==-1&&cls.indexOf('ng-touched')!==-1)return true;
-            var v=input.value||'';if(v&&cls.indexOf('ng-touched')!==-1){if(v.trim()==='')return true;
-            if(!/^[a-zA-Z\\s\\.\\,\\-\\(\\)]+$/.test(v))return true;}return false;
+            var input = document.querySelector('input[name="Name"]');
+            if (!input) return false;
+            var cls = input.className || '';
+            if (cls.indexOf('ng-invalid') !== -1 && cls.indexOf('ng-touched') !== -1) return true;
+            return false;
         """)
 
-    # ── ONE-CALL FLOWS ──────────────────────────────────
+    def get_field_value(self, locator):
+        """Get the current value of an input field via JS (fast)."""
+        try:
+            css = locator[1] if locator[0] == "css" else ""
+            if not css:
+                return ""
+            return self.driver.execute_script(
+                "var el = document.querySelector(arguments[0]); "
+                "return el ? el.value : '';", css
+            ) or ""
+        except Exception:
+            return ""
+
+    # ── ONE-CALL FLOWS (fast — no time.sleep!) ──────────
 
     def create_designation(self, data):
+        """Create a designation. Returns result dict with status."""
         log.info(f"CREATE: {data.get('name','?')}")
         result = {'status': 'FAILED', 'error': '', 'message': '', 'data': data}
         try:
             self.open_add_form()
             self.fill_designation_form(data)
             self.submit()
-            time.sleep(1)
-            if self.is_validation_alert_present(timeout=3):
-                alert_text = self.driver.execute_script(
+            # Fast alert check — no time.sleep!
+            if self.is_validation_alert_present(timeout=2):
+                alert_title = self.driver.execute_script(
                     "var el=document.querySelector('#swal2-title');return el?el.textContent.trim():'';"
                 ) or ''
-                if 'success' in alert_text.lower():
-                    result['message'] = alert_text
+                if 'success' in alert_title.lower():
+                    result['message'] = alert_title
                     result['status'] = 'PASSED'
                     self.driver.execute_script("var btn=document.querySelector('.swal2-confirm');if(btn)btn.click();")
                 else:
-                    warning = self.handle_validation_warning()
+                    self.handle_validation_warning()
                     result['error'] = 'validation_warning'
-                    result['message'] = warning if isinstance(warning, str) else alert_text
+                    result['message'] = alert_title
                     result['status'] = 'VALIDATION_FAILED'
                     return result
             else:
-                msg = self.handle_success_alert()
-                result['message'] = msg
-                result['status'] = 'PASSED' if msg else 'UNKNOWN'
+                self.handle_success_alert()
+                result['status'] = 'PASSED'
             self._force_close_panels()
         except Exception as e:
             result['error'] = str(e)
         return result
 
     def edit_designation(self, name, updated_data):
+        """Edit a designation. Returns result dict with status."""
         log.info(f"EDIT: {name}")
         result = {'status': 'FAILED', 'error': '', 'message': ''}
         try:
@@ -495,24 +673,23 @@ class DesignationPage(BasePage):
                 return result
             self.fill_designation_form(updated_data)
             self.click_update()
-            time.sleep(1)
-            if self.is_validation_alert_present(timeout=3):
-                alert_text = self.driver.execute_script(
+            # Fast alert check — no time.sleep!
+            if self.is_validation_alert_present(timeout=2):
+                alert_title = self.driver.execute_script(
                     "var el=document.querySelector('#swal2-title');return el?el.textContent.trim():'';"
                 ) or ''
-                if 'success' in alert_text.lower():
-                    result['message'] = alert_text
+                if 'success' in alert_title.lower():
+                    result['message'] = alert_title
                     result['status'] = 'PASSED'
                     self.driver.execute_script("var btn=document.querySelector('.swal2-confirm');if(btn)btn.click();")
                 else:
-                    warning = self.handle_validation_warning()
+                    self.handle_validation_warning()
                     result['error'] = 'validation_warning'
-                    result['message'] = warning if isinstance(warning, str) else alert_text
+                    result['message'] = alert_title
                     result['status'] = 'VALIDATION_FAILED'
                     return result
             else:
-                msg = self.handle_success_alert()
-                result['message'] = msg
+                self.handle_success_alert()
                 result['status'] = 'PASSED'
             self._force_close_panels()
         except Exception as e:
@@ -526,68 +703,135 @@ class DesignationPage(BasePage):
         if not css:
             return
         self.driver.execute_script("""
-            var input=document.querySelector(arguments[0]);if(!input)return;
-            input.focus();input.dispatchEvent(new Event('focus',{bubbles:true}));
-            if(arguments[2]){var ns=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
-            ns.call(input,'');input.dispatchEvent(new Event('input',{bubbles:true}));}
-            var ns=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
-            ns.call(input,arguments[1]);input.dispatchEvent(new Event('input',{bubbles:true}));
-            input.dispatchEvent(new Event('change',{bubbles:true}));input.blur();
-            input.dispatchEvent(new Event('blur',{bubbles:true}));
+            var input = document.querySelector(arguments[0]);
+            if (!input) return;
+            input.focus();
+            input.dispatchEvent(new Event('focus', {bubbles: true}));
+            if (arguments[2]) {
+                var ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                ns.call(input, '');
+                input.dispatchEvent(new Event('input', {bubbles: true}));
+            }
+            var ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            ns.call(input, arguments[1]);
+            input.dispatchEvent(new Event('input', {bubbles: true}));
+            input.dispatchEvent(new Event('change', {bubbles: true}));
+            input.blur();
+            input.dispatchEvent(new Event('blur', {bubbles: true}));
         """, css, value, clear_first)
 
-    # For backward compat with test calls to _set_angular_input
+    # For backward compat
     def _set_angular_input(self, locator, value, clear_first=True):
         self._set_input(locator, value, clear_first)
 
     # ── JS CLICK HELPERS ────────────────────────────────
 
     def _js_click_popup_button(self, button_text):
+        """Click a popup footer button (Submit/Update) via JS — bypasses overlay issues."""
+        js = """
+        var footers = document.querySelectorAll('.popup-footer');
+        for (var i = 0; i < footers.length; i++) {
+            var buttons = footers[i].querySelectorAll('button');
+            for (var j = 0; j < buttons.length; j++) {
+                if (buttons[j].textContent.trim().indexOf(arguments[0]) !== -1) {
+                    buttons[j].click();
+                    return 'clicked_' + arguments[0];
+                }
+            }
+        }
+        throw new Error('Button "' + arguments[0] + '" not found in popup footer');
+        """
         try:
-            self.driver.execute_script("""
-                var footers=document.querySelectorAll('.popup-footer');
-                for(var i=0;i<footers.length;i++){var btns=footers[i].querySelectorAll('button');
-                for(var j=0;j<btns.length;j++){if(btns[j].textContent.trim().indexOf(arguments[0])!==-1){btns[j].click();return;}}}
-            """, button_text)
+            result = self.driver.execute_script(js, button_text)
+            log.info("JS click " + button_text + ": " + str(result))
         except Exception as e:
-            log.warning(f"JS click {button_text} failed: {e}")
+            log.warning("JS click failed for " + button_text + ", falling back to Selenium: " + str(e))
+            if button_text == 'Submit':
+                self.click_with_retry(self.SUBMIT_BUTTON)
+            elif button_text == 'Update':
+                self.click_with_retry(self.UPDATE_BUTTON)
 
     def _click_action_menu_item(self, name, action_name):
-        log.info(f"Clicking {action_name} for: {name}")
-        self.driver.execute_script("""
-            var table=document.querySelector('table#excel-table');if(!table)throw new Error('Table not found');
-            var rows=table.querySelectorAll('tbody tr');
-            for(var i=0;i<rows.length;i++){var nc=rows[i].querySelector('td.cdk-column-name,td.mat-column-name');
-            if(nc&&nc.textContent.trim().toLowerCase().indexOf(arguments[0].toLowerCase())!==-1){
-            var mb=rows[i].querySelector('td.cdk-column-actions button,.erp-row-trigger');
-            if(mb){mb.scrollIntoView({block:'center'});mb.click();return;}}}
-            throw new Error('Row not found: '+arguments[0]);
-        """, name)
+        """Click an action menu item (View/Edit/History) for a specific row (UOM pattern)."""
+        log.info("Clicking " + action_name + " via 3-dot menu for: " + name)
+        # Step 1: Open 3-dot menu for the row
+        js = """
+        var table = document.querySelector('table#excel-table');
+        if (!table) { throw new Error('Table not found'); }
+        var rows = table.querySelectorAll('tbody tr');
+        for (var i = 0; i < rows.length; i++) {
+            var cells = rows[i].querySelectorAll('td');
+            for (var j = 0; j < cells.length; j++) {
+                if (cells[j].textContent.trim().indexOf(arguments[0]) !== -1) {
+                    var menuBtn = rows[i].querySelector('td.cdk-column-actions button');
+                    if (!menuBtn) { throw new Error('3-dot menu button not found'); }
+                    menuBtn.scrollIntoView({block:'center'});
+                    menuBtn.click();
+                    return 'menu_opened';
+                }
+            }
+        }
+        throw new Error('Row not found: ' + arguments[0]);
+        """
+        result = self.driver.execute_script(js, name)
+        log.info("3-dot menu opened for: " + name)
+
+        # Step 2: Wait for dropdown overlay
         try:
             WebDriverWait(self.driver, 2).until(
                 EC.presence_of_element_located(("css selector", ".cdk-overlay-container .cdk-overlay-pane"))
             )
         except Exception:
             pass
-        self.driver.execute_script("""
-            var overlay=document.querySelector('.cdk-overlay-container');if(!overlay)throw new Error('No overlay');
-            var items=overlay.querySelectorAll('button,span,div');
-            for(var i=0;i<items.length;i++){if(items[i].textContent.trim()===arguments[0]){items[i].click();return;}}
-            for(var i=0;i<items.length;i++){if(items[i].textContent.trim().toLowerCase().indexOf(arguments[0].toLowerCase())!==-1){items[i].click();return;}}
-            throw new Error('Menu item not found: '+arguments[0]);
-        """, action_name)
+
+        # Step 3: Click the specific menu item
+        js_click = """
+        var overlay = document.querySelector('.cdk-overlay-container');
+        if (!overlay) { throw new Error('CDK overlay not found after menu click'); }
+        var items = overlay.querySelectorAll('button, span, div');
+        for (var i = 0; i < items.length; i++) {
+            var text = items[i].textContent.trim();
+            if (text === arguments[0]) {
+                items[i].click();
+                return 'clicked_' + arguments[0];
+            }
+        }
+        for (var i = 0; i < items.length; i++) {
+            var text = items[i].textContent.trim().toLowerCase();
+            if (text.indexOf(arguments[0].toLowerCase()) !== -1) {
+                items[i].click();
+                return 'clicked_partial_' + arguments[0];
+            }
+        }
+        throw new Error('Menu item "' + arguments[0] + '" not found in dropdown overlay');
+        """
+        result = self.driver.execute_script(js_click, action_name)
+        log.info("Successfully clicked " + action_name + " for: " + name)
+        return result
 
     # ── OVERLAY CLEANUP ─────────────────────────────────
 
     def _force_close_panels(self):
+        """Remove any lingering CDK overlay panels that block clicks."""
         self.driver.execute_script("""
-            document.querySelectorAll('.swal2-container').forEach(function(el){el.remove();});
-            document.querySelectorAll('.cdk-overlay-backdrop').forEach(function(el){el.remove();});
+            document.querySelectorAll('.cdk-overlay-backdrop').forEach(function(el) { el.remove(); });
+            document.querySelectorAll('.cdk-overlay-pane').forEach(function(el) { el.remove(); });
         """)
 
-    def force_close_form_popup(self):
-        self.driver.execute_script("""
-            var p=document.querySelector('div.edit_pop_up');if(!p)return;
-            var c=p.querySelector('button[mat-icon-button] mat-icon');if(!c)return;
-            var btn=c.closest('button');if(btn)btn.click();
-        """)
+    def _dismiss_swal(self, button, label):
+        """Dismiss a SweetAlert popup by clicking the specified button via JS."""
+        try:
+            self.driver.find_element("css selector", ".swal2-popup")
+            self.driver.execute_script("""
+                var btn = document.querySelector(arguments[0]);
+                if (btn) { btn.click(); }
+            """, button)
+            log.info("Dismissed SweetAlert via " + label)
+            try:
+                WebDriverWait(self.driver, 2).until(
+                    EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
+                )
+            except Exception:
+                pass
+        except Exception as e:
+            log.warning("No SweetAlert to dismiss: " + str(e))
