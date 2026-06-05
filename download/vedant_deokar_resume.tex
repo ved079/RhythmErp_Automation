@@ -1,0 +1,174 @@
+% ============================================================
+% ATS-Friendly Resume — Vedant J. Deokar
+% Overleaf-compatible | Single-column | No graphics/icons/tables
+% Targets: AI Intern / AI Roles, Automation, Business/Data Analyst
+% ============================================================
+\documentclass[11pt,letterpaper]{article}
+
+% ── Packages ──
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=0.6in]{geometry}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+% ── Hyperref setup (subtle, ATS-safe) ──
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  urlcolor=black,
+  citecolor=black
+}
+
+% ── Custom colors ──
+\definecolor{heading}{RGB}{40,40,40}
+
+% ── Section formatting ──
+\renewcommand{\section}[1]{
+  \vspace{6pt}
+  {\bfseries\large #1}
+  \vspace{2pt}
+  \hrule height 0.8pt
+  \vspace{4pt}
+}
+
+% ── Itemize ──
+\setlist[itemize]{
+  topsep=2pt,
+  itemsep=1pt,
+  parsep=0pt,
+  partopsep=0pt,
+  leftmargin=14pt
+}
+
+% ── Remove page numbers ──
+\pagestyle{empty}
+
+% ── Paragraph spacing ──
+\setlength{\parskip}{0pt}
+\setlength{\parindent}{0pt}
+
+\begin{document}
+
+% ============================================================
+% HEADER
+% ============================================================
+\begin{center}
+  {\LARGE\bfseries VEDANT JITENDRA DEOKAR}\\[4pt]
+  +91 9309316566 \quad|\quad vedantdeo79@gmail.com \quad|\quad Pune, Maharashtra, India\\[2pt]
+  \href{https://github.com/ved079}{github.com/ved079} \quad|\quad \href{https://linkedin.com/in/vedantdeokar}{linkedin.com/in/vedantdeokar}
+\end{center}
+
+\vspace{4pt}
+
+% ============================================================
+% PROFESSIONAL SUMMARY
+% ============================================================
+\section{PROFESSIONAL SUMMARY}
+
+Results-driven engineer with hands-on experience in \textbf{test automation}, \textbf{business analysis}, and \textbf{data analytics}. Built and deployed 1200+ automated API tests across 23+ ERP modules, designed interactive dashboards, and translated complex business logic into functional specifications. Seeking to leverage automation expertise, analytical thinking, and Python proficiency in AI, automation, or data analyst roles.
+
+\vspace{2pt}
+
+% ============================================================
+% EDUCATION
+% ============================================================
+\section{EDUCATION}
+
+\textbf{B.Tech.\ in Computer Engineering} \hfill Anticipated May 2026\\
+MIT Academy of Engineering, Pune \quad|\quad CGPA: 7.84/10
+
+\vspace{3pt}
+
+\textbf{12th CBSE (Science)} \hfill 2022\\
+Kendriya Vidyalaya, Pune \quad|\quad 74.40\%
+
+\vspace{2pt}
+
+% ============================================================
+% EXPERIENCE
+% ============================================================
+\section{WORK EXPERIENCE}
+
+\textbf{Business Analyst Intern} \hfill Jan 2026 -- Present\\
+\textit{Rhythmflows Solutions --- Pune, India}
+
+\begin{itemize}
+  \item Engineered 1200+ automated API tests across 23+ ERP modules using \textbf{Python} and \textbf{pytest}, covering schema validation, payload integrity, CRUD operations, and performance benchmarks
+  \item Designed end-to-end test automation framework for a multi-tenant ERP system with JWT authentication, dynamic screen wrappers, and REST API validation pipelines
+  \item Built modular test architecture with parameterized fixtures, reusable data builders, FK pool validation, and batch data creation scripts for test environment setup
+  \item Discovered and reported critical server-side bugs including missing database migration columns, contributing to production stability and faster release cycles
+  \item Analyzed and documented end-to-end business processes across finance and compliance modules, translating business logic into Functional Specification Documents (FSDs) and data flow diagrams
+  \item Designed interactive \textbf{Power BI} dashboards for management overviews and weekly performance trackers, enabling data-driven decision-making
+  \item Gathered requirements and prototyped UI in \textbf{Figma}, transitioning the company profile experience from static PDF to a dynamic web interface
+  \item Defined data dictionaries and mapped workflows for supplier and customer data, enabling automation and resolving navigation bottlenecks
+\end{itemize}
+
+\vspace{2pt}
+
+% ============================================================
+% PROJECTS
+% ============================================================
+\section{PROJECTS}
+
+\textbf{RhythmERP API Test Automation Suite} \hfill \textit{Python, pytest, REST APIs, Git}
+\begin{itemize}
+  \item Built comprehensive API test suite with 1200+ tests spanning Common Settings, Commodity, Registration, and Company Onboarding modules
+  \item Implemented dynamic payload generation, foreign-key pool validation, and bulk data creation scripts (\texttt{batch\_create.py}) for rapid test environment provisioning
+  \item Designed 4-tier test architecture: payload validation, schema conformance, live CRUD operations, and performance benchmarking
+  \item Maintained version-controlled test codebase on GitHub with structured commits across module deliverables
+\end{itemize}
+
+\vspace{3pt}
+
+\textbf{Shree Enterprises Books \& Uniform Sales Analytics} \hfill \textit{SQL, Power BI}
+\begin{itemize}
+  \item Analyzed operational datasets to model customer behavior and revenue trends for a retail supplier
+  \item Built a star-schema data model and validated integrity using SQL joins for accurate KPI reporting
+  \item Developed interactive dashboards in Power BI to visualize revenue and category performance
+\end{itemize}
+
+\vspace{3pt}
+
+\textbf{Grocery Inflation \& Household Spend Dashboard} \hfill \textit{Power BI, Data Analysis}
+\begin{itemize}
+  \item Built an interactive dashboard analyzing 180 days of price trends across e-commerce platforms
+  \item Modeled purchase patterns to calculate budget variance and spending insights
+  \item Presented actionable recommendations based on data-driven insights
+\end{itemize}
+
+\vspace{2pt}
+
+% ============================================================
+% SKILLS
+% ============================================================
+\section{SKILLS}
+
+\textbf{Automation \& Testing:} \quad Python, pytest, REST API Testing, Test Automation Framework Design, Postman, CI/CD Basics
+
+\vspace{1pt}
+
+\textbf{Data \& Analytics:} \quad SQL, Power BI, Tableau, Excel, Pandas, NumPy, Data Modeling, KPI Reporting
+
+\vspace{1pt}
+
+\textbf{Business Analysis:} \quad Requirements Elicitation, Process Mapping, Gap Analysis, UAT, FSD, Data Dictionaries, DFD, Wireframing (Figma)
+
+\vspace{1pt}
+
+\textbf{Tools \& Platforms:} \quad Git/GitHub, Jira, Visio, draw.io, Linux, VS Code
+
+\vspace{2pt}
+
+% ============================================================
+% CERTIFICATIONS (optional — uncomment and fill if applicable)
+% ============================================================
+% \section{CERTIFICATIONS}
+% \begin{itemize}
+%   \item Google Data Analytics Professional Certificate --- Coursera (2025)
+%   \item AWS Cloud Practitioner --- Amazon Web Services (2025)
+% \end{itemize}
+
+\end{document}
