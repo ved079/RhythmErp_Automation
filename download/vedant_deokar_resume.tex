@@ -9,12 +9,12 @@
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
-\usepackage[margin=0.6in]{geometry}
+\usepackage[margin=0.65in]{geometry}
 \usepackage{enumitem}
 \usepackage{hyperref}
 \usepackage{xcolor}
 
-% ── Hyperref setup (subtle, ATS-safe) ──
+% ── Hyperref (ATS-safe: black links) ──
 \hypersetup{
   colorlinks=true,
   linkcolor=black,
@@ -22,28 +22,28 @@
   citecolor=black
 }
 
-% ── Custom colors ──
-\definecolor{heading}{RGB}{40,40,40}
+% ── Line spacing (gives the whole page breathing room) ──
+\renewcommand{\baselinestretch}{1.08}
 
 % ── Section formatting ──
-\renewcommand{\section}[1]{
-  \vspace{6pt}
-  {\bfseries\large #1}
-  \vspace{2pt}
-  \hrule height 0.8pt
-  \vspace{4pt}
+\renewcommand{\section}[1]{%
+  \vspace{10pt}%
+  {\bfseries\large #1}%
+  \vspace{3pt}%
+  \par\noindent\textcolor{black!25}{\rule{\textwidth}{0.5pt}}%
+  \vspace{5pt}%
 }
 
-% ── Itemize ──
+% ── Itemize (more space between bullets) ──
 \setlist[itemize]{
-  topsep=2pt,
-  itemsep=1pt,
+  topsep=4pt,
+  itemsep=3pt,
   parsep=0pt,
   partopsep=0pt,
-  leftmargin=14pt
+  leftmargin=16pt
 }
 
-% ── Remove page numbers ──
+% ── No page numbers ──
 \pagestyle{empty}
 
 % ── Paragraph spacing ──
@@ -56,44 +56,31 @@
 % HEADER
 % ============================================================
 \begin{center}
-  {\LARGE\bfseries VEDANT JITENDRA DEOKAR}\\[4pt]
-  +91 9309316566 \quad|\quad vedantdeo79@gmail.com \quad|\quad Pune, Maharashtra, India\\[2pt]
-  \href{https://github.com/ved079}{github.com/ved079} \quad|\quad \href{https://linkedin.com/in/vedantdeokar}{linkedin.com/in/vedantdeokar}
+  {\LARGE\bfseries VEDANT JITENDRA DEOKAR}\\[6pt]
+  vedantdeo79@gmail.com \quad$\cdot$\quad Pune, Maharashtra, India\\[2pt]
+  \href{https://github.com/ved079}{github.com/ved079} \quad$\cdot$\quad \href{https://linkedin.com/in/vedantdeokar}{linkedin.com/in/vedantdeokar}
 \end{center}
-
-\vspace{4pt}
-
-% ============================================================
-% PROFESSIONAL SUMMARY
-% ============================================================
-\section{PROFESSIONAL SUMMARY}
-
-Results-driven engineer with hands-on experience in \textbf{test automation}, \textbf{business analysis}, and \textbf{data analytics}. Built and deployed 1200+ automated API tests across 23+ ERP modules, designed interactive dashboards, and translated complex business logic into functional specifications. Seeking to leverage automation expertise, analytical thinking, and Python proficiency in AI, automation, or data analyst roles.
-
-\vspace{2pt}
 
 % ============================================================
 % EDUCATION
 % ============================================================
 \section{EDUCATION}
 
-\textbf{B.Tech.\ in Computer Engineering} \hfill Anticipated May 2026\\
-MIT Academy of Engineering, Pune \quad|\quad CGPA: 7.84/10
+\textbf{B.Tech.\ in Computer Engineering} \hfill Anticipated May 2026\\[1pt]
+MIT Academy of Engineering, Pune \quad$\cdot$\quad CGPA: 7.84/10
 
-\vspace{3pt}
+\vspace{6pt}
 
-\textbf{12th CBSE (Science)} \hfill 2022\\
-Kendriya Vidyalaya, Pune \quad|\quad 74.40\%
-
-\vspace{2pt}
+\textbf{12th CBSE (Science)} \hfill 2022\\[1pt]
+Kendriya Vidyalaya, Pune \quad$\cdot$\quad 74.40\%
 
 % ============================================================
 % EXPERIENCE
 % ============================================================
 \section{WORK EXPERIENCE}
 
-\textbf{Business Analyst Intern} \hfill Jan 2026 -- Present\\
-\textit{Rhythmflows Solutions --- Pune, India}
+\textbf{Business Analyst Intern} \hfill Jan 2026 -- Present\\[1pt]
+\textit{Rhythmflows Solutions, Pune}
 
 \begin{itemize}
   \item Engineered 1200+ automated API tests across 23+ ERP modules using \textbf{Python} and \textbf{pytest}, covering schema validation, payload integrity, CRUD operations, and performance benchmarks
@@ -106,8 +93,6 @@ Kendriya Vidyalaya, Pune \quad|\quad 74.40\%
   \item Defined data dictionaries and mapped workflows for supplier and customer data, enabling automation and resolving navigation bottlenecks
 \end{itemize}
 
-\vspace{2pt}
-
 % ============================================================
 % PROJECTS
 % ============================================================
@@ -116,12 +101,12 @@ Kendriya Vidyalaya, Pune \quad|\quad 74.40\%
 \textbf{RhythmERP API Test Automation Suite} \hfill \textit{Python, pytest, REST APIs, Git}
 \begin{itemize}
   \item Built comprehensive API test suite with 1200+ tests spanning Common Settings, Commodity, Registration, and Company Onboarding modules
-  \item Implemented dynamic payload generation, foreign-key pool validation, and bulk data creation scripts (\texttt{batch\_create.py}) for rapid test environment provisioning
+  \item Implemented dynamic payload generation, foreign-key pool validation, and bulk data creation scripts for rapid test environment provisioning
   \item Designed 4-tier test architecture: payload validation, schema conformance, live CRUD operations, and performance benchmarking
   \item Maintained version-controlled test codebase on GitHub with structured commits across module deliverables
 \end{itemize}
 
-\vspace{3pt}
+\vspace{6pt}
 
 \textbf{Shree Enterprises Books \& Uniform Sales Analytics} \hfill \textit{SQL, Power BI}
 \begin{itemize}
@@ -130,40 +115,27 @@ Kendriya Vidyalaya, Pune \quad|\quad 74.40\%
   \item Developed interactive dashboards in Power BI to visualize revenue and category performance
 \end{itemize}
 
-\vspace{3pt}
-
-\textbf{Grocery Inflation \& Household Spend Dashboard} \hfill \textit{Power BI, Data Analysis}
-\begin{itemize}
-  \item Built an interactive dashboard analyzing 180 days of price trends across e-commerce platforms
-  \item Modeled purchase patterns to calculate budget variance and spending insights
-  \item Presented actionable recommendations based on data-driven insights
-\end{itemize}
-
-\vspace{2pt}
-
 % ============================================================
 % SKILLS
 % ============================================================
 \section{SKILLS}
 
-\textbf{Automation \& Testing:} \quad Python, pytest, REST API Testing, Test Automation Framework Design, Postman, CI/CD Basics
+\textbf{Automation \& Testing:} \enspace Python, pytest, REST API Testing, Test Automation Framework Design, Postman, CI/CD Basics
 
-\vspace{1pt}
+\vspace{4pt}
 
-\textbf{Data \& Analytics:} \quad SQL, Power BI, Tableau, Excel, Pandas, NumPy, Data Modeling, KPI Reporting
+\textbf{Data \& Analytics:} \enspace SQL, Power BI, Tableau, Excel, Pandas, NumPy, Data Modeling, KPI Reporting
 
-\vspace{1pt}
+\vspace{4pt}
 
-\textbf{Business Analysis:} \quad Requirements Elicitation, Process Mapping, Gap Analysis, UAT, FSD, Data Dictionaries, DFD, Wireframing (Figma)
+\textbf{Business Analysis:} \enspace Requirements Elicitation, Process Mapping, Gap Analysis, UAT, FSD, Data Dictionaries, DFD, Wireframing (Figma)
 
-\vspace{1pt}
+\vspace{4pt}
 
-\textbf{Tools \& Platforms:} \quad Git/GitHub, Jira, Visio, draw.io, Linux, VS Code
-
-\vspace{2pt}
+\textbf{Tools \& Platforms:} \enspace Git/GitHub, Jira, Visio, draw.io, Linux, VS Code
 
 % ============================================================
-% CERTIFICATIONS (optional — uncomment and fill if applicable)
+% CERTIFICATIONS (uncomment when ready)
 % ============================================================
 % \section{CERTIFICATIONS}
 % \begin{itemize}
