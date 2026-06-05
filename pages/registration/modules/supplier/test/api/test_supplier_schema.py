@@ -117,3 +117,19 @@ class TestSupplierSchema:
         assert len(PO_TYPE_IDS) == FIELD_VALIDATION_RULES["po_type_ref_id"]["fk_options_count"]
         assert len(PAYMENT_TERMS_IDS) == FIELD_VALIDATION_RULES["payment_terms_ref_id"]["fk_options_count"]
         assert len(BANK_DOC_IDS) == FIELD_VALIDATION_RULES["bank_doc_id"]["fk_options_count"]
+
+    def test_address_type_has_dual_requirement_note(self):
+        """FIELD_VALIDATION_RULES for address_type should note dual requirement."""
+        rule = FIELD_VALIDATION_RULES["address_type"]
+        assert rule["required"] is True
+        note = rule.get("note", "")
+        assert "Shipping" in note and "Billing" in note, (
+            f"address_type rule should note both types required, got: {note}"
+        )
+
+    def test_default_fk_ids_has_both_address_types(self):
+        """DEFAULT_SUPPLIER_FK_IDS must include both shipping and billing address types."""
+        assert "shipping_address_type" in DEFAULT_SUPPLIER_FK_IDS
+        assert "billing_address_type" in DEFAULT_SUPPLIER_FK_IDS
+        assert DEFAULT_SUPPLIER_FK_IDS["shipping_address_type"] in ADDRESS_TYPE_IDS
+        assert DEFAULT_SUPPLIER_FK_IDS["billing_address_type"] in ADDRESS_TYPE_IDS

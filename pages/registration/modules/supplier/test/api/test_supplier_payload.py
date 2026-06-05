@@ -85,6 +85,45 @@ class TestSupplierAPIPayload:
             assert "state_ref_id_id" in addr
             assert "address" in addr
 
+    def test_payload_shipping_billing_have_different_types(self):
+        """Shipping and Billing address rows must have distinct address_type values."""
+        payload = generate_supplier_api_payload()
+        addr_details = payload["children"][1]["details"]
+        addr_types = [d["address_type"] for d in addr_details]
+        # All rows should not have the same type — must be one of each
+        assert len(set(addr_types)) >= 2, (
+            f"All address rows have the same type {addr_types} — "
+            "ERP requires both Shipping (43) and Billing (42)"
+        )
+
+    def test_payload_both_addresses_share_cascading_chain(self):
+        """Both Shipping and Billing should share the same country/state/district chain."""
+        payload = generate_supplier_api_payload()
+        addr_details = payload["children"][1]["details"]
+        assert len(addr_details) >= 2
+        row0, row1 = addr_details[0], addr_details[1]
+        # Same country and state for both addresses
+        assert row0["country_ref_id_id"] == row1["country_ref_id_id"], (
+            "Both address rows should share the same country"
+        )
+        assert row0["state_ref_id_id"] == row1["state_ref_id_id"], (
+            "Both address rows should share the same state"
+        )
+
+    def test_generate_valid_supplier_data_has_step2_addresses(self):
+        """generate_valid_supplier_data() must return step2_addresses list for UI."""
+        from pages.registration.modules.supplier.data.supplier_data import (
+            generate_valid_supplier_data,
+        )
+        data = generate_valid_supplier_data()
+        assert "step2_addresses" in data, "Missing step2_addresses key"
+        assert len(data["step2_addresses"]) == 2, (
+            f"Expected 2 address rows, got {len(data['step2_addresses'])}"
+        )
+        types = [a.get("address_type") for a in data["step2_addresses"]]
+        assert "Shipping" in types, "First address should be Shipping"
+        assert "Billing" in types, "Second address should be Billing"
+
     def test_payload_bank_in_details_array(self):
         """Bank rows must be in children[2].details[] array."""
         payload = generate_supplier_api_payload()

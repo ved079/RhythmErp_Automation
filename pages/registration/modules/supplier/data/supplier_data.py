@@ -441,10 +441,22 @@ def generate_valid_supplier_data(company_prefix=None):
     """Generate complete valid data for ALL 3 steps.
     Uses realistic Indian data by default. Pass company_prefix for old format.
     Used for end-to-end happy path tests.
+
+    IMPORTANT (verified 2026-06-05): The ERP now REQUIRES both a Shipping
+    AND a Billing address for Supplier roles. This function returns:
+      - step2: single address dict (backward compat for API payloads)
+      - step2_addresses: list of TWO dicts (Shipping + Billing) for UI tests
+    The UI create_supplier() method uses step2_addresses when present.
     """
+    step2_base = generate_valid_step2_data()
     return {
         "step1": generate_valid_step1_data(company_prefix),
-        "step2": generate_valid_step2_data(),
+        "step2": step2_base,  # backward compat — single address
+        # UI needs BOTH address types — first row Shipping, second row Billing
+        "step2_addresses": [
+            {**step2_base, "address_type": "Shipping"},
+            {**step2_base, "address_type": "Billing"},
+        ],
         "step3": generate_valid_step3_data(),
     }
 
@@ -532,6 +544,7 @@ def generate_empty_step1_data():
 
 def generate_duplicate_company_data(existing_company_name):
     """Return valid data using an existing company name — for duplicate test."""
+    step2_base = generate_valid_step2_data()
     return {
         "step1": {
             "ownership_status": None,
@@ -551,7 +564,11 @@ def generate_duplicate_company_data(existing_company_name):
             "delivery_terms": None,
             "mode_of_delivery": None,
         },
-        "step2": generate_valid_step2_data(),
+        "step2": step2_base,
+        "step2_addresses": [
+            {**step2_base, "address_type": "Shipping"},
+            {**step2_base, "address_type": "Billing"},
+        ],
         "step3": generate_valid_step3_data(),
     }
 
@@ -560,9 +577,14 @@ def generate_duplicate_email_data(existing_email):
     """Return valid data using an existing email — for duplicate email test."""
     step1 = generate_valid_step1_data("DupEmail")
     step1["email"] = existing_email
+    step2_base = generate_valid_step2_data()
     return {
         "step1": step1,
-        "step2": generate_valid_step2_data(),
+        "step2": step2_base,
+        "step2_addresses": [
+            {**step2_base, "address_type": "Shipping"},
+            {**step2_base, "address_type": "Billing"},
+        ],
         "step3": generate_valid_step3_data(),
     }
 
@@ -571,9 +593,14 @@ def generate_duplicate_phone_data(existing_phone):
     """Return valid data using an existing phone — for duplicate phone test."""
     step1 = generate_valid_step1_data("DupPhone")
     step1["phone_number"] = existing_phone
+    step2_base = generate_valid_step2_data()
     return {
         "step1": step1,
-        "step2": generate_valid_step2_data(),
+        "step2": step2_base,
+        "step2_addresses": [
+            {**step2_base, "address_type": "Shipping"},
+            {**step2_base, "address_type": "Billing"},
+        ],
         "step3": generate_valid_step3_data(),
     }
 

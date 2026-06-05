@@ -79,3 +79,42 @@ class TestSupplierAPILive:
             assert "Additional Details" in stepper_names
             assert "Address Details" in stepper_names
             assert "Bank Details" in stepper_names
+
+
+@pytest.mark.api
+class TestSupplierAddressValidation:
+    """Verify ERP enforces the dual address type requirement for Suppliers."""
+
+    def test_missing_billing_address_rejected(self, api_client):
+        """Payload with only Shipping address should be rejected (400).
+        ERP validates: 'Billing address is required for Supplier roles'.
+        """
+        payload = generate_supplier_api_payload()
+        # Remove the Billing address row, keep only Shipping
+        addr_details = payload["children"][1]["details"]
+        payload["children"][1]["details"] = [
+            d for d in addr_details if d.get("address_type") == 43  # Shipping only
+        ]
+        assert len(payload["children"][1]["details"]) == 1
+        result = api_client.create_entry(payload)
+        assert result is None, (
+            "BUG: ERP accepted Supplier with only Shipping address — "
+            "Billing address should be required"
+        )
+
+    def test_missing_shipping_address_rejected(self, api_client):
+        """Payload with only Billing address should be rejected (400).
+        ERP validates: 'Shipping address is required for Supplier roles'.
+        """
+        payload = generate_supplier_api_payload()
+        # Remove the Shipping address row, keep only Billing
+        addr_details = payload["children"][1]["details"]
+        payload["children"][1]["details"] = [
+            d for d in addr_details if d.get("address_type") == 42  # Billing only
+        ]
+        assert len(payload["children"][1]["details"]) == 1
+        result = api_client.create_entry(payload)
+        assert result is None, (
+            "BUG: ERP accepted Supplier with only Billing address — "
+            "Shipping address should be required"
+        )

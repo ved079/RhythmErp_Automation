@@ -1487,8 +1487,26 @@ class SupplierPage(BasePage):
             self.wait_seconds(1)
 
             # Step 2: Fill Address Details
-            step2 = data.get("step2", {})
-            self.fill_step2_address(step2)
+            # IMPORTANT (verified 2026-06-05): ERP now REQUIRES both Shipping
+            # AND Billing address rows for Supplier roles. The data dict may
+            # contain either a single step2 or a list step2_addresses.
+            step2_addresses = data.get("step2_addresses", [])
+            if not step2_addresses:
+                # Fallback: single step2 dict → wrap in list
+                step2 = data.get("step2", {})
+                if step2:
+                    # First row = Shipping, second row = Billing
+                    step2_addresses = [
+                        {**step2, "address_type": "Shipping"},
+                        {**step2, "address_type": "Billing"},
+                    ]
+
+            for i, addr_data in enumerate(step2_addresses):
+                if i > 0:
+                    # Add a new row for Billing (and beyond)
+                    self.add_address_row()
+                    self.wait_seconds(1)
+                self.fill_step2_address(addr_data, row_index=i)
 
             # Click Next to go to Step 3
             self.click_stepper_next()
