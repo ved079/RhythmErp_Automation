@@ -141,12 +141,13 @@ class ErrorCodeMstPage:
 
     def is_form_open(self):
         """Check if form popup is open — JS offsetParent (instant)."""
-        return self.driver.execute_script("""
+        return bool(self.driver.execute_script("""
             var el = document.querySelector('div.big-model');
             if (el && el.offsetParent !== null) return true;
             var dlg = document.querySelector('mat-dialog-container');
-            return dlg && dlg.offsetParent !== null;
-        """)
+            if (dlg && dlg.offsetParent !== null) return true;
+            return false;
+        """))
 
     def is_form_closed(self):
         """Check if form popup is closed."""
@@ -533,28 +534,28 @@ class ErrorCodeMstPage:
 
     def is_edit_mode(self):
         """Check if Update button is present (Edit mode) — JS."""
-        return self.driver.execute_script("""
+        return bool(self.driver.execute_script("""
             var btns = document.querySelectorAll('.popup-footer button');
             for (var i = 0; i < btns.length; i++) {
                 if (btns[i].textContent.indexOf('Update') !== -1 && btns[i].offsetParent !== null)
                     return true;
             }
             return false;
-        """)
+        """))
 
     def is_view_mode(self):
-        """Check if no Submit/Update button (View mode) — JS."""
-        return not self.is_edit_mode() and not self._is_submit_visible()
+        """Check if form is open and no Submit/Update button (View mode) — JS."""
+        return self.is_form_open() and not self.is_edit_mode() and not self._is_submit_visible()
 
     def _is_submit_visible(self):
-        return self.driver.execute_script("""
+        return bool(self.driver.execute_script("""
             var btns = document.querySelectorAll('.popup-footer button');
             for (var i = 0; i < btns.length; i++) {
                 if (btns[i].textContent.indexOf('Submit') !== -1 && btns[i].offsetParent !== null)
                     return true;
             }
             return false;
-        """)
+        """))
 
     def get_form_heading(self):
         """Read popup heading text — JS."""
@@ -608,8 +609,10 @@ class ErrorCodeMstPage:
         """, row_index, css_class)
 
     def is_code_in_table(self, code):
-        """Check if Code value exists in table — pure JS (fast)."""
-        return self.driver.execute_script("""
+        """Check if Code value exists in table — pure JS (fast).
+        If not found on current page, tries searching (handles pagination)."""
+        # Try current page first
+        found = self.driver.execute_script("""
             var rows = document.querySelectorAll('table#excel-table tbody tr');
             for (var i = 0; i < rows.length; i++) {
                 var cells = rows[i].querySelectorAll('td');
@@ -620,10 +623,45 @@ class ErrorCodeMstPage:
             }
             return false;
         """, code)
+        if found:
+            return True
+
+        # Not on current page — try hard_refresh + check again (table might have updated)
+        self.hard_refresh()
+        found = self.driver.execute_script("""
+            var rows = document.querySelectorAll('table#excel-table tbody tr');
+            for (var i = 0; i < rows.length; i++) {
+                var cells = rows[i].querySelectorAll('td');
+                for (var j = 0; j < cells.length; j++) {
+                    if (cells[j].textContent.indexOf(arguments[0]) !== -1)
+                        return true;
+                }
+            }
+            return false;
+        """, code)
+        if found:
+            return True
+
+        # Still not found — use search to bring record to page 1
+        self.search_record(code)
+        found = self.driver.execute_script("""
+            var rows = document.querySelectorAll('table#excel-table tbody tr');
+            for (var i = 0; i < rows.length; i++) {
+                var cells = rows[i].querySelectorAll('td');
+                for (var j = 0; j < cells.length; j++) {
+                    if (cells[j].textContent.indexOf(arguments[0]) !== -1)
+                        return true;
+                }
+            }
+            return false;
+        """, code)
+        return bool(found)
 
     def find_code_row_index(self, code):
-        """Find row index by Code value — pure JS (fast). Returns -1 if not found."""
-        return self.driver.execute_script("""
+        """Find row index by Code value — pure JS (fast). Returns -1 if not found.
+        If not found on current page, tries searching (handles pagination)."""
+        # Try current page first
+        idx = self.driver.execute_script("""
             var rows = document.querySelectorAll('table#excel-table tbody tr');
             for (var i = 0; i < rows.length; i++) {
                 var cells = rows[i].querySelectorAll('td');
@@ -634,6 +672,39 @@ class ErrorCodeMstPage:
             }
             return -1;
         """, code)
+        if idx is not None and idx >= 0:
+            return idx
+
+        # Not on current page — try hard_refresh + check again
+        self.hard_refresh()
+        idx = self.driver.execute_script("""
+            var rows = document.querySelectorAll('table#excel-table tbody tr');
+            for (var i = 0; i < rows.length; i++) {
+                var cells = rows[i].querySelectorAll('td');
+                for (var j = 0; j < cells.length; j++) {
+                    if (cells[j].textContent.indexOf(arguments[0]) !== -1)
+                        return i;
+                }
+            }
+            return -1;
+        """, code)
+        if idx is not None and idx >= 0:
+            return idx
+
+        # Still not found — use search to bring record to page 1
+        self.search_record(code)
+        idx = self.driver.execute_script("""
+            var rows = document.querySelectorAll('table#excel-table tbody tr');
+            for (var i = 0; i < rows.length; i++) {
+                var cells = rows[i].querySelectorAll('td');
+                for (var j = 0; j < cells.length; j++) {
+                    if (cells[j].textContent.indexOf(arguments[0]) !== -1)
+                        return i;
+                }
+            }
+            return -1;
+        """, code)
+        return idx if idx is not None else -1
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Row Action Buttons — View / Edit / History (JS click)
@@ -901,4 +972,74 @@ class ErrorCodeMstPage:
         self.driver.execute_script("""
             document.querySelectorAll('.cdk-overlay-backdrop:not(.cdk-overlay-dark)').forEach(function(el) { el.remove(); });
             document.querySelectorAll('.cdk-overlay-pane:not(.mat-mdc-dialog-container)').forEach(function(el) { el.remove(); });
+        """)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Search (handles pagination — like Tax Authority pattern)
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def search_record(self, code):
+        """Search for a record by Code in the main table.
+        Uses JS clicks to bypass overlay issues. Returns True if found."""
+        try:
+            # Toggle search input open
+            self.driver.execute_script("""
+                var toggleBtn = document.querySelector('button.search-btn');
+                if (toggleBtn && toggleBtn.offsetParent !== null) toggleBtn.click();
+            """)
+            # Fast poll for search input
+            end_search = time.monotonic() + 3
+            while time.monotonic() < end_search:
+                found = self.driver.execute_script("""
+                    var inp = document.querySelector('input[placeholder="Search"]');
+                    return inp && inp.offsetParent !== null;
+                """)
+                if found:
+                    break
+                time.sleep(0.1)
+
+            # Set search value via JS native setter
+            self.driver.execute_script("""
+                var input = document.querySelector('input[placeholder="Search"]');
+                if (input) {
+                    var nativeSetter = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value'
+                    ).set;
+                    nativeSetter.call(input, arguments[0]);
+                    input.dispatchEvent(new Event('input', {bubbles: true}));
+                    input.dispatchEvent(new Event('keyup', {bubbles: true}));
+                    input.dispatchEvent(new Event('change', {bubbles: true}));
+                }
+                var searchBtn = document.querySelector('button.search-btn');
+                if (searchBtn) searchBtn.click();
+            """, code)
+
+            # Fast poll for table to update
+            end_table = time.monotonic() + 5
+            while time.monotonic() < end_table:
+                row_count = self.get_table_row_count()
+                if row_count > 0:
+                    break
+                time.sleep(0.2)
+
+            return self.get_table_row_count() > 0
+
+        except Exception:
+            return False
+
+    def clear_search(self):
+        """Clear search filter — pure JS."""
+        self.driver.execute_script("""
+            var input = document.querySelector('input[placeholder="Search"]');
+            if (input) {
+                var nativeSetter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value'
+                ).set;
+                nativeSetter.call(input, '');
+                input.dispatchEvent(new Event('input', {bubbles: true}));
+                input.dispatchEvent(new Event('keyup', {bubbles: true}));
+                input.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+            var btn = document.querySelector('button.search-btn');
+            if (btn) btn.click();
         """)
