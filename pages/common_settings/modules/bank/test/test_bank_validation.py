@@ -119,14 +119,15 @@ from common.logger import log
 def _create_prerequisite_bank(page, prefix="PreReq"):
     """Create a Bank entry for tests that need existing data.
     Returns the bank name and the data dict used.
-    v3: create_bank() now uses _handle_submit_response() for speed.
     """
     data = generate_valid_bank_data(prefix)
     result = page.create_bank(data)
-    # Close any remaining popup (create_bank may leave it open on validation failure)
     try:
-        if page.is_form_popup_open() or page.is_add_form_open():
-            page.force_close_form_popup()
+        page.close_popup()
+    except Exception:
+        pass
+    try:
+        page.force_close_form_popup()
     except Exception:
         pass
     name = result.get("bank_name", "")
@@ -183,8 +184,7 @@ class TestCreateFormValidations:
 
     # ---- BNK-C02: Create with valid data (happy path) ----
     def test_BNK_C02_valid_create(self, logged_in_driver):
-        """Create with valid data — should succeed.
-        v3: fill_bank_form() now uses random dropdown selection for reliability."""
+        """Create with valid data — should succeed."""
         driver = logged_in_driver
         page = BankPage(driver)
 
@@ -200,13 +200,6 @@ class TestCreateFormValidations:
                 log.info(f"Bank created successfully: {name}")
             else:
                 log.warning(f"Create failed: {result.get('error', 'unknown')}")
-
-            # After create, force close any remaining popup and refresh
-            try:
-                if page.is_form_popup_open() or page.is_add_form_open():
-                    page.force_close_form_popup()
-            except Exception:
-                pass
 
             if name:
                 page.hard_refresh()
@@ -1296,7 +1289,6 @@ class TestSearchFilterEdgeCases:
     """BNK-S01 to BNK-S06: Search and filter tests.
 
     BUG-003 (MEDIUM): Search does not filter the Bank table at all.
-    Tests that expect filtering will be marked @pytest.mark.xfail.
     """
 
     def _cleanup(self, page):
@@ -1626,7 +1618,7 @@ class TestPopupUIBehaviors:
             """)
             log.info(f"Character counters found: {counters}")
 
-            assert counters > 0, "Character counters should be visible in View mode"
+            assert int(counters or 0) > 0, "Character counters should be visible in View mode"
             log.info("Character counters visible in View popup")
         except Exception:
             raise

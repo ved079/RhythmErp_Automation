@@ -54,20 +54,16 @@ KEY RULES (verified from live application 2026-05-19):
   - No Delete functionality (BUG-005)
   - Global search does not filter Bank table (BUG-003)
 
-Optimised (v3 — SPEED OPTIMIZED, UOM gold standard):
-- _handle_submit_response(): COMBINED alert handler — no double-wait for success
-  (was: is_validation_alert_present(2s) THEN handle_success_alert(2s) = 4s)
-  (now: single poll for any SweetAlert, read title, click button = 1-2s)
-- Ultra-fast handle_success_alert() — no wait for SweetAlert to disappear
-- Replaced ALL wait_seconds() with WebDriverWait or eliminated entirely
-- Dropdown selection: always use random from live UI (reliable, no text-matching issues)
-- _open_dropdown_by_label(): WebDriverWait instead of wait_seconds(0.5)
-- _select_option_by_text(): no sleep, partial text matching (indexOf)
-- create_bank(): uses _handle_submit_response() for speed
-- Reduced is_bank_in_table() timeout from 8s to 3s
+Optimised (v3 — UOM gold standard + BUG-004 fix):
+- ActionChains click for mat-select dropdowns (FIX BUG-004 — JS clicks don't update Angular model)
+- _handle_submit_response(): combined alert handler — single poll for success/validation
+- Ultra-fast _dismiss_swal() — no wait for SweetAlert to disappear
 - Fast polling (0.1s) throughout instead of 0.2-0.3s
 - hard_refresh() for fast page reset between tests
 - search_and_verify() combines search + existence check
+- JS clicks for Add/Submit/Update/Cancel bypass overlay issues
+- Reduced is_bank_in_table() timeout from 8s to 3s
+- JS-based get_field_validation_state() and get_input_value() for speed
 """
 
 import os
@@ -505,44 +501,22 @@ class BankPage(BasePage):
         Uses Selenium ActionChains click — JS click does NOT reliably open
         Angular Material mat-select dropdowns (BUG-004).
 
-        Step 1: Find the mat-select element scoped to popup via JS.
-        Step 2: Click the mat-select using Selenium ActionChains (properly
-                triggers Angular's event handlers).
+        Step 1: Find the mat-select element via Selenium XPath.
+        Step 2: Click using ActionChains (properly triggers Angular's event handlers).
         Step 3: Wait for dropdown panel to appear via WebDriverWait.
         """
-        # Step 1: Verify the mat-select exists in the popup via JS
-        js_find = f"""
-            var popup = document.querySelector(
-                '.edit_pop_up.override_edit_pop_up.popup-mode'
-            );
-            if (!popup) return '';
-            var formFields = popup.querySelectorAll('mat-form-field');
-            for (var i = 0; i < formFields.length; i++) {{
-                var label = formFields[i].querySelector('mat-label');
-                if (label && label.textContent.trim() === '{label_text}') {{
-                    var select = formFields[i].querySelector('mat-select');
-                    if (select) return 'found';
-                }}
-            }}
-            return '';
-        """
-        found = self.driver.execute_script(js_find)
-        if not found:
-            log.warning(f"Dropdown not found: {label_text}")
-            return False
-
-        # Step 2: Find the mat-select via Selenium (XPath) and click with ActionChains
         try:
+            # Step 1: Find mat-select via Selenium
             select_el = self.driver.find_element(
                 By.XPATH,
-                f"//mat-label[contains(.,'{label_text}')]"
-                f"/ancestor::mat-form-field//mat-select"
+                f"//mat-label[contains(.,'{label_text}')]/"
+                f"ancestor::mat-form-field//mat-select"
             )
-            # Use ActionChains for reliable Angular Material click
+            # Step 2: ActionChains click — triggers Angular change detection
             ActionChains(self.driver).move_to_element(select_el).click().perform()
         except Exception as e:
-            log.warning(f"ActionChains click failed for dropdown '{label_text}': {e}")
-            # Fallback: dispatch mouse events via JS (better than plain JS click)
+            # Fallback: JS dispatch mouse events
+            log.warning(f"ActionChains click failed for '{label_text}': {e}")
             self.driver.execute_script("""
                 var popup = document.querySelector(
                     '.edit_pop_up.override_edit_pop_up.popup-mode'
@@ -573,15 +547,30 @@ class BankPage(BasePage):
             return True
         except Exception:
             pass
+        log.warning(f"Dropdown panel not appeared for: {label_text}")
         return False
 
     def _select_option_by_text(self, option_text):
         """Select a mat-option from the currently open dropdown panel.
-
-        Uses JS click on the option element. Partial text matching (indexOf)
-        for robustness — exact match fails when options have extra whitespace.
-        No sleep after click — Angular updates instantly via JS click.
+        Uses Selenium ActionChains click on the option element.
+        JS click on mat-option does NOT update Angular's form model (BUG-004),
+        but Selenium ActionChains click DOES because it triggers real browser events.
         """
+        # Try Selenium click on matching option first (most reliable for Angular)
+        try:
+            options = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                ".cdk-overlay-pane mat-option, .cdk-overlay-pane [role='option']"
+            )
+            for opt in options:
+                text = opt.text.strip()
+                if text == option_text or option_text in text:
+                    ActionChains(self.driver).move_to_element(opt).click().perform()
+                    return True
+        except Exception:
+            pass
+
+        # Fallback: JS click with partial matching
         js = """
             var options = document.querySelectorAll(
                 '.cdk-overlay-pane mat-option'
@@ -593,7 +582,7 @@ class BankPage(BasePage):
                     return 'Selected';
                 }
             }
-            // Partial match (indexOf) — handles extra whitespace/formatting
+            // Partial match (indexOf)
             for (var i = 0; i < options.length; i++) {
                 if (options[i].textContent.trim().indexOf(arguments[0]) !== -1) {
                     options[i].click();
@@ -623,30 +612,18 @@ class BankPage(BasePage):
         self._force_close_panels()
 
     def select_account_type(self, value):
-        """Select an Account Type dropdown option ('Current' or 'Saving').
-        Falls back to random selection if specific value not found."""
+        """Select an Account Type dropdown option ('Current' or 'Saving')."""
         log.info(f"Selecting Account Type: {value}")
         self._open_dropdown_by_label("Account Type")
-        selected = self._select_option_by_text(value)
+        self._select_option_by_text(value)
         self._close_dropdown_panel()
-        if not selected:
-            # Fallback: select random option from live UI
-            log.info(f"Account Type '{value}' not found, selecting random")
-            return self.select_random_account_type()
-        return True
 
     def select_gl_account(self, value):
-        """Select a GL Account dropdown option.
-        Falls back to random selection if specific value not found."""
+        """Select a GL Account dropdown option."""
         log.info(f"Selecting GL Account: {value}")
         self._open_dropdown_by_label("GL Account")
-        selected = self._select_option_by_text(value)
+        self._select_option_by_text(value)
         self._close_dropdown_panel()
-        if not selected:
-            # Fallback: select random option from live UI
-            log.info(f"GL Account '{value}' not found, selecting random")
-            return self.select_random_gl_account()
-        return True
 
     def select_random_account_type(self):
         """Select a random Account Type option from the live UI.
@@ -792,8 +769,7 @@ class BankPage(BasePage):
 
         Args:
             data: Dict with keys matching field names.
-                   Dropdowns always use random selection from live UI for reliability
-                   (BUG-004: browser clicks don't reliably update Angular form model).
+                   None values for dropdowns → select random from live UI.
         """
         log.info("Filling Bank form...")
 
@@ -816,15 +792,20 @@ class BankPage(BasePage):
             if value is not None:
                 self._fill_input_by_name(name_attr, str(value))
 
-        # Dropdowns — ALWAYS use random from live UI for reliability
-        # (BUG-004: text matching fails, random selection reads actual options)
-        random_type = self.select_random_account_type()
-        if random_type:
-            data["account_type"] = random_type
+        # Dropdowns — select specified or random
+        if data.get("account_type"):
+            self.select_account_type(data["account_type"])
+        else:
+            random_type = self.select_random_account_type()
+            if random_type:
+                data["account_type"] = random_type
 
-        random_gl = self.select_random_gl_account()
-        if random_gl:
-            data["gl_account"] = random_gl
+        if data.get("gl_account"):
+            self.select_gl_account(data["gl_account"])
+        else:
+            random_gl = self.select_random_gl_account()
+            if random_gl:
+                data["gl_account"] = random_gl
 
         # Toggles
         if "is_default_bank" in data:
@@ -838,7 +819,6 @@ class BankPage(BasePage):
 
     def create_bank(self, data):
         """Open Add form, fill all fields, and submit.
-        v3: Uses _handle_submit_response() — single poll instead of double-wait.
 
         Returns dict with:
             status: "PASSED" or "FAILED"
@@ -846,28 +826,42 @@ class BankPage(BasePage):
             error: error message if any
         """
         log.info("Creating Bank record...")
+        self.open_add_form()
+        assert self._is_form_popup_open(), "Add form did not open"
+        self.fill_bank_form(data)
+        return self._submit_and_handle_result(data)
+
+    def _submit_and_handle_result(self, data):
+        """Click Submit/Update and handle the result using fast SweetAlert polling.
+        v3: Uses _handle_submit_response() for combined alert detection.
+
+        Returns dict with status, bank_name, error.
+        """
         result = {"status": "FAILED", "bank_name": "", "error": ""}
-        try:
-            self.open_add_form()
+
+        # Click Submit via JS
+        self._force_close_panels()
+        self._js_click_popup_button('Submit')
+
+        # Combined response handler — single poll cycle
+        response = self._handle_submit_response()
+        if response == 'success':
+            result["status"] = "PASSED"
+            result["bank_name"] = data.get("bank_name", "")
+            log.info(f"Bank created successfully: {result['bank_name']}")
+        elif response == 'validation':
+            result["error"] = "Validation Failed"
+            result["bank_name"] = data.get("bank_name", "")
+        else:
+            # No alert appeared — check if popup closed (success without alert)
             if not self._is_form_popup_open():
-                result["error"] = "Add form did not open"
-                return result
-            self.fill_bank_form(data)
-            self.submit()
-            response = self._handle_submit_response()
-            if response == 'success':
                 result["status"] = "PASSED"
                 result["bank_name"] = data.get("bank_name", "")
-            elif response == 'validation':
-                result["error"] = "validation_warning"
-                result["bank_name"] = data.get("bank_name", "")
+                log.info(f"Bank created (no alert): {result['bank_name']}")
             else:
-                # No alert appeared — might still be success
-                result["status"] = "PASSED"
-                result["bank_name"] = data.get("bank_name", "")
-            self._force_close_panels()
-        except Exception as e:
-            result["error"] = str(e)
+                result["error"] = "Submit clicked but no SweetAlert appeared"
+                log.warning(result["error"])
+
         return result
 
     def _handle_submit_response(self):
@@ -875,15 +869,15 @@ class BankPage(BasePage):
         alert detection into ONE wait cycle instead of two.
 
         OLD WAY (4-5s per create):
-          is_validation_alert_present(timeout=2) → handle_success_alert(timeout=2)
+          is_validation_alert_present(timeout=2) -> handle_success_alert(timeout=2)
 
         NEW WAY (1-2s per create):
-          Single poll for ANY SweetAlert → read title → click appropriate button
+          Single poll for ANY SweetAlert -> read title -> click appropriate button
 
         Returns: 'success', 'validation', or 'none'
         """
         log.info("Waiting for submit response")
-        end = time.monotonic() + 2
+        end = time.monotonic() + 3
         while time.monotonic() < end:
             info = self.driver.execute_script("""
                 var popup = document.querySelector('.swal2-popup');
@@ -927,6 +921,10 @@ class BankPage(BasePage):
                         return 'validation'
             except Exception:
                 pass
+            # Also check if popup closed (success without SweetAlert)
+            if not self._is_form_popup_open():
+                log.info("Submit response: popup closed (success)")
+                return 'success'
             time.sleep(0.1)
         log.info("No SweetAlert appeared after submit")
         return 'none'
@@ -1057,10 +1055,9 @@ class BankPage(BasePage):
         except Exception:
             return False
 
-    def handle_validation_warning(self, timeout=1.5):
+    def handle_validation_warning(self, timeout=2):
         """Handle the 'Validation Failed' SweetAlert2 popup.
         Fast poll for validation alert, then dismiss.
-        Reduced timeout (1.5s, was 2s) for speed.
 
         Returns the SweetAlert title if visible, or empty string.
         Automatically dismisses the alert.
@@ -1083,7 +1080,7 @@ class BankPage(BasePage):
         return ""
 
     def handle_success_alert(self):
-        """Handle SweetAlert2 success notification — ULTRA FAST dismiss.
+        """Handle the success SweetAlert2 popup — ULTRA FAST dismiss.
         Clicks confirm via JS and does NOT wait for SweetAlert to disappear.
         The popup will auto-close — waiting wastes 4-6s per call."""
         log.info("Handling success alert")
@@ -1224,9 +1221,7 @@ class BankPage(BasePage):
 
     def get_field_validation_state(self, field_label):
         """Check if a specific field is currently invalid.
-
-        Uses fast JS-based DOM walk-up (like UOM gold standard) instead of
-        Selenium find_elements for ~3x speed improvement.
+        Uses fast JS-based DOM walk-up instead of Selenium find_elements for ~3x speed.
 
         Returns dict with: invalid (bool), error (str), touched (bool).
         """
@@ -1251,8 +1246,8 @@ class BankPage(BasePage):
             return JSON.stringify({invalid: false, touched: false, error: ''});
         """
         try:
-            result = self.driver.execute_script(js, field_label)
             import json
+            result = self.driver.execute_script(js, field_label)
             return json.loads(result)
         except Exception:
             pass
@@ -1380,9 +1375,9 @@ class BankPage(BasePage):
         except Exception:
             return 0
 
-    def is_bank_in_table(self, bank_name, timeout=2):
+    def is_bank_in_table(self, bank_name, timeout=3):
         """Check if a bank with the given name exists in the table.
-        Fast polling (0.1s) with reduced timeout (2s, was 3s)."""
+        Fast polling (0.1s) with reduced timeout (3s, was 8s)."""
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
             try:
@@ -1642,7 +1637,7 @@ class BankPage(BasePage):
         """Search for a bank name, then verify it exists in the filtered results.
         This is the recommended way to verify a create/update — uses search
         instead of scanning all rows (handles pagination automatically).
-        Returns True if found. Fast polling (3s timeout).
+        Returns True if found.
         """
         log.info(f"Searching and verifying Bank: {bank_name}")
         self.search(bank_name)
