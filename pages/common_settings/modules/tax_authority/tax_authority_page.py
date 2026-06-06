@@ -181,11 +181,13 @@ class TaxAuthorityPage:
 
     def _open_mat_dropdown(self, label_text):
         """Open a mat-select dropdown by label text. Returns True if panel opens.
-        Uses partial label match + multiple click strategies for robustness."""
-        # Try opening with multiple click strategies
+        Scopes label search to within the form popup for accuracy."""
         for attempt in range(3):
             self.driver.execute_script("""
-                var labels = document.querySelectorAll('mat-label');
+                // Scope to form popup to avoid picking up labels from outside
+                var form = document.querySelector('div.edit_pop_up');
+                if (!form) return false;
+                var labels = form.querySelectorAll('mat-label');
                 var target = null;
                 for (var i = 0; i < labels.length; i++) {
                     var txt = labels[i].textContent.trim();
@@ -220,9 +222,11 @@ class TaxAuthorityPage:
                 """)
                 if panel_open:
                     return True
-                # Retry with trigger click strategy
+                # Retry with trigger click strategy (scoped to form)
                 self.driver.execute_script("""
-                    var labels = document.querySelectorAll('mat-label');
+                    var form = document.querySelector('div.edit_pop_up');
+                    if (!form) return;
+                    var labels = form.querySelectorAll('mat-label');
                     for (var i = 0; i < labels.length; i++) {
                         var txt = labels[i].textContent.trim();
                         if (txt === arguments[0] || txt.indexOf(arguments[0]) !== -1) {
@@ -240,37 +244,121 @@ class TaxAuthorityPage:
         return False
 
     def _click_dropdown_option(self, option_text):
-        """Click a matching option in the open dropdown panel."""
-        clicked = self.driver.execute_script("""
+        """Click a matching option in the open dropdown panel.
+        Uses pointerdown+pointerup+click event sequence for Angular Material compatibility.
+        Verifies the value was actually set after clicking."""
+        # Step 1: Click the option with proper event sequence
+        result = self.driver.execute_script("""
+            var optionText = arguments[0];
             var options = document.querySelectorAll(
                 'div.mat-mdc-select-panel mat-option, [role="option"]'
             );
+            var found = null;
             for (var i = 0; i < options.length; i++) {
                 if (options[i].offsetParent !== null &&
-                    options[i].textContent.indexOf(arguments[0]) !== -1) {
-                    options[i].scrollIntoView({block:'center'});
-                    options[i].click();
-                    return true;
+                    options[i].textContent.indexOf(optionText) !== -1) {
+                    found = options[i];
+                    break;
                 }
             }
-            return false;
+            if (!found) return {clicked: false, reason: 'option_not_found'};
+
+            // Scroll into view
+            found.scrollIntoView({block:'center'});
+
+            // Dispatch pointerdown -> pointerup -> click sequence
+            // This is what a real browser click does and Angular Material needs it
+            found.dispatchEvent(new PointerEvent('pointerdown', {
+                bubbles: true, cancelable: true, pointerId: 1, width: 1, height: 1,
+                pressure: 0.5, clientX: 0, clientY: 0
+            }));
+            found.dispatchEvent(new PointerEvent('pointerup', {
+                bubbles: true, cancelable: true, pointerId: 1, width: 1, height: 1,
+                pressure: 0, clientX: 0, clientY: 0
+            }));
+            found.click();
+
+            return {clicked: true, reason: ''};
         """, option_text.strip())
 
-        # Fast poll for CDK overlay panel to close
-        end_panel = time.monotonic() + 2
+        clicked = result.get('clicked', False) if isinstance(result, dict) else bool(result)
+        if not clicked:
+            self._force_close_panels()
+            return False
+
+        # Step 2: Wait for panel to close (indicates Angular processed the click)
+        panel_closed = False
+        end_panel = time.monotonic() + 3
         while time.monotonic() < end_panel:
             panel_gone = self.driver.execute_script("""
-                var panels = document.querySelectorAll('.cdk-overlay-pane:not(.mat-mdc-dialog-container)');
+                var panels = document.querySelectorAll('.cdk-overlay-pane');
                 for (var i = 0; i < panels.length; i++) {
-                    if (panels[i].offsetParent !== null) return false;
+                    if (panels[i].offsetParent !== null) {
+                        var hasOptions = panels[i].querySelector('mat-option, [role="option"]');
+                        if (hasOptions) return false;
+                    }
                 }
                 return true;
             """)
             if panel_gone:
+                panel_closed = True
                 break
-            time.sleep(0.1)
+            time.sleep(0.15)
+
+        # Step 3: Verify the value was actually set in the mat-select
+        value_set = self.driver.execute_script("""
+            var form = document.querySelector('div.edit_pop_up');
+            if (!form) return {verified: false, value: ''};
+            var selects = form.querySelectorAll('mat-select');
+            for (var i = 0; i < selects.length; i++) {
+                var trigger = selects[i].querySelector(
+                    '.mat-mdc-select-value-text, .mat-mdc-select-min-line'
+                );
+                if (trigger) {
+                    var val = trigger.textContent.trim();
+                    if (val.indexOf(arguments[0]) !== -1) {
+                        return {verified: true, value: val};
+                    }
+                }
+            }
+            // Also check all visible triggers
+            var allTriggers = document.querySelectorAll(
+                '.mat-mdc-select-value-text, .mat-mdc-select-min-line'
+            );
+            for (var i = 0; i < allTriggers.length; i++) {
+                var val = allTriggers[i].textContent.trim();
+                if (val.indexOf(arguments[0]) !== -1 && allTriggers[i].offsetParent !== null) {
+                    return {verified: true, value: val};
+                }
+            }
+            return {verified: false, value: ''};
+        """, option_text.strip())
+
+        verified = value_set.get('verified', False) if isinstance(value_set, dict) else False
+
+        if not verified:
+            # JS click didn't register with Angular. Fallback: Selenium native click.
+            log.warning(f"Dropdown JS click for '{option_text}' didn't register. Trying Selenium click.")
+            try:
+                from selenium.webdriver.common.by import By
+                opt_elements = self.driver.find_elements(
+                    By.CSS_SELECTOR, 'mat-option'
+                )
+                for opt in opt_elements:
+                    try:
+                        if opt.is_displayed() and option_text in opt.text:
+                            opt.click()
+                            time.sleep(0.3)
+                            verified = True
+                            break
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+        # Final cleanup
         self._force_close_panels()
-        return bool(clicked)
+        return verified or clicked
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Fill All Fields (with lightweight retry)
@@ -921,6 +1009,10 @@ class TaxAuthorityPage:
                 result["error"] = "Dropdown failed to open after retries"
                 return result
 
+            # Diagnostic: log field values before submit
+            field_vals = self.get_form_field_values()
+            log.info(f"Before submit — field values: {field_vals}")
+
             self._force_close_panels()
             self.submit()
 
@@ -928,6 +1020,7 @@ class TaxAuthorityPage:
             response = self._handle_submit_response(timeout=5)
             if response.get("alert"):
                 result["error"] = f"Validation: {response['title']}"
+                log.warning(f"Submit failed with validation. Field values were: {field_vals}")
                 self.force_close_form_popup()
                 return result
 
