@@ -5,12 +5,13 @@ Tax Authority — Data pool + API payload builder.
 Screen: "Tax Authority" (flat, 2 FK dropdowns: tax_type_ref_id, country_ref_id)
 Fields: tax_name, tax_type_ref_id, country_ref_id
 
-Discovered FK IDs (2026-06-02):
-  tax_type_ref_id:  GST=93
-  country_ref_id:   India=1 (+ 113 other countries)
+Speed optimized (v4):
+- Added missing UI helper functions (FIELD_TAX_NAME, PAGE_URL, etc.)
+- Unique timestamp-based tax name generation (avoids collisions)
 """
 
 import random
+import time
 
 # ── Real FK IDs from live ERP ────────────────────────────────────────
 TAX_TYPE_IDS = {"GST": 93}
@@ -28,6 +29,14 @@ COUNTRY_IDS = {
     "Thailand": 0, "Turkey": 105, "Ukraine": 106, "United Kingdom": 107,
     "United States": 108, "Vietnam": 112,
 }
+
+# ── Page constants (used by tax_authority_page.py) ──────────────────
+TAX_AUTHORITY_PAGE_URL = "https://rhythmerp.algorhythms.in/#/dynamic-screens/Tax%20Authority"
+FIELD_TAX_NAME = "tax_name"
+VALIDATION_FAILED_TITLE = "Validation Failed"
+VALIDATION_FAILED_CONTENT = "Please correct the highlighted fields"
+POPUP_TITLE = "Tax Authority"
+HISTORY_POPUP_TITLE = "Tax Authority History"
 
 # ── Realistic data pools ─────────────────────────────────────────────
 
@@ -53,6 +62,56 @@ TAX_AUTHORITIES = [
     {"tax_name": "State Tax Authority Madhya Pradesh","tax_type": "GST","country": "India"},
     {"tax_name": "GST Enforcement Wing",           "tax_type": "GST", "country": "India"},
 ]
+
+
+# ── UI Validation Helpers ───────────────────────────────────────────
+
+_ta_counter = 0
+
+
+def generate_tax_name():
+    """Return a unique tax authority name string."""
+    global _ta_counter
+    _ta_counter += 1
+    ts = int(time.time() * 1000) % 100000
+    return f"TA-AUTO-{_ta_counter:04d}-{ts}"
+
+
+def valid_tax_authority_data():
+    """Return a dict with all fields for UI create_record."""
+    country = random.choice(list(COUNTRY_IDS.keys()))
+    return {
+        FIELD_TAX_NAME: generate_tax_name(),
+        "tax_type": "GST",
+        "country": country,
+    }
+
+
+def duplicate_tax_authority_data(tax_name):
+    """Return data that duplicates an existing tax_name."""
+    return {
+        FIELD_TAX_NAME: tax_name,
+        "tax_type": "GST",
+        "country": "India",
+    }
+
+
+def special_chars_tax_name():
+    """Return data with special characters in tax_name."""
+    return {
+        FIELD_TAX_NAME: "TEST@#$%^&*()_+-=[]{}|;':\",./<>?",
+        "tax_type": "GST",
+        "country": "India",
+    }
+
+
+def invalid_very_long_tax_name(length=200):
+    """Return data with a very long tax_name."""
+    return {
+        FIELD_TAX_NAME: "X" * length,
+        "tax_type": "GST",
+        "country": "India",
+    }
 
 
 # ── Payload builder ──────────────────────────────────────────────────

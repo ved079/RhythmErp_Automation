@@ -1,5 +1,9 @@
-﻿"""
+"""
 conftest.py - Tax Authority Common Settings (RhythmERP)
+UOM Gold Standard pattern:
+  - Session-scoped driver + logged_in_driver
+  - NO function-scoped page fixture — each test creates TaxAuthorityPage(logged_in_driver) locally
+  - This saves 5-8s per test (no full navigate_to_page + force_cleanup_all per test)
 """
 
 import os
@@ -8,7 +12,8 @@ import logging
 import pytest
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-sys.path.insert(0, PROJECT_ROOT)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 from common.logger import log
 from common.browser_utils import get_driver
@@ -18,27 +23,8 @@ from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
 from pages.common_settings.cs_report_generator import CSReportStore, generate_cs_report
 
 
-def pytest_configure(config):
-    """Register custom pytest markers for Tax Authority tests."""
-    config.addinivalue_line(
-        "markers", "smoke: Critical path tests â€” must pass for build acceptance (7 tests)"
-    )
-    config.addinivalue_line(
-        "markers", "sanity: Full functional validation of every test case (18 tests)"
-    )
-    config.addinivalue_line(
-        "markers", "regression: Complete regression suite covering all 18 tests"
-    )
-    config.addinivalue_line(
-        "markers", "bug: Tests verifying known open bugs (5 tests)"
-    )
-    config.addinivalue_line(
-        "markers", "ui: UI/popup/form/table/visual behaviour tests (13 tests)"
-    )
-
-
 # ================================================================
-# FIXTURES
+# FIXTURES — UOM Gold Standard Pattern
 # ================================================================
 
 @pytest.fixture(scope="session")
@@ -77,81 +63,38 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-#     log.step(3, "Selecting facility (blank - first option)")
-#     login_page.select_facility_by_index(index=0)
-
     login_page.wait_seconds(1)
 
-    log.step(4, "Clicking Login button")
+    log.step(4, "Clicking Login button (double-click)")
     login_page.click_login()
     login_page.wait_seconds(3)
 
     login_page.wait_for_login_complete()
+
+    # Verify login actually succeeded
+    if "login" in driver.current_url.lower():
+        log.error("Login did not complete — still on login page. URL: " + driver.current_url)
+        raise RuntimeError("RhythmERP login failed — still on login page after wait. Check credentials in .env")
+
     log.info("RhythmERP login successful!")
     start_screenshot_broadcast(driver)
-    start_screenshot_broadcast(driver)
-    log.info("RhythmERP login successful!")
 
     yield driver
 
     stop_screenshot_broadcast()
 
 
-@pytest.fixture
-def tax_authority_page(logged_in_driver):
-    """
-    Tax Authority page object â€” fresh navigation for each test.
+# ================================================================
+# PYTEST MARKERS
+# ================================================================
 
-    Setup:
-      1. Hard-refresh the browser to clear any leftover state from the
-         previous test (overlays, open popups, stale Angular state).
-      2. Navigate to the Tax Authority screen.
-      3. If navigation fails, do one more hard-refresh + retry before
-         raising â€” this handles the case where a previous test left the
-         browser in a partially broken state.
-
-    Teardown:
-      Hard-refresh after every test so the next test always starts
-      from a clean browser state.  Wait long enough for Angular to
-      fully settle before the next fixture setup runs.
-    """
-    from tax_authority.tax_authority_page import TaxAuthorityPage
-
-    # --- Pre-test hard refresh to wipe leftover state ---
-    try:
-        logged_in_driver.refresh()
-        import time
-        time.sleep(2)
-    except Exception as e:
-        log.warning(f"Pre-test refresh failed (non-fatal): {e}")
-
-    page = TaxAuthorityPage(logged_in_driver)
-
-    # --- Navigate with one retry ---
-    try:
-        page.navigate_to_tax_authority()
-    except Exception as first_err:
-        log.warning(
-            f"First navigation attempt failed: {first_err!r} â€” "
-            "retrying after hard refresh..."
-        )
-        try:
-            logged_in_driver.refresh()
-            page.wait_seconds(3)
-            page.navigate_to_tax_authority()
-        except Exception as second_err:
-            log.error(f"Navigation failed after retry: {second_err!r}")
-            raise
-
-    yield page
-
-    # --- Post-test teardown: hard refresh + settle ---
-    try:
-        logged_in_driver.refresh()
-        page.wait_seconds(2)
-        log.info("Post-test hard refresh complete")
-    except Exception as e:
-        log.warning(f"Post-test refresh failed (non-fatal): {e}")
+def pytest_configure(config):
+    """Register custom pytest markers for Tax Authority tests."""
+    config.addinivalue_line("markers", "smoke: Critical path tests (7 tests)")
+    config.addinivalue_line("markers", "sanity: Full functional validation (18 tests)")
+    config.addinivalue_line("markers", "regression: Complete regression suite (18 tests)")
+    config.addinivalue_line("markers", "bug: Tests verifying known open bugs (6 tests)")
+    config.addinivalue_line("markers", "ui: UI/popup/form/table behaviour tests (12 tests)")
 
 
 # ================================================================
@@ -197,7 +140,7 @@ _cs_store.record_issue(
     expected="Tax Name should have a reasonable max-length limit.",
     actual="maxlength=-1 (unlimited). Extremely long strings (200+ characters) "
            "may be accepted without warning.",
-    test_ref="â€”",
+    test_ref="C08",
     status="Open",
 )
 
@@ -210,7 +153,7 @@ _cs_store.record_issue(
     expected="ADD button should have mattooltip='ADD' for consistency.",
     actual="ADD button has no mattooltip. Requires different locator strategy "
            "(//button[mat-icon[text()='add']] instead of //button[contains(@class,'erp-add-btn')]).",
-    test_ref="â€”",
+    test_ref="---",
     status="Open",
 )
 
@@ -270,19 +213,19 @@ def pytest_runtest_teardown(item, nextitem):
 
 @pytest.hookimpl(hookwrapper=True, trylast=True)
 def pytest_runtest_makereport(item, call):
-    """Capture test result (pass/fail) and finalise for report."""
+    """Capture test result (pass/fail) and finalize for report."""
     outcome = yield
-    report  = outcome.get_result()
+    report = outcome.get_result()
     if call.when == "call":
         if report.passed:
             status = "PASSED"
-            error  = ""
+            error = ""
         elif report.failed:
             status = "FAILED"
-            error  = str(report.longrepr) if report.longrepr else ""
+            error = str(report.longrepr) if report.longrepr else ""
         else:
             status = "SKIPPED"
-            error  = ""
+            error = ""
         _cs_store.finish_test(status, error)
 
 
@@ -290,13 +233,11 @@ def pytest_sessionfinish(session, exitstatus):
     """Generate Excel report at end of test session."""
     if not _cs_store.has_results():
         return
-    output_dir = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "reports"
-    )
+    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "reports")
     try:
-        filepath = generate_cs_report(
-            _cs_store.results, output_dir, issues=_cs_store.known_issues
-        )
+        os.makedirs(output_dir, exist_ok=True)
+        filepath = generate_cs_report(_cs_store.results, output_dir,
+                                       issues=_cs_store.known_issues)
         print("")
         print("=" * 60)
         print("  REPORT GENERATED: " + filepath)
