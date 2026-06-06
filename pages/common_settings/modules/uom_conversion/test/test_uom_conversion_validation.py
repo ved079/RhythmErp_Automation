@@ -836,7 +836,8 @@ class TestUOMConversionValidation:
     @pytest.mark.regression
     @pytest.mark.ui
     def test_history_shows_record(self, logged_in_driver):
-        """Test 19: History popup opens and shows at least 1 row with data."""
+        """Test 19: History popup opens and shows at least 1 row with data.
+        History only appears after a record has been updated at least once."""
         driver = logged_in_driver
         page = UOMConversionPage(driver)
 
@@ -848,18 +849,34 @@ class TestUOMConversionValidation:
                 "Create should succeed for pair: " + data["source_uom"] + " -> " + data["target_uom"]
             log.info("  Created: " + data["source_uom"] + " -> " + data["target_uom"] + " = " + data["conversion_factor"])
 
-            log.step(2, "Open History popup")
+            log.step(2, "Edit record to generate history")
+            page.navigate_to_page()
+            page.search_table(data["source_uom"])
+            time.sleep(1)
+            page.click_row_edit(data["source_uom"], data["target_uom"])
+            time.sleep(1)
+            page.enter_conversion_factor("7")
+            page.click_update()
+            time.sleep(1)
+            # Dismiss any success alert or wait for form to close
+            if page.is_success_alert_present(timeout=2):
+                page.handle_success_alert()
+            if page.is_form_open():
+                page.force_close_form_popup()
+            log.info("  Updated conversion factor to 7")
+
+            log.step(3, "Open History popup")
             page.navigate_to_page()
             page.search_table(data["source_uom"])
             time.sleep(1)
             page.click_row_history(data["source_uom"], data["target_uom"])
             # _click_action_button now waits for history popup to open
 
-            log.step(3, "Verify History has data")
+            log.step(4, "Verify History has data")
             row_count = page.get_history_row_count()
             log.info("  History rows found: " + str(row_count))
             assert row_count >= 1, \
-                "History should have at least 1 row for a newly created record"
+                "History should have at least 1 row after an update"
 
             history_data = page.get_history_data()
             log.info("  History data: " + str(history_data))
@@ -878,7 +895,8 @@ class TestUOMConversionValidation:
     @pytest.mark.regression
     @pytest.mark.ui
     def test_history_close_button(self, logged_in_driver):
-        """Test 20: Open History popup, click Cancel to close."""
+        """Test 20: Open History popup, click Cancel to close.
+        History only appears after a record has been updated at least once."""
         driver = logged_in_driver
         page = UOMConversionPage(driver)
 
@@ -890,18 +908,34 @@ class TestUOMConversionValidation:
                 "Create should succeed for pair: " + data["source_uom"] + " -> " + data["target_uom"]
             log.info("  Created: " + data["source_uom"] + " -> " + data["target_uom"] + " = " + data["conversion_factor"])
 
-            log.step(2, "Open History popup")
+            log.step(2, "Edit record to generate history")
+            page.navigate_to_page()
+            page.search_table(data["source_uom"])
+            time.sleep(1)
+            page.click_row_edit(data["source_uom"], data["target_uom"])
+            time.sleep(1)
+            page.enter_conversion_factor("9")
+            page.click_update()
+            time.sleep(1)
+            # Dismiss any success alert or wait for form to close
+            if page.is_success_alert_present(timeout=2):
+                page.handle_success_alert()
+            if page.is_form_open():
+                page.force_close_form_popup()
+            log.info("  Updated conversion factor to 9")
+
+            log.step(3, "Open History popup")
             page.navigate_to_page()
             page.search_table(data["source_uom"])
             time.sleep(1)
             page.click_row_history(data["source_uom"], data["target_uom"])
             # _click_action_button now waits for history popup to open
 
-            log.step(3, "Click Cancel to close History")
+            log.step(4, "Click Cancel to close History")
             page.close_history_popup()
             time.sleep(1)
 
-            log.step(4, "Verify we're back at the table")
+            log.step(5, "Verify we're back at the table")
             page._wait_for_page_ready()
             rows = page.get_table_rows()
             assert len(rows) > 0, "Table should be visible after closing History"
