@@ -68,13 +68,32 @@ TAX_AUTHORITIES = [
 
 _ta_counter = 0
 
+# Adjective pools for unique letter-only tax names
+_ADJECTIVES = [
+    "Central", "State", "Eastern", "Western", "Northern", "Southern",
+    "Metro", "Urban", "Rural", "Coastal", "Inland", "Regional",
+    "Primary", "Secondary", "Federal", "Local", "Civic", "National",
+    "New", "Old", "Modern", "Classic", "Royal", "Capital",
+]
+
+_PLACES = [
+    "Mumbai", "Delhi", "Pune", "Chennai", "Kolkata", "Bengaluru",
+    "Hyderabad", "Jaipur", "Lucknow", "Indore", "Nagpur", "Surat",
+    "Kochi", "Bhopal", "Patna", "Ranchi", "Vadodara", "Agra",
+    "Goa", "Noida", "Thane", "Gurgaon", "Mysore", "Trivandrum",
+]
+
 
 def generate_tax_name():
-    """Return a unique tax authority name string."""
+    """Return a unique tax authority name string — LETTERS ONLY.
+    No numbers, hyphens, or special characters (server rejects them)."""
     global _ta_counter
     _ta_counter += 1
-    ts = int(time.time() * 1000) % 100000
-    return f"TA-AUTO-{_ta_counter:04d}-{ts}"
+    adj = _ADJECTIVES[(_ta_counter - 1) % len(_ADJECTIVES)]
+    place = _PLACES[(_ta_counter - 1) % len(_PLACES)]
+    # Add a letter suffix for uniqueness when counter wraps
+    suffix = chr(ord('A') + (_ta_counter - 1) % 26)
+    return f"{adj} GST Authority {place} {suffix}"
 
 
 def valid_tax_authority_data():
