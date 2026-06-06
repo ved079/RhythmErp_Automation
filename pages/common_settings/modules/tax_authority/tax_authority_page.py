@@ -168,44 +168,10 @@ class TaxAuthorityPage:
         return self._select_mat_dropdown('Tax Type', option_text)
 
     def select_country(self, country_name):
-        """Select Country from searchable dropdown. Returns True if successful."""
-        # Open dropdown
-        if not self._open_mat_dropdown('Country'):
-            return False
-
-        # Type search text (Country dropdown is searchable)
-        self.driver.execute_script("""
-            var searchInputs = document.querySelectorAll(
-                '.cdk-overlay-pane input[type="text"], .cdk-overlay-pane input'
-            );
-            for (var i = 0; i < searchInputs.length; i++) {
-                if (searchInputs[i].offsetParent !== null) {
-                    var nativeSetter = Object.getOwnPropertyDescriptor(
-                        window.HTMLInputElement.prototype, 'value'
-                    ).set;
-                    nativeSetter.call(searchInputs[i], arguments[0]);
-                    searchInputs[i].dispatchEvent(new Event('input', {bubbles: true}));
-                    searchInputs[i].dispatchEvent(new Event('keyup', {bubbles: true}));
-                    searchInputs[i].dispatchEvent(new Event('change', {bubbles: true}));
-                    return true;
-                }
-            }
-            return false;
-        """, country_name)
-
-        # Fast poll for filtered options to appear
-        end_opts = time.monotonic() + 3
-        while time.monotonic() < end_opts:
-            opt_count = self.driver.execute_script("""
-                var opts = document.querySelectorAll('div.mat-mdc-select-panel mat-option');
-                return opts.length;
-            """)
-            if opt_count > 0:
-                break
-            time.sleep(0.1)
-
-        # Click the matching option
-        return self._click_dropdown_option(country_name)
+        """Select Country from dropdown. Returns True if successful.
+        Uses same _select_mat_dropdown pattern as Tax Type — simpler and more reliable.
+        Works for 'India' (always first in the list)."""
+        return self._select_mat_dropdown('Country', country_name)
 
     def _select_mat_dropdown(self, label_text, option_text):
         """Generic mat-select dropdown selection. Returns True if successful."""

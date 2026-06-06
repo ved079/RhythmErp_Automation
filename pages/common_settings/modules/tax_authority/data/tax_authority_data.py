@@ -78,12 +78,12 @@ def generate_tax_name():
 
 
 def valid_tax_authority_data():
-    """Return a dict with all fields for UI create_record."""
-    country = random.choice(list(COUNTRY_IDS.keys()))
+    """Return a dict with all fields for UI create_record.
+    Hardcoded: tax_type=GST, country=India (user requirement)."""
     return {
         FIELD_TAX_NAME: generate_tax_name(),
         "tax_type": "GST",
-        "country": country,
+        "country": "India",
     }
 
 
