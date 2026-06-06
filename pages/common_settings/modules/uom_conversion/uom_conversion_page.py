@@ -772,8 +772,23 @@ class UOMConversionPage(BasePage):
                 time.sleep(0.1)
             time.sleep(0.2)
 
-        # Clean up any lingering overlays
-        self._force_close_panels()
+        # Clean up lingering 3-dot menu overlay ONLY (not history/form popups)
+        # NOTE: _force_close_panels() removes ALL cdk-overlay-panes which would
+        # destroy the history dialog — so we only remove the small menu panel
+        try:
+            self.driver.execute_script(
+                "var menus = document.querySelectorAll('.mat-mdc-menu-panel.erp-action-menu');"
+                "for (var i = 0; i < menus.length; i++) {"
+                "  var pane = menus[i].closest('.cdk-overlay-pane');"
+                "  if (pane) pane.remove();"
+                "}"
+                "var backdrops = document.querySelectorAll('.cdk-overlay-backdrop');"
+                "for (var i = 0; i < backdrops.length; i++) {"
+                "  backdrops[i].remove();"
+                "}"
+            )
+        except Exception:
+            pass
         return bool(clicked)
 
     def click_edit_button(self, row_source, row_target):
