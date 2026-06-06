@@ -502,36 +502,77 @@ class BankPage(BasePage):
 
     def _open_dropdown_by_label(self, label_text):
         """Open a mat-select dropdown by finding its form-field label.
-        Uses WebDriverWait instead of wait_seconds for speed."""
-        js = f"""
+        Uses Selenium ActionChains click — JS click does NOT reliably open
+        Angular Material mat-select dropdowns (BUG-004).
+
+        Step 1: Find the mat-select element scoped to popup via JS.
+        Step 2: Click the mat-select using Selenium ActionChains (properly
+                triggers Angular's event handlers).
+        Step 3: Wait for dropdown panel to appear via WebDriverWait.
+        """
+        # Step 1: Verify the mat-select exists in the popup via JS
+        js_find = f"""
             var popup = document.querySelector(
                 '.edit_pop_up.override_edit_pop_up.popup-mode'
             );
-            if (!popup) return 'No popup';
+            if (!popup) return '';
             var formFields = popup.querySelectorAll('mat-form-field');
             for (var i = 0; i < formFields.length; i++) {{
                 var label = formFields[i].querySelector('mat-label');
                 if (label && label.textContent.trim() === '{label_text}') {{
                     var select = formFields[i].querySelector('mat-select');
-                    if (select) {{
-                        select.click();
-                        return 'Opened';
-                    }}
+                    if (select) return 'found';
                 }}
             }}
-            return 'Not found: {label_text}';
+            return '';
         """
-        result = self.driver.execute_script(js)
-        # Wait for dropdown options to appear (WebDriverWait instead of sleep)
-        if "Opened" in str(result):
-            try:
-                WebDriverWait(self.driver, 3).until(
-                    EC.presence_of_element_located(("css selector", ".cdk-overlay-pane mat-option"))
-                )
-            except Exception:
-                pass
+        found = self.driver.execute_script(js_find)
+        if not found:
+            log.warning(f"Dropdown not found: {label_text}")
+            return False
+
+        # Step 2: Find the mat-select via Selenium (XPath) and click with ActionChains
+        try:
+            select_el = self.driver.find_element(
+                By.XPATH,
+                f"//mat-label[contains(.,'{label_text}')]"
+                f"/ancestor::mat-form-field//mat-select"
+            )
+            # Use ActionChains for reliable Angular Material click
+            ActionChains(self.driver).move_to_element(select_el).click().perform()
+        except Exception as e:
+            log.warning(f"ActionChains click failed for dropdown '{label_text}': {e}")
+            # Fallback: dispatch mouse events via JS (better than plain JS click)
+            self.driver.execute_script("""
+                var popup = document.querySelector(
+                    '.edit_pop_up.override_edit_pop_up.popup-mode'
+                );
+                if (!popup) return;
+                var formFields = popup.querySelectorAll('mat-form-field');
+                for (var i = 0; i < formFields.length; i++) {
+                    var label = formFields[i].querySelector('mat-label');
+                    if (label && label.textContent.trim() === arguments[0]) {
+                        var select = formFields[i].querySelector('mat-select');
+                        if (select) {
+                            select.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                            select.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                            select.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                        }
+                    }
+                }
+            """, label_text)
+
+        # Step 3: Wait for dropdown options to appear
+        try:
+            WebDriverWait(self.driver, 3).until(
+                EC.presence_of_element_located((
+                    "css selector",
+                    ".cdk-overlay-pane mat-option, .cdk-overlay-pane [role='option']"
+                ))
+            )
             return True
-        log.warning(f"Dropdown not opened: {label_text} — {result}")
+        except Exception:
+            pass
         return False
 
     def _select_option_by_text(self, option_text):
@@ -842,7 +883,7 @@ class BankPage(BasePage):
         Returns: 'success', 'validation', or 'none'
         """
         log.info("Waiting for submit response")
-        end = time.monotonic() + 3
+        end = time.monotonic() + 2
         while time.monotonic() < end:
             info = self.driver.execute_script("""
                 var popup = document.querySelector('.swal2-popup');
@@ -1016,10 +1057,10 @@ class BankPage(BasePage):
         except Exception:
             return False
 
-    def handle_validation_warning(self, timeout=2):
+    def handle_validation_warning(self, timeout=1.5):
         """Handle the 'Validation Failed' SweetAlert2 popup.
         Fast poll for validation alert, then dismiss.
-        Reduced timeout (2s, was 3s) for speed.
+        Reduced timeout (1.5s, was 2s) for speed.
 
         Returns the SweetAlert title if visible, or empty string.
         Automatically dismisses the alert.
@@ -1184,26 +1225,35 @@ class BankPage(BasePage):
     def get_field_validation_state(self, field_label):
         """Check if a specific field is currently invalid.
 
+        Uses fast JS-based DOM walk-up (like UOM gold standard) instead of
+        Selenium find_elements for ~3x speed improvement.
+
         Returns dict with: invalid (bool), error (str), touched (bool).
         """
+        js = """
+            var popup = document.querySelector(
+                '.edit_pop_up.override_edit_pop_up.popup-mode'
+            );
+            if (!popup) return JSON.stringify({invalid: false, touched: false, error: ''});
+            var formFields = popup.querySelectorAll('mat-form-field');
+            for (var i = 0; i < formFields.length; i++) {
+                var label = formFields[i].querySelector('mat-label');
+                if (label && label.textContent.trim().indexOf(arguments[0]) !== -1) {
+                    var classes = formFields[i].className || '';
+                    var errorEl = formFields[i].querySelector('mat-error');
+                    return JSON.stringify({
+                        invalid: classes.indexOf('ng-invalid') !== -1,
+                        touched: classes.indexOf('ng-touched') !== -1,
+                        error: errorEl ? errorEl.textContent.trim() : ''
+                    });
+                }
+            }
+            return JSON.stringify({invalid: false, touched: false, error: ''});
+        """
         try:
-            popup = self.driver.find_element(
-                By.CSS_SELECTOR,
-                ".edit_pop_up.override_edit_pop_up.popup-mode",
-            )
-            form_fields = popup.find_elements(
-                By.CSS_SELECTOR, "mat-form-field"
-            )
-            for ff in form_fields:
-                label = ff.find_element(By.CSS_SELECTOR, "mat-label")
-                if label and field_label in label.text:
-                    classes = ff.get_attribute("class") or ""
-                    error_el = ff.find_elements(By.CSS_SELECTOR, "mat-error")
-                    return {
-                        "invalid": "ng-invalid" in classes,
-                        "touched": "ng-touched" in classes,
-                        "error": error_el[0].text.strip() if error_el else "",
-                    }
+            result = self.driver.execute_script(js, field_label)
+            import json
+            return json.loads(result)
         except Exception:
             pass
         return {"invalid": False, "touched": False, "error": ""}
@@ -1302,16 +1352,17 @@ class BankPage(BasePage):
         return values
 
     def get_input_value(self, name_attr):
-        """Get the current value of an input field by name attribute."""
+        """Get the current value of an input field by name attribute.
+        Uses fast JS instead of Selenium find_element for speed."""
         try:
-            popup = self.driver.find_element(
-                By.CSS_SELECTOR,
-                ".edit_pop_up.override_edit_pop_up.popup-mode",
-            )
-            input_el = popup.find_element(
-                By.CSS_SELECTOR, f"input[name='{name_attr}']"
-            )
-            return input_el.get_attribute("value") or ""
+            return self.driver.execute_script("""
+                var popup = document.querySelector(
+                    '.edit_pop_up.override_edit_pop_up.popup-mode'
+                );
+                if (!popup) return '';
+                var input = popup.querySelector('input[name="' + arguments[0] + '"]');
+                return input ? (input.value || '') : '';
+            """, name_attr)
         except Exception:
             return ""
 
@@ -1329,9 +1380,9 @@ class BankPage(BasePage):
         except Exception:
             return 0
 
-    def is_bank_in_table(self, bank_name, timeout=3):
+    def is_bank_in_table(self, bank_name, timeout=2):
         """Check if a bank with the given name exists in the table.
-        Fast polling (0.1s) with reduced timeout (3s, was 8s)."""
+        Fast polling (0.1s) with reduced timeout (2s, was 3s)."""
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
             try:
@@ -1543,7 +1594,7 @@ class BankPage(BasePage):
 
             # Wait for search input to become visible
             try:
-                search_input = WebDriverWait(self.driver, 5).until(
+                search_input = WebDriverWait(self.driver, 3).until(
                     EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
                 )
                 log.info("Search input became visible")

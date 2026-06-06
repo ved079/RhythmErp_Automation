@@ -606,11 +606,6 @@ class TestCreateFormValidations:
             self._cleanup(page)
 
     # ---- BNK-C15: SQL injection strings ----
-    @pytest.mark.xfail(
-        reason="BUG: SQL injection strings may be accepted by the system. "
-               "This test verifies if they are accepted (BUG) or rejected (security).",
-        strict=False,
-    )
     def test_BNK_C15_sql_injection(self, logged_in_driver):
         """SQL injection payload should be rejected by the system."""
         driver = logged_in_driver
@@ -634,11 +629,6 @@ class TestCreateFormValidations:
             self._cleanup(page)
 
     # ---- BNK-C16: XSS payloads ----
-    @pytest.mark.xfail(
-        reason="BUG: XSS payloads may be accepted by the system. "
-               "This test verifies if they are accepted (BUG) or rejected (security).",
-        strict=False,
-    )
     def test_BNK_C16_xss_payload(self, logged_in_driver):
         """XSS payload should be rejected by the system."""
         driver = logged_in_driver
@@ -1163,12 +1153,6 @@ class TestEditFormValidations:
             self._cleanup(page)
 
     # ---- BNK-E05: Edit Bank Name to invalid ----
-    @pytest.mark.xfail(
-        reason="BUG: ERP accepts invalid (too-short) Bank Name on edit. "
-               "The Update button does not validate minlength for Bank Name "
-               "in edit mode — the form closes without any validation warning.",
-        strict=False,
-    )
     def test_BNK_E05_edit_invalid_bank_name(self, logged_in_driver):
         """Edit Bank Name to an invalid value — should be blocked."""
         driver = logged_in_driver
@@ -1322,11 +1306,6 @@ class TestSearchFilterEdgeCases:
         page.hard_refresh()
 
     # ---- BNK-S01: Search with exact bank name ----
-    @pytest.mark.xfail(
-        reason="BUG-003: Global search does not filter the Bank table. "
-               "Exact name search returns all rows unchanged.",
-        strict=False,
-    )
     def test_BNK_S01_search_exact_name(self, logged_in_driver):
         """Search with exact bank name should filter the table."""
         driver = logged_in_driver
@@ -1362,10 +1341,6 @@ class TestSearchFilterEdgeCases:
             self._cleanup(page)
 
     # ---- BNK-S02: Search with partial name ----
-    @pytest.mark.xfail(
-        reason="BUG-003: Global search does not filter the Bank table.",
-        strict=False,
-    )
     def test_BNK_S02_search_partial_name(self, logged_in_driver):
         """Search with partial bank name should filter the table."""
         driver = logged_in_driver
@@ -1392,10 +1367,6 @@ class TestSearchFilterEdgeCases:
             self._cleanup(page)
 
     # ---- BNK-S03: Search with special characters ----
-    @pytest.mark.xfail(
-        reason="BUG-003: Global search does not filter the Bank table.",
-        strict=False,
-    )
     def test_BNK_S03_search_special_chars(self, logged_in_driver):
         """Search with special characters should be handled gracefully."""
         driver = logged_in_driver
@@ -1415,10 +1386,6 @@ class TestSearchFilterEdgeCases:
             self._cleanup(page)
 
     # ---- BNK-S04: Search with non-existent term ----
-    @pytest.mark.xfail(
-        reason="BUG-003: Global search does not filter the Bank table.",
-        strict=False,
-    )
     def test_BNK_S04_search_non_existent(self, logged_in_driver):
         """Search with non-existent term should show no results."""
         driver = logged_in_driver
@@ -1464,10 +1431,6 @@ class TestSearchFilterEdgeCases:
             self._cleanup(page)
 
     # ---- BNK-S06: Search with Account Number ----
-    @pytest.mark.xfail(
-        reason="BUG-003: Global search does not filter the Bank table.",
-        strict=False,
-    )
     def test_BNK_S06_search_account_number(self, logged_in_driver):
         """Search with Account Number should filter the table."""
         driver = logged_in_driver
@@ -1822,11 +1785,6 @@ class TestHistoryAuditTrail:
         page.hard_refresh()
 
     # ---- BNK-H01: History button opens popup ----
-    @pytest.mark.xfail(
-        reason="BUG-006: History button opens View popup instead of "
-               "audit trail popup.",
-        strict=False,
-    )
     def test_BNK_H01_history_opens_popup(self, logged_in_driver):
         """History button should open a history/audit trail popup."""
         driver = logged_in_driver
@@ -1852,10 +1810,6 @@ class TestHistoryAuditTrail:
             self._cleanup(page)
 
     # ---- BNK-H02: History popup has change log entries ----
-    @pytest.mark.xfail(
-        reason="BUG-006: History button opens View popup, not history.",
-        strict=False,
-    )
     def test_BNK_H02_history_change_log(self, logged_in_driver):
         """History popup should display change log entries with timestamps."""
         driver = logged_in_driver
@@ -1879,10 +1833,6 @@ class TestHistoryAuditTrail:
             self._cleanup(page)
 
     # ---- BNK-H03: History popup shows timestamps ----
-    @pytest.mark.xfail(
-        reason="BUG-006: History button opens View popup, no timestamps.",
-        strict=False,
-    )
     def test_BNK_H03_history_timestamps(self, logged_in_driver):
         """History popup should show timestamps for each change."""
         driver = logged_in_driver
@@ -2031,10 +1981,6 @@ class TestBugSpecific:
             self._cleanup(page)
 
     # ---- BNK-B03: Search doesn't filter table ----
-    @pytest.mark.xfail(
-        reason="BUG-003: Global search does not filter the Bank table at all.",
-        strict=False,
-    )
     def test_BNK_B03_search_no_filter(self, logged_in_driver):
         """Global search does not filter the Bank table.
 
@@ -2087,10 +2033,6 @@ class TestBugSpecific:
             self._cleanup(page)
 
     # ---- BNK-B05: History opens View popup ----
-    @pytest.mark.xfail(
-        reason="BUG-006: History button opens View popup, not audit trail.",
-        strict=False,
-    )
     def test_BNK_B05_history_opens_view(self, logged_in_driver):
         """History button opens View popup instead of audit trail.
 
