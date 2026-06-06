@@ -536,10 +536,10 @@ class ErrorCodeMstPage:
 
     def _cleanup_swal2(self):
         """Remove leftover swal2 container + backdrops."""
-        self.driver.execute_script("""
-            document.querySelectorAll('.swal2-container').forEach(el => el.remove());
-            document.querySelectorAll('.swal2-backdrop-show').forEach(el => el.remove());
-        """)
+        self.driver.execute_script(
+            "document.querySelectorAll('.swal2-container').forEach(function(el){el.remove();});"
+            "document.querySelectorAll('.swal2-backdrop-show').forEach(function(el){el.remove();});"
+        )
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Form Mode Detection (JS offsetParent)
@@ -613,30 +613,33 @@ class ErrorCodeMstPage:
     # ═══════════════════════════════════════════════════════════════════════════
 
     def get_form_field_values(self):
-        """Read all form field values — JS. Scoped to form popup to avoid
-        picking up mat-select/input elements from the table or other areas."""
-        values = self.driver.execute_script("""
-            var result = {};
-            var form = document.querySelector('div.edit_pop_up');
-            if (!form || form.offsetParent === null) {
-                return {error_code_type: '', code: '', description: '', is_qty_amt: 'Amount'};
-            }
-            var selectTrigger = form.querySelector('mat-select .mat-mdc-select-value-text');
-            if (selectTrigger) {
-                result.error_code_type = selectTrigger.textContent.trim();
-            } else {
-                var select = form.querySelector('mat-select');
-                result.error_code_type = select ? (select.textContent || '').trim().split('\n')[0].trim() : '';
-            }
-            var code = form.querySelector('input[name="Code"]');
-            result.code = code ? code.value : '';
-            var desc = form.querySelector('input[name="Description"]');
-            result.description = desc ? desc.value : '';
-            var cb = form.querySelector('.switch-container.vertical input[type="checkbox"]');
-            result.is_qty_amt = (cb && cb.checked) ? 'Qty' : 'Amount';
-            return result;
-        """)
-        return values or {"error_code_type": "", "code": "", "description": "", "is_qty_amt": TOGGLE_AMOUNT}
+        """Read all form field values. Scoped to form popup.
+        Uses .mat-mdc-select-value-text to read only the SELECTED dropdown value,
+        not all option text from the mat-select element.
+        Single-line JS format to avoid hidden Unicode chars causing syntax errors."""
+        try:
+            values = self.driver.execute_script(
+                "var r={};"
+                "var f=document.querySelector('div.edit_pop_up');"
+                "if(!f||f.offsetParent===null){"
+                "  return{error_code_type:'',code:'',description:'',is_qty_amt:'Amount'};"
+                "}"
+                "var sel=f.querySelector('mat-select');"
+                "if(sel){"
+                "  var vt=sel.querySelector('.mat-mdc-select-value-text');"
+                "  r.error_code_type=vt?(vt.textContent||'').trim():(sel.textContent||'').trim();"
+                "}else{r.error_code_type='';}"
+                "var c=f.querySelector('input[name=\"Code\"]');"
+                "r.code=c?c.value:'';"
+                "var d=f.querySelector('input[name=\"Description\"]');"
+                "r.description=d?d.value:'';"
+                "var cb=f.querySelector('.switch-container.vertical input[type=\"checkbox\"]');"
+                "r.is_qty_amt=(cb&&cb.checked)?'Qty':'Amount';"
+                "return r;"
+            )
+            return values or {"error_code_type": "", "code": "", "description": "", "is_qty_amt": TOGGLE_AMOUNT}
+        except Exception:
+            return {"error_code_type": "", "code": "", "description": "", "is_qty_amt": TOGGLE_AMOUNT}
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Table Operations (pure JS — fast, no Selenium iteration)
@@ -1067,7 +1070,7 @@ class ErrorCodeMstPage:
         return result
 
     def view_record(self, row_index):
-        """One-call view: click view → wait for form → read values → close."""
+        """One-call view: click view -> wait for form -> read values -> close."""
         try:
             self.click_view_on_row(row_index)
             # Wait for form to fully open (view mode)
@@ -1076,13 +1079,20 @@ class ErrorCodeMstPage:
                 if self.is_form_open():
                     break
                 time.sleep(0.1)
-            # Small settle for Angular to populate fields
-            time.sleep(0.3)
-            values = self.get_form_field_values()
+            # Wait for Angular to populate form fields (fast poll)
+            end_pop = time.monotonic() + 3
+            while time.monotonic() < end_pop:
+                vals = self.get_form_field_values()
+                if vals and vals.get("code"):
+                    break
+                time.sleep(0.1)
             self.cancel()
-            return values
+            return vals
         except Exception:
-            self.cancel()
+            try:
+                self.cancel()
+            except Exception:
+                pass
             return None
 
     def check_history(self, row_index):
