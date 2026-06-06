@@ -849,7 +849,7 @@ class TestUOMConversionValidation:
                 "Create should succeed for pair: " + data["source_uom"] + " -> " + data["target_uom"]
             log.info("  Created: " + data["source_uom"] + " -> " + data["target_uom"] + " = " + data["conversion_factor"])
 
-            log.step(2, "Edit record to generate history")
+            log.step(2, "Search record, edit to generate history, then check history")
             page.navigate_to_page()
             page.search_table(data["source_uom"])
             time.sleep(1)
@@ -865,12 +865,8 @@ class TestUOMConversionValidation:
                 page.force_close_form_popup()
             log.info("  Updated conversion factor to 7")
 
-            log.step(3, "Open History popup")
-            page.navigate_to_page()
-            page.search_table(data["source_uom"])
-            time.sleep(1)
+            log.step(3, "Open History popup from same search results")
             page.click_row_history(data["source_uom"], data["target_uom"])
-            # _click_action_button now waits for history popup to open
 
             log.step(4, "Verify History has data")
             row_count = page.get_history_row_count()
@@ -908,7 +904,7 @@ class TestUOMConversionValidation:
                 "Create should succeed for pair: " + data["source_uom"] + " -> " + data["target_uom"]
             log.info("  Created: " + data["source_uom"] + " -> " + data["target_uom"] + " = " + data["conversion_factor"])
 
-            log.step(2, "Edit record to generate history")
+            log.step(2, "Search record, edit to generate history, then check history")
             page.navigate_to_page()
             page.search_table(data["source_uom"])
             time.sleep(1)
@@ -924,12 +920,8 @@ class TestUOMConversionValidation:
                 page.force_close_form_popup()
             log.info("  Updated conversion factor to 9")
 
-            log.step(3, "Open History popup")
-            page.navigate_to_page()
-            page.search_table(data["source_uom"])
-            time.sleep(1)
+            log.step(3, "Open History popup from same search results")
             page.click_row_history(data["source_uom"], data["target_uom"])
-            # _click_action_button now waits for history popup to open
 
             log.step(4, "Click Cancel to close History")
             page.close_history_popup()
