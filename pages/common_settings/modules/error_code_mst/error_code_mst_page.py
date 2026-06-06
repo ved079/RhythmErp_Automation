@@ -1,27 +1,29 @@
 """
-Error Code Mst — Page Object
-=============================
-All locators and methods for the Error Code Mst module.
-Based on Vehicle Master proven patterns (100% working).
+Error Code Mst — Page Object (v4 SPEED OPTIMIZED)
+====================================================
+UOM gold-standard speed patterns applied.
 Module: 4 fields (1 dropdown with 4 fixed options, 2 text, 1 toggle).
+
+Speed optimizations vs v3:
+- All fixed time.sleep() replaced with fast JS polls (0.1s intervals)
+- Dropdown select: JS poll for CDK overlay close (was 0.3s sleep)
+- get_dropdown_options(): JS poll for options visible + pure JS read (was 0.5s sleep)
+- Toggle: JS poll for checkbox state change (was 0.3s sleep)
+- Row action clicks: JS poll for form/popup open (was 0.3s sleep)
+- History search: native setter + Angular events (was 0.5s sleep → 0.2s settle)
+- _fresh_page() smart navigation: navigate_to_page() first call, hard_refresh() after
+- Removed unused imports (EC, TimeoutException)
+- Zero blocking time.sleep() remaining — all are fast poll intervals or brief settles
 """
 
 import time
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException
 
 from pages.common_settings.modules.error_code_mst.data.error_code_mst_data import (
     PAGE_URL,
-    FIELD_ERROR_CODE_TYPE,
-    FIELD_CODE,
-    FIELD_DESCRIPTION,
-    FIELD_IS_QTY_AMT,
     VALIDATION_FAILED_TITLE,
-    VALIDATION_FAILED_CONTENT,
     POPUP_TITLE,
     HISTORY_POPUP_TITLE,
     ERROR_CODE_TYPE_OPTIONS,
@@ -39,23 +41,12 @@ class ErrorCodeMstPage:
     TABLE = (By.CSS_SELECTOR, "table#excel-table")
     TABLE_BODY_ROWS = (By.CSS_SELECTOR, "table#excel-table tbody tr")
     ADD_BUTTON = (By.XPATH, "//button[contains(@class,'erp-add-btn')]")
-    REFRESH_BUTTON = (By.XPATH, "//*[@mattooltip='REFRESH']/button")
-    MORE_BUTTON = (By.XPATH, "//button[@mattooltip='More']")
-
-    # Row action buttons
-    VIEW_BUTTON = (By.XPATH, "//td[contains(@class,'mat-column-view')]//button")
-    EDIT_BUTTON = (By.XPATH, "//td[contains(@class,'mat-column-edit')]//button")
-    HISTORY_BUTTON = (By.XPATH, "//td[contains(@class,'mat-column-archive')]//button")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Locators — Form Popup
     # ═══════════════════════════════════════════════════════════════════════════
 
-    POPUP_CONTAINER = (By.XPATH, "//div[contains(@class,'edit_pop_up') and contains(@class,'popup-mode')]")
-    POPUP_HEADER = (By.CSS_SELECTOR, ".popup-header")
     POPUP_TITLE = (By.CSS_SELECTOR, ".big-model h3")
-    POPUP_FOOTER = (By.XPATH, "//div[contains(@class,'popup-footer')]")
-    CLOSE_X_BUTTON = (By.XPATH, "//div[contains(@class,'big-model')]//button//mat-icon[contains(text(),'close')]")
     CANCEL_BUTTON = (By.XPATH, "//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]")
     SUBMIT_BUTTON = (By.XPATH, "//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]")
     UPDATE_BUTTON = (By.XPATH, "//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]")
@@ -64,17 +55,9 @@ class ErrorCodeMstPage:
     # Locators — Form Fields (4 fields)
     # ═══════════════════════════════════════════════════════════════════════════
 
-    # Field 1: Error Code Type — Standard mat-select (NOT app-dropdown-v2)
     ERROR_CODE_TYPE_SELECT = (By.XPATH, "//mat-label[contains(.,'Error Code Type')]/ancestor::mat-form-field//mat-select")
-
-    # Field 2: Code — text input, REQUIRED
     CODE_INPUT = (By.CSS_SELECTOR, "input[name='Code']")
-
-    # Field 3: Description — text input, optional
     DESCRIPTION_INPUT = (By.CSS_SELECTOR, "input[name='Description']")
-
-    # Field 4: Is Qty/Amt — custom app-slide-toggle-v2 (Amount/Quantity)
-    TOGGLE_CONTAINER = (By.CSS_SELECTOR, ".switch-container.vertical")
     TOGGLE_CHECKBOX = (By.CSS_SELECTOR, ".switch-container.vertical input[type='checkbox']")
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -90,10 +73,8 @@ class ErrorCodeMstPage:
     # Locators — History Popup
     # ═══════════════════════════════════════════════════════════════════════════
 
-    HISTORY_POPUP = (By.CSS_SELECTOR, ".popup-content")
     HISTORY_TITLE = (By.XPATH, "//h3[contains(.,'History')]")
     HISTORY_CANCEL = (By.XPATH, "//div[contains(@class,'popup')]//button[contains(.,'Cancel')]")
-    HISTORY_SEARCH_INPUT = (By.CSS_SELECTOR, ".edit_pop_up input[placeholder='Search box']")
     HISTORY_TABLE_ROWS = (By.CSS_SELECTOR, ".edit_pop_up table tbody tr")
     NO_DATA_IMAGE = (By.CSS_SELECTOR, ".edit_pop_up img[alt='No Data Available']")
 
@@ -103,138 +84,233 @@ class ErrorCodeMstPage:
 
     def __init__(self, driver):
         self.driver = driver
-        self.wait = WebDriverWait(driver, 15)
+        self.wait = WebDriverWait(driver, 10)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Navigation
+    # Navigation (UOM gold standard pattern)
     # ═══════════════════════════════════════════════════════════════════════════
 
     def navigate_to_page(self):
-        """Navigate to Error Code Mst page + force refresh + wait for table."""
+        """Navigate to Error Code Mst page via direct URL. First call only."""
         self.driver.get(PAGE_URL)
+        self._wait_for_page_ready()
+
+    def hard_refresh(self):
+        """Hard refresh (Ctrl+R) + wait for page ready.
+        Much faster than navigate_to_page() for resetting between tests."""
         self.driver.refresh()
         self._wait_for_page_ready()
 
     def _wait_for_page_ready(self):
-        """Wait for page fully loaded — table visible + toolbar ready."""
-        try:
-            self.wait.until(EC.visibility_of_element_located(self.TABLE))
-            time.sleep(1)
-            self._wait_for_toolbar()
-        except TimeoutException:
-            pass
-
-    def _wait_for_toolbar(self):
-        """Retry ADD button readiness (3 retries x 2s)."""
-        for _ in range(3):
+        """Wait for the table to appear — fast JS poll (0.1s intervals)."""
+        end = time.monotonic() + 15
+        while time.monotonic() < end:
             try:
-                btn = self.driver.find_element(*self.ADD_BUTTON)
-                if btn.is_displayed():
+                found = self.driver.execute_script(
+                    "var t = document.querySelector('table#excel-table'); "
+                    "return t && t.offsetParent !== null;"
+                )
+                if found:
                     return
-            except NoSuchElementException:
+            except Exception:
                 pass
-            time.sleep(2)
-
-    def is_page_loaded(self):
-        """Check if listing page is loaded."""
-        try:
-            return self.driver.find_element(*self.TABLE).is_displayed()
-        except NoSuchElementException:
-            return False
+            time.sleep(0.1)
+        # Fallback: just proceed — tests will catch issues
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Add Form — Open / Close
+    # Add Form — Open / Close (fast JS, no sleep)
     # ═══════════════════════════════════════════════════════════════════════════
 
     def open_add_form(self):
-        """Click ADD button to open create form. JS click + verify popup."""
-        try:
-            btn = self.driver.find_element(*self.ADD_BUTTON)
-            self.driver.execute_script("arguments[0].scrollIntoView(true);", btn)
-            time.sleep(0.5)
-            self.driver.execute_script("arguments[0].click();", btn)
-            time.sleep(1.5)
-            if not self._is_form_popup_open():
-                self.driver.execute_script(
-                    "document.querySelector(\"button.erp-add-btn\").click();"
-                )
-                time.sleep(1.5)
-        except Exception as e:
-            raise Exception(f"Failed to open Add form: {e}")
-
-    def _is_form_popup_open(self):
-        """Check if form popup is visible."""
-        try:
-            el = self.driver.find_element(By.CSS_SELECTOR, "div.big-model")
-            return el.is_displayed()
-        except NoSuchElementException:
-            try:
-                el = self.driver.find_element(By.CSS_SELECTOR, "mat-dialog-container")
-                return el.is_displayed()
-            except NoSuchElementException:
-                return False
+        """Click ADD button via JS + wait for form popup via fast poll."""
+        self.driver.execute_script("""
+            var btn = document.querySelector('button.erp-add-btn');
+            if (btn) { btn.scrollIntoView({block:'center'}); btn.click(); }
+        """)
+        # Fast poll for form popup (0.2s intervals, 5s timeout)
+        end = time.monotonic() + 5
+        while time.monotonic() < end:
+            if self.is_form_open():
+                return
+            # Retry click if form didn't open
+            self.driver.execute_script("""
+                var btn = document.querySelector('button.erp-add-btn');
+                if (btn) { btn.click(); }
+            """)
+            time.sleep(0.2)
 
     def is_form_open(self):
-        """Check if form popup is currently open."""
-        return self._is_form_popup_open()
+        """Check if form popup is open — JS offsetParent (instant)."""
+        return self.driver.execute_script("""
+            var el = document.querySelector('div.big-model');
+            if (el && el.offsetParent !== null) return true;
+            var dlg = document.querySelector('mat-dialog-container');
+            return dlg && dlg.offsetParent !== null;
+        """)
 
     def is_form_closed(self):
         """Check if form popup is closed."""
-        return not self._is_form_popup_open()
+        return not self.is_form_open()
 
     def close_popup(self):
-        """Click X icon in popup header."""
-        try:
-            icons = self.driver.find_elements(By.CSS_SELECTOR,
-                                               ".big-model button mat-icon")
-            for icon in icons:
-                if "close" in (icon.text or "").lower():
-                    btn = icon.find_element(By.XPATH, "./ancestor::button")
-                    self.driver.execute_script("arguments[0].click();", btn)
-                    time.sleep(1)
-                    return
-        except Exception:
-            self.cancel()
+        """Close popup via Cancel button — pure JS."""
+        self.driver.execute_script("""
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.indexOf('Cancel') !== -1) {
+                        buttons[j].click(); return;
+                    }
+                }
+            }
+        """)
 
     def cancel(self):
-        """Click Cancel button in popup footer."""
-        try:
-            btn = self.driver.find_element(*self.CANCEL_BUTTON)
-            self.driver.execute_script("arguments[0].click();", btn)
-            time.sleep(1)
-        except Exception:
-            pass
+        """Click Cancel button — alias for close_popup (UOM pattern)."""
+        self.close_popup()
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Form — Fill Fields
+    # Form — Fill Fields (JS native setter for Angular)
     # ═══════════════════════════════════════════════════════════════════════════
 
     def fill_code(self, value):
-        """Type into Code input."""
-        self.type_text(self.CODE_INPUT, value)
+        """Type into Code input — JS native setter + Angular dispatch."""
+        self._fill_input_by_name('Code', value)
 
     def fill_description(self, value):
-        """Type into Description input."""
-        self.type_text(self.DESCRIPTION_INPUT, value)
+        """Type into Description input — JS native setter + Angular dispatch."""
+        self._fill_input_by_name('Description', value)
+
+    def _fill_input_by_name(self, field_name, value):
+        """Set input value via JS native setter + Angular change events."""
+        self.driver.execute_script("""
+            var input = document.querySelector('input[name="' + arguments[0] + '"]');
+            if (!input) return;
+            var nativeSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value'
+            ).set;
+            nativeSetter.call(input, arguments[1]);
+            input.dispatchEvent(new Event('input', {bubbles: true}));
+            input.dispatchEvent(new Event('change', {bubbles: true}));
+        """, field_name, str(value))
 
     def select_error_code_type(self, option_text):
         """
         Select from Error Code Type dropdown (4 fixed options).
-        Standard mat-select with built-in search (NOT app-dropdown-v2).
-        Returns True if selection succeeded, False if dropdown didn't open.
+        Standard mat-select. Returns True if selection succeeded.
         """
-        return self._select_mat_option(self.ERROR_CODE_TYPE_SELECT, option_text)
+        try:
+            # Click the dropdown trigger via JS
+            select_el = self.driver.find_element(*self.ERROR_CODE_TYPE_SELECT)
+            self.driver.execute_script("arguments[0].click();", select_el)
+
+            # Fast poll for overlay panel (0.2s intervals, 3s timeout)
+            panel_open = False
+            end = time.monotonic() + 3
+            while time.monotonic() < end:
+                panel_open = self.driver.execute_script("""
+                    var panels = document.querySelectorAll(
+                        'div.cdk-overlay-pane:not(.mat-mdc-dialog-container)'
+                    );
+                    for (var i = 0; i < panels.length; i++) {
+                        if (panels[i].offsetParent !== null) return true;
+                    }
+                    return false;
+                """)
+                if panel_open:
+                    break
+                time.sleep(0.2)
+
+            if not panel_open:
+                return False
+
+            # Find and click the matching option via JS
+            clicked = self.driver.execute_script("""
+                var options = document.querySelectorAll(
+                    'div.mat-mdc-select-panel mat-option'
+                );
+                for (var i = 0; i < options.length; i++) {
+                    if (options[i].offsetParent !== null &&
+                        options[i].textContent.indexOf(arguments[0]) !== -1) {
+                        options[i].scrollIntoView({block:'center'});
+                        options[i].click();
+                        return true;
+                    }
+                }
+                // Fallback: try role=option
+                var allOpts = document.querySelectorAll('[role="option"]');
+                for (var i = 0; i < allOpts.length; i++) {
+                    if (allOpts[i].offsetParent !== null &&
+                        allOpts[i].textContent.indexOf(arguments[0]) !== -1) {
+                        allOpts[i].scrollIntoView({block:'center'});
+                        allOpts[i].click();
+                        return true;
+                    }
+                }
+                return false;
+            """, option_text.strip())
+
+            # Fast poll for CDK overlay panel to close (replaces time.sleep(0.3))
+            end_panel = time.monotonic() + 1
+            while time.monotonic() < end_panel:
+                panel_gone = self.driver.execute_script("""
+                    var panels = document.querySelectorAll('.cdk-overlay-pane:not(.mat-mdc-dialog-container)');
+                    for (var i = 0; i < panels.length; i++) {
+                        if (panels[i].offsetParent !== null) return false;
+                    }
+                    return true;
+                """)
+                if panel_gone:
+                    break
+                time.sleep(0.1)
+            self._force_close_panels()
+            return bool(clicked)
+
+        except Exception:
+            self._force_close_panels()
+            return False
+
+    def get_dropdown_options(self):
+        """Get all current options from Error Code Type dropdown. Returns list of strings."""
+        options = []
+        try:
+            select_el = self.driver.find_element(*self.ERROR_CODE_TYPE_SELECT)
+            self.driver.execute_script("arguments[0].click();", select_el)
+
+            # Fast poll for options to appear (replaces time.sleep(0.5))
+            end_opts = time.monotonic() + 2
+            while time.monotonic() < end_opts:
+                opt_count = self.driver.execute_script("""
+                    return document.querySelectorAll('div.mat-mdc-select-panel mat-option').length;
+                """)
+                if opt_count > 0:
+                    break
+                time.sleep(0.1)
+
+            # Read options via JS (faster than Selenium find_elements)
+            options = self.driver.execute_script("""
+                var result = [];
+                var opts = document.querySelectorAll('div.mat-mdc-select-panel mat-option');
+                for (var i = 0; i < opts.length; i++) {
+                    if (opts[i].offsetParent !== null) {
+                        var text = (opts[i].textContent || '').trim();
+                        if (text) result.push(text);
+                    }
+                }
+                return result;
+            """)
+
+            self._force_close_panels()
+        except Exception:
+            self._force_close_panels()
+        return options
 
     def toggle_is_qty_amt(self, state):
-        """
-        Set Is Qty/Amt toggle to 'amount' (off) or 'quantity' (on).
-        Clicks the underlying checkbox + dispatches change/input events
-        to trigger Angular's change detection (app-slide-toggle-v2).
-        """
+        """Set Is Qty/Amt toggle to 'amount' (off) or 'quantity' (on)."""
         try:
             cb = self.driver.find_element(*self.TOGGLE_CHECKBOX)
             current = self.is_toggle_quantity()
-
             want_on = (state == TOGGLE_QUANTITY)
             if current != want_on:
                 self.driver.execute_script("""
@@ -243,9 +319,15 @@ class ErrorCodeMstPage:
                     cb.dispatchEvent(new Event('change', {bubbles: true}));
                     cb.dispatchEvent(new Event('input', {bubbles: true}));
                 """, cb)
-                time.sleep(0.8)
-        except Exception as e:
-            print(f"  [Toggle] Error: {e}")
+                # Fast poll for toggle state change (replaces time.sleep(0.3))
+                want_on = (state == TOGGLE_QUANTITY)
+                end_toggle = time.monotonic() + 1
+                while time.monotonic() < end_toggle:
+                    if self.is_toggle_quantity() == want_on:
+                        break
+                    time.sleep(0.1)
+        except Exception:
+            pass
 
     def is_toggle_quantity(self):
         """Check if toggle is in Quantity (checked/Yes) state."""
@@ -269,29 +351,20 @@ class ErrorCodeMstPage:
             success = self._fill_all_fields_once(data)
             if success:
                 return True
-            print(f"  [Retry {attempt}/{max_retries}] Dropdown didn't register, retrying...")
+            # Retry: cancel + hard_refresh + reopen form
             self.cancel()
-            time.sleep(1)
-            self.driver.refresh()
-            time.sleep(2)
-            self._wait_for_page_ready()
-            time.sleep(1)
+            self.hard_refresh()
             self.open_add_form()
-            time.sleep(1.5)
         return False
 
     def _fill_all_fields_once(self, data):
-        """
-        Single pass: fill Dropdown → Text fields → Toggle.
-        Returns True if dropdown registered and all fields filled.
-        """
+        """Single pass: fill Dropdown → Text fields → Toggle."""
         # 1. Dropdown FIRST (most likely to fail)
         error_type = data.get("error_code_type", "")
         if error_type:
             dropdown_ok = self.select_error_code_type(error_type)
             if not dropdown_ok:
                 return False
-            self._force_close_panels()
 
         # 2. Text fields
         code = data.get("code", "")
@@ -308,231 +381,144 @@ class ErrorCodeMstPage:
 
         return True
 
-    def type_text(self, locator, text, clear_first=True):
-        """Type text into an input field with JS value set for reliability."""
-        try:
-            el = self.driver.find_element(*locator)
-            if clear_first:
-                el.clear()
-                self.driver.execute_script(
-                    "arguments[0].value = '';", el
-                )
-            el.send_keys(str(text))
-            self.driver.execute_script(
-                "arguments[0].dispatchEvent(new Event('input', {bubbles: true}));", el
-            )
-        except Exception as e:
-            raise Exception(f"Failed to type into {locator}: {e}")
-
     # ═══════════════════════════════════════════════════════════════════════════
-    # Dropdown — Select Option (Standard mat-select with built-in search)
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def _select_mat_option(self, select_locator, option_text):
-        """
-        Select a specific option from mat-select dropdown.
-        Standard mat-select with built-in search panel.
-        Returns True if option selected, False if dropdown didn't open.
-        """
-        try:
-            # Click the dropdown trigger
-            select_el = self.driver.find_element(*select_locator)
-            self.driver.execute_script("arguments[0].click();", select_el)
-            time.sleep(1.5)
-
-            # Check if overlay panel opened
-            panels = self.driver.find_elements(
-                By.CSS_SELECTOR, "div.cdk-overlay-pane:not(.mat-mdc-dialog-container)"
-            )
-            if not panels:
-                # Fallback: ActionChains click
-                ActionChains(self.driver).move_to_element(select_el).click().perform()
-                time.sleep(2)
-                panels = self.driver.find_elements(
-                    By.CSS_SELECTOR, "div.cdk-overlay-pane:not(.mat-mdc-dialog-container)"
-                )
-                if not panels:
-                    return False
-
-            # Find the matching option
-            options = self.driver.find_elements(
-                By.CSS_SELECTOR, "div.mat-mdc-select-panel mat-option"
-            )
-            for opt in options:
-                if opt.is_displayed() and option_text.strip() in (opt.text or ""):
-                    self.driver.execute_script(
-                        "arguments[0].scrollIntoView(true); arguments[0].click();", opt
-                    )
-                    time.sleep(0.8)
-                    self._force_close_panels()
-                    return True
-
-            # Fallback: try by role=option
-            all_options = self.driver.find_elements(By.CSS_SELECTOR, "[role='option']")
-            for opt in all_options:
-                if opt.is_displayed() and option_text.strip() in (opt.text or ""):
-                    self.driver.execute_script(
-                        "arguments[0].scrollIntoView(true); arguments[0].click();", opt
-                    )
-                    time.sleep(0.8)
-                    self._force_close_panels()
-                    return True
-
-            return False
-
-        except Exception as e:
-            print(f"  [Dropdown] Error selecting '{option_text}': {e}")
-            return False
-
-    def get_dropdown_options(self):
-        """Get all current options from Error Code Type dropdown. Returns list of strings."""
-        options = []
-        try:
-            select_el = self.driver.find_element(*self.ERROR_CODE_TYPE_SELECT)
-            self.driver.execute_script("arguments[0].click();", select_el)
-            time.sleep(1.5)
-
-            opts = self.driver.find_elements(By.CSS_SELECTOR, "div.mat-mdc-select-panel mat-option")
-            for opt in opts:
-                if opt.is_displayed() and (opt.text or "").strip():
-                    options.append(opt.text.strip())
-
-            self._force_close_panels()
-        except Exception:
-            self._force_close_panels()
-        return options
-
-    def _force_close_panels(self):
-        """Remove leftover CDK overlay panels (not dialogs)."""
-        self.driver.execute_script("""
-            document.querySelectorAll('.cdk-overlay-backdrop:not(.cdk-overlay-dark)').forEach(el => el.remove());
-            document.querySelectorAll('.cdk-overlay-pane:not(.mat-mdc-dialog-container)').forEach(el => el.remove());
-        """)
-
-    def _close_select_panel(self):
-        """Close dropdown panel via backdrop click."""
-        try:
-            backdrop = self.driver.find_element(By.CSS_SELECTOR, ".cdk-overlay-backdrop")
-            self.driver.execute_script("arguments[0].click();", backdrop)
-            time.sleep(0.5)
-        except Exception:
-            self._force_close_panels()
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Submit / Update
+    # Submit / Update (UOM _js_click_popup_button pattern)
     # ═══════════════════════════════════════════════════════════════════════════
 
     def submit(self):
-        """Click Submit button (Add mode). 3-tier JS click."""
-        self._click_popup_button(self.SUBMIT_BUTTON)
+        """Click Submit button — single JS call (UOM pattern)."""
+        self._js_click_popup_button('Submit')
 
     def click_update(self):
-        """Click Update button (Edit mode). 3-tier JS click."""
-        self._click_popup_button(self.UPDATE_BUTTON)
+        """Click Update button — single JS call (UOM pattern)."""
+        self._js_click_popup_button('Update')
 
-    def _click_popup_button(self, button_locator):
-        """3-tier click: find visible → JS scroll+click → fallback."""
-        try:
-            btn = self.driver.find_element(*button_locator)
-            self.driver.execute_script("arguments[0].scrollIntoView(true);", btn)
-            time.sleep(0.3)
-            self.driver.execute_script("arguments[0].click();", btn)
-        except Exception:
-            try:
-                btn = self.driver.find_element(*button_locator)
-                btn.click()
-            except Exception:
-                pass
+    def _js_click_popup_button(self, button_text):
+        """Click a popup footer button via JS — bypasses overlay issues."""
+        self.driver.execute_script("""
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.trim().indexOf(arguments[0]) !== -1) {
+                        buttons[j].click();
+                        return;
+                    }
+                }
+            }
+        """, button_text)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # SweetAlert2 — Handle Alerts
+    # SweetAlert2 — Combined alert handler (UOM pattern, fast)
     # ═══════════════════════════════════════════════════════════════════════════
     # NOTE: Error Code Mst does NOT show success SweetAlert2 on create/update.
     # Form closes silently. Only "Validation Failed" alert appears for errors.
 
-    def handle_validation_warning(self, timeout=10):
+    def _handle_submit_response(self, timeout=5):
         """
-        Handle SweetAlert2 validation warning.
-        Returns the warning title text or empty string.
+        Combined SweetAlert handler — single fast poll.
+        Detects validation alert OR form close (= success).
+        Returns dict: {alert: bool, title: str, form_closed: bool}
         """
-        try:
-            title_el = WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located(self.SWAL_TITLE)
-            )
-            message = title_el.text or ""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            result = self.driver.execute_script("""
+                var popup = document.querySelector('.swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error');
+                if (popup && popup.offsetParent !== null) {
+                    var titleEl = document.querySelector('#swal2-title');
+                    var title = titleEl ? titleEl.textContent.trim() : '';
+                    var confirm = document.querySelector('.swal2-confirm');
+                    if (confirm) confirm.click();
+                    return {alert: true, title: title, form_closed: false};
+                }
+                var form = document.querySelector('div.big-model');
+                var formOpen = form && form.offsetParent !== null;
+                if (!formOpen) {
+                    return {alert: false, title: '', form_closed: true};
+                }
+                return null;
+            """)
+            if result is not None:
+                # Clean up swal remnants
+                if result.get('alert'):
+                    self._cleanup_swal2()
+                return result
+            time.sleep(0.2)
 
+        # Timeout — check form state
+        form_closed = not self.is_form_open()
+        return {"alert": False, "title": "", "form_closed": form_closed}
+
+    def is_validation_alert_present(self, timeout=3):
+        """Check if validation SweetAlert2 is visible — fast JS poll (0.2s)."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
             try:
-                confirm = self.driver.find_element(*self.SWAL_CONFIRM)
-                self.driver.execute_script("arguments[0].click();", confirm)
+                visible = self.driver.execute_script("""
+                    var el = document.querySelector('.swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error');
+                    return el && el.offsetParent !== null;
+                """)
+                if visible:
+                    return True
             except Exception:
-                self.driver.execute_script(
-                    "document.querySelector('.swal2-confirm').click();"
-                )
-
-            try:
-                WebDriverWait(self.driver, 5).until(
-                    EC.invisibility_of_element_located(self.SWAL_CONTAINER)
-                )
-            except TimeoutException:
                 pass
+            time.sleep(0.2)
+        return False
 
-            self._cleanup_swal2()
-            return message
+    def handle_validation_warning(self, timeout=5):
+        """Handle SweetAlert2 validation warning — returns title text or empty string."""
+        result = self._handle_submit_response(timeout)
+        return result.get("title", "")
 
-        except TimeoutException:
-            self._cleanup_swal2()
-            return ""
+    def get_sweetalert_title(self, timeout=3):
+        """Get SweetAlert2 title text — fast JS poll."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            try:
+                title = self.driver.execute_script("""
+                    var el = document.querySelector('#swal2-title');
+                    return el && el.offsetParent !== null ? el.textContent.trim() : null;
+                """)
+                if title is not None:
+                    return title
+            except Exception:
+                pass
+            time.sleep(0.2)
+        return ""
 
-    def is_sweetalert_visible(self, timeout=5):
-        """Check if any SweetAlert2 popup is visible."""
-        try:
-            el = WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located(self.SWAL_CONTAINER)
-            )
-            return el.is_displayed()
-        except TimeoutException:
-            return False
+    def get_sweetalert_message(self, timeout=3):
+        """Get SweetAlert2 body message — fast JS poll."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            try:
+                msg = self.driver.execute_script("""
+                    var el = document.querySelector('.swal2-html-container');
+                    return el && el.offsetParent !== null ? el.textContent.trim() : null;
+                """)
+                if msg is not None:
+                    return msg
+            except Exception:
+                pass
+            time.sleep(0.2)
+        return ""
 
-    def is_validation_alert_present(self, timeout=5):
-        """Check if validation SweetAlert2 is visible with 'Validation Failed'."""
-        try:
-            el = WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located(self.SWAL_TITLE)
-            )
-            return VALIDATION_FAILED_TITLE in (el.text or "")
-        except TimeoutException:
-            return False
-
-    def get_sweetalert_title(self, timeout=5):
-        """Get SweetAlert2 title text."""
-        try:
-            el = WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located(self.SWAL_TITLE)
-            )
-            return el.text or ""
-        except TimeoutException:
-            return ""
-
-    def get_sweetalert_message(self, timeout=5):
-        """Get SweetAlert2 body message."""
-        try:
-            el = WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located(self.SWAL_CONTENT)
-            )
-            return el.text or ""
-        except TimeoutException:
-            return ""
-
-    def accept_sweetalert(self, timeout=10):
-        """Click OK/confirm on SweetAlert2."""
-        try:
-            confirm = WebDriverWait(self.driver, timeout).until(
-                EC.element_to_be_clickable(self.SWAL_CONFIRM)
-            )
-            self.driver.execute_script("arguments[0].click();", confirm)
-            time.sleep(0.5)
-        except Exception:
-            self._cleanup_swal2()
+    def accept_sweetalert(self, timeout=5):
+        """Click OK/confirm on SweetAlert2 — single JS call."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            try:
+                clicked = self.driver.execute_script("""
+                    var btn = document.querySelector('.swal2-confirm');
+                    if (btn && btn.offsetParent !== null) { btn.click(); return true; }
+                    return false;
+                """)
+                if clicked:
+                    self._cleanup_swal2()
+                    return
+            except Exception:
+                pass
+            time.sleep(0.2)
+        self._cleanup_swal2()
 
     def _cleanup_swal2(self):
         """Remove leftover swal2 container + backdrops."""
@@ -542,33 +528,42 @@ class ErrorCodeMstPage:
         """)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Form Mode Detection
+    # Form Mode Detection (JS offsetParent)
     # ═══════════════════════════════════════════════════════════════════════════
 
     def is_edit_mode(self):
-        """Check if Update button is present (Edit mode)."""
-        try:
-            btn = self.driver.find_element(*self.UPDATE_BUTTON)
-            return btn.is_displayed()
-        except NoSuchElementException:
-            return False
+        """Check if Update button is present (Edit mode) — JS."""
+        return self.driver.execute_script("""
+            var btns = document.querySelectorAll('.popup-footer button');
+            for (var i = 0; i < btns.length; i++) {
+                if (btns[i].textContent.indexOf('Update') !== -1 && btns[i].offsetParent !== null)
+                    return true;
+            }
+            return false;
+        """)
 
     def is_view_mode(self):
-        """Check if no Submit/Update button (View mode)."""
+        """Check if no Submit/Update button (View mode) — JS."""
         return not self.is_edit_mode() and not self._is_submit_visible()
 
     def _is_submit_visible(self):
-        try:
-            btn = self.driver.find_element(*self.SUBMIT_BUTTON)
-            return btn.is_displayed()
-        except NoSuchElementException:
-            return False
+        return self.driver.execute_script("""
+            var btns = document.querySelectorAll('.popup-footer button');
+            for (var i = 0; i < btns.length; i++) {
+                if (btns[i].textContent.indexOf('Submit') !== -1 && btns[i].offsetParent !== null)
+                    return true;
+            }
+            return false;
+        """)
 
     def get_form_heading(self):
-        """Read popup heading text."""
+        """Read popup heading text — JS."""
         try:
-            return self.driver.find_element(*self.POPUP_TITLE).text
-        except NoSuchElementException:
+            return self.driver.execute_script(
+                "var el = document.querySelector('.big-model h3'); "
+                "return el ? el.textContent.trim() : '';"
+            )
+        except Exception:
             return ""
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -576,227 +571,182 @@ class ErrorCodeMstPage:
     # ═══════════════════════════════════════════════════════════════════════════
 
     def get_form_field_values(self):
-        """Read all form field values. Returns dict."""
-        values = {}
-
-        try:
-            select_el = self.driver.find_element(*self.ERROR_CODE_TYPE_SELECT)
-            values["error_code_type"] = select_el.text.strip() or ""
-        except NoSuchElementException:
-            values["error_code_type"] = ""
-
-        try:
-            values["code"] = self.driver.find_element(
-                *self.CODE_INPUT
-            ).get_attribute("value") or ""
-        except NoSuchElementException:
-            values["code"] = ""
-
-        try:
-            values["description"] = self.driver.find_element(
-                *self.DESCRIPTION_INPUT
-            ).get_attribute("value") or ""
-        except NoSuchElementException:
-            values["description"] = ""
-
-        try:
-            values["is_qty_amt"] = TOGGLE_QUANTITY if self.is_toggle_quantity() else TOGGLE_AMOUNT
-        except Exception:
-            values["is_qty_amt"] = TOGGLE_AMOUNT
-
-        return values
+        """Read all form field values — JS. Returns dict."""
+        values = self.driver.execute_script("""
+            var result = {};
+            var select = document.querySelector('mat-select');
+            result.error_code_type = select ? (select.textContent || '').trim() : '';
+            var code = document.querySelector('input[name="Code"]');
+            result.code = code ? code.value : '';
+            var desc = document.querySelector('input[name="Description"]');
+            result.description = desc ? desc.value : '';
+            var cb = document.querySelector('.switch-container.vertical input[type="checkbox"]');
+            result.is_qty_amt = (cb && cb.checked) ? 'Qty' : 'Amount';
+            return result;
+        """)
+        return values or {"error_code_type": "", "code": "", "description": "", "is_qty_amt": TOGGLE_AMOUNT}
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Table Operations
+    # Table Operations (pure JS — fast, no Selenium iteration)
     # ═══════════════════════════════════════════════════════════════════════════
 
     def get_table_row_count(self):
-        """Count visible data rows in table."""
-        try:
-            rows = self.driver.find_elements(*self.TABLE_BODY_ROWS)
-            return len(rows)
-        except NoSuchElementException:
-            return 0
+        """Count visible data rows in table — JS."""
+        return self.driver.execute_script(
+            "return document.querySelectorAll('table#excel-table tbody tr').length;"
+        ) or 0
 
     def get_cell_text(self, row_index, css_class):
-        """Read text from a table cell by row index and column CSS class."""
-        try:
-            rows = self.driver.find_elements(*self.TABLE_BODY_ROWS)
-            if row_index < len(rows):
-                cell = rows[row_index].find_element(
-                    By.CSS_SELECTOR, f"td.{css_class}"
-                )
-                return cell.text or ""
-        except Exception:
-            pass
-        return ""
+        """Read text from a table cell by row index and column CSS class — JS."""
+        return self.driver.execute_script("""
+            var rows = document.querySelectorAll('table#excel-table tbody tr');
+            if (arguments[0] < rows.length) {
+                var cell = rows[arguments[0]].querySelector('td.' + arguments[1]);
+                return cell ? (cell.textContent || '').trim() : '';
+            }
+            return '';
+        """, row_index, css_class)
 
     def is_code_in_table(self, code):
-        """Check if Code value exists in table (partial match)."""
-        try:
-            rows = self.driver.find_elements(*self.TABLE_BODY_ROWS)
-            for row in rows:
-                cells = row.find_elements(By.CSS_SELECTOR, "td")
-                for cell in cells:
-                    if code in (cell.text or ""):
-                        return True
-        except Exception:
-            pass
-        return False
+        """Check if Code value exists in table — pure JS (fast)."""
+        return self.driver.execute_script("""
+            var rows = document.querySelectorAll('table#excel-table tbody tr');
+            for (var i = 0; i < rows.length; i++) {
+                var cells = rows[i].querySelectorAll('td');
+                for (var j = 0; j < cells.length; j++) {
+                    if (cells[j].textContent.indexOf(arguments[0]) !== -1)
+                        return true;
+                }
+            }
+            return false;
+        """, code)
 
     def find_code_row_index(self, code):
-        """Find row index by Code value (partial match). Returns -1 if not found."""
-        try:
-            rows = self.driver.find_elements(*self.TABLE_BODY_ROWS)
-            for i, row in enumerate(rows):
-                cells = row.find_elements(By.CSS_SELECTOR, "td")
-                for cell in cells:
-                    if code in (cell.text or ""):
-                        return i
-        except Exception:
-            pass
-        return -1
-
-    def click_refresh(self):
-        """Click Refresh button on toolbar."""
-        try:
-            btn = self.driver.find_element(*self.REFRESH_BUTTON)
-            self.driver.execute_script("arguments[0].click();", btn)
-            time.sleep(2)
-        except Exception:
-            pass
-
-    def wait_for_table_load(self, timeout=15):
-        """Wait until table has at least 1 row."""
-        try:
-            WebDriverWait(self.driver, timeout).until(
-                lambda d: len(d.find_elements(*self.TABLE_BODY_ROWS)) > 0
-            )
-        except TimeoutException:
-            pass
+        """Find row index by Code value — pure JS (fast). Returns -1 if not found."""
+        return self.driver.execute_script("""
+            var rows = document.querySelectorAll('table#excel-table tbody tr');
+            for (var i = 0; i < rows.length; i++) {
+                var cells = rows[i].querySelectorAll('td');
+                for (var j = 0; j < cells.length; j++) {
+                    if (cells[j].textContent.indexOf(arguments[0]) !== -1)
+                        return i;
+                }
+            }
+            return -1;
+        """, code)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Row Action Buttons — View / Edit / History
+    # Row Action Buttons — View / Edit / History (JS click)
     # ═══════════════════════════════════════════════════════════════════════════
 
     def click_view_on_row(self, row_index=0):
-        """Click View action button (eye icon) on specified row."""
-        try:
-            rows = self.driver.find_elements(*self.TABLE_BODY_ROWS)
-            if row_index < len(rows):
-                btn = rows[row_index].find_element(
-                    By.CSS_SELECTOR, "td.mat-column-view button"
-                )
-                self.driver.execute_script("arguments[0].click();", btn)
-                time.sleep(1.5)
-                return True
-        except Exception:
-            pass
-        return False
+        """Click View action button on specified row — JS."""
+        return self._click_row_action_button(row_index, 'mat-column-view')
 
     def click_edit_on_row(self, row_index=0):
-        """Click Edit action button (pencil icon) on specified row."""
-        try:
-            rows = self.driver.find_elements(*self.TABLE_BODY_ROWS)
-            if row_index < len(rows):
-                btn = rows[row_index].find_element(
-                    By.CSS_SELECTOR, "td.mat-column-edit button"
-                )
-                self.driver.execute_script("arguments[0].click();", btn)
-                time.sleep(1.5)
-                return True
-        except Exception:
-            pass
-        return False
+        """Click Edit action button on specified row — JS."""
+        return self._click_row_action_button(row_index, 'mat-column-edit')
 
     def click_history_on_row(self, row_index=0):
-        """Click History action button (archive icon) on specified row."""
+        """Click History action button on specified row — JS."""
+        return self._click_row_action_button(row_index, 'mat-column-archive')
+
+    def _click_row_action_button(self, row_index, column_class):
+        """Click action button in specific column — JS."""
         try:
-            rows = self.driver.find_elements(*self.TABLE_BODY_ROWS)
-            if row_index < len(rows):
-                btn = rows[row_index].find_element(
-                    By.CSS_SELECTOR, "td.mat-column-archive button"
-                )
-                self.driver.execute_script("arguments[0].click();", btn)
-                time.sleep(1.5)
-                return True
+            result = self.driver.execute_script("""
+                var rows = document.querySelectorAll('table#excel-table tbody tr');
+                if (arguments[0] < rows.length) {
+                    var btn = rows[arguments[0]].querySelector('td.' + arguments[1] + ' button');
+                    if (btn) { btn.click(); return true; }
+                }
+                return false;
+            """, row_index, column_class)
+            # Fast poll for form/popup to open (replaces time.sleep(0.3))
+            if result:
+                end_action = time.monotonic() + 3
+                while time.monotonic() < end_action:
+                    if self.is_form_open() or self.is_history_popup_open():
+                        break
+                    time.sleep(0.1)
+            return bool(result)
         except Exception:
-            pass
-        return False
+            return False
 
     # ═══════════════════════════════════════════════════════════════════════════
     # History Popup
     # ═══════════════════════════════════════════════════════════════════════════
 
     def is_history_popup_open(self):
-        """Check if History popup is visible."""
-        try:
-            el = self.driver.find_element(*self.HISTORY_TITLE)
-            return el.is_displayed()
-        except NoSuchElementException:
-            return False
+        """Check if History popup is visible — JS offsetParent."""
+        return self.driver.execute_script("""
+            var el = document.querySelector('h3');
+            if (el && el.textContent.indexOf('History') !== -1 && el.offsetParent !== null)
+                return true;
+            return false;
+        """)
 
     def get_history_row_count(self):
-        """Count rows in history table."""
-        try:
-            rows = self.driver.find_elements(*self.HISTORY_TABLE_ROWS)
-            return len(rows)
-        except NoSuchElementException:
-            return 0
+        """Count rows in history table — JS."""
+        return self.driver.execute_script(
+            "return document.querySelectorAll('.edit_pop_up table tbody tr').length;"
+        ) or 0
 
     def is_history_empty(self):
-        """Check if history shows 'No Data Available'."""
-        try:
-            el = self.driver.find_element(*self.NO_DATA_IMAGE)
-            return el.is_displayed()
-        except NoSuchElementException:
-            return False
+        """Check if history shows 'No Data Available' — JS."""
+        return self.driver.execute_script("""
+            var img = document.querySelector('.edit_pop_up img[alt="No Data Available"]');
+            return img && img.offsetParent !== null;
+        """)
 
     def close_history_popup(self):
-        """Close History popup — 3 JS strategies."""
-        # Strategy 1: Cancel button
-        try:
-            btn = self.driver.find_element(*self.HISTORY_CANCEL)
-            self.driver.execute_script("arguments[0].click();", btn)
-            time.sleep(1)
-            if not self.is_history_popup_open():
-                return
-        except Exception:
-            pass
-
-        # Strategy 2: Force remove overlays
+        """Close History popup — pure JS Cancel click."""
         self.driver.execute_script("""
-            document.querySelectorAll('.popup-content').forEach(el => el.remove());
-            document.querySelectorAll('.cdk-overlay-backdrop').forEach(el => el.remove());
-            document.querySelectorAll('.cdk-overlay-pane').forEach(el => el.remove());
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.indexOf('Cancel') !== -1) {
+                        buttons[j].click(); return;
+                    }
+                }
+            }
         """)
 
     def search_in_history(self, search_text):
-        """Search inside history popup."""
+        """Search inside history popup — JS."""
         try:
-            inp = self.driver.find_element(*self.HISTORY_SEARCH_INPUT)
-            inp.clear()
-            inp.send_keys(str(search_text))
-            time.sleep(1.5)
+            self.driver.execute_script("""
+                var inp = document.querySelector('.edit_pop_up input[placeholder="Search box"]');
+                if (inp) {
+                    var nativeSetter = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value'
+                    ).set;
+                    nativeSetter.call(inp, arguments[0]);
+                    inp.dispatchEvent(new Event('input', {bubbles: true}));
+                    inp.dispatchEvent(new Event('keyup', {bubbles: true}));
+                    inp.dispatchEvent(new Event('change', {bubbles: true}));
+                }
+            """, str(search_text))
+            # Brief settle for Angular change detection (replaces time.sleep(0.5))
+            time.sleep(0.2)
             return True
         except Exception:
             return False
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # High-Level One-Call Methods
+    # High-Level One-Call Methods (speed-optimized)
     # ═══════════════════════════════════════════════════════════════════════════
 
     def create_record(self, data):
         """
         One-call record creation: open form → fill all → submit.
-        NOTE: Error Code Mst does NOT show success SweetAlert2.
-        Form closes silently on success.
+        Uses _handle_submit_response() for fast alert detection.
         Returns dict: {status, error, message, data}
         """
         result = {"status": "failed", "error": "", "message": "", "data": data}
         try:
             self.open_add_form()
-            time.sleep(1)
 
             fill_ok = self.fill_all_fields(data)
             if not fill_ok:
@@ -804,21 +754,16 @@ class ErrorCodeMstPage:
                 return result
 
             self._force_close_panels()
-            time.sleep(0.5)
             self.submit()
 
-            # Check for validation alert FIRST (catches duplicates + empty fields)
-            if self.is_validation_alert_present(timeout=5):
-                warning = self.handle_validation_warning()
-                result["error"] = f"Validation: {warning}"
-                # Alert handled — force close form if still open
+            # Combined alert handler — fast poll
+            response = self._handle_submit_response(timeout=5)
+            if response.get("alert"):
+                result["error"] = f"Validation: {response['title']}"
                 self.force_close_form_popup()
-                time.sleep(0.5)
                 return result
 
-            # No alert — wait for form to close = success
-            time.sleep(3)
-            if self.is_form_closed():
+            if response.get("form_closed"):
                 result["status"] = "success"
                 result["message"] = "Record created (form closed silently)"
             else:
@@ -834,13 +779,11 @@ class ErrorCodeMstPage:
     def edit_record(self, row_index, updated_data):
         """
         One-call record edit: click edit → fill changed fields → update.
-        NOTE: No success SweetAlert2 — form closes silently on success.
         Returns dict: {status, error, message}
         """
         result = {"status": "failed", "error": "", "message": ""}
         try:
             self.click_edit_on_row(row_index)
-            time.sleep(1)
 
             if not self.is_edit_mode():
                 result["error"] = "Edit form did not open"
@@ -852,26 +795,21 @@ class ErrorCodeMstPage:
             if updated_data.get("description"):
                 self.fill_description(updated_data["description"])
             if updated_data.get("error_code_type"):
-                self._select_mat_option(self.ERROR_CODE_TYPE_SELECT, updated_data["error_code_type"])
-                self._force_close_panels()
+                self.select_error_code_type(updated_data["error_code_type"])
             if updated_data.get("is_qty_amt"):
                 self.toggle_is_qty_amt(updated_data["is_qty_amt"])
 
             self._force_close_panels()
-            time.sleep(0.5)
             self.click_update()
 
-            # Check for validation alert FIRST (catches duplicates)
-            if self.is_validation_alert_present(timeout=5):
-                warning = self.handle_validation_warning()
-                result["error"] = f"Validation: {warning}"
+            # Combined alert handler
+            response = self._handle_submit_response(timeout=5)
+            if response.get("alert"):
+                result["error"] = f"Validation: {response['title']}"
                 self.force_close_form_popup()
-                time.sleep(0.5)
                 return result
 
-            # No alert — wait for form to close = success
-            time.sleep(3)
-            if self.is_form_closed():
+            if response.get("form_closed"):
                 result["status"] = "success"
                 result["message"] = "Record updated (form closed silently)"
             else:
@@ -885,13 +823,9 @@ class ErrorCodeMstPage:
         return result
 
     def view_record(self, row_index):
-        """
-        One-call view: click view → read values → close.
-        Returns dict with field values or None.
-        """
+        """One-call view: click view → read values → close."""
         try:
             self.click_view_on_row(row_index)
-            time.sleep(1)
             values = self.get_form_field_values()
             self.cancel()
             return values
@@ -900,14 +834,10 @@ class ErrorCodeMstPage:
             return None
 
     def check_history(self, row_index):
-        """
-        One-call history check.
-        Returns dict: {row_count, is_empty, error}
-        """
+        """One-call history check. Returns dict: {row_count, is_empty, error}"""
         result = {"row_count": 0, "is_empty": True, "error": ""}
         try:
             self.click_history_on_row(row_index)
-            time.sleep(1.5)
 
             if not self.is_history_popup_open():
                 result["error"] = "History popup did not open"
@@ -924,20 +854,51 @@ class ErrorCodeMstPage:
         return result
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Force Cleanup
+    # Force Cleanup (single JS call)
     # ═══════════════════════════════════════════════════════════════════════════
 
     def force_close_form_popup(self):
-        """Force close any form popup via JS."""
+        """Force-close any open form popup — single JS call."""
         self.driver.execute_script("""
-            document.querySelectorAll('.big-model').forEach(el => el.remove());
-            document.querySelectorAll('.edit_pop_up').forEach(el => el.remove());
-            document.querySelectorAll('.cdk-overlay-backdrop').forEach(el => el.remove());
-            document.querySelectorAll('.cdk-overlay-pane').forEach(el => el.remove());
+            var popup = document.querySelector('div.edit_pop_up');
+            if (!popup) return;
+            var closeBtn = popup.querySelector('button[mat-icon-button] mat-icon');
+            if (closeBtn) {
+                var btn = closeBtn.closest('button');
+                if (btn) { btn.click(); return; }
+            }
+            // Fallback: click Cancel
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.indexOf('Cancel') !== -1) {
+                        buttons[j].click(); return;
+                    }
+                }
+            }
         """)
 
     def force_cleanup_all(self):
-        """Force close everything — popups, alerts, panels."""
-        self._cleanup_swal2()
-        self._force_close_panels()
-        self.force_close_form_popup()
+        """One-call cleanup: SweetAlert + CDK overlays + form popups."""
+        self.driver.execute_script("""
+            document.querySelectorAll('.swal2-container').forEach(function(el) { el.remove(); });
+            document.querySelectorAll('.swal2-backdrop-show').forEach(function(el) { el.remove(); });
+            document.querySelectorAll('.cdk-overlay-backdrop').forEach(function(el) { el.remove(); });
+            document.querySelectorAll('.cdk-overlay-pane:not(.mat-mdc-dialog-container)').forEach(function(el) { el.remove(); });
+            var popup = document.querySelector('div.edit_pop_up');
+            if (popup) {
+                var closeBtn = popup.querySelector('button[mat-icon-button] mat-icon');
+                if (closeBtn) {
+                    var btn = closeBtn.closest('button');
+                    if (btn) btn.click();
+                }
+            }
+        """)
+
+    def _force_close_panels(self):
+        """Remove leftover CDK overlay panels (not dialogs) — single JS."""
+        self.driver.execute_script("""
+            document.querySelectorAll('.cdk-overlay-backdrop:not(.cdk-overlay-dark)').forEach(function(el) { el.remove(); });
+            document.querySelectorAll('.cdk-overlay-pane:not(.mat-mdc-dialog-container)').forEach(function(el) { el.remove(); });
+        """)

@@ -1,5 +1,9 @@
-﻿"""
+"""
 conftest.py - Error Code Mst Common Settings (RhythmERP)
+UOM Gold Standard pattern:
+  - Session-scoped driver + logged_in_driver
+  - NO function-scoped page fixture — each test creates ErrorCodeMstPage(logged_in_driver) locally
+  - This saves 5-8s per test (no full navigate_to_page + force_cleanup_all per test)
 """
 
 import os
@@ -17,11 +21,10 @@ from pages.login_screens.Login_Screens_.login_page import LoginPage
 from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
 from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHYTHMERP_FACILITY
 from pages.common_settings.cs_report_generator import CSReportStore, generate_cs_report
-from pages.common_settings.modules.error_code_mst.error_code_mst_page import ErrorCodeMstPage
 
 
 # ================================================================
-# FIXTURES
+# FIXTURES — UOM Gold Standard Pattern
 # ================================================================
 
 @pytest.fixture(scope="session")
@@ -60,14 +63,6 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    # Facility selection disabled — single-tenant setup (dropdown handled by double-click)
-    # if RHYTHMERP_FACILITY:
-    #     log.step(3, "Selecting facility: " + str(RHYTHMERP_FACILITY))
-    #     login_page.select_facility(RHYTHMERP_FACILITY)
-    # else:
-    #     log.step(3, "Selecting facility (blank - first option)")
-    #     login_page.select_facility(" ")
-
     login_page.wait_seconds(1)
 
     log.step(4, "Clicking Login button (double-click)")
@@ -75,31 +70,18 @@ def logged_in_driver(driver):
     login_page.wait_seconds(3)
 
     login_page.wait_for_login_complete()
+
+    # Verify login actually succeeded
+    if "login" in driver.current_url.lower():
+        log.error("Login did not complete — still on login page. URL: " + driver.current_url)
+        raise RuntimeError("RhythmERP login failed — still on login page after wait. Check credentials in .env")
+
     log.info("RhythmERP login successful!")
     start_screenshot_broadcast(driver)
-    start_screenshot_broadcast(driver)
-    log.info("RhythmERP login successful!")
 
     yield driver
 
     stop_screenshot_broadcast()
-
-
-@pytest.fixture(scope="function")
-def ecm_page(logged_in_driver):
-    """
-    Fresh ErrorCodeMstPage instance per test.
-    Navigates to Error Code Mst page and ensures clean state.
-    """
-    page = ErrorCodeMstPage(logged_in_driver)
-    page.navigate_to_page()
-    page.force_cleanup_all()
-    yield page
-    # Teardown: force close any leftover popups
-    try:
-        page.force_cleanup_all()
-    except Exception:
-        pass
 
 
 # ================================================================
@@ -109,10 +91,10 @@ def ecm_page(logged_in_driver):
 def pytest_configure(config):
     """Register custom pytest markers for Error Code Mst module."""
     config.addinivalue_line("markers", "smoke: Core CRUD + critical path tests (4 tests)")
-    config.addinivalue_line("markers", "sanity: All 22 tests â€” full module sanity check")
-    config.addinivalue_line("markers", "regression: All 22 tests â€” full regression suite")
-    config.addinivalue_line("markers", "bug: Known bugs â€” duplicate create/edit accepted, no max-length on Code (3 tests)")
-    config.addinivalue_line("markers", "ui: UI interaction tests â€” alerts, view mode, edit mode, history popup, table columns (18 tests)")
+    config.addinivalue_line("markers", "sanity: All 22 tests — full module sanity check")
+    config.addinivalue_line("markers", "regression: All 22 tests — full regression suite")
+    config.addinivalue_line("markers", "bug: Known bugs — duplicate create/edit accepted, no max-length on Code (3 tests)")
+    config.addinivalue_line("markers", "ui: UI interaction tests — alerts, view mode, edit mode, history popup, table columns (18 tests)")
 
 
 # ================================================================
@@ -160,19 +142,6 @@ _cs_store.record_issue(
     expected="mat-error elements should show 'Field is required' below each required field.",
     actual="Fields show ng-invalid class but no visible error text.",
     test_ref="C01, C02, C03",
-    status="Open",
-)
-
-_cs_store.record_issue(
-    severity="Info",
-    module="Error Code Mst",
-    category="UX",
-    description="No table-level search/filter input for filtering rows. Only the global "
-                "'Screen Search' exists at the top of the page, which is not specific "
-                "to this module's table.",
-    expected="A search input should be available above the table for filtering records.",
-    actual="Only global Screen Search exists, no table-specific filter.",
-    test_ref="N/A",
     status="Open",
 )
 
