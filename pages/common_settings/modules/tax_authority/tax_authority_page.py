@@ -17,9 +17,7 @@ Speed optimizations vs v3 (BasePage):
 """
 
 import time
-from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common.exceptions import NoSuchElementException
 
 from pages.common_settings.modules.tax_authority.data.tax_authority_data import (
     TAX_AUTHORITY_PAGE_URL,
@@ -74,7 +72,7 @@ class TaxAuthorityPage:
     # ═══════════════════════════════════════════════════════════════════════════
 
     def open_add_form(self):
-        """Click ADD button via JS + wait for form popup via fast poll."""
+        """Click ADD button via JS + wait for form popup + wait for fields to render."""
         self.driver.execute_script("""
             var btn = document.querySelector('button[mattooltip="ADD"]')
                      || document.querySelector('button.erp-add-btn');
@@ -92,7 +90,7 @@ class TaxAuthorityPage:
         end = time.monotonic() + 5
         while time.monotonic() < end:
             if self.is_form_open():
-                return
+                break
             # Retry click if form didn't open
             self.driver.execute_script("""
                 var btn = document.querySelector('button[mattooltip="ADD"]')
@@ -108,13 +106,15 @@ class TaxAuthorityPage:
                 if (btn) btn.click();
             """)
             time.sleep(0.2)
+        # Wait for mat-select elements to fully render inside form
+        self._wait_for_form_fields_ready()
 
     def is_form_open(self):
         """Check if form popup is open — JS offsetParent (instant)."""
-        return self.driver.execute_script("""
+        return bool(self.driver.execute_script("""
             var el = document.querySelector('div.edit_pop_up');
             return el && el.offsetParent !== null;
-        """)
+        """))
 
     def is_form_closed(self):
         """Check if form popup is closed."""
@@ -214,39 +214,63 @@ class TaxAuthorityPage:
         return self._click_dropdown_option(option_text)
 
     def _open_mat_dropdown(self, label_text):
-        """Open a mat-select dropdown by label text. Returns True if panel opens."""
-        # JS click the mat-select trigger
-        self.driver.execute_script("""
-            var labels = document.querySelectorAll('mat-label');
-            var target = null;
-            for (var i = 0; i < labels.length; i++) {
-                if (labels[i].textContent.trim() === arguments[0]) {
-                    target = labels[i]; break;
+        """Open a mat-select dropdown by label text. Returns True if panel opens.
+        Uses partial label match + multiple click strategies for robustness."""
+        # Try opening with multiple click strategies
+        for attempt in range(3):
+            self.driver.execute_script("""
+                var labels = document.querySelectorAll('mat-label');
+                var target = null;
+                for (var i = 0; i < labels.length; i++) {
+                    var txt = labels[i].textContent.trim();
+                    if (txt === arguments[0] || txt.indexOf(arguments[0]) !== -1) {
+                        target = labels[i]; break;
+                    }
                 }
-            }
-            if (!target) return false;
-            var field = target.closest('mat-form-field');
-            if (!field) return false;
-            var select = field.querySelector('mat-select');
-            if (select) { select.click(); return true; }
-            return false;
-        """, label_text)
-
-        # Fast poll for overlay panel (0.2s intervals, 3s timeout)
-        end = time.monotonic() + 3
-        while time.monotonic() < end:
-            panel_open = self.driver.execute_script("""
-                var panels = document.querySelectorAll(
-                    'div.cdk-overlay-pane:not(.mat-mdc-dialog-container)'
-                );
-                for (var i = 0; i < panels.length; i++) {
-                    if (panels[i].offsetParent !== null) return true;
+                if (!target) return false;
+                var field = target.closest('mat-form-field');
+                if (!field) return false;
+                var select = field.querySelector('mat-select');
+                if (select) {
+                    select.scrollIntoView({block:'center'});
+                    select.click();
+                    return true;
                 }
                 return false;
-            """)
-            if panel_open:
-                return True
-            time.sleep(0.2)
+            """, label_text)
+
+            # Fast poll for overlay panel (0.15s intervals, 2s timeout per attempt)
+            end = time.monotonic() + 2
+            while time.monotonic() < end:
+                panel_open = self.driver.execute_script("""
+                    var panels = document.querySelectorAll('.cdk-overlay-pane');
+                    for (var i = 0; i < panels.length; i++) {
+                        if (panels[i].offsetParent !== null) {
+                            var hasOptions = panels[i].querySelector('mat-option, [role="option"]');
+                            if (hasOptions) return true;
+                        }
+                    }
+                    return false;
+                """)
+                if panel_open:
+                    return True
+                # Retry with trigger click strategy
+                self.driver.execute_script("""
+                    var labels = document.querySelectorAll('mat-label');
+                    for (var i = 0; i < labels.length; i++) {
+                        var txt = labels[i].textContent.trim();
+                        if (txt === arguments[0] || txt.indexOf(arguments[0]) !== -1) {
+                            var field = labels[i].closest('mat-form-field');
+                            if (field) {
+                                var trigger = field.querySelector('.mat-mdc-select-trigger');
+                                if (trigger) { trigger.click(); return; }
+                                var select = field.querySelector('mat-select');
+                                if (select) { select.click(); return; }
+                            }
+                        }
+                    }
+                """, label_text)
+                time.sleep(0.15)
         return False
 
     def _click_dropdown_option(self, option_text):
@@ -470,8 +494,8 @@ class TaxAuthorityPage:
         """)
 
     def is_view_mode(self):
-        """Check if no Submit/Update button (View mode) — JS."""
-        return not self.is_edit_mode() and not self._is_submit_visible()
+        """Check if form is open AND no Submit/Update button (View mode) — JS."""
+        return self.is_form_open() and not self.is_edit_mode() and not self._is_submit_visible()
 
     def _is_submit_visible(self):
         return self.driver.execute_script("""
@@ -484,14 +508,40 @@ class TaxAuthorityPage:
         """)
 
     def is_field_disabled(self, locator_tuple=None, field_name=None):
-        """Check if a form field is disabled — JS by name."""
+        """Check if a form field is disabled (input or mat-select) — JS by name.
+        Returns True if disabled, False if enabled or not found."""
         name = field_name or (locator_tuple[1].split("name='")[1].split("'")[0] if locator_tuple and "name=" in str(locator_tuple) else "")
         if not name:
             return False
-        return self.driver.execute_script("""
+        return bool(self.driver.execute_script("""
+            // Check input element
             var input = document.querySelector('input[name="' + arguments[0] + '"]');
-            return input && (input.disabled || input.getAttribute('aria-disabled') === 'true');
-        """, name)
+            if (input) {
+                if (input.disabled || input.getAttribute('aria-disabled') === 'true' ||
+                    input.hasAttribute('readonly') || input.getAttribute('readonly') === 'true') {
+                    return true;
+                }
+            }
+            // Check mat-select element (disabled state on mat-select itself)
+            var labels = document.querySelectorAll('mat-label');
+            for (var i = 0; i < labels.length; i++) {
+                var txt = labels[i].textContent.trim();
+                if (txt === arguments[0] || txt.indexOf(arguments[0]) !== -1) {
+                    var field = labels[i].closest('mat-form-field');
+                    if (field) {
+                        var select = field.querySelector('mat-select');
+                        if (select) {
+                            if (select.classList.contains('mat-mdc-select-disabled') ||
+                                select.hasAttribute('disabled') ||
+                                select.getAttribute('aria-disabled') === 'true') {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            return false;
+        """, name))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Read Form Field Values
@@ -545,29 +595,66 @@ class TaxAuthorityPage:
             return '';
         """, row_index, col_index)
 
+    def _get_tax_name_column_index(self):
+        """Find the column index for Tax Name dynamically from table header or cdk-column."""
+        return self.driver.execute_script("""
+            // Try table header first
+            var headers = document.querySelectorAll('table#excel-table thead tr th');
+            for (var i = 0; i < headers.length; i++) {
+                var text = (headers[i].textContent || '').trim().toLowerCase();
+                if (text.indexOf('tax name') !== -1 || text === 'tax_name') return i;
+            }
+            // Try cdk-column class names on first data row
+            var firstRow = document.querySelector('table#excel-table tbody tr');
+            if (firstRow) {
+                var cells = firstRow.querySelectorAll('td');
+                for (var i = 0; i < cells.length; i++) {
+                    var cls = cells[i].className || '';
+                    if (cls.indexOf('cdk-column-tax_name') !== -1) return i;
+                }
+            }
+            // Fallback: scan all cells in first row for any that look like tax names
+            if (firstRow) {
+                var cells = firstRow.querySelectorAll('td');
+                for (var i = 1; i < cells.length; i++) {
+                    var txt = (cells[i].textContent || '').trim();
+                    // Skip columns that are too short (Sr No, actions) or look like dropdowns
+                    if (txt.length > 3 && txt.length < 100 && !/^\\d+$/.test(txt)) return i;
+                }
+            }
+            return 2;  // default fallback
+        """)
+
     def find_row_by_name(self, name):
-        """Find row index by Tax Name column — pure JS (fast). Returns -1 if not found."""
+        """Find row index by Tax Name column — dynamic column detection. Returns -1 if not found."""
+        col_idx = self._get_tax_name_column_index()
         return self.driver.execute_script("""
             var rows = document.querySelectorAll('table#excel-table tbody tr');
             var searchLower = arguments[0].toLowerCase();
+            var colIdx = arguments[1];
             for (var i = 0; i < rows.length; i++) {
                 var cells = rows[i].querySelectorAll('td');
-                // Tax Name is column 3 (0-indexed)
-                if (cells.length > 3) {
-                    var text = (cells[3].textContent || '').trim().toLowerCase();
+                if (colIdx < cells.length) {
+                    var text = (cells[colIdx].textContent || '').trim().toLowerCase();
                     if (text === searchLower) return i;
+                }
+                // Fallback: scan all cells
+                for (var j = 0; j < cells.length; j++) {
+                    var text2 = (cells[j].textContent || '').trim().toLowerCase();
+                    if (text2 === searchLower) return i;
                 }
             }
             return -1;
-        """, name.strip())
+        """, name.strip(), col_idx)
 
     def is_record_present(self, name):
         """Check if a Tax Authority record exists in the table."""
         return self.find_row_by_name(name) != -1
 
     def get_name_from_row(self, row_index):
-        """Get the Tax Name value from a specific row (column 3)."""
-        return self.get_cell_text(row_index, 3)
+        """Get the Tax Name value from a specific row (dynamic column)."""
+        col_idx = self._get_tax_name_column_index()
+        return self.get_cell_text(row_index, col_idx)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Row Action Buttons — View / Edit / History (JS click)
@@ -586,37 +673,114 @@ class TaxAuthorityPage:
         return self._click_row_action_button(row_index, 2)
 
     def _click_row_action_button(self, row_index, action_index):
-        """Click action button by row and action index (0=view,1=edit,2=history) — JS."""
+        """Click action button using 3-dot menu (like UOM pattern).
+        action_index: 0=View, 1=Edit, 2=History"""
+        action_names = {0: "View", 1: "Edit", 2: "History"}
+        action_name = action_names.get(action_index, "View")
+        return self._click_action_menu_item(row_index, action_name)
+
+    def _click_action_menu_item(self, row_index, action_name):
+        """Click an action menu item (View/Edit/History) for a specific row.
+        Uses 3-dot menu approach like UOM — opens menu dropdown, then clicks item."""
         try:
-            result = self.driver.execute_script("""
+            # Step 1: Click 3-dot menu button in the actions column
+            menu_opened = self.driver.execute_script("""
                 var rows = document.querySelectorAll('table#excel-table tbody tr');
-                if (arguments[0] < rows.length) {
-                    var btns = rows[arguments[0]].querySelectorAll('button.tblActnBtn');
-                    if (btns.length > arguments[1]) {
-                        btns[arguments[1]].click();
-                        return true;
-                    }
-                    // Fallback: try action columns
-                    var cells = rows[arguments[0]].querySelectorAll('td');
-                    for (var j = 0; j < cells.length; j++) {
-                        var cellBtns = cells[j].querySelectorAll('button');
-                        if (cellBtns.length > 0 && j < 6) {
-                            if (j === arguments[1] + 0) {
-                                cellBtns[0].click();
-                                return true;
+                if (arguments[0] >= rows.length) return false;
+                var row = rows[arguments[0]];
+
+                // Try cdk-column-actions button (3-dot menu)
+                var menuBtn = row.querySelector('td.cdk-column-actions button');
+                if (!menuBtn) {
+                    // Try any button with mat-icon in the actions area
+                    var actionCells = row.querySelectorAll('td');
+                    for (var i = 0; i < actionCells.length; i++) {
+                        var btns = actionCells[i].querySelectorAll('button');
+                        for (var j = 0; j < btns.length; j++) {
+                            var icon = btns[j].querySelector('mat-icon');
+                            if (icon && (icon.textContent.trim() === 'more_vert'
+                                || icon.textContent.trim() === 'more_horiz'
+                                || icon.textContent.trim() === '...')) {
+                                menuBtn = btns[j]; break;
                             }
                         }
+                        if (menuBtn) break;
+                    }
+                }
+                if (menuBtn) {
+                    menuBtn.scrollIntoView({block:'center'});
+                    menuBtn.click();
+                    return true;
+                }
+                return false;
+            """, row_index)
+
+            if not menu_opened:
+                # Fallback: try direct tblActnBtn approach
+                result = self.driver.execute_script("""
+                    var rows = document.querySelectorAll('table#excel-table tbody tr');
+                    if (arguments[0] < rows.length) {
+                        var btns = rows[arguments[0]].querySelectorAll('button.tblActnBtn');
+                        if (btns.length > arguments[1]) {
+                            btns[arguments[1]].click(); return true;
+                        }
+                    }
+                    return false;
+                """, row_index, action_index)
+                if result:
+                    end_action = time.monotonic() + 5
+                    while time.monotonic() < end_action:
+                        if self.is_form_open() or self.is_history_popup_open():
+                            break
+                        time.sleep(0.1)
+                return bool(result)
+
+            # Step 2: Wait for CDK overlay dropdown to appear
+            end_menu = time.monotonic() + 3
+            while time.monotonic() < end_menu:
+                overlay_visible = self.driver.execute_script("""
+                    var overlay = document.querySelector('.cdk-overlay-container .cdk-overlay-pane');
+                    return overlay && overlay.offsetParent !== null;
+                """)
+                if overlay_visible:
+                    break
+                time.sleep(0.1)
+
+            # Step 3: Click the action item in the dropdown
+            result = self.driver.execute_script("""
+                var overlay = document.querySelector('.cdk-overlay-container');
+                if (!overlay) return false;
+                var items = overlay.querySelectorAll('button, span, div');
+                for (var i = 0; i < items.length; i++) {
+                    var text = items[i].textContent.trim();
+                    if (text === arguments[0]) {
+                        items[i].click();
+                        return true;
+                    }
+                }
+                // Fallback: partial match
+                for (var i = 0; i < items.length; i++) {
+                    var text = items[i].textContent.trim().toLowerCase();
+                    if (text.indexOf(arguments[0].toLowerCase()) !== -1) {
+                        items[i].click();
+                        return true;
                     }
                 }
                 return false;
-            """, row_index, action_index)
-            # Fast poll for form/popup to open
+            """, action_name)
+
+            # Step 4: Wait for form/popup to open
             if result:
                 end_action = time.monotonic() + 5
                 while time.monotonic() < end_action:
-                    if self.is_form_open() or self.is_history_popup_open():
-                        break
+                    if action_name == "History":
+                        if self.is_history_popup_open():
+                            break
+                    else:
+                        if self.is_form_open():
+                            break
                     time.sleep(0.1)
+
             return bool(result)
         except Exception:
             return False
@@ -698,31 +862,55 @@ class TaxAuthorityPage:
     # ═══════════════════════════════════════════════════════════════════════════
 
     def is_history_popup_open(self):
-        """Check if History popup is visible — JS offsetParent."""
-        return self.driver.execute_script("""
+        """Check if History popup is visible — JS offsetParent.
+        Checks both app-dynamic-history component (like UOM) and popup-overlay."""
+        return bool(self.driver.execute_script("""
+            // Check app-dynamic-history (like UOM pattern)
+            var histEl = document.querySelector('app-dynamic-history');
+            if (histEl && histEl.offsetParent !== null) return true;
+            // Check popup-overlay
             var el = document.querySelector('.popup-overlay .popup-content');
-            return el && el.offsetParent !== null;
-        """)
+            if (el && el.offsetParent !== null) return true;
+            return false;
+        """))
 
     def get_history_title(self):
-        """Get history popup title — JS."""
+        """Get history popup title — JS. Checks both app-dynamic-history and popup-overlay."""
         try:
-            return self.driver.execute_script(
-                "var el = document.querySelector('.popup-overlay .popup-content .popup-title'); "
-                "return el ? el.textContent.trim() : '';"
-            )
+            return self.driver.execute_script("""
+                // Check app-dynamic-history (like UOM)
+                var histHeader = document.querySelector('app-dynamic-history .tbl-title h2');
+                if (histHeader) return histHeader.textContent.trim();
+                // Check popup-overlay
+                var el = document.querySelector('.popup-overlay .popup-content .popup-title');
+                return el ? el.textContent.trim() : '';
+            """)
         except Exception:
             return ""
 
     def get_history_row_count(self):
-        """Count rows in history table — JS."""
-        return self.driver.execute_script(
-            "return document.querySelectorAll('.popup-overlay .popup-content table tbody tr').length;"
-        ) or 0
+        """Count rows in history table — JS. Checks both app-dynamic-history and popup-overlay."""
+        return self.driver.execute_script("""
+            var rows = document.querySelectorAll('app-dynamic-history table#excel-table tbody tr');
+            if (rows.length > 0) return rows.length;
+            rows = document.querySelectorAll('.popup-overlay .popup-content table tbody tr');
+            return rows.length;
+        """) or 0
 
     def close_history_popup(self):
-        """Close History popup — pure JS Cancel click."""
+        """Close History popup — pure JS Cancel click. Checks both patterns."""
         self.driver.execute_script("""
+            // Try Cancel in app-dynamic-history (like UOM)
+            var histFooters = document.querySelectorAll('app-dynamic-history .popup-footer');
+            for (var i = 0; i < histFooters.length; i++) {
+                var buttons = histFooters[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.indexOf('Cancel') !== -1) {
+                        buttons[j].click(); return;
+                    }
+                }
+            }
+            // Try Cancel in popup-overlay
             var footers = document.querySelectorAll('.popup-overlay .popup-footer');
             for (var i = 0; i < footers.length; i++) {
                 var buttons = footers[i].querySelectorAll('button');
@@ -733,7 +921,9 @@ class TaxAuthorityPage:
                 }
             }
             // Fallback: click X button
-            var closeIcons = document.querySelectorAll('.popup-overlay .popup-actions button .mat-icon');
+            var closeIcons = document.querySelectorAll(
+                'app-dynamic-history button .mat-icon, .popup-overlay .popup-actions button .mat-icon'
+            );
             for (var k = 0; k < closeIcons.length; k++) {
                 if (closeIcons[k].textContent.trim() === 'close') {
                     var btn = closeIcons[k].closest('button');
@@ -744,6 +934,8 @@ class TaxAuthorityPage:
             // Nuclear: remove overlay
             var overlay = document.querySelector('.popup-overlay');
             if (overlay) overlay.remove();
+            var hist = document.querySelector('app-dynamic-history');
+            if (hist) hist.remove();
         """)
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -883,6 +1075,18 @@ class TaxAuthorityPage:
             var overlay = document.querySelector('.popup-overlay');
             if (overlay) overlay.remove();
         """)
+
+    def _wait_for_form_fields_ready(self):
+        """Wait for form fields (especially mat-select) to be fully rendered."""
+        end = time.monotonic() + 5
+        while time.monotonic() < end:
+            ready = self.driver.execute_script("""
+                var selects = document.querySelectorAll('div.edit_pop_up mat-select');
+                return selects.length >= 2;
+            """)
+            if ready:
+                return
+            time.sleep(0.1)
 
     def _force_close_panels(self):
         """Remove leftover CDK overlay panels (not dialogs) — single JS."""
