@@ -1,5 +1,5 @@
-﻿"""
-conftest.py - Tax Authority Common Settings (RhythmERP)
+"""
+conftest.py - Tax Rate Common Settings (RhythmERP)
 """
 
 import os
@@ -21,7 +21,7 @@ from pages.common_settings.cs_report_generator import CSReportStore, generate_cs
 def pytest_configure(config):
     """Register custom pytest markers for Tax Rate tests."""
     config.addinivalue_line(
-        "markers", "smoke: Critical path tests â€” must pass for build acceptance (7 tests)"
+        "markers", "smoke: Critical path tests (7 tests)"
     )
     config.addinivalue_line(
         "markers", "sanity: Full functional validation of every test case (20 tests)"
@@ -44,7 +44,7 @@ def pytest_configure(config):
 @pytest.fixture(scope="session")
 def driver():
     log.separator()
-    log.info("LAUNCHING BROWSER (RhythmERP - Tax Authority Tests)...")
+    log.info("LAUNCHING BROWSER (RhythmERP - Tax Rate Tests)...")
     log.separator()
     drv = get_driver()
     drv.maximize_window()
@@ -77,20 +77,22 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-#     log.step(3, "Selecting facility (blank - first option)")
-#     login_page.select_facility_by_index(index=0)
-
     login_page.wait_seconds(1)
 
-    log.step(4, "Clicking Login button")
+    log.step(4, "Clicking Login button (double-click)")
     login_page.click_login()
     login_page.wait_seconds(3)
+
+    # Double-click login to get tenant dropdown autofilled
+    try:
+        login_page.click_login()
+        login_page.wait_seconds(3)
+    except Exception:
+        pass
 
     login_page.wait_for_login_complete()
     log.info("RhythmERP login successful!")
     start_screenshot_broadcast(driver)
-    start_screenshot_broadcast(driver)
-    log.info("RhythmERP login successful!")
 
     yield driver
 
@@ -98,60 +100,57 @@ def logged_in_driver(driver):
 
 
 @pytest.fixture
-def tax_authority_page(logged_in_driver):
+def tr_page(logged_in_driver):
     """
-    Tax Authority page object â€” fresh navigation for each test.
+    Tax Rate page object — fresh navigation for each test.
 
     Setup:
-      1. Hard-refresh the browser to clear any leftover state from the
-         previous test (overlays, open popups, stale Angular state).
-      2. Navigate to the Tax Authority screen.
-      3. If navigation fails, do one more hard-refresh + retry before
-         raising â€” this handles the case where a previous test left the
-         browser in a partially broken state.
+      1. Hard-refresh the browser to clear any leftover state.
+      2. Navigate to the Tax Rate screen.
+      3. If navigation fails, retry after hard refresh.
 
     Teardown:
-      Hard-refresh after every test so the next test always starts
-      from a clean browser state.  Wait long enough for Angular to
-      fully settle before the next fixture setup runs.
+      Hard-refresh after every test for clean state.
     """
-    from tax_authority.tax_authority_page import TaxAuthorityPage
+    from pages.common_settings.modules.tax_rate.tax_rate_page import TaxRatePage
 
-    # --- Pre-test hard refresh to wipe leftover state ---
+    # --- Pre-test hard refresh ---
     try:
         logged_in_driver.refresh()
         import time
         time.sleep(2)
     except Exception as e:
-        log.warning(f"Pre-test refresh failed (non-fatal): {e}")
+        log.warning("Pre-test refresh failed (non-fatal): " + str(e))
 
-    page = TaxAuthorityPage(logged_in_driver)
+    page = TaxRatePage(logged_in_driver)
 
     # --- Navigate with one retry ---
     try:
-        page.navigate_to_tax_authority()
+        page.navigate_to_page()
     except Exception as first_err:
-        log.warning(
-            f"First navigation attempt failed: {first_err!r} â€” "
-            "retrying after hard refresh..."
-        )
+        log.warning("First navigation attempt failed, retrying...")
         try:
             logged_in_driver.refresh()
             page.wait_seconds(3)
-            page.navigate_to_tax_authority()
+            page.navigate_to_page()
         except Exception as second_err:
-            log.error(f"Navigation failed after retry: {second_err!r}")
+            log.error("Navigation failed after retry: " + str(second_err))
             raise
 
     yield page
 
-    # --- Post-test teardown: hard refresh + settle ---
+    # --- Post-test teardown ---
+    try:
+        page.force_cleanup_all()
+    except Exception:
+        pass
     try:
         logged_in_driver.refresh()
-        page.wait_seconds(2)
+        import time
+        time.sleep(2)
         log.info("Post-test hard refresh complete")
     except Exception as e:
-        log.warning(f"Post-test refresh failed (non-fatal): {e}")
+        log.warning("Post-test refresh failed (non-fatal): " + str(e))
 
 
 # ================================================================
@@ -159,60 +158,6 @@ def tax_authority_page(logged_in_driver):
 # ================================================================
 
 _cs_store = CSReportStore()
-
-# ---- Tax Authority Known Issues ----
-_cs_store.record_issue(
-    severity="High",
-    module="Tax Authority",
-    category="UX",
-    description="No success SweetAlert after successful record creation. "
-                "Form closes silently without any confirmation message.",
-    expected="System should show 'Your record has been added successfully!' "
-             "SweetAlert with OK button after successful create/update.",
-    actual="Form closes silently after Submit/Update. No success toast or "
-           "SweetAlert is displayed. User cannot confirm the save operation.",
-    test_ref="C05, E04",
-    status="Open",
-)
-
-_cs_store.record_issue(
-    severity="Medium",
-    module="Tax Authority",
-    category="Validation",
-    description="Missing mat-error messages for Tax Type and Country dropdowns "
-                "on empty form submit. Only Tax Name shows 'This field is required'.",
-    expected="All 3 required fields should show 'This field is required' "
-             "mat-error below the field on empty submit.",
-    actual="Only Tax Name shows mat-error. Tax Type and Country have ng-invalid "
-           "class but no visible error message text is rendered.",
-    test_ref="C01",
-    status="Open",
-)
-
-_cs_store.record_issue(
-    severity="Low",
-    module="Tax Authority",
-    category="Validation",
-    description="No maxlength restriction on Tax Name field.",
-    expected="Tax Name should have a reasonable max-length limit.",
-    actual="maxlength=-1 (unlimited). Extremely long strings (200+ characters) "
-           "may be accepted without warning.",
-    test_ref="â€”",
-    status="Open",
-)
-
-_cs_store.record_issue(
-    severity="Low",
-    module="Tax Authority",
-    category="Consistency",
-    description="ADD button has no mattooltip attribute, unlike other Common Settings "
-                "modules (Bank, Error Code Mst) which have mattooltip='ADD'.",
-    expected="ADD button should have mattooltip='ADD' for consistency.",
-    actual="ADD button has no mattooltip. Requires different locator strategy "
-           "(//button[mat-icon[text()='add']] instead of //button[contains(@class,'erp-add-btn')]).",
-    test_ref="â€”",
-    status="Open",
-)
 
 
 # ================================================================

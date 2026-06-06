@@ -263,6 +263,8 @@ def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: d
 
 # ── UI Validation Helpers (restored for test compatibility) ──
 
+PAGE_URL = "https://rhythmerp.algorhythms.in/#/dynamic-screens/Tax%20Rate"
+
 VALIDATION_FAILED_TITLE = "Validation Failed"
 POPUP_TITLE = "Tax Rate"
 HISTORY_POPUP_TITLE = "Tax Rate History"
