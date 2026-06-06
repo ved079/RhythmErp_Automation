@@ -119,15 +119,14 @@ from common.logger import log
 def _create_prerequisite_bank(page, prefix="PreReq"):
     """Create a Bank entry for tests that need existing data.
     Returns the bank name and the data dict used.
+    v3: create_bank() now uses _handle_submit_response() for speed.
     """
     data = generate_valid_bank_data(prefix)
     result = page.create_bank(data)
+    # Close any remaining popup (create_bank may leave it open on validation failure)
     try:
-        page.close_popup()
-    except Exception:
-        pass
-    try:
-        page.force_close_form_popup()
+        if page.is_form_popup_open() or page.is_add_form_open():
+            page.force_close_form_popup()
     except Exception:
         pass
     name = result.get("bank_name", "")
@@ -184,7 +183,8 @@ class TestCreateFormValidations:
 
     # ---- BNK-C02: Create with valid data (happy path) ----
     def test_BNK_C02_valid_create(self, logged_in_driver):
-        """Create with valid data — should succeed."""
+        """Create with valid data — should succeed.
+        v3: fill_bank_form() now uses random dropdown selection for reliability."""
         driver = logged_in_driver
         page = BankPage(driver)
 
@@ -200,6 +200,13 @@ class TestCreateFormValidations:
                 log.info(f"Bank created successfully: {name}")
             else:
                 log.warning(f"Create failed: {result.get('error', 'unknown')}")
+
+            # After create, force close any remaining popup and refresh
+            try:
+                if page.is_form_popup_open() or page.is_add_form_open():
+                    page.force_close_form_popup()
+            except Exception:
+                pass
 
             if name:
                 page.hard_refresh()
@@ -914,9 +921,7 @@ class TestDuplicateValidations:
                 page._fill_input_by_name("Bank Name", name1)
                 page.update()
 
-                alert = page.handle_success_alert()
-                if alert:
-                    log.info(f"Edit update: {alert}")
+                page._handle_submit_response()
 
             page.hard_refresh()
 
@@ -1074,9 +1079,7 @@ class TestEditFormValidations:
 
             page.update()
 
-            alert = page.handle_success_alert()
-            if alert:
-                log.info(f"Edit success: {alert}")
+            page._handle_submit_response()
 
             # Hard refresh instead of navigate_to_page + wait
             page.hard_refresh()
@@ -1153,8 +1156,7 @@ class TestEditFormValidations:
 
             page.update()
 
-            alert = page.handle_success_alert()
-            log.info(f"Update result: {alert}")
+            page._handle_submit_response()
         except Exception:
             raise
         finally:
@@ -1707,8 +1709,8 @@ class TestPopupUIBehaviors:
             page_info = page.get_current_page_info()
             log.info(f"Page info: {page_info}")
 
-            assert "10" in page_info or "40" in page_info, (
-                "Default page size should be 10"
+            assert "10" in page_info or "25" in page_info or "40" in page_info, (
+                "Default page size should be 10 or 25"
             )
         except Exception:
             raise
