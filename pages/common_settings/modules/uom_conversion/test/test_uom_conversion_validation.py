@@ -853,7 +853,7 @@ class TestUOMConversionValidation:
             page.search_table(data["source_uom"])
             time.sleep(1)
             page.click_row_history(data["source_uom"], data["target_uom"])
-            time.sleep(2)
+            # _click_action_button now waits for history popup to open
 
             log.step(3, "Verify History has data")
             row_count = page.get_history_row_count()
@@ -895,7 +895,7 @@ class TestUOMConversionValidation:
             page.search_table(data["source_uom"])
             time.sleep(1)
             page.click_row_history(data["source_uom"], data["target_uom"])
-            time.sleep(2)
+            # _click_action_button now waits for history popup to open
 
             log.step(3, "Click Cancel to close History")
             page.close_history_popup()

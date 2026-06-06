@@ -694,11 +694,12 @@ class UOMConversionPage(BasePage):
     #  ROW ACTION BUTTONS — 3-dot menu (UOM gold standard)
     # ================================================================
 
-    def _click_action_button(self, row_source, row_target, action_icon):
+    def _click_action_button(self, row_source, row_target, action_name):
         """Click action button via 3-dot menu — fast polls.
-        Uses .erp-row-trigger (the ⋮ button) → CDK overlay dropdown menu."""
-        icon_map = {"view": "visibility", "edit": "edit", "history": "history"}
-        icon_text = icon_map.get(action_icon, action_icon)
+        Uses .erp-row-trigger (the ⋮ button) → CDK overlay dropdown menu.
+        Matches menu items by .erp-menu-title label text (View/Edit/History)."""
+        # Capitalize for label matching (View, Edit, History)
+        action_label = action_name.capitalize()
 
         # Step 1: Click ⋮ menu trigger on matching row
         self.driver.execute_script(
@@ -715,46 +716,65 @@ class UOMConversionPage(BasePage):
             "}"
         , row_source, row_target)
 
-        # Fast poll for CDK overlay menu (0.1s intervals, 2s timeout)
-        end = time.monotonic() + 2
+        # Fast poll for CDK overlay menu (0.1s intervals, 3s timeout)
+        end = time.monotonic() + 3
         while time.monotonic() < end:
             menu_open = self.driver.execute_script(
-                "var menu = document.querySelector('.cdk-overlay-container .cdk-overlay-pane .mat-mdc-menu-panel');"
-                "return menu && menu.offsetParent !== null;"
+                "var panels = document.querySelectorAll('.mat-mdc-menu-panel.erp-action-menu');"
+                "for (var i = 0; i < panels.length; i++) {"
+                "  if (panels[i].offsetParent !== null) return true;"
+                "}"
+                "return false;"
             )
             if menu_open:
                 break
             time.sleep(0.1)
 
-        # Step 2: Click menu item by icon text OR label text
-        self.driver.execute_script(
-            "var overlay = document.querySelector('.cdk-overlay-container');"
-            "if (!overlay) return;"
-            "var items = overlay.querySelectorAll('button.mat-mdc-menu-item');"
-            "for (var i = 0; i < items.length; i++) {"
-            "  var icon = items[i].querySelector('i.material-icons');"
-            "  if (icon && icon.textContent.trim() === arguments[0]) {"
-            "    items[i].click(); return;"
+        # Step 2: Click menu item by .erp-menu-title label text
+        clicked = self.driver.execute_script(
+            "var overlay = document.querySelector('.mat-mdc-menu-panel.erp-action-menu');"
+            "if (!overlay) return false;"
+            "var titles = overlay.querySelectorAll('.erp-menu-title');"
+            "for (var i = 0; i < titles.length; i++) {"
+            "  if (titles[i].textContent.trim() === arguments[0]) {"
+            "    var item = titles[i].closest('.erp-menu-item');"
+            "    if (item) { item.click(); return true; }"
+            "    titles[i].click(); return true;"
             "  }"
             "}"
             "var allItems = overlay.querySelectorAll('button, span, div');"
             "for (var i = 0; i < allItems.length; i++) {"
             "  var text = allItems[i].textContent.trim();"
             "  if (text === arguments[0]) {"
-            "    allItems[i].click(); return;"
+            "    allItems[i].click(); return true;"
             "  }"
             "}"
             "var needle = arguments[0].toLowerCase();"
             "for (var i = 0; i < allItems.length; i++) {"
             "  var text = allItems[i].textContent.trim().toLowerCase();"
             "  if (text.indexOf(needle) !== -1) {"
-            "    allItems[i].click(); return;"
+            "    allItems[i].click(); return true;"
             "  }"
             "}"
-        , icon_text)
+            "return false;"
+        , action_label)
 
-        # Brief settle for Angular to process
-        time.sleep(0.2)
+        # Step 3: Wait for form or history popup to open
+        if clicked:
+            end_action = time.monotonic() + 5
+            while time.monotonic() < end_action:
+                if action_name == "history":
+                    if self.is_history_popup_open():
+                        break
+                else:
+                    if self.is_form_open():
+                        break
+                time.sleep(0.1)
+            time.sleep(0.2)
+
+        # Clean up any lingering overlays
+        self._force_close_panels()
+        return bool(clicked)
 
     def click_edit_button(self, row_source, row_target):
         return self._click_action_button(row_source, row_target, "edit")
@@ -1069,12 +1089,31 @@ class UOMConversionPage(BasePage):
     #  HISTORY POPUP HELPERS
     # ================================================================
 
+    def is_history_popup_open(self):
+        """Check if History popup is visible — JS offsetParent.
+        History popup uses div.popup-overlay with title containing 'History',
+        or app-dynamic-history component."""
+        return bool(self.driver.execute_script(
+            "var overlay = document.querySelector('div.popup-overlay');"
+            "if (overlay) {"
+            "  var title = overlay.querySelector('h3.popup-title');"
+            "  if (title && title.textContent.indexOf('History') !== -1 && title.offsetParent !== null)"
+            "    return true;"
+            "}"
+            "var histComp = document.querySelector('app-dynamic-history');"
+            "if (histComp && histComp.offsetParent !== null) return true;"
+            "return false;"
+        ))
+
     def get_history_row_count(self):
-        """Count rows in the history popup table — JS, scoped to popup."""
+        """Count rows in history table — JS.
+        Checks popup-overlay first, then app-dynamic-history, then fallbacks."""
         return self.driver.execute_script(
-            "var popup = document.querySelector('div.overflow_model, div.edit_pop_up');"
-            "if (!popup) return 0;"
-            "var rows = popup.querySelectorAll('table tbody tr');"
+            "var rows = document.querySelectorAll('div.popup-overlay app-dynamic-history table tbody tr');"
+            "if (rows.length > 0) return rows.length;"
+            "rows = document.querySelectorAll('.edit_pop_up table tbody tr');"
+            "if (rows.length > 0) return rows.length;"
+            "rows = document.querySelectorAll('app-dynamic-history table tbody tr');"
             "return rows.length;"
         ) or 0
 
@@ -1082,9 +1121,11 @@ class UOMConversionPage(BasePage):
         """Get all history table data as a list of row strings."""
         try:
             return self.driver.execute_script(
-                "var popup = document.querySelector('div.overflow_model, div.edit_pop_up');"
-                "if (!popup) return [];"
-                "var rows = popup.querySelectorAll('table tbody tr');"
+                "var rows = document.querySelectorAll('div.popup-overlay app-dynamic-history table tbody tr');"
+                "if (rows.length === 0)"
+                "  rows = document.querySelectorAll('.edit_pop_up table tbody tr');"
+                "if (rows.length === 0)"
+                "  rows = document.querySelectorAll('app-dynamic-history table tbody tr');"
                 "var data = [];"
                 "for (var i = 0; i < rows.length; i++) {"
                 "  data.push(rows[i].textContent.trim());"
@@ -1095,27 +1136,29 @@ class UOMConversionPage(BasePage):
             return []
 
     def close_history_popup(self):
-        """Close the history popup — Cancel button in footer."""
+        """Close History popup — pure JS Cancel click.
+        Targets div.popup-overlay first, then fallback to any popup-footer."""
         self.driver.execute_script(
-            "var footer = document.querySelector('div.overflow_model .popup-footer');"
-            "if (footer) {"
-            "  var btns = footer.querySelectorAll('button');"
-            "  for (var i = 0; i < btns.length; i++) {"
-            "    if (btns[i].textContent.indexOf('Cancel') !== -1) {"
-            "      btns[i].click(); return;"
+            "var overlay = document.querySelector('div.popup-overlay');"
+            "if (overlay) {"
+            "  var footers = overlay.querySelectorAll('.popup-footer');"
+            "  for (var i = 0; i < footers.length; i++) {"
+            "    var buttons = footers[i].querySelectorAll('button');"
+            "    for (var j = 0; j < buttons.length; j++) {"
+            "      if (buttons[j].textContent.indexOf('Cancel') !== -1) {"
+            "        buttons[j].click(); return;"
+            "      }"
             "    }"
             "  }"
+            "  var closeBtn = overlay.querySelector('.popup-actions button[mat-icon-button]');"
+            "  if (closeBtn) { closeBtn.click(); return; }"
             "}"
-            "var popup = document.querySelector('div.overflow_model');"
-            "if (popup) {"
-            "  var actions = popup.querySelector('.popup-actions');"
-            "  if (actions) {"
-            "    var buttons = actions.querySelectorAll('button');"
-            "    for (var i = buttons.length - 1; i >= 0; i--) {"
-            "      var icon = buttons[i].querySelector('mat-icon');"
-            "      if (icon && icon.textContent.trim() === 'close') {"
-            "        buttons[i].click(); return;"
-            "      }"
+            "var allFooters = document.querySelectorAll('.popup-footer');"
+            "for (var i = 0; i < allFooters.length; i++) {"
+            "  var buttons = allFooters[i].querySelectorAll('button');"
+            "  for (var j = 0; j < buttons.length; j++) {"
+            "    if (buttons[j].textContent.indexOf('Cancel') !== -1) {"
+            "      buttons[j].click(); return;"
             "    }"
             "  }"
             "}"
