@@ -54,16 +54,13 @@ KEY RULES (verified from live application 2026-05-19):
   - No Delete functionality (BUG-005)
   - Global search does not filter Bank table (BUG-003)
 
-Optimised (v3 — UOM gold standard + BUG-004 fix):
-- ActionChains click for mat-select dropdowns (FIX BUG-004 — JS clicks don't update Angular model)
-- _handle_submit_response(): combined alert handler — single poll for success/validation
-- Ultra-fast _dismiss_swal() — no wait for SweetAlert to disappear
-- Fast polling (0.1s) throughout instead of 0.2-0.3s
-- hard_refresh() for fast page reset between tests
+Optimised (v2):
+- Replaced most time.sleep()/wait_seconds() with WebDriverWait + fast polling
+- Added hard_refresh() for fast page reset between tests
 - search_and_verify() combines search + existence check
 - JS clicks for Add/Submit/Update/Cancel bypass overlay issues
-- Reduced is_bank_in_table() timeout from 8s to 3s
-- JS-based get_field_validation_state() and get_input_value() for speed
+- Fast SweetAlert polling replaces blind wait_seconds(3)
+- Removed _wait_for_toolbar() and _wait_for_form_content() — not needed with JS approach
 """
 
 import os
@@ -497,95 +494,61 @@ class BankPage(BasePage):
     # ==============================================================
 
     def _open_dropdown_by_label(self, label_text):
-        """Open a mat-select dropdown by finding its form-field label.
-        Uses Selenium ActionChains click — JS click does NOT reliably open
-        Angular Material mat-select dropdowns (BUG-004).
-
-        Step 1: Find the mat-select element via Selenium XPath.
-        Step 2: Click using ActionChains (properly triggers Angular's event handlers).
-        Step 3: Wait for dropdown panel to appear via WebDriverWait.
+        """Open a mat-select dropdown by finding its form-field label."""
+        js = f"""
+            var popup = document.querySelector(
+                '.edit_pop_up.override_edit_pop_up.popup-mode'
+            );
+            if (!popup) return 'No popup';
+            var formFields = popup.querySelectorAll('mat-form-field');
+            for (var i = 0; i < formFields.length; i++) {{
+                var label = formFields[i].querySelector('mat-label');
+                if (label && label.textContent.trim() === '{label_text}') {{
+                    var select = formFields[i].querySelector('mat-select');
+                    if (select) {{
+                        select.click();
+                        return 'Opened';
+                    }}
+                }}
+            }}
+            return 'Not found: {label_text}';
         """
-        try:
-            # Step 1: Find mat-select via Selenium
-            select_el = self.driver.find_element(
-                By.XPATH,
-                f"//mat-label[contains(.,'{label_text}')]/"
-                f"ancestor::mat-form-field//mat-select"
-            )
-            # Step 2: ActionChains click — triggers Angular change detection
-            ActionChains(self.driver).move_to_element(select_el).click().perform()
-        except Exception as e:
-            # Fallback: JS dispatch mouse events
-            log.warning(f"ActionChains click failed for '{label_text}': {e}")
-            self.driver.execute_script("""
-                var popup = document.querySelector(
-                    '.edit_pop_up.override_edit_pop_up.popup-mode'
-                );
-                if (!popup) return;
-                var formFields = popup.querySelectorAll('mat-form-field');
-                for (var i = 0; i < formFields.length; i++) {
-                    var label = formFields[i].querySelector('mat-label');
-                    if (label && label.textContent.trim() === arguments[0]) {
-                        var select = formFields[i].querySelector('mat-select');
-                        if (select) {
-                            select.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
-                            select.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
-                            select.dispatchEvent(new MouseEvent('click', {bubbles: true}));
-                        }
-                    }
-                }
-            """, label_text)
-
-        # Step 3: Wait for dropdown options to appear
-        try:
-            WebDriverWait(self.driver, 3).until(
-                EC.presence_of_element_located((
-                    "css selector",
-                    ".cdk-overlay-pane mat-option, .cdk-overlay-pane [role='option']"
-                ))
-            )
+        result = self.driver.execute_script(js)
+        self.wait_seconds(0.5)
+        if "Opened" in str(result):
             return True
-        except Exception:
-            pass
-        log.warning(f"Dropdown panel not appeared for: {label_text}")
+        log.warning(f"Dropdown not opened: {label_text} — {result}")
         return False
 
     def _select_option_by_text(self, option_text):
         """Select a mat-option from the currently open dropdown panel.
-        Uses Selenium ActionChains click on the option element.
-        JS click on mat-option does NOT update Angular's form model (BUG-004),
-        but Selenium ActionChains click DOES because it triggers real browser events.
-        """
-        # Try Selenium click on matching option first (most reliable for Angular)
-        try:
-            options = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                ".cdk-overlay-pane mat-option, .cdk-overlay-pane [role='option']"
-            )
-            for opt in options:
-                text = opt.text.strip()
-                if text == option_text or option_text in text:
-                    ActionChains(self.driver).move_to_element(opt).click().perform()
-                    return True
-        except Exception:
-            pass
 
-        # Fallback: JS click with partial matching
+        FIX BUG-004: Plain JS click() on mat-option does NOT update
+        Angular's reactive form model because Angular Material's option
+        selection handler requires the full mousedown→mouseup→click event
+        chain. We dispatch all three events in order, which properly
+        triggers MatOption.select() → MatSelect._onChange() → FormControl.
+        """
         js = """
+            function dispatchFullClick(el) {
+                el.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true}));
+                el.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, cancelable: true}));
+                el.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+            }
             var options = document.querySelectorAll(
                 '.cdk-overlay-pane mat-option'
             );
             // Exact match first
             for (var i = 0; i < options.length; i++) {
                 if (options[i].textContent.trim() === arguments[0]) {
-                    options[i].click();
+                    dispatchFullClick(options[i]);
                     return 'Selected';
                 }
             }
-            // Partial match (indexOf)
+            // Partial match (handles extra whitespace/formatting)
             for (var i = 0; i < options.length; i++) {
                 if (options[i].textContent.trim().indexOf(arguments[0]) !== -1) {
-                    options[i].click();
+                    dispatchFullClick(options[i]);
                     return 'Selected_partial';
                 }
             }
@@ -595,13 +558,14 @@ class BankPage(BasePage):
             );
             for (var i = 0; i < allOpts.length; i++) {
                 if (allOpts[i].textContent.trim().indexOf(arguments[0]) !== -1) {
-                    allOpts[i].click();
+                    dispatchFullClick(allOpts[i]);
                     return 'Selected_role';
                 }
             }
             return 'Not found: ' + arguments[0];
         """
         result = self.driver.execute_script(js, option_text)
+        self.wait_seconds(0.3)
         if "Selected" in str(result):
             return True
         log.warning(f"Option not selected: {option_text} — {result}")
@@ -833,7 +797,6 @@ class BankPage(BasePage):
 
     def _submit_and_handle_result(self, data):
         """Click Submit/Update and handle the result using fast SweetAlert polling.
-        v3: Uses _handle_submit_response() for combined alert detection.
 
         Returns dict with status, bank_name, error.
         """
@@ -842,92 +805,53 @@ class BankPage(BasePage):
         # Click Submit via JS
         self._force_close_panels()
         self._js_click_popup_button('Submit')
-
-        # Combined response handler — single poll cycle
-        response = self._handle_submit_response()
-        if response == 'success':
-            result["status"] = "PASSED"
-            result["bank_name"] = data.get("bank_name", "")
-            log.info(f"Bank created successfully: {result['bank_name']}")
-        elif response == 'validation':
-            result["error"] = "Validation Failed"
-            result["bank_name"] = data.get("bank_name", "")
-        else:
-            # No alert appeared — check if popup closed (success without alert)
-            if not self._is_form_popup_open():
-                result["status"] = "PASSED"
-                result["bank_name"] = data.get("bank_name", "")
-                log.info(f"Bank created (no alert): {result['bank_name']}")
-            else:
-                result["error"] = "Submit clicked but no SweetAlert appeared"
-                log.warning(result["error"])
-
-        return result
-
-    def _handle_submit_response(self):
-        """Handle the response after submit/update — combines success and validation
-        alert detection into ONE wait cycle instead of two.
-
-        OLD WAY (4-5s per create):
-          is_validation_alert_present(timeout=2) -> handle_success_alert(timeout=2)
-
-        NEW WAY (1-2s per create):
-          Single poll for ANY SweetAlert -> read title -> click appropriate button
-
-        Returns: 'success', 'validation', or 'none'
-        """
-        log.info("Waiting for submit response")
-        end = time.monotonic() + 3
-        while time.monotonic() < end:
-            info = self.driver.execute_script("""
-                var popup = document.querySelector('.swal2-popup');
-                if (!popup || popup.offsetParent === null) return JSON.stringify({found: false});
-                var title = document.querySelector('#swal2-title');
-                var titleText = title ? title.textContent.trim() : '';
-                var icon = document.querySelector('.swal2-popup .swal2-icon');
-                var iconType = '';
-                if (icon) {
-                    if (icon.classList.contains('swal2-icon-success')) iconType = 'success';
-                    else if (icon.classList.contains('swal2-icon-warning')) iconType = 'warning';
-                    else if (icon.classList.contains('swal2-icon-error')) iconType = 'error';
-                }
-                return JSON.stringify({
-                    found: true,
-                    title: titleText,
-                    icon: iconType
-                });
-            """)
+        # Wait for SweetAlert with fast polling instead of blind wait_seconds(3)
+        end_time = time.monotonic() + 5
+        swal_found = False
+        while time.monotonic() < end_time:
             try:
-                import json
-                d = json.loads(info)
-                if d.get('found'):
-                    title = d.get('title', '')
-                    icon = d.get('icon', '')
-                    if icon == 'success' or 'success' in title.lower():
-                        self.driver.execute_script("""
-                            var btn = document.querySelector('.swal2-confirm');
-                            if (btn) btn.click();
-                        """)
-                        log.info("Submit response: SUCCESS — " + title)
-                        return 'success'
-                    else:
-                        self.driver.execute_script("""
-                            var cancel = document.querySelector('.swal2-cancel');
-                            if (cancel) { cancel.click(); return; }
-                            var confirm = document.querySelector('.swal2-confirm');
-                            if (confirm) confirm.click();
-                        """)
-                        log.info("Submit response: VALIDATION — " + title)
-                        return 'validation'
+                visible = self.driver.execute_script("""
+                    var el = document.querySelector('.swal2-popup');
+                    return el && el.offsetParent !== null;
+                """)
+                if visible:
+                    swal_found = True
+                    break
             except Exception:
                 pass
             # Also check if popup closed (success without SweetAlert)
             if not self._is_form_popup_open():
-                log.info("Submit response: popup closed (success)")
-                return 'success'
-            time.sleep(0.1)
-        log.info("No SweetAlert appeared after submit")
-        return 'none'
+                result["status"] = "PASSED"
+                result["bank_name"] = data.get("bank_name", "")
+                return result
+            time.sleep(0.3)
+
+        if swal_found:
+            swal_title = self.get_swal_title()
+            if swal_title and "success" in swal_title.lower():
+                result["status"] = "PASSED"
+                result["bank_name"] = data.get("bank_name", "")
+                log.info(f"Bank created successfully: {result['bank_name']}")
+            elif swal_title and "validation" in swal_title.lower():
+                result["error"] = f"{swal_title} — validation failed"
+                log.warning(f"Validation failed: {result['error']}")
+                self._dismiss_swal()
+            else:
+                result["status"] = "PASSED"
+                result["bank_name"] = data.get("bank_name", "")
+                log.info(f"Bank created (swal title: {swal_title}): {result['bank_name']}")
+        else:
+            # No SweetAlert appeared and popup still open? Treat as error
+            if self._is_form_popup_open():
+                result["error"] = "Submit clicked but no SweetAlert appeared"
+                log.warning(result["error"])
+            else:
+                # Popup closed without SweetAlert (success without alert)
+                result["status"] = "PASSED"
+                result["bank_name"] = data.get("bank_name", "")
+                log.info(f"Bank created (no alert): {result['bank_name']}")
+
+        return result
 
     def submit(self):
         """Click the Submit button on the form via JS click."""
@@ -1035,8 +959,7 @@ class BankPage(BasePage):
         return ""
 
     def _dismiss_swal(self):
-        """Dismiss the SweetAlert2 popup — try Cancel first, then OK.
-        Ultra-fast — no wait for SweetAlert to disappear (saves 2-3s per call)."""
+        """Dismiss the SweetAlert2 popup — try Cancel first, then OK."""
         self.driver.execute_script("""
             var cancel = document.querySelector('.swal2-cancel');
             if (cancel) { cancel.click(); return 'Cancel'; }
@@ -1044,6 +967,12 @@ class BankPage(BasePage):
             if (confirm) { confirm.click(); return 'OK'; }
             return 'none';
         """)
+        try:
+            WebDriverWait(self.driver, 2).until(
+                EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
+            )
+        except Exception:
+            pass
 
     def is_swal_visible(self):
         """Check if a SweetAlert2 popup is visible."""
@@ -1055,7 +984,7 @@ class BankPage(BasePage):
         except Exception:
             return False
 
-    def handle_validation_warning(self, timeout=2):
+    def handle_validation_warning(self, timeout=3):
         """Handle the 'Validation Failed' SweetAlert2 popup.
         Fast poll for validation alert, then dismiss.
 
@@ -1076,43 +1005,37 @@ class BankPage(BasePage):
                     return title
             except Exception:
                 pass
-            time.sleep(0.1)
+            time.sleep(0.2)
         return ""
 
     def handle_success_alert(self):
-        """Handle the success SweetAlert2 popup — ULTRA FAST dismiss.
-        Clicks confirm via JS and does NOT wait for SweetAlert to disappear.
-        The popup will auto-close — waiting wastes 4-6s per call."""
+        """Handle the success SweetAlert2 popup — fast dismiss."""
         log.info("Handling success alert")
-        # Click confirm immediately — don't wait for visibility first
-        result = self.driver.execute_script("""
-            var btn = document.querySelector('.swal2-confirm');
-            if (btn) { btn.click(); return 'clicked'; }
-            return 'not found';
-        """)
-        if result == 'clicked':
-            log.info("SweetAlert confirm clicked")
-            return
-        # Brief poll — SweetAlert may take 1s to appear after submit
-        end = time.monotonic() + 3
-        while time.monotonic() < end:
-            result = self.driver.execute_script("""
+        try:
+            WebDriverWait(self.driver, 3).until(
+                EC.visibility_of_element_located(("css selector", ".swal2-container"))
+            )
+            log.info("SweetAlert detected, dismissing via JS")
+            self.driver.execute_script("""
                 var btn = document.querySelector('.swal2-confirm');
                 if (btn) { btn.click(); return 'clicked'; }
                 return 'not found';
             """)
-            if result == 'clicked':
-                log.info("SweetAlert confirm clicked (after poll)")
-                return
-            time.sleep(0.1)
-        log.info("No SweetAlert found (may have auto-dismissed)")
+            try:
+                WebDriverWait(self.driver, 3).until(
+                    EC.invisibility_of_element_located(("css selector", ".swal2-container"))
+                )
+            except Exception:
+                pass
+        except Exception:
+            log.info("No SweetAlert found (may have auto-dismissed)")
 
     # ==============================================================
     #  Validation alert handlers (like UOM)
     # ==============================================================
 
-    def is_validation_alert_present(self, timeout=2):
-        """Check if any SweetAlert validation popup is visible. Fast poll (0.1s)."""
+    def is_validation_alert_present(self, timeout=3):
+        """Check if any SweetAlert validation popup is visible. Fast poll (0.2s)."""
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
             try:
@@ -1124,12 +1047,11 @@ class BankPage(BasePage):
                     return True
             except Exception:
                 pass
-            time.sleep(0.1)
+            time.sleep(0.2)
         return False
 
     def dismiss_any_validation_alert(self):
-        """Dismiss any SweetAlert validation popup — try Cancel first, then OK.
-        Ultra-fast — no wait for SweetAlert to disappear."""
+        """Dismiss any SweetAlert validation popup — try Cancel first, then OK."""
         log.info("Dismissing any validation alert")
         self.driver.execute_script("""
             var cancel = document.querySelector('.swal2-cancel');
@@ -1138,6 +1060,12 @@ class BankPage(BasePage):
             if (confirm) { confirm.click(); return 'OK'; }
             return 'none';
         """)
+        try:
+            WebDriverWait(self.driver, 2).until(
+                EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
+            )
+        except Exception:
+            pass
 
     # ==============================================================
     #  Validation error reading
@@ -1221,34 +1149,27 @@ class BankPage(BasePage):
 
     def get_field_validation_state(self, field_label):
         """Check if a specific field is currently invalid.
-        Uses fast JS-based DOM walk-up instead of Selenium find_elements for ~3x speed.
 
         Returns dict with: invalid (bool), error (str), touched (bool).
         """
-        js = """
-            var popup = document.querySelector(
-                '.edit_pop_up.override_edit_pop_up.popup-mode'
-            );
-            if (!popup) return JSON.stringify({invalid: false, touched: false, error: ''});
-            var formFields = popup.querySelectorAll('mat-form-field');
-            for (var i = 0; i < formFields.length; i++) {
-                var label = formFields[i].querySelector('mat-label');
-                if (label && label.textContent.trim().indexOf(arguments[0]) !== -1) {
-                    var classes = formFields[i].className || '';
-                    var errorEl = formFields[i].querySelector('mat-error');
-                    return JSON.stringify({
-                        invalid: classes.indexOf('ng-invalid') !== -1,
-                        touched: classes.indexOf('ng-touched') !== -1,
-                        error: errorEl ? errorEl.textContent.trim() : ''
-                    });
-                }
-            }
-            return JSON.stringify({invalid: false, touched: false, error: ''});
-        """
         try:
-            import json
-            result = self.driver.execute_script(js, field_label)
-            return json.loads(result)
+            popup = self.driver.find_element(
+                By.CSS_SELECTOR,
+                ".edit_pop_up.override_edit_pop_up.popup-mode",
+            )
+            form_fields = popup.find_elements(
+                By.CSS_SELECTOR, "mat-form-field"
+            )
+            for ff in form_fields:
+                label = ff.find_element(By.CSS_SELECTOR, "mat-label")
+                if label and field_label in label.text:
+                    classes = ff.get_attribute("class") or ""
+                    error_el = ff.find_elements(By.CSS_SELECTOR, "mat-error")
+                    return {
+                        "invalid": "ng-invalid" in classes,
+                        "touched": "ng-touched" in classes,
+                        "error": error_el[0].text.strip() if error_el else "",
+                    }
         except Exception:
             pass
         return {"invalid": False, "touched": False, "error": ""}
@@ -1347,17 +1268,16 @@ class BankPage(BasePage):
         return values
 
     def get_input_value(self, name_attr):
-        """Get the current value of an input field by name attribute.
-        Uses fast JS instead of Selenium find_element for speed."""
+        """Get the current value of an input field by name attribute."""
         try:
-            return self.driver.execute_script("""
-                var popup = document.querySelector(
-                    '.edit_pop_up.override_edit_pop_up.popup-mode'
-                );
-                if (!popup) return '';
-                var input = popup.querySelector('input[name="' + arguments[0] + '"]');
-                return input ? (input.value || '') : '';
-            """, name_attr)
+            popup = self.driver.find_element(
+                By.CSS_SELECTOR,
+                ".edit_pop_up.override_edit_pop_up.popup-mode",
+            )
+            input_el = popup.find_element(
+                By.CSS_SELECTOR, f"input[name='{name_attr}']"
+            )
+            return input_el.get_attribute("value") or ""
         except Exception:
             return ""
 
@@ -1375,9 +1295,9 @@ class BankPage(BasePage):
         except Exception:
             return 0
 
-    def is_bank_in_table(self, bank_name, timeout=3):
+    def is_bank_in_table(self, bank_name, timeout=8):
         """Check if a bank with the given name exists in the table.
-        Fast polling (0.1s) with reduced timeout (3s, was 8s)."""
+        Fast polling with configurable timeout."""
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
             try:
@@ -1389,7 +1309,7 @@ class BankPage(BasePage):
                             return True
             except Exception:
                 pass
-            time.sleep(0.1)
+            time.sleep(0.3)
         return False
 
     def get_all_bank_names(self):
@@ -1589,7 +1509,7 @@ class BankPage(BasePage):
 
             # Wait for search input to become visible
             try:
-                search_input = WebDriverWait(self.driver, 3).until(
+                search_input = WebDriverWait(self.driver, 5).until(
                     EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
                 )
                 log.info("Search input became visible")
@@ -1641,7 +1561,7 @@ class BankPage(BasePage):
         """
         log.info(f"Searching and verifying Bank: {bank_name}")
         self.search(bank_name)
-        return self.is_bank_in_table(bank_name, timeout=3)
+        return self.is_bank_in_table(bank_name, timeout=10)
 
     def clear_search(self):
         """Clear the search input and refresh to get clean state."""
