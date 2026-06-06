@@ -140,12 +140,13 @@ class ErrorCodeMstPage:
             time.sleep(0.2)
 
     def is_form_open(self):
-        """Check if form popup is open — JS offsetParent (instant)."""
+        """Check if form popup is open — JS offsetParent (instant).
+        Checks div.edit_pop_up (the actual form container used by the ERP)."""
         return bool(self.driver.execute_script("""
-            var el = document.querySelector('div.big-model');
+            var el = document.querySelector('div.edit_pop_up');
             if (el && el.offsetParent !== null) return true;
-            var dlg = document.querySelector('mat-dialog-container');
-            if (dlg && dlg.offsetParent !== null) return true;
+            var bigModel = document.querySelector('div.big-model');
+            if (bigModel && bigModel.offsetParent !== null) return true;
             return false;
         """))
 
@@ -184,9 +185,17 @@ class ErrorCodeMstPage:
         self._fill_input_by_name('Description', value)
 
     def _fill_input_by_name(self, field_name, value):
-        """Set input value via JS native setter + Angular change events."""
+        """Set input value via JS native setter + Angular change events.
+        Scoped to form popup (div.edit_pop_up) when popup is open."""
         self.driver.execute_script("""
-            var input = document.querySelector('input[name="' + arguments[0] + '"]');
+            var input = null;
+            var form = document.querySelector('div.edit_pop_up');
+            if (form && form.offsetParent !== null) {
+                input = form.querySelector('input[name="' + arguments[0] + '"]');
+            }
+            if (!input) {
+                input = document.querySelector('input[name="' + arguments[0] + '"]');
+            }
             if (!input) return;
             var nativeSetter = Object.getOwnPropertyDescriptor(
                 window.HTMLInputElement.prototype, 'value'
@@ -226,7 +235,7 @@ class ErrorCodeMstPage:
             if not panel_open:
                 return False
 
-            # Find and click the matching option via JS
+            # Find and click the matching option via JS (pointerdown → pointerup → click for Angular)
             clicked = self.driver.execute_script("""
                 var options = document.querySelectorAll(
                     'div.mat-mdc-select-panel mat-option'
@@ -235,6 +244,8 @@ class ErrorCodeMstPage:
                     if (options[i].offsetParent !== null &&
                         options[i].textContent.indexOf(arguments[0]) !== -1) {
                         options[i].scrollIntoView({block:'center'});
+                        options[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                        options[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
                         options[i].click();
                         return true;
                     }
@@ -245,6 +256,8 @@ class ErrorCodeMstPage:
                     if (allOpts[i].offsetParent !== null &&
                         allOpts[i].textContent.indexOf(arguments[0]) !== -1) {
                         allOpts[i].scrollIntoView({block:'center'});
+                        allOpts[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                        allOpts[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
                         allOpts[i].click();
                         return true;
                     }
@@ -432,7 +445,7 @@ class ErrorCodeMstPage:
                     if (confirm) confirm.click();
                     return {alert: true, title: title, form_closed: false};
                 }
-                var form = document.querySelector('div.big-model');
+                var form = document.querySelector('div.edit_pop_up') || document.querySelector('div.big-model');
                 var formOpen = form && form.offsetParent !== null;
                 if (!formOpen) {
                     return {alert: false, title: '', form_closed: true};
@@ -533,9 +546,12 @@ class ErrorCodeMstPage:
     # ═══════════════════════════════════════════════════════════════════════════
 
     def is_edit_mode(self):
-        """Check if Update button is present (Edit mode) — JS."""
+        """Check if Update button is present (Edit mode) — JS.
+        Scoped to div.edit_pop_up to avoid matching buttons outside the form."""
         return bool(self.driver.execute_script("""
-            var btns = document.querySelectorAll('.popup-footer button');
+            var form = document.querySelector('div.edit_pop_up');
+            if (!form || form.offsetParent === null) return false;
+            var btns = form.querySelectorAll('.popup-footer button');
             for (var i = 0; i < btns.length; i++) {
                 if (btns[i].textContent.indexOf('Update') !== -1 && btns[i].offsetParent !== null)
                     return true;
@@ -544,12 +560,21 @@ class ErrorCodeMstPage:
         """))
 
     def is_view_mode(self):
-        """Check if form is open and no Submit/Update button (View mode) — JS."""
-        return self.is_form_open() and not self.is_edit_mode() and not self._is_submit_visible()
+        """Check if form is open and no Submit/Update button (View mode) — JS.
+        Also checks that Cancel button is present (form IS open, just read-only)."""
+        if not self.is_form_open():
+            return False
+        has_submit = self._is_submit_visible()
+        has_update = self.is_edit_mode()
+        has_cancel = self._is_cancel_visible()
+        return has_cancel and not has_submit and not has_update
 
     def _is_submit_visible(self):
+        """Check if Submit button is visible — scoped to form popup."""
         return bool(self.driver.execute_script("""
-            var btns = document.querySelectorAll('.popup-footer button');
+            var form = document.querySelector('div.edit_pop_up');
+            if (!form || form.offsetParent === null) return false;
+            var btns = form.querySelectorAll('.popup-footer button');
             for (var i = 0; i < btns.length; i++) {
                 if (btns[i].textContent.indexOf('Submit') !== -1 && btns[i].offsetParent !== null)
                     return true;
@@ -557,11 +582,27 @@ class ErrorCodeMstPage:
             return false;
         """))
 
+    def _is_cancel_visible(self):
+        """Check if Cancel button is visible — scoped to form popup."""
+        return bool(self.driver.execute_script("""
+            var form = document.querySelector('div.edit_pop_up');
+            if (!form || form.offsetParent === null) return false;
+            var btns = form.querySelectorAll('.popup-footer button');
+            for (var i = 0; i < btns.length; i++) {
+                if (btns[i].textContent.indexOf('Cancel') !== -1 && btns[i].offsetParent !== null)
+                    return true;
+            }
+            return false;
+        """))
+
     def get_form_heading(self):
-        """Read popup heading text — JS."""
+        """Read popup heading text — JS. Scoped to form popup."""
         try:
             return self.driver.execute_script(
-                "var el = document.querySelector('.big-model h3'); "
+                "var form = document.querySelector('div.edit_pop_up'); "
+                "if (!form) form = document.querySelector('div.big-model'); "
+                "if (!form) return ''; "
+                "var el = form.querySelector('h3'); "
                 "return el ? el.textContent.trim() : '';"
             )
         except Exception:
@@ -572,16 +613,21 @@ class ErrorCodeMstPage:
     # ═══════════════════════════════════════════════════════════════════════════
 
     def get_form_field_values(self):
-        """Read all form field values — JS. Returns dict."""
+        """Read all form field values — JS. Scoped to form popup to avoid
+        picking up mat-select/input elements from the table or other areas."""
         values = self.driver.execute_script("""
             var result = {};
-            var select = document.querySelector('mat-select');
+            var form = document.querySelector('div.edit_pop_up');
+            if (!form || form.offsetParent === null) {
+                return {error_code_type: '', code: '', description: '', is_qty_amt: 'Amount'};
+            }
+            var select = form.querySelector('mat-select');
             result.error_code_type = select ? (select.textContent || '').trim() : '';
-            var code = document.querySelector('input[name="Code"]');
+            var code = form.querySelector('input[name="Code"]');
             result.code = code ? code.value : '';
-            var desc = document.querySelector('input[name="Description"]');
+            var desc = form.querySelector('input[name="Description"]');
             result.description = desc ? desc.value : '';
-            var cb = document.querySelector('.switch-container.vertical input[type="checkbox"]');
+            var cb = form.querySelector('.switch-container.vertical input[type="checkbox"]');
             result.is_qty_amt = (cb && cb.checked) ? 'Qty' : 'Amount';
             return result;
         """)
@@ -723,23 +769,32 @@ class ErrorCodeMstPage:
         return self._click_row_action_button(row_index, 'mat-column-archive')
 
     def _click_row_action_button(self, row_index, column_class):
-        """Click action button in specific column — JS."""
+        """Click action button in specific column — JS.
+        Uses pointerdown → pointerup → click event sequence for Angular compatibility.
+        Waits for popup to open after click."""
         try:
             result = self.driver.execute_script("""
                 var rows = document.querySelectorAll('table#excel-table tbody tr');
                 if (arguments[0] < rows.length) {
                     var btn = rows[arguments[0]].querySelector('td.' + arguments[1] + ' button');
-                    if (btn) { btn.click(); return true; }
+                    if (btn) {
+                        btn.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                        btn.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                        btn.click();
+                        return true;
+                    }
                 }
                 return false;
             """, row_index, column_class)
-            # Fast poll for form/popup to open (replaces time.sleep(0.3))
+            # Fast poll for form/popup to open
             if result:
-                end_action = time.monotonic() + 3
+                end_action = time.monotonic() + 5
                 while time.monotonic() < end_action:
                     if self.is_form_open() or self.is_history_popup_open():
                         break
                     time.sleep(0.1)
+                # Small settle for Angular to render form fields
+                time.sleep(0.2)
             return bool(result)
         except Exception:
             return False
@@ -749,26 +804,67 @@ class ErrorCodeMstPage:
     # ═══════════════════════════════════════════════════════════════════════════
 
     def is_history_popup_open(self):
-        """Check if History popup is visible — JS offsetParent."""
-        return self.driver.execute_script("""
-            var el = document.querySelector('h3');
-            if (el && el.textContent.indexOf('History') !== -1 && el.offsetParent !== null)
-                return true;
+        """Check if History popup is visible — JS offsetParent.
+        Checks multiple possible containers: div.edit_pop_up, app-dynamic-history."""
+        return bool(self.driver.execute_script("""
+            // Check inside div.edit_pop_up
+            var form = document.querySelector('div.edit_pop_up');
+            if (form && form.offsetParent !== null) {
+                var h3 = form.querySelector('h3');
+                if (h3 && h3.textContent.indexOf('History') !== -1 && h3.offsetParent !== null)
+                    return true;
+            }
+            // Check app-dynamic-history component (like UOM uses)
+            var histComp = document.querySelector('app-dynamic-history');
+            if (histComp && histComp.offsetParent !== null) return true;
+            // Check any visible h3 with 'History' text
+            var allH3 = document.querySelectorAll('h3');
+            for (var i = 0; i < allH3.length; i++) {
+                if (allH3[i].textContent.indexOf('History') !== -1 && allH3[i].offsetParent !== null)
+                    return true;
+            }
+            // Check mat-dialog-container with History title
+            var dialogs = document.querySelectorAll('mat-dialog-container');
+            for (var i = 0; i < dialogs.length; i++) {
+                if (dialogs[i].offsetParent !== null) {
+                    var h = dialogs[i].querySelector('h3');
+                    if (h && h.textContent.indexOf('History') !== -1) return true;
+                }
+            }
             return false;
-        """)
+        """))
 
     def get_history_row_count(self):
-        """Count rows in history table — JS."""
-        return self.driver.execute_script(
-            "return document.querySelectorAll('.edit_pop_up table tbody tr').length;"
-        ) or 0
+        """Count rows in history table — JS. Checks multiple possible containers."""
+        return self.driver.execute_script("""
+            var rows = document.querySelectorAll('.edit_pop_up table tbody tr');
+            if (rows.length > 0) return rows.length;
+            rows = document.querySelectorAll('app-dynamic-history table tbody tr');
+            if (rows.length > 0) return rows.length;
+            rows = document.querySelectorAll('mat-dialog-container table tbody tr');
+            return rows.length;
+        """) or 0
 
     def is_history_empty(self):
         """Check if history shows 'No Data Available' — JS."""
-        return self.driver.execute_script("""
+        return bool(self.driver.execute_script("""
             var img = document.querySelector('.edit_pop_up img[alt="No Data Available"]');
-            return img && img.offsetParent !== null;
-        """)
+            if (img && img.offsetParent !== null) return true;
+            img = document.querySelector('app-dynamic-history img[alt="No Data Available"]');
+            if (img && img.offsetParent !== null) return true;
+            // Also check for 'No data available' text
+            var allEls = document.querySelectorAll('.no-data, .noData');
+            for (var i = 0; i < allEls.length; i++) {
+                if (allEls[i].offsetParent !== null) return true;
+            }
+            // Check for 'No data available' text in history popup
+            var histContainer = document.querySelector('.edit_pop_up') || document.querySelector('app-dynamic-history');
+            if (histContainer) {
+                var text = histContainer.textContent || '';
+                if (text.indexOf('No data available') !== -1 || text.indexOf('No Data Available') !== -1) return true;
+            }
+            return false;
+        """))
 
     def close_history_popup(self):
         """Close History popup — pure JS Cancel click."""
@@ -789,6 +885,8 @@ class ErrorCodeMstPage:
         try:
             self.driver.execute_script("""
                 var inp = document.querySelector('.edit_pop_up input[placeholder="Search box"]');
+                if (!inp) inp = document.querySelector('app-dynamic-history input');
+                if (!inp) inp = document.querySelector('.edit_pop_up input[placeholder="Search"]');
                 if (inp) {
                     var nativeSetter = Object.getOwnPropertyDescriptor(
                         window.HTMLInputElement.prototype, 'value'
@@ -849,12 +947,19 @@ class ErrorCodeMstPage:
 
     def edit_record(self, row_index, updated_data):
         """
-        One-call record edit: click edit → fill changed fields → update.
+        One-call record edit: click edit → wait for edit mode → fill changed fields → update.
         Returns dict: {status, error, message}
         """
         result = {"status": "failed", "error": "", "message": ""}
         try:
             self.click_edit_on_row(row_index)
+
+            # Wait for edit mode to be ready (Update button visible)
+            end_edit = time.monotonic() + 5
+            while time.monotonic() < end_edit:
+                if self.is_edit_mode():
+                    break
+                time.sleep(0.1)
 
             if not self.is_edit_mode():
                 result["error"] = "Edit form did not open"
@@ -894,9 +999,17 @@ class ErrorCodeMstPage:
         return result
 
     def view_record(self, row_index):
-        """One-call view: click view → read values → close."""
+        """One-call view: click view → wait for form → read values → close."""
         try:
             self.click_view_on_row(row_index)
+            # Wait for form to fully open (view mode)
+            end_view = time.monotonic() + 5
+            while time.monotonic() < end_view:
+                if self.is_form_open():
+                    break
+                time.sleep(0.1)
+            # Small settle for Angular to populate fields
+            time.sleep(0.3)
             values = self.get_form_field_values()
             self.cancel()
             return values
@@ -910,6 +1023,13 @@ class ErrorCodeMstPage:
         try:
             self.click_history_on_row(row_index)
 
+            # Wait for history popup to open with extended timeout
+            end_hist = time.monotonic() + 5
+            while time.monotonic() < end_hist:
+                if self.is_history_popup_open():
+                    break
+                time.sleep(0.1)
+
             if not self.is_history_popup_open():
                 result["error"] = "History popup did not open"
                 return result
@@ -920,7 +1040,10 @@ class ErrorCodeMstPage:
         except Exception as e:
             result["error"] = str(e)
         finally:
-            self.close_history_popup()
+            try:
+                self.close_history_popup()
+            except Exception:
+                pass
 
         return result
 
