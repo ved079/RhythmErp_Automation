@@ -621,8 +621,13 @@ class ErrorCodeMstPage:
             if (!form || form.offsetParent === null) {
                 return {error_code_type: '', code: '', description: '', is_qty_amt: 'Amount'};
             }
-            var select = form.querySelector('mat-select');
-            result.error_code_type = select ? (select.textContent || '').trim() : '';
+            var selectTrigger = form.querySelector('mat-select .mat-mdc-select-value-text');
+            if (selectTrigger) {
+                result.error_code_type = selectTrigger.textContent.trim();
+            } else {
+                var select = form.querySelector('mat-select');
+                result.error_code_type = select ? (select.textContent || '').trim().split('\n')[0].trim() : '';
+            }
             var code = form.querySelector('input[name="Code"]');
             result.code = code ? code.value : '';
             var desc = form.querySelector('input[name="Description"]');
@@ -753,51 +758,103 @@ class ErrorCodeMstPage:
         return idx if idx is not None else -1
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Row Action Buttons — View / Edit / History (JS click)
+    # Row Action Buttons — View / Edit / History (3-dot menu from UOM pattern)
     # ═══════════════════════════════════════════════════════════════════════════
 
     def click_view_on_row(self, row_index=0):
-        """Click View action button on specified row — JS."""
-        return self._click_row_action_button(row_index, 'mat-column-view')
+        """Click View action via 3-dot menu on specified row."""
+        return self._click_action_menu_item(row_index, "View")
 
     def click_edit_on_row(self, row_index=0):
-        """Click Edit action button on specified row — JS."""
-        return self._click_row_action_button(row_index, 'mat-column-edit')
+        """Click Edit action via 3-dot menu on specified row."""
+        return self._click_action_menu_item(row_index, "Edit")
 
     def click_history_on_row(self, row_index=0):
-        """Click History action button on specified row — JS."""
-        return self._click_row_action_button(row_index, 'mat-column-archive')
+        """Click History action via 3-dot menu on specified row."""
+        return self._click_action_menu_item(row_index, "History")
 
-    def _click_row_action_button(self, row_index, column_class):
-        """Click action button in specific column — JS.
-        Uses pointerdown → pointerup → click event sequence for Angular compatibility.
-        Waits for popup to open after click."""
-        try:
-            result = self.driver.execute_script("""
-                var rows = document.querySelectorAll('table#excel-table tbody tr');
-                if (arguments[0] < rows.length) {
-                    var btn = rows[arguments[0]].querySelector('td.' + arguments[1] + ' button');
-                    if (btn) {
-                        btn.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                        btn.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                        btn.click();
-                        return true;
-                    }
+    def _click_action_menu_item(self, row_index, action_name):
+        """Click an action menu item (View/Edit/History) for a specific row.
+        Uses the 3-dot (⋮) menu button (button.erp-row-trigger) in the Actions column,
+        then selects the action from the dropdown overlay — UOM gold standard pattern."""
+        # Step 1: Click the 3-dot menu trigger for the given row
+        menu_opened = self.driver.execute_script("""
+            var rows = document.querySelectorAll('table#excel-table tbody tr');
+            if (arguments[0] >= rows.length) return false;
+            var menuBtn = rows[arguments[0]].querySelector('td.cdk-column-actions button.erp-row-trigger');
+            if (!menuBtn) return false;
+            menuBtn.scrollIntoView({block:'center'});
+            menuBtn.click();
+            return true;
+        """, row_index)
+
+        if not menu_opened:
+            return False
+
+        # Step 2: Wait for the dropdown overlay to appear
+        end = time.monotonic() + 3
+        while time.monotonic() < end:
+            overlay_visible = self.driver.execute_script("""
+                var panels = document.querySelectorAll('.mat-mdc-menu-panel.erp-action-menu');
+                for (var i = 0; i < panels.length; i++) {
+                    if (panels[i].offsetParent !== null) return true;
                 }
                 return false;
-            """, row_index, column_class)
-            # Fast poll for form/popup to open
-            if result:
-                end_action = time.monotonic() + 5
-                while time.monotonic() < end_action:
-                    if self.is_form_open() or self.is_history_popup_open():
+            """)
+            if overlay_visible:
+                break
+            time.sleep(0.1)
+
+        # Step 3: Click the specific menu item from the dropdown overlay
+        clicked = self.driver.execute_script("""
+            var overlay = document.querySelector('.mat-mdc-menu-panel.erp-action-menu');
+            if (!overlay) return false;
+            // Try exact match on menu title first
+            var titles = overlay.querySelectorAll('.erp-menu-title');
+            for (var i = 0; i < titles.length; i++) {
+                if (titles[i].textContent.trim() === arguments[0]) {
+                    var item = titles[i].closest('.erp-menu-item');
+                    if (item) { item.click(); return true; }
+                    titles[i].click(); return true;
+                }
+            }
+            // Fallback: try matching on any button/span text in the overlay
+            var items = overlay.querySelectorAll('button, span, div');
+            for (var i = 0; i < items.length; i++) {
+                var text = items[i].textContent.trim();
+                if (text === arguments[0]) {
+                    items[i].click();
+                    return true;
+                }
+            }
+            // Fallback: partial match
+            for (var i = 0; i < items.length; i++) {
+                var text = items[i].textContent.trim().toLowerCase();
+                if (text.indexOf(arguments[0].toLowerCase()) !== -1) {
+                    items[i].click();
+                    return true;
+                }
+            }
+            return false;
+        """, action_name)
+
+        # Step 4: Wait for form or history popup to open
+        if clicked:
+            end_action = time.monotonic() + 5
+            while time.monotonic() < end_action:
+                if action_name == "History":
+                    if self.is_history_popup_open():
                         break
-                    time.sleep(0.1)
-                # Small settle for Angular to render form fields
-                time.sleep(0.2)
-            return bool(result)
-        except Exception:
-            return False
+                else:
+                    if self.is_form_open():
+                        break
+                time.sleep(0.1)
+            # Small settle for Angular to render form fields
+            time.sleep(0.2)
+
+        # Clean up any lingering overlays
+        self._force_close_panels()
+        return bool(clicked)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # History Popup
@@ -805,73 +862,78 @@ class ErrorCodeMstPage:
 
     def is_history_popup_open(self):
         """Check if History popup is visible — JS offsetParent.
-        Checks multiple possible containers: div.edit_pop_up, app-dynamic-history."""
+        History popup uses div.popup-overlay > .popup-content > .popup-header > h3.popup-title."""
         return bool(self.driver.execute_script("""
-            // Check inside div.edit_pop_up
-            var form = document.querySelector('div.edit_pop_up');
-            if (form && form.offsetParent !== null) {
-                var h3 = form.querySelector('h3');
-                if (h3 && h3.textContent.indexOf('History') !== -1 && h3.offsetParent !== null)
+            // Primary: Check div.popup-overlay with popup-title containing 'History'
+            var overlay = document.querySelector('div.popup-overlay');
+            if (overlay) {
+                var title = overlay.querySelector('h3.popup-title');
+                if (title && title.textContent.indexOf('History') !== -1 && title.offsetParent !== null)
                     return true;
             }
-            // Check app-dynamic-history component (like UOM uses)
+            // Fallback: Check app-dynamic-history component (like UOM uses)
             var histComp = document.querySelector('app-dynamic-history');
             if (histComp && histComp.offsetParent !== null) return true;
-            // Check any visible h3 with 'History' text
-            var allH3 = document.querySelectorAll('h3');
-            for (var i = 0; i < allH3.length; i++) {
-                if (allH3[i].textContent.indexOf('History') !== -1 && allH3[i].offsetParent !== null)
-                    return true;
-            }
-            // Check mat-dialog-container with History title
-            var dialogs = document.querySelectorAll('mat-dialog-container');
-            for (var i = 0; i < dialogs.length; i++) {
-                if (dialogs[i].offsetParent !== null) {
-                    var h = dialogs[i].querySelector('h3');
-                    if (h && h.textContent.indexOf('History') !== -1) return true;
-                }
-            }
             return false;
         """))
 
     def get_history_row_count(self):
-        """Count rows in history table — JS. Checks multiple possible containers."""
+        """Count rows in history table — JS. Checks popup-overlay first, then fallbacks."""
         return self.driver.execute_script("""
-            var rows = document.querySelectorAll('.edit_pop_up table tbody tr');
+            var rows = document.querySelectorAll('div.popup-overlay app-dynamic-history table tbody tr');
+            if (rows.length > 0) return rows.length;
+            rows = document.querySelectorAll('.edit_pop_up table tbody tr');
             if (rows.length > 0) return rows.length;
             rows = document.querySelectorAll('app-dynamic-history table tbody tr');
-            if (rows.length > 0) return rows.length;
-            rows = document.querySelectorAll('mat-dialog-container table tbody tr');
             return rows.length;
         """) or 0
 
     def is_history_empty(self):
-        """Check if history shows 'No Data Available' — JS."""
+        """Check if history shows 'No Data Available' — JS.
+        Checks popup-overlay first, then fallbacks."""
         return bool(self.driver.execute_script("""
+            var overlay = document.querySelector('div.popup-overlay');
+            if (overlay) {
+                var img = overlay.querySelector('img[alt="No Data Available"]');
+                if (img && img.offsetParent !== null) return true;
+                var text = overlay.textContent || '';
+                if (text.indexOf('No data available') !== -1 || text.indexOf('No Data Available') !== -1 || text.indexOf('No results found') !== -1) return true;
+            }
+            // Fallbacks
             var img = document.querySelector('.edit_pop_up img[alt="No Data Available"]');
             if (img && img.offsetParent !== null) return true;
             img = document.querySelector('app-dynamic-history img[alt="No Data Available"]');
             if (img && img.offsetParent !== null) return true;
-            // Also check for 'No data available' text
             var allEls = document.querySelectorAll('.no-data, .noData');
             for (var i = 0; i < allEls.length; i++) {
                 if (allEls[i].offsetParent !== null) return true;
-            }
-            // Check for 'No data available' text in history popup
-            var histContainer = document.querySelector('.edit_pop_up') || document.querySelector('app-dynamic-history');
-            if (histContainer) {
-                var text = histContainer.textContent || '';
-                if (text.indexOf('No data available') !== -1 || text.indexOf('No Data Available') !== -1) return true;
             }
             return false;
         """))
 
     def close_history_popup(self):
-        """Close History popup — pure JS Cancel click."""
+        """Close History popup — pure JS Cancel click.
+        Targets div.popup-overlay first, then fallback to any popup-footer."""
         self.driver.execute_script("""
-            var footers = document.querySelectorAll('.popup-footer');
-            for (var i = 0; i < footers.length; i++) {
-                var buttons = footers[i].querySelectorAll('button');
+            var overlay = document.querySelector('div.popup-overlay');
+            if (overlay) {
+                var footers = overlay.querySelectorAll('.popup-footer');
+                for (var i = 0; i < footers.length; i++) {
+                    var buttons = footers[i].querySelectorAll('button');
+                    for (var j = 0; j < buttons.length; j++) {
+                        if (buttons[j].textContent.indexOf('Cancel') !== -1) {
+                            buttons[j].click(); return;
+                        }
+                    }
+                }
+                // Fallback: try close button (X) in popup-actions
+                var closeBtn = overlay.querySelector('.popup-actions button[mat-icon-button]');
+                if (closeBtn) { closeBtn.click(); return; }
+            }
+            // Ultimate fallback: any Cancel in any popup-footer
+            var allFooters = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < allFooters.length; i++) {
+                var buttons = allFooters[i].querySelectorAll('button');
                 for (var j = 0; j < buttons.length; j++) {
                     if (buttons[j].textContent.indexOf('Cancel') !== -1) {
                         buttons[j].click(); return;
@@ -881,10 +943,16 @@ class ErrorCodeMstPage:
         """)
 
     def search_in_history(self, search_text):
-        """Search inside history popup — JS."""
+        """Search inside history popup — JS.
+        Checks popup-overlay first, then fallbacks."""
         try:
             self.driver.execute_script("""
-                var inp = document.querySelector('.edit_pop_up input[placeholder="Search box"]');
+                var inp = null;
+                var overlay = document.querySelector('div.popup-overlay');
+                if (overlay) {
+                    inp = overlay.querySelector('input[placeholder="Search box"], input#erpSearchInput');
+                }
+                if (!inp) inp = document.querySelector('.edit_pop_up input[placeholder="Search box"]');
                 if (!inp) inp = document.querySelector('app-dynamic-history input');
                 if (!inp) inp = document.querySelector('.edit_pop_up input[placeholder="Search"]');
                 if (inp) {
