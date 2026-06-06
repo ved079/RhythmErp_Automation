@@ -1,11 +1,18 @@
 """
 conftest.py - Tax Rate Common Settings (RhythmERP)
+
+Optimised (v2) — following UOM gold standard:
+- Session-scoped driver + logged_in_driver
+- Per-test: PageClass(driver) + navigate_to_page()
+- Single hard_refresh() in _cleanup() for fast reset
+- No time.sleep in fixture setup
 """
 
 import os
 import sys
 import logging
 import pytest
+import time
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
@@ -20,21 +27,11 @@ from pages.common_settings.cs_report_generator import CSReportStore, generate_cs
 
 def pytest_configure(config):
     """Register custom pytest markers for Tax Rate tests."""
-    config.addinivalue_line(
-        "markers", "smoke: Critical path tests (7 tests)"
-    )
-    config.addinivalue_line(
-        "markers", "sanity: Full functional validation of every test case (20 tests)"
-    )
-    config.addinivalue_line(
-        "markers", "regression: Complete regression suite covering all 20 tests"
-    )
-    config.addinivalue_line(
-        "markers", "bug: Tests verifying known open bugs (5 tests)"
-    )
-    config.addinivalue_line(
-        "markers", "ui: UI/popup/form/table/visual behaviour tests (12 tests)"
-    )
+    config.addinivalue_line("markers", "smoke: Critical path tests (7 tests)")
+    config.addinivalue_line("markers", "sanity: Full functional validation of every test case (20 tests)")
+    config.addinivalue_line("markers", "regression: Complete regression suite covering all 20 tests")
+    config.addinivalue_line("markers", "bug: Tests verifying known open bugs (5 tests)")
+    config.addinivalue_line("markers", "ui: UI/popup/form/table/visual behaviour tests (12 tests)")
 
 
 # ================================================================
@@ -105,33 +102,24 @@ def tr_page(logged_in_driver):
     Tax Rate page object — fresh navigation for each test.
 
     Setup:
-      1. Hard-refresh the browser to clear any leftover state.
-      2. Navigate to the Tax Rate screen.
-      3. If navigation fails, retry after hard refresh.
+      1. Create TaxRatePage instance
+      2. Navigate to the Tax Rate screen
 
     Teardown:
-      Hard-refresh after every test for clean state.
+      1. Force cleanup any open popups
+      2. Hard-refresh for clean state
     """
     from pages.common_settings.modules.tax_rate.tax_rate_page import TaxRatePage
 
-    # --- Pre-test hard refresh ---
-    try:
-        logged_in_driver.refresh()
-        import time
-        time.sleep(2)
-    except Exception as e:
-        log.warning("Pre-test refresh failed (non-fatal): " + str(e))
-
     page = TaxRatePage(logged_in_driver)
 
-    # --- Navigate with one retry ---
+    # Navigate to page
     try:
         page.navigate_to_page()
     except Exception as first_err:
         log.warning("First navigation attempt failed, retrying...")
         try:
-            logged_in_driver.refresh()
-            page.wait_seconds(3)
+            page.hard_refresh()
             page.navigate_to_page()
         except Exception as second_err:
             log.error("Navigation failed after retry: " + str(second_err))
@@ -139,18 +127,16 @@ def tr_page(logged_in_driver):
 
     yield page
 
-    # --- Post-test teardown ---
+    # Post-test teardown
     try:
-        page.force_cleanup_all()
+        page._cleanup()
     except Exception:
         pass
     try:
-        logged_in_driver.refresh()
-        import time
-        time.sleep(2)
+        page.hard_refresh()
         log.info("Post-test hard refresh complete")
-    except Exception as e:
-        log.warning("Post-test refresh failed (non-fatal): " + str(e))
+    except Exception:
+        pass
 
 
 # ================================================================
@@ -217,17 +203,17 @@ def pytest_runtest_teardown(item, nextitem):
 def pytest_runtest_makereport(item, call):
     """Capture test result (pass/fail) and finalise for report."""
     outcome = yield
-    report  = outcome.get_result()
+    report = outcome.get_result()
     if call.when == "call":
         if report.passed:
             status = "PASSED"
-            error  = ""
+            error = ""
         elif report.failed:
             status = "FAILED"
-            error  = str(report.longrepr) if report.longrepr else ""
+            error = str(report.longrepr) if report.longrepr else ""
         else:
             status = "SKIPPED"
-            error  = ""
+            error = ""
         _cs_store.finish_test(status, error)
 
 
