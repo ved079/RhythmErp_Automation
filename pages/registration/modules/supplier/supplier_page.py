@@ -55,13 +55,20 @@ FORM LAYOUT (3-STEP STEPPER — verified 2026-05-22 on live app):
       - Attachment              (file upload, optional) — .png/.jpg/.pdf
       - Remove row button
 
-KEY RULES (V1 — verified 2026-05-22 on live app):
+KEY RULES (V2 — updated 2026-06-06):
   - NEVER use Keys.ESCAPE (use backdrop click + JS overlay removal)
   - JS clicks for Angular Material overlays
   - Dropdown options read dynamically at runtime (never hardcode)
   - STEPPER form: Next/Back buttons navigate between steps
   - Step 1 has scrollable content — Additional Details below the fold
   - Address and Bank steps support ADD ROW / REMOVE ROW
+  - **CRITICAL: ERP requires BOTH Shipping AND Billing address rows for Suppliers.
+    A single address row (any type) will be rejected with 400:
+      "Shipping address is required for Supplier roles"
+      "Billing address is required for Supplier roles"
+    create_supplier() now adds 2 address rows by default.**
+  - fill_step2_address() uses row-scoped locators for row_index > 0
+    so the correct Nth address row is targeted (not always the first).
   - Cascading dropdowns MUST be filled in order: Country → State → District → Taluka → Village
   - Party Reference is optional, has dynamic farmer list
   - BUG-001: Company Name accepts special characters
@@ -1207,29 +1214,111 @@ class SupplierPage(BasePage):
     #  Step 2: Fill Address Details
     # ==============================================================
 
+    # ==============================================================
+    #  Address row-scoped locator helpers
+    # ==============================================================
+    # When the ERP renders multiple address rows in Step 2, the
+    # generic class-level locators (ADDRESS_TYPE_SELECT, etc.) always
+    # match the FIRST row.  These helpers build row-scoped XPath/CSS
+    # locators that target the Nth address-row container inside
+    # mat-step-content[2] (0-indexed: step 2 = index 1 in DOM, but
+    # mat-step-content uses 1-based indexing in XPath).
+    #
+    # RhythmERP renders each address row inside a container div under
+    # <mat-step-content> (the 2nd one for Step 2).  We scope to the
+    # Nth such container using position().
+    # ==============================================================
+
+    def _addr_row_select_locator(self, label, row_index=0):
+        """Return a row-scoped mat-select locator for an address dropdown.
+
+        Args:
+            label: The mat-label text (e.g. 'Address Type', 'Country')
+            row_index: 0-based address row index (0 = first row, 1 = second)
+
+        Returns:
+            ("xpath", scoped_xpath) tuple targeting the Nth row only.
+        """
+        pos = row_index + 1  # XPath position() is 1-based
+        xpath = (
+            f"(//mat-step-content[2]"
+            f"//mat-label[contains(.,'{label}')]"
+            f"/ancestor::mat-form-field//mat-select)[{pos}]"
+        )
+        return ("xpath", xpath)
+
+    def _addr_row_input_locator(self, field_name, row_index=0):
+        """Return a row-scoped input locator for an address text field.
+
+        Args:
+            field_name: The input[name] value (e.g. 'Address', 'Pin Code', 'GSTIN')
+            row_index: 0-based address row index
+
+        Returns:
+            ("xpath", scoped_xpath) tuple targeting the Nth row only.
+        """
+        pos = row_index + 1
+        xpath = (
+            f"(//mat-step-content[2]"
+            f"//input[@name='{field_name}'])[{pos}]"
+        )
+        return ("xpath", xpath)
+
     def fill_step2_address(self, data, row_index=0):
         """Fill the Address Details fields in Step 2.
-        IMPORTANT: Cascading dropdowns MUST be filled in order:
+
+        IMPORTANT (verified 2026-06-05): ERP now REQUIRES both Shipping
+        AND Billing address rows for Supplier roles.  This method fills
+        ONE row at a time.  Call it once per address row, using
+        row_index=0 for Shipping and row_index=1 for Billing.
+
+        When row_index > 0, row-scoped XPath locators are used so the
+        correct address-row container is targeted (not the first row).
+
+        Cascading dropdowns MUST be filled in order:
         Country → State → District → Taluka → Village
+
         data dict keys: address_type, country, state, district,
         taluka, village, address, pin_code, gstin
         """
         log.info(f"Filling Step 2 — Address Details (row {row_index})...")
 
+        # Pick locators: row-scoped when row_index > 0, class-level for row 0
+        if row_index == 0:
+            addr_type_loc = self.ADDRESS_TYPE_SELECT
+            country_loc = self.COUNTRY_SELECT
+            state_loc = self.STATE_SELECT
+            district_loc = self.DISTRICT_SELECT
+            taluka_loc = self.TALUKA_SELECT
+            village_loc = self.VILLAGE_SELECT
+            address_loc = self.ADDRESS_INPUT
+            pin_code_loc = self.PIN_CODE_INPUT
+            gstin_loc = self.GSTIN_INPUT
+        else:
+            addr_type_loc = self._addr_row_select_locator("Address Type", row_index)
+            country_loc = self._addr_row_select_locator("Country", row_index)
+            state_loc = self._addr_row_select_locator("State", row_index)
+            district_loc = self._addr_row_select_locator("District", row_index)
+            taluka_loc = self._addr_row_select_locator("Taluka", row_index)
+            village_loc = self._addr_row_select_locator("Village", row_index)
+            address_loc = self._addr_row_input_locator("Address", row_index)
+            pin_code_loc = self._addr_row_input_locator("Pin Code", row_index)
+            gstin_loc = self._addr_row_input_locator("GSTIN", row_index)
+
         # Address Type (REQUIRED) — Shipping/Billing
         addr_type = data.get("address_type")
         if addr_type is None:
-            self._select_mat_option(self.ADDRESS_TYPE_SELECT)
+            self._select_mat_option(addr_type_loc)
         elif addr_type != "":
-            self._select_mat_option(self.ADDRESS_TYPE_SELECT, addr_type)
+            self._select_mat_option(addr_type_loc, addr_type)
         self.wait_seconds(0.5)
 
         # Country (REQUIRED) — MUST be filled first for cascading
         country = data.get("country")
         if country is None:
-            country_selected = self._select_mat_option(self.COUNTRY_SELECT)
+            country_selected = self._select_mat_option(country_loc)
         elif country != "":
-            country_selected = self._select_mat_option(self.COUNTRY_SELECT, country)
+            country_selected = self._select_mat_option(country_loc, country)
         else:
             country_selected = None
         self.wait_seconds(1)  # Wait for State options to load
@@ -1237,9 +1326,9 @@ class SupplierPage(BasePage):
         # State (REQUIRED, depends on Country)
         state = data.get("state")
         if state is None:
-            state_selected = self._select_mat_option(self.STATE_SELECT)
+            state_selected = self._select_mat_option(state_loc)
         elif state != "":
-            state_selected = self._select_mat_option(self.STATE_SELECT, state)
+            state_selected = self._select_mat_option(state_loc, state)
         else:
             state_selected = None
         self.wait_seconds(1)  # Wait for District options to load
@@ -1247,9 +1336,9 @@ class SupplierPage(BasePage):
         # District (REQUIRED, depends on State)
         district = data.get("district")
         if district is None:
-            district_selected = self._select_mat_option(self.DISTRICT_SELECT)
+            district_selected = self._select_mat_option(district_loc)
         elif district != "":
-            district_selected = self._select_mat_option(self.DISTRICT_SELECT, district)
+            district_selected = self._select_mat_option(district_loc, district)
         else:
             district_selected = None
         self.wait_seconds(1)  # Wait for Taluka options to load
@@ -1257,35 +1346,35 @@ class SupplierPage(BasePage):
         # Taluka (REQUIRED, depends on District)
         taluka = data.get("taluka")
         if taluka is None:
-            self._select_mat_option(self.TALUKA_SELECT)
+            self._select_mat_option(taluka_loc)
         elif taluka != "":
-            self._select_mat_option(self.TALUKA_SELECT, taluka)
+            self._select_mat_option(taluka_loc, taluka)
         self.wait_seconds(1)  # Wait for Village options to load
 
         # Village (optional, depends on Taluka)
         village = data.get("village")
         if village is None:
-            self._select_mat_option(self.VILLAGE_SELECT)
+            self._select_mat_option(village_loc)
         elif village != "":
-            self._select_mat_option(self.VILLAGE_SELECT, village)
+            self._select_mat_option(village_loc, village)
         self.wait_seconds(0.3)
 
         # Address (REQUIRED)
         address = data.get("address", "")
         if address:
-            self.type_text(self.ADDRESS_INPUT, address, clear_first=True)
+            self.type_text(address_loc, address, clear_first=True)
             self.wait_seconds(0.3)
 
         # Pin Code (optional)
         pin_code = data.get("pin_code", "")
         if pin_code:
-            self.type_text(self.PIN_CODE_INPUT, pin_code, clear_first=True)
+            self.type_text(pin_code_loc, pin_code, clear_first=True)
             self.wait_seconds(0.3)
 
         # GSTIN (optional)
         gstin = data.get("gstin", "")
         if gstin:
-            self.type_text(self.GSTIN_INPUT, gstin, clear_first=True)
+            self.type_text(gstin_loc, gstin, clear_first=True)
             self.wait_seconds(0.3)
 
         log.info(f"Step 2 Address Details filled (row {row_index})")
@@ -1336,60 +1425,121 @@ class SupplierPage(BasePage):
             log.warning(f"Remove Address row failed: {e}")
 
     # ==============================================================
-    #  Step 3: Fill Bank Details
+    #  Bank row-scoped locator helpers
     # ==============================================================
+    # Same pattern as address rows — when multiple bank rows exist,
+    # generic locators always match the first. These helpers build
+    # row-scoped locators targeting the Nth bank row.
+    # ==============================================================
+
+    def _bank_row_select_locator(self, label, row_index=0):
+        """Return a row-scoped mat-select locator for a bank dropdown.
+
+        Args:
+            label: The mat-label text (e.g. 'Account Type', 'Bank Proof')
+            row_index: 0-based bank row index
+
+        Returns:
+            ("xpath", scoped_xpath) tuple targeting the Nth row only.
+        """
+        pos = row_index + 1
+        xpath = (
+            f"(//mat-step-content[3]"
+            f"//mat-label[contains(.,'{label}')]"
+            f"/ancestor::mat-form-field//mat-select)[{pos}]"
+        )
+        return ("xpath", xpath)
+
+    def _bank_row_input_locator(self, field_name, row_index=0):
+        """Return a row-scoped input locator for a bank text field.
+
+        Args:
+            field_name: The input[name] value (e.g. 'Bank Name', 'Branch')
+            row_index: 0-based bank row index
+
+        Returns:
+            ("xpath", scoped_xpath) tuple targeting the Nth row only.
+        """
+        pos = row_index + 1
+        xpath = (
+            f"(//mat-step-content[3]"
+            f"//input[@name='{field_name}'])[{pos}]"
+        )
+        return ("xpath", xpath)
 
     def fill_step3_bank(self, data, row_index=0):
         """Fill the Bank Details fields in Step 3.
+
+        When row_index > 0, row-scoped XPath locators are used so the
+        correct bank-row container is targeted (not the first row).
+
         data dict keys: bank_name, branch, ifsc_code, account_type,
         account_holder_name, account_number, bank_proof, attachment_path
         """
         log.info(f"Filling Step 3 — Bank Details (row {row_index})...")
 
+        # Pick locators: row-scoped when row_index > 0, class-level for row 0
+        if row_index == 0:
+            bank_name_loc = self.BANK_NAME_INPUT
+            branch_loc = self.BRANCH_INPUT
+            ifsc_loc = self.IFSC_CODE_INPUT
+            account_type_loc = self.ACCOUNT_TYPE_SELECT
+            holder_loc = self.ACCOUNT_HOLDER_NAME_INPUT
+            account_num_loc = self.ACCOUNT_NUMBER_INPUT
+            bank_proof_loc = self.BANK_PROOF_SELECT
+        else:
+            bank_name_loc = self._bank_row_input_locator("Bank Name", row_index)
+            branch_loc = self._bank_row_input_locator("Branch", row_index)
+            ifsc_loc = self._bank_row_input_locator("IFSC Code", row_index)
+            account_type_loc = self._bank_row_select_locator("Account Type", row_index)
+            holder_loc = self._bank_row_input_locator("Account Holder Name", row_index)
+            account_num_loc = self._bank_row_input_locator("Account Number", row_index)
+            bank_proof_loc = self._bank_row_select_locator("Bank Proof", row_index)
+
         # Bank Name (optional)
         bank_name = data.get("bank_name", "")
         if bank_name:
-            self.type_text(self.BANK_NAME_INPUT, bank_name, clear_first=True)
+            self.type_text(bank_name_loc, bank_name, clear_first=True)
             self.wait_seconds(0.3)
 
         # Branch (optional)
         branch = data.get("branch", "")
         if branch:
-            self.type_text(self.BRANCH_INPUT, branch, clear_first=True)
+            self.type_text(branch_loc, branch, clear_first=True)
             self.wait_seconds(0.3)
 
         # IFSC Code (optional)
         ifsc = data.get("ifsc_code", "")
         if ifsc:
-            self.type_text(self.IFSC_CODE_INPUT, ifsc, clear_first=True)
+            self.type_text(ifsc_loc, ifsc, clear_first=True)
             self.wait_seconds(0.3)
 
         # Account Type (optional) — Current/Saving
         account_type = data.get("account_type")
         if account_type is None:
-            self._select_mat_option(self.ACCOUNT_TYPE_SELECT)
+            self._select_mat_option(account_type_loc)
         elif account_type != "":
-            self._select_mat_option(self.ACCOUNT_TYPE_SELECT, account_type)
+            self._select_mat_option(account_type_loc, account_type)
         self.wait_seconds(0.3)
 
         # Account Holder Name (optional)
         holder = data.get("account_holder_name", "")
         if holder:
-            self.type_text(self.ACCOUNT_HOLDER_NAME_INPUT, holder, clear_first=True)
+            self.type_text(holder_loc, holder, clear_first=True)
             self.wait_seconds(0.3)
 
         # Account Number (optional)
         account_num = data.get("account_number", "")
         if account_num:
-            self.type_text(self.ACCOUNT_NUMBER_INPUT, account_num, clear_first=True)
+            self.type_text(account_num_loc, account_num, clear_first=True)
             self.wait_seconds(0.3)
 
         # Bank Proof (REQUIRED)
         bank_proof = data.get("bank_proof")
         if bank_proof is None:
-            self._select_mat_option(self.BANK_PROOF_SELECT)
+            self._select_mat_option(bank_proof_loc)
         elif bank_proof != "":
-            self._select_mat_option(self.BANK_PROOF_SELECT, bank_proof)
+            self._select_mat_option(bank_proof_loc, bank_proof)
         self.wait_seconds(0.3)
 
         # Attachment (optional file upload)
