@@ -60,12 +60,25 @@ def driver():
 
 @pytest.fixture(scope="function", autouse=True)
 def reset_between_tests(logged_in_driver):
-    """Hard refresh page after each test to clear stale overlays/state."""
+    """Hard refresh page after each test to clear stale overlays/state.
+    Uses fast JS poll instead of fixed sleep."""
     yield
     try:
         logged_in_driver.execute_script("location.reload(true)")
         import time as _t
-        _t.sleep(2)
+        # Fast poll for page ready (0.2s intervals, 5s max)
+        end = _t.monotonic() + 5
+        while _t.monotonic() < end:
+            try:
+                found = logged_in_driver.execute_script(
+                    "var btn = document.querySelector('app-custom-header .erp-add-btn');"
+                    "return !!btn;"
+                )
+                if found:
+                    break
+            except Exception:
+                pass
+            _t.sleep(0.2)
     except Exception:
         pass
 

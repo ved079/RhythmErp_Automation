@@ -1,6 +1,20 @@
-﻿"""
-Page Object for UOM Conversion module.
-Extends BasePage with pure-JS helpers for Angular Material MDC components.
+"""
+UOM Conversion Page Object (v2 SPEED OPTIMIZED)
+==================================================
+UOM gold-standard speed patterns applied.
+Module: 3 fields (2 FK dropdowns: Source UOM, Target UOM + 1 number: Conversion Factor).
+
+Speed optimizations vs v1:
+- All fixed time.sleep() replaced with fast JS polls (0.1-0.2s intervals)
+- navigate_to_page() only on first call; hard_refresh() between tests
+- Dropdown: fast poll for panel open/close, pointerdown+pointerup+click for Angular
+- _wait_for_page_ready(): 0.1s poll intervals (was 1s)
+- open_add_form(): fast poll for form open (was 1s sleep)
+- create_fresh_record(): eliminated all fixed sleeps, fast polls throughout
+- search_table(): fast polls (was 0.3-1.5s sleeps)
+- _click_action_button(): fast polls (was 0.8s+0.5s sleeps)
+- conftest: fast refresh instead of sleep(2)
+- Zero blocking time.sleep() remaining — all are fast poll intervals or brief settles
 """
 
 import time
@@ -12,189 +26,233 @@ from common.logger import log
 
 class UOMConversionPage(BasePage):
     """Page Object for UOM Conversion (Common Settings)."""
+
     UOM_CONVERSION_PAGE_URL = "https://rhythmerp.algorhythms.in/#/dynamic-screens/UOM%20Conversion"
+
+    CONVERSION_FACTOR_INPUT = "Conversion Factor"
+
     # ================================================================
-    #  NAVIGATION
+    #  NAVIGATION (UOM gold standard pattern)
     # ================================================================
 
     def navigate_to_page(self):
+        """Navigate to UOM Conversion page via direct URL. First call only."""
         log.info("Navigating to UOM Conversion page")
         self.driver.get(self.UOM_CONVERSION_PAGE_URL)
         self._wait_for_page_ready()
         self._force_close_panels()
-        log.info("Arrived at UOM Conversion page")
+
+    def hard_refresh(self):
+        """Hard refresh (Ctrl+R) + wait for page ready.
+        Much faster than navigate_to_page() for resetting between tests."""
+        self.driver.refresh()
+        self._wait_for_page_ready()
 
     def _wait_for_page_ready(self):
-        """
-        Poll until the 'add' icon appears in app-custom-header.
-        Timeout extended to 30s. After expiry, waits an extra 3s as a
-        last-ditch buffer so Angular can finish rendering before callers
-        proceed.
-        """
-        waited = 0
-        while waited < 30:
+        """Wait for the add button to appear — fast JS poll (0.1s intervals)."""
+        end = time.monotonic() + 15
+        while time.monotonic() < end:
             try:
-                has_add = self.driver.execute_script("""
-                    // Try .erp-add-btn first (most reliable), then fallback to icon search
-                    var addBtn = document.querySelector('app-custom-header .erp-add-btn');
-                    if (addBtn) return true;
-                    var icons = document.querySelectorAll('app-custom-header mat-icon, app-custom-header i.material-icons');
-                    for (var i = 0; i < icons.length; i++) {
-                        if (icons[i].textContent.trim() === 'add') return true;
-                    }
-                    return false;
-                """)
-                if has_add:
-                    log.info("Page ready after " + str(waited) + "s")
+                found = self.driver.execute_script(
+                    "var btn = document.querySelector('app-custom-header .erp-add-btn');"
+                    "if (btn) return true;"
+                    "var icons = document.querySelectorAll('app-custom-header mat-icon');"
+                    "for (var i = 0; i < icons.length; i++) {"
+                    "  if (icons[i].textContent.trim() === 'add') return true;"
+                    "}"
+                    "return false;"
+                )
+                if found:
                     return
             except Exception:
                 pass
-            time.sleep(1)
-            waited += 1
-        log.warning("Page may not be fully ready after 30s")
-        # Last-ditch buffer: give Angular a few more seconds
-        time.sleep(3)
-
-    def hard_refresh(self):
-        """Hard refresh the current page to clear stale overlays/state."""
-        log.info("Hard refreshing page...")
-        try:
-            self.driver.execute_script("location.reload(true)")
-            time.sleep(2)
-            log.info("Hard refresh complete")
-        except Exception as e:
-            log.warning("Hard refresh failed: " + str(e))
-            time.sleep(2)
-
-    def open_add_form(self):
-        """
-        Click the ADD button to open the form popup.
-        Retries up to 3 times. Between retries, attempts to close stale
-        overlays and hard refresh the page.
-        """
-        js = """
-        // Try .erp-add-btn first (most reliable), then fallback to icon click
-        var addBtn = document.querySelector('app-custom-header .erp-add-btn');
-        if (addBtn) { addBtn.click(); return 'clicked erp-add-btn'; }
-        var icons = document.querySelectorAll('app-custom-header mat-icon, app-custom-header i.material-icons');
-        for (var i = 0; i < icons.length; i++) {
-            if (icons[i].textContent.trim() === 'add') {
-                icons[i].click();
-                return 'clicked add icon';
-            }
-        }
-        throw new Error('ADD button not found');
-        """
-        last_exc = None
-        for attempt in range(1, 4):
-            try:
-                result = self.driver.execute_script(js)
-                log.info(f"Open add form: {result}")
-                time.sleep(1)
-                return result
-            except Exception as e:
-                last_exc = e
-                log.warning(f"open_add_form attempt {attempt}/3 failed: {e}")
-                if attempt < 3:
-                    try:
-                        self._force_close_panels()
-                    except Exception:
-                        pass
-                    try:
-                        self.force_close_form_popup()
-                    except Exception:
-                        pass
-                    self.hard_refresh()
-                else:
-                    time.sleep(2)
-        raise last_exc
+            time.sleep(0.1)
 
     # ================================================================
-    #  MAT-SELECT DROPDOWN (MDC)
+    #  ADD FORM — Open / Close (fast JS polls)
+    # ================================================================
+
+    def open_add_form(self):
+        """Click ADD button via JS + fast poll for form popup."""
+        self.driver.execute_script(
+            "var btn = document.querySelector('app-custom-header .erp-add-btn');"
+            "if (btn) { btn.click(); return; }"
+            "var icons = document.querySelectorAll('app-custom-header mat-icon');"
+            "for (var i = 0; i < icons.length; i++) {"
+            "  if (icons[i].textContent.trim() === 'add') { icons[i].click(); return; }"
+            "}"
+        )
+        # Fast poll for form popup (0.2s intervals, 5s timeout)
+        end = time.monotonic() + 5
+        while time.monotonic() < end:
+            if self.is_form_open():
+                return
+            # Retry click if form didn't open
+            self.driver.execute_script(
+                "var btn = document.querySelector('app-custom-header .erp-add-btn');"
+                "if (btn) btn.click();"
+            )
+            time.sleep(0.2)
+
+    def is_form_open(self):
+        """Check if form popup is open — JS offsetParent (instant)."""
+        try:
+            return bool(self.driver.execute_script(
+                "var el = document.querySelector('div.overflow_model');"
+                "if (!el) return false;"
+                "if (el.offsetParent !== null) return true;"
+                "var s = window.getComputedStyle(el);"
+                "return s.display !== 'none' && s.visibility !== 'hidden';"
+            ))
+        except Exception:
+            return False
+
+    def is_add_form_open(self):
+        """Alias for is_form_open."""
+        return self.is_form_open()
+
+    def is_form_closed(self):
+        """Check if form popup is closed."""
+        return not self.is_form_open()
+
+    def close_popup(self):
+        """Close popup via Cancel button — pure JS."""
+        self.driver.execute_script(
+            "var footers = document.querySelectorAll('.popup-footer');"
+            "for (var i = 0; i < footers.length; i++) {"
+            "  var buttons = footers[i].querySelectorAll('button');"
+            "  for (var j = 0; j < buttons.length; j++) {"
+            "    if (buttons[j].textContent.indexOf('Cancel') !== -1) {"
+            "      buttons[j].click(); return;"
+            "    }"
+            "  }"
+            "}"
+            "var btn = document.querySelector('.swal2-confirm');"
+            "if (btn) btn.click();"
+        )
+
+    def force_close_form_popup(self):
+        """Force-close form popup — single JS call."""
+        try:
+            self.driver.execute_script(
+                "var popup = document.querySelector('div.overflow_model');"
+                "if (!popup) return;"
+                "var actions = popup.querySelector('.popup-actions');"
+                "if (actions) {"
+                "  var buttons = actions.querySelectorAll('button');"
+                "  for (var i = buttons.length - 1; i >= 0; i--) {"
+                "    var icon = buttons[i].querySelector('mat-icon, i.material-icons');"
+                "    if (icon && icon.textContent.trim() === 'close') {"
+                "      buttons[i].click(); return;"
+                "    }"
+                "  }"
+                "}"
+                "var footer = popup.querySelector('div.popup-footer');"
+                "if (footer) {"
+                "  var cancelBtn = footer.querySelector('.left button');"
+                "  if (cancelBtn) { cancelBtn.click(); return; }"
+                "  var btns = footer.querySelectorAll('button');"
+                "  for (var k = 0; k < btns.length; k++) {"
+                "    if (btns[k].textContent.indexOf('Cancel') !== -1) {"
+                "      btns[k].click(); return;"
+                "    }"
+                "  }"
+                "}"
+            )
+        except Exception:
+            pass
+        self._force_close_panels()
+
+    def wait_for_form_to_close(self, timeout=5):
+        """Poll until the form popup disappears — fast 0.1s intervals."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            if not self.is_form_open():
+                return True
+            time.sleep(0.1)
+        return False
+
+    # ================================================================
+    #  MAT-SELECT DROPDOWN (MDC) — Speed Optimized
     # ================================================================
 
     def select_uom(self, label_text, uom_code):
-        """
-        Select a UOM from a mat-select dropdown.
-        Uses .mat-mdc-select-trigger and .mat-mdc-select-panel (MDC version).
-        """
+        """Select a UOM from a mat-select dropdown — fast polls."""
         # Step 1: Click the select trigger
-        js_open = """
-        var fields = document.querySelectorAll('mat-form-field');
-        for (var i = 0; i < fields.length; i++) {
-            var label = fields[i].querySelector('mat-label');
-            if (label && label.textContent.trim().indexOf(arguments[0]) !== -1) {
-                var trigger = fields[i].querySelector('.mat-mdc-select-trigger');
-                if (trigger) {
-                    trigger.click();
-                    return 'opened: ' + label.textContent.trim();
-                }
-            }
-        }
-        throw new Error('mat-select trigger with label "' + arguments[0] + '" not found');
-        """
-        result = self.driver.execute_script(js_open, label_text)
-        log.info(f"Selecting '{uom_code}' from '{label_text}' - {result}")
+        self.driver.execute_script(
+            "var fields = document.querySelectorAll('mat-form-field');"
+            "for (var i = 0; i < fields.length; i++) {"
+            "  var label = fields[i].querySelector('mat-label');"
+            "  if (label && label.textContent.trim().indexOf(arguments[0]) !== -1) {"
+            "    var trigger = fields[i].querySelector('.mat-mdc-select-trigger');"
+            "    if (trigger) { trigger.click(); return; }"
+            "  }"
+            "}"
+        , label_text)
 
-        # Step 2: Wait for panel to appear (retry loop)
-        panel = None
-        for _ in range(15):
-            panel = self.driver.execute_script(
+        # Step 2: Fast poll for panel (0.1s intervals, 3s timeout)
+        end = time.monotonic() + 3
+        while time.monotonic() < end:
+            panel_open = self.driver.execute_script(
                 "var p = document.querySelector('.mat-mdc-select-panel');"
-                " return (p && p.offsetParent !== null) ? p : null;"
+                "return p && p.offsetParent !== null;"
             )
-            if panel:
+            if panel_open:
                 break
-            time.sleep(0.4)
-
-        if not panel:
-            raise Exception(
-                f".mat-mdc-select-panel did not appear for '{label_text}'"
-            )
+            time.sleep(0.1)
 
         # Step 3: Type in search input
-        js_search = """
-        var panel = document.querySelector('.mat-mdc-select-panel');
-        if (!panel) throw new Error('Panel not found');
-        var searchInput = panel.querySelector('.search-container input');
-        if (!searchInput) throw new Error('Search input not found in panel');
-        var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-            window.HTMLInputElement.prototype, 'value'
-        ).set;
-        nativeInputValueSetter.call(searchInput, arguments[0]);
-        searchInput.dispatchEvent(new Event('input', {bubbles: true}));
-        return 'searched';
-        """
-        self.driver.execute_script(js_search, uom_code)
-        time.sleep(1)
+        self.driver.execute_script(
+            "var panel = document.querySelector('.mat-mdc-select-panel');"
+            "if (!panel) return;"
+            "var searchInput = panel.querySelector('.search-container input');"
+            "if (!searchInput) return;"
+            "var nativeSetter = Object.getOwnPropertyDescriptor("
+            "  window.HTMLInputElement.prototype, 'value').set;"
+            "nativeSetter.call(searchInput, arguments[0]);"
+            "searchInput.dispatchEvent(new Event('input', {bubbles: true}));"
+        , uom_code)
+        # Brief settle for search filtering
+        time.sleep(0.2)
 
-        # Step 4: Click matching option
-        js_click = """
-        var panel = document.querySelector('.mat-mdc-select-panel');
-        if (!panel) throw new Error('Panel not found');
-        var options = panel.querySelectorAll('mat-option');
-        for (var i = 0; i < options.length; i++) {
-            var t = options[i].querySelector('.mdc-list-item__primary-text');
-            if (t && t.textContent.trim() === arguments[0]) {
-                options[i].click();
-                return 'selected (exact)';
-            }
-        }
-        var needle = arguments[0].toUpperCase();
-        for (var i = 0; i < options.length; i++) {
-            var t = options[i].querySelector('.mdc-list-item__primary-text');
-            if (t && t.textContent.trim().toUpperCase().indexOf(needle) !== -1) {
-                options[i].click();
-                return 'selected (partial): ' + t.textContent.trim();
-            }
-        }
-        throw new Error('Option "' + arguments[0] + '" not found');
-        """
-        result = self.driver.execute_script(js_click, uom_code)
-        log.info(f"Option click result: {result}")
-        time.sleep(0.5)
+        # Step 4: Click matching option (pointerdown+pointerup+click for Angular)
+        self.driver.execute_script(
+            "var panel = document.querySelector('.mat-mdc-select-panel');"
+            "if (!panel) return false;"
+            "var options = panel.querySelectorAll('mat-option');"
+            "for (var i = 0; i < options.length; i++) {"
+            "  var t = options[i].querySelector('.mdc-list-item__primary-text');"
+            "  if (t && t.textContent.trim() === arguments[0]) {"
+            "    options[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));"
+            "    options[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));"
+            "    options[i].click(); return true;"
+            "  }"
+            "}"
+            "var needle = arguments[0].toUpperCase();"
+            "for (var i = 0; i < options.length; i++) {"
+            "  var t = options[i].querySelector('.mdc-list-item__primary-text');"
+            "  if (t && t.textContent.trim().toUpperCase().indexOf(needle) !== -1) {"
+            "    options[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));"
+            "    options[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));"
+            "    options[i].click(); return true;"
+            "  }"
+            "}"
+            "return false;"
+        , uom_code)
 
-        # Step 5: Cleanup leftover panels
+        # Fast poll for CDK overlay panel to close
+        end_close = time.monotonic() + 1
+        while time.monotonic() < end_close:
+            gone = self.driver.execute_script(
+                "var panels = document.querySelectorAll('.cdk-overlay-pane:not(.mat-mdc-dialog-container)');"
+                "for (var i = 0; i < panels.length; i++) {"
+                "  if (panels[i].offsetParent !== null) return false;"
+                "}"
+                "return true;"
+            )
+            if gone:
+                break
+            time.sleep(0.1)
         self._force_close_panels()
 
     def select_source_uom(self, uom_code):
@@ -204,351 +262,499 @@ class UOMConversionPage(BasePage):
         self.select_uom("Target UOM", uom_code)
 
     # ================================================================
-    #  FORM FIELDS
+    #  FORM FIELDS — JS native setter for Angular
     # ================================================================
 
     def type_conversion_factor(self, value):
-        """Type into the Conversion Factor input field."""
-        js = """
-        var fields = document.querySelectorAll('mat-form-field');
-        for (var i = 0; i < fields.length; i++) {
-            var label = fields[i].querySelector('mat-label');
-            if (label && label.textContent.trim().indexOf('Conversion Factor') !== -1) {
-                var input = fields[i].querySelector('input');
-                if (input) {
-                    input.focus();
-                    var setter = Object.getOwnPropertyDescriptor(
-                        window.HTMLInputElement.prototype, 'value'
-                    ).set;
-                    setter.call(input, arguments[0]);
-                    input.dispatchEvent(new Event('input', {bubbles: true}));
-                    input.dispatchEvent(new Event('change', {bubbles: true}));
-                    return 'typed: ' + arguments[0];
-                }
-            }
-        }
-        throw new Error('Conversion Factor input not found');
-        """
-        result = self.driver.execute_script(js, str(value))
-        log.info(f"Conversion factor typed: {result}")
-        time.sleep(0.3)
+        """Type into Conversion Factor input — JS native setter + Angular dispatch."""
+        self.driver.execute_script(
+            "var fields = document.querySelectorAll('mat-form-field');"
+            "for (var i = 0; i < fields.length; i++) {"
+            "  var label = fields[i].querySelector('mat-label');"
+            "  if (label && label.textContent.trim().indexOf('Conversion Factor') !== -1) {"
+            "    var input = fields[i].querySelector('input');"
+            "    if (input) {"
+            "      input.focus();"
+            "      var setter = Object.getOwnPropertyDescriptor("
+            "        window.HTMLInputElement.prototype, 'value').set;"
+            "      setter.call(input, arguments[0]);"
+            "      input.dispatchEvent(new Event('input', {bubbles: true}));"
+            "      input.dispatchEvent(new Event('change', {bubbles: true}));"
+            "      return;"
+            "    }"
+            "  }"
+            "}"
+        , str(value))
+
+    def enter_conversion_factor(self, value):
+        """Alias for type_conversion_factor."""
+        self.type_conversion_factor(value)
 
     def get_mat_error_text(self, label_text):
         """Get the mat-error message for a field by its label."""
-        js = """
-        var fields = document.querySelectorAll('mat-form-field');
-        for (var i = 0; i < fields.length; i++) {
-            var label = fields[i].querySelector('mat-label');
-            if (label && label.textContent.trim().indexOf(arguments[0]) !== -1) {
-                var err = fields[i].querySelector('mat-error');
-                return err ? err.textContent.trim() : '';
-            }
-        }
-        return '';
-        """
-        return self.driver.execute_script(js, label_text) or ""
+        return self.driver.execute_script(
+            "var fields = document.querySelectorAll('mat-form-field');"
+            "for (var i = 0; i < fields.length; i++) {"
+            "  var label = fields[i].querySelector('mat-label');"
+            "  if (label && label.textContent.trim().indexOf(arguments[0]) !== -1) {"
+            "    var err = fields[i].querySelector('mat-error');"
+            "    return err ? err.textContent.trim() : '';"
+            "  }"
+            "}"
+            "return '';"
+        , label_text) or ""
+
+    def is_dropdown_error(self, label_text):
+        """Check if a mat-select dropdown has error state."""
+        return bool(self.driver.execute_script(
+            "var fields = document.querySelectorAll('mat-form-field');"
+            "for (var i = 0; i < fields.length; i++) {"
+            "  var label = fields[i].querySelector('mat-label');"
+            "  if (label && label.textContent.trim().indexOf(arguments[0]) !== -1) {"
+            "    var select = fields[i].querySelector('mat-select');"
+            "    if (select) {"
+            "      return select.classList.contains('mat-mdc-select-invalid') ||"
+            "             select.classList.contains('ng-invalid');"
+            "    }"
+            "  }"
+            "}"
+            "return false;"
+        , label_text))
+
+    def clear_conversion_factor_via_js(self):
+        """Clear the Conversion Factor input field via JS."""
+        self.driver.execute_script(
+            "var fields = document.querySelectorAll('mat-form-field');"
+            "for (var i = 0; i < fields.length; i++) {"
+            "  var label = fields[i].querySelector('mat-label');"
+            "  if (label && label.textContent.trim().indexOf('Conversion Factor') !== -1) {"
+            "    var input = fields[i].querySelector('input');"
+            "    if (input) {"
+            "      input.focus();"
+            "      var setter = Object.getOwnPropertyDescriptor("
+            "        window.HTMLInputElement.prototype, 'value').set;"
+            "      setter.call(input, '');"
+            "      input.dispatchEvent(new Event('input', {bubbles: true}));"
+            "      input.dispatchEvent(new Event('change', {bubbles: true}));"
+            "      return;"
+            "    }"
+            "  }"
+            "}"
+        )
+
+    def get_selected_uom_text(self, label_text):
+        """Get currently selected value from a mat-select."""
+        return self.driver.execute_script(
+            "var fields = document.querySelectorAll('mat-form-field');"
+            "for (var i = 0; i < fields.length; i++) {"
+            "  var label = fields[i].querySelector('mat-label');"
+            "  if (label && label.textContent.trim().indexOf(arguments[0]) !== -1) {"
+            "    var vt = fields[i].querySelector('.mat-mdc-select-value-text span');"
+            "    return vt ? vt.textContent.trim() : '';"
+            "  }"
+            "}"
+            "return '';"
+        , label_text) or ""
+
+    def get_conversion_factor_value(self):
+        """Get current value of Conversion Factor input."""
+        return self.driver.execute_script(
+            "var fields = document.querySelectorAll('mat-form-field');"
+            "for (var i = 0; i < fields.length; i++) {"
+            "  var label = fields[i].querySelector('mat-label');"
+            "  if (label && label.textContent.trim().indexOf('Conversion Factor') !== -1) {"
+            "    var input = fields[i].querySelector('input');"
+            "    return input ? input.value : '';"
+            "  }"
+            "}"
+            "return '';"
+        ) or ""
 
     # ================================================================
-    #  FORM BUTTONS
+    #  FORM BUTTONS — JS click (bypasses overlay issues)
     # ================================================================
+
+    def submit(self):
+        """Click Submit button — JS click."""
+        self._js_click_popup_button('Submit')
+
+    def click_update(self):
+        """Click Update button — JS click."""
+        self._js_click_popup_button('Update')
 
     def click_save_button(self):
-        """Click the Submit or Update button on the form popup via JS."""
-        js = """
-        var footer = document.querySelector('div.popup-footer');
-        if (!footer) throw new Error('Popup footer not found');
-        var buttons = footer.querySelectorAll('button');
-        for (var i = 0; i < buttons.length; i++) {
-            var txt = buttons[i].textContent.trim();
-            if (txt === 'Submit' || txt === 'Update') {
-                buttons[i].click();
-                return 'clicked ' + txt;
-            }
-        }
-        throw new Error('Submit/Update button not found in popup footer');
-        """
-        result = self.driver.execute_script(js)
-        log.info(f"Clicked save button: {result}")
-        time.sleep(0.3)
+        """Click Submit or Update button — JS click."""
+        self._js_click_popup_button('Submit') or self._js_click_popup_button('Update')
+
+    def _js_click_popup_button(self, button_text):
+        """Click a popup footer button via JS — bypasses overlay issues."""
+        return self.driver.execute_script(
+            "var footers = document.querySelectorAll('.popup-footer');"
+            "for (var i = 0; i < footers.length; i++) {"
+            "  var buttons = footers[i].querySelectorAll('button');"
+            "  for (var j = 0; j < buttons.length; j++) {"
+            "    if (buttons[j].textContent.trim().indexOf(arguments[0]) !== -1) {"
+            "      buttons[j].click(); return true;"
+            "    }"
+            "  }"
+            "}"
+            "return false;"
+        , button_text)
 
     def click_cancel_button(self):
-        """Click the Cancel button on the form popup."""
-        js = """
-        var footer = document.querySelector('div.popup-footer');
-        if (!footer) throw new Error('Popup footer not found');
-        var btn = footer.querySelector('.left button');
-        if (btn) { btn.click(); return 'clicked cancel'; }
-        var buttons = footer.querySelectorAll('button');
-        for (var i = 0; i < buttons.length; i++) {
-            if (buttons[i].textContent.trim().indexOf('Cancel') !== -1) {
-                buttons[i].click();
-                return 'clicked cancel (text)';
-            }
-        }
-        throw new Error('Cancel button not found');
-        """
-        self.driver.execute_script(js)
-        log.info("Clicked Cancel button")
-        time.sleep(0.5)
+        """Click Cancel button on form popup — JS."""
+        self.driver.execute_script(
+            "var footers = document.querySelectorAll('.popup-footer');"
+            "for (var i = 0; i < footers.length; i++) {"
+            "  var buttons = footers[i].querySelectorAll('button');"
+            "  for (var j = 0; j < buttons.length; j++) {"
+            "    if (buttons[j].textContent.indexOf('Cancel') !== -1) {"
+            "      buttons[j].click(); return;"
+            "    }"
+            "  }"
+            "}"
+        )
 
     # ================================================================
-    #  FORM POPUP STATE
+    #  SWEET ALERT HANDLERS — Combined fast handler
     # ================================================================
 
-    def is_form_open(self):
-        """Return True if the overflow_model popup is visible."""
+    def _handle_submit_response(self, timeout=5):
+        """Combined SweetAlert handler — fast poll.
+        Detects validation alert, success alert, or form close (= success).
+        Returns dict: {alert, title, form_closed, success}"""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            result = self.driver.execute_script(
+                "var popup = document.querySelector('.swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error');"
+                "if (popup && popup.offsetParent !== null) {"
+                "  var titleEl = document.querySelector('#swal2-title');"
+                "  var title = titleEl ? titleEl.textContent.trim() : '';"
+                "  var confirm = document.querySelector('.swal2-confirm');"
+                "  if (confirm) confirm.click();"
+                "  return {alert: true, title: title, form_closed: false, success: false};"
+                "}"
+                "var successPopup = document.querySelector('.swal2-popup.swal2-icon-success');"
+                "if (successPopup && successPopup.offsetParent !== null) {"
+                "  var confirm2 = document.querySelector('.swal2-confirm');"
+                "  if (confirm2) confirm2.click();"
+                "  return {alert: true, title: 'Success', form_closed: false, success: true};"
+                "}"
+                "var form = document.querySelector('div.overflow_model');"
+                "var formOpen = form && form.offsetParent !== null;"
+                "if (!formOpen) {"
+                "  return {alert: false, title: '', form_closed: true, success: true};"
+                "}"
+                "return null;"
+            )
+            if result is not None:
+                if result.get('alert'):
+                    self._cleanup_swal2()
+                return result
+            time.sleep(0.2)
+
+        # Timeout — check form state
+        form_closed = not self.is_form_open()
+        return {"alert": False, "title": "", "form_closed": form_closed, "success": form_closed}
+
+    def is_validation_alert_present(self, timeout=3):
+        """Check if SweetAlert validation/warning popup appeared — fast poll."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            try:
+                visible = self.driver.execute_script(
+                    "var el = document.querySelector('.swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error');"
+                    "return el && el.offsetParent !== null;"
+                )
+                if visible:
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.1)
+        # Also check generic swal popup
+        end2 = time.monotonic() + 1
+        while time.monotonic() < end2:
+            try:
+                visible = self.driver.execute_script(
+                    "var el = document.querySelector('.swal2-popup');"
+                    "return el && el.offsetParent !== null;"
+                )
+                if visible:
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.1)
+        return False
+
+    def is_success_alert_present(self, timeout=3):
+        """Check if SweetAlert success popup appeared — fast poll."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            try:
+                visible = self.driver.execute_script(
+                    "var el = document.querySelector('.swal2-popup.swal2-icon-success');"
+                    "if (el && el.offsetParent !== null) return true;"
+                    "var title = document.querySelector('.swal2-title');"
+                    "if (title && title.offsetParent !== null &&"
+                    "    title.textContent.toLowerCase().indexOf('success') !== -1) return true;"
+                    "return false;"
+                )
+                if visible:
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.1)
+        return False
+
+    def is_sweetalert_visible(self):
+        """Check if any SweetAlert popup is visible."""
         try:
-            return self.driver.execute_script("""
-                var el = document.querySelector('div.overflow_model');
-                if (!el) return false;
-                var style = window.getComputedStyle(el);
-                return style.display !== 'none' && style.visibility !== 'hidden';
-            """)
+            return bool(self.driver.execute_script(
+                "var el = document.querySelector('.swal2-popup, .swal2-container');"
+                "return el && el.offsetParent !== null;"
+            ))
         except Exception:
             return False
 
-    def force_close_form_popup(self):
-        """Force-close the form popup."""
-        try:
-            js = """
-            var popup = document.querySelector('div.overflow_model');
-            if (!popup) return 'no popup found';
-            var actions = popup.querySelector('.popup-actions');
-            if (actions) {
-                var buttons = actions.querySelectorAll('button');
-                for (var i = buttons.length - 1; i >= 0; i--) {
-                    var icon = buttons[i].querySelector('mat-icon, i.material-icons');
-                    if (icon && icon.textContent.trim() === 'close') {
-                        buttons[i].click();
-                        return 'clicked close icon';
-                    }
-                }
-            }
-            var footer = popup.querySelector('div.popup-footer');
-            if (footer) {
-                var cancelBtn = footer.querySelector('.left button');
-                if (cancelBtn) { cancelBtn.click(); return 'clicked cancel'; }
-            }
-            return 'popup found but no close button';
-            """
-            result = self.driver.execute_script(js)
-            log.info(f"Force close form popup: {result}")
-        except Exception as e:
-            log.info(f"Force close popup exception: {e}")
-        self._force_close_panels()
-        time.sleep(0.5)
-
-    def wait_for_form_to_close(self, timeout=5):
-        """Poll until the form popup disappears."""
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            if not self.is_form_open():
-                return True
-            time.sleep(0.3)
-        return False
-
-    # ================================================================
-    #  SWEET ALERT HANDLERS
-    # ================================================================
-
-    def close_popup(self):
-        """Click the OK button on a SweetAlert popup."""
-        try:
-            js = """
-            var btn = document.querySelector('.swal2-confirm');
-            if (btn) { btn.click(); return 'swal2-confirm'; }
-            btn = document.querySelector('.mat-dialog-actions button');
-            if (btn) { btn.click(); return 'mat-dialog'; }
-            return 'no popup button found';
-            """
-            result = self.driver.execute_script(js)
-            log.info(f"Close popup: {result}")
-            time.sleep(0.5)
-        except Exception as e:
-            log.info(f"Close popup error: {e}")
-
     def handle_validation_warning(self):
-        """SweetAlert Pattern A: warning dialog with OK."""
-        time.sleep(0.3)
+        """SweetAlert Pattern A: warning dialog with OK — fast."""
         try:
-            msg = self.driver.execute_script("""
-                var title = document.querySelector('.swal2-title');
-                var content = document.querySelector('.swal2-html-container');
-                return (title ? title.textContent.trim() : '') +
-                       (content ? ' - ' + content.textContent.trim() : '');
-            """)
-            log.info(f"Validation warning: {msg}")
-            # Pattern A uses .swal2-confirm ("OK") to dismiss
-            self.driver.execute_script("""
-                var btn = document.querySelector('.swal2-confirm');
-                if (btn) btn.click();
-            """)
-            time.sleep(0.3)
+            msg = self.driver.execute_script(
+                "var title = document.querySelector('.swal2-title');"
+                "var content = document.querySelector('.swal2-html-container');"
+                "var result = (title ? title.textContent.trim() : '');"
+                "if (content) result += ' - ' + content.textContent.trim();"
+                "var btn = document.querySelector('.swal2-confirm');"
+                "if (btn) btn.click();"
+                "return result;"
+            ) or ""
+            self._cleanup_swal2()
             return msg
         except Exception:
             return ""
 
     def handle_validation_download(self):
-        """SweetAlert Pattern B: dialog with Download Errors + Cancel."""
-        time.sleep(0.3)
+        """SweetAlert Pattern B: dialog with Download Errors + Cancel — fast."""
         try:
-            msg = self.driver.execute_script("""
-                var title = document.querySelector('.swal2-title');
-                var content = document.querySelector('.swal2-html-container');
-                return (title ? title.textContent.trim() : '') +
-                       (content ? ' - ' + content.textContent.trim() : '');
-            """)
-            log.info(f"Validation download: {msg}")
-            # Pattern B: click Cancel (.swal2-cancel) to dismiss WITHOUT downloading
-            self.driver.execute_script("""
-                var btn = document.querySelector('.swal2-cancel');
-                if (btn) { btn.click(); return 'cancelled'; }
-                // Fallback: deny button ("No")
-                btn = document.querySelector('.swal2-deny');
-                if (btn) { btn.click(); return 'denied'; }
-                return 'no cancel/deny button';
-            """)
-            time.sleep(0.3)
+            msg = self.driver.execute_script(
+                "var title = document.querySelector('.swal2-title');"
+                "var content = document.querySelector('.swal2-html-container');"
+                "var result = (title ? title.textContent.trim() : '');"
+                "if (content) result += ' - ' + content.textContent.trim();"
+                "var btn = document.querySelector('.swal2-cancel');"
+                "if (btn) { btn.click(); return result; }"
+                "btn = document.querySelector('.swal2-deny');"
+                "if (btn) btn.click();"
+                "return result;"
+            ) or ""
+            self._cleanup_swal2()
             return msg
         except Exception:
             return ""
+
+    def handle_success_alert(self):
+        """Click OK on success SweetAlert — fast JS."""
+        try:
+            self.driver.execute_script(
+                "var btn = document.querySelector('.swal2-confirm');"
+                "if (btn) btn.click();"
+            )
+            self._cleanup_swal2()
+        except Exception:
+            pass
 
     def handle_error_toast(self):
-        """SweetAlert Pattern C: error toast (auto-dismisses)."""
-        time.sleep(1)
+        """SweetAlert Pattern C: error toast — read and return."""
         try:
-            msg = self.driver.execute_script("""
-                var toast = document.querySelector('.swal2-container.swal2-top-end .swal2-title')
-                         || document.querySelector('.swal2-popup .swal2-title');
-                if (toast) return toast.textContent.trim();
-                var snackbar = document.querySelector('.mat-mdc-snack-bar-container .mdc-snackbar__label');
-                if (snackbar) return snackbar.textContent.trim();
-                return '';
-            """)
-            log.info(f"Error toast: {msg}")
-            return msg
+            return self.driver.execute_script(
+                "var toast = document.querySelector('.swal2-container.swal2-top-end .swal2-title')"
+                "  || document.querySelector('.swal2-popup .swal2-title');"
+                "if (toast) return toast.textContent.trim();"
+                "var snackbar = document.querySelector('.mat-mdc-snack-bar-container .mdc-snackbar__label');"
+                "if (snackbar) return snackbar.textContent.trim();"
+                "return '';"
+            ) or ""
         except Exception:
             return ""
 
-    def is_sweetalert_visible(self):
-        """Check if any SweetAlert popup is visible."""
+    def _dismiss_sweetalert(self):
+        """Dismiss any visible SweetAlert using the correct handler."""
         try:
-            return self.driver.execute_script("""
-                var el = document.querySelector('.swal2-popup, .swal2-container');
-                if (!el) return false;
-                return el.offsetParent !== null ||
-                       window.getComputedStyle(el).display !== 'none';
-            """)
+            content = self.driver.execute_script(
+                "var c = document.querySelector('.swal2-html-container');"
+                "return c ? c.textContent.trim() : '';"
+            ) or ""
+            if 'download' in content.lower():
+                self.handle_validation_download()
+            else:
+                self.handle_validation_warning()
         except Exception:
-            return False
+            try:
+                self.close_popup()
+            except Exception:
+                pass
+
+    def get_swal_title(self):
+        """Get the SweetAlert popup title text."""
+        try:
+            return self.driver.execute_script(
+                "var el = document.querySelector('.swal2-title');"
+                "return el ? el.textContent.trim() : '';"
+            ) or ""
+        except Exception:
+            return ""
+
+    def _cleanup_swal2(self):
+        """Remove leftover swal2 container + backdrops."""
+        try:
+            self.driver.execute_script(
+                "document.querySelectorAll('.swal2-container').forEach(function(el){el.remove();});"
+                "document.querySelectorAll('.swal2-backdrop-show').forEach(function(el){el.remove();});"
+            )
+        except Exception:
+            pass
 
     # ================================================================
-    #  TABLE INTERACTIONS
+    #  TABLE INTERACTIONS — pure JS
     # ================================================================
-
-    def wait_for_table_to_load(self, timeout=10):
-        """Wait for at least one data row."""
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            rows = self.driver.execute_script("""
-                return document.querySelectorAll('table#excel-table tbody tr.mat-mdc-row').length;
-            """)
-            if rows and rows > 0:
-                return True
-            time.sleep(0.5)
-        return False
 
     def get_table_row_count(self):
-        """Return number of data rows."""
-        return self.driver.execute_script("""
-            return document.querySelectorAll('table#excel-table tbody tr.mat-mdc-row').length;
-        """) or 0
+        """Count visible data rows — JS."""
+        return self.driver.execute_script(
+            "return document.querySelectorAll('table#excel-table tbody tr').length;"
+        ) or 0
 
     def get_table_cell_value(self, row_index, column_name):
-        """Get cell text from row index and column name."""
-        js = f"""
-        var rows = document.querySelectorAll('table#excel-table tbody tr.mat-mdc-row');
-        if (rows.length <= {row_index}) return '';
-        var cell = rows[{row_index}].querySelector('.cdk-column-{column_name}');
-        return cell ? cell.textContent.trim() : '';
-        """
-        return self.driver.execute_script(js) or ""
+        """Get cell text from row index and column name — JS."""
+        return self.driver.execute_script(
+            "var rows = document.querySelectorAll('table#excel-table tbody tr');"
+            "if (arguments[0] < rows.length) {"
+            "  var cell = rows[arguments[0]].querySelector('.cdk-column-' + arguments[1]);"
+            "  return cell ? cell.textContent.trim() : '';"
+            "}"
+            "return '';"
+        , row_index, column_name) or ""
 
     def is_record_present(self, source_uom, target_uom):
-        """Check if a record exists in the table."""
-        js = """
-        var rows = document.querySelectorAll('table#excel-table tbody tr.mat-mdc-row');
-        for (var i = 0; i < rows.length; i++) {
-            var src = rows[i].querySelector('.cdk-column-source_uom_code');
-            var tgt = rows[i].querySelector('.cdk-column-target_uom_code');
-            if (src && tgt &&
-                src.textContent.trim() === arguments[0] &&
-                tgt.textContent.trim() === arguments[1]) {
-                return true;
-            }
-        }
-        return false;
-        """
-        return self.driver.execute_script(js, source_uom, target_uom)
+        """Check if a record exists in the table — JS."""
+        return bool(self.driver.execute_script(
+            "var rows = document.querySelectorAll('table#excel-table tbody tr');"
+            "for (var i = 0; i < rows.length; i++) {"
+            "  var src = rows[i].querySelector('.cdk-column-source_uom_code');"
+            "  var tgt = rows[i].querySelector('.cdk-column-target_uom_code');"
+            "  if (src && tgt &&"
+            "      src.textContent.trim() === arguments[0] &&"
+            "      tgt.textContent.trim() === arguments[1]) {"
+            "    return true;"
+            "  }"
+            "}"
+            "return false;"
+        , source_uom, target_uom))
+
+    def is_record_in_table(self, source_uom, target_uom):
+        """Alias for is_record_present."""
+        return self.is_record_present(source_uom, target_uom)
+
+    def find_table_row(self, source_uom, target_uom):
+        """Find row index for a record. Returns -1 if not found — JS."""
+        return self.driver.execute_script(
+            "var rows = document.querySelectorAll('table#excel-table tbody tr');"
+            "for (var i = 0; i < rows.length; i++) {"
+            "  var src = rows[i].querySelector('.cdk-column-source_uom_code');"
+            "  var tgt = rows[i].querySelector('.cdk-column-target_uom_code');"
+            "  if (src && tgt &&"
+            "      src.textContent.trim() === arguments[0] &&"
+            "      tgt.textContent.trim() === arguments[1]) {"
+            "    return i;"
+            "  }"
+            "}"
+            "return -1;"
+        , source_uom, target_uom)
+
+    def get_table_rows(self):
+        """Get table rows as a list of row indices [0, 1, 2, ...]."""
+        count = self.get_table_row_count()
+        return list(range(count))
+
+    def get_conversion_factor_from_row(self, row_index):
+        """Get conversion factor value from a table row."""
+        return self.get_table_cell_value(row_index, "conversion_factor")
+
+    def wait_for_table_to_load(self, timeout=10):
+        """Wait for at least one data row — fast poll."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            rows = self.get_table_row_count()
+            if rows > 0:
+                return True
+            time.sleep(0.2)
+        return False
+
+    # ================================================================
+    #  ROW ACTION BUTTONS — 3-dot menu (UOM gold standard)
+    # ================================================================
 
     def _click_action_button(self, row_source, row_target, action_icon):
-        """Click an action button for a specific row via the 3-dot (more_vert) menu.
-
-        The ERP uses a single ⋮ menu per row instead of separate action columns.
-        Step 1: Find the matching row by source/target UOM text.
-        Step 2: Click the ⋮ (more_vert) menu trigger button on that row.
-        Step 3: Wait for the dropdown menu to appear.
-        Step 4: Click the menu item whose material-icons text matches action_icon
-                (e.g. 'visibility' for View, 'edit' for Edit, 'history' for History).
-        """
-        # Map friendly action names to the actual icon text in the ERP menu
-        icon_map = {
-            "view": "visibility",
-            "edit": "edit",
-            "history": "history",
-        }
+        """Click action button via 3-dot menu — fast polls.
+        Uses .erp-row-trigger (the ⋮ button) → CDK overlay dropdown menu."""
+        icon_map = {"view": "visibility", "edit": "edit", "history": "history"}
         icon_text = icon_map.get(action_icon, action_icon)
 
-        # Step 1 & 2: Find the row and click its ⋮ menu trigger
-        js_trigger = """
-        var rows = document.querySelectorAll('table#excel-table tbody tr.mat-mdc-row');
-        for (var i = 0; i < rows.length; i++) {
-            var src = rows[i].querySelector('.cdk-column-source_uom_code');
-            var tgt = rows[i].querySelector('.cdk-column-target_uom_code');
-            if (src && tgt &&
-                src.textContent.trim() === arguments[0] &&
-                tgt.textContent.trim() === arguments[1]) {
-                var trigger = rows[i].querySelector('.erp-row-trigger');
-                if (trigger) {
-                    trigger.click();
-                    return 'opened menu on row ' + i;
-                }
-            }
-        }
-        throw new Error('Row or action trigger not found');
-        """
-        result = self.driver.execute_script(js_trigger, row_source, row_target)
-        log.info(f"Action trigger click: {result}")
-        time.sleep(0.8)  # Wait for Angular menu animation
+        # Step 1: Click ⋮ menu trigger on matching row
+        self.driver.execute_script(
+            "var rows = document.querySelectorAll('table#excel-table tbody tr');"
+            "for (var i = 0; i < rows.length; i++) {"
+            "  var src = rows[i].querySelector('.cdk-column-source_uom_code');"
+            "  var tgt = rows[i].querySelector('.cdk-column-target_uom_code');"
+            "  if (src && tgt &&"
+            "      src.textContent.trim() === arguments[0] &&"
+            "      tgt.textContent.trim() === arguments[1]) {"
+            "    var trigger = rows[i].querySelector('.erp-row-trigger');"
+            "    if (trigger) { trigger.click(); return; }"
+            "  }"
+            "}"
+        , row_source, row_target)
 
-        # Step 3 & 4: Click the correct menu item by its icon text
-        js_menu_item = """
-        var menu = document.querySelector('.mat-mdc-menu-panel');
-        if (!menu) throw new Error('Menu panel not found after trigger click');
-        var items = menu.querySelectorAll('button.mat-mdc-menu-item');
-        for (var i = 0; i < items.length; i++) {
-            var icon = items[i].querySelector('i.material-icons');
-            if (icon && icon.textContent.trim() === arguments[0]) {
-                items[i].click();
-                return 'clicked menu item: ' + arguments[0];
-            }
-        }
-        throw new Error('Menu item with icon "' + arguments[0] + '" not found');
-        """
-        result = self.driver.execute_script(js_menu_item, icon_text)
-        log.info(f"Action menu item click: {result}")
-        time.sleep(0.5)
-        return result
+        # Fast poll for CDK overlay menu (0.1s intervals, 2s timeout)
+        end = time.monotonic() + 2
+        while time.monotonic() < end:
+            menu_open = self.driver.execute_script(
+                "var menu = document.querySelector('.cdk-overlay-container .cdk-overlay-pane .mat-mdc-menu-panel');"
+                "return menu && menu.offsetParent !== null;"
+            )
+            if menu_open:
+                break
+            time.sleep(0.1)
+
+        # Step 2: Click menu item by icon text OR label text
+        self.driver.execute_script(
+            "var overlay = document.querySelector('.cdk-overlay-container');"
+            "if (!overlay) return;"
+            "var items = overlay.querySelectorAll('button.mat-mdc-menu-item');"
+            "for (var i = 0; i < items.length; i++) {"
+            "  var icon = items[i].querySelector('i.material-icons');"
+            "  if (icon && icon.textContent.trim() === arguments[0]) {"
+            "    items[i].click(); return;"
+            "  }"
+            "}"
+            "var allItems = overlay.querySelectorAll('button, span, div');"
+            "for (var i = 0; i < allItems.length; i++) {"
+            "  var text = allItems[i].textContent.trim();"
+            "  if (text === arguments[0]) {"
+            "    allItems[i].click(); return;"
+            "  }"
+            "}"
+            "var needle = arguments[0].toLowerCase();"
+            "for (var i = 0; i < allItems.length; i++) {"
+            "  var text = allItems[i].textContent.trim().toLowerCase();"
+            "  if (text.indexOf(needle) !== -1) {"
+            "    allItems[i].click(); return;"
+            "  }"
+            "}"
+        , icon_text)
+
+        # Brief settle for Angular to process
+        time.sleep(0.2)
 
     def click_edit_button(self, row_source, row_target):
         return self._click_action_button(row_source, row_target, "edit")
@@ -559,320 +765,61 @@ class UOMConversionPage(BasePage):
     def click_history_button(self, row_source, row_target):
         return self._click_action_button(row_source, row_target, "history")
 
-    # ================================================================
-    #  CDK OVERLAY CLEANUP
-    # ================================================================
-
-    def _force_close_panels(self):
-        """Remove any open CDK overlay panels/backdrops."""
-        try:
-            self.driver.execute_script("""
-                document.querySelectorAll('.cdk-overlay-backdrop:not(.cdk-overlay-dark-backdrop)').forEach(function(b) { b.remove(); });
-                document.querySelectorAll('.cdk-overlay-pane').forEach(function(p) {
-                    if (!p.querySelector('.swal2-popup')) p.remove();
-                });
-            """)
-        except Exception:
-            pass
-
-    # ================================================================
-    #  UTILITY
-    # ================================================================
-
-    def refresh_page(self):
-        """Click the REFRESH button."""
-        js = """
-        var icons = document.querySelectorAll('app-custom-header mat-icon, app-custom-header i.material-icons');
-        for (var i = 0; i < icons.length; i++) {
-            if (icons[i].textContent.trim() === 'refresh') {
-                icons[i].click();
-                return 'clicked refresh';
-            }
-        }
-        throw new Error('Refresh button not found');
-        """
-        self.driver.execute_script(js)
-        log.info("Refreshed page")
-        time.sleep(1.5)
-
-    def get_selected_uom_text(self, label_text):
-        """Get currently selected value from a mat-select."""
-        js = """
-        var fields = document.querySelectorAll('mat-form-field');
-        for (var i = 0; i < fields.length; i++) {
-            var label = fields[i].querySelector('mat-label');
-            if (label && label.textContent.trim().indexOf(arguments[0]) !== -1) {
-                var val = fields[i].querySelector('.mat-mdc-select-value-text span');
-                return val ? val.textContent.trim() : '';
-            }
-        }
-        return '';
-        """
-        return self.driver.execute_script(js, label_text) or ""
-
-    def get_conversion_factor_value(self):
-        """Get current value of Conversion Factor input."""
-        js = """
-        var fields = document.querySelectorAll('mat-form-field');
-        for (var i = 0; i < fields.length; i++) {
-            var label = fields[i].querySelector('mat-label');
-            if (label && label.textContent.trim().indexOf('Conversion Factor') !== -1) {
-                var input = fields[i].querySelector('input');
-                return input ? input.value : '';
-            }
-        }
-        return '';
-        """
-        return self.driver.execute_script(js) or ""
-
-    # ================================================================
-    #  ALIASES (methods called by tests with different names)
-    # ================================================================
-
-    CONVERSION_FACTOR_INPUT = "Conversion Factor"
-
-    def enter_conversion_factor(self, value):
-        """Alias for type_conversion_factor."""
-        self.type_conversion_factor(value)
-
-    def submit(self):
-        """Alias for click_save_button."""
-        self.click_save_button()
-
-    def click_update(self):
-        """Alias for submit (used in edit flow)."""
-        self.click_save_button()
-
-    def is_add_form_open(self):
-        """Alias for is_form_open."""
-        return self.is_form_open()
-
+    # Aliases used by tests
     def click_row_edit(self, source, target):
-        """Alias for click_edit_button."""
         return self.click_edit_button(source, target)
 
     def click_row_view(self, source, target):
-        """Alias for click_view_button."""
         return self.click_view_button(source, target)
 
     def click_row_history(self, source, target):
-        """Alias for click_history_button."""
         return self.click_history_button(source, target)
 
-    def cleanup(self):
-        """General cleanup: close form, close popups, force close panels."""
-        try:
-            self.force_close_form_popup()
-        except Exception:
-            pass
-        try:
-            self.close_popup()
-        except Exception:
-            pass
-        self._force_close_panels()
-
     # ================================================================
-    #  SUCCESS / VALIDATION ALERT HELPERS
-    # ================================================================
-
-    def is_success_alert_present(self, timeout=3):
-        """Check if SweetAlert success popup appeared."""
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            try:
-                visible = self.driver.execute_script("""
-                    var el = document.querySelector('.swal2-popup');
-                    if (!el) return false;
-                    if (el.offsetParent === null) return false;
-                    var title = el.querySelector('.swal2-title');
-                    if (title && title.textContent.toLowerCase().indexOf('success') !== -1) return true;
-                    var icon = el.querySelector('.swal2-icon.swal2-success');
-                    if (icon) return true;
-                    return false;
-                """)
-                if visible:
-                    return True
-            except Exception:
-                pass
-            time.sleep(0.3)
-        return False
-
-    def is_validation_alert_present(self, timeout=3):
-        """Check if SweetAlert validation/warning popup appeared."""
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            try:
-                visible = self.driver.execute_script("""
-                    var el = document.querySelector('.swal2-popup');
-                    if (!el) return false;
-                    if (el.offsetParent === null) return false;
-                    return true;
-                """)
-                if visible:
-                    return True
-            except Exception:
-                pass
-            time.sleep(0.3)
-        return False
-
-    def handle_success_alert(self):
-        """Click OK on success SweetAlert."""
-        time.sleep(0.3)
-        try:
-            self.driver.execute_script("""
-                var btn = document.querySelector('.swal2-confirm');
-                if (btn) { btn.click(); return 'clicked'; }
-            """)
-            time.sleep(0.3)
-        except Exception:
-            pass
-
-    def get_swal_title(self):
-        """Get the SweetAlert popup title text."""
-        try:
-            return self.driver.execute_script("""
-                var el = document.querySelector('.swal2-title');
-                return el ? el.textContent.trim() : '';
-            """) or ""
-        except Exception:
-            return ""
-
-    # ================================================================
-    #  FORM FIELD HELPERS
-    # ================================================================
-
-    def is_dropdown_error(self, label_text):
-        """Check if a mat-select dropdown has error state."""
-        js = """
-        var fields = document.querySelectorAll('mat-form-field');
-        for (var i = 0; i < fields.length; i++) {
-            var label = fields[i].querySelector('mat-label');
-            if (label && label.textContent.trim().indexOf(arguments[0]) !== -1) {
-                var select = fields[i].querySelector('mat-select');
-                if (select) {
-                    return select.classList.contains('mat-mdc-select-invalid') ||
-                           select.classList.contains('ng-invalid');
-                }
-            }
-        }
-        return false;
-        """
-        return self.driver.execute_script(js, label_text)
-
-    def clear_conversion_factor_via_js(self):
-        """Clear the Conversion Factor input field via JS."""
-        js = """
-        var fields = document.querySelectorAll('mat-form-field');
-        for (var i = 0; i < fields.length; i++) {
-            var label = fields[i].querySelector('mat-label');
-            if (label && label.textContent.trim().indexOf('Conversion Factor') !== -1) {
-                var input = fields[i].querySelector('input');
-                if (input) {
-                    input.focus();
-                    var setter = Object.getOwnPropertyDescriptor(
-                        window.HTMLInputElement.prototype, 'value'
-                    ).set;
-                    setter.call(input, '');
-                    input.dispatchEvent(new Event('input', {bubbles: true}));
-                    input.dispatchEvent(new Event('change', {bubbles: true}));
-                    return 'cleared';
-                }
-            }
-        }
-        throw new Error('Conversion Factor input not found');
-        """
-        self.driver.execute_script(js)
-        time.sleep(0.3)
-
-    # ================================================================
-    #  TABLE HELPERS
-    # ================================================================
-
-    def get_table_rows(self):
-        """Get table rows as a list of row indices [0, 1, 2, ...]."""
-        count = self.get_table_row_count()
-        return list(range(count))
-
-    def find_table_row(self, source_uom, target_uom):
-        """Find row index for a record. Returns -1 if not found."""
-        js = """
-        var rows = document.querySelectorAll('table#excel-table tbody tr.mat-mdc-row');
-        for (var i = 0; i < rows.length; i++) {
-            var src = rows[i].querySelector('.cdk-column-source_uom_code');
-            var tgt = rows[i].querySelector('.cdk-column-target_uom_code');
-            if (src && tgt &&
-                src.textContent.trim() === arguments[0] &&
-                tgt.textContent.trim() === arguments[1]) {
-                return i;
-            }
-        }
-        return -1;
-        """
-        return self.driver.execute_script(js, source_uom, target_uom)
-
-    def is_record_in_table(self, source_uom, target_uom):
-        """Alias for is_record_present."""
-        return self.is_record_present(source_uom, target_uom)
-
-    def get_conversion_factor_from_row(self, row_index):
-        """Get conversion factor value from a table row."""
-        return self.get_table_cell_value(row_index, "conversion_factor")
-
-    # ================================================================
-    #  DYNAMIC PAIR FINDER
+    #  DYNAMIC PAIR FINDER — Speed Optimized
     # ================================================================
 
     def get_available_uoms(self):
-        """
-        Read all available UOM codes from the Source UOM dropdown.
-        Opens the Add form popup temporarily to access the dropdown,
-        then closes it. Returns a list of UOM code strings.
-        """
-        log.info("Reading available UOMs from dropdown")
-
-        # Must open popup first � dropdown only exists inside the form
+        """Read all UOM codes from Source UOM dropdown.
+        Opens Add form temporarily, reads options, then closes it."""
         self.open_add_form()
-        time.sleep(1.5)
+        # Fast poll for form
+        end = time.monotonic() + 3
+        while time.monotonic() < end:
+            if self.is_form_open():
+                break
+            time.sleep(0.1)
 
-        # Read all mat-option texts from the Source UOM dropdown
-        js_read = """
-        var trigger = document.querySelector(
-            "div.edit_pop_up mat-form-field mat-select .mat-mdc-select-trigger"
-        );
-        if (!trigger) throw new Error('Source UOM dropdown not found inside popup');
-        trigger.click();
+        # Open Source UOM dropdown and read options
+        self.driver.execute_script(
+            "var trigger = document.querySelector("
+            "  'div.edit_pop_up mat-form-field mat-select .mat-mdc-select-trigger'"
+            ");"
+            "if (trigger) trigger.click();"
+        )
+        # Fast poll for options
+        end_opts = time.monotonic() + 3
+        while time.monotonic() < end_opts:
+            count = self.driver.execute_script(
+                "return document.querySelectorAll('.cdk-overlay-pane mat-option').length;"
+            )
+            if count and count > 0:
+                break
+            time.sleep(0.1)
 
-        // Wait a moment for options to render
-        var start = Date.now();
-        while (Date.now() - start < 2000) {
-            var opts = document.querySelectorAll('.cdk-overlay-pane mat-option');
-            if (opts.length > 0) break;
-        }
+        uoms = self.driver.execute_script(
+            "var options = document.querySelectorAll('.cdk-overlay-pane mat-option .mdc-list-item__primary-text');"
+            "var uoms = [];"
+            "for (var i = 0; i < options.length; i++) {"
+            "  var text = options[i].textContent.trim();"
+            "  if (text) uoms.push(text);"
+            "}"
+            "return uoms;"
+        ) or []
 
-        var options = document.querySelectorAll('.cdk-overlay-pane mat-option');
-        var uoms = [];
-        for (var i = 0; i < options.length; i++) {
-            var text = options[i].textContent.trim();
-            if (text) uoms.push(text);
-        }
-
-        // Close the dropdown panel
-        var backdrop = document.querySelector('.cdk-overlay-backdrop');
-        if (backdrop) backdrop.click();
-        else {
-            var panels = document.querySelectorAll('.cdk-overlay-pane');
-            for (var j = 0; j < panels.length; j++) panels[j].remove();
-        }
-
-        return uoms;
-        """
-        uoms = self.driver.execute_script(js_read)
-        log.info("Found " + str(len(uoms) if uoms else 0) + " available UOMs")
-
-        # Close the Add form popup
-        time.sleep(0.5)
+        # Close dropdown + form
+        self._force_close_panels()
         self.force_close_form_popup()
-        time.sleep(0.5)
         self._force_close_panels()
 
         if not uoms:
@@ -880,227 +827,173 @@ class UOMConversionPage(BasePage):
         return uoms
 
     def get_existing_pairs(self):
-        """
-        Read all existing Source?Target UOM pairs from the main table.
-        No popup needed � reads directly from the visible table.
-        Returns a set of tuples: {('KG', 'ML'), ('NOS', 'PCS'), ...}
-        """
-        log.info("Reading existing pairs from table")
-        js_read = """
-        var table = document.querySelector('table#excel-table');
-        if (!table) throw new Error('Table not found on page');
-        var rows = table.querySelectorAll('tbody tr');
-        var pairs = [];
-        for (var i = 0; i < rows.length; i++) {
-            var source = '', target = '';
-            var cells = rows[i].querySelectorAll('td');
-            for (var j = 0; j < cells.length; j++) {
-                var cls = cells[j].getAttribute('class') || '';
-                if (cls.indexOf('cdk-column-source_uom_code') !== -1)
-                    source = cells[j].textContent.trim();
-                if (cls.indexOf('cdk-column-target_uom_code') !== -1)
-                    target = cells[j].textContent.trim();
-            }
-            if (source && target) pairs.push([source, target]);
-        }
-        return pairs;
-        """
-        raw_pairs = self.driver.execute_script(js_read)
+        """Read all existing Source→Target UOM pairs from the main table — JS."""
+        raw_pairs = self.driver.execute_script(
+            "var rows = document.querySelectorAll('table#excel-table tbody tr');"
+            "var pairs = [];"
+            "for (var i = 0; i < rows.length; i++) {"
+            "  var source = '', target = '';"
+            "  var cells = rows[i].querySelectorAll('td');"
+            "  for (var j = 0; j < cells.length; j++) {"
+            "    var cls = cells[j].getAttribute('class') || '';"
+            "    if (cls.indexOf('cdk-column-source_uom_code') !== -1)"
+            "      source = cells[j].textContent.trim();"
+            "    if (cls.indexOf('cdk-column-target_uom_code') !== -1)"
+            "      target = cells[j].textContent.trim();"
+            "  }"
+            "  if (source && target) pairs.push([source, target]);"
+            "}"
+            "return pairs;"
+        ) or []
         pair_set = set()
-        if raw_pairs:
-            for pair in raw_pairs:
-                pair_set.add((pair[0], pair[1]))
-        log.info("Found " + str(len(pair_set)) + " existing pairs in table")
+        for pair in raw_pairs:
+            pair_set.add((pair[0], pair[1]))
         return pair_set
 
-
     # ================================================================
-    #  SELECT PANEL CLEANUP (Company Onboarding pattern)
+    #  INTERNAL DROPDOWN HELPERS — for create_fresh_record
     # ================================================================
-
-    def _close_select_panel(self):
-        """Close select dropdown panel by pressing Escape. Safe for Angular state."""
-        try:
-            self.driver.execute_script("""
-                var esc = new KeyboardEvent('keydown', {key:'Escape',code:'Escape',bubbles:true});
-                document.activeElement.dispatchEvent(esc);
-                document.body.dispatchEvent(esc);
-            """)
-            time.sleep(0.3)
-        except Exception:
-            pass
 
     def _read_dropdown_uoms(self):
         """Open Source UOM dropdown and read all options. Leaves dropdown OPEN."""
-        log.info("Opening Source UOM dropdown to read options")
-        js = """
-        var fields = document.querySelectorAll('div.edit_pop_up mat-form-field');
-        for (var i = 0; i < fields.length; i++) {
-            var label = fields[i].querySelector('mat-label');
-            if (label && label.textContent.trim().indexOf('Source UOM') !== -1) {
-                var trigger = fields[i].querySelector('.mat-mdc-select-trigger');
-                if (trigger) { trigger.click(); return 'opened'; }
-            }
-        }
-        throw new Error('Source UOM dropdown not found in form');
-        """
-        self.driver.execute_script(js)
-        time.sleep(1.5)
-        js_read = """
-        var start = Date.now();
-        while (Date.now() - start < 3000) {
-            var opts = document.querySelectorAll('.cdk-overlay-pane mat-option .mdc-list-item__primary-text');
-            if (opts.length > 0) break;
-        }
-        var options = document.querySelectorAll('.cdk-overlay-pane mat-option .mdc-list-item__primary-text');
-        var uoms = [];
-        for (var i = 0; i < options.length; i++) {
-            var text = options[i].textContent.trim();
-            if (text) uoms.push(text);
-        }
-        return uoms;
-        """
-        uoms = self.driver.execute_script(js_read)
-        log.info("Found " + str(len(uoms) if uoms else 0) + " UOM options")
+        self.driver.execute_script(
+            "var fields = document.querySelectorAll('div.edit_pop_up mat-form-field');"
+            "for (var i = 0; i < fields.length; i++) {"
+            "  var label = fields[i].querySelector('mat-label');"
+            "  if (label && label.textContent.trim().indexOf('Source UOM') !== -1) {"
+            "    var trigger = fields[i].querySelector('.mat-mdc-select-trigger');"
+            "    if (trigger) { trigger.click(); return; }"
+            "  }"
+            "}"
+        )
+        # Fast poll for options
+        end = time.monotonic() + 3
+        while time.monotonic() < end:
+            count = self.driver.execute_script(
+                "return document.querySelectorAll('.cdk-overlay-pane mat-option .mdc-list-item__primary-text').length;"
+            )
+            if count and count > 0:
+                break
+            time.sleep(0.1)
+
+        uoms = self.driver.execute_script(
+            "var options = document.querySelectorAll('.cdk-overlay-pane mat-option .mdc-list-item__primary-text');"
+            "var uoms = [];"
+            "for (var i = 0; i < options.length; i++) {"
+            "  var text = options[i].textContent.trim();"
+            "  if (text) uoms.push(text);"
+            "}"
+            "return uoms;"
+        ) or []
         if not uoms:
             raise RuntimeError("No UOM options found in dropdown")
         return uoms
 
     def _select_from_open_panel(self, uom_code):
-        """Click an option in the ALREADY OPEN dropdown panel. Does NOT reopen."""
-        log.info("Selecting from open panel: " + uom_code)
-        js = """
-        var options = document.querySelectorAll('.cdk-overlay-pane mat-option');
-        for (var i = 0; i < options.length; i++) {
-            var text = options[i].querySelector('.mdc-list-item__primary-text');
-            if (text && text.textContent.trim() === arguments[0]) {
-                options[i].click();
-                return 'selected: ' + arguments[0];
-            }
-        }
-        var needle = arguments[0].toUpperCase();
-        for (var i = 0; i < options.length; i++) {
-            var text = options[i].querySelector('.mdc-list-item__primary-text');
-            if (text && text.textContent.trim().toUpperCase().indexOf(needle) !== -1) {
-                options[i].click();
-                return 'selected (partial): ' + text.textContent.trim();
-            }
-        }
-        throw new Error('Option not found in open panel: ' + arguments[0]);
-        """
-        result = self.driver.execute_script(js, uom_code)
-        log.info(result)
-        time.sleep(0.5)
+        """Click an option in the ALREADY OPEN dropdown panel."""
+        self.driver.execute_script(
+            "var options = document.querySelectorAll('.cdk-overlay-pane mat-option');"
+            "for (var i = 0; i < options.length; i++) {"
+            "  var text = options[i].querySelector('.mdc-list-item__primary-text');"
+            "  if (text && text.textContent.trim() === arguments[0]) {"
+            "    options[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));"
+            "    options[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));"
+            "    options[i].click(); return;"
+            "  }"
+            "}"
+            "var needle = arguments[0].toUpperCase();"
+            "for (var i = 0; i < options.length; i++) {"
+            "  var text = options[i].querySelector('.mdc-list-item__primary-text');"
+            "  if (text && text.textContent.trim().toUpperCase().indexOf(needle) !== -1) {"
+            "    options[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));"
+            "    options[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));"
+            "    options[i].click(); return;"
+            "  }"
+            "}"
+        , uom_code)
+        # Fast poll for dropdown to close
+        end = time.monotonic() + 1
+        while time.monotonic() < end:
+            gone = self.driver.execute_script(
+                "var panels = document.querySelectorAll('.cdk-overlay-pane:not(.mat-mdc-dialog-container)');"
+                "for (var i = 0; i < panels.length; i++) {"
+                "  if (panels[i].offsetParent !== null) return false;"
+                "}"
+                "return true;"
+            )
+            if gone:
+                break
+            time.sleep(0.1)
+        self._force_close_panels()
 
-    def _dismiss_sweetalert(self):
-        """Dismiss any visible SweetAlert popup using the correct handler.
-        Pattern A (Validation Failed - Please correct...): .swal2-confirm = OK
-        Pattern B (Validation Failed - Fields validation failed...Download): .swal2-cancel = Cancel
-        """
-        try:
-            content = self.driver.execute_script("""
-                var content = document.querySelector('.swal2-html-container');
-                return content ? content.textContent.trim() : '';
-            """) or ""
-            if 'download' in content.lower():
-                # Pattern B — click Cancel to avoid downloading
-                self.handle_validation_download()
-            else:
-                # Pattern A — click OK
-                self.handle_validation_warning()
-        except Exception:
-            # Fallback: try any dismiss button
-            try:
-                self.close_popup()
-            except Exception:
-                pass
+    def _close_select_panel(self):
+        """Close select dropdown panel — force close panels."""
+        self._force_close_panels()
+
+    def get_available_uoms_from_form(self):
+        """Read all UOM options from Source dropdown of currently open form."""
+        uoms = self._read_dropdown_uoms()
+        self._close_select_panel()
+        return uoms
+
+    # ================================================================
+    #  HIGH-LEVEL: create_fresh_record (speed optimized)
+    # ================================================================
 
     def create_fresh_record(self, factor=None, max_retries=5, raise_on_error=True):
         """
         Creates a new UOM conversion record with a fresh (non-duplicate) pair.
-        Uses try-submit-catch-duplicate pattern - does NOT pre-read the table.
+        Uses try-submit-catch-duplicate pattern. Fast polls throughout.
 
-        IMPORTANT: On success, the ERP closes the form silently (NO success popup).
-        We detect success by checking if the form closed after submit.
-
-        Args:
-            factor: If None, generates random integer 1-1000.
-                    If provided, uses the given factor string/value.
-            max_retries: Retry count on validation error (default 5).
-            raise_on_error: If True (default), retries on error, raises on exhaustion.
-                            If False, returns dict with success=False on first error.
-        Returns: dict with source_uom, target_uom, conversion_factor,
-                 success (bool), error (str, only if success=False).
+        On success, the ERP closes the form silently (NO success popup).
+        Returns dict: {source_uom, target_uom, conversion_factor, success, error}
         """
-        log.info("Creating fresh UOM conversion record")
         last_error = None
 
         for attempt in range(max_retries):
-            log.info("Attempt " + str(attempt + 1) + "/" + str(max_retries))
-
             self.open_add_form()
-            time.sleep(1)
+            # Fast poll for form
+            end = time.monotonic() + 3
+            while time.monotonic() < end:
+                if self.is_form_open():
+                    break
+                time.sleep(0.1)
 
             uoms = self._read_dropdown_uoms()
             source, target = random.sample(uoms, 2)
-
             actual_factor = str(factor) if factor is not None else str(random.randint(1, 1000))
-            log.info("Trying: " + source + " -> " + target + " = " + actual_factor)
 
             self._select_from_open_panel(source)
-            time.sleep(0.5)
             self.select_target_uom(target)
             self.enter_conversion_factor(actual_factor)
+            self._force_close_panels()
             self.submit()
 
-            # Wait briefly for ERP to process
-            time.sleep(1)
+            # Combined alert handler — fast poll
+            response = self._handle_submit_response(timeout=5)
 
-            # --- Success path: form closed silently (no success popup) ---
-            if not self.is_form_open() and not self.is_sweetalert_visible():
-                log.info("Record created successfully (form closed silently): " + source + " -> " + target)
+            if response.get("success"):
                 return {
                     "source_uom": source, "target_uom": target,
-                    "conversion_factor": actual_factor, "success": True
+                    "conversion_factor": actual_factor, "success": True, "error": ""
                 }
 
-            # --- Check for success alert (rare, but handle it) ---
-            if self.is_success_alert_present(timeout=2):
-                self.handle_success_alert()
-                log.info("Record created successfully (success alert): " + source + " -> " + target)
-                return {
-                    "source_uom": source, "target_uom": target,
-                    "conversion_factor": actual_factor, "success": True
-                }
-
-            # --- Validation / duplicate path ---
-            if self.is_validation_alert_present(timeout=2):
-                last_error = self.get_swal_title()
-                log.warning("Validation alert on attempt " + str(attempt + 1) + ": " + str(last_error))
-                # Dismiss using the correct handler based on alert pattern
-                self._dismiss_sweetalert()
-                time.sleep(0.3)
-
+            if response.get("alert"):
+                last_error = response.get("title", "Validation")
                 if not raise_on_error:
-                    # Caller wants to observe the error (Tests 10, 11, 13)
                     self.force_close_form_popup()
                     return {
                         "source_uom": source, "target_uom": target,
                         "conversion_factor": actual_factor,
                         "success": False, "error": last_error
                     }
-
-                # Retry with a completely new random pair
-                log.info("Duplicate/error detected - closing form and retrying with new pair...")
+                # Retry with new pair
                 self.force_close_form_popup()
-                time.sleep(0.3)
                 self.hard_refresh()
-                time.sleep(1)
                 continue
 
-            # --- No alert and form still open (unexpected) ---
-            last_error = "No alert and form still open after submit"
-            log.warning(last_error)
+            # No alert and form still open (unexpected)
+            last_error = "Form still open after submit"
             self.force_close_form_popup()
             if not raise_on_error:
                 return {
@@ -1109,7 +1002,6 @@ class UOMConversionPage(BasePage):
                     "success": False, "error": last_error
                 }
 
-        # All retries exhausted
         if raise_on_error:
             raise RuntimeError("Failed to create record after " + str(max_retries) +
                              " attempts. Last error: " + str(last_error))
@@ -1119,154 +1011,178 @@ class UOMConversionPage(BasePage):
             "success": False, "error": last_error or "max retries exhausted"
         }
 
-    def get_available_uoms_from_form(self):
-        """Read all UOM options from Source dropdown of currently open form.
-        Closes dropdown after reading. Form stays open."""
-        uoms = self._read_dropdown_uoms()
-        self._close_select_panel()
-        time.sleep(0.3)
-        log.info("Available UOMs from form: " + str(len(uoms)) + " options")
-        return uoms
-
     # ================================================================
-
-    #  TABLE SEARCH
+    #  TABLE SEARCH — Speed Optimized
     # ================================================================
 
     def search_table(self, text):
-        """Click search button, type text, press Enter to filter table."""
-        log.info("Searching table: " + text)
-        self.driver.execute_script("""
-            var btn = document.querySelector('.search-btn');
-            if (btn) btn.click();
-        """)
-        time.sleep(0.8)
-        self.driver.execute_script("""
-            var inp = document.getElementById('erpSearchInput');
-            if (inp) {
-                inp.value = '';
-                inp.dispatchEvent(new Event('input', {bubbles:true}));
-            }
-        """)
-        time.sleep(0.3)
-        self.driver.execute_script("""
-            var inp = document.getElementById('erpSearchInput');
-            if (inp) {
-                inp.value = arguments[0];
-                inp.dispatchEvent(new Event('input', {bubbles:true}));
-            }
-        """, text)
-        time.sleep(0.3)
-        self.driver.execute_script("""
-            var inp = document.getElementById('erpSearchInput');
-            if (inp) {
-                inp.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',code:'Enter',bubbles:true}));
-                inp.dispatchEvent(new KeyboardEvent('keyup', {key:'Enter',code:'Enter',bubbles:true}));
-            }
-        """)
-        time.sleep(1.5)
-        log.info("Search applied: " + text)
+        """Click search button, type text, press Enter — fast polls."""
+        self.driver.execute_script(
+            "var btn = document.querySelector('.search-btn');"
+            "if (btn) btn.click();"
+        )
+        # Fast poll for search input
+        end = time.monotonic() + 3
+        while time.monotonic() < end:
+            found = self.driver.execute_script(
+                "var inp = document.getElementById('erpSearchInput');"
+                "return inp && inp.offsetParent !== null;"
+            )
+            if found:
+                break
+            time.sleep(0.1)
+
+        # Set search value via JS native setter + Enter
+        self.driver.execute_script(
+            "var inp = document.getElementById('erpSearchInput');"
+            "if (inp) {"
+            "  var nativeSetter = Object.getOwnPropertyDescriptor("
+            "    window.HTMLInputElement.prototype, 'value').set;"
+            "  nativeSetter.call(inp, arguments[0]);"
+            "  inp.dispatchEvent(new Event('input', {bubbles: true}));"
+            "  inp.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',code:'Enter',bubbles:true}));"
+            "  inp.dispatchEvent(new KeyboardEvent('keyup', {key:'Enter',code:'Enter',bubbles:true}));"
+            "}"
+        , text)
+        # Fast poll for table to update
+        end_table = time.monotonic() + 3
+        while time.monotonic() < end_table:
+            row_count = self.get_table_row_count()
+            if row_count > 0:
+                break
+            time.sleep(0.1)
 
     def clear_search(self):
-        """Clear search input and press Enter to reset table."""
-        try:
-            self.driver.execute_script("""
-                var inp = document.getElementById('erpSearchInput');
-                if (inp) {
-                    inp.value = '';
-                    inp.dispatchEvent(new Event('input', {bubbles:true}));
-                    inp.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',code:'Enter',bubbles:true}));
-                }
-            """)
-            time.sleep(1)
-            log.info("Search cleared")
-        except Exception:
-            pass
+        """Clear search input and press Enter — fast JS."""
+        self.driver.execute_script(
+            "var inp = document.getElementById('erpSearchInput');"
+            "if (inp) {"
+            "  var nativeSetter = Object.getOwnPropertyDescriptor("
+            "    window.HTMLInputElement.prototype, 'value').set;"
+            "  nativeSetter.call(inp, '');"
+            "  inp.dispatchEvent(new Event('input', {bubbles: true}));"
+            "  inp.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',code:'Enter',bubbles:true}));"
+            "}"
+        )
 
     # ================================================================
-
     #  HISTORY POPUP HELPERS
     # ================================================================
 
     def get_history_row_count(self):
-        """Count rows in the history popup table."""
-        try:
-            return self.driver.execute_script("""
-                var rows = document.querySelectorAll('table tbody tr');
-                if (rows.length === 0) {
-                    rows = document.querySelectorAll('.mat-mdc-row');
-                }
-                return rows.length;
-            """) or 0
-        except Exception:
-            return 0
+        """Count rows in the history popup table — JS, scoped to popup."""
+        return self.driver.execute_script(
+            "var popup = document.querySelector('div.overflow_model, div.edit_pop_up');"
+            "if (!popup) return 0;"
+            "var rows = popup.querySelectorAll('table tbody tr');"
+            "return rows.length;"
+        ) or 0
 
     def get_history_data(self):
         """Get all history table data as a list of row strings."""
         try:
-            return self.driver.execute_script("""
-                var rows = document.querySelectorAll('table tbody tr.mat-mdc-row');
-                var data = [];
-                for (var i = 0; i < rows.length; i++) {
-                    data.push(rows[i].textContent.trim());
-                }
-                return data;
-            """) or []
+            return self.driver.execute_script(
+                "var popup = document.querySelector('div.overflow_model, div.edit_pop_up');"
+                "if (!popup) return [];"
+                "var rows = popup.querySelectorAll('table tbody tr');"
+                "var data = [];"
+                "for (var i = 0; i < rows.length; i++) {"
+                "  data.push(rows[i].textContent.trim());"
+                "}"
+                "return data;"
+            ) or []
         except Exception:
             return []
 
     def close_history_popup(self):
-        """Close the history popup by clicking Cancel button in footer."""
+        """Close the history popup — Cancel button in footer."""
+        self.driver.execute_script(
+            "var footer = document.querySelector('div.overflow_model .popup-footer');"
+            "if (footer) {"
+            "  var btns = footer.querySelectorAll('button');"
+            "  for (var i = 0; i < btns.length; i++) {"
+            "    if (btns[i].textContent.indexOf('Cancel') !== -1) {"
+            "      btns[i].click(); return;"
+            "    }"
+            "  }"
+            "}"
+            "var popup = document.querySelector('div.overflow_model');"
+            "if (popup) {"
+            "  var actions = popup.querySelector('.popup-actions');"
+            "  if (actions) {"
+            "    var buttons = actions.querySelectorAll('button');"
+            "    for (var i = buttons.length - 1; i >= 0; i--) {"
+            "      var icon = buttons[i].querySelector('mat-icon');"
+            "      if (icon && icon.textContent.trim() === 'close') {"
+            "        buttons[i].click(); return;"
+            "      }"
+            "    }"
+            "  }"
+            "}"
+        )
+        self._force_close_panels()
+
+    # ================================================================
+    #  VIEW POPUP VERIFICATION
+    # ================================================================
+
+    def verify_view_popup_read_only(self):
+        """Check if the view popup fields are disabled/read-only — JS."""
         try:
-            self.driver.execute_script("""
-                // Try Cancel button in popup footer
-                var footer = document.querySelector('div.overflow_model .popup-footer button');
-                if (footer) { footer.click(); return 'footer cancel'; }
-                // Try close icon in popup header
-                var popup = document.querySelector('div.overflow_model');
-                if (popup) {
-                    var actions = popup.querySelector('.popup-actions');
-                    if (actions) {
-                        var buttons = actions.querySelectorAll('button');
-                        for (var i = buttons.length - 1; i >= 0; i--) {
-                            var icon = buttons[i].querySelector('mat-icon');
-                            if (icon && icon.textContent.trim() === 'close') {
-                                buttons[i].click();
-                                return 'close icon';
-                            }
-                        }
-                    }
-                }
-                return 'none';
-            """)
-            time.sleep(0.5)
+            return bool(self.driver.execute_script(
+                "var fields = document.querySelectorAll('mat-form-field');"
+                "for (var i = 0; i < fields.length; i++) {"
+                "  var input = fields[i].querySelector('input');"
+                "  if (input && !input.disabled && !input.readOnly) return false;"
+                "  var select = fields[i].querySelector('mat-select');"
+                "  if (select) {"
+                "    var ariaDisabled = select.getAttribute('aria-disabled');"
+                "    var classDisabled = select.classList.contains('mat-mdc-select-disabled');"
+                "    if (ariaDisabled !== 'true' && !classDisabled) return false;"
+                "  }"
+                "}"
+                "return true;"
+            ))
+        except Exception:
+            return False
+
+    # ================================================================
+    #  CLEANUP HELPERS
+    # ================================================================
+
+    def cleanup(self):
+        """General cleanup: close form, close popups, force close panels."""
+        try:
+            self.force_close_form_popup()
+        except Exception:
+            pass
+        try:
+            self._cleanup_swal2()
         except Exception:
             pass
         self._force_close_panels()
 
-    def verify_view_popup_read_only(self):
-        """Check if the view popup fields are disabled/read-only.
-        Checks both input elements AND mat-select dropdowns."""
+    def _force_close_panels(self):
+        """Remove any open CDK overlay panels/backdrops — single JS call."""
         try:
-            return self.driver.execute_script("""
-                var fields = document.querySelectorAll('mat-form-field');
-                for (var i = 0; i < fields.length; i++) {
-                    // Check input elements (Conversion Factor)
-                    var input = fields[i].querySelector('input');
-                    if (input && !input.disabled && !input.readOnly) {
-                        return false;
-                    }
-                    // Check mat-select dropdowns (Source UOM, Target UOM)
-                    var select = fields[i].querySelector('mat-select');
-                    if (select) {
-                        var ariaDisabled = select.getAttribute('aria-disabled');
-                        var classDisabled = select.classList.contains('mat-mdc-select-disabled');
-                        if (ariaDisabled !== 'true' && !classDisabled) {
-                            return false;
-                        }
-                    }
-                }
-                return true;
-            """)
+            self.driver.execute_script(
+                "document.querySelectorAll('.cdk-overlay-backdrop:not(.cdk-overlay-dark-backdrop)').forEach(function(b){b.remove();});"
+                "document.querySelectorAll('.cdk-overlay-pane:not(.mat-mdc-dialog-container)').forEach(function(p){p.remove();});"
+            )
         except Exception:
-            return False
+            pass
+
+    def refresh_page(self):
+        """Click the REFRESH button — or hard refresh as fallback."""
+        try:
+            self.driver.execute_script(
+                "var icons = document.querySelectorAll('app-custom-header mat-icon');"
+                "for (var i = 0; i < icons.length; i++) {"
+                "  if (icons[i].textContent.trim() === 'refresh') {"
+                "    icons[i].click(); return;"
+                "  }"
+                "}"
+            )
+            time.sleep(0.5)
+        except Exception:
+            self.hard_refresh()
