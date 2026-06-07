@@ -12,6 +12,7 @@ Speed optimized (v4):
 
 import random
 import time
+from datetime import datetime
 
 # ── Real FK IDs from live ERP ────────────────────────────────────────
 TAX_TYPE_IDS = {"GST": 93}
@@ -86,14 +87,21 @@ _PLACES = [
 
 def generate_tax_name():
     """Return a unique tax authority name string — LETTERS ONLY.
-    No numbers, hyphens, or special characters (server rejects them)."""
+    No numbers, hyphens, or special characters (server rejects them).
+    Uses HHMMSS timestamp + counter for cross-session uniqueness."""
     global _ta_counter
     _ta_counter += 1
+    ts = datetime.now().strftime("%H%M%S")
     adj = _ADJECTIVES[(_ta_counter - 1) % len(_ADJECTIVES)]
     place = _PLACES[(_ta_counter - 1) % len(_PLACES)]
-    # Add a letter suffix for uniqueness when counter wraps
+    # Use letter suffix from counter for extra uniqueness
     suffix = chr(ord('A') + (_ta_counter - 1) % 26)
-    return f"{adj} GST Authority {place} {suffix}"
+    # Spell out the timestamp digits as letters to avoid rejection
+    # e.g. 091523 -> AIBAEC (A=0, B=1, ... J=9)
+    _digit_to_letter = {'0':'A','1':'B','2':'C','3':'D','4':'E',
+                        '5':'F','6':'G','7':'H','8':'I','9':'J'}
+    ts_alpha = ''.join(_digit_to_letter.get(c, c) for c in ts)
+    return f"{adj} GST Auth {place} {suffix}{ts_alpha}"
 
 
 def valid_tax_authority_data():

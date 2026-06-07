@@ -285,7 +285,7 @@ class TestEditFormValidations:
         new_type = [t for t in HSN_SAC_TYPE_OPTIONS if t != original_type][0]
 
         edit_data = {"hsn_sac_type": new_type}
-        result = page.edit_hsn_sac(0, edit_data)
+        result = page.edit_hsn_sac(0, edit_data, hsn_number=data["hsn_sac_number"])
         assert result["status"] == "success", f"Edit failed: {result['error']}"
         assert "updated successfully" in result["message"].lower(), \
             f"Unexpected message: {result['message']}"

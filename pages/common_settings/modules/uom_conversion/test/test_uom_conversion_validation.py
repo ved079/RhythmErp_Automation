@@ -68,6 +68,14 @@ class TestUOMConversionValidation:
 
             log.step(2, "Verify record exists in table")
             page.navigate_to_page()
+            # Wait for table data to load (navigate_to_page only waits for Add button)
+            import time as _time
+            _time.sleep(0.5)
+            # Verify table has at least 1 row before checking
+            for _ in range(10):
+                if page.get_table_row_count() > 0:
+                    break
+                _time.sleep(0.3)
             assert page.is_record_present(data["source_uom"], data["target_uom"]), \
                 "Record should exist in table: " + data["source_uom"] + " -> " + data["target_uom"]
             log.info("  [PASS] Record found in table: " + data["source_uom"] + " -> " + data["target_uom"])

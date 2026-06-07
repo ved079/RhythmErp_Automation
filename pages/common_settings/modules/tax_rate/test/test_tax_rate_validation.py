@@ -363,10 +363,18 @@ class TestHistoryValidations:
         itself should still open.
         """
         log.info("TR-T25: History popup opens")
-        # Create a record first
-        data = generate_create_test_data()
-        result = tr_page.create_record(data)
-        assert result["status"] == "success", f"Create failed: {result['error']}"
+        # Create a record first — retry up to 3 times with different data
+        # (some tax authorities intermittently cause "Failed to save record")
+        result = None
+        data = None
+        for attempt in range(3):
+            data = generate_create_test_data()
+            result = tr_page.create_record(data)
+            if result["status"] == "success":
+                break
+            log.warning(f"T25: Create attempt {attempt+1} failed: {result.get('error','')}, retrying...")
+            time.sleep(0.5)
+        assert result["status"] == "success", f"Create failed after 3 attempts: {result['error']}"
         time.sleep(0.3)
 
         # Search for the record to get its row index

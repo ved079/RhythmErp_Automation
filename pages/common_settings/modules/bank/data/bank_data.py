@@ -72,9 +72,9 @@ def _gen_account_number():
     return ''.join(random.choices(string.digits, k=12))
 
 def _gen_swift():
-    """Generate a SWIFT code (8 chars: 4 bank + 2 country + 2 location)."""
-    bank = ''.join(random.choices(string.ascii_uppercase, k=4))
-    return f"{bank}IN{random.choice('MM')}"
+    """Generate a SWIFT code (11 chars: letters only, like MXBZNYSHTDI).
+    ERP validates swift_number as letters-only (A-Z a-z)."""
+    return ''.join(random.choices(string.ascii_uppercase, k=11))
 
 
 # ── Payload builder ──────────────────────────────────────────────────
@@ -180,7 +180,7 @@ FIELD_VALIDATION_RULES = {
         "type": "character",
         "required": True,
         "max_length": 255,
-        "note": "Alphanumeric accepted.",
+        "note": "ONLY 4-digit integer accepted (e.g., 1234). No letters, no special chars.",
     },
     "branch_name": {
         "type": "character",
@@ -202,7 +202,7 @@ FIELD_VALIDATION_RULES = {
         "type": "character",
         "required": False,
         "max_length": 255,
-        "note": "Optional. SWIFT/BIC format.",
+        "note": "Optional. Letters-only format (e.g., MXBZNYSHTDI). No digits or special chars.",
     },
     "iban_number": {
         "type": "character",
@@ -321,19 +321,31 @@ def _bnk_next():
 
 
 def generate_bank_name(prefix="BANK"):
-    """Return a valid uppercase alpha bank name (>= 10 chars)."""
+    """Return a valid alpha-only bank name (A-Z a-z only, >= 10 chars).
+    ERP validates bank_name as character type — only A-Z a-z accepted."""
     n = _bnk_next()
-    # Pad to ensure at least 10 uppercase chars
-    base = f"{prefix}{n:04d}"
+    # Convert counter to letter-based suffix to avoid digits
+    # e.g., 1 -> A, 2 -> B, 27 -> AA, 28 -> AB
+    suffix = ""
+    val = n
+    while val > 0:
+        val -= 1
+        suffix = chr(ord('A') + (val % 26)) + suffix
+        val //= 26
+    # Build alpha-only name
+    base = f"{prefix}{suffix}XX"
     if len(base) < 10:
         base = base + "X" * (10 - len(base))
     return base.upper()
 
 
 def generate_bank_code():
-    """Return a valid alphanumeric bank code."""
+    """Return a valid 4-digit integer bank code (e.g., '1234').
+    ERP validates bank_code as ONLY 4-digit integer — no less, no more, no chars/special."""
     n = _bnk_next()
-    return f"BNK{n:04d}"
+    # Ensure exactly 4 digits: cycle through 0001-9999
+    code_num = ((n - 1) % 9999) + 1
+    return f"{code_num:04d}"
 
 
 def generate_branch_name():
@@ -453,7 +465,8 @@ def generate_lowercase_bank_name():
 
 
 def generate_bank_name_with_digits():
-    """Return a bank name with digits (invalid per alpha-only rule)."""
+    """Return a bank name with digits (invalid per alpha-only rule).
+    ERP only accepts A-Z a-z in bank_name."""
     return "BANK123TEST"
 
 

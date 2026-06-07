@@ -348,7 +348,7 @@ class TestSeasonEditFlow:
             assert page.is_form_open(), "Edit form should be open"
 
             # Step 3: Enter new data (fill_form uses JS setter to replace existing values)
-            new_name = f"EDITED_{original_name}"
+            new_name = f"EDITED {original_name}"
             new_desc = f"Edited - {data['Description']}"
             page.fill_form(new_name, new_desc)
 
@@ -476,7 +476,7 @@ class TestSeasonSearch:
 
         try:
             page.navigate_to_season()
-            fake_name = f"NONEXISTENT_{valid_season_name()}_NOCHANCE"
+            fake_name = f"NONEXISTENT {valid_season_name()} NOCHANCE"
 
             found = page.search_record(fake_name)
             assert not found, f"Search should NOT find '{fake_name}'"
@@ -688,7 +688,7 @@ class TestSeasonCancel:
             page.click_edit_button(original_name)
             assert page.is_form_open(), "Edit form should be open"
 
-            modified_name = f"CANCELLED_{original_name}"
+            modified_name = f"CANCELLED {original_name}"
             page.enter_name(modified_name)
 
             page.close_popup()

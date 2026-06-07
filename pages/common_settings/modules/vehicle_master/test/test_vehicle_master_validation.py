@@ -61,6 +61,7 @@ from pages.common_settings.modules.vehicle_master.data.vehicle_master_data impor
     generate_vehicle_name,
     generate_vehicle_price,
     generate_description,
+    _random_alpha,
 )
 from common.logger import log
 
@@ -906,7 +907,7 @@ class TestSearchFilter:
         log.info("VM-S03: Search nonexistent")
         page = vehicle_master_page
 
-        fake_name = f"NonExistent_{int(time.time())}"
+        fake_name = f"NonExistent {_random_alpha(8)}"
         found = page.search_vehicle(fake_name)
         page.clear_search()
 

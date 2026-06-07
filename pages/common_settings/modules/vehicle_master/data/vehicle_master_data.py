@@ -71,9 +71,22 @@ def _random_alpha(length=6):
     return "".join(random.choices(string.ascii_uppercase, k=length))
 
 
+_vm_name_counter = 0
+
 def generate_vehicle_name(prefix="VM"):
-    """Generate a unique vehicle name with prefix + random chars + timestamp."""
-    return f"{prefix}_{_random_alpha(4)}_{_timestamp_suffix()}"
+    """Generate a unique vehicle name — LETTERS ONLY (A-Z a-z).
+    ERP rejects underscores, digits, and special chars in name field.
+    Uses prefix + random alpha + counter-based suffix for uniqueness."""
+    global _vm_name_counter
+    _vm_name_counter += 1
+    # Convert counter to letters (1->A, 2->B, 27->AA, etc.)
+    n = _vm_name_counter
+    suffix = ""
+    while n > 0:
+        n -= 1
+        suffix = chr(ord('A') + (n % 26)) + suffix
+        n //= 26
+    return f"{prefix} {_random_alpha(4)} {suffix}"
 
 
 def generate_vehicle_price():
@@ -89,23 +102,26 @@ def generate_description(prefix="Test"):
 def generate_valid_vehicle_data(prefix="VM"):
     """Generate a complete valid vehicle data dict for Create form.
     
+    Name field uses alpha-only format (no underscores/digits).
     Returns dict with keys: name, price, vehicle_type, fuel_type, description
     """
     vehicle = random.choice(VEHICLES)
-    ts = _timestamp_suffix()
+    name = generate_vehicle_name(prefix)
+    # Description can have special chars (not restricted)
+    desc_suffix = _random_alpha(4)
     return {
-        "name": f"{prefix}_{vehicle['name']}_{ts}",
+        "name": name,
         "price": str(vehicle["price"]),
         "vehicle_type": vehicle["vehicle_type"],
         "fuel_type": vehicle["fuel_type"],
-        "description": f"{prefix} {vehicle['desc']} {ts}",
+        "description": f"{prefix} Test Vehicle {desc_suffix}",
     }
 
 
 def generate_valid_edit_data():
     """Generate data suitable for editing a vehicle (description change)."""
     return {
-        "description": f"Edited Description {_timestamp_suffix()}",
+        "description": f"Edited Description {_random_alpha(6)}",
     }
 
 
@@ -121,7 +137,7 @@ def generate_empty_data():
 
 
 def generate_name_only_data(prefix="NameOnly"):
-    """Return data with only the name filled in."""
+    """Return data with only the name filled in (alpha-only name)."""
     return {
         "name": generate_vehicle_name(prefix),
         "price": "",
@@ -167,8 +183,8 @@ def generate_price_with_spaces():
 
 
 def generate_special_char_name():
-    """Return a name with special characters."""
-    return f"Test!@#$%^&*_{_timestamp_suffix()}"
+    """Return a name with special characters (invalid per ERP alpha-only rule)."""
+    return f"Test!@#$%^&* {_random_alpha(4)}"
 
 
 def generate_string_255():
