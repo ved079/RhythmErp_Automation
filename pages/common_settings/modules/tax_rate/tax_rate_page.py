@@ -1137,9 +1137,11 @@ class TaxRatePage(BasePage):
                 "if (popup && popup.offsetParent !== null) {"
                 "  var titleEl = document.querySelector('#swal2-title');"
                 "  var title = titleEl ? titleEl.textContent.trim() : '';"
+                "  var msgEl = document.querySelector('.swal2-html-container');"
+                "  var msg = msgEl ? msgEl.textContent.trim() : '';"
                 "  var confirm = document.querySelector('.swal2-confirm');"
                 "  if (confirm) confirm.click();"
-                "  return {alert: true, title: title, form_closed: false};"
+                "  return {alert: true, title: title, message: msg, form_closed: false};"
                 "}"
                 "var form = document.querySelector('div.edit_pop_up');"
                 "var formOpen = form && form.offsetParent !== null;"
@@ -1221,12 +1223,14 @@ class TaxRatePage(BasePage):
 
                 if response.get("alert"):
                     error_title = response.get("title", "Validation Failed")
-                    log.info(f"Validation alert: {error_title}")
+                    error_msg = response.get("message", "")
+                    error_detail = f"{error_title}: {error_msg}" if error_msg else error_title
+                    log.info(f"Validation alert: {error_detail}")
                     try:
                         self.cancel()
                     except Exception:
                         pass
-                    return {"status": "failed", "error": error_title}
+                    return {"status": "failed", "error": error_detail}
 
                 if response.get("form_closed"):
                     log.info(f"Record '{name}' created successfully (silent success)")
