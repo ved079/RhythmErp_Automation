@@ -193,67 +193,45 @@ class TaxRatePage(BasePage):
     def force_cleanup_all(self):
         """Force-close any stuck SweetAlert, form popup, history popup, and overlays.
 
-        CRITICAL: NEVER remove .cdk-overlay-container or .cdk-overlay-pane.
+        CRITICAL: NEVER remove .cdk-overlay-container or all .cdk-overlay-pane.
         Only remove .cdk-overlay-backdrop (the dark sheet). Removing the
         container/pane kills Angular's overlay rendering engine permanently.
         """
         try:
-            # 1. Dismiss any SweetAlert popup
+            # 1. Dismiss any SweetAlert popup via JS
             try:
-                alerts = self.driver.find_elements(By.CSS_SELECTOR, ".swal2-popup")
-                for alert in alerts:
-                    if alert.is_displayed():
-                        confirm = alert.find_element(By.CSS_SELECTOR, "button.swal2-confirm")
-                        if confirm.is_displayed():
-                            confirm.click()
-                            log.info("Cleaned: Dismissed SweetAlert popup")
-                            self.wait_seconds(0.5)
+                self.driver.execute_script(
+                    "var btn = document.querySelector('.swal2-confirm');"
+                    "if (btn) btn.click();"
+                )
             except Exception:
                 pass
 
             # 2. Remove ONLY CDK overlay backdrops (NEVER containers or panes)
             try:
-                self.driver.execute_script("""
-                    document.querySelectorAll('.cdk-overlay-backdrop').forEach(el => el.remove());
-                """)
+                self.driver.execute_script(
+                    "document.querySelectorAll('.cdk-overlay-backdrop').forEach(function(el) { el.remove(); });"
+                )
             except Exception:
                 pass
 
-            # 3. Close form popup if open (via Cancel or Escape)
+            # 3. Close form popup if open (via Cancel JS click)
             try:
-                form = self.driver.find_element(By.CSS_SELECTOR, "div.edit_pop_up")
-                if form.is_displayed():
-                    cancel = form.find_element(
-                        By.CSS_SELECTOR,
-                        ".popup-footer button[type='button']"
-                    )
-                    if cancel.is_displayed():
-                        cancel.click()
-                        log.info("Cleaned: Closed stuck form popup")
-                        self.wait_seconds(0.5)
-                    else:
-                        from selenium.webdriver.common.action_chains import ActionChains
-                        ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
-                        self.wait_seconds(0.5)
+                self.driver.execute_script(
+                    "var footers = document.querySelectorAll('.popup-footer');"
+                    "for (var i = 0; i < footers.length; i++) {"
+                    "  var buttons = footers[i].querySelectorAll('button');"
+                    "  for (var j = 0; j < buttons.length; j++) {"
+                    "    if (buttons[j].textContent.indexOf('Cancel') !== -1) {"
+                    "      buttons[j].click(); break;"
+                    "    }"
+                    "  }"
+                    "}"
+                )
             except Exception:
                 pass
 
-            # 4. Close history popup if open
-            try:
-                hist = self.driver.find_element(By.CSS_SELECTOR, ".popup-overlay")
-                if hist.is_displayed():
-                    cancel = hist.find_element(
-                        By.CSS_SELECTOR,
-                        ".popup-footer button[type='button']"
-                    )
-                    if cancel.is_displayed():
-                        cancel.click()
-                        log.info("Cleaned: Closed stuck history popup")
-                        self.wait_seconds(0.5)
-            except Exception:
-                pass
-
-            # 5. Send Escape to dismiss any remaining lightweight overlays
+            # 4. Send Escape to dismiss any remaining overlays
             try:
                 from selenium.webdriver.common.action_chains import ActionChains
                 ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
@@ -266,17 +244,17 @@ class TaxRatePage(BasePage):
     def _force_close_panels(self):
         """Remove open CDK overlay panels/backdrops safely.
 
-        CRITICAL: Only removes .erp-action-menu panels and non-SweetAlert .cdk-overlay-pane.
+        CRITICAL: Only removes .erp-action-menu panels and non-SweetAlert/non-history .cdk-overlay-pane.
         NEVER removes all .cdk-overlay-pane — that kills the history popup.
         """
         try:
-            self.driver.execute_script("""
-                document.querySelectorAll('.erp-action-menu').forEach(function(el) { el.remove(); });
-                document.querySelectorAll('.cdk-overlay-backdrop').forEach(function(el) { el.remove(); });
-                document.querySelectorAll('.cdk-overlay-pane').forEach(function(el) {
-                    if (!el.querySelector('.swal2-popup') && !el.querySelector('app-dynamic-history')) el.remove();
-                });
-            """)
+            self.driver.execute_script(
+                "document.querySelectorAll('.erp-action-menu').forEach(function(el) { el.remove(); });"
+                "document.querySelectorAll('.cdk-overlay-backdrop').forEach(function(el) { el.remove(); });"
+                "document.querySelectorAll('.cdk-overlay-pane').forEach(function(el) {"
+                "  if (!el.querySelector('.swal2-popup') && !el.querySelector('app-dynamic-history')) el.remove();"
+                "});"
+            )
         except Exception:
             pass
 
@@ -296,15 +274,13 @@ class TaxRatePage(BasePage):
     def _set_text_field(self, locator, value):
         """Set text field value using atomic JavaScript for Angular reactivity."""
         try:
-            self.driver.execute_script("""
-                var input = arguments[0];
-                var nativeSetter = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype, 'value'
-                ).set;
-                nativeSetter.call(input, arguments[1]);
-                input.dispatchEvent(new Event('input', {bubbles: true}));
-                input.dispatchEvent(new Event('change', {bubbles: true}));
-            """, self.find_element(locator), value)
+            self.driver.execute_script(
+                "var input = arguments[0];"
+                "var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;"
+                "nativeSetter.call(input, arguments[1]);"
+                "input.dispatchEvent(new Event('input', {bubbles: true}));"
+                "input.dispatchEvent(new Event('change', {bubbles: true}));"
+            , self.find_element(locator), value)
         except Exception:
             self.type_text(locator, value, clear_first=True)
 
@@ -315,16 +291,14 @@ class TaxRatePage(BasePage):
         We set the value via JS and dispatch change events for Angular.
         """
         try:
-            self.driver.execute_script("""
-                var input = arguments[0];
-                var nativeSetter = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype, 'value'
-                ).set;
-                nativeSetter.call(input, arguments[1]);
-                input.dispatchEvent(new Event('input', {bubbles: true}));
-                input.dispatchEvent(new Event('change', {bubbles: true}));
-                input.dispatchEvent(new Event('blur', {bubbles: true}));
-            """, self.find_element(locator), value)
+            self.driver.execute_script(
+                "var input = arguments[0];"
+                "var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;"
+                "nativeSetter.call(input, arguments[1]);"
+                "input.dispatchEvent(new Event('input', {bubbles: true}));"
+                "input.dispatchEvent(new Event('change', {bubbles: true}));"
+                "input.dispatchEvent(new Event('blur', {bubbles: true}));"
+            , self.find_element(locator), value)
             log.info(f"Set date field to: {value}")
         except Exception as e:
             log.warning(f"Date field JS set failed: {e}")
@@ -339,7 +313,6 @@ class TaxRatePage(BasePage):
         """Click on body to blur any active input (helps dropdown focus issues)."""
         try:
             self.driver.execute_script("document.body.click();")
-            self.wait_seconds(0.3)
         except Exception:
             pass
 
@@ -364,22 +337,21 @@ class TaxRatePage(BasePage):
         and never becomes Selenium-clickable.
         """
         log.info("Opening Add form")
-        js_click_add = """
-        var btn = document.querySelector('button.erp-add-btn');
-        if (!btn) {
-            var icons = document.querySelectorAll('app-custom-header mat-icon, app-custom-header i.material-icons');
-            for (var i = 0; i < icons.length; i++) {
-                if (icons[i].textContent.trim() === 'add') {
-                    btn = icons[i].closest('button');
-                    break;
-                }
-            }
-        }
-        if (!btn) { throw new Error('Add button not found in DOM'); }
-        btn.scrollIntoView({block:'center'});
-        btn.click();
-        return 'clicked';
-        """
+        js_click_add = (
+            "var btn = document.querySelector('button.erp-add-btn');"
+            "if (!btn) {"
+            "  var icons = document.querySelectorAll('app-custom-header mat-icon, app-custom-header i.material-icons');"
+            "  for (var i = 0; i < icons.length; i++) {"
+            "    if (icons[i].textContent.trim() === 'add') {"
+            "      btn = icons[i].closest('button'); break;"
+            "    }"
+            "  }"
+            "}"
+            "if (!btn) { throw new Error('Add button not found in DOM'); }"
+            "btn.scrollIntoView({block:'center'});"
+            "btn.click();"
+            "return 'clicked';"
+        )
         try:
             result = self.driver.execute_script(js_click_add)
             log.info("Add button clicked via JS: " + str(result))
@@ -397,19 +369,18 @@ class TaxRatePage(BasePage):
         """Click the Cancel button to close the form popup via JS."""
         log.info("Closing form via Cancel button")
         try:
-            self.driver.execute_script("""
-                var footers = document.querySelectorAll('.popup-footer');
-                for (var i = 0; i < footers.length; i++) {
-                    var buttons = footers[i].querySelectorAll('button');
-                    for (var j = 0; j < buttons.length; j++) {
-                        if (buttons[j].textContent.indexOf('Cancel') !== -1) {
-                            buttons[j].click();
-                            return 'clicked';
-                        }
-                    }
-                }
-                return 'not found';
-            """)
+            self.driver.execute_script(
+                "var footers = document.querySelectorAll('.popup-footer');"
+                "for (var i = 0; i < footers.length; i++) {"
+                "  var buttons = footers[i].querySelectorAll('button');"
+                "  for (var j = 0; j < buttons.length; j++) {"
+                "    if (buttons[j].textContent.indexOf('Cancel') !== -1) {"
+                "      buttons[j].click(); return 'clicked';"
+                "    }"
+                "  }"
+                "}"
+                "return 'not found';"
+            )
         except Exception:
             self.click(self.CANCEL_BUTTON)
         self.wait_for_form_to_close()
@@ -501,7 +472,7 @@ class TaxRatePage(BasePage):
             log.info(f"Tax Rate Name set to: {name}")
 
     def select_tax_type(self, tax_type):
-        """Select Tax Type from mat-select dropdown.
+        """Select Tax Type from mat-select dropdown via JS clicks.
 
         Args:
             tax_type: The tax type to select (e.g., 'GST').
@@ -513,47 +484,94 @@ class TaxRatePage(BasePage):
             return True
         log.info(f"Selecting Tax Type: {tax_type}")
         try:
-            self._blur_active_element()
-            time.sleep(0.2)
-            self.click(self.TAX_TYPE_SELECT)
-            time.sleep(0.5)
-
-            option = ("xpath", f"//mat-option//span[contains(text(),'{tax_type}')]")
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located(option)
+            self._force_close_panels()
+            # JS click the mat-select trigger
+            self.driver.execute_script(
+                "var labels = document.querySelectorAll('mat-label');"
+                "for (var i = 0; i < labels.length; i++) {"
+                "  if (labels[i].textContent.indexOf('Tax Type') !== -1) {"
+                "    var sel = labels[i].closest('mat-form-field').querySelector('mat-select');"
+                "    if (sel) { sel.click(); return 'opened'; }"
+                "  }"
+                "}"
+                "throw new Error('Tax Type mat-select not found');"
             )
-            time.sleep(0.2)
-            self._js_click(option)
-            time.sleep(0.3)
+            # Fast poll for option to appear
+            end_time = time.monotonic() + 5
+            while time.monotonic() < end_time:
+                try:
+                    clicked = self.driver.execute_script(
+                        "var opts = document.querySelectorAll('mat-option span');"
+                        "for (var i = 0; i < opts.length; i++) {"
+                        "  if (opts[i].textContent.trim() === arguments[0]) {"
+                        "    opts[i].closest('mat-option').click(); return 'clicked';"
+                        "  }"
+                        "}"
+                        "return '';"
+                    , tax_type)
+                    if clicked:
+                        break
+                except Exception:
+                    pass
+                time.sleep(0.1)
+            else:
+                log.warning(f"Tax Type option '{tax_type}' not found in dropdown")
+                self._force_close_panels()
+                return False
+            self._force_close_panels()
             log.info(f"Tax Type set to: {tax_type}")
             return True
         except Exception as e:
             log.warning(f"Tax Type selection failed: {e}")
-            self._log_overlay_state()
+            self._force_close_panels()
             return False
 
     def select_tax_authority(self, authority):
+        """Select Tax Authority from mat-select dropdown via JS clicks."""
         if not authority:
             return True
         log.info(f"Selecting Tax Authority: {authority}")
         try:
-            self._blur_active_element()
-            time.sleep(0.2)
-            self.click(self.TAX_AUTHORITY_SELECT)
-            time.sleep(0.5)
-
-            option = ("xpath", f"//mat-option//span[contains(text(),'{authority}')]")
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located(option)
+            self._force_close_panels()
+            # JS click the mat-select trigger
+            self.driver.execute_script(
+                "var labels = document.querySelectorAll('mat-label');"
+                "for (var i = 0; i < labels.length; i++) {"
+                "  if (labels[i].textContent.indexOf('Tax Authority') !== -1) {"
+                "    var sel = labels[i].closest('mat-form-field').querySelector('mat-select');"
+                "    if (sel) { sel.click(); return 'opened'; }"
+                "  }"
+                "}"
+                "throw new Error('Tax Authority mat-select not found');"
             )
-            time.sleep(0.2)
-            self._js_click(option)
-            time.sleep(0.3)
+            # Fast poll for option to appear
+            end_time = time.monotonic() + 5
+            while time.monotonic() < end_time:
+                try:
+                    clicked = self.driver.execute_script(
+                        "var opts = document.querySelectorAll('mat-option span');"
+                        "for (var i = 0; i < opts.length; i++) {"
+                        "  if (opts[i].textContent.trim().indexOf(arguments[0]) !== -1) {"
+                        "    opts[i].closest('mat-option').click(); return 'clicked';"
+                        "  }"
+                        "}"
+                        "return '';"
+                    , authority)
+                    if clicked:
+                        break
+                except Exception:
+                    pass
+                time.sleep(0.1)
+            else:
+                log.warning(f"Tax Authority option '{authority}' not found in dropdown")
+                self._force_close_panels()
+                return False
+            self._force_close_panels()
             log.info(f"Tax Authority set to: {authority}")
             return True
         except Exception as e:
             log.warning(f"Tax Authority selection failed: {e}")
-            self._log_overlay_state()
+            self._force_close_panels()
             return False
 
     def fill_from_date(self, date_str):
@@ -625,13 +643,58 @@ class TaxRatePage(BasePage):
     # ================================================================
 
     def _switch_to_sub_table_tab(self):
-        """Click 'Define Tax Rate Details' tab to reveal sub-table."""
+        """Click 'Define Tax Rate Details' tab to reveal sub-table via JS.
+
+        Uses targeted selectors — avoids clicking parent container divs that
+        contain the text but are not the actual tab element.
+        """
         try:
-            self.click(self.SUB_TABLE_TAB)
-            time.sleep(0.5)
-            log.info("Switched to sub-table tab")
-        except Exception:
-            log.info("Sub-table tab not found (may already be visible)")
+            result = self.driver.execute_script(
+                "var tabs = document.querySelectorAll('.big-model .tab-name, .big-model .stepper-title, "
+                ".big-model div[role=\"tab\"], .big-model .tab-title, .big-model .nav-link');"
+                "for (var i = 0; i < tabs.length; i++) {"
+                "  if (tabs[i].textContent.indexOf('Define Tax Rate Details') !== -1) {"
+                "    tabs[i].click(); return 'clicked';"
+                "  }"
+                "}"
+                "var spans = document.querySelectorAll('.big-model .stepper-title span, .big-model .tab-name span, .big-model .nav-link span');"
+                "for (var i = 0; i < spans.length; i++) {"
+                "  if (spans[i].textContent.trim() === 'Define Tax Rate Details') {"
+                "    spans[i].click(); return 'clicked_span';"
+                "  }"
+                "}"
+                "var navLinks = document.querySelectorAll('.big-model a.nav-link, .big-model .nav-item a');"
+                "for (var i = 0; i < navLinks.length; i++) {"
+                "  if (navLinks[i].textContent.indexOf('Define Tax Rate Details') !== -1) {"
+                "    navLinks[i].click(); return 'clicked_navlink';"
+                "  }"
+                "}"
+                "var all = document.querySelectorAll('.big-model .tab-name, .big-model .stepper-title, .big-model [role=\"tab\"], .big-model .nav-item, .big-model .nav-link, .big-model .tab-item');"
+                "for (var i = 0; i < all.length; i++) {"
+                "  if (all[i].textContent.trim() === 'Define Tax Rate Details') {"
+                "    all[i].click(); return 'clicked_exact_fallback';"
+                "  }"
+                "}"
+                "var tabBtns = document.querySelectorAll('.big-model .nav-item, .big-model .tab-item, .big-model button[role=\"tab\"]');"
+                "if (tabBtns.length >= 2) { tabBtns[1].click(); return 'clicked_second_tab'; }"
+                "return 'not_found';"
+            )
+            log.info("Sub-table tab switch: " + str(result))
+            # Fast poll for sub-table to appear
+            end = time.monotonic() + 5
+            while time.monotonic() < end:
+                try:
+                    has_rows = self.driver.execute_script(
+                        "var rows = document.querySelectorAll('.edit_pop_up table tbody tr, .big-model table tbody tr');"
+                        "return rows.length > 0;"
+                    )
+                    if has_rows:
+                        break
+                except Exception:
+                    pass
+                time.sleep(0.1)
+        except Exception as e:
+            log.warning("Sub-table tab switch failed: " + str(e))
 
     def _get_sub_table_rows(self):
         """Get all sub-table row WebElements.
@@ -660,18 +723,47 @@ class TaxRatePage(BasePage):
         return count
 
     def add_sub_table_row(self):
-        """Click the Add button to add a new empty row to the sub-table."""
+        """Click the Add button to add a new empty row to the sub-table via JS.
+
+        Tracks row count BEFORE click and waits for it to increase by 1.
+        This avoids the false-positive where count > 0 is always true
+        due to the pre-created empty row.
+        """
         log.info("Adding new sub-table row")
         try:
-            self._js_click(self.ADD_SUB_TABLE_ROW_BUTTON)
-            # Wait for the new row to appear
-            try:
-                WebDriverWait(self.driver, 5).until(
-                    lambda d: len(d.find_elements(By.CSS_SELECTOR,
-                        "div.edit_pop_up table tbody tr, div.big-model table tbody tr")) > 0
-                )
-            except Exception:
-                pass
+            # Get current row count BEFORE clicking Add
+            count_before = self.driver.execute_script(
+                "var rows = document.querySelectorAll('.edit_pop_up table tbody tr, .big-model table tbody tr');"
+                "return rows.length;"
+            ) or 0
+            log.info("Row count before Add: " + str(count_before))
+
+            self.driver.execute_script(
+                "var btns = document.querySelectorAll('.big-model button');"
+                "for (var i = 0; i < btns.length; i++) {"
+                "  if (btns[i].textContent.trim() === 'Add') {"
+                "    btns[i].click(); return 'clicked';"
+                "  }"
+                "}"
+                "var addBtn = document.querySelector('.big-model button.erp-add-btn, .big-model .add-row-btn');"
+                "if (addBtn) { addBtn.click(); return 'clicked_fallback'; }"
+                "return 'not_found';"
+            )
+            # Fast poll for the new row to appear (count must increase)
+            end = time.monotonic() + 5
+            while time.monotonic() < end:
+                try:
+                    count_now = self.driver.execute_script(
+                        "var rows = document.querySelectorAll('.edit_pop_up table tbody tr, .big-model table tbody tr');"
+                        "return rows.length;"
+                    ) or 0
+                    if count_now > count_before:
+                        break
+                except Exception:
+                    pass
+                time.sleep(0.1)
+            else:
+                log.warning("Row count did not increase after clicking Add")
             log.info("New sub-table row added")
         except Exception as e:
             log.warning(f"Failed to add sub-table row: {e}")
@@ -695,13 +787,15 @@ class TaxRatePage(BasePage):
             row = rows[row_index]
             delete_btn = row.find_element(By.CSS_SELECTOR, "td.mat-column-action button")
             self._js_click_element(delete_btn)
-            self.wait_seconds(0.5)
             log.info(f"Deleted sub-table row {row_index}")
         except Exception as e:
             log.warning(f"Failed to delete sub-table row {row_index}: {e}")
 
     def select_hsn_number(self, hsn, row_index=0):
-        """Select HSN Number from the mat-select dropdown in a sub-table row.
+        """Select HSN Number from the mat-select dropdown in a sub-table row via pure JS.
+
+        Uses pure JS for the entire operation — avoids stale Selenium WebElements
+        that become invalid after the form popup DOM changes.
 
         Args:
             hsn: HSN Number string (e.g., '997212').
@@ -714,65 +808,106 @@ class TaxRatePage(BasePage):
             return True
 
         log.info(f"Selecting HSN Number '{hsn}' in row {row_index}")
+        self._force_close_panels()
 
-        # Retry: sub-table rows may not be immediately available after tab switch
-        for attempt in range(3):
+        # Fast poll for sub-table row to be available (pure JS)
+        end_time = time.monotonic() + 5
+        while time.monotonic() < end_time:
             try:
-                rows = self._get_sub_table_rows()
-                if row_index >= len(rows):
-                    if attempt < 2:
-                        log.info(f"Row {row_index} not found yet ({len(rows)} rows), waiting...")
-                        time.sleep(1)
-                        continue
-                    log.warning(f"Row {row_index} does not exist ({len(rows)} rows)")
-                    return False
-
-                row = rows[row_index]
-                hsn_select = row.find_element(By.CSS_SELECTOR, "mat-select")
-                self._blur_active_element()
-                time.sleep(0.2)
-                self._js_click_element(hsn_select)
-                time.sleep(0.5)
-
-                option = ("xpath", f"//mat-option//span[contains(text(),'{hsn}')]")
-                WebDriverWait(self.driver, 10).until(
-                    EC.presence_of_element_located(option)
+                row_count = self.driver.execute_script(
+                    "var rows = document.querySelectorAll('.edit_pop_up table tbody tr, .big-model table tbody tr');"
+                    "return rows.length;"
                 )
-                time.sleep(0.2)
-                self._js_click(option)
-                time.sleep(0.3)
-                log.info(f"HSN Number set to: {hsn}")
-                return True
-            except Exception as e:
-                if attempt < 2:
-                    log.warning(f"HSN selection attempt {attempt+1} failed, retrying: {e}")
-                    time.sleep(1)
-                else:
-                    log.warning(f"HSN Number selection failed: {e}")
-                    self._log_overlay_state()
-                    return False
-        return False
+                if row_count and row_count > row_index:
+                    break
+            except Exception:
+                pass
+            time.sleep(0.1)
+        else:
+            log.warning(f"Sub-table row {row_index} not available")
+            return False
+
+        try:
+            # JS click the mat-select in the sub-table row (pure JS)
+            result = self.driver.execute_script(
+                "var rows = document.querySelectorAll('.edit_pop_up table tbody tr, .big-model table tbody tr');"
+                "var idx = arguments[0];"
+                "if (idx >= rows.length) { throw new Error('Row ' + idx + ' not found'); }"
+                "var sel = rows[idx].querySelector('mat-select');"
+                "if (!sel) { throw new Error('mat-select not found in row ' + idx); }"
+                "sel.click();"
+                "return 'opened';"
+            , row_index)
+            log.info("HSN select opened: " + str(result))
+
+            # Fast poll for option to appear
+            end_time = time.monotonic() + 5
+            while time.monotonic() < end_time:
+                try:
+                    clicked = self.driver.execute_script(
+                        "var opts = document.querySelectorAll('mat-option span');"
+                        "for (var i = 0; i < opts.length; i++) {"
+                        "  if (opts[i].textContent.trim() === arguments[0]) {"
+                        "    opts[i].closest('mat-option').click(); return 'clicked';"
+                        "  }"
+                        "}"
+                        "return '';"
+                    , hsn)
+                    if clicked:
+                        break
+                except Exception:
+                    pass
+                time.sleep(0.1)
+            else:
+                log.warning(f"HSN option '{hsn}' not found in dropdown")
+                self._force_close_panels()
+                return False
+
+            self._force_close_panels()
+            log.info(f"HSN Number set to: {hsn}")
+            return True
+        except Exception as e:
+            log.warning(f"HSN Number selection failed: {e}")
+            self._force_close_panels()
+            return False
 
     def fill_sub_table_tax_rate(self, rate, row_index=0):
-        """Set Tax Rate value in a sub-table row.
+        """Set Tax Rate value in a sub-table row via pure JS.
+
+        Uses pure JS for row finding — avoids stale Selenium WebElements.
 
         Args:
             rate: Numeric tax rate value (e.g., 18.0, -5.0, 0).
             row_index: 0-based row index in the sub-table.
         """
         log.info(f"Setting Tax Rate to {rate} in row {row_index}")
-        try:
-            rows = self._get_sub_table_rows()
-            if row_index >= len(rows):
-                log.warning(f"Row {row_index} does not exist ({len(rows)} rows)")
-                return
+        # Wait briefly for the row to exist
+        end = time.monotonic() + 3
+        while time.monotonic() < end:
+            row_count = self.driver.execute_script(
+                "var rows = document.querySelectorAll('.edit_pop_up table tbody tr, .big-model table tbody tr');"
+                "return rows.length;"
+            ) or 0
+            if row_count > row_index:
+                break
+            time.sleep(0.1)
 
-            row = rows[row_index]
-            tax_rate_input = row.find_element(By.CSS_SELECTOR, "input[name='Tax Rate']")
-            tax_rate_input.clear()
-            tax_rate_input.send_keys(str(rate))
-            self.wait_seconds(0.3)
-            log.info(f"Tax Rate set to: {rate}")
+        try:
+            result = self.driver.execute_script(
+                "var rows = document.querySelectorAll('.edit_pop_up table tbody tr, .big-model table tbody tr');"
+                "var idx = arguments[0];"
+                "if (idx >= rows.length) return 'row_not_found';"
+                "var input = rows[idx].querySelector('input[name=\"Tax Rate\"]');"
+                "if (!input) return 'input_not_found';"
+                "var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;"
+                "nativeSetter.call(input, '');"
+                "input.dispatchEvent(new Event('input', {bubbles: true}));"
+                "nativeSetter.call(input, String(arguments[1]));"
+                "input.dispatchEvent(new Event('input', {bubbles: true}));"
+                "input.dispatchEvent(new Event('change', {bubbles: true}));"
+                "return 'set';"
+            , row_index, rate)
+            log.info(f"Tax Rate set to: {rate} (result: {result})")
         except Exception as e:
             log.warning(f"Failed to set Tax Rate: {e}")
 
@@ -800,7 +935,9 @@ class TaxRatePage(BasePage):
         """Fill multiple sub-table rows.
 
         Sub-table starts with 1 empty row. For additional rows,
-        clicks Add first, then fills from bottom-up.
+        clicks Add first, then fills top-down (index 0 first).
+
+        Uses pure JS for row counting — avoids stale Selenium WebElements.
 
         Args:
             sub_table_rows: List of dicts, each with 'hsn_number' and 'tax_rate'.
@@ -814,17 +951,21 @@ class TaxRatePage(BasePage):
 
         # Switch to sub-table tab
         self._switch_to_sub_table_tab()
-        self.wait_seconds(0.5)
 
-        # Add extra rows if needed (first row is pre-created)
-        current_rows = self._get_sub_table_row_count()
+        # Get current row count via JS (avoid stale Selenium elements)
+        current_rows = self.driver.execute_script(
+            "var rows = document.querySelectorAll('.edit_pop_up table tbody tr, .big-model table tbody tr');"
+            "return rows.length;"
+        ) or 0
         needed = len(sub_table_rows)
+        log.info(f"Sub-table: {current_rows} existing rows, need {needed}")
+
         for _ in range(max(0, needed - current_rows)):
             self.add_sub_table_row()
 
-        # Fill rows from bottom-up (pattern #9)
+        # Fill rows top-down (index 0 first)
         all_ok = True
-        for i in range(needed - 1, -1, -1):
+        for i in range(needed):
             ok = self.fill_sub_table_row(sub_table_rows[i], row_index=i)
             if not ok:
                 all_ok = False
@@ -840,19 +981,18 @@ class TaxRatePage(BasePage):
         """Click the Submit button (Create mode) via JS click."""
         log.info("Clicking Submit button")
         self._force_close_panels()
-        js = """
-        var footers = document.querySelectorAll('.popup-footer');
-        for (var i = 0; i < footers.length; i++) {
-            var buttons = footers[i].querySelectorAll('button');
-            for (var j = 0; j < buttons.length; j++) {
-                if (buttons[j].textContent.trim().indexOf('Submit') !== -1) {
-                    buttons[j].click();
-                    return 'clicked_Submit';
-                }
-            }
-        }
-        throw new Error('Submit button not found in popup footer');
-        """
+        js = (
+            "var footers = document.querySelectorAll('.popup-footer');"
+            "for (var i = 0; i < footers.length; i++) {"
+            "  var buttons = footers[i].querySelectorAll('button');"
+            "  for (var j = 0; j < buttons.length; j++) {"
+            "    if (buttons[j].textContent.trim().indexOf('Submit') !== -1) {"
+            "      buttons[j].click(); return 'clicked_Submit';"
+            "    }"
+            "  }"
+            "}"
+            "throw new Error('Submit button not found in popup footer');"
+        )
         try:
             result = self.driver.execute_script(js)
             log.info("JS click Submit: " + str(result))
@@ -870,7 +1010,7 @@ class TaxRatePage(BasePage):
     # CREATE RECORD — Full flow with retry logic
     # ================================================================
 
-    def create_record(self, data, max_cycles=3):
+    def create_record(self, data, max_cycles=2):
         """Create a new Tax Rate record.
 
         Opens form, fills header + sub-table, clicks Submit, and handles
@@ -897,8 +1037,9 @@ class TaxRatePage(BasePage):
             log.info(f"Creating Tax Rate: {name} (cycle {cycle}/{max_cycles})")
 
             try:
-                # Navigate fresh
-                self.hard_refresh()
+                # Only refresh on retry (cycle > 1); first cycle uses fixture's navigation
+                if cycle > 1:
+                    self.hard_refresh()
 
                 # Open Add form
                 self.open_add_form()
@@ -914,43 +1055,37 @@ class TaxRatePage(BasePage):
                 self.submit()
 
                 # Fast poll for result (form close = success)
-                end_time = time.monotonic() + 8
+                end_time = time.monotonic() + 6
                 while time.monotonic() < end_time:
-                    # Check for validation alert first
+                    # Check for validation alert first (ultra-fast JS check)
                     try:
-                        alert_visible = self.driver.execute_script(
-                            "var el = document.querySelector('.swal2-popup.swal2-icon-warning'); "
-                            "return el && el.offsetParent !== null;"
+                        result = self.driver.execute_script(
+                            "var warn = document.querySelector('.swal2-popup.swal2-icon-warning');"
+                            "if (warn && warn.offsetParent !== null) {"
+                            "  var title = document.querySelector('.swal2-title');"
+                            "  var btn = document.querySelector('.swal2-confirm');"
+                            "  if (btn) btn.click();"
+                            "  return title ? title.textContent.trim() : 'Validation Failed';"
+                            "}"
+                            "var el = document.querySelector('div.edit_pop_up');"
+                            "if (el && el.offsetParent !== null) return 'form_open';"
+                            "return 'form_closed';"
                         )
-                        if alert_visible:
-                            title = self.get_sweetalert_title()
-                            log.info("Validation Failed: " + str(title))
-                            self.driver.execute_script(
-                                "var btn = document.querySelector('.swal2-confirm'); "
-                                "if (btn) btn.click();"
-                            )
-                            time.sleep(0.5)
+                        if result == 'form_closed':
+                            log.info(f"Record '{name}' created successfully (silent success)")
+                            return {"status": "success", "error": ""}
+                        elif result not in ('form_open', ''):
+                            # Validation alert detected — result is the alert title
+                            log.info("Validation Failed: " + str(result))
                             try:
                                 self.cancel()
                             except Exception:
                                 pass
-                            return {"status": "failed", "error": title}
+                            return {"status": "failed", "error": result}
                     except Exception:
                         pass
 
-                    # Check if form closed (silent success)
-                    try:
-                        form_open = self.driver.execute_script(
-                            "var el = document.querySelector('div.edit_pop_up'); "
-                            "return el && el.offsetParent !== null;"
-                        )
-                        if not form_open:
-                            log.info(f"Record '{name}' created successfully (silent success)")
-                            return {"status": "success", "error": ""}
-                    except Exception:
-                        pass
-
-                    time.sleep(0.3)
+                    time.sleep(0.2)
 
                 # Form still open, no alert — dropdown may have failed
                 log.warning(f"Cycle {cycle}: Form still open, no alert — retrying")
@@ -963,7 +1098,7 @@ class TaxRatePage(BasePage):
                 self.cancel()
             except Exception:
                 pass
-            time.sleep(0.5)
+            time.sleep(0.3)
 
         return {"status": "failed", "error": f"Could not create record after {max_cycles} cycles"}
 
@@ -972,23 +1107,29 @@ class TaxRatePage(BasePage):
     # ================================================================
 
     def is_validation_alert_present(self, timeout=5):
-        """Check if SweetAlert 'Validation Failed' popup is visible."""
-        try:
-            WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located((By.CSS_SELECTOR, ".swal2-popup"))
-            )
-            title = self.get_text(self.SWEET_ALERT_TITLE)
-            if "Validation Failed" in title:
-                log.info("Validation Failed alert detected")
-                return True
-        except Exception:
-            pass
+        """Check if SweetAlert 'Validation Failed' popup is visible (fast JS poll)."""
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            try:
+                visible = self.driver.execute_script(
+                    "var el = document.querySelector('.swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error');"
+                    "return el && el.offsetParent !== null;"
+                )
+                if visible:
+                    log.info("Validation Failed alert detected")
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.2)
         return False
 
     def get_sweetalert_title(self):
-        """Get the title text from the current SweetAlert popup."""
+        """Get the title text from the current SweetAlert popup via JS."""
         try:
-            return self.get_text(self.SWEET_ALERT_TITLE)
+            return self.driver.execute_script(
+                "var el = document.querySelector('.swal2-title');"
+                "return el ? el.textContent.trim() : '';"
+            ) or ""
         except Exception:
             return ""
 
@@ -1000,25 +1141,56 @@ class TaxRatePage(BasePage):
             return ""
 
     def accept_sweetalert(self):
-        """Click OK/Confirm on the current SweetAlert popup."""
-        log.info("Accepting SweetAlert (clicking OK)")
+        """Click OK/Confirm on the current SweetAlert popup via JS click."""
+        log.info("Accepting SweetAlert (clicking OK via JS)")
         try:
-            self.click(self.SWEET_ALERT_CONFIRM_BTN)
-            self.wait_seconds(0.5)
+            self.driver.execute_script(
+                "var btn = document.querySelector('.swal2-confirm');"
+                "if (btn) { btn.click(); return 'clicked'; }"
+                "return 'not found';"
+            )
+            # Fast poll for SweetAlert to disappear
+            end = time.monotonic() + 3
+            while time.monotonic() < end:
+                try:
+                    visible = self.driver.execute_script(
+                        "var el = document.querySelector('.swal2-popup');"
+                        "return el && el.offsetParent !== null;"
+                    )
+                    if not visible:
+                        break
+                except Exception:
+                    break
+                time.sleep(0.1)
         except Exception:
             log.warning("Could not click SweetAlert OK button")
 
     def dismiss_sweetalert(self):
-        """Click Cancel on the current SweetAlert popup."""
+        """Click Cancel on the current SweetAlert popup via JS."""
         try:
-            self.click(self.SWEET_ALERT_CANCEL_BTN)
-            self.wait_seconds(0.5)
+            self.driver.execute_script(
+                "var btn = document.querySelector('.swal2-cancel');"
+                "if (btn) { btn.click(); return 'clicked'; }"
+                "return 'not found';"
+            )
         except Exception:
             pass
 
     def is_any_alert_present(self, timeout=3):
-        """Check if any SweetAlert popup is visible."""
-        return self.is_displayed(self.SWEET_ALERT_POPUP, timeout=timeout)
+        """Check if any SweetAlert popup is visible (fast JS poll)."""
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            try:
+                visible = self.driver.execute_script(
+                    "var el = document.querySelector('.swal2-popup');"
+                    "return el && el.offsetParent !== null;"
+                )
+                if visible:
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.2)
+        return False
 
     # ================================================================
     # TABLE — Read Data
@@ -1122,62 +1294,102 @@ class TaxRatePage(BasePage):
     # ================================================================
 
     def _click_action_button(self, row_index, action_name):
-        """Click an action button for a specific row via the 3-dot (more_vert) menu.
+        """Click an action button for a specific row via the 3-dot menu.
 
-        The ERP uses a single ⋮ menu per row instead of separate action columns.
-        Step 1: Find the matching row by index.
-        Step 2: Click the ⋮ (erp-row-trigger) button on that row.
-        Step 3: Wait for the dropdown menu to appear.
-        Step 4: Click the menu item whose text matches action_name
-                (e.g. 'View', 'Edit', 'History').
+        Gold standard pattern (from UOM Conversion):
+        Step 1: Click .erp-row-trigger on the target row.
+        Step 2: Fast-poll for .mat-mdc-menu-panel.erp-action-menu to appear.
+        Step 3: Click the menu item by .erp-menu-title label text.
+        Step 4: Clean up ONLY the small menu overlay (not history/form popups).
         """
-        # Map friendly action names to the actual icon text in the ERP menu
-        icon_map = {
-            "view": "visibility",
-            "edit": "edit",
-            "history": "history",
-            "version": "folder",
-        }
-        icon_text = icon_map.get(action_name.lower(), action_name.lower())
-
+        action_label = action_name.capitalize()
         log.info("Clicking " + action_name + " via 3-dot menu for row " + str(row_index))
 
-        # Step 1 & 2: Find the row and click its ⋮ menu trigger
-        js_trigger = """
-        var table = document.querySelector('table#excel-table');
-        if (!table) { throw new Error('Table not found'); }
-        var rows = table.querySelectorAll('tbody tr');
-        var idx = arguments[0];
-        if (idx >= rows.length) { throw new Error('Row index ' + idx + ' out of range (total ' + rows.length + ')'); }
-        var trigger = rows[idx].querySelector('.erp-row-trigger');
-        if (trigger) {
-            trigger.click();
-            return 'opened menu on row ' + idx;
-        }
-        throw new Error('Action trigger (.erp-row-trigger) not found on row ' + idx);
-        """
-        result = self.driver.execute_script(js_trigger, row_index)
-        log.info("3-dot menu opened: " + str(result))
-        time.sleep(0.8)  # Wait for Angular menu animation
+        # Step 1: Click ⋮ menu trigger on target row
+        self.driver.execute_script(
+            "var table = document.querySelector('table#excel-table');"
+            "if (!table) { throw new Error('Table not found'); }"
+            "var rows = table.querySelectorAll('tbody tr');"
+            "var idx = arguments[0];"
+            "if (idx >= rows.length) { throw new Error('Row ' + idx + ' out of range'); }"
+            "var trigger = rows[idx].querySelector('.erp-row-trigger');"
+            "if (trigger) { trigger.click(); return 'opened'; }"
+            "throw new Error('.erp-row-trigger not found on row ' + idx);"
+        , row_index)
 
-        # Step 3 & 4: Click the correct menu item by its icon text
-        js_menu_item = """
-        var menu = document.querySelector('.mat-mdc-menu-panel');
-        if (!menu) { throw new Error('Menu panel not found after trigger click'); }
-        var items = menu.querySelectorAll('button.mat-mdc-menu-item');
-        for (var i = 0; i < items.length; i++) {
-            var icon = items[i].querySelector('i.material-icons');
-            if (icon && icon.textContent.trim() === arguments[0]) {
-                items[i].click();
-                return 'clicked menu item: ' + arguments[0];
-            }
-        }
-        throw new Error('Menu item with icon "' + arguments[0] + '" not found');
-        """
-        result = self.driver.execute_script(js_menu_item, icon_text)
-        log.info("Action menu item click: " + str(result))
-        time.sleep(0.5)
-        return result
+        # Step 2: Fast-poll for CDK overlay menu (0.1s intervals, 3s timeout)
+        end = time.monotonic() + 3
+        while time.monotonic() < end:
+            menu_open = self.driver.execute_script(
+                "var panels = document.querySelectorAll('.mat-mdc-menu-panel.erp-action-menu');"
+                "for (var i = 0; i < panels.length; i++) {"
+                "  if (panels[i].offsetParent !== null) return true;"
+                "}"
+                "return false;"
+            )
+            if menu_open:
+                break
+            time.sleep(0.1)
+
+        # Step 3: Click menu item by .erp-menu-title label text
+        clicked = self.driver.execute_script(
+            "var overlay = document.querySelector('.mat-mdc-menu-panel.erp-action-menu');"
+            "if (!overlay) return false;"
+            "var titles = overlay.querySelectorAll('.erp-menu-title');"
+            "for (var i = 0; i < titles.length; i++) {"
+            "  if (titles[i].textContent.trim() === arguments[0]) {"
+            "    var item = titles[i].closest('.erp-menu-item');"
+            "    if (item) { item.click(); return true; }"
+            "    titles[i].click(); return true;"
+            "  }"
+            "}"
+            "var allItems = overlay.querySelectorAll('button, span, div');"
+            "for (var i = 0; i < allItems.length; i++) {"
+            "  var text = allItems[i].textContent.trim();"
+            "  if (text === arguments[0]) {"
+            "    allItems[i].click(); return true;"
+            "  }"
+            "}"
+            "var needle = arguments[0].toLowerCase();"
+            "for (var i = 0; i < allItems.length; i++) {"
+            "  var text = allItems[i].textContent.trim().toLowerCase();"
+            "  if (text.indexOf(needle) !== -1) {"
+            "    allItems[i].click(); return true;"
+            "  }"
+            "}"
+            "return false;"
+        , action_label)
+
+        # Step 4: Wait for form or history popup to open
+        if clicked:
+            end_action = time.monotonic() + 5
+            while time.monotonic() < end_action:
+                if action_name.lower() == "history":
+                    if self.is_history_popup_open(timeout=0):
+                        break
+                else:
+                    if self.is_form_open():
+                        break
+                time.sleep(0.1)
+
+        # Clean up lingering 3-dot menu overlay ONLY (not history/form popups)
+        try:
+            self.driver.execute_script(
+                "var menus = document.querySelectorAll('.mat-mdc-menu-panel.erp-action-menu');"
+                "for (var i = 0; i < menus.length; i++) {"
+                "  var pane = menus[i].closest('.cdk-overlay-pane');"
+                "  if (pane) pane.remove();"
+                "}"
+                "var backdrops = document.querySelectorAll('.cdk-overlay-backdrop');"
+                "for (var i = 0; i < backdrops.length; i++) {"
+                "  backdrops[i].remove();"
+                "}"
+            )
+        except Exception:
+            pass
+
+        log.info("Action " + action_name + " click result: " + str(clicked))
+        return clicked
 
     def click_view_on_row(self, row_index):
         """Click the View button on a specific table row via 3-dot menu."""
@@ -1212,44 +1424,61 @@ class TaxRatePage(BasePage):
         log.info("Checking if Edit is disabled on row " + str(row_index))
 
         # Open the 3-dot menu
-        js_trigger = """
-        var table = document.querySelector('table#excel-table');
-        if (!table) { throw new Error('Table not found'); }
-        var rows = table.querySelectorAll('tbody tr');
-        var idx = arguments[0];
-        if (idx >= rows.length) { throw new Error('Row index ' + idx + ' out of range'); }
-        var trigger = rows[idx].querySelector('.erp-row-trigger');
-        if (trigger) {
-            trigger.click();
-            return 'opened menu on row ' + idx;
-        }
-        throw new Error('Action trigger not found on row ' + idx);
-        """
-        result = self.driver.execute_script(js_trigger, row_index)
-        log.info("3-dot menu opened: " + str(result))
-        time.sleep(0.8)
+        self.driver.execute_script(
+            "var table = document.querySelector('table#excel-table');"
+            "if (!table) { throw new Error('Table not found'); }"
+            "var rows = table.querySelectorAll('tbody tr');"
+            "var idx = arguments[0];"
+            "if (idx >= rows.length) { throw new Error('Row index ' + idx + ' out of range'); }"
+            "var trigger = rows[idx].querySelector('.erp-row-trigger');"
+            "if (trigger) { trigger.click(); return 'opened'; }"
+            "throw new Error('.erp-row-trigger not found on row ' + idx);"
+        , row_index)
 
-        # Check the Edit menu item disabled state
-        js_check = """
-        var menu = document.querySelector('.mat-mdc-menu-panel');
-        if (!menu) { throw new Error('Menu panel not found after trigger click'); }
-        var items = menu.querySelectorAll('button.mat-mdc-menu-item');
-        for (var i = 0; i < items.length; i++) {
-            var icon = items[i].querySelector('i.material-icons');
-            if (icon && icon.textContent.trim() === 'edit') {
-                return items[i].disabled;
-            }
-        }
-        throw new Error('Edit menu item not found');
-        """
-        is_disabled = self.driver.execute_script(js_check)
+        # Fast-poll for menu to appear
+        end = time.monotonic() + 3
+        while time.monotonic() < end:
+            menu_open = self.driver.execute_script(
+                "var panels = document.querySelectorAll('.mat-mdc-menu-panel.erp-action-menu');"
+                "for (var i = 0; i < panels.length; i++) {"
+                "  if (panels[i].offsetParent !== null) return true;"
+                "}"
+                "return false;"
+            )
+            if menu_open:
+                break
+            time.sleep(0.1)
+
+        # Check the Edit menu item disabled state via .erp-menu-title
+        is_disabled = self.driver.execute_script(
+            "var overlay = document.querySelector('.mat-mdc-menu-panel.erp-action-menu');"
+            "if (!overlay) return true;"
+            "var titles = overlay.querySelectorAll('.erp-menu-title');"
+            "for (var i = 0; i < titles.length; i++) {"
+            "  if (titles[i].textContent.trim() === 'Edit') {"
+            "    var item = titles[i].closest('.erp-menu-item');"
+            "    if (item) return item.disabled || item.classList.contains('disabled');"
+            "    var btn = titles[i].closest('button');"
+            "    if (btn) return btn.disabled;"
+            "  }"
+            "}"
+            "return true;"
+        )
         log.info("Edit button disabled: " + str(is_disabled))
 
-        # Close the menu by pressing Escape
+        # Close the menu by removing the overlay
         try:
-            from selenium.webdriver.common.action_chains import ActionChains
-            ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
-            time.sleep(0.3)
+            self.driver.execute_script(
+                "var menus = document.querySelectorAll('.mat-mdc-menu-panel.erp-action-menu');"
+                "for (var i = 0; i < menus.length; i++) {"
+                "  var pane = menus[i].closest('.cdk-overlay-pane');"
+                "  if (pane) pane.remove();"
+                "}"
+                "var backdrops = document.querySelectorAll('.cdk-overlay-backdrop');"
+                "for (var i = 0; i < backdrops.length; i++) {"
+                "  backdrops[i].remove();"
+                "}"
+            )
         except Exception:
             pass
 
@@ -1262,46 +1491,54 @@ class TaxRatePage(BasePage):
     def _do_js_search(self, text):
         """Execute search using atomic JavaScript — fast poll approach."""
         # Step 1: Click search button to toggle search input
-        self.driver.execute_script("""
-            var toggleBtn = document.querySelector('button.search-btn');
-            if (toggleBtn) toggleBtn.click();
-        """)
-        # Step 2: Wait for search input to appear
-        try:
-            WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input#erpSearchInput, input[placeholder='Search']"))
-            )
-        except Exception:
-            pass
+        self.driver.execute_script(
+            "var toggleBtn = document.querySelector('button.search-btn');"
+            "if (toggleBtn) toggleBtn.click();"
+        )
+        # Step 2: Fast poll for search input to appear
+        end_time = time.monotonic() + 3
+        while time.monotonic() < end_time:
+            try:
+                found = self.driver.execute_script(
+                    "var el = document.querySelector('input#erpSearchInput') || "
+                    "document.querySelector('input[placeholder=\"Search\"]'); "
+                    "return el && el.offsetParent !== null;"
+                )
+                if found:
+                    break
+            except Exception:
+                pass
+            time.sleep(0.1)
 
         # Step 3: Set search value and fire Angular events
-        self.driver.execute_script("""
-            var input = document.querySelector('input#erpSearchInput') ||
-                        document.querySelector('input[placeholder="Search"]');
-            if (!input) { throw new Error('Search input not found'); }
-            var nativeSetter = Object.getOwnPropertyDescriptor(
-                window.HTMLInputElement.prototype, 'value'
-            ).set;
-            nativeSetter.call(input, '');
-            input.dispatchEvent(new Event('input', {bubbles: true}));
-            nativeSetter.call(input, arguments[0]);
-            input.dispatchEvent(new Event('input', {bubbles: true}));
-            input.dispatchEvent(new Event('change', {bubbles: true}));
-        """, text)
+        self.driver.execute_script(
+            "var input = document.querySelector('input#erpSearchInput') || "
+            "document.querySelector('input[placeholder=\"Search\"]');"
+            "if (!input) { throw new Error('Search input not found'); }"
+            "var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;"
+            "nativeSetter.call(input, '');"
+            "input.dispatchEvent(new Event('input', {bubbles: true}));"
+            "nativeSetter.call(input, arguments[0]);"
+            "input.dispatchEvent(new Event('input', {bubbles: true}));"
+            "input.dispatchEvent(new Event('change', {bubbles: true}));"
+        , text)
 
         # Step 4: Click search button to submit
-        self.driver.execute_script("""
-            var btn = document.querySelector('button.search-btn');
-            if (btn) btn.click();
-        """)
+        self.driver.execute_script(
+            "var btn = document.querySelector('button.search-btn');"
+            "if (btn) btn.click();"
+        )
 
-        # Step 5: Wait for table to refresh
-        try:
-            WebDriverWait(self.driver, 5).until(
-                lambda d: d.find_elements(By.CSS_SELECTOR, "table#excel-table tbody tr")
-            )
-        except Exception:
-            pass
+        # Step 5: Fast poll for table to refresh
+        end_time = time.monotonic() + 3
+        while time.monotonic() < end_time:
+            try:
+                rows = self.driver.find_elements(By.CSS_SELECTOR, "table#excel-table tbody tr")
+                if rows:
+                    break
+            except Exception:
+                pass
+            time.sleep(0.1)
 
     def search_record(self, name, exact=False):
         """Search for a record by Tax Rate Name.
@@ -1341,85 +1578,59 @@ class TaxRatePage(BasePage):
             return False
 
     def clear_search(self):
-        """Clear the search filter to show all records."""
-        log.info("Clearing search filter...")
-        try:
-            self.driver.execute_script("""
-                var input = document.querySelector('input[placeholder="Search"]');
-                if (input) {
-                    var nativeSetter = Object.getOwnPropertyDescriptor(
-                        window.HTMLInputElement.prototype, 'value'
-                    ).set;
-                    nativeSetter.call(input, '');
-                    input.dispatchEvent(new Event('input', {bubbles: true}));
-                    input.dispatchEvent(new KeyboardEvent('keydown', {
-                        key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true
-                    }));
-                }
-                var btn = document.querySelector('button.search-btn');
-                if (btn) btn.click();
-            """)
-            self.wait_seconds(1)
-        except Exception:
-            self.navigate_to_page()
+        """Clear the search filter — fast hard refresh."""
+        log.info("Clearing search filter — hard refreshing")
+        self.hard_refresh()
 
     # ================================================================
     # REFRESH
     # ================================================================
 
     def refresh_table(self):
-        """Click the Refresh button to reload the table data."""
+        """Refresh the table — fast hard refresh."""
         log.info("Refreshing Tax Rate table...")
-        try:
-            refresh_btn = ("xpath", "//button[mat-icon[text()='refresh']]")
-            self.click(refresh_btn)
-            self.wait_seconds(2)
-            log.info("Table refreshed")
-        except Exception:
-            log.warning("Refresh button not found, falling back to page refresh")
-            self.navigate_to_page()
+        self.hard_refresh()
 
     # ================================================================
     # HISTORY POPUP
     # ================================================================
 
-    def wait_for_history_popup(self, timeout=15):
-        """Wait for the history popup to open and load data."""
-        try:
-            WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located(
-                    (By.CSS_SELECTOR, ".popup-content")
-                )
-            )
-            # Wait for either table rows or "No Data" image
-            WebDriverWait(self.driver, 5).until(
-                lambda d: (
-                    len(d.find_elements(By.CSS_SELECTOR, ".edit_pop_up table tbody tr")) > 0
-                    or d.find_element(By.CSS_SELECTOR, ".edit_pop_up img[alt='No Data Available']")
-                        .is_displayed()
-                )
-            )
-            log.info("History popup loaded")
-        except Exception:
-            log.warning("History popup did not load within timeout")
-            self.take_screenshot("history_popup_not_loaded")
-
-    def is_history_popup_open(self, timeout=5):
-        """Check if the History popup is currently visible."""
-        # Check for either the popup-content or app-dynamic-history container
+    def wait_for_history_popup(self, timeout=10):
+        """Wait for the history popup to open and load data (fast JS poll)."""
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
             try:
-                visible = self.driver.execute_script("""
-                    var el = document.querySelector('.popup-content') ||
-                             document.querySelector('app-dynamic-history');
-                    return el && el.offsetParent !== null;
-                """)
+                visible = self.driver.execute_script(
+                    "var el = document.querySelector('.popup-content') || "
+                    "document.querySelector('app-dynamic-history'); "
+                    "return el && el.offsetParent !== null;"
+                )
+                if visible:
+                    log.info("History popup loaded")
+                    return
+            except Exception:
+                pass
+            time.sleep(0.2)
+        log.warning("History popup did not load within timeout")
+        self.take_screenshot("history_popup_not_loaded")
+
+    def is_history_popup_open(self, timeout=5):
+        """Check if the History popup is currently visible (fast JS poll)."""
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            try:
+                visible = self.driver.execute_script(
+                    "var el = document.querySelector('app-dynamic-history') || "
+                    "document.querySelector('.popup-content'); "
+                    "return el && el.offsetParent !== null;"
+                )
                 if visible:
                     return True
             except Exception:
                 pass
-            time.sleep(0.3)
+            if timeout <= 0:
+                break
+            time.sleep(0.2)
         return False
 
     def get_history_title(self):
@@ -1443,24 +1654,35 @@ class TaxRatePage(BasePage):
         """Close the History popup via Cancel button using JS."""
         log.info("Closing History popup")
         try:
-            self.driver.execute_script("""
-                var footers = document.querySelectorAll('.popup-footer');
-                for (var i = 0; i < footers.length; i++) {
-                    var buttons = footers[i].querySelectorAll('button');
-                    for (var j = 0; j < buttons.length; j++) {
-                        if (buttons[j].textContent.indexOf('Cancel') !== -1) {
-                            buttons[j].click();
-                            return 'clicked';
-                        }
-                    }
-                }
-                return 'not found';
-            """)
-            time.sleep(0.5)
+            self.driver.execute_script(
+                "var footers = document.querySelectorAll('.popup-footer');"
+                "for (var i = 0; i < footers.length; i++) {"
+                "  var buttons = footers[i].querySelectorAll('button');"
+                "  for (var j = 0; j < buttons.length; j++) {"
+                "    if (buttons[j].textContent.indexOf('Cancel') !== -1) {"
+                "      buttons[j].click(); return 'clicked';"
+                "    }"
+                "  }"
+                "}"
+                "return 'not found';"
+            )
+            # Fast poll for popup to close
+            end = time.monotonic() + 3
+            while time.monotonic() < end:
+                try:
+                    visible = self.driver.execute_script(
+                        "var el = document.querySelector('app-dynamic-history') || "
+                        "document.querySelector('.popup-content'); "
+                        "return el && el.offsetParent !== null;"
+                    )
+                    if not visible:
+                        break
+                except Exception:
+                    break
+                time.sleep(0.1)
         except Exception:
             try:
                 from selenium.webdriver.common.action_chains import ActionChains
                 ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
-                time.sleep(0.5)
             except Exception:
                 pass

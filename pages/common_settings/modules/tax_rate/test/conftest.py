@@ -85,10 +85,14 @@ def logged_in_driver(driver):
     login_page.wait_seconds(3)
 
     login_page.wait_for_login_complete()
+
+    # Verify login actually succeeded (don't falsely report success)
+    if "login" in driver.current_url.lower():
+        log.error("Login did not complete — still on login page. URL: " + driver.current_url)
+        raise RuntimeError("RhythmERP login failed — still on login page after wait. Check credentials in .env")
+
     log.info("RhythmERP login successful!")
     start_screenshot_broadcast(driver)
-    start_screenshot_broadcast(driver)
-    log.info("RhythmERP login successful!")
 
     yield driver
 
@@ -100,22 +104,14 @@ def tr_page(logged_in_driver):
     """Tax Rate page object — fresh navigation for each test.
 
     Setup:
-      1. Hard-refresh the browser to clear leftover state.
-      2. Navigate to the Tax Rate screen.
-      3. If navigation fails, do one more hard-refresh + retry.
+      1. Navigate to the Tax Rate screen.
+      2. If navigation fails, do one more hard-refresh + retry.
 
     Teardown:
       Hard-refresh after every test so the next test always starts
       from a clean browser state.
     """
     from pages.common_settings.modules.tax_rate.tax_rate_page import TaxRatePage
-
-    # --- Pre-test hard refresh to wipe leftover state ---
-    try:
-        logged_in_driver.refresh()
-        time.sleep(2)
-    except Exception as e:
-        log.warning(f"Pre-test refresh failed (non-fatal): {e}")
 
     page = TaxRatePage(logged_in_driver)
 
@@ -128,8 +124,7 @@ def tr_page(logged_in_driver):
             "retrying after hard refresh..."
         )
         try:
-            logged_in_driver.refresh()
-            time.sleep(3)
+            page.hard_refresh()
             page.navigate_to_page()
         except Exception as second_err:
             log.error(f"Navigation failed after retry: {second_err!r}")
@@ -137,10 +132,9 @@ def tr_page(logged_in_driver):
 
     yield page
 
-    # --- Post-test teardown: hard refresh + settle ---
+    # --- Post-test teardown: hard refresh ---
     try:
-        logged_in_driver.refresh()
-        time.sleep(2)
+        page.hard_refresh()
         log.info("Post-test hard refresh complete")
     except Exception as e:
         log.warning(f"Post-test refresh failed (non-fatal): {e}")

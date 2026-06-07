@@ -77,7 +77,7 @@ class TestCreateFormValidations:
         data = generate_create_test_data()
         result = tr_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
-        time.sleep(1)
+        time.sleep(0.3)
         assert tr_page.is_name_in_table(data["header"]["tax_rate_name"]), \
             f"Record '{data['header']['tax_rate_name']}' not found in table"
 
@@ -89,7 +89,7 @@ class TestCreateFormValidations:
         data = generate_create_multi_row_data(row_count=3)
         result = tr_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
-        time.sleep(1)
+        time.sleep(0.3)
         assert tr_page.is_name_in_table(data["header"]["tax_rate_name"]), \
             "Record not found in table"
 
@@ -101,7 +101,7 @@ class TestCreateFormValidations:
         data = generate_create_test_data()
         result = tr_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
-        time.sleep(1)
+        time.sleep(0.3)
         assert tr_page.is_name_in_table(data["header"]["tax_rate_name"]), \
             "Record not found in table"
 
@@ -113,7 +113,7 @@ class TestCreateFormValidations:
         """TR-T08: Submit with all fields empty → Validation Failed."""
         log.info("TR-T08: All fields empty shows validation")
         tr_page.open_add_form()
-        time.sleep(1)
+        time.sleep(0.3)
         tr_page.submit()
         assert tr_page.is_validation_alert_present(timeout=5), "Validation alert not shown"
         title = tr_page.get_sweetalert_title()
@@ -138,7 +138,7 @@ class TestFieldLevelValidations:
         log.info("TR-T04: Missing Tax Rate Name shows validation")
         data = missing_name_data()
         tr_page.open_add_form()
-        time.sleep(1)
+        time.sleep(0.3)
         tr_page.fill_all_fields(data)
         tr_page._force_close_panels()
         tr_page.submit()
@@ -154,7 +154,7 @@ class TestFieldLevelValidations:
         log.info("TR-T05: Missing Tax Type shows validation")
         data = missing_tax_type_data()
         tr_page.open_add_form()
-        time.sleep(1)
+        time.sleep(0.3)
         tr_page.fill_all_fields(data)
         tr_page._force_close_panels()
         tr_page.submit()
@@ -170,7 +170,7 @@ class TestFieldLevelValidations:
         log.info("TR-T06: Missing Tax Authority shows validation")
         data = missing_tax_authority_data()
         tr_page.open_add_form()
-        time.sleep(1)
+        time.sleep(0.3)
         tr_page.fill_all_fields(data)
         tr_page._force_close_panels()
         tr_page.submit()
@@ -186,7 +186,7 @@ class TestFieldLevelValidations:
         log.info("TR-T07: Missing Revision Status shows validation")
         data = missing_revision_status_data()
         tr_page.open_add_form()
-        time.sleep(1)
+        time.sleep(0.3)
         tr_page.fill_all_fields(data)
         tr_page._force_close_panels()
         tr_page.submit()
@@ -205,7 +205,7 @@ class TestFieldLevelValidations:
         result = tr_page.create_record(data)
         # Bug TR-01: SQL injection is accepted
         assert result["status"] == "success", f"Create failed: {result['error']}"
-        time.sleep(1)
+        time.sleep(0.3)
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -216,7 +216,7 @@ class TestFieldLevelValidations:
         data["header"]["tax_rate_name"] = f"AUTOTEST_SPEC{generate_tax_rate_name()}"
         result = tr_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
-        time.sleep(1)
+        time.sleep(0.3)
 
 
 # ================================================================
@@ -294,13 +294,13 @@ class TestViewAndVersionBehaviors:
         data = generate_create_test_data()
         result = tr_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
-        time.sleep(1)
+        time.sleep(0.3)
 
         row_idx = tr_page.find_name_row_index(data["header"]["tax_rate_name"])
         assert row_idx >= 0, "Record not found in table"
 
         tr_page.click_view_on_row(row_idx)
-        time.sleep(2)
+        time.sleep(0.5)
         assert tr_page.is_form_open(), "View popup should be open"
         assert tr_page.is_view_mode(), "Should be in view mode"
         tr_page.cancel()
@@ -314,13 +314,13 @@ class TestViewAndVersionBehaviors:
         data = generate_create_test_data()
         result = tr_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
-        time.sleep(1)
+        time.sleep(0.3)
 
         row_idx = tr_page.find_name_row_index(data["header"]["tax_rate_name"])
         assert row_idx >= 0, "Record not found"
 
         tr_page.click_view_on_row(row_idx)
-        time.sleep(2)
+        time.sleep(0.5)
 
         # Verify form is open and has sub-table data
         assert tr_page.is_form_open(), "View popup should be open"
@@ -334,9 +334,8 @@ class TestViewAndVersionBehaviors:
     def test_T24_edit_button_disabled(self, tr_page):
         """TR-T24: Edit button is disabled for all rows (bug TR-02)."""
         log.info("TR-T24: Edit button is disabled (bug TR-02)")
-        tr_page.navigate_to_page()
         tr_page.wait_for_table_load()
-        time.sleep(1)
+        time.sleep(0.3)
 
         # Check first visible row has disabled edit button via 3-dot menu
         rows = tr_page.driver.find_elements(*tr_page.TABLE_BODY_ROWS)
@@ -368,17 +367,17 @@ class TestHistoryValidations:
         data = generate_create_test_data()
         result = tr_page.create_record(data)
         assert result["status"] == "success", f"Create failed: {result['error']}"
-        time.sleep(1)
+        time.sleep(0.3)
 
         # Search for the record to get its row index
         tr_page.search_record(data["header"]["tax_rate_name"], exact=True)
-        time.sleep(1)
+        time.sleep(0.3)
 
         row_idx = tr_page.find_name_row_index(data["header"]["tax_rate_name"])
         assert row_idx >= 0, "Record not found"
 
         tr_page.click_history_on_row(row_idx)
-        time.sleep(2)
+        time.sleep(0.5)
         assert tr_page.is_history_popup_open(), "History popup should be open"
         tr_page.close_history_popup()
 
@@ -399,7 +398,7 @@ class TestTableOperations:
         log.info("TR-T26: Cancel discards new record")
         name = generate_tax_rate_name()
         tr_page.open_add_form()
-        time.sleep(1)
+        time.sleep(0.3)
 
         tr_page.fill_tax_rate_name(name)
         tr_page.select_tax_type("GST")
@@ -407,7 +406,7 @@ class TestTableOperations:
         tr_page.fill_revision_status("effective")
 
         tr_page.cancel()
-        time.sleep(1)
+        time.sleep(0.3)
 
         assert not tr_page.is_name_in_table(name), \
             f"Record '{name}' should NOT be in table after cancel"
@@ -418,9 +417,8 @@ class TestTableOperations:
     def test_table_columns_present(self, tr_page):
         """Verify all 10 table columns are present."""
         log.info("Verify table columns present")
-        tr_page.navigate_to_page()
         tr_page.wait_for_table_load()
-        time.sleep(1)
+        time.sleep(0.3)
 
         # Just verify the page loaded with table
         assert tr_page.is_page_loaded(), "Tax Rate page should be loaded"
