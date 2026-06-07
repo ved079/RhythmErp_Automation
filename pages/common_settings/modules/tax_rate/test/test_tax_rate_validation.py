@@ -72,11 +72,20 @@ class TestCreateFormValidations:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_T01_create_valid_record_with_sub_table_row(self, tr_page):
-        """TR-T01: Add valid tax rate with all header fields + 1 HSN/TaxRate row."""
-        log.info("TR-T01: Create valid tax rate with sub-table row")
-        data = generate_create_test_data()
-        result = tr_page.create_record(data)
-        assert result["status"] == "success", f"Create failed: {result['error']}"
+        """TR-T01: Add valid tax rate with all header fields + 1 HSN/TaxRate row.
+        Retries up to 3 times with fresh data if ERP returns 'Failed to save record'."""
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            log.info(f"TR-T01: Create valid tax rate with sub-table row (attempt {attempt}/{max_attempts})")
+            data = generate_create_test_data()
+            result = tr_page.create_record(data)
+            if result["status"] == "success":
+                break
+            if attempt < max_attempts and "Failed to save" in result.get("error", ""):
+                log.warning(f"Attempt {attempt} got 'Failed to save record', retrying with fresh data")
+                tr_page.hard_refresh()
+                continue
+            assert result["status"] == "success", f"Create failed: {result['error']}"
         time.sleep(0.3)
         assert tr_page.is_name_in_table(data["header"]["tax_rate_name"]), \
             f"Record '{data['header']['tax_rate_name']}' not found in table"

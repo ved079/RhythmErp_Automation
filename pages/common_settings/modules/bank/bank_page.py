@@ -1346,49 +1346,33 @@ class BankPage(BasePage):
     #  Row action buttons
     # ==============================================================
 
-    def _click_action_button(self, bank_name, action_icon):
-        """Click an action button for a specific row via the 3-dot (more_vert) menu.
-        Uses JS approach like UOM's _click_action_menu_item() for speed.
-
-        The ERP uses a single ⋮ menu per row instead of separate action columns.
+    def _click_action_button(self, bank_name, action_name):
+        """Click an action menu item (View/Edit/History) for a specific bank row.
+        Uses the same UOM/Designation pattern: td.cdk-column-actions button
+        trigger + text-based menu item matching (not icon-based).
         """
-        # Map friendly action names to the actual icon text in the ERP menu
-        icon_map = {
-            "view": "visibility",
-            "edit": "edit",
-            "history": "history",
-        }
-        icon_text = icon_map.get(action_icon, action_icon)
-
-        # Step 1 & 2: Find the row and click its menu trigger
-        js_trigger = """
-        var table = document.querySelector('table#excel-table');
-        if (!table) { throw new Error('Table not found'); }
-        var rows = table.querySelectorAll('tbody tr');
-        for (var i = 0; i < rows.length; i++) {
-            var cells = rows[i].querySelectorAll('td');
-            for (var j = 0; j < cells.length; j++) {
-                if (cells[j].textContent.trim().indexOf(arguments[0]) !== -1) {
-                    // Try .erp-row-trigger first (3-dot menu button)
-                    var trigger = rows[i].querySelector('.erp-row-trigger');
-                    if (trigger) {
-                        trigger.click();
-                        return 'menu_opened';
-                    }
-                    // Fallback: cdk-column-actions button
-                    var menuBtn = rows[i].querySelector('td.cdk-column-actions button');
-                    if (menuBtn) {
-                        menuBtn.scrollIntoView({block:'center'});
-                        menuBtn.click();
-                        return 'menu_opened';
-                    }
-                }
-            }
-        }
-        throw new Error('Row or action trigger not found for bank: ' + arguments[0]);
-        """
+        log.info("Clicking " + action_name + " via 3-dot menu for Bank: " + bank_name)
+        # Step 1: Find the row and click its 3-dot menu trigger
+        js_trigger = (
+            "var table = document.querySelector('table#excel-table');"
+            "if (!table) { throw new Error('Table not found'); }"
+            "var rows = table.querySelectorAll('tbody tr');"
+            "for (var i = 0; i < rows.length; i++) {"
+            "  var cells = rows[i].querySelectorAll('td');"
+            "  for (var j = 0; j < cells.length; j++) {"
+            "    if (cells[j].textContent.trim().indexOf(arguments[0]) !== -1) {"
+            "      var menuBtn = rows[i].querySelector('td.cdk-column-actions button');"
+            "      if (!menuBtn) { throw new Error('3-dot menu button not found in actions column'); }"
+            "      menuBtn.scrollIntoView({block:'center'});"
+            "      menuBtn.click();"
+            "      return 'menu_opened';"
+            "    }"
+            "  }"
+            "}"
+            "throw new Error('Bank ' + arguments[0] + ' not found in table');"
+        )
         result = self.driver.execute_script(js_trigger, bank_name)
-        log.info("Action trigger click: " + str(result))
+        log.info("3-dot menu opened for Bank: " + bank_name)
 
         # Wait briefly for dropdown to render
         try:
@@ -1398,61 +1382,60 @@ class BankPage(BasePage):
         except Exception:
             pass
 
-        # Step 3 & 4: Click the correct menu item by its icon text
-        js_menu_item = """
-        var overlay = document.querySelector('.cdk-overlay-container');
-        if (!overlay) {
-            // Fallback: try mat-menu panel
-            overlay = document.querySelector('.mat-mdc-menu-panel');
-        }
-        if (!overlay) throw new Error('CDK overlay not found after menu click');
-        var items = overlay.querySelectorAll('button.mat-mdc-menu-item, button');
-        for (var i = 0; i < items.length; i++) {
-            var icon = items[i].querySelector('i.material-icons');
-            if (icon && icon.textContent.trim() === arguments[0]) {
-                items[i].click();
-                return 'clicked menu item: ' + arguments[0];
-            }
-        }
-        // Fallback: try text match
-        for (var i = 0; i < items.length; i++) {
-            var text = items[i].textContent.trim().toLowerCase();
-            if (text.indexOf(arguments[0].toLowerCase()) !== -1) {
-                items[i].click();
-                return 'clicked_partial_' + arguments[0];
-            }
-        }
-        throw new Error('Menu item with icon "' + arguments[0] + '" not found');
-        """
-        result = self.driver.execute_script(js_menu_item, icon_text)
-        log.info("Menu item click: " + str(result))
+        # Step 2: Click the specific menu item by text (View/Edit/History)
+        js_click_item = (
+            "var overlay = document.querySelector('.cdk-overlay-container');"
+            "if (!overlay) { throw new Error('CDK overlay not found after menu click'); }"
+            "var items = overlay.querySelectorAll('button, span, div');"
+            "for (var i = 0; i < items.length; i++) {"
+            "  var text = items[i].textContent.trim();"
+            "  if (text === arguments[0]) {"
+            "    items[i].click();"
+            "    return 'clicked_' + arguments[0];"
+            "  }"
+            "}"
+            "for (var i = 0; i < items.length; i++) {"
+            "  var text = items[i].textContent.trim().toLowerCase();"
+            "  if (text.indexOf(arguments[0].toLowerCase()) !== -1) {"
+            "    items[i].click();"
+            "    return 'clicked_partial_' + arguments[0];"
+            "  }"
+            "}"
+            "throw new Error('Menu item \"' + arguments[0] + '\" not found in dropdown overlay');"
+        )
+        result = self.driver.execute_script(js_click_item, action_name)
+        log.info("Successfully clicked " + action_name + " for Bank: " + bank_name)
+        return result
 
     def click_view_button(self, bank_name):
         """Click the View button for a specific bank row via 3-dot menu."""
-        log.info(f"Clicking View for: {bank_name}")
-        self._force_close_panels()
+        self._click_action_button(bank_name, 'View')
         try:
-            self._click_action_button(bank_name, 'view')
-        except Exception as e:
-            log.error(f"View button not found for '{bank_name}': {e}")
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(("css selector", ".popup-header h3"))
+            )
+        except Exception:
+            pass
 
     def click_edit_button(self, bank_name):
         """Click the Edit button for a specific bank row via 3-dot menu."""
-        log.info(f"Clicking Edit for: {bank_name}")
-        self._force_close_panels()
+        self._click_action_button(bank_name, 'Edit')
         try:
-            self._click_action_button(bank_name, 'edit')
-        except Exception as e:
-            log.error(f"Edit button not found for '{bank_name}': {e}")
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(("css selector", "input[name='Bank Name']"))
+            )
+        except Exception:
+            pass
 
     def click_history_button(self, bank_name):
         """Click the History button for a specific bank row via 3-dot menu."""
-        log.info(f"Clicking History for: {bank_name}")
-        self._force_close_panels()
+        self._click_action_button(bank_name, 'History')
         try:
-            self._click_action_button(bank_name, 'history')
-        except Exception as e:
-            log.error(f"History button not found for '{bank_name}': {e}")
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(("css selector", "app-dynamic-history"))
+            )
+        except Exception:
+            pass
 
     # ==============================================================
     #  Search functionality
@@ -1462,12 +1445,19 @@ class BankPage(BasePage):
         """Click the search toggle button to show the search input via JS."""
         log.info("Opening search bar...")
         try:
-            self.driver.execute_script("""
-                var btn = document.querySelector('button.search-btn');
-                if (btn) { btn.click(); return 'clicked'; }
-                return 'not found';
-            """)
-            return True
+            js = (
+                "var btn = document.querySelector('button.search-btn')"
+                "  || document.querySelector('button[mattooltip=\"Search\"]')"
+                "  || document.querySelector('button[mattooltip=\"search\"]')"
+                "  || document.querySelector('.search-btn');"
+                "if (!btn) { return 'not_found'; }"
+                "btn.scrollIntoView({block:'center'});"
+                "btn.click();"
+                "return 'clicked';"
+            )
+            result = self.driver.execute_script(js)
+            if result == 'clicked':
+                return True
         except Exception:
             pass
         log.warning("Search button not found")
@@ -1475,7 +1465,7 @@ class BankPage(BasePage):
 
     def search(self, text):
         """Type text into the search input and click search via JS.
-        Fast approach like UOM with JS event dispatching."""
+        Uses multiple fallback selectors for the search button like Designation."""
         log.info(f"Searching for: {text}")
 
         # Step 1: Check if search input is already visible
@@ -1495,14 +1485,22 @@ class BankPage(BasePage):
         # Step 2: If search input not visible, click search button via JS to open it
         if search_input is None:
             log.info("Search input not visible, clicking search button via JS")
+            js_click_search = (
+                "var btn = document.querySelector('button.search-btn')"
+                "  || document.querySelector('button[mattooltip=\"Search\"]')"
+                "  || document.querySelector('button[mattooltip=\"search\"]')"
+                "  || document.querySelector('.search-btn');"
+                "if (!btn) { return 'not_found'; }"
+                "btn.scrollIntoView({block:'center'});"
+                "btn.click();"
+                "return 'clicked';"
+            )
             try:
-                self.driver.execute_script("""
-                    var btn = document.querySelector('button.search-btn');
-                    if (!btn) { throw new Error('Search button not found in DOM'); }
-                    btn.scrollIntoView({block:'center'});
-                    btn.click();
-                    return 'clicked';
-                """)
+                result = self.driver.execute_script(js_click_search)
+                log.info("Search button clicked via JS: " + str(result))
+                if result == 'not_found':
+                    log.error("Search button not found in DOM with any selector")
+                    return
             except Exception as e:
                 log.error("Failed to click search button via JS: " + str(e))
                 return
@@ -1536,11 +1534,15 @@ class BankPage(BasePage):
             )
 
         # Step 5: Click the search button again via JS to submit/filter the table
-        self.driver.execute_script("""
-            var btn = document.querySelector('button.search-btn');
-            if (btn) { btn.click(); return 'clicked'; }
-            return 'not found';
-        """)
+        js_click_search = (
+            "var btn = document.querySelector('button.search-btn')"
+            "  || document.querySelector('button[mattooltip=\"Search\"]')"
+            "  || document.querySelector('button[mattooltip=\"search\"]')"
+            "  || document.querySelector('.search-btn');"
+            "if (btn) { btn.click(); return 'clicked'; }"
+            "return 'not found';"
+        )
+        self.driver.execute_script(js_click_search)
         log.info("Search submit clicked via JS")
 
         # Step 6: Wait for table to refresh
