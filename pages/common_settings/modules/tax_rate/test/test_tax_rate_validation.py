@@ -338,8 +338,8 @@ class TestViewAndVersionBehaviors:
         time.sleep(0.3)
 
         # Check first visible row has disabled edit button via 3-dot menu
-        rows = tr_page.driver.find_elements(*tr_page.TABLE_BODY_ROWS)
-        assert len(rows) > 0, "Table should have at least one row"
+        row_count = tr_page.get_table_row_count()
+        assert row_count > 0, "Table should have at least one row"
         assert tr_page.is_edit_button_disabled(0), "Edit button should be disabled (TR-02)"
 
 

@@ -287,13 +287,16 @@ class TaxRatePage(BasePage):
     def _set_date_field(self, locator, value):
         """Set date picker value via JavaScript.
 
-        Date fields have name=null (TR-04) and use mat-datepicker.
-        We set the value via JS and dispatch change events for Angular.
+        Date fields use mat-datepicker with DD/MM/YYYY format.
+        We clear the existing value first (From Date auto-fills on open),
+        then set the new value via nativeSetter and dispatch events for Angular.
         """
         try:
             self.driver.execute_script(
                 "var input = arguments[0];"
                 "var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;"
+                "nativeSetter.call(input, '');"
+                "input.dispatchEvent(new Event('input', {bubbles: true}));"
                 "nativeSetter.call(input, arguments[1]);"
                 "input.dispatchEvent(new Event('input', {bubbles: true}));"
                 "input.dispatchEvent(new Event('change', {bubbles: true}));"
@@ -643,40 +646,34 @@ class TaxRatePage(BasePage):
     # ================================================================
 
     def _switch_to_sub_table_tab(self):
-        """Click 'Define Tax Rate Details' tab to reveal sub-table via JS.
+        """Click 'Define Tax Rate Details' step/tab to reveal sub-table via JS.
 
-        Uses targeted selectors — avoids clicking parent container divs that
-        contain the text but are not the actual tab element.
+        The live ERP uses a mat-horizontal-stepper with mat-step-header elements.
+        The sub-table is typically already visible on the first (and only) step.
+        This method clicks the step header if needed.
         """
         try:
             result = self.driver.execute_script(
+                "var stepHeaders = document.querySelectorAll('mat-step-header');"
+                "for (var i = 0; i < stepHeaders.length; i++) {"
+                "  if (stepHeaders[i].textContent.indexOf('Define Tax Rate Details') !== -1) {"
+                "    stepHeaders[i].click(); return 'clicked_step_header';"
+                "  }"
+                "}"
                 "var tabs = document.querySelectorAll('.big-model .tab-name, .big-model .stepper-title, "
-                ".big-model div[role=\"tab\"], .big-model .tab-title, .big-model .nav-link');"
+                ".big-model div[role=\"tab\"], .big-model .tab-title, .big-model .nav-link, "
+                ".overflow_model .tab-name, .overflow_model .stepper-title, .overflow_model [role=\"tab\"]');"
                 "for (var i = 0; i < tabs.length; i++) {"
                 "  if (tabs[i].textContent.indexOf('Define Tax Rate Details') !== -1) {"
                 "    tabs[i].click(); return 'clicked';"
                 "  }"
                 "}"
-                "var spans = document.querySelectorAll('.big-model .stepper-title span, .big-model .tab-name span, .big-model .nav-link span');"
-                "for (var i = 0; i < spans.length; i++) {"
-                "  if (spans[i].textContent.trim() === 'Define Tax Rate Details') {"
-                "    spans[i].click(); return 'clicked_span';"
+                "var allStep = document.querySelectorAll('[role=\"tab\"], mat-step-header');"
+                "for (var i = 0; i < allStep.length; i++) {"
+                "  if (allStep[i].textContent.indexOf('Define Tax Rate Details') !== -1) {"
+                "    allStep[i].click(); return 'clicked_generic';"
                 "  }"
                 "}"
-                "var navLinks = document.querySelectorAll('.big-model a.nav-link, .big-model .nav-item a');"
-                "for (var i = 0; i < navLinks.length; i++) {"
-                "  if (navLinks[i].textContent.indexOf('Define Tax Rate Details') !== -1) {"
-                "    navLinks[i].click(); return 'clicked_navlink';"
-                "  }"
-                "}"
-                "var all = document.querySelectorAll('.big-model .tab-name, .big-model .stepper-title, .big-model [role=\"tab\"], .big-model .nav-item, .big-model .nav-link, .big-model .tab-item');"
-                "for (var i = 0; i < all.length; i++) {"
-                "  if (all[i].textContent.trim() === 'Define Tax Rate Details') {"
-                "    all[i].click(); return 'clicked_exact_fallback';"
-                "  }"
-                "}"
-                "var tabBtns = document.querySelectorAll('.big-model .nav-item, .big-model .tab-item, .big-model button[role=\"tab\"]');"
-                "if (tabBtns.length >= 2) { tabBtns[1].click(); return 'clicked_second_tab'; }"
                 "return 'not_found';"
             )
             log.info("Sub-table tab switch: " + str(result))
