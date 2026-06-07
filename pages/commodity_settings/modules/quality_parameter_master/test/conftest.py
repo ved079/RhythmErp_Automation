@@ -1,4 +1,4 @@
-﻿"""
+"""
 conftest.py - Quality Parameter Master Commodity Settings (RhythmERP)
 """
 
@@ -16,7 +16,7 @@ from common.logger import log
 from common.browser_utils import get_driver
 from pages.login_screens.Login_Screens_.login_page import LoginPage
 from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
-from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
+from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHYTHMERP_FACILITY
 from pages.common_settings.cs_report_generator import (
     CSReportStore,
     generate_cs_report,
@@ -36,9 +36,9 @@ def pytest_configure(config):
         pytest test_quality_parameter_master_validation.py -m "not bug"
         pytest test_quality_parameter_master_validation.py -m ui
     """
-    config.addinivalue_line("markers", "smoke: Critical path â€” core create/edit/search")
+    config.addinivalue_line("markers", "smoke: Critical path — core create/edit/search")
     config.addinivalue_line("markers", "sanity: Broad functional coverage for quick feedback")
-    config.addinivalue_line("markers", "regression: Full test suite â€” all 30 tests")
+    config.addinivalue_line("markers", "regression: Full test suite — all 30 tests")
     config.addinivalue_line("markers", "bug: Tests validating known open bugs (BUG-001 to BUG-006)")
     config.addinivalue_line("markers", "ui: UI element visibility, layout, and interaction checks")
 
@@ -83,20 +83,28 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-#     log.step(3, "Selecting facility (blank - first option)")
-#     login_page.select_facility_by_index(index=0)
+    # if RHYTHMERP_FACILITY:
+    #     log.step(3, "Selecting facility: " + str(RHYTHMERP_FACILITY))
+    #     login_page.select_facility(RHYTHMERP_FACILITY)
+    # else:
+    #     log.step(3, "Selecting facility (blank - first option)")
+    #     login_page.select_facility(" ")
 
     login_page.wait_seconds(1)
 
-    log.step(4, "Clicking Login button")
+    log.step(4, "Clicking Login button (double-click)")
     login_page.click_login()
     login_page.wait_seconds(3)
 
     login_page.wait_for_login_complete()
+
+    # Verify login actually succeeded (don't falsely report success)
+    if "login" in driver.current_url.lower():
+        log.error("Login did not complete — still on login page. URL: " + driver.current_url)
+        raise RuntimeError("RhythmERP login failed — still on login page after wait. Check credentials in .env")
+
     log.info("RhythmERP login successful!")
     start_screenshot_broadcast(driver)
-    start_screenshot_broadcast(driver)
-    log.info("RhythmERP login successful!")
 
     yield driver
 
@@ -105,7 +113,7 @@ def logged_in_driver(driver):
 
 @pytest.fixture
 def qp_master_page(logged_in_driver):
-    """Quality Parameter Master page object â€” fresh navigation for each test."""
+    """Quality Parameter Master page object — fresh navigation for each test."""
     from pages.commodity_settings.modules.quality_parameter_master.quality_parameter_master_page import (
         QualityParameterMasterPage,
     )
@@ -116,6 +124,8 @@ def qp_master_page(logged_in_driver):
 
 # ================================================================
 # REPORT GENERATOR HOOKS
+# Auto-generates Excel report after every Commodity Settings test run.
+# Parses log.info lines for step details - no test code changes.
 # ================================================================
 
 _qpm_store = CSReportStore()
@@ -202,7 +212,7 @@ _qpm_store.record_issue(
     module="Quality Parameter Master",
     category="Functionality",
     description="No Delete option exists anywhere on the Quality Parameter Master "
-                "screen â€” no Delete button per row, no Delete in More menu, "
+                "screen — no Delete button per row, no Delete in More menu, "
                 "no Delete in the edit popup.",
     expected="Users should be able to delete a Quality Parameter via a Delete "
              "button on the row or in the edit popup.",
@@ -317,4 +327,3 @@ def pytest_sessionfinish(session, exitstatus):
         tb.print_exc()
         print("")
         print("  [WARNING] Report generation failed (see traceback above)")
-
