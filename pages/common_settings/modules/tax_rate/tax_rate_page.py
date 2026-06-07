@@ -271,6 +271,131 @@ class TaxRatePage(BasePage):
         """Click a WebElement using JavaScript."""
         self.driver.execute_script("arguments[0].click();", element)
 
+    def _click_mat_option_robust(self, option_text, exact_match=True):
+        """Click a mat-option with PointerEvent sequence for Angular Material compatibility.
+
+        Uses pointerdown -> pointerup -> click event sequence (what a real browser
+        does) because Angular Material's mat-option requires the full event chain
+        to properly register the selection. A simple .click() often fails to
+        trigger Angular's change detection, leaving the form control invalid.
+
+        After clicking, verifies the value was actually set in the mat-select
+        by reading .mat-mdc-select-value-text. If verification fails, falls
+        back to Selenium native click.
+
+        Args:
+            option_text: The option text to select.
+            exact_match: If True, match exact text. If False, partial match.
+
+        Returns:
+            True if selection succeeded (clicked + verified), False otherwise.
+        """
+        # Step 1: Click the option with full PointerEvent sequence
+        match_logic = (
+            "opts[i].textContent.trim() === arguments[0]"
+            if exact_match else
+            "opts[i].textContent.trim().indexOf(arguments[0]) !== -1"
+        )
+        result = self.driver.execute_script(
+            "var opts = document.querySelectorAll('mat-option, [role=\"option\"]');"
+            "var found = null;"
+            "for (var i = 0; i < opts.length; i++) {"
+            "  if (opts[i].offsetParent !== null && " + match_logic + ") {"
+            "    found = opts[i]; break;"
+            "  }"
+            "}"
+            "if (!found) return {clicked: false, reason: 'option_not_found'};"
+            "found.scrollIntoView({block:'center'});"
+            "found.dispatchEvent(new PointerEvent('pointerdown', {"
+            "  bubbles: true, cancelable: true, pointerId: 1, width: 1, height: 1,"
+            "  pressure: 0.5, clientX: 0, clientY: 0"
+            "}));"
+            "found.dispatchEvent(new PointerEvent('pointerup', {"
+            "  bubbles: true, cancelable: true, pointerId: 1, width: 1, height: 1,"
+            "  pressure: 0, clientX: 0, clientY: 0"
+            "}));"
+            "found.click();"
+            "return {clicked: true, reason: ''};"
+        , option_text)
+
+        clicked = result.get('clicked', False) if isinstance(result, dict) else bool(result)
+        if not clicked:
+            return False
+
+        # Step 2: Wait for dropdown panel to close (indicates Angular processed the click)
+        end_panel = time.monotonic() + 3
+        while time.monotonic() < end_panel:
+            panel_gone = self.driver.execute_script(
+                "var panels = document.querySelectorAll('.cdk-overlay-pane');"
+                "for (var i = 0; i < panels.length; i++) {"
+                "  if (panels[i].offsetParent !== null) {"
+                "    if (panels[i].querySelector('mat-option, [role=\"option\"]')) return false;"
+                "  }"
+                "}"
+                "return true;"
+            )
+            if panel_gone:
+                break
+            time.sleep(0.15)
+
+        # Step 3: Verify the value was actually set in the mat-select
+        verify_text = option_text if exact_match else option_text
+        value_set = self.driver.execute_script(
+            "var triggers = document.querySelectorAll('.mat-mdc-select-value-text, .mat-mdc-select-min-line');"
+            "for (var i = 0; i < triggers.length; i++) {"
+            "  if (triggers[i].offsetParent !== null) {"
+            "    var val = triggers[i].textContent.trim();"
+            "    if (val.indexOf(arguments[0]) !== -1) return {verified: true, value: val};"
+            "  }"
+            "}"
+            "return {verified: false, value: ''};"
+        , verify_text)
+
+        verified = value_set.get('verified', False) if isinstance(value_set, dict) else False
+
+        if not verified:
+            # JS click didn't register with Angular. Fallback: Selenium native click.
+            log.warning(f"Dropdown JS click for '{option_text}' didn't register. Trying Selenium click.")
+            try:
+                opt_elements = self.driver.find_elements(By.CSS_SELECTOR, 'mat-option')
+                for opt in opt_elements:
+                    try:
+                        if opt.is_displayed() and option_text in opt.text:
+                            opt.click()
+                            time.sleep(0.3)
+                            verified = True
+                            break
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+        return verified or clicked
+
+    def _check_form_invalid_fields(self):
+        """Check for invalid Angular form fields and log them.
+
+        Returns:
+            List of invalid field labels (empty if all valid).
+        """
+        try:
+            invalid = self.driver.execute_script(
+                "var form = document.querySelector('div.edit_pop_up');"
+                "if (!form) return [];"
+                "var invalid_fields = [];"
+                "var fields = form.querySelectorAll('.mat-form-field-invalid');"
+                "for (var i = 0; i < fields.length; i++) {"
+                "  var label = fields[i].querySelector('mat-label');"
+                "  invalid_fields.push(label ? label.textContent.trim() : 'unknown');"
+                "}"
+                "return invalid_fields;"
+            )
+            if invalid:
+                log.warning(f"Invalid form fields detected: {invalid}")
+            return invalid or []
+        except Exception:
+            return []
+
     def _set_text_field(self, locator, value):
         """Set text field value using atomic JavaScript for Angular reactivity."""
         try:
@@ -477,6 +602,9 @@ class TaxRatePage(BasePage):
     def select_tax_type(self, tax_type):
         """Select Tax Type from mat-select dropdown via JS clicks.
 
+        Uses _click_mat_option_robust() for reliable Angular Material option
+        selection with PointerEvent sequence + verification.
+
         Args:
             tax_type: The tax type to select (e.g., 'GST').
 
@@ -488,90 +616,90 @@ class TaxRatePage(BasePage):
         log.info(f"Selecting Tax Type: {tax_type}")
         try:
             self._force_close_panels()
-            # JS click the mat-select trigger
-            self.driver.execute_script(
-                "var labels = document.querySelectorAll('mat-label');"
+            # JS click the mat-select trigger (scoped to form popup)
+            opened = self.driver.execute_script(
+                "var form = document.querySelector('div.edit_pop_up');"
+                "if (!form) return 'form_not_found';"
+                "var labels = form.querySelectorAll('mat-label');"
                 "for (var i = 0; i < labels.length; i++) {"
                 "  if (labels[i].textContent.indexOf('Tax Type') !== -1) {"
-                "    var sel = labels[i].closest('mat-form-field').querySelector('mat-select');"
-                "    if (sel) { sel.click(); return 'opened'; }"
+                "    var field = labels[i].closest('mat-form-field');"
+                "    if (field) {"
+                "      var trigger = field.querySelector('.mat-mdc-select-trigger');"
+                "      if (trigger) { trigger.click(); return 'opened'; }"
+                "      var sel = field.querySelector('mat-select');"
+                "      if (sel) { sel.click(); return 'opened'; }"
+                "    }"
                 "  }"
                 "}"
-                "throw new Error('Tax Type mat-select not found');"
+                "return 'not_found';"
             )
-            # Fast poll for option to appear
+            log.info("Tax Type dropdown: " + str(opened))
+            # Fast poll for option panel to appear, then use robust click
             end_time = time.monotonic() + 5
             while time.monotonic() < end_time:
                 try:
-                    clicked = self.driver.execute_script(
-                        "var opts = document.querySelectorAll('mat-option span');"
-                        "for (var i = 0; i < opts.length; i++) {"
-                        "  if (opts[i].textContent.trim() === arguments[0]) {"
-                        "    opts[i].closest('mat-option').click(); return 'clicked';"
-                        "  }"
-                        "}"
-                        "return '';"
-                    , tax_type)
-                    if clicked:
-                        break
+                    result = self._click_mat_option_robust(tax_type, exact_match=True)
+                    if result:
+                        self._force_close_panels()
+                        log.info(f"Tax Type set to: {tax_type}")
+                        return True
                 except Exception:
                     pass
-                time.sleep(0.1)
-            else:
-                log.warning(f"Tax Type option '{tax_type}' not found in dropdown")
-                self._force_close_panels()
-                return False
+                time.sleep(0.15)
+            log.warning(f"Tax Type option '{tax_type}' not found in dropdown")
             self._force_close_panels()
-            log.info(f"Tax Type set to: {tax_type}")
-            return True
+            return False
         except Exception as e:
             log.warning(f"Tax Type selection failed: {e}")
             self._force_close_panels()
             return False
 
     def select_tax_authority(self, authority):
-        """Select Tax Authority from mat-select dropdown via JS clicks."""
+        """Select Tax Authority from mat-select dropdown via JS clicks.
+
+        Uses _click_mat_option_robust() with partial match for reliable
+        Angular Material option selection with PointerEvent + verification.
+        """
         if not authority:
             return True
         log.info(f"Selecting Tax Authority: {authority}")
         try:
             self._force_close_panels()
-            # JS click the mat-select trigger
-            self.driver.execute_script(
-                "var labels = document.querySelectorAll('mat-label');"
+            # JS click the mat-select trigger (scoped to form popup)
+            opened = self.driver.execute_script(
+                "var form = document.querySelector('div.edit_pop_up');"
+                "if (!form) return 'form_not_found';"
+                "var labels = form.querySelectorAll('mat-label');"
                 "for (var i = 0; i < labels.length; i++) {"
                 "  if (labels[i].textContent.indexOf('Tax Authority') !== -1) {"
-                "    var sel = labels[i].closest('mat-form-field').querySelector('mat-select');"
-                "    if (sel) { sel.click(); return 'opened'; }"
+                "    var field = labels[i].closest('mat-form-field');"
+                "    if (field) {"
+                "      var trigger = field.querySelector('.mat-mdc-select-trigger');"
+                "      if (trigger) { trigger.click(); return 'opened'; }"
+                "      var sel = field.querySelector('mat-select');"
+                "      if (sel) { sel.click(); return 'opened'; }"
+                "    }"
                 "  }"
                 "}"
-                "throw new Error('Tax Authority mat-select not found');"
+                "return 'not_found';"
             )
-            # Fast poll for option to appear
+            log.info("Tax Authority dropdown: " + str(opened))
+            # Fast poll for option panel to appear, then use robust click
             end_time = time.monotonic() + 5
             while time.monotonic() < end_time:
                 try:
-                    clicked = self.driver.execute_script(
-                        "var opts = document.querySelectorAll('mat-option span');"
-                        "for (var i = 0; i < opts.length; i++) {"
-                        "  if (opts[i].textContent.trim().indexOf(arguments[0]) !== -1) {"
-                        "    opts[i].closest('mat-option').click(); return 'clicked';"
-                        "  }"
-                        "}"
-                        "return '';"
-                    , authority)
-                    if clicked:
-                        break
+                    result = self._click_mat_option_robust(authority, exact_match=False)
+                    if result:
+                        self._force_close_panels()
+                        log.info(f"Tax Authority set to: {authority}")
+                        return True
                 except Exception:
                     pass
-                time.sleep(0.1)
-            else:
-                log.warning(f"Tax Authority option '{authority}' not found in dropdown")
-                self._force_close_panels()
-                return False
+                time.sleep(0.15)
+            log.warning(f"Tax Authority option '{authority}' not found in dropdown")
             self._force_close_panels()
-            log.info(f"Tax Authority set to: {authority}")
-            return True
+            return False
         except Exception as e:
             log.warning(f"Tax Authority selection failed: {e}")
             self._force_close_panels()
@@ -628,6 +756,9 @@ class TaxRatePage(BasePage):
             self.fill_from_date(from_date)
         if to_date:
             self.fill_to_date(to_date)
+
+        # Blur active element to trigger Angular change detection on all fields
+        self._blur_active_element()
 
     def clear_header_fields(self):
         """Clear all header text input fields."""
@@ -789,10 +920,10 @@ class TaxRatePage(BasePage):
             log.warning(f"Failed to delete sub-table row {row_index}: {e}")
 
     def select_hsn_number(self, hsn, row_index=0):
-        """Select HSN Number from the mat-select dropdown in a sub-table row via pure JS.
+        """Select HSN Number from the mat-select dropdown in a sub-table row.
 
-        Uses pure JS for the entire operation — avoids stale Selenium WebElements
-        that become invalid after the form popup DOM changes.
+        Uses _click_mat_option_robust() for reliable Angular Material option
+        selection with PointerEvent sequence + verification.
 
         Args:
             hsn: HSN Number string (e.g., '997212').
@@ -837,32 +968,22 @@ class TaxRatePage(BasePage):
             , row_index)
             log.info("HSN select opened: " + str(result))
 
-            # Fast poll for option to appear
+            # Fast poll for option panel to appear, then use robust click
             end_time = time.monotonic() + 5
             while time.monotonic() < end_time:
                 try:
-                    clicked = self.driver.execute_script(
-                        "var opts = document.querySelectorAll('mat-option span');"
-                        "for (var i = 0; i < opts.length; i++) {"
-                        "  if (opts[i].textContent.trim() === arguments[0]) {"
-                        "    opts[i].closest('mat-option').click(); return 'clicked';"
-                        "  }"
-                        "}"
-                        "return '';"
-                    , hsn)
-                    if clicked:
-                        break
+                    result = self._click_mat_option_robust(hsn, exact_match=True)
+                    if result:
+                        self._force_close_panels()
+                        log.info(f"HSN Number set to: {hsn}")
+                        return True
                 except Exception:
                     pass
-                time.sleep(0.1)
-            else:
-                log.warning(f"HSN option '{hsn}' not found in dropdown")
-                self._force_close_panels()
-                return False
+                time.sleep(0.15)
 
+            log.warning(f"HSN option '{hsn}' not found in dropdown")
             self._force_close_panels()
-            log.info(f"HSN Number set to: {hsn}")
-            return True
+            return False
         except Exception as e:
             log.warning(f"HSN Number selection failed: {e}")
             self._force_close_panels()
@@ -1003,6 +1124,38 @@ class TaxRatePage(BasePage):
         self._force_close_panels()
         self.click(self.CREATE_VERSION_BUTTON)
 
+    def _handle_submit_response(self, timeout=5):
+        """Combined SweetAlert handler — single fast poll.
+
+        Detects validation alert (warning OR error) OR form close (= success).
+        Returns dict: {alert: bool, title: str, form_closed: bool}
+        """
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            result = self.driver.execute_script(
+                "var popup = document.querySelector('.swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error');"
+                "if (popup && popup.offsetParent !== null) {"
+                "  var titleEl = document.querySelector('#swal2-title');"
+                "  var title = titleEl ? titleEl.textContent.trim() : '';"
+                "  var confirm = document.querySelector('.swal2-confirm');"
+                "  if (confirm) confirm.click();"
+                "  return {alert: true, title: title, form_closed: false};"
+                "}"
+                "var form = document.querySelector('div.edit_pop_up');"
+                "var formOpen = form && form.offsetParent !== null;"
+                "if (!formOpen) {"
+                "  return {alert: false, title: '', form_closed: true};"
+                "}"
+                "return null;"
+            )
+            if result is not None:
+                return result
+            time.sleep(0.2)
+
+        # Timeout — check form state
+        form_closed = not self.is_form_open()
+        return {"alert": False, "title": "", "form_closed": form_closed}
+
     # ================================================================
     # CREATE RECORD — Full flow with retry logic
     # ================================================================
@@ -1048,44 +1201,40 @@ class TaxRatePage(BasePage):
                 if sub_rows:
                     self.fill_sub_table(sub_rows)
 
+                # Check for invalid form fields before submitting
+                invalid_fields = self._check_form_invalid_fields()
+                if invalid_fields:
+                    log.warning(f"Form has invalid fields before submit: {invalid_fields}")
+                    # Try to blur active element to trigger Angular validation
+                    self._blur_active_element()
+                    time.sleep(0.3)
+                    # Re-check
+                    invalid_fields = self._check_form_invalid_fields()
+                    if invalid_fields:
+                        log.warning(f"Still invalid after blur: {invalid_fields}")
+
                 # Click Submit via JS
                 self.submit()
 
-                # Fast poll for result (form close = success)
-                end_time = time.monotonic() + 6
-                while time.monotonic() < end_time:
-                    # Check for validation alert first (ultra-fast JS check)
+                # Use combined response handler (checks warning + error SweetAlerts)
+                response = self._handle_submit_response(timeout=6)
+
+                if response.get("alert"):
+                    error_title = response.get("title", "Validation Failed")
+                    log.info(f"Validation alert: {error_title}")
                     try:
-                        result = self.driver.execute_script(
-                            "var warn = document.querySelector('.swal2-popup.swal2-icon-warning');"
-                            "if (warn && warn.offsetParent !== null) {"
-                            "  var title = document.querySelector('.swal2-title');"
-                            "  var btn = document.querySelector('.swal2-confirm');"
-                            "  if (btn) btn.click();"
-                            "  return title ? title.textContent.trim() : 'Validation Failed';"
-                            "}"
-                            "var el = document.querySelector('div.edit_pop_up');"
-                            "if (el && el.offsetParent !== null) return 'form_open';"
-                            "return 'form_closed';"
-                        )
-                        if result == 'form_closed':
-                            log.info(f"Record '{name}' created successfully (silent success)")
-                            return {"status": "success", "error": ""}
-                        elif result not in ('form_open', ''):
-                            # Validation alert detected — result is the alert title
-                            log.info("Validation Failed: " + str(result))
-                            try:
-                                self.cancel()
-                            except Exception:
-                                pass
-                            return {"status": "failed", "error": result}
+                        self.cancel()
                     except Exception:
                         pass
+                    return {"status": "failed", "error": error_title}
 
-                    time.sleep(0.2)
+                if response.get("form_closed"):
+                    log.info(f"Record '{name}' created successfully (silent success)")
+                    return {"status": "success", "error": ""}
 
-                # Form still open, no alert — dropdown may have failed
-                log.warning(f"Cycle {cycle}: Form still open, no alert — retrying")
+                # Form still open, no alert — log diagnostic info
+                invalid_fields = self._check_form_invalid_fields()
+                log.warning(f"Cycle {cycle}: Form still open, no alert. Invalid fields: {invalid_fields}")
 
             except Exception as e:
                 log.warning(f"Cycle {cycle} error: {e}")
