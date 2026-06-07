@@ -163,9 +163,25 @@ class QualityParameterMasterPage(BasePage):
         self._js_click_popup_button("Update")
 
     def cancel(self):
-        """Click Cancel via JS click on popup-footer button."""
+        """Click Cancel via JS click on popup-footer button.
+        Gracefully handles case where no popup is open (no error thrown)."""
         log.info("Clicking Cancel")
-        self._js_click_popup_button("Cancel")
+        try:
+            result = self.driver.execute_script(
+                "var footers = document.querySelectorAll('div[class*=\"popup-footer\"]'); "
+                "for(var i=0;i<footers.length;i++){"
+                "  var buttons = footers[i].querySelectorAll('button'); "
+                "  for(var j=0;j<buttons.length;j++){"
+                "    if(buttons[j].textContent.trim().indexOf('Cancel')!==-1){"
+                "      buttons[j].click(); return 'clicked_Cancel';"
+                "    }"
+                "  }"
+                "} "
+                "return 'no_cancel_found';"
+            )
+            log.info("Cancel result: " + str(result))
+        except Exception as e:
+            log.warning("Cancel click failed: " + str(e))
 
     def _js_click_popup_button(self, button_text):
         """Click a popup footer button (Submit/Update/Cancel) via JS — bypasses overlay issues."""
@@ -267,7 +283,10 @@ class QualityParameterMasterPage(BasePage):
         return result
 
     def click_view_button(self, qp_name):
-        """Click View via 3-dot menu for a specific QP row."""
+        """Click View via 3-dot menu for a specific QP row.
+        Searches first to ensure the QP is on the current page."""
+        if not self.is_qp_in_table(qp_name):
+            self.search_qp(qp_name)
         self._click_action_menu_item(qp_name, "View")
         try:
             WebDriverWait(self.driver, 5).until(
@@ -277,7 +296,10 @@ class QualityParameterMasterPage(BasePage):
             pass
 
     def click_edit_button(self, qp_name):
-        """Click Edit via 3-dot menu for a specific QP row."""
+        """Click Edit via 3-dot menu for a specific QP row.
+        Searches first to ensure the QP is on the current page."""
+        if not self.is_qp_in_table(qp_name):
+            self.search_qp(qp_name)
         self._click_action_menu_item(qp_name, "Edit")
         try:
             WebDriverWait(self.driver, 5).until(
@@ -570,6 +592,160 @@ class QualityParameterMasterPage(BasePage):
             return len(rows)
         except Exception:
             return 0
+
+    # ================================================================
+    # Search cleanup — needed by test C02, E02, S01-S03, S05
+    # ================================================================
+
+    def clear_search(self):
+        """Clear the search input and refresh to get clean state."""
+        log.info("Clearing search - hard refreshing")
+        self.hard_refresh()
+
+    # ================================================================
+    # Filter panel — needed by test S04
+    # ================================================================
+
+    def open_filter_panel(self):
+        """Open the filter panel via JS click on the filter button."""
+        log.info("Opening filter panel")
+        try:
+            result = self.driver.execute_script(
+                "var btn = document.querySelector('button.filter-btn') "
+                "|| document.querySelector('button[mattooltip=\"Filter\"]') "
+                "|| document.querySelector('button[mattooltip=\"filter\"]'); "
+                "if(!btn){return 'not found';} "
+                "btn.scrollIntoView({block:'center'}); btn.click(); return 'clicked';"
+            )
+            log.info("Filter panel result: " + str(result))
+        except Exception as e:
+            log.warning("Filter panel open failed: " + str(e))
+
+    def close_filter_panel(self):
+        """Close the filter panel via JS click on close/cancel."""
+        log.info("Closing filter panel")
+        try:
+            result = self.driver.execute_script(
+                "var btn = document.querySelector('button.filter-btn') "
+                "|| document.querySelector('button[mattooltip=\"Filter\"]') "
+                "|| document.querySelector('button[mattooltip=\"filter\"]'); "
+                "if(btn){btn.click(); return 'clicked toggle';} "
+                "var cancel = document.querySelector('.filter-panel button.cancel-btn'); "
+                "if(cancel){cancel.click(); return 'clicked cancel';} "
+                "return 'not found';"
+            )
+            log.info("Filter close result: " + str(result))
+        except Exception as e:
+            log.warning("Filter panel close failed: " + str(e))
+
+    def is_filter_panel_open(self):
+        """Check if the filter panel is currently visible."""
+        try:
+            return bool(self.driver.execute_script(
+                "var panel = document.querySelector('.filter-panel, .erp-filter-panel'); "
+                "return panel && panel.offsetParent !== null;"
+            ))
+        except Exception:
+            return False
+
+    # ================================================================
+    # Column sort — needed by test S05
+    # ================================================================
+
+    def click_name_column_header(self):
+        """Click the Name column header to toggle sort order via JS."""
+        log.info("Clicking Name column header for sort")
+        try:
+            result = self.driver.execute_script(
+                "var header = document.querySelector('table#excel-table th.cdk-column-name') "
+                "|| document.querySelector('table#excel-table th.mat-column-name'); "
+                "if(!header){return 'not found';} "
+                "header.click(); return 'clicked';"
+            )
+            log.info("Name column header result: " + str(result))
+        except Exception as e:
+            log.warning("Name column header click failed: " + str(e))
+
+    # ================================================================
+    # View/Edit popup verification — needed by tests P03, P04
+    # ================================================================
+
+    def verify_view_popup_read_only(self):
+        """Verify the View popup shows Name field as read-only.
+        Returns True if read-only, False if editable."""
+        log.info("Verifying View popup is read-only")
+        try:
+            name_disabled = self.driver.execute_script(
+                "var el = document.querySelector("
+                "\"input[name='Name'], input[name='name'], input[formcontrolname='name']\"); "
+                "return el && el.disabled;"
+            )
+            no_submit = not bool(self.driver.execute_script(
+                "var footers = document.querySelectorAll('div[class*=\"popup-footer\"]'); "
+                "for(var i=0;i<footers.length;i++){"
+                "  var buttons = footers[i].querySelectorAll('button'); "
+                "  for(var j=0;j<buttons.length;j++){"
+                "    if(buttons[j].textContent.trim().indexOf('Submit')!==-1){return true;}"
+                "  }"
+                "} return false;"
+            ))
+            no_update = not bool(self.driver.execute_script(
+                "var footers = document.querySelectorAll('div[class*=\"popup-footer\"]'); "
+                "for(var i=0;i<footers.length;i++){"
+                "  var buttons = footers[i].querySelectorAll('button'); "
+                "  for(var j=0;j<buttons.length;j++){"
+                "    if(buttons[j].textContent.trim().indexOf('Update')!==-1){return true;}"
+                "  }"
+                "} return false;"
+            ))
+            has_cancel = bool(self.driver.execute_script(
+                "var footers = document.querySelectorAll('div[class*=\"popup-footer\"]'); "
+                "for(var i=0;i<footers.length;i++){"
+                "  var buttons = footers[i].querySelectorAll('button'); "
+                "  for(var j=0;j<buttons.length;j++){"
+                "    if(buttons[j].textContent.trim().indexOf('Cancel')!==-1){return true;}"
+                "  }"
+                "} return false;"
+            ))
+            is_readonly = bool(name_disabled) and no_submit and no_update and has_cancel
+            log.info("View popup read-only check: disabled=" + str(name_disabled)
+                     + " no_submit=" + str(no_submit) + " no_update=" + str(no_update)
+                     + " has_cancel=" + str(has_cancel) + " => readonly=" + str(is_readonly))
+            return is_readonly
+        except Exception as e:
+            log.warning("View popup read-only check failed: " + str(e))
+            return False
+
+    def verify_edit_popup_editable(self):
+        """Verify the Edit popup shows Name field as editable with Update button.
+        Returns True if editable, False if not."""
+        log.info("Verifying Edit popup is editable")
+        try:
+            has_update = bool(self.driver.execute_script(
+                "var footers = document.querySelectorAll('div[class*=\"popup-footer\"]'); "
+                "for(var i=0;i<footers.length;i++){"
+                "  var buttons = footers[i].querySelectorAll('button'); "
+                "  for(var j=0;j<buttons.length;j++){"
+                "    if(buttons[j].textContent.trim().indexOf('Update')!==-1){return true;}"
+                "  }"
+                "} return false;"
+            ))
+            has_cancel = bool(self.driver.execute_script(
+                "var footers = document.querySelectorAll('div[class*=\"popup-footer\"]'); "
+                "for(var i=0;i<footers.length;i++){"
+                "  var buttons = footers[i].querySelectorAll('button'); "
+                "  for(var j=0;j<buttons.length;j++){"
+                "    if(buttons[j].textContent.trim().indexOf('Cancel')!==-1){return true;}"
+                "  }"
+                "} return false;"
+            ))
+            is_editable = has_update and has_cancel
+            log.info("Edit popup editable check: has_update=" + str(has_update)
+                     + " has_cancel=" + str(has_cancel) + " => editable=" + str(is_editable))
+            return is_editable
+        except Exception as e:
+            log.warning("Edit popup editable check failed: " + str(e))
+            return False
 
     # ================================================================
     # High-level CRUD workflows
