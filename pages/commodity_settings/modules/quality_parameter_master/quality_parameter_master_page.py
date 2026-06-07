@@ -49,10 +49,10 @@ class QualityParameterMasterPage(BasePage):
     # ================================================================
 
     def navigate_to_page(self):
-        """Navigate + refresh + wait for table ready."""
+        """Navigate to QPM page and wait for table ready."""
         log.info("Navigating to Quality Parameter Master page")
         self.driver.get(self.PAGE_URL)
-        self.hard_refresh()
+        self._wait_for_page_ready()
 
     def hard_refresh(self):
         """Hard refresh and wait for table to appear."""
@@ -468,7 +468,8 @@ class QualityParameterMasterPage(BasePage):
     # ================================================================
 
     def search_qp(self, qp_name):
-        """Search for a QP by name. Multi-selector fallback for search button."""
+        """Search for a QP by name. Returns True if found in results, False otherwise.
+        Multi-selector fallback for search button."""
         log.info("Searching for QP: " + qp_name)
         # Step 1: Check if search input is already visible
         search_input = None
@@ -485,14 +486,20 @@ class QualityParameterMasterPage(BasePage):
 
         # Step 2: If not visible, click search button via JS (multi-selector fallback)
         if search_input is None:
-            self.driver.execute_script(
-                "var btn = document.querySelector('button.search-btn') "
-                "|| document.querySelector('button[mattooltip=\"Search\"]'); "
-                "if(!btn){throw new Error('Search button not found');} "
-                "btn.scrollIntoView({block:'center'}); btn.click();"
-            )
             try:
-                search_input = WebDriverWait(self.driver, 5).until(
+                self.driver.execute_script(
+                    "var btn = document.querySelector('button.search-btn') "
+                    "|| document.querySelector('button[mattooltip=\"Search\"]') "
+                    "|| document.querySelector('button[mattooltip=\"search\"]') "
+                    "|| document.querySelector('.search-btn'); "
+                    "if(!btn){return 'not_found';} "
+                    "btn.scrollIntoView({block:'center'}); btn.click(); return 'clicked';"
+                )
+            except Exception as e:
+                log.warning("Search button click failed: " + str(e))
+                return False
+            try:
+                search_input = WebDriverWait(self.driver, 3).until(
                     EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
                 )
             except Exception:
@@ -521,13 +528,17 @@ class QualityParameterMasterPage(BasePage):
 
         # Step 5: Wait for table to refresh
         try:
-            WebDriverWait(self.driver, 5).until(
+            WebDriverWait(self.driver, 3).until(
                 lambda d: d.find_elements("css selector", "table#excel-table tbody tr")
             )
         except Exception:
             pass
-        log.info("Search completed for: " + qp_name)
-        return True
+
+        # Step 6: Check if the searched name is actually in the filtered results
+        time.sleep(0.3)  # Brief pause for Angular rendering
+        found = self.is_qp_in_table(qp_name)
+        log.info("Search completed for: " + qp_name + " found=" + str(found))
+        return found
 
     # ================================================================
     # Table data helpers
@@ -753,7 +764,8 @@ class QualityParameterMasterPage(BasePage):
 
     def create_quality_parameter(self, data):
         """Full create workflow: open form → fill → submit → handle response.
-        Returns the name that was submitted."""
+        Returns the name that was submitted.
+        Optimised: checks form-closed FIRST (BUG-004 fast path), then alert."""
         name = data.get("name", "")
         log.info("Creating Quality Parameter: " + name)
 
@@ -763,31 +775,35 @@ class QualityParameterMasterPage(BasePage):
         self.fill_form(data)
         self.submit()
 
-        # BUG-004: No success SweetAlert — just check if form closed or validation appeared
-        if self.is_validation_alert_present(timeout=3):
-            warning = self.get_swal_title()
-            log.warning("Validation alert after submit: " + warning)
-            self.handle_validation_warning(timeout=2)
-            return name
-
-        # Wait briefly for form to close
-        try:
-            WebDriverWait(self.driver, 5).until(
-                lambda d: not d.execute_script(
+        # BUG-004: No success SweetAlert — form just closes silently
+        # Check form-closed first (fast path ~1s), then alert (slow path ~2s)
+        end_time = time.monotonic() + 4
+        while time.monotonic() < end_time:
+            if not self.is_add_form_open():
+                break  # Form closed — valid create
+            # Quick single-check for validation alert
+            try:
+                visible = self.driver.execute_script(
                     "var el = document.querySelector("
-                    "\"input[name='Name'], input[name='name'], input[formcontrolname='name']\"); "
+                    "'.swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error'); "
                     "return el && el.offsetParent !== null;"
                 )
-            )
-        except Exception:
-            pass
+                if visible:
+                    warning = self.get_swal_title()
+                    log.warning("Validation alert after submit: " + warning)
+                    self.handle_validation_warning(timeout=2)
+                    return name
+            except Exception:
+                pass
+            time.sleep(0.2)
 
         log.info("Quality Parameter created: " + name)
         return name
 
     def edit_quality_parameter(self, qp_name, new_data):
         """Full edit workflow: navigate → search → click edit → fill → update.
-        Returns the new name."""
+        Returns the new name.
+        Optimised: checks form-closed FIRST (BUG-004 fast path), then alert."""
         new_name = new_data.get("name", "")
         log.info("Editing QP '" + qp_name + "' -> '" + new_name + "'")
 
@@ -799,23 +815,26 @@ class QualityParameterMasterPage(BasePage):
         self.fill_form(new_data)
         self.click_update()
 
-        # BUG-004: No success SweetAlert — wait for form to close
-        if self.is_validation_alert_present(timeout=3):
-            warning = self.get_swal_title()
-            log.warning("Validation alert after update: " + warning)
-            self.handle_validation_warning(timeout=2)
-            return new_name
-
-        try:
-            WebDriverWait(self.driver, 5).until(
-                lambda d: not d.execute_script(
+        # BUG-004: No success SweetAlert — form just closes silently
+        # Check form-closed first (fast path), then alert
+        end_time = time.monotonic() + 4
+        while time.monotonic() < end_time:
+            if not self.is_add_form_open():
+                break  # Form closed — valid update
+            try:
+                visible = self.driver.execute_script(
                     "var el = document.querySelector("
-                    "\"input[name='Name'], input[name='name'], input[formcontrolname='name']\"); "
+                    "'.swal2-popup.swal2-icon-warning, .swal2-popup.swal2-icon-error'); "
                     "return el && el.offsetParent !== null;"
                 )
-            )
-        except Exception:
-            pass
+                if visible:
+                    warning = self.get_swal_title()
+                    log.warning("Validation alert after update: " + warning)
+                    self.handle_validation_warning(timeout=2)
+                    return new_name
+            except Exception:
+                pass
+            time.sleep(0.2)
 
         log.info("Quality Parameter updated: " + new_name)
         return new_name

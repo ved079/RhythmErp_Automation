@@ -44,27 +44,15 @@ from common.logger import log
 # ====================================================================
 
 def _cleanup(page):
-    """Fast cleanup: cancel any open form, close panels, hard-refresh."""
-    try:
-        page.cancel()
-    except Exception:
-        pass
-    try:
-        page._force_close_panels()
-    except Exception:
-        pass
+    """Fast cleanup: hard-refresh resets page (closes all popups/overlays)."""
     page.hard_refresh()
 
 
 def _create_qp_fast(page, data=None):
-    """Create a QP, close leftover popup, hard-refresh. Returns name."""
+    """Create a QP and hard-refresh. Returns name."""
     if data is None:
         data = generate_valid_quality_parameter_data("PreReq")
     name = page.create_quality_parameter(data)
-    try:
-        page.close_popup()
-    except Exception:
-        pass
     page.hard_refresh()
     return name
 
