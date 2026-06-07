@@ -273,13 +273,22 @@ TAX_TYPE_OPTIONS = list(TAX_TYPE_IDS.keys())
 TAX_AUTHORITY_OPTIONS = list(TAX_AUTHORITY_IDS.keys())
 
 _tr_counter = 0
+_session_ts = None
 
 
 def generate_tax_rate_name():
-    """Return a unique tax rate name string."""
-    global _tr_counter
+    """Return a unique tax rate name string.
+
+    Uses a session timestamp prefix so names are unique across
+    multiple pytest runs (the counter resets each session but the
+    timestamp changes).  Format: AUTOTEST-TR-<HHMMSS>-<NNNN>.
+    """
+    global _tr_counter, _session_ts
+    if _session_ts is None:
+        from datetime import datetime
+        _session_ts = datetime.now().strftime("%H%M%S")
     _tr_counter += 1
-    return f"AUTOTEST-TR-{_tr_counter:04d}"
+    return f"AUTOTEST-TR-{_session_ts}-{_tr_counter:04d}"
 
 
 def generate_revision_status():
