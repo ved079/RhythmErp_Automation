@@ -312,13 +312,10 @@ SWAL_TITLE_SUCCESS = "Success"
 
 _bnk_counter = 0
 
-
 def _bnk_next():
-    """Return and increment the bank counter."""
     global _bnk_counter
     _bnk_counter += 1
     return _bnk_counter
-
 
 def generate_bank_name(prefix="BANK"):
     """Return a valid alpha-only bank name (A-Z a-z only, >= 10 chars).
@@ -333,7 +330,7 @@ def generate_bank_name(prefix="BANK"):
         suffix = chr(ord('A') + (val % 26)) + suffix
         val //= 26
     # Build alpha-only name
-    base = f"{prefix}{suffix}XX"
+    base = f"{prefix}{suffix}XXNM"
     if len(base) < 10:
         base = base + "X" * (10 - len(base))
     return base.upper()
