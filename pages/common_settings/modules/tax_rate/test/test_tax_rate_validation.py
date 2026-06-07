@@ -201,7 +201,7 @@ class TestFieldLevelValidations:
         """TR-T11: SQL injection in Tax Rate Name → accepted (bug TR-01)."""
         log.info("TR-T11: SQL injection in Tax Rate Name (bug TR-01)")
         data = generate_create_test_data()
-        data["header"]["tax_rate_name"] = "AUTOTEST_SQL_INJ"
+        data["header"]["tax_rate_name"] = f"AUTOTEST_SQL_INJ{generate_tax_rate_name()}"
         result = tr_page.create_record(data)
         # Bug TR-01: SQL injection is accepted
         assert result["status"] == "success", f"Create failed: {result['error']}"
