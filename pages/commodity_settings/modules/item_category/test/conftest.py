@@ -130,20 +130,38 @@ _ic_store = CSReportStore()
 
 # ---- Item Category Known Issues ----
 
-# BUG-001 (HIGH): No maxlength on Item Category input
+# BUG-001 (HIGH): No maxlength on Item Category input — 256+ char names ACCEPTED
 _ic_store.record_issue(
     severity="High",
     module="Item Category",
     category="Validation",
     description="No maxlength attribute on the Item Category input field. Names of 256+ "
-                "characters are accepted by the client. The server rejects at 255 "
-                "with a generic 'Failed to save record' error instead of a specific "
-                "field-level message. No client-side length validation exists.",
+                "characters are accepted by BOTH the client AND the server. There is "
+                "no client-side or server-side length validation. The 256-char name "
+                "(all 'C' chars) is saved successfully with 'Your record has been added "
+                "successfully!' message.",
     expected="System should enforce maxlength=255 on the Item Category input and show "
              "inline validation if the limit is exceeded.",
-    actual="No maxlength constraint. 256+ char names accepted by client, "
-           "rejected by server with generic 'Failed to save record' message.",
-    test_ref="IC-C09, IC-C10",
+    actual="No maxlength constraint. 256+ char names accepted and saved successfully. "
+           "No warning, no error, no truncation.",
+    test_ref="IC-C10, IC-P08",
+    status="Open",
+)
+
+# BUG-001b (INFO): Item Category field only accepts chars, nums, hyphen (-), and slash (/)
+_ic_store.record_issue(
+    severity="Info",
+    module="Item Category",
+    category="Validation",
+    description="Item Category field rejects underscores (_) and other special characters "
+                "with a generic 'Validation Failed' popup. Only letters, numbers, "
+                "hyphen (-) and slash (/) are accepted. This is by design but the "
+                "error message is not specific — it says 'Validation Failed' without "
+                "indicating which character is invalid.",
+    expected="System should show a specific message like 'Item Category can only contain "
+             "letters, numbers, hyphens and slashes'.",
+    actual="Generic 'Validation Failed' popup with no indication of the character restriction.",
+    test_ref="IC-C06, IC-C07, IC-N01, IC-P04",
     status="Open",
 )
 
@@ -237,6 +255,21 @@ _ic_store.record_issue(
     actual="History popup shows 'No data available'.",
     test_ref="IC-H01, IC-H03",
     status="Open",
+)
+
+# ---- Item Category UI Changes (live system vs. original automation) ----
+_ic_store.record_issue(
+    severity="Info",
+    module="Item Category",
+    category="UI Change",
+    description="Action buttons changed from separate columns (View/Edit/History) "
+                "to a single 3-dot menu dropdown in cdk-column-actions. "
+                "Automation code updated to use _click_action_menu_item() instead of "
+                "separate column button locators.",
+    expected="Separate action columns (cdk-column-view/edit/archive).",
+    actual="Single Actions column with 3-dot menu dropdown.",
+    test_ref="All tests using click_view/edit/history_button",
+    status="Fixed",
 )
 
 

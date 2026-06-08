@@ -41,10 +41,12 @@ from datetime import datetime
 # ──────────────────────────────────────────────
 
 def generate_item_category_name(prefix="AutoIC"):
-    """Generate a unique Item Category name with timestamp."""
+    """Generate a unique Item Category name with timestamp.
+    NOTE: Item Category field only accepts chars, nums, hyphen (-) and slash (/).
+    NO underscores — they cause 'Validation Failed' on the live system."""
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     rand = random.randint(100, 999)
-    return f"{prefix}_{timestamp}_{rand}"
+    return f"{prefix}-{timestamp}-{rand}"
 
 
 def generate_item_description():

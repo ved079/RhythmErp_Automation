@@ -14,14 +14,14 @@ FORM LAYOUT (Simple popup — NOT a stepper):
   [Cancel] [Submit]
 
 TABLE COLUMNS (main listing):
-  - View / Edit / History   (action buttons per row)
+  - Actions (3-dot menu: View / Edit / History)
   - Item Category / Item Description / Level
 
 NOTES:
   - NO Status toggle
   - NO dropdowns
   - NO Delete button
-  - HAS History button
+  - HAS History button (via 3-dot menu)
   - Duplicates ALLOWED for Item Category name
   - Level field: accepts negative integers, strips leading zeros on save,
     accepts 0, does NOT accept decimals
@@ -38,6 +38,7 @@ KEY RULES:
   - NEVER use Keys.ESCAPE (closes entire popup form!)
   - JS clicks for Angular Material overlays
   - ALL SweetAlert2 dismissals MUST use JS querySelector click
+  - Row actions use 3-dot menu (cdk-column-actions) matching UOM golden standard
 """
 
 import os
@@ -76,13 +77,14 @@ class ItemCategoryPage(BasePage):
     # ==============================================================
     ADD_BUTTON = ("css", "button.erp-add-btn")
     SEARCH_TOGGLE = ("css", "button.search-btn, button[aria-label='Search']")
+    SEARCH_BUTTON = ("css", "button.search-btn")
     REFRESH_BUTTON = ("css", "button[mattooltip='Refresh']")
     FILTER_BUTTON = ("css", "div[mattooltip='Filters'] button")
 
     # ==============================================================
     #  LOCATORS - Search bar
     # ==============================================================
-    SEARCH_INPUT = ("css", "input#erpSearchInput, .erp-search-wrapper input")
+    SEARCH_INPUT = ("css", "input#erpSearchInput")
 
     # ==============================================================
     #  LOCATORS - Table (main listing)
@@ -113,6 +115,12 @@ class ItemCategoryPage(BasePage):
         "table#excel-table tbody tr td.no-data, "
         "table#excel-table tbody tr.mat-mdc-no-data-row",
     )
+
+    # ==============================================================
+    #  LOCATORS - Row action buttons (3-dot menu pattern — UOM golden standard)
+    # ==============================================================
+    ACTIONS_COLUMN = ("css", "td.cdk-column-actions")
+    THREE_DOT_MENU_BUTTON = ("css", "td.cdk-column-actions button")
 
     # ==============================================================
     #  LOCATORS - Popup form
@@ -155,43 +163,16 @@ class ItemCategoryPage(BasePage):
     )
 
     # ==============================================================
-    #  LOCATORS - Row action buttons
+    #  LOCATORS - History popup (UOM golden standard — app-dynamic-history)
     # ==============================================================
-    VIEW_BUTTON_BY_NAME = (
-        "xpath",
-        "//td[contains(text(),'{item_name}')]"
-        "/ancestor::tr//td[contains(@class,'cdk-column-view')]"
-        "//button",
-    )
-    EDIT_BUTTON_BY_NAME = (
-        "xpath",
-        "//td[contains(text(),'{item_name}')]"
-        "/ancestor::tr//td[contains(@class,'cdk-column-edit')]"
-        "//button",
-    )
-    HISTORY_BUTTON_BY_NAME = (
-        "xpath",
-        "//td[contains(text(),'{item_name}')]"
-        "/ancestor::tr//td[contains(@class,'cdk-column-archive')]"
-        "//button",
-    )
-
-    # ==============================================================
-    #  LOCATORS - History popup
-    # ==============================================================
-    HISTORY_POPUP = (
-        "xpath",
-        "//div[contains(@class,'popup-overlay') or contains(@class,'big-model')]"
-        "[.//h3[contains(translate(.,'HISTORY','history'),'history')]]",
-    )
-    HISTORY_TABLE_ROWS = (
-        "css",
-        ".popup-body table tbody tr, .big-model table tbody tr",
-    )
-    HISTORY_CLOSE_BUTTON = (
-        "xpath",
-        "//div[@class='popup-footer']//button[contains(.,'Cancel') or contains(.,'Close')]",
-    )
+    HISTORY_HEADER = ("css", "app-dynamic-history .tbl-title h2")
+    HISTORY_NO_DATA = ("css", "app-dynamic-history .no-data, app-dynamic-history img[alt='No Data Available']")
+    HISTORY_NO_DATA_TEXT = ("xpath", "//app-dynamic-history//*[contains(text(),'No data available')]")
+    HISTORY_SEARCH_INPUT = ("css", "app-dynamic-history input#erpSearchInput")
+    HISTORY_TABLE_ROWS = ("css", "app-dynamic-history table#excel-table tbody tr")
+    HISTORY_CANCEL_BUTTON = ("xpath", "//app-dynamic-history//div[@class='popup-footer']//button[contains(.,'Cancel')]")
+    HISTORY_COL_CREATED_TIME = ("css", "app-dynamic-history td.cdk-column-created_date_time")
+    HISTORY_COL_UPDATED_TIME = ("css", "app-dynamic-history td.cdk-column-updated_date_time")
 
     # ==============================================================
     #  LOCATORS - SweetAlert2
@@ -689,138 +670,208 @@ class ItemCategoryPage(BasePage):
         return errors
 
     # ==============================================================
-    #  Row action buttons
+    #  Row action buttons (3-dot menu — UOM golden standard)
     # ==============================================================
 
-    def click_view_button(self, item_name=None, row_index=0):
-        """Click the View button on a table row."""
-        log.info(f"Clicking View button (name={item_name}, row={row_index})...")
-        if item_name:
-            try:
-                locator = (
-                    "xpath",
-                    f"//td[contains(text(),'{item_name}')]"
-                    "/ancestor::tr//td[contains(@class,'cdk-column-view')]"
-                    "//button",
-                )
-                btn = self.find_visible_element(locator, timeout=5)
-                if btn:
-                    self.driver.execute_script("arguments[0].click();", btn)
-                    self.wait_seconds(1)
-                    return True
-            except Exception:
-                pass
-
-        # Fallback: use row index
-        return self._click_action_button_by_index(row_index, 0)
-
-    def click_edit_button(self, item_name=None, row_index=0):
-        """Click the Edit button on a table row."""
-        log.info(f"Clicking Edit button (name={item_name}, row={row_index})...")
-        if item_name:
-            try:
-                locator = (
-                    "xpath",
-                    f"//td[contains(text(),'{item_name}')]"
-                    "/ancestor::tr//td[contains(@class,'cdk-column-edit')]"
-                    "//button",
-                )
-                btn = self.find_visible_element(locator, timeout=5)
-                if btn:
-                    self.driver.execute_script("arguments[0].click();", btn)
-                    self.wait_seconds(1)
-                    return True
-            except Exception:
-                pass
-
-        return self._click_action_button_by_index(row_index, 1)
-
-    def click_history_button(self, item_name=None, row_index=0):
-        """Click the History button on a table row."""
-        log.info(f"Clicking History button (name={item_name}, row={row_index})...")
-
-        self._force_close_panels()
-
-        if item_name:
-            try:
-                locator = (
-                    "xpath",
-                    f"//td[contains(text(),'{item_name}')]"
-                    "/ancestor::tr//td[contains(@class,'cdk-column-archive')]"
-                    "//button",
-                )
-                btn = self.find_visible_element(locator, timeout=5)
-                if btn:
-                    self.driver.execute_script("arguments[0].click();", btn)
-                    self.wait_seconds(2)
-                    return True
-            except Exception as e:
-                log.warning(f"History button by name failed: {e}")
-
-        # Fallback: find archive column button by row index
-        row = row_index + 1
-
-        # Debug: count rows and archive cells
-        rows_found = self.driver.find_elements(By.CSS_SELECTOR, "tr.mat-mdc-row")
-        archive_cells = self.driver.find_elements(By.CSS_SELECTOR, "td.cdk-column-archive")
-        log.info(f"Debug: {len(rows_found)} table rows, {len(archive_cells)} archive cells")
-
-        # Try CSS selector approach (more reliable than XPath)
-        try:
-            archive_btn = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                f"tr.mat-mdc-row:nth-child({row}) td.cdk-column-archive button"
-            )
-            log.info(f"Debug: Found {len(archive_btn)} archive buttons in row {row}")
-
-            if archive_btn:
-                btn = archive_btn[0]
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});", btn
-                )
-                self.wait_seconds(0.5)
-                self.driver.execute_script("arguments[0].click();", btn)
-                log.info("History button clicked via JS")
-                self.wait_seconds(2)
-                return True
-        except Exception as e:
-            log.warning(f"CSS selector approach failed: {e}")
-
-        # Last resort: find ALL archive buttons and click by index
-        try:
-            all_archive_btns = self.driver.find_elements(
-                By.CSS_SELECTOR, "td.cdk-column-archive button"
-            )
-            log.info(f"Debug: Total {len(all_archive_btns)} archive buttons on page")
-
-            if row_index < len(all_archive_btns):
-                btn = all_archive_btns[row_index]
-                self.driver.execute_script("arguments[0].click();", btn)
-                log.info(f"History button clicked by index {row_index}")
-                self.wait_seconds(2)
-                return True
-        except Exception as e:
-            log.warning(f"Index approach failed: {e}")
-
-        raise Exception(f"History button not found for row {row_index}")
-
-    def _click_action_button_by_index(self, row_index, btn_index):
-        """Click an action button by row and button index."""
+    def _get_row_category_name(self, row_index):
+        """Get the Item Category name from a specific row by index.
+        Used as fallback when clicking action menu by index."""
         try:
             rows = self.driver.find_elements(
                 By.CSS_SELECTOR, "table#excel-table tbody tr"
             )
             if row_index < len(rows):
-                btns = rows[row_index].find_elements(By.CSS_SELECTOR, "button")
-                if btn_index < len(btns):
-                    self.driver.execute_script(
-                        "arguments[0].click();", btns[btn_index]
-                    )
-                    self.wait_seconds(1)
-                    return True
+                cells = rows[row_index].find_elements(By.CSS_SELECTOR, "td")
+                for cell in cells:
+                    cls = cell.get_attribute("class") or ""
+                    if "cdk-column-item_category" in cls or "mat-column-item_category" in cls \
+                            or "cdk-column-itemCategory" in cls or "mat-column-itemCategory" in cls:
+                        return cell.text.strip()
+                # Fallback: return first non-action cell text
+                for cell in cells:
+                    cls = cell.get_attribute("class") or ""
+                    if "cdk-column-actions" not in cls:
+                        text = cell.text.strip()
+                        if text:
+                            return text
+        except Exception:
+            pass
+        return ""
+
+    def _click_action_menu_item(self, item_name, action_name):
+        """Click an action menu item (View/Edit/History) for a specific Item Category row.
+        The live system uses a 3-dot (⋮) menu button in cdk-column-actions.
+        Pure JS — finds row by name, clicks 3-dot menu, waits for CDK overlay, clicks named item.
+        Matches UOM golden standard pattern."""
+        log.info("Clicking " + action_name + " via 3-dot menu for Item Category: " + item_name)
+        js = """
+        var table = document.querySelector('table#excel-table');
+        if (!table) { throw new Error('Table not found'); }
+        var rows = table.querySelectorAll('tbody tr');
+        for (var i = 0; i < rows.length; i++) {
+            var cells = rows[i].querySelectorAll('td');
+            for (var j = 0; j < cells.length; j++) {
+                if (cells[j].textContent.trim().indexOf(arguments[0]) !== -1) {
+                    var menuBtn = rows[i].querySelector('td.cdk-column-actions button');
+                    if (!menuBtn) { throw new Error('3-dot menu button not found in actions column'); }
+                    menuBtn.scrollIntoView({block:'center'});
+                    menuBtn.click();
+                    return 'menu_opened';
+                }
+            }
+        }
+        throw new Error('Item Category ' + arguments[0] + ' not found in table');
+        """
+        result = self.driver.execute_script(js, item_name)
+        log.info("3-dot menu opened for Item Category: " + item_name)
+
+        # Wait briefly for dropdown to render
+        try:
+            WebDriverWait(self.driver, 2).until(
+                EC.presence_of_element_located(("css selector", ".cdk-overlay-container .cdk-overlay-pane"))
+            )
+        except Exception:
+            pass
+
+        # Click the specific menu item from the dropdown overlay
+        js_click_item = """
+        var overlay = document.querySelector('.cdk-overlay-container');
+        if (!overlay) { throw new Error('CDK overlay not found after menu click'); }
+        var items = overlay.querySelectorAll('button, span, div');
+        for (var i = 0; i < items.length; i++) {
+            var text = items[i].textContent.trim();
+            if (text === arguments[0]) {
+                items[i].click();
+                return 'clicked_' + arguments[0];
+            }
+        }
+        // Fallback: try partial match
+        for (var i = 0; i < items.length; i++) {
+            var text = items[i].textContent.trim().toLowerCase();
+            if (text.indexOf(arguments[0].toLowerCase()) !== -1) {
+                items[i].click();
+                return 'clicked_partial_' + arguments[0];
+            }
+        }
+        throw new Error('Menu item "' + arguments[0] + '" not found in dropdown overlay');
+        """
+        result = self.driver.execute_script(js_click_item, action_name)
+        log.info("Successfully clicked " + action_name + " for Item Category: " + item_name)
+        return result
+
+    def _click_action_menu_by_index(self, row_index, action_name):
+        """Click an action menu item by row index (fallback when item_name is not available).
+        Opens the 3-dot menu for the row at the given index, then clicks the named action."""
+        log.info("Clicking " + action_name + " via 3-dot menu by row index: " + str(row_index))
+        js = """
+        var table = document.querySelector('table#excel-table');
+        if (!table) { throw new Error('Table not found'); }
+        var rows = table.querySelectorAll('tbody tr');
+        if (arguments[0] >= rows.length) { throw new Error('Row index ' + arguments[0] + ' out of range'); }
+        var menuBtn = rows[arguments[0]].querySelector('td.cdk-column-actions button');
+        if (!menuBtn) { throw new Error('3-dot menu button not found in actions column for row ' + arguments[0]); }
+        menuBtn.scrollIntoView({block:'center'});
+        menuBtn.click();
+        return 'menu_opened';
+        """
+        try:
+            result = self.driver.execute_script(js, row_index)
+            log.info("3-dot menu opened for row index: " + str(row_index))
         except Exception as e:
-            log.warning(f"Failed to click action button: {e}")
-        return False
+            log.warning("Failed to open 3-dot menu for row index " + str(row_index) + ": " + str(e))
+            return False
+
+        # Wait briefly for dropdown to render
+        try:
+            WebDriverWait(self.driver, 2).until(
+                EC.presence_of_element_located(("css selector", ".cdk-overlay-container .cdk-overlay-pane"))
+            )
+        except Exception:
+            pass
+
+        # Click the specific menu item
+        js_click_item = """
+        var overlay = document.querySelector('.cdk-overlay-container');
+        if (!overlay) { throw new Error('CDK overlay not found after menu click'); }
+        var items = overlay.querySelectorAll('button, span, div');
+        for (var i = 0; i < items.length; i++) {
+            var text = items[i].textContent.trim();
+            if (text === arguments[0]) {
+                items[i].click();
+                return 'clicked_' + arguments[0];
+            }
+        }
+        // Fallback: try partial match
+        for (var i = 0; i < items.length; i++) {
+            var text = items[i].textContent.trim().toLowerCase();
+            if (text.indexOf(arguments[0].toLowerCase()) !== -1) {
+                items[i].click();
+                return 'clicked_partial_' + arguments[0];
+            }
+        }
+        throw new Error('Menu item "' + arguments[0] + '" not found in dropdown overlay');
+        """
+        try:
+            result = self.driver.execute_script(js_click_item, action_name)
+            log.info("Successfully clicked " + action_name + " for row index: " + str(row_index))
+            return True
+        except Exception as e:
+            log.warning("Failed to click " + action_name + " for row index " + str(row_index) + ": " + str(e))
+            return False
+
+    def click_view_button(self, item_name=None, row_index=0):
+        """Click the View button on a table row via 3-dot menu (UOM golden standard)."""
+        log.info("Clicking View button (name={}, row={})...".format(item_name, row_index))
+        if item_name:
+            self._click_action_menu_item(item_name, "View")
+            # Wait for view popup to appear
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located(("css selector", ".popup-header h3"))
+                )
+            except Exception:
+                pass
+            return True
+        else:
+            # Fallback: use row index
+            return self._click_action_menu_by_index(row_index, "View")
+
+    def click_edit_button(self, item_name=None, row_index=0):
+        """Click the Edit button on a table row via 3-dot menu (UOM golden standard)."""
+        log.info("Clicking Edit button (name={}, row={})...".format(item_name, row_index))
+        if item_name:
+            self._click_action_menu_item(item_name, "Edit")
+            # Wait for edit popup to appear
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located(("css selector", "input"))
+                )
+            except Exception:
+                pass
+            return True
+        else:
+            # Fallback: use row index
+            return self._click_action_menu_by_index(row_index, "Edit")
+
+    def click_history_button(self, item_name=None, row_index=0):
+        """Click the History button on a table row via 3-dot menu (UOM golden standard)."""
+        log.info("Clicking History button (name={}, row={})...".format(item_name, row_index))
+
+        self._force_close_panels()
+
+        if item_name:
+            self._click_action_menu_item(item_name, "History")
+            # Wait for history popup to appear
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located(("css selector", "app-dynamic-history"))
+                )
+            except Exception:
+                pass
+            return True
+        else:
+            # Fallback: use row index
+            return self._click_action_menu_by_index(row_index, "History")
 
     # ==============================================================
     #  Mode detection
@@ -851,45 +902,20 @@ class ItemCategoryPage(BasePage):
         return False
 
     # ==============================================================
-    #  History popup
+    #  History popup (UOM golden standard — app-dynamic-history)
     # ==============================================================
 
     def is_history_popup_open(self):
-        """Check if the History popup is visible."""
+        """Check if the History popup is visible (UOM golden standard — checks for app-dynamic-history element)."""
         try:
-            # Check all possible popup/overlay containers
-            selectors = [
-                "mat-dialog-container",
-                "cdk-overlay-pane",
-                "div.big-model",
-                "div.edit_pop_up",
-                "div.cdk-overlay-pane",
-                "div.mat-mdc-dialog-surface",
-            ]
-            for sel in selectors:
-                elements = self.driver.find_elements(By.CSS_SELECTOR, sel)
-                for el in elements:
-                    try:
-                        if el.is_displayed():
-                            text = el.text.lower()
-                            if "history" in text:
-                                log.info(f"History popup found via selector: {sel}")
-                                return True
-                    except Exception:
-                        continue
-
-            # Nuclear option: find ANY visible overlay with "history" text
-            overlays = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "[class*='overlay'], [class*='dialog'], [class*='popup'], [class*='modal']"
+            elements = self.driver.find_elements(
+                By.CSS_SELECTOR, "app-dynamic-history"
             )
-            for o in overlays:
+            for el in elements:
                 try:
-                    if o.is_displayed():
-                        text = o.text.lower()
-                        if "history" in text:
-                            log.info(f"History popup found via overlay search")
-                            return True
+                    if el.is_displayed():
+                        log.info("History popup found via app-dynamic-history")
+                        return True
                 except Exception:
                     continue
         except Exception:
@@ -897,14 +923,29 @@ class ItemCategoryPage(BasePage):
         return False
 
     def close_history_popup(self):
-        """Close the History popup by clicking Cancel/Close."""
+        """Close the History popup by clicking Cancel using pure JS (UOM golden standard)."""
+        log.info("Closing History popup")
+        js = """
+        var footers = document.querySelectorAll('app-dynamic-history .popup-footer');
+        if (footers.length === 0) {
+            footers = document.querySelectorAll('.popup-footer');
+        }
+        for (var i = 0; i < footers.length; i++) {
+            var buttons = footers[i].querySelectorAll('button');
+            for (var j = 0; j < buttons.length; j++) {
+                if (buttons[j].textContent.indexOf('Cancel') !== -1) {
+                    buttons[j].click();
+                    return 'clicked';
+                }
+            }
+        }
+        throw new Error('Cancel button not found in any popup-footer');
+        """
         try:
-            btn = self.find_visible_element(self.HISTORY_CLOSE_BUTTON, timeout=5)
-            if btn:
-                log.info(f"History button found, clicking...")
-                self.driver.execute_script("arguments[0].click();", btn)
-                self.wait_seconds(1)
-        except Exception:
+            self.driver.execute_script(js)
+            log.info("History popup closed via JS Cancel click")
+        except Exception as e:
+            log.warning("JS Cancel click failed: " + str(e))
             # Force close via JS
             self.driver.execute_script("""
                 document.querySelectorAll('.big-model, .edit_pop_up').forEach(
@@ -913,22 +954,32 @@ class ItemCategoryPage(BasePage):
             """)
         self._force_close_panels()
 
+    def is_history_empty(self):
+        """Check if the History popup shows 'No data available'.
+        Returns True if empty, False if data exists. (UOM golden standard)"""
+        log.info("Checking if History is empty")
+        no_data = self.is_present(self.HISTORY_NO_DATA, timeout=5)
+        no_data_text = self.is_present(self.HISTORY_NO_DATA_TEXT, timeout=5)
+        is_empty = no_data or no_data_text
+        log.info("History empty: " + str(is_empty))
+        return is_empty
+
     def get_history_table_row_count(self):
-        """Get the number of rows in the history popup table."""
+        """Get the number of rows in the history popup table (UOM golden standard — app-dynamic-history selectors)."""
         try:
             rows = self.driver.find_elements(
-                By.CSS_SELECTOR, ".popup-body table tbody tr, .big-model table tbody tr"
+                By.CSS_SELECTOR, "app-dynamic-history table#excel-table tbody tr"
             )
             return len(rows)
         except Exception:
             return 0
 
     def get_history_table_headers(self):
-        """Get the column headers from the history popup table."""
+        """Get the column headers from the history popup table (UOM golden standard — app-dynamic-history selectors)."""
         headers = []
         try:
             ths = self.driver.find_elements(
-                By.CSS_SELECTOR, ".popup-body table thead th, .big-model table thead th"
+                By.CSS_SELECTOR, "app-dynamic-history table thead th"
             )
             for th in ths:
                 try:
@@ -978,19 +1029,20 @@ class ItemCategoryPage(BasePage):
                 "table#excel-table tbody td.mat-column-itemCategory"
             )
             if not cells:
-                # Fallback: get all non-action cells from column 3 (after View/Edit/History)
+                # Fallback: get first non-action cell from each row
                 rows = self.driver.find_elements(
                     By.CSS_SELECTOR, "table#excel-table tbody tr"
                 )
                 for row in rows:
                     try:
                         tds = row.find_elements(By.CSS_SELECTOR, "td")
-                        # Skip action columns (typically first 3)
-                        for td in tds[3:]:
-                            text = td.text.strip()
-                            if text:
-                                names.append(text)
-                                break
+                        for td in tds:
+                            cls = td.get_attribute("class") or ""
+                            if "cdk-column-actions" not in cls:
+                                text = td.text.strip()
+                                if text:
+                                    names.append(text)
+                                    break
                     except Exception:
                         continue
             else:
@@ -1024,32 +1076,141 @@ class ItemCategoryPage(BasePage):
         names = self.get_all_item_names()
         return any(name in n for n in names)
 
+    # ==============================================================
+    #  Search (UOM golden standard — JS-based with Angular events)
+    # ==============================================================
+
     def search_item(self, search_text):
-        """Search for an item using the search input."""
-        log.info(f"Searching for: {search_text}")
+        """Search for an item using the search input. Uses JS clicks to bypass overlay issues.
+        The search button (button.search-btn) is often overlapped on the live system
+        and never becomes Selenium-clickable, so we click it via JavaScript instead.
+        Matches UOM golden standard search_uom() pattern."""
+        log.info("Searching for: " + str(search_text))
+
+        # Step 1: Check if search input is already visible
+        search_input = None
         try:
-            # Toggle search bar if needed
+            el = self.driver.find_element("css selector", "input#erpSearchInput")
+            rect = self.driver.execute_script(
+                "var r = arguments[0].getBoundingClientRect(); "
+                "return r.width > 0 && r.height > 0;", el
+            )
+            if rect:
+                search_input = el
+                log.info("Search input already visible, skipping button click")
+        except Exception:
+            pass
+
+        # Step 2: If search input not visible, click search button via JS to open it
+        if search_input is None:
+            log.info("Search input not visible, clicking search button via JS")
+            js_click_search = """
+            var btn = document.querySelector('button.search-btn');
+            if (!btn) { throw new Error('Search button not found in DOM'); }
+            btn.scrollIntoView({block:'center'});
+            btn.click();
+            return 'clicked';
+            """
             try:
-                search_toggle = self.driver.find_element(
-                    By.CSS_SELECTOR, "button.search-btn, button[aria-label='Search']"
+                result = self.driver.execute_script(js_click_search)
+                log.info("Search button clicked via JS: " + str(result))
+            except Exception as e:
+                log.error("Failed to click search button via JS: " + str(e))
+                return
+
+            # Wait for search input to become visible
+            try:
+                search_input = WebDriverWait(self.driver, 5).until(
+                    EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
                 )
-                if search_toggle.is_displayed():
-                    self.driver.execute_script("arguments[0].click();", search_toggle)
-                    self.wait_seconds(0.5)
+                log.info("Search input became visible")
+            except Exception:
+                log.warning("Search input did not become visible after clicking search button")
+                return
+
+        # Step 3: Clear existing value completely
+        self.driver.execute_script("arguments[0].value = '';", search_input)
+        self.driver.execute_script(
+            "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));",
+            search_input,
+        )
+
+        # Step 4: Set new value and fire Angular change events
+        self.driver.execute_script(
+            "arguments[0].value = arguments[1];", search_input, search_text
+        )
+        search_input.click()
+        for event in ["input", "keyup", "change"]:
+            self.driver.execute_script(
+                "arguments[0].dispatchEvent(new Event('" + event + "', { bubbles: true }));",
+                search_input,
+            )
+
+        # Step 5: Click the search button again via JS to submit/filter the table
+        js_click_search = """
+        var btn = document.querySelector('button.search-btn');
+        if (btn) { btn.click(); return 'clicked'; }
+        return 'not found';
+        """
+        self.driver.execute_script(js_click_search)
+        log.info("Search submit clicked via JS")
+
+        # Step 6: Wait for table to refresh
+        try:
+            WebDriverWait(self.driver, 5).until(
+                lambda d: d.find_elements("css selector", "table#excel-table tbody tr")
+            )
+        except Exception:
+            pass  # Table might be empty (no results)
+
+        log.info("Search completed for: " + str(search_text))
+
+    def search_and_verify(self, name):
+        """Search for an item category name, then verify it exists in the filtered results.
+        This is the recommended way to verify a create/update — uses search
+        instead of scanning all rows (handles pagination automatically).
+        Returns True if found. (UOM golden standard pattern)"""
+        log.info("Searching and verifying Item Category: " + str(name))
+        self.search_item(name)
+        return self.is_ic_in_table(name)
+
+    def is_ic_in_table(self, name):
+        """Check if an Item Category name exists in the main table (current view only).
+        Polls up to 10s to handle slow Angular re-renders.
+        Returns True if found, raises AssertionError if not. (UOM golden standard pattern)"""
+        log.info("Verifying Item Category '{}' exists in table".format(name))
+        end_time = time.monotonic() + 10
+        last_seen = []
+        while time.monotonic() < end_time:
+            try:
+                rows = self.driver.find_elements(
+                    By.CSS_SELECTOR, "table#excel-table tbody tr"
+                )
+                last_seen = []
+                for row in rows:
+                    cells = row.find_elements(By.CSS_SELECTOR, "td")
+                    row_text = " | ".join(c.text.strip() for c in cells if c.text.strip())
+                    last_seen.append(row_text)
+                    for cell in cells:
+                        if name in cell.text.strip():
+                            log.info("Item Category '{}' found in table".format(name))
+                            return True
             except Exception:
                 pass
+            time.sleep(0.5)
+        log.error("Item Category '{}' NOT found. Table contents were: {}".format(name, last_seen))
+        raise AssertionError(
+            "Item Category '{}' NOT found in table after search. Last table rows: {}".format(name, last_seen)
+        )
 
-            # Type in search input
-            search_input = self.driver.find_element(
-                By.CSS_SELECTOR,
-                "input#erpSearchInput, .erp-search-wrapper input"
-            )
-            search_input.clear()
-            search_input.send_keys(search_text)
-            self.wait_seconds(2)
+    def clear_search(self):
+        """Clear the search input and refresh to get clean state. (UOM golden standard pattern)"""
+        log.info("Clearing search - hard refreshing")
+        self.hard_refresh()
 
-        except Exception as e:
-            log.warning(f"Search failed: {e}")
+    # ==============================================================
+    #  Field value helpers
+    # ==============================================================
 
     def get_field_value(self, field_locator):
         """Get the current value of a form field."""
