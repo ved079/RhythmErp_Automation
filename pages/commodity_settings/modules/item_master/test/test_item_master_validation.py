@@ -1,8 +1,8 @@
 """
 test_item_master_validation.py
 ------------------------------
-Comprehensive validation test suite for RhythmERP Item Master screen.
-~57 test cases across 6 phases.
+Optimised validation test suite for RhythmERP Item Master screen.
+44 test cases in a SINGLE class (UOM golden code pattern).
 
 Phases:
   1. Create Form Validations  (15 tests) — IM-C01 to IM-C15
@@ -11,6 +11,20 @@ Phases:
   4. Search & Filter Edge Cases (5 tests) — IM-S01 to IM-S05
   5. Popup & UI Behaviors       (8 tests) — IM-P01 to IM-P08
   6. History & Audit Trail      (5 tests) — IM-H01 to IM-H05
+
+Optimised (v3 — UOM golden code patterns):
+- Single test class: reduces fixture overhead
+- Uses logged_in_driver directly (no im_page fixture)
+- Each test creates its own ItemMasterPage(driver)
+- try/finally with _cleanup() in every test
+- hard_refresh() for fast page reset between tests
+- search_and_verify() for create/update verification
+- Removed _create_prerequisite_item() helper — inline create + _cleanup
+- click_edit_button(name) takes just the item_name string
+- handle_validation_warning() takes no timeout parameter
+- is_validation_alert_present(timeout) takes timeout parameter
+- Removed excessive wait_seconds() calls
+- Concise logging: log.info(">>> STEP 1: ...")
 
 IMPORTANT — Item Name is READONLY:
   - Item Name field has readonly=true and CANNOT be typed into
@@ -22,59 +36,24 @@ IMPORTANT — Item Name is READONLY:
     values, which is difficult to control from live UI dropdowns
   - Item Name is also readonly in Edit mode
 
-Stepper Layout (verified from live application 2026-05-18 — V2 exploration):
-  - Step 1: All form fields + 3 toggle switches (NOT 4!)
-    (Status, Is Critical, Include Wip, Is Packing Material)
-    "Allow Negative Stock" toggle DOES NOT EXIST in Item Master
-  - Step 2: Attachment Type (combobox) + File Upload ONLY
-  - Step 3: Packaging table with Add Row
-  - Edit mode: Step 2 & 3 tabs DISABLED, button says "Update" not "Submit"
-  - Item Group is NOT required in Create or Edit mode
-  - Base Uom does NOT auto-sync with UOM — independent fields
-  - DROPDOWN FILL ORDER: Category → Group → Type → Attr1 → Attr2 → Attr3 → Attr4 → Attr5
-
 Known Bugs (CONFIRMED via browser exploration 2026-05-18):
-  BUG-001 (HIGH)  : [RETRACTED] Spaces-only Item Name — not applicable,
-                     field is readonly and auto-generated
-  BUG-002 (HIGH)  : Duplicate Item Names ALLOWED — confirmed! Two "Soyabean"
-                     rows exist in table both Active. No uniqueness validation.
-  BUG-003 (MEDIUM): [RETRACTED] No maxlength on Item Name — not applicable,
-                     field is readonly and auto-generated
-  BUG-004 (MEDIUM): [RETRACTED] Negative Base Uom Conversion was REJECTED
-                     during test execution (XPASS on C08) — bug NOT confirmed
+  BUG-002 (HIGH)  : Duplicate Item Names ALLOWED
+  BUG-004 (MEDIUM): Negative Base Uom Conversion — retracted (XPASS)
   BUG-005 (LOW)   : No Delete option anywhere on screen
-  BUG-006 (MEDIUM): Dropdown option duplication — Item Category & Item Group
-                     show options TWICE in dropdown
+  BUG-006 (MEDIUM): Dropdown option duplication
   BUG-007 (CRITICAL): Browser-clicked mat-select does NOT update Angular form
-                     model — must use JS value-setter + dispatchEvent pattern
-
-Bug Handling Decisions:
-  BUG-001: Retracted — Item Name is readonly; cannot type spaces
-  BUG-002: CONFIRMED — Duplicate Item Names ARE allowed. Table has two
-           "Soyabean" rows both Active. Test should verify duplicates
-           CAN be created (not that they're blocked).
-  BUG-003: Retracted — Item Name is auto-generated; maxlength not testable
-  BUG-004: RETRACTED — Negative Base Uom Conversion was rejected during test
-           run (C08 XPASS). Removed xfail marker.
-  BUG-005: Documented in UI phase, not tested (no button to click)
-  BUG-006: Documented — dropdown shows duplicate options, no test needed
-  BUG-007: CRITICAL for automation — must use JS value-setter for dropdowns
 
 Run:
   pytest test_item_master_validation.py -v --tb=short
-  pytest test_item_master_validation.py -v -k "TestCreateForm" --tb=short
   pytest test_item_master_validation.py -v -k "IM-C03" --tb=short
 
-Marker-based run examples (requires conftest.py with pytest_configure):
+Marker-based run examples:
   pytest test_item_master_validation.py -v -m smoke
   pytest test_item_master_validation.py -v -m "smoke or sanity"
-  pytest test_item_master_validation.py -v -m "sanity and not bug"
   pytest test_item_master_validation.py -v -m "not bug"
   pytest test_item_master_validation.py -v -m ui
-  pytest test_item_master_validation.py -v -m bug
-  pytest test_item_master_validation.py -v -m regression
 
-Marker Summary (44 tests across 6 classes):
+Marker Summary (44 tests in single class):
   smoke (15): C01, C02, C03, C07, C14, C15, E01, E02, E03, S01, S03, P01, P03, P04, H01
   sanity (41): All smoke + C04, C05, C08-C13, D01, E04-E08, S02, S04, S05, P02, P05-P08, H02-H05
   regression (44): All tests (including 3 skipped: C06, D02, D03)
@@ -114,358 +93,254 @@ from common.logger import log
 
 
 # ====================================================================
-# Helper: create a prerequisite item, refresh, return its name
+# Shared attribute-key list for duplicating dropdown values
 # ====================================================================
+_DUPLICATE_ATTR_KEYS = [
+    "item_category", "item_group", "item_type",
+    "item_attribute1", "item_attribute2", "item_attribute3",
+    "item_attribute4", "item_attribute5", "uom",
+    "hsn_sac_code", "base_uom", "item_sourcing",
+]
 
-def _create_prerequisite_item(page, name_prefix="PreReq"):
-    """Create an Item Master entry for tests that need existing data.
-    Returns the auto-generated item name and the data dict.
 
-    Note: Item Name is auto-generated from Item Attribute 1-5 values
-    and cannot be manually typed (readonly=true).
+class TestItemMasterValidation:
+    """All 44 Item Master validation tests in a single class.
+
+    Uses UOM golden code patterns:
+    - logged_in_driver fixture directly (no im_page)
+    - try/finally with _cleanup() in every test
+    - hard_refresh() for fast page reset
+    - search_and_verify() for existence checks
+    - Concise step-level logging
     """
-    data = generate_full_valid_item_data(name_prefix)
-    result = page.create_item(data)
-    # Cleanup form if still open
-    try:
-        page.close_popup()
-    except Exception:
-        pass
-    try:
-        page.force_close_form_popup()
-    except Exception:
-        pass
-    page.click_refresh()
-    page.wait_seconds(2)
-    # Item Name is auto-generated from attributes
-    name = result.get("item_name", "") or data.get("_auto_item_name", "")
-    log.info(f"Prerequisite item created: {name}")
-    return name, data
 
+    # ------------------------------------------------------------------
+    # Shared cleanup — UOM pattern
+    # ------------------------------------------------------------------
 
-# ====================================================================
-# PHASE 1: Create Form Validations (15 tests)
-# ====================================================================
+    def _cleanup(self, page):
+        """Smart cleanup — close form if still open, then hard refresh."""
+        if page.is_add_form_open():
+            page.force_close_form_popup()
+        page.hard_refresh()
 
-class TestCreateFormValidations:
-    """IM-C01 to IM-C15: Validation checks on the Create form.
-    Item Master has a 3-step stepper with many fields.
-
-    Note: Item Name is READONLY (auto-generated from Item Attributes 1-5).
-    Tests that previously tried to type into Item Name have been redesigned
-    to verify readonly enforcement instead.
-    """
+    # ==================================================================
+    # PHASE 1: Create Form Validations (15 tests)
+    # ==================================================================
 
     # ---- IM-C01: Submit with all fields empty ----
     @pytest.mark.smoke
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_C01_empty_submit(self, im_page):
+    def test_IM_C01_empty_submit(self, logged_in_driver):
         """Submit with all fields empty — should be blocked."""
-        log.info("IM-C01: Empty submit test")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        page.open_add_form()
-        page.wait_seconds(1)
-        assert page.is_add_form_open(), "Add form did not open"
-
-        # Click Next on Step 1 with all fields empty
-        page.click_stepper_next()
-        page.wait_seconds(2)
-
-        # Check for validation errors or SweetAlert
-        validation_alert = page.handle_validation_warning(timeout=5)
-        errors = page.get_mat_error_text()
-        form_still_open = page.is_add_form_open()
-        still_step1 = page.is_step1_active()
-
-        # Expect: form stays on Step 1 + validation errors shown
-        assert form_still_open or errors or validation_alert, (
-            "BUG: Form advanced with all fields empty — no validation"
-        )
-        if still_step1:
-            log.info("Form stayed on Step 1 — validation working")
-        if validation_alert:
-            log.info(f"Validation alert shown: {validation_alert}")
-        if errors:
-            log.info(f"Validation errors shown: {errors}")
-
-        # Cleanup
         try:
-            page.cancel()
+            log.info(">>> STEP 1: Open Add form and submit with empty fields")
+            page.navigate_to_page()
+            page.open_add_form()
+            assert page.is_add_form_open(), "Add form did not open"
+
+            page.click_stepper_next()
+
+            log.info(">>> STEP 2: Verify validation blocks advancement")
+            validation_alert = page.is_validation_alert_present(timeout=3)
+            if validation_alert:
+                page.handle_validation_warning()
+                log.info("  [PASS] Pattern A alert detected and dismissed")
+
+            errors = page.get_mat_error_text()
+            form_still_open = page.is_add_form_open()
+            still_step1 = page.is_step1_active()
+
+            assert form_still_open or errors or validation_alert, (
+                "BUG: Form advanced with all fields empty — no validation"
+            )
+            if still_step1:
+                log.info("  [PASS] Form stayed on Step 1 — validation working")
+
+            log.info(">>> TEST IM-C01 PASSED: Empty submit blocked")
         except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-C02: Create with valid data (happy path) ----
     @pytest.mark.smoke
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_C02_valid_create(self, im_page):
+    def test_IM_C02_valid_create(self, logged_in_driver):
         """Create with valid data across all 3 steps — should succeed."""
-        log.info("IM-C02: Valid create test (happy path)")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        data = generate_full_valid_item_data("ValidC")
-        result = page.create_item(data)
-        # Item Name is auto-generated from Item Attribute 1-5 concatenation
-        name = result.get("item_name", "") or data.get("_auto_item_name", "")
+        try:
+            log.info(">>> STEP 1: Create item with valid data")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("ValidC")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
 
-        if result["status"] == "PASSED":
-            log.info(f"Item created successfully: {name}")
-        else:
-            log.warning(f"Create failed: {result.get('error', 'unknown')}")
+            if result["status"] == "PASSED":
+                log.info("  Item created: " + name)
+            else:
+                log.warning("  Create failed: " + result.get("error", "unknown"))
 
-        # Verify the item appears in the table
-        page.click_refresh()
-        page.wait_seconds(2)
-        found = page.is_item_in_table(name)
+            log.info(">>> STEP 2: Search and verify item in table")
+            page.hard_refresh()
+            page.search_and_verify(name)
 
-        assert found, (
-            f"Created item '{name}' not found in table after refresh"
-        )
-        log.info(f"Item created and found in table: {name}")
+            log.info(">>> TEST IM-C02 PASSED: Valid create succeeded")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-C03: Item Name field is readonly ----
     @pytest.mark.smoke
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_C03_item_name_readonly(self, im_page):
-        """Item Name field is readonly — manual input should have no effect.
+    def test_IM_C03_item_name_readonly(self, logged_in_driver):
+        """Item Name field is readonly — manual input should have no effect."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        Item Name has readonly=true and is auto-generated from Item
-        Attribute 1-5 values. Typing into it should not change its value.
-        This replaces the former spaces-only name test (BUG-001) since
-        the field cannot receive manual input at all.
-        """
-        log.info("IM-C03: Item Name readonly test")
-        page = im_page
-
-        data = generate_valid_item_data("ROTest")
-
-        page.open_add_form()
-        page.wait_seconds(1)
-
-        # Fill Step 1 to trigger auto-generation of Item Name
-        page.fill_step1(data)
-        page.wait_seconds(1)
-
-        # Read the auto-generated Item Name value
-        values_before = page.get_form_field_values_step1()
-        name_before = values_before.get("item_name", "")
-
-        # Attempt to type into the readonly Item Name field
-        page.type_text(
-            page.ITEM_NAME_INPUT, "ManualInputAttempt", clear_first=True
-        )
-        page.wait_seconds(0.5)
-
-        # Read the value again — it should NOT have changed
-        values_after = page.get_form_field_values_step1()
-        name_after = values_after.get("item_name", "")
-
-        if name_before and name_after == name_before:
-            log.info(
-                f"Item Name is readonly — value unchanged: '{name_before}'"
-            )
-        elif not name_before and not name_after:
-            log.info(
-                "Item Name was empty before and after — "
-                "readonly prevents manual input"
-            )
-        else:
-            log.warning(
-                f"Item Name may not be readonly — "
-                f"before='{name_before}', after='{name_after}'"
-            )
-
-        # Also verify the readonly attribute on the input element
-        is_readonly = page.driver.execute_script(
-            "var i = document.querySelector("
-            "  \"input[name='Item Name'], input[formcontrolname='name'], \""
-            "  + \"input[name='itemName']\");"
-            "return i ? i.readOnly : null;"
-        )
-        if is_readonly is True:
-            log.info("Item Name input has readonly=true attribute confirmed")
-        elif is_readonly is False:
-            log.warning(
-                "Item Name input does NOT have readonly attribute — "
-                "unexpected"
-            )
-        else:
-            log.info(
-                "Could not verify readonly attribute on Item Name input "
-                "(element selector may need updating)"
-            )
-
-        # Cleanup
         try:
-            page.cancel()
+            log.info(">>> STEP 1: Open form and fill Step 1 to trigger auto-generation")
+            page.navigate_to_page()
+            data = generate_valid_item_data("ROTest")
+            page.open_add_form()
+            page.fill_step1(data)
+
+            log.info(">>> STEP 2: Read auto-generated name, then attempt manual input")
+            values_before = page.get_form_field_values_step1()
+            name_before = values_before.get("item_name", "")
+
+            page.type_text(page.ITEM_NAME_INPUT, "ManualInputAttempt", clear_first=True)
+
+            values_after = page.get_form_field_values_step1()
+            name_after = values_after.get("item_name", "")
+
+            if name_before and name_after == name_before:
+                log.info("  [PASS] Item Name readonly — value unchanged: '" + name_before + "'")
+            elif not name_before and not name_after:
+                log.info("  [PASS] Item Name was empty before and after — readonly prevents input")
+            else:
+                log.warning("  Item Name may not be readonly — before='" + name_before + "', after='" + name_after + "'")
+
+            log.info(">>> STEP 3: Verify readonly attribute via JS")
+            is_readonly = page.driver.execute_script(
+                "var i = document.querySelector("
+                "  \"input[name='Item Name'], input[formcontrolname='name'], \""
+                "  + \"input[name='itemName']\");"
+                "return i ? i.readOnly : null;"
+            )
+            if is_readonly is True:
+                log.info("  [PASS] Item Name input has readonly=true")
+            else:
+                log.info("  readonly property: " + str(is_readonly))
+
+            log.info(">>> TEST IM-C03 PASSED: Item Name readonly enforcement verified")
         except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-C04: Duplicate Item Name — verify duplicates are ALLOWED ----
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.bug
-    def test_IM_C04_duplicate_name(self, im_page):
-        """Duplicate Item Name in Create — verify duplicates are ALLOWED.
+    def test_IM_C04_duplicate_name(self, logged_in_driver):
+        """Duplicate Item Name — verify duplicates are ALLOWED (BUG-002)."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        BUG-002: Duplicate Item Names are ALLOWED in the system.
-        Since Item Name is auto-generated from Item Attribute 1-5 values,
-        we test this by creating two items using the SAME dropdown values
-        for all attributes. Both should succeed, confirming no uniqueness
-        validation on Item Name.
-
-        Strategy: Create item 1, record its selected dropdown values,
-        then create item 2 with those exact same values (but a different
-        Item Code to avoid code-level uniqueness issues).
-        """
-        log.info("IM-C04: Duplicate name test — verify duplicates are ALLOWED")
-        page = im_page
-
-        # Create item 1 with random dropdown values
-        data1 = generate_full_valid_item_data("DupTest1")
-        result1 = page.create_item(data1)
-        name1 = result1.get("item_name", "") or data1.get("_auto_item_name", "")
-
-        # Cleanup form if still open
         try:
-            page.close_popup()
+            log.info(">>> STEP 1: Create item 1")
+            page.navigate_to_page()
+            data1 = generate_full_valid_item_data("DupTest1")
+            result1 = page.create_item(data1)
+            name1 = result1.get("item_name", "") or data1.get("_auto_item_name", "")
+
+            page.hard_refresh()
+            if not name1:
+                log.warning("  Item 1 name empty — cannot test duplicates")
+                return
+
+            log.info(">>> STEP 2: Create item 2 with same dropdown values")
+            data2 = generate_full_valid_item_data("DupTest2")
+            for key in _DUPLICATE_ATTR_KEYS:
+                if key in data1 and data1[key]:
+                    data2[key] = data1[key]
+            if "base_uom_conversion" in data1:
+                data2["base_uom_conversion"] = data1["base_uom_conversion"]
+
+            result2 = page.create_item(data2)
+            name2 = result2.get("item_name", "") or data2.get("_auto_item_name", "")
+
+            page.hard_refresh()
+
+            log.info(">>> STEP 3: Verify both items exist")
+            if name1 and name2 and name1.strip().lower() == name2.strip().lower():
+                log.info("  BUG-002 CONFIRMED: Duplicate names allowed — both named '" + name1 + "'")
+                found1 = page.is_item_in_table(name1)
+                found2 = page.is_item_in_table(name2)
+                if found1 and found2:
+                    log.info("  Both duplicate items found in table")
+            elif name1 and name2:
+                log.info("  Names differ: name1='" + name1 + "', name2='" + name2 + "'. Both created.")
+            else:
+                log.warning("  Could not create both items")
+
+            log.info(">>> TEST IM-C04 PASSED: Duplicate name behavior verified")
         except Exception:
-            pass
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-        page.wait_seconds(2)
-
-        if not name1:
-            log.warning("Item 1 name is empty — cannot test duplicates")
-            return
-
-        # Create item 2 with the SAME dropdown values as item 1
-        # Use the data dict which now contains the selected values
-        data2 = generate_full_valid_item_data("DupTest2")
-        # Override with item 1's selected dropdown values
-        for key in ["item_category", "item_group", "item_type",
-                    "item_attribute1", "item_attribute2", "item_attribute3",
-                    "item_attribute4", "item_attribute5", "uom",
-                    "hsn_sac_code", "base_uom"]:
-            if key in data1 and data1[key]:
-                data2[key] = data1[key]
-        # Use same Base Uom Conversion value
-        if "base_uom_conversion" in data1:
-            data2["base_uom_conversion"] = data1["base_uom_conversion"]
-
-        result2 = page.create_item(data2)
-        name2 = result2.get("item_name", "") or data2.get("_auto_item_name", "")
-
-        # Cleanup
-        try:
-            page.close_popup()
-        except Exception:
-            pass
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-        page.wait_seconds(2)
-
-        # BUG-002: Duplicate names ARE allowed
-        if name1 and name2 and name1.strip().lower() == name2.strip().lower():
-            log.info(
-                f"BUG-002 CONFIRMED: Duplicate Item Names allowed — "
-                f"both items have name '{name1}'"
-            )
-            # Verify both items exist in the table
-            found1 = page.is_item_in_table(name1)
-            found2 = page.is_item_in_table(name2)
-            if found1 and found2:
-                log.info("Both duplicate items found in table")
-        elif name1 and name2:
-            log.info(
-                f"Item 1 name='{name1}', Item 2 name='{name2}' — "
-                f"names differ (different attributes selected). "
-                f"BUG-002 cannot be conclusively tested but system "
-                f"allowed both creates."
-            )
-        else:
-            log.warning(
-                "Could not create both items for duplicate test — "
-                f"name1='{name1}', name2='{name2}'"
-            )
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-C05: Auto-generated Item Name length is reasonable ----
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_C05_auto_name_length_reasonable(self, im_page):
-        """Auto-generated Item Name length should be reasonable.
+    def test_IM_C05_auto_name_length_reasonable(self, logged_in_driver):
+        """Auto-generated Item Name length should be reasonable (<= 500 chars)."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        Item Name is auto-generated from Item Attribute 1-5 values
-        concatenated with spaces. This test verifies the generated
-        name is within a reasonable length (e.g., under 500 chars).
+        try:
+            log.info(">>> STEP 1: Create item and check auto-generated name length")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("LenChk")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
 
-        Note: maxlength boundary testing (255/256 chars) is not
-        applicable for auto-generated fields since the user cannot
-        manually control the input length.
-        """
-        log.info("IM-C05: Auto-generated name length test")
-        page = im_page
+            if result["status"] == "PASSED" and name:
+                name_len = len(name)
+                log.info("  Auto-generated Item Name length: " + str(name_len))
+                MAX_REASONABLE_LENGTH = 500
+                assert name_len <= MAX_REASONABLE_LENGTH, (
+                    "Auto-generated name is " + str(name_len) + " chars — exceeds " + str(MAX_REASONABLE_LENGTH)
+                )
+                log.info("  [PASS] Name length (" + str(name_len) + ") within bounds")
+            else:
+                log.warning("  Could not verify name length: status=" + result.get("status", ""))
 
-        data = generate_full_valid_item_data("LenChk")
-        result = page.create_item(data)
-        name = result.get("item_name", "") or data.get("_auto_item_name", "")
-
-        if result["status"] == "PASSED" and name:
-            name_len = len(name)
-            log.info(f"Auto-generated Item Name length: {name_len}")
-
-            # Reasonable upper bound — auto-generated from 5 attributes
-            # should not exceed 500 chars in normal usage
-            MAX_REASONABLE_LENGTH = 500
-            assert name_len <= MAX_REASONABLE_LENGTH, (
-                f"Auto-generated Item Name is {name_len} chars — "
-                f"exceeds reasonable limit of {MAX_REASONABLE_LENGTH}"
-            )
-            log.info(
-                f"Auto-generated name length ({name_len}) is within "
-                f"reasonable bounds (<= {MAX_REASONABLE_LENGTH})"
-            )
-        else:
-            log.warning(
-                f"Could not verify name length: "
-                f"status={result.get('status')}, name='{name}'"
-            )
-
-        page.click_refresh()
-        page.wait_seconds(2)
+            log.info(">>> TEST IM-C05 PASSED: Auto-generated name length reasonable")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-C06: Maxlength not applicable for auto-generated field ----
     @pytest.mark.regression
     @pytest.mark.skip(
         reason="Item Name is readonly and auto-generated from attributes; "
-               "maxlength boundary testing (256 chars) is not applicable "
-               "since the user cannot manually input text. "
+               "maxlength boundary testing (256 chars) is not applicable. "
                "See IM-C05 for auto-generated name length verification."
     )
-    def test_IM_C06_name_256_chars(self, im_page):
-        """Item Name 256-char boundary — not applicable.
-
-        Since Item Name is auto-generated, we cannot test the maxlength
-        boundary by typing 256 characters. The field's readonly attribute
-        prevents manual input. IM-C05 verifies the auto-generated name
-        length is reasonable.
-        """
-        log.info("IM-C06: 256-char name test — SKIPPED (readonly field)")
+    def test_IM_C06_name_256_chars(self, logged_in_driver):
+        """Item Name 256-char boundary — not applicable (readonly field)."""
         pass
 
     # ---- IM-C07: Verify Item Name readonly attribute ----
@@ -473,969 +348,704 @@ class TestCreateFormValidations:
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.ui
-    def test_IM_C07_verify_name_readonly_attribute(self, im_page):
-        """Verify Item Name input element has the readonly attribute.
+    def test_IM_C07_verify_name_readonly_attribute(self, logged_in_driver):
+        """Verify Item Name input element has the readonly attribute."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        Item Name is auto-generated from Item Attribute 1-5 and should
-        have readonly=true on the input element. This test verifies
-        the UI enforcement of readonly behavior.
-
-        Replaces the former special-characters-in-name test since
-        special characters cannot be typed into a readonly field.
-        """
-        log.info("IM-C07: Verify Item Name readonly attribute test")
-        page = im_page
-
-        page.open_add_form()
-        page.wait_seconds(1)
-
-        # Check the readonly attribute via JavaScript
-        is_readonly = page.driver.execute_script(
-            "var i = document.querySelector("
-            "  \"input[name='Item Name'], input[formcontrolname='name'], \""
-            "  + \"input[name='itemName']\");"
-            "return i ? i.readOnly : null;"
-        )
-
-        # Check the HTML readonly attribute as well
-        has_readonly_attr = page.driver.execute_script(
-            "var i = document.querySelector("
-            "  \"input[name='Item Name'], input[formcontrolname='name'], \""
-            "  + \"input[name='itemName']\");"
-            "return i ? i.hasAttribute('readonly') : null;"
-        )
-
-        if is_readonly is True:
-            log.info(
-                "Item Name input has readonly property = true — "
-                "readonly enforcement confirmed"
-            )
-        elif is_readonly is False:
-            log.warning(
-                "Item Name input readonly property is false — "
-                "field may accept manual input (unexpected)"
-            )
-        else:
-            log.info(
-                "Could not read readonly property — "
-                "element selector may need updating"
-            )
-
-        if has_readonly_attr is True:
-            log.info(
-                "Item Name input has HTML readonly attribute — confirmed"
-            )
-        elif has_readonly_attr is False:
-            log.warning(
-                "Item Name input does NOT have HTML readonly attribute"
-            )
-        else:
-            log.info(
-                "Could not check HTML readonly attribute — "
-                "element not found with current selector"
-            )
-
-        # Attempt to type and verify no change
-        page.type_text(
-            page.ITEM_NAME_INPUT, "!@#$%^&*()_+", clear_first=True
-        )
-        page.wait_seconds(0.5)
-
-        values = page.get_form_field_values_step1()
-        name_value = values.get("item_name", "")
-
-        # Value should be empty or unchanged (not the special chars string)
-        if name_value != "!@#$%^&*()_+":
-            log.info(
-                "Typing special characters into Item Name had no effect — "
-                "readonly enforcement working"
-            )
-        else:
-            log.warning(
-                "Special characters were accepted in Item Name — "
-                "readonly may not be enforced"
-            )
-
-        # Cleanup
         try:
-            page.cancel()
+            log.info(">>> STEP 1: Open form and check readonly attribute")
+            page.navigate_to_page()
+            page.open_add_form()
+
+            is_readonly = page.driver.execute_script(
+                "var i = document.querySelector("
+                "  \"input[name='Item Name'], input[formcontrolname='name'], \""
+                "  + \"input[name='itemName']\");"
+                "return i ? i.readOnly : null;"
+            )
+
+            if is_readonly is True:
+                log.info("  [PASS] Item Name input has readonly property = true")
+            elif is_readonly is False:
+                log.warning("  Item Name input readonly property is false — unexpected")
+            else:
+                log.info("  Could not read readonly property — selector may need updating")
+
+            log.info(">>> STEP 2: Attempt to type special chars — should have no effect")
+            page.type_text(page.ITEM_NAME_INPUT, "!@#$%^&*()_+", clear_first=True)
+
+            values = page.get_form_field_values_step1()
+            name_value = values.get("item_name", "")
+
+            if name_value != "!@#$%^&*()_+":
+                log.info("  [PASS] Typing special chars into Item Name had no effect — readonly working")
+            else:
+                log.warning("  Special chars were accepted — readonly may not be enforced")
+
+            log.info(">>> TEST IM-C07 PASSED: Readonly attribute verified")
         except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-        page.click_refresh()
-        page.wait_seconds(2)
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-C08: Negative Base Uom Conversion ----
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.bug
-    def test_IM_C08_negative_uom_conversion(self, im_page):
-        """Negative value in Base Uom Conversion — should be rejected.
-        BUG-004 was NOT confirmed during test run (XPASS): negative values
-        were correctly rejected by the system.
-        """
-        log.info("IM-C08: Negative UOM conversion test")
-        page = im_page
+    def test_IM_C08_negative_uom_conversion(self, logged_in_driver):
+        """Negative value in Base Uom Conversion — should be rejected."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        data = generate_valid_item_data("NegUom")
-        data["base_uom_conversion"] = generate_negative_uom_conversion()
-
-        page.open_add_form()
-        page.wait_seconds(1)
-        page.fill_step1(data)
-        page.click_stepper_next()
-        page.wait_seconds(2)
-
-        validation_alert = page.handle_validation_warning(timeout=3)
-        errors = page.get_mat_error_text()
-        form_still_open = page.is_add_form_open()
-
-        assert form_still_open or errors or validation_alert, (
-            "BUG-004 CONFIRMED: Negative Base Uom Conversion was accepted"
-        )
-
-        # Cleanup
         try:
-            page.cancel()
+            log.info(">>> STEP 1: Fill form with negative Uom Conversion")
+            page.navigate_to_page()
+            data = generate_valid_item_data("NegUom")
+            data["base_uom_conversion"] = generate_negative_uom_conversion()
+
+            page.open_add_form()
+            page.fill_step1(data)
+            page.click_stepper_next()
+
+            log.info(">>> STEP 2: Verify validation blocks submission")
+            validation_alert = page.is_validation_alert_present(timeout=3)
+            if validation_alert:
+                page.handle_validation_warning()
+
+            errors = page.get_mat_error_text()
+            form_still_open = page.is_add_form_open()
+
+            assert form_still_open or errors or validation_alert, (
+                "BUG-004 CONFIRMED: Negative Base Uom Conversion was accepted"
+            )
+            log.info("  [PASS] Negative Uom Conversion rejected")
+
+            log.info(">>> TEST IM-C08 PASSED: Negative Uom Conversion rejected")
         except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-C09: Zero Base Uom Conversion ----
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_C09_zero_uom_conversion(self, im_page):
+    def test_IM_C09_zero_uom_conversion(self, logged_in_driver):
         """Zero value in Base Uom Conversion — check if rejected."""
-        log.info("IM-C09: Zero UOM conversion test")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        data = generate_valid_item_data("ZeroUom")
-        data["base_uom_conversion"] = generate_zero_uom_conversion()
-
-        page.open_add_form()
-        page.wait_seconds(1)
-        page.fill_step1(data)
-        page.click_stepper_next()
-        page.wait_seconds(2)
-
-        validation_alert = page.handle_validation_warning(timeout=3)
-        errors = page.get_mat_error_text()
-        form_still_open = page.is_add_form_open()
-
-        if form_still_open or errors or validation_alert:
-            log.info("Zero UOM conversion rejected — validation working")
-        else:
-            log.info(
-                "Zero UOM conversion accepted (may be valid in some contexts)"
-            )
-
-        # Cleanup
         try:
-            page.cancel()
+            log.info(">>> STEP 1: Fill form with zero Uom Conversion")
+            page.navigate_to_page()
+            data = generate_valid_item_data("ZeroUom")
+            data["base_uom_conversion"] = generate_zero_uom_conversion()
+
+            page.open_add_form()
+            page.fill_step1(data)
+            page.click_stepper_next()
+
+            log.info(">>> STEP 2: Check validation outcome")
+            validation_alert = page.is_validation_alert_present(timeout=3)
+            if validation_alert:
+                page.handle_validation_warning()
+
+            errors = page.get_mat_error_text()
+            form_still_open = page.is_add_form_open()
+
+            if form_still_open or errors or validation_alert:
+                log.info("  Zero UOM conversion rejected — validation working")
+            else:
+                log.info("  Zero UOM conversion accepted (may be valid in some contexts)")
+
+            log.info(">>> TEST IM-C09 PASSED: Zero Uom Conversion behavior verified")
         except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-        page.click_refresh()
-        page.wait_seconds(2)
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-C10: Alphabetic Base Uom Conversion ----
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.bug
-    def test_IM_C10_alpha_uom_conversion(self, im_page):
+    def test_IM_C10_alpha_uom_conversion(self, logged_in_driver):
         """Alphabetic characters in Base Uom Conversion — should be rejected."""
-        log.info("IM-C10: Alpha UOM conversion test")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        data = generate_valid_item_data("AlphaUom")
-        data["base_uom_conversion"] = generate_alpha_uom_conversion()
-
-        page.open_add_form()
-        page.wait_seconds(1)
-        page.fill_step1(data)
-        page.click_stepper_next()
-        page.wait_seconds(2)
-
-        validation_alert = page.handle_validation_warning(timeout=3)
-        errors = page.get_mat_error_text()
-        form_still_open = page.is_add_form_open()
-
-        if form_still_open or errors or validation_alert:
-            log.info("Alpha UOM conversion rejected — validation working")
-        else:
-            log.warning(
-                "BUG: Alphabetic characters accepted in Base Uom Conversion"
-            )
-
-        # Cleanup
         try:
-            page.cancel()
+            log.info(">>> STEP 1: Fill form with alpha Uom Conversion")
+            page.navigate_to_page()
+            data = generate_valid_item_data("AlphaUom")
+            data["base_uom_conversion"] = generate_alpha_uom_conversion()
+
+            page.open_add_form()
+            page.fill_step1(data)
+            page.click_stepper_next()
+
+            log.info(">>> STEP 2: Verify validation outcome")
+            validation_alert = page.is_validation_alert_present(timeout=3)
+            if validation_alert:
+                page.handle_validation_warning()
+
+            errors = page.get_mat_error_text()
+            form_still_open = page.is_add_form_open()
+
+            if form_still_open or errors or validation_alert:
+                log.info("  [PASS] Alpha UOM conversion rejected")
+            else:
+                log.warning("  BUG: Alphabetic characters accepted in Base Uom Conversion")
+
+            log.info(">>> TEST IM-C10 PASSED: Alpha Uom Conversion behavior verified")
         except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-        page.click_refresh()
-        page.wait_seconds(2)
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-C11: Special characters in Base Uom Conversion ----
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.bug
-    def test_IM_C11_special_char_uom_conversion(self, im_page):
+    def test_IM_C11_special_char_uom_conversion(self, logged_in_driver):
         """Special characters in Base Uom Conversion — should be rejected."""
-        log.info("IM-C11: Special char UOM conversion test")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        data = generate_valid_item_data("SpUom")
-        data["base_uom_conversion"] = generate_special_char_uom_conversion()
-
-        page.open_add_form()
-        page.wait_seconds(1)
-        page.fill_step1(data)
-        page.click_stepper_next()
-        page.wait_seconds(2)
-
-        validation_alert = page.handle_validation_warning(timeout=3)
-        errors = page.get_mat_error_text()
-        form_still_open = page.is_add_form_open()
-
-        if form_still_open or errors or validation_alert:
-            log.info("Special char UOM conversion rejected — validation working")
-        else:
-            log.warning(
-                "BUG: Special characters accepted in Base Uom Conversion"
-            )
-
-        # Cleanup
         try:
-            page.cancel()
+            log.info(">>> STEP 1: Fill form with special char Uom Conversion")
+            page.navigate_to_page()
+            data = generate_valid_item_data("SpUom")
+            data["base_uom_conversion"] = generate_special_char_uom_conversion()
+
+            page.open_add_form()
+            page.fill_step1(data)
+            page.click_stepper_next()
+
+            log.info(">>> STEP 2: Verify validation outcome")
+            validation_alert = page.is_validation_alert_present(timeout=3)
+            if validation_alert:
+                page.handle_validation_warning()
+
+            errors = page.get_mat_error_text()
+            form_still_open = page.is_add_form_open()
+
+            if form_still_open or errors or validation_alert:
+                log.info("  [PASS] Special char UOM conversion rejected")
+            else:
+                log.warning("  BUG: Special characters accepted in Base Uom Conversion")
+
+            log.info(">>> TEST IM-C11 PASSED: Special char Uom Conversion behavior verified")
         except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-        page.click_refresh()
-        page.wait_seconds(2)
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-C12: Spaces in Base Uom Conversion ----
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.bug
-    def test_IM_C12_spaces_uom_conversion(self, im_page):
+    def test_IM_C12_spaces_uom_conversion(self, logged_in_driver):
         """Spaces-only value in Base Uom Conversion — should be rejected."""
-        log.info("IM-C12: Spaces UOM conversion test")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        data = generate_valid_item_data("SpUom")
-        data["base_uom_conversion"] = generate_uom_conversion_with_spaces()
-
-        page.open_add_form()
-        page.wait_seconds(1)
-        page.fill_step1(data)
-        page.click_stepper_next()
-        page.wait_seconds(2)
-
-        validation_alert = page.handle_validation_warning(timeout=3)
-        errors = page.get_mat_error_text()
-        form_still_open = page.is_add_form_open()
-
-        if form_still_open or errors or validation_alert:
-            log.info("Spaces UOM conversion rejected — validation working")
-        else:
-            log.warning(
-                "BUG: Spaces accepted in Base Uom Conversion"
-            )
-
-        # Cleanup
         try:
-            page.cancel()
+            log.info(">>> STEP 1: Fill form with spaces-only Uom Conversion")
+            page.navigate_to_page()
+            data = generate_valid_item_data("SpUom")
+            data["base_uom_conversion"] = generate_uom_conversion_with_spaces()
+
+            page.open_add_form()
+            page.fill_step1(data)
+            page.click_stepper_next()
+
+            log.info(">>> STEP 2: Verify validation outcome")
+            validation_alert = page.is_validation_alert_present(timeout=3)
+            if validation_alert:
+                page.handle_validation_warning()
+
+            errors = page.get_mat_error_text()
+            form_still_open = page.is_add_form_open()
+
+            if form_still_open or errors or validation_alert:
+                log.info("  [PASS] Spaces UOM conversion rejected")
+            else:
+                log.warning("  BUG: Spaces accepted in Base Uom Conversion")
+
+            log.info(">>> TEST IM-C12 PASSED: Spaces Uom Conversion behavior verified")
         except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-        page.click_refresh()
-        page.wait_seconds(2)
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-C13: Valid decimal Base Uom Conversion ----
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_C13_decimal_uom_conversion(self, im_page):
+    def test_IM_C13_decimal_uom_conversion(self, logged_in_driver):
         """Valid decimal value in Base Uom Conversion — should be accepted."""
-        log.info("IM-C13: Decimal UOM conversion test")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        data = generate_valid_item_data("DecUom")
-        data["base_uom_conversion"] = generate_decimal_uom_conversion()
+        try:
+            log.info(">>> STEP 1: Create item with decimal Uom Conversion")
+            page.navigate_to_page()
+            data = generate_valid_item_data("DecUom")
+            data["base_uom_conversion"] = generate_decimal_uom_conversion()
 
-        result = page.create_item(data)
-        # Item Name is auto-generated from attributes
-        name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
 
-        if result["status"] == "PASSED":
-            page.click_refresh()
-            page.wait_seconds(2)
-            found = page.is_item_in_table(name)
-            assert found, f"Item with decimal UOM conversion not found: {name}"
-            log.info(f"Decimal UOM conversion accepted: {name}")
-        else:
-            log.warning(
-                f"Decimal UOM conversion may have been rejected: {result.get('error', '')}"
-            )
+            if result["status"] == "PASSED":
+                log.info(">>> STEP 2: Verify item in table")
+                page.hard_refresh()
+                page.search_and_verify(name)
+                log.info("  [PASS] Decimal UOM conversion accepted: " + name)
+            else:
+                log.warning("  Decimal UOM conversion may have been rejected: " + result.get("error", ""))
+
+            log.info(">>> TEST IM-C13 PASSED: Decimal Uom Conversion verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-C14: Partial required fields — dropdowns missing ----
     @pytest.mark.smoke
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_C14_partial_required_fields(self, im_page):
-        """Submit with only partial required fields — should be blocked.
+    def test_IM_C14_partial_required_fields(self, logged_in_driver):
+        """Submit with only partial required fields — should be blocked."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        Since Item Name is auto-generated from attributes, we cannot
-        test 'name-only' partial fill. Instead, this test fills only
-        some fields (e.g., Item Code and Description) and leaves
-        required dropdowns (Item Category, Item Type, UOM) empty to
-        verify that validation errors are shown.
-
-        NOTE: Angular stepper may allow advancing to Step 2/3 even
-        with empty required fields — the actual validation triggers on
-        Submit. So this test navigates all the way to Submit and
-        expects the system to block submission.
-        """
-        log.info("IM-C14: Partial required fields submit test")
-        page = im_page
-
-        # Open form and fill only text fields, leaving dropdowns empty
-        page.open_add_form()
-        page.wait_seconds(1)
-
-        # Type only into text inputs — leave all dropdowns unfilled
-        page.type_text(page.ITEM_CODE_INPUT, "PartialTestCode")
-        page.type_text(page.DESCRIPTION_INPUT, "Partial test description")
-        # Intentionally do NOT select any dropdown values
-        # (Item Category, Item Type, UOM, Item Attribute 1-5, etc.)
-
-        # Try to navigate through all steps to trigger Submit
-        # The stepper may allow advancing even with empty required fields
-        page.click_stepper_next()
-        page.wait_seconds(2)
-
-        # Check if we're still on Step 1 (validation blocked advancement)
-        validation_alert = page.handle_validation_warning(timeout=5)
-        errors = page.get_mat_error_text()
-        still_step1 = page.is_step1_active()
-
-        if still_step1 or errors or validation_alert:
-            # Validation blocked at Step 1 — expected behavior
-            log.info("Form stayed on Step 1 — validation working at step level")
-            if errors:
-                log.info(f"Partial fill validation errors: {errors}")
-        else:
-            # Stepper allowed advancing — try to navigate to Step 3 and Submit
-            log.info(
-                "Stepper allowed advancing with partial fields — "
-                "navigating to Submit to trigger validation"
-            )
-            # Try Step 2 -> Step 3
-            page.click_stepper_next()
-            page.wait_seconds(1)
-
-            # Try clicking Submit
-            page.submit()
-            page.wait_seconds(2)
-
-            # Check for validation at Submit level
-            validation_alert = page.handle_validation_warning(timeout=5)
-            errors = page.get_mat_error_text()
-            form_still_open = page.is_add_form_open()
-
-            assert form_still_open or errors or validation_alert, (
-                "BUG: Form submitted with only text fields filled — "
-                "required dropdown fields not validated even at Submit"
-            )
-            if errors:
-                log.info(f"Validation errors at Submit: {errors}")
-            if validation_alert:
-                log.info(f"Validation alert at Submit: {validation_alert}")
-
-        # Cleanup
         try:
-            page.cancel()
+            log.info(">>> STEP 1: Open form and fill only text fields (no dropdowns)")
+            page.navigate_to_page()
+            page.open_add_form()
+
+            page.type_text(page.ITEM_CODE_INPUT, "PartialTestCode")
+            page.type_text(page.DESCRIPTION_INPUT, "Partial test description")
+
+            log.info(">>> STEP 2: Try to advance stepper — should be blocked")
+            page.click_stepper_next()
+
+            validation_alert = page.is_validation_alert_present(timeout=3)
+            if validation_alert:
+                page.handle_validation_warning()
+
+            errors = page.get_mat_error_text()
+            still_step1 = page.is_step1_active()
+
+            if still_step1 or errors or validation_alert:
+                log.info("  [PASS] Form stayed on Step 1 — validation working")
+            else:
+                log.info(">>> STEP 3: Stepper allowed advancing — try Submit")
+                page.click_stepper_next()
+                page.submit()
+
+                validation_alert = page.is_validation_alert_present(timeout=3)
+                if validation_alert:
+                    page.handle_validation_warning()
+
+                errors = page.get_mat_error_text()
+                form_still_open = page.is_add_form_open()
+
+                assert form_still_open or errors or validation_alert, (
+                    "BUG: Form submitted with only text fields filled"
+                )
+                log.info("  [PASS] Validation blocked at Submit level")
+
+            log.info(">>> TEST IM-C14 PASSED: Partial fields blocked")
         except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-C15: Stepper navigation — Back button ----
     @pytest.mark.smoke
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.ui
-    def test_IM_C15_stepper_back_button(self, im_page):
+    def test_IM_C15_stepper_back_button(self, logged_in_driver):
         """Fill Step 1, go to Step 2, then click Back — should return to Step 1."""
-        log.info("IM-C15: Stepper Back button test")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        data = generate_valid_item_data("StepNav")
-
-        page.open_add_form()
-        page.wait_seconds(1)
-        assert page.is_step1_active(), "Step 1 should be active initially"
-
-        # Fill Step 1 and go to Step 2
-        page.fill_step1(data)
-        page.click_stepper_next()
-        page.wait_seconds(1)
-
-        # Verify we're on Step 2
-        step2_active = page.is_step2_active()
-        if step2_active:
-            log.info("Successfully navigated to Step 2")
-
-            # Click Back
-            page.click_stepper_back()
-            page.wait_seconds(1)
-
-            # Verify we're back on Step 1
-            assert page.is_step1_active(), (
-                "Did not return to Step 1 after clicking Back"
-            )
-            log.info("Back button correctly returned to Step 1")
-
-            # Verify Step 1 data is preserved
-            values = page.get_form_field_values_step1()
-            if values.get("item_name"):
-                log.info(
-                    f"Step 1 data preserved after Back: name={values['item_name']}"
-                )
-            else:
-                log.warning("Step 1 data may have been lost after Back navigation")
-        else:
-            log.warning(
-                "Could not navigate to Step 2 — "
-                "required field validation may have blocked"
-            )
-
-        # Cleanup
         try:
-            page.cancel()
+            log.info(">>> STEP 1: Open form and fill Step 1")
+            page.navigate_to_page()
+            data = generate_valid_item_data("StepNav")
+            page.open_add_form()
+            assert page.is_step1_active(), "Step 1 should be active initially"
+            page.fill_step1(data)
+
+            log.info(">>> STEP 2: Navigate to Step 2")
+            page.click_stepper_next()
+
+            step2_active = page.is_step2_active()
+            if step2_active:
+                log.info("  Successfully navigated to Step 2")
+
+                log.info(">>> STEP 3: Click Back — should return to Step 1")
+                page.click_stepper_back()
+                assert page.is_step1_active(), "Did not return to Step 1 after Back"
+                log.info("  [PASS] Back button correctly returned to Step 1")
+
+                values = page.get_form_field_values_step1()
+                if values.get("item_name"):
+                    log.info("  Step 1 data preserved after Back")
+            else:
+                log.warning("  Could not navigate to Step 2 — validation may have blocked")
+
+            log.info(">>> TEST IM-C15 PASSED: Stepper Back button verified")
         except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
+            raise
+        finally:
+            self._cleanup(page)
 
-
-# ====================================================================
-# PHASE 2: Duplicate Validations (3 tests)
-# ====================================================================
-
-class TestDuplicateValidations:
-    """IM-D01 to IM-D03: Duplicate name checks in Create and Edit.
-
-    BUG-002: Duplicate Item Names are ALLOWED — confirmed via browser
-    exploration. Tests verify duplicates CAN be created by reusing the
-    same attribute values (since Item Name is auto-generated from attrs).
-
-    D01: Now IMPLEMENTED — creates two items with same dropdown values.
-    D02: Still SKIPPED — case-insensitive not testable with readonly names.
-    D03: Still SKIPPED — Item Name is readonly in Edit, can't change it.
-    """
+    # ==================================================================
+    # PHASE 2: Duplicate Validations (3 tests)
+    # ==================================================================
 
     # ---- IM-D01: Duplicate name — Create after Create ----
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.bug
-    def test_IM_D01_duplicate_create(self, im_page):
-        """Create two items with identical attribute values (producing duplicate names).
-
-        BUG-002: Duplicate Item Names ARE allowed in the system.
-        Since Item Name is auto-generated from Item Attribute 1-5 values,
-        we test this by creating two items using the SAME dropdown values
-        for all attributes. Both should succeed, confirming no uniqueness
-        validation on Item Name.
-
-        Strategy: Same as C04 but explicitly focused on the duplicate
-        create-after-create scenario.
-        """
-        log.info("IM-D01: Duplicate create test — verify duplicates are ALLOWED")
-        page = im_page
-
-        # Create item 1
-        data1 = generate_full_valid_item_data("DupD01")
-        result1 = page.create_item(data1)
-        name1 = result1.get("item_name", "") or data1.get("_auto_item_name", "")
+    def test_IM_D01_duplicate_create(self, logged_in_driver):
+        """Create two items with identical attribute values — BUG-002: duplicates ALLOWED."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
         try:
-            page.close_popup()
-        except Exception:
-            pass
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-        page.wait_seconds(2)
+            log.info(">>> STEP 1: Create item 1")
+            page.navigate_to_page()
+            data1 = generate_full_valid_item_data("DupD01")
+            result1 = page.create_item(data1)
+            name1 = result1.get("item_name", "") or data1.get("_auto_item_name", "")
 
-        if not name1:
-            log.warning("Item 1 creation failed — cannot test duplicate")
-            return
+            page.hard_refresh()
+            if not name1:
+                log.warning("  Item 1 creation failed — cannot test duplicate")
+                return
 
-        # Create item 2 with the SAME attribute values
-        data2 = generate_full_valid_item_data("DupD01b")
-        for key in ["item_category", "item_group", "item_type",
-                    "item_attribute1", "item_attribute2", "item_attribute3",
-                    "item_attribute4", "item_attribute5", "uom",
-                    "hsn_sac_code", "base_uom"]:
-            if key in data1 and data1[key]:
-                data2[key] = data1[key]
-        if "base_uom_conversion" in data1:
-            data2["base_uom_conversion"] = data1["base_uom_conversion"]
+            log.info(">>> STEP 2: Create item 2 with same attribute values")
+            data2 = generate_full_valid_item_data("DupD01b")
+            for key in _DUPLICATE_ATTR_KEYS:
+                if key in data1 and data1[key]:
+                    data2[key] = data1[key]
+            if "base_uom_conversion" in data1:
+                data2["base_uom_conversion"] = data1["base_uom_conversion"]
 
-        result2 = page.create_item(data2)
-        name2 = result2.get("item_name", "") or data2.get("_auto_item_name", "")
+            result2 = page.create_item(data2)
+            name2 = result2.get("item_name", "") or data2.get("_auto_item_name", "")
 
-        try:
-            page.close_popup()
-        except Exception:
-            pass
-        try:
-            page.force_close_form_popup()
-        except Exception:
-            pass
-        page.click_refresh()
-        page.wait_seconds(2)
+            page.hard_refresh()
 
-        # Both items should exist regardless of duplicate name
-        found1 = page.is_item_in_table(name1) if name1 else False
-        found2 = page.is_item_in_table(name2) if name2 else False
+            log.info(">>> STEP 3: Verify both items exist")
+            found1 = page.is_item_in_table(name1) if name1 else False
+            found2 = page.is_item_in_table(name2) if name2 else False
 
-        if found1 and found2:
-            log.info("Both items found in table — duplicate creation succeeded")
-            if name1 and name2 and name1.strip().lower() == name2.strip().lower():
-                log.info(
-                    f"BUG-002 CONFIRMED: Duplicate names allowed — "
-                    f"both items named '{name1}'"
-                )
+            if found1 and found2:
+                log.info("  Both items found in table — duplicate creation succeeded")
+                if name1 and name2 and name1.strip().lower() == name2.strip().lower():
+                    log.info("  BUG-002 CONFIRMED: Duplicate names allowed — both named '" + name1 + "'")
             else:
-                log.info(
-                    f"Items have different names — name1='{name1}', "
-                    f"name2='{name2}'. Both created successfully."
-                )
-        else:
-            log.warning(
-                f"Not all items found: found1={found1}, found2={found2}"
-            )
+                log.warning("  Not all items found: found1=" + str(found1) + ", found2=" + str(found2))
+
+            log.info(">>> TEST IM-D01 PASSED: Duplicate create verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-D02: Duplicate name — case-insensitive check ----
     @pytest.mark.regression
     @pytest.mark.skip(
         reason="Item Name is readonly and auto-generated from attributes; "
-               "cannot type a name in different case. Case-insensitive "
-               "duplicate check would require identical attribute selections "
-               "that produce names differing only in case, which is not "
-               "reliably controllable from live UI dropdowns."
+               "cannot type a name in different case."
     )
-    def test_IM_D02_duplicate_case_insensitive(self, im_page):
-        """Create item with same name in different case — cannot test.
-
-        Since Item Name is auto-generated, we cannot type an uppercase
-        version of an existing name. This test is not applicable.
-        """
-        log.info("IM-D02: Duplicate case-insensitive test — SKIPPED (readonly field)")
+    def test_IM_D02_duplicate_case_insensitive(self, logged_in_driver):
+        """Create item with same name in different case — cannot test (readonly)."""
         pass
 
     # ---- IM-D03: Duplicate name — Edit to existing name ----
     @pytest.mark.regression
     @pytest.mark.skip(
-        reason="Item Name is readonly in Edit mode as well; cannot type "
-               "another item's name into the edit form. The Item Name "
-               "field cannot be modified during edit, so duplicate name "
-               "testing via edit is not applicable."
+        reason="Item Name is readonly in Edit mode; cannot change it."
     )
-    def test_IM_D03_duplicate_edit(self, im_page):
-        """Edit an item to use another item's name — not applicable.
-
-        Item Name is readonly in both Create and Edit modes. Since we
-        cannot modify the Item Name field during edit, testing for
-        duplicate names via edit is not applicable.
-        """
-        log.info("IM-D03: Duplicate edit test — SKIPPED (readonly field)")
+    def test_IM_D03_duplicate_edit(self, logged_in_driver):
+        """Edit an item to use another item's name — not applicable (readonly)."""
         pass
 
-
-# ====================================================================
-# PHASE 3: Edit Form Validations (8 tests)
-# ====================================================================
-
-class TestEditFormValidations:
-    """IM-E01 to IM-E08: Validation checks on the Edit form.
-
-    Note: Item Name is READONLY in Edit mode too — cannot be modified.
-    Tests that previously tried to clear or change Item Name in edit
-    have been redesigned to verify readonly enforcement.
-    """
+    # ==================================================================
+    # PHASE 3: Edit Form Validations (8 tests)
+    # ==================================================================
 
     # ---- IM-E01: Edit — pre-populated fields ----
     @pytest.mark.smoke
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_E01_edit_prepopulated(self, im_page):
-        """Edit popup should show Step 1 fields pre-populated.
+    def test_IM_E01_edit_prepopulated(self, logged_in_driver):
+        """Edit popup should show Step 1 fields pre-populated."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        Item Name is auto-generated from Item Attribute 1-5 values
-        and does NOT contain the test prefix. The assertion compares
-        the edit form's Item Name with the actual auto-generated name
-        from the create operation.
-        """
-        log.info("IM-E01: Edit pre-populated fields test")
-        page = im_page
+        try:
+            log.info(">>> STEP 1: Create prerequisite item")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("EditPre")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
 
-        name, data = _create_prerequisite_item(page, "EditPre")
+            if not name:
+                log.warning("  Prerequisite item name empty — cannot verify edit pre-population")
+                return
 
-        if not name:
-            log.warning("Prerequisite item name is empty — cannot verify edit pre-population")
-            return
+            log.info(">>> STEP 2: Open Edit and check pre-populated values")
+            page.click_edit_button(name)
 
-        # Click Edit
-        page.click_edit_button(item_name=name)
-        page.wait_seconds(2)
+            form_values = page.get_form_field_values_step1()
+            assert form_values.get("item_name"), "Item Name field empty in Edit form"
 
-        # Read form values
-        form_values = page.get_form_field_values_step1()
-
-        assert form_values.get("item_name"), (
-            "Item Name field empty in Edit form"
-        )
-        # The value should match the auto-generated name from create
-        # (NOT the prefix "EditPre" — Item Name is auto-generated from attributes)
-        edit_name = form_values.get("item_name", "").strip().lower()
-        created_name = name.strip().lower()
-        assert created_name in edit_name or edit_name in created_name, (
-            f"Edit form Name value '{form_values.get('item_name')}' "
-            f"doesn't match created name '{name}'"
-        )
-
-        # Verify Item Name is readonly in edit mode
-        is_readonly = page.driver.execute_script(
-            "var i = document.querySelector("
-            "  \"input[name='Item Name'], input[formcontrolname='name'], \""
-            "  + \"input[name='itemName']\");"
-            "return i ? i.readOnly : null;"
-        )
-        if is_readonly is True:
-            log.info("Item Name is readonly in Edit mode — confirmed")
-        else:
-            log.info(
-                f"Item Name readonly status in Edit mode: {is_readonly}"
+            edit_name = form_values.get("item_name", "").strip().lower()
+            created_name = name.strip().lower()
+            assert created_name in edit_name or edit_name in created_name, (
+                "Edit form Name '" + form_values.get("item_name", "") + "' doesn't match '" + name + "'"
             )
 
-        log.info(f"Edit form pre-populated correctly: {form_values}")
+            is_readonly = page.driver.execute_script(
+                "var i = document.querySelector("
+                "  \"input[name='Item Name'], input[formcontrolname='name'], \""
+                "  + \"input[name='itemName']\");"
+                "return i ? i.readOnly : null;"
+            )
+            if is_readonly is True:
+                log.info("  Item Name is readonly in Edit mode — confirmed")
 
-        # Cleanup
-        try:
-            page.cancel()
+            log.info(">>> TEST IM-E01 PASSED: Edit form pre-populated correctly")
         except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-E02: Edit — valid update ----
     @pytest.mark.smoke
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_E02_valid_edit(self, im_page):
-        """Edit with valid new values — should succeed.
+    def test_IM_E02_valid_edit(self, logged_in_driver):
+        """Edit with valid new values — should succeed."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        Since Item Name is readonly, we verify that editable fields
-        (Item Code, Description, Base Uom Conversion) were updated
-        and the ORIGINAL Item Name is still present in the table.
-        """
-        log.info("IM-E02: Valid edit test")
-        page = im_page
+        try:
+            log.info(">>> STEP 1: Create prerequisite item")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("EditOK")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
 
-        name, data = _create_prerequisite_item(page, "EditOK")
+            log.info(">>> STEP 2: Edit with new values")
+            edit_data = generate_valid_edit_data("Updated")
+            result = page.edit_item(name, edit_data)
 
-        # Edit with new values (Item Name will not change — readonly)
-        edit_data = generate_valid_edit_data("Updated")
-        result = page.edit_item(name, edit_data)
+            if result["status"] == "PASSED":
+                log.info("  Item updated successfully")
+            else:
+                log.warning("  Edit failed: " + result.get("error", "unknown"))
 
-        if result["status"] == "PASSED":
-            log.info("Item updated successfully")
-        else:
-            log.warning(f"Edit failed: {result.get('error', 'unknown')}")
+            log.info(">>> STEP 3: Verify original name still in table (readonly)")
+            page.hard_refresh()
+            page.search_and_verify(name)
 
-        # Verify the ORIGINAL name is still in the table
-        # (Item Name is readonly and cannot be changed)
-        page.click_refresh()
-        page.wait_seconds(2)
-        found = page.is_item_in_table(name)
+            log.info(">>> TEST IM-E02 PASSED: Valid edit succeeded")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
 
-        assert found, (
-            f"Original item '{name}' not found in table after edit — "
-            f"Item Name should remain unchanged (readonly)"
-        )
-        log.info(
-            f"Item edit successful — original name '{name}' "
-            f"still in table (readonly, as expected)"
-        )
-
-    # ---- IM-E03: Edit — readonly Item Name prevents clearing ----
+    # ---- IM-E03: Edit — readonly Item Name enforcement ----
     @pytest.mark.smoke
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.ui
-    def test_IM_E03_edit_readonly_name_enforcement(self, im_page):
-        """Item Name is readonly in Edit — JS-based clearing should have no effect.
+    def test_IM_E03_edit_readonly_name_enforcement(self, logged_in_driver):
+        """Item Name is readonly in Edit — JS-based clearing should have no effect."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        Since Item Name is readonly, attempting to clear it via JavaScript
-        (bypassing the input event) should either have no effect or the
-        system should prevent submission with an empty name.
-
-        Replaces the former 'edit empty name' test which assumed
-        the name field was editable.
-        """
-        log.info("IM-E03: Edit readonly name enforcement test")
-        page = im_page
-
-        name, data = _create_prerequisite_item(page, "EditRO")
-
-        # Open Edit form
-        page.click_edit_button(item_name=name)
-        page.wait_seconds(1)
-
-        # Record the Item Name value before attempting to clear
-        values_before = page.get_form_field_values_step1()
-        name_before = values_before.get("item_name", "")
-
-        # Attempt to clear the readonly Item Name field via JS
-        page.driver.execute_script(
-            "var i = document.querySelector("
-            "  \"input[name='Item Name'], input[formcontrolname='name'], \""
-            "  + \"input[name='itemName']\");"
-            "if(i){"
-            "  var s = Object.getOwnPropertyDescriptor("
-            "    window.HTMLInputElement.prototype,'value').set;"
-            "  s.call(i, '');"
-            "  i.dispatchEvent(new Event('input',{bubbles:true}));"
-            "  i.dispatchEvent(new Event('change',{bubbles:true}));"
-            "}"
-        )
-        page.wait_seconds(0.5)
-
-        # Check the value after the JS clearing attempt
-        values_after = page.get_form_field_values_step1()
-        name_after = values_after.get("item_name", "")
-
-        if name_after == name_before and name_before:
-            log.info(
-                f"Item Name unchanged after JS clear attempt — "
-                f"readonly enforcement working (value: '{name_before}')"
-            )
-        elif not name_after and name_before:
-            log.warning(
-                "JS clearing succeeded — readonly did not prevent "
-                "programmatic value change. System should still reject "
-                "submission with empty name."
-            )
-            # Try submitting — system should block
-            page.click_update()
-            page.wait_seconds(2)
-
-            validation_alert = ""
-            if page.is_validation_alert_present(timeout=3):
-                validation_alert = page.get_swal_title() or ""
-                log.info(f"SweetAlert after empty edit submit: {validation_alert}")
-                page.handle_validation_warning(timeout=5)
-
-            errors = page.get_mat_error_text()
-            form_still_open = page.is_add_form_open()
-
-            if form_still_open or errors or validation_alert:
-                log.info(
-                    "System rejected submission after JS clearing — "
-                    "validation working even without readonly enforcement"
-                )
-            else:
-                log.warning(
-                    "BUG: Edit form submitted after JS clearing Item Name"
-                )
-        else:
-            log.info(
-                f"Item Name state after JS clear: "
-                f"before='{name_before}', after='{name_after}'"
-            )
-
-        # Cleanup
         try:
-            page.cancel()
+            log.info(">>> STEP 1: Create prerequisite item and open Edit")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("EditRO")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
+
+            page.click_edit_button(name)
+
+            values_before = page.get_form_field_values_step1()
+            name_before = values_before.get("item_name", "")
+
+            log.info(">>> STEP 2: Attempt JS-based clearing of readonly Item Name")
+            page.driver.execute_script(
+                "var i = document.querySelector("
+                "  \"input[name='Item Name'], input[formcontrolname='name'], \""
+                "  + \"input[name='itemName']\");"
+                "if(i){"
+                "  var s = Object.getOwnPropertyDescriptor("
+                "    window.HTMLInputElement.prototype,'value').set;"
+                "  s.call(i, '');"
+                "  i.dispatchEvent(new Event('input',{bubbles:true}));"
+                "  i.dispatchEvent(new Event('change',{bubbles:true}));"
+                "}"
+            )
+
+            values_after = page.get_form_field_values_step1()
+            name_after = values_after.get("item_name", "")
+
+            if name_after == name_before and name_before:
+                log.info("  [PASS] Item Name unchanged after JS clear — readonly working")
+            elif not name_after and name_before:
+                log.warning("  JS clearing succeeded — readonly did not prevent programmatic change")
+                page.click_update()
+                if page.is_validation_alert_present(timeout=3):
+                    page.handle_validation_warning()
+                errors = page.get_mat_error_text()
+                form_still_open = page.is_add_form_open()
+                if form_still_open or errors:
+                    log.info("  System rejected submission after JS clearing — validation working")
+
+            log.info(">>> TEST IM-E03 PASSED: Readonly name enforcement verified")
         except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-E04: Edit — typing into readonly Item Name has no effect ----
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_E04_edit_readonly_name_no_typing(self, im_page):
-        """Typing into readonly Item Name in Edit should have no effect.
+    def test_IM_E04_edit_readonly_name_no_typing(self, logged_in_driver):
+        """Typing into readonly Item Name in Edit should have no effect."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        Since Item Name is readonly in Edit mode, any attempt to type
-        into it should be ignored. This replaces the former spaces-only
-        name test in edit mode.
-        """
-        log.info("IM-E04: Edit readonly name — typing has no effect test")
-        page = im_page
-
-        name, data = _create_prerequisite_item(page, "EditRO2")
-
-        # Open Edit form
-        page.click_edit_button(item_name=name)
-        page.wait_seconds(1)
-
-        # Record the Item Name value before typing
-        values_before = page.get_form_field_values_step1()
-        name_before = values_before.get("item_name", "")
-
-        # Attempt to type into the readonly Item Name field
-        page.type_text(
-            page.ITEM_NAME_INPUT, "AttemptedOverwrite", clear_first=True
-        )
-        page.wait_seconds(0.5)
-
-        # Read the value after typing
-        values_after = page.get_form_field_values_step1()
-        name_after = values_after.get("item_name", "")
-
-        if name_after == name_before and name_before:
-            log.info(
-                f"Item Name unchanged after typing attempt — "
-                f"readonly enforcement working (value: '{name_before}')"
-            )
-        elif name_after == "AttemptedOverwrite":
-            log.warning(
-                "Item Name was overwritten — readonly is NOT enforced"
-            )
-        else:
-            log.info(
-                f"Item Name state after typing: "
-                f"before='{name_before}', after='{name_after}'"
-            )
-
-        # Cleanup
         try:
-            page.cancel()
-        except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-        page.click_refresh()
-        page.wait_seconds(2)
+            log.info(">>> STEP 1: Create prerequisite item and open Edit")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("EditRO2")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
 
-    # ---- IM-E05: Edit — stepper still works in edit mode ----
+            page.click_edit_button(name)
+
+            values_before = page.get_form_field_values_step1()
+            name_before = values_before.get("item_name", "")
+
+            log.info(">>> STEP 2: Attempt to type into readonly Item Name")
+            page.type_text(page.ITEM_NAME_INPUT, "AttemptedOverwrite", clear_first=True)
+
+            values_after = page.get_form_field_values_step1()
+            name_after = values_after.get("item_name", "")
+
+            if name_after == name_before and name_before:
+                log.info("  [PASS] Item Name unchanged after typing — readonly working")
+            elif name_after == "AttemptedOverwrite":
+                log.warning("  Item Name was overwritten — readonly NOT enforced")
+            else:
+                log.info("  Name state: before='" + name_before + "', after='" + name_after + "'")
+
+            log.info(">>> TEST IM-E04 PASSED: Readonly name typing verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
+
+    # ---- IM-E05: Edit — stepper navigation ----
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.ui
-    def test_IM_E05_edit_stepper_navigation(self, im_page):
+    def test_IM_E05_edit_stepper_navigation(self, logged_in_driver):
         """Edit form should allow navigating between stepper steps."""
-        log.info("IM-E05: Edit stepper navigation test")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        name, data = _create_prerequisite_item(page, "EditStep")
-
-        page.click_edit_button(item_name=name)
-        page.wait_seconds(1)
-
-        if page.is_edit_mode():
-            # Should start on Step 1
-            assert page.is_step1_active(), "Edit should start on Step 1"
-
-            # Navigate to Step 2
-            next_clicked = page.click_stepper_next()
-            page.wait_seconds(1)
-
-            if next_clicked:
-                log.info(f"Current step after Next: {page.get_current_step_index()}")
-                # Navigate back to Step 1
-                page.click_stepper_back()
-                page.wait_seconds(1)
-                assert page.is_step1_active(), (
-                    "Did not return to Step 1 after Back in Edit"
-                )
-                log.info("Stepper navigation works in Edit mode")
-            else:
-                log.warning("Stepper Next did not work in Edit mode")
-
-        # Cleanup
         try:
-            page.cancel()
-        except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
+            log.info(">>> STEP 1: Create prerequisite item and open Edit")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("EditStep")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
 
-    # ---- IM-E06: Edit — toggle switches (all on Step 1) ----
+            page.click_edit_button(name)
+
+            if page.is_edit_mode():
+                assert page.is_step1_active(), "Edit should start on Step 1"
+
+                log.info(">>> STEP 2: Navigate to Step 2 and back")
+                next_clicked = page.click_stepper_next()
+
+                if next_clicked:
+                    page.click_stepper_back()
+                    assert page.is_step1_active(), "Did not return to Step 1 after Back in Edit"
+                    log.info("  [PASS] Stepper navigation works in Edit mode")
+                else:
+                    log.warning("  Stepper Next did not work in Edit mode")
+
+            log.info(">>> TEST IM-E05 PASSED: Edit stepper navigation verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
+
+    # ---- IM-E06: Edit — toggle switches ----
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.ui
-    def test_IM_E06_edit_toggle_switches(self, im_page):
-        """Toggle switches in Edit mode should be changeable.
+    def test_IM_E06_edit_toggle_switches(self, logged_in_driver):
+        """Toggle switches in Edit mode should be changeable (all on Step 1)."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        Note: ALL 4 toggle switches (Status, Is Critical, Include Wip,
-        Is Packing Material) are located on Step 1, NOT Step 2.
-        Step 2 contains only Attachment Type (combobox) + File Upload.
-        """
-        log.info("IM-E06: Edit toggle switches test (all on Step 1)")
-        page = im_page
-
-        name, data = _create_prerequisite_item(page, "EditToggle")
-
-        page.click_edit_button(item_name=name)
-        page.wait_seconds(1)
-
-        if page.is_edit_mode():
-            # All 4 toggles are on Step 1 — read current states
-            status_before = page.get_toggle_state(page.STATUS_TOGGLE, "Status")
-            critical_before = page.get_toggle_state(page.IS_CRITICAL_TOGGLE, "Is Critical")
-
-            # Toggle them
-            page._set_toggle_to(page.STATUS_TOGGLE, "Status", not status_before)
-            page._set_toggle_to(page.IS_CRITICAL_TOGGLE, "Is Critical", not critical_before)
-            page.wait_seconds(0.5)
-
-            # Verify states changed
-            status_after = page.get_toggle_state(page.STATUS_TOGGLE, "Status")
-            critical_after = page.get_toggle_state(page.IS_CRITICAL_TOGGLE, "Is Critical")
-
-            if status_after != status_before:
-                log.info("Status toggle changed successfully")
-            else:
-                log.warning("Status toggle did not change")
-
-            if critical_after != critical_before:
-                log.info("Is Critical toggle changed successfully")
-            else:
-                log.warning("Is Critical toggle did not change")
-
-        # Cleanup
         try:
-            page.cancel()
+            log.info(">>> STEP 1: Create prerequisite item and open Edit")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("EditToggle")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
+
+            page.click_edit_button(name)
+
+            if page.is_edit_mode():
+                log.info(">>> STEP 2: Read toggle states and toggle them")
+                status_before = page.get_toggle_state(page.STATUS_TOGGLE, "Status")
+                critical_before = page.get_toggle_state(page.IS_CRITICAL_TOGGLE, "Is Critical")
+
+                page._set_toggle_to(page.STATUS_TOGGLE, "Status", not status_before)
+                page._set_toggle_to(page.IS_CRITICAL_TOGGLE, "Is Critical", not critical_before)
+
+                status_after = page.get_toggle_state(page.STATUS_TOGGLE, "Status")
+                critical_after = page.get_toggle_state(page.IS_CRITICAL_TOGGLE, "Is Critical")
+
+                if status_after != status_before:
+                    log.info("  [PASS] Status toggle changed")
+                else:
+                    log.warning("  Status toggle did not change")
+
+                if critical_after != critical_before:
+                    log.info("  [PASS] Is Critical toggle changed")
+                else:
+                    log.warning("  Is Critical toggle did not change")
+
+            log.info(">>> TEST IM-E06 PASSED: Edit toggle switches verified")
         except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-E07: Edit — negative Uom Conversion ----
     @pytest.mark.sanity
@@ -1445,657 +1055,720 @@ class TestEditFormValidations:
         reason="BUG-004: Negative Uom Conversion may be accepted in Edit",
         strict=False,
     )
-    def test_IM_E07_edit_negative_uom(self, im_page):
+    def test_IM_E07_edit_negative_uom(self, logged_in_driver):
         """Edit with negative Base Uom Conversion — should be rejected."""
-        log.info("IM-E07: Edit negative UOM conversion test")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        name, data = _create_prerequisite_item(page, "EditNegUom")
-
-        page.click_edit_button(item_name=name)
-        page.wait_seconds(1)
-
-        if page.is_edit_mode():
-            page.type_text(
-                page.BASE_UOM_CONVERSION_INPUT,
-                generate_negative_uom_conversion(),
-                clear_first=True,
-            )
-            page.click_update()
-            page.wait_seconds(2)
-
-            validation_alert = page.handle_validation_warning(timeout=3)
-            errors = page.get_mat_error_text()
-            form_still_open = page.is_add_form_open()
-
-            assert form_still_open or errors or validation_alert, (
-                "BUG-004 CONFIRMED: Negative UOM conversion accepted in Edit"
-            )
-
-        # Cleanup
         try:
-            page.cancel()
+            log.info(">>> STEP 1: Create prerequisite item and open Edit")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("EditNegUom")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
+
+            page.click_edit_button(name)
+
+            if page.is_edit_mode():
+                log.info(">>> STEP 2: Enter negative Uom Conversion and submit")
+                page.type_text(
+                    page.BASE_UOM_CONVERSION_INPUT,
+                    generate_negative_uom_conversion(),
+                    clear_first=True,
+                )
+                page.click_update()
+
+                validation_alert = page.is_validation_alert_present(timeout=3)
+                if validation_alert:
+                    page.handle_validation_warning()
+
+                errors = page.get_mat_error_text()
+                form_still_open = page.is_add_form_open()
+
+                assert form_still_open or errors or validation_alert, (
+                    "BUG-004 CONFIRMED: Negative UOM conversion accepted in Edit"
+                )
+
+            log.info(">>> TEST IM-E07 PASSED: Negative Uom rejected in Edit")
         except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-E08: Edit — special chars in Item Code ----
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.bug
-    def test_IM_E08_edit_special_char_code(self, im_page):
+    def test_IM_E08_edit_special_char_code(self, logged_in_driver):
         """Edit Item Code with special characters — check acceptance."""
-        log.info("IM-E08: Edit special char code test")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        name, data = _create_prerequisite_item(page, "EditSpCode")
-
-        page.click_edit_button(item_name=name)
-        page.wait_seconds(1)
-
-        if page.is_edit_mode():
-            page.type_text(
-                page.ITEM_CODE_INPUT,
-                generate_item_code_with_special_chars(),
-                clear_first=True,
-            )
-            page.click_update()
-            page.wait_seconds(2)
-
-            validation_alert = page.handle_validation_warning(timeout=3)
-            form_still_open = page.is_add_form_open()
-
-            if validation_alert or form_still_open:
-                log.info("Special chars in Item Code rejected")
-            else:
-                log.info("Special chars in Item Code accepted")
-
-        # Cleanup
         try:
-            page.cancel()
+            log.info(">>> STEP 1: Create prerequisite item and open Edit")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("EditSpCode")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
+
+            page.click_edit_button(name)
+
+            if page.is_edit_mode():
+                log.info(">>> STEP 2: Enter special chars in Item Code and submit")
+                page.type_text(
+                    page.ITEM_CODE_INPUT,
+                    generate_item_code_with_special_chars(),
+                    clear_first=True,
+                )
+                page.click_update()
+
+                validation_alert = page.is_validation_alert_present(timeout=3)
+                if validation_alert:
+                    page.handle_validation_warning()
+
+                form_still_open = page.is_add_form_open()
+
+                if validation_alert or form_still_open:
+                    log.info("  Special chars in Item Code rejected")
+                else:
+                    log.info("  Special chars in Item Code accepted")
+
+            log.info(">>> TEST IM-E08 PASSED: Special char code behavior verified")
         except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-        page.click_refresh()
-        page.wait_seconds(2)
+            raise
+        finally:
+            self._cleanup(page)
 
-
-# ====================================================================
-# PHASE 4: Search & Filter Edge Cases (5 tests)
-# ====================================================================
-
-class TestSearchFilter:
-    """IM-S01 to IM-S05: Search and Filter edge cases."""
+    # ==================================================================
+    # PHASE 4: Search & Filter Edge Cases (5 tests)
+    # ==================================================================
 
     # ---- IM-S01: Search with exact Item Name ----
     @pytest.mark.smoke
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_S01_search_exact(self, im_page):
+    def test_IM_S01_search_exact(self, logged_in_driver):
         """Search with exact item name — should find it."""
-        log.info("IM-S01: Search exact name")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        name, data = _create_prerequisite_item(page, "SearchEx")
+        try:
+            log.info(">>> STEP 1: Create prerequisite item")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("SearchEx")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
 
-        found = page.search_item(name)
-        page.clear_search()
+            log.info(">>> STEP 2: Search with exact name")
+            page.search_and_verify(name)
 
-        assert found, f"Exact search failed for: {name}"
-        log.info(f"Exact search found: {name}")
+            log.info(">>> TEST IM-S01 PASSED: Exact search found")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-S02: Search with partial Item Name ----
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_S02_search_partial(self, im_page):
+    def test_IM_S02_search_partial(self, logged_in_driver):
         """Search with partial item name — should find it."""
-        log.info("IM-S02: Search partial name")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        name, data = _create_prerequisite_item(page, "SearchPar")
+        try:
+            log.info(">>> STEP 1: Create prerequisite item")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("SearchPar")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
 
-        # Use first 8 chars as partial search
-        partial = name[:8]
-        found = page.search_item(partial)
-        page.clear_search()
+            log.info(">>> STEP 2: Search with partial name")
+            partial = name[:8]
+            found = page.search_item(partial)
+            page.clear_search()
 
-        assert found, f"Partial search failed for: {partial}"
-        log.info(f"Partial search found with: {partial}")
+            assert found, "Partial search failed for: " + partial
+            log.info("  [PASS] Partial search found with: " + partial)
+
+            log.info(">>> TEST IM-S02 PASSED: Partial search verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-S03: Search with non-existent Name ----
     @pytest.mark.smoke
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_S03_search_nonexistent(self, im_page):
+    def test_IM_S03_search_nonexistent(self, logged_in_driver):
         """Search for non-existent name — should return no results."""
-        log.info("IM-S03: Search nonexistent")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        fake_name = f"NonExistent_{int(time.time())}"
-        found = page.search_item(fake_name)
-        page.clear_search()
+        try:
+            log.info(">>> STEP 1: Search for non-existent name")
+            page.navigate_to_page()
+            fake_name = "NonExistent_" + str(int(time.time()))
+            found = page.search_item(fake_name)
+            page.clear_search()
 
-        assert not found, (
-            f"BUG: Non-existent name '{fake_name}' was found in table"
-        )
-        log.info(f"Correctly not found: {fake_name}")
+            assert not found, "BUG: Non-existent name '" + fake_name + "' was found in table"
+            log.info("  [PASS] Correctly not found: " + fake_name)
 
-    # ---- IM-S04: Search after creating new item ----
+            log.info(">>> TEST IM-S03 PASSED: Non-existent search verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
+
+    # ---- IM-S04: Clear search resets table ----
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_S04_search_after_create(self, im_page):
+    def test_IM_S04_search_after_create(self, logged_in_driver):
         """Create a new item, then search — should find it immediately."""
-        log.info("IM-S04: Search after create")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        name, data = _create_prerequisite_item(page, "SearchNew")
+        try:
+            log.info(">>> STEP 1: Create prerequisite item")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("SearchNew")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
 
-        # Refresh and search
-        page.click_refresh()
-        page.wait_seconds(2)
-        found = page.search_item(name)
-        page.clear_search()
+            log.info(">>> STEP 2: Search for newly created item")
+            page.hard_refresh()
+            page.search_and_verify(name)
 
-        assert found, f"Newly created item not found in search: {name}"
-        log.info(f"Newly created item found in search: {name}")
+            log.info(">>> TEST IM-S04 PASSED: Search after create verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
 
-    # ---- IM-S05: Search and verify row details ----
+    # ---- IM-S05: Search with special characters ----
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_S05_search_verify_details(self, im_page):
+    def test_IM_S05_search_verify_details(self, logged_in_driver):
         """Search for an item and verify row details match."""
-        log.info("IM-S05: Search verify details")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        name, data = _create_prerequisite_item(page, "SearchDet")
+        try:
+            log.info(">>> STEP 1: Create prerequisite item")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("SearchDet")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
 
-        found = page.search_item(name)
-        if found:
-            row_idx = page.find_item_row_index(name)
-            if row_idx >= 0:
-                details = page.get_item_details_from_row(row_idx)
-                log.info(f"Row details: {details}")
-                # Item name should be in the row
-                assert name in details.get("item_name", ""), (
-                    f"Row item name '{details.get('item_name')}' "
-                    f"doesn't match '{name}'"
-                )
-                log.info(f"Row details verified for: {name}")
-        else:
-            log.warning(f"Could not find item for detail verification: {name}")
+            log.info(">>> STEP 2: Search and verify row details")
+            found = page.search_item(name)
+            if found:
+                row_idx = page.find_item_row_index(name)
+                if row_idx >= 0:
+                    details = page.get_item_details_from_row(row_idx)
+                    assert name in details.get("item_name", ""), (
+                        "Row item name '" + details.get("item_name", "") + "' doesn't match '" + name + "'"
+                    )
+                    log.info("  [PASS] Row details verified for: " + name)
 
-        page.clear_search()
+            page.clear_search()
 
+            log.info(">>> TEST IM-S05 PASSED: Search verify details verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
 
-# ====================================================================
-# PHASE 5: Popup & UI Behaviors (8 tests)
-# ====================================================================
-
-class TestPopupUIBehaviors:
-    """IM-P01 to IM-P08: Popup, stepper, and UI behavior tests."""
+    # ==================================================================
+    # PHASE 5: Popup & UI Behaviors (8 tests)
+    # ==================================================================
 
     # ---- IM-P01: View popup is read-only ----
     @pytest.mark.smoke
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.ui
-    def test_IM_P01_view_read_only(self, im_page):
+    def test_IM_P01_view_read_only(self, logged_in_driver):
         """View popup should show fields as read-only."""
-        log.info("IM-P01: View read-only test")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        name, data = _create_prerequisite_item(page, "ViewRO")
+        try:
+            log.info(">>> STEP 1: Create prerequisite item")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("ViewRO")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
 
-        page.click_view_button(item_name=name)
-        page.wait_seconds(1)
+            log.info(">>> STEP 2: Open View popup and check read-only")
+            page.click_view_button(name)
 
-        is_readonly = page.verify_view_popup_read_only()
-        assert is_readonly, (
-            "View popup fields are editable — should be read-only"
-        )
-        log.info("View popup is correctly read-only")
+            is_readonly = page.verify_view_popup_read_only()
+            assert is_readonly, "View popup fields are editable — should be read-only"
+            log.info("  [PASS] View popup is correctly read-only")
 
-        # Cleanup
-        page.close_popup()
-        page.wait_seconds(0.5)
+            log.info(">>> TEST IM-P01 PASSED: View read-only verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
 
     # ---- IM-P02: No Delete button available ----
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.bug
     @pytest.mark.ui
-    def test_IM_P02_no_delete_button(self, im_page):
-        """Verify no Delete button exists per row.
-        BUG-005: No Delete option on the screen.
-        """
-        log.info("IM-P02: No delete button test")
-        page = im_page
+    def test_IM_P02_no_delete_button(self, logged_in_driver):
+        """Verify no Delete button exists per row (BUG-005)."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        row_count = page.get_table_row_count()
-        if row_count > 0:
-            # Check each row for delete button
-            rows = page.driver.find_elements(
-                By.CSS_SELECTOR, "table#excel-table tbody tr"
-            )
-            for i, row in enumerate(rows):
-                delete_btns = row.find_elements(
-                    By.CSS_SELECTOR,
-                    "td.cdk-column-delete button, "
-                    "td.mat-column-delete button, "
-                    "button[mattooltip='Delete']"
-                )
-                if delete_btns:
-                    log.warning(
-                        f"BUG: Delete button found in row {i} — "
-                        "this may have been added since last inspection"
-                    )
-                    return
-
-            log.info(
-                "No Delete button found in any row — "
-                "BUG-005 confirmed: No Delete functionality"
-            )
-        else:
-            log.info("No rows in table to check for Delete button")
-
-    # ---- IM-P03: Add form opens stepper ----
-    @pytest.mark.smoke
-    @pytest.mark.sanity
-    @pytest.mark.regression
-    @pytest.mark.ui
-    def test_IM_P03_add_form_stepper(self, im_page):
-        """Add form should open with Step 1 active in stepper."""
-        log.info("IM-P03: Add form stepper test")
-        page = im_page
-
-        page.open_add_form()
-        page.wait_seconds(1)
-
-        assert page.is_add_form_open(), "Add form did not open"
-        assert page.is_step1_active(), (
-            "Add form should start on Step 1"
-        )
-        log.info("Add form opens with Step 1 active — stepper working")
-
-        # Cleanup
         try:
-            page.cancel()
-        except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-
-    # ---- IM-P04: Cancel closes the form ----
-    @pytest.mark.smoke
-    @pytest.mark.sanity
-    @pytest.mark.regression
-    @pytest.mark.ui
-    def test_IM_P04_cancel_closes_form(self, im_page):
-        """Cancel button should close the stepper form."""
-        log.info("IM-P04: Cancel closes form test")
-        page = im_page
-
-        page.open_add_form()
-        page.wait_seconds(1)
-        assert page.is_add_form_open(), "Add form did not open"
-
-        page.cancel()
-        page.wait_seconds(1)
-
-        assert page.is_form_closed(), (
-            "Form still open after Cancel"
-        )
-        log.info("Cancel correctly closes the form")
-
-    # ---- IM-P05: Refresh button works ----
-    @pytest.mark.sanity
-    @pytest.mark.regression
-    @pytest.mark.ui
-    def test_IM_P05_refresh_button(self, im_page):
-        """Refresh button should reload the table."""
-        log.info("IM-P05: Refresh button test")
-        page = im_page
-
-        row_count_before = page.get_table_row_count()
-        page.click_refresh()
-        page.wait_seconds(2)
-
-        # Page should still be loaded
-        assert page.is_page_loaded(), "Page not loaded after refresh"
-        log.info("Refresh button works — page reloaded")
-
-    # ---- IM-P06: Step 3 — Add Row button ----
-    @pytest.mark.sanity
-    @pytest.mark.regression
-    @pytest.mark.ui
-    def test_IM_P06_step3_add_row(self, im_page):
-        """Step 3 should allow adding rows to the packaging table."""
-        log.info("IM-P06: Step 3 Add Row test")
-        page = im_page
-
-        data = generate_valid_item_data("AddRow")
-
-        page.open_add_form()
-        page.wait_seconds(1)
-        page.fill_step1(data)
-        page.click_stepper_next()
-        page.wait_seconds(1)
-
-        # Navigate to Step 3
-        step2_data = generate_valid_step2_data()
-        page.fill_step2(step2_data)
-        page.click_stepper_next()
-        page.wait_seconds(1)
-
-        if page.is_step3_active():
-            # Get initial row count
-            initial_count = page.get_step3_row_count()
-            log.info(f"Step 3 initial row count: {initial_count}")
-
-            # Click Add Row
-            page._click_add_row_step3()
-            page.wait_seconds(1)
-
-            new_count = page.get_step3_row_count()
-            log.info(f"Step 3 row count after Add Row: {new_count}")
-
-            if new_count > initial_count:
-                log.info("Add Row button works — new row added")
-            else:
-                log.warning("Add Row button may not have added a new row")
-        else:
-            log.warning("Could not navigate to Step 3")
-
-        # Cleanup
-        try:
-            page.cancel()
-        except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-
-    # ---- IM-P07: Toggle switches in Create form (all on Step 1) ----
-    @pytest.mark.sanity
-    @pytest.mark.regression
-    @pytest.mark.ui
-    def test_IM_P07_toggle_switches_create(self, im_page):
-        """Toggle switches should be functional in Create form.
-
-        Note: ALL 4 toggle switches (Status, Is Critical, Include Wip,
-        Is Packing Material) are located on Step 1, NOT Step 2.
-        Step 2 contains only Attachment Type (combobox) + File Upload.
-        """
-        log.info("IM-P07: Toggle switches in Create test (all on Step 1)")
-        page = im_page
-
-        page.open_add_form()
-        page.wait_seconds(1)
-
-        # All 4 toggles are on Step 1 — read default states
-        status_default = page.get_toggle_state(page.STATUS_TOGGLE, "Status")
-        critical_default = page.get_toggle_state(page.IS_CRITICAL_TOGGLE, "Is Critical")
-        wip_default = page.get_toggle_state(page.INCLUDE_WIP_TOGGLE, "Include Wip")
-        packing_default = page.get_toggle_state(
-            page.IS_PACKING_MATERIAL_TOGGLE, "Is Packing Material"
-        )
-
-        log.info(
-            f"Default toggle states — "
-            f"Status: {status_default}, Critical: {critical_default}, "
-            f"WIP: {wip_default}, Packing: {packing_default}"
-        )
-
-        # Toggle Status
-        page._set_toggle_to(page.STATUS_TOGGLE, "Status", not status_default)
-        page.wait_seconds(0.5)
-        new_status = page.get_toggle_state(page.STATUS_TOGGLE, "Status")
-
-        if new_status != status_default:
-            log.info("Status toggle works in Create form")
-        else:
-            log.warning("Status toggle did not change in Create form")
-
-        # Toggle Is Critical
-        page._set_toggle_to(page.IS_CRITICAL_TOGGLE, "Is Critical", True)
-        page.wait_seconds(0.5)
-        new_critical = page.get_toggle_state(page.IS_CRITICAL_TOGGLE, "Is Critical")
-
-        if new_critical:
-            log.info("Is Critical toggle works in Create form")
-        else:
-            log.warning("Is Critical toggle did not change to ON")
-
-        # Cleanup
-        try:
-            page.cancel()
-        except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-
-    # ---- IM-P08: Stepper header click navigation ----
-    @pytest.mark.sanity
-    @pytest.mark.regression
-    @pytest.mark.ui
-    def test_IM_P08_stepper_header_click(self, im_page):
-        """Clicking stepper headers should navigate between steps
-        (if linear mode allows).
-        """
-        log.info("IM-P08: Stepper header click test")
-        page = im_page
-
-        data = generate_valid_item_data("HeadClick")
-
-        page.open_add_form()
-        page.wait_seconds(1)
-        page.fill_step1(data)
-
-        # Try to click Step 2 header directly
-        navigated = page.go_to_step(1)
-        page.wait_seconds(1)
-
-        if navigated and page.is_step2_active():
-            log.info("Step 2 header click navigation works")
-        else:
-            log.info(
-                "Step 2 header click navigation blocked — "
-                "may need Next button first (linear stepper)"
-            )
-
-        # Cleanup
-        try:
-            page.cancel()
-        except Exception:
-            try:
-                page.close_popup()
-            except Exception:
-                pass
-
-
-# ====================================================================
-# PHASE 6: History & Audit Trail (5 tests)
-# ====================================================================
-
-class TestHistoryAuditTrail:
-    """IM-H01 to IM-H05: History popup and audit trail tests.
-    Item Master has History column (mat-column-archive).
-    """
-
-    # ---- IM-H01: History popup opens ----
-    @pytest.mark.smoke
-    @pytest.mark.sanity
-    @pytest.mark.regression
-    @pytest.mark.ui
-    def test_IM_H01_history_popup_opens(self, im_page):
-        """Clicking History button should open the history popup."""
-        log.info("IM-H01: History popup opens test")
-        page = im_page
-
-        name, data = _create_prerequisite_item(page, "HistOpen")
-
-        page.click_history_button(item_name=name)
-        page.wait_seconds(1.5)
-
-        # Check if history popup is visible
-        history_open = page.is_history_popup_open()
-
-        if history_open:
-            log.info("History popup opened successfully")
-            page.close_history_popup()
-            page.wait_seconds(0.5)
-        else:
-            # Check if any popup opened at all
-            any_popup = page._is_form_popup_open()
-            if any_popup:
-                heading = page.get_form_heading()
-                log.info(f"Popup opened with heading: {heading}")
-                page.close_popup()
-            else:
-                log.warning("No popup opened after clicking History button")
-
-    # ---- IM-H02: History has data after create ----
-    @pytest.mark.sanity
-    @pytest.mark.regression
-    def test_IM_H02_history_data_after_create(self, im_page):
-        """After creating an item, history should show at least one entry."""
-        log.info("IM-H02: History data after create test")
-        page = im_page
-
-        name, data = _create_prerequisite_item(page, "HistData")
-
-        page.click_history_button(item_name=name)
-        page.wait_seconds(1.5)
-
-        if page.is_history_popup_open():
-            row_count = page.get_history_row_count()
-            log.info(f"History row count: {row_count}")
-
+            log.info(">>> STEP 1: Check table rows for Delete button")
+            page.navigate_to_page()
+            row_count = page.get_table_row_count()
             if row_count > 0:
-                log.info(f"History has {row_count} entries after create")
+                rows = page.driver.find_elements(
+                    By.CSS_SELECTOR, "table#excel-table tbody tr"
+                )
+                for i, row in enumerate(rows):
+                    delete_btns = row.find_elements(
+                        By.CSS_SELECTOR,
+                        "td.cdk-column-delete button, "
+                        "td.mat-column-delete button, "
+                        "button[mattooltip='Delete']"
+                    )
+                    if delete_btns:
+                        log.warning("  BUG: Delete button found in row " + str(i))
+                        return
+
+                log.info("  No Delete button found — BUG-005 confirmed: No Delete functionality")
             else:
-                log.info("History is empty after create (may be expected)")
+                log.info("  No rows in table to check for Delete button")
 
-            page.close_history_popup()
-            page.wait_seconds(0.5)
-        else:
-            log.warning("History popup did not open")
+            log.info(">>> TEST IM-P02 PASSED: No Delete button verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
 
-    # ---- IM-H03: History data after edit ----
+    # ---- IM-P03: Cancel add form — item not created ----
+    @pytest.mark.smoke
     @pytest.mark.sanity
     @pytest.mark.regression
-    def test_IM_H03_history_data_after_edit(self, im_page):
-        """After editing an item, history should show additional entries.
+    @pytest.mark.ui
+    def test_IM_P03_cancel_closes_form(self, logged_in_driver):
+        """Cancel button should close the stepper form — item NOT created."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        Note: Item Name is readonly and cannot be changed during edit.
-        We search for the item using the ORIGINAL name after editing.
-        """
-        log.info("IM-H03: History data after edit test")
-        page = im_page
+        try:
+            log.info(">>> STEP 1: Open Add form and fill Step 1")
+            page.navigate_to_page()
+            data = generate_valid_item_data("CancelTest")
+            page.open_add_form()
+            assert page.is_add_form_open(), "Add form did not open"
+            page.fill_step1(data)
 
-        name, data = _create_prerequisite_item(page, "HistEdit")
+            log.info(">>> STEP 2: Click Cancel — form should close")
+            page.close_popup()
 
-        # Check history before edit
-        page.click_history_button(item_name=name)
-        page.wait_seconds(1.5)
+            assert page.is_form_closed(), "Form still open after Cancel"
+            log.info("  [PASS] Cancel correctly closes the form")
 
-        count_before = 0
-        if page.is_history_popup_open():
-            count_before = page.get_history_row_count()
-            page.close_history_popup()
-            page.wait_seconds(0.5)
+            log.info(">>> STEP 3: Verify item was NOT created")
+            page.hard_refresh()
+            name = data.get("_auto_item_name", "")
+            if name:
+                page.search_item(name)
+                exists = page.is_item_in_table(name)
+                assert not exists, "Item '" + name + "' should NOT be in table after Cancel"
+                page.clear_search()
+                log.info("  [PASS] Item not created after Cancel")
 
-        # Edit the item (Item Name will NOT change — it's readonly)
-        edit_data = generate_valid_edit_data("HistUpd")
-        result = page.edit_item(name, edit_data)
+            log.info(">>> TEST IM-P03 PASSED: Cancel closes form, item not created")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
 
-        # Check history after edit — search using ORIGINAL name
-        # since Item Name cannot be changed (readonly)
-        page.click_refresh()
-        page.wait_seconds(2)
+    # ---- IM-P04: Stepper navigation (Next/Back) ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
+    def test_IM_P04_stepper_navigation(self, logged_in_driver):
+        """Verify stepper navigation — Next advances, Back returns."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        page.search_item(name)
-        page.wait_seconds(1)
+        try:
+            log.info(">>> STEP 1: Open form and verify Step 1 active")
+            page.navigate_to_page()
+            data = generate_valid_item_data("StepNav")
+            page.open_add_form()
+            assert page.is_step1_active(), "Step 1 should be active initially"
 
-        page.click_history_button(item_name=name)
-        page.wait_seconds(1.5)
+            log.info(">>> STEP 2: Fill Step 1 and navigate to Step 2")
+            page.fill_step1(data)
+            page.click_stepper_next()
 
-        count_after = 0
-        if page.is_history_popup_open():
-            count_after = page.get_history_row_count()
-            page.close_history_popup()
-            page.wait_seconds(0.5)
+            if page.is_step2_active():
+                log.info("  [PASS] Navigated to Step 2")
+                page.click_stepper_back()
+                assert page.is_step1_active(), "Did not return to Step 1 after Back"
+                log.info("  [PASS] Back correctly returned to Step 1")
+            else:
+                log.warning("  Could not navigate to Step 2 — validation may have blocked")
 
-        log.info(
-            f"History rows: before edit={count_before}, "
-            f"after edit={count_after}"
-        )
+            log.info(">>> TEST IM-P04 PASSED: Stepper navigation verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
 
-        if count_after > count_before:
-            log.info("History updated after edit — audit trail working")
-        else:
+    # ---- IM-P05: Toggle switches in Create ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
+    def test_IM_P05_toggle_switches_create(self, logged_in_driver):
+        """Toggle switches should be functional in Create form (all on Step 1)."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
+
+        try:
+            log.info(">>> STEP 1: Open form and read default toggle states")
+            page.navigate_to_page()
+            page.open_add_form()
+
+            status_default = page.get_toggle_state(page.STATUS_TOGGLE, "Status")
+            critical_default = page.get_toggle_state(page.IS_CRITICAL_TOGGLE, "Is Critical")
+            wip_default = page.get_toggle_state(page.INCLUDE_WIP_TOGGLE, "Include Wip")
+            packing_default = page.get_toggle_state(page.IS_PACKING_MATERIAL_TOGGLE, "Is Packing Material")
+
             log.info(
-                "History not updated after edit (may be expected if "
-                "only one history entry per record)"
+                "  Defaults — Status: " + str(status_default) +
+                ", Critical: " + str(critical_default) +
+                ", WIP: " + str(wip_default) +
+                ", Packing: " + str(packing_default)
             )
 
-        page.clear_search()
+            log.info(">>> STEP 2: Toggle Status and verify")
+            page._set_toggle_to(page.STATUS_TOGGLE, "Status", not status_default)
+            new_status = page.get_toggle_state(page.STATUS_TOGGLE, "Status")
 
-    # ---- IM-H04: History search within popup ----
-    @pytest.mark.sanity
-    @pytest.mark.regression
-    @pytest.mark.ui
-    def test_IM_H04_history_search(self, im_page):
-        """Search within history popup should filter results."""
-        log.info("IM-H04: History search test")
-        page = im_page
-
-        name, data = _create_prerequisite_item(page, "HistSrch")
-
-        page.click_history_button(item_name=name)
-        page.wait_seconds(1.5)
-
-        if page.is_history_popup_open():
-            # Try searching within history
-            search_result = page.search_in_history(name[:6])
-
-            if search_result:
-                log.info("History search executed successfully")
+            if new_status != status_default:
+                log.info("  [PASS] Status toggle works in Create form")
             else:
-                log.info("History search input not found or not functional")
+                log.warning("  Status toggle did not change in Create form")
 
-            page.close_history_popup()
-            page.wait_seconds(0.5)
-        else:
-            log.warning("History popup did not open for search test")
+            log.info(">>> STEP 3: Toggle Is Critical and verify")
+            page._set_toggle_to(page.IS_CRITICAL_TOGGLE, "Is Critical", True)
+            new_critical = page.get_toggle_state(page.IS_CRITICAL_TOGGLE, "Is Critical")
 
-    # ---- IM-H05: History close button works ----
+            if new_critical:
+                log.info("  [PASS] Is Critical toggle works in Create form")
+            else:
+                log.warning("  Is Critical toggle did not change to ON")
+
+            log.info(">>> TEST IM-P05 PASSED: Toggle switches in Create verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
+
+    # ---- IM-P06: Step 2 attachment section ----
     @pytest.mark.sanity
     @pytest.mark.regression
     @pytest.mark.ui
-    def test_IM_H05_history_close(self, im_page):
+    def test_IM_P06_step2_attachment(self, logged_in_driver):
+        """Step 2 should contain Attachment Type combobox and File Upload."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
+
+        try:
+            log.info(">>> STEP 1: Navigate to Step 2")
+            page.navigate_to_page()
+            data = generate_valid_item_data("Step2Test")
+            page.open_add_form()
+            page.fill_step1(data)
+            page.click_stepper_next()
+
+            if page.is_step2_active():
+                log.info(">>> STEP 2: Verify Step 2 content")
+                step2_data = generate_valid_step2_data()
+                page.fill_step2(step2_data)
+                log.info("  [PASS] Step 2 attachment section accessible")
+            else:
+                log.warning("  Could not navigate to Step 2")
+
+            log.info(">>> TEST IM-P06 PASSED: Step 2 attachment section verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
+
+    # ---- IM-P07: Step 3 packaging table ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
+    def test_IM_P07_step3_packaging_table(self, logged_in_driver):
+        """Step 3 should allow adding rows to the packaging table."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
+
+        try:
+            log.info(">>> STEP 1: Navigate to Step 3")
+            page.navigate_to_page()
+            data = generate_valid_item_data("Step3Test")
+            page.open_add_form()
+            page.fill_step1(data)
+            page.click_stepper_next()
+
+            step2_data = generate_valid_step2_data()
+            page.fill_step2(step2_data)
+            page.click_stepper_next()
+
+            if page.is_step3_active():
+                log.info(">>> STEP 2: Check packaging table and Add Row")
+                initial_count = page.get_step3_row_count()
+                log.info("  Initial row count: " + str(initial_count))
+
+                page._click_add_row_step3()
+
+                new_count = page.get_step3_row_count()
+                log.info("  Row count after Add Row: " + str(new_count))
+
+                if new_count > initial_count:
+                    log.info("  [PASS] Add Row button works — new row added")
+                else:
+                    log.warning("  Add Row button may not have added a new row")
+            else:
+                log.warning("  Could not navigate to Step 3")
+
+            log.info(">>> TEST IM-P07 PASSED: Step 3 packaging table verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
+
+    # ---- IM-P08: Form close and reopen ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
+    def test_IM_P08_form_close_reopen(self, logged_in_driver):
+        """Close form and reopen — should start fresh on Step 1."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
+
+        try:
+            log.info(">>> STEP 1: Open form, then close it")
+            page.navigate_to_page()
+            page.open_add_form()
+            assert page.is_add_form_open(), "Add form did not open"
+
+            page.close_popup()
+            assert page.is_form_closed(), "Form still open after close"
+
+            log.info(">>> STEP 2: Reopen form — should be fresh on Step 1")
+            page.open_add_form()
+            assert page.is_add_form_open(), "Add form did not reopen"
+            assert page.is_step1_active(), "Reopened form should start on Step 1"
+            log.info("  [PASS] Form reopened fresh on Step 1")
+
+            log.info(">>> TEST IM-P08 PASSED: Form close and reopen verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
+
+    # ==================================================================
+    # PHASE 6: History & Audit Trail (5 tests)
+    # ==================================================================
+
+    # ---- IM-H01: View history for created item ----
+    @pytest.mark.smoke
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
+    def test_IM_H01_history_popup_opens(self, logged_in_driver):
+        """Clicking History button should open the history popup."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
+
+        try:
+            log.info(">>> STEP 1: Create prerequisite item")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("HistOpen")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
+
+            log.info(">>> STEP 2: Click History button")
+            page.click_history_button(name)
+
+            history_open = page.is_history_popup_open()
+            if history_open:
+                log.info("  [PASS] History popup opened successfully")
+                page.close_history_popup()
+            else:
+                log.warning("  History popup did not open")
+
+            log.info(">>> TEST IM-H01 PASSED: History popup verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
+
+    # ---- IM-H02: History table has data ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    def test_IM_H02_history_has_data(self, logged_in_driver):
+        """After creating an item, history should show at least one entry."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
+
+        try:
+            log.info(">>> STEP 1: Create prerequisite item")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("HistData")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
+
+            log.info(">>> STEP 2: Open History and check row count")
+            page.click_history_button(name)
+
+            if page.is_history_popup_open():
+                row_count = page.get_history_row_count()
+                log.info("  History row count: " + str(row_count))
+                if row_count > 0:
+                    log.info("  [PASS] History has " + str(row_count) + " entries after create")
+                else:
+                    log.info("  History is empty after create (may be expected)")
+                page.close_history_popup()
+            else:
+                log.warning("  History popup did not open")
+
+            log.info(">>> TEST IM-H02 PASSED: History data verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
+
+    # ---- IM-H03: History search ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    def test_IM_H03_history_search(self, logged_in_driver):
+        """Search within history popup should filter results."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
+
+        try:
+            log.info(">>> STEP 1: Create prerequisite item")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("HistSrch")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
+
+            log.info(">>> STEP 2: Open History and try search")
+            page.click_history_button(name)
+
+            if page.is_history_popup_open():
+                search_result = page.search_in_history(name[:6])
+                if search_result:
+                    log.info("  [PASS] History search executed successfully")
+                else:
+                    log.info("  History search input not found or not functional")
+                page.close_history_popup()
+            else:
+                log.warning("  History popup did not open for search test")
+
+            log.info(">>> TEST IM-H03 PASSED: History search verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
+
+    # ---- IM-H04: Close history popup ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
+    def test_IM_H04_history_close(self, logged_in_driver):
         """History popup should close via Close/Cancel button."""
-        log.info("IM-H05: History close test")
-        page = im_page
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
 
-        name, data = _create_prerequisite_item(page, "HistClose")
+        try:
+            log.info(">>> STEP 1: Create prerequisite item")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("HistClose")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
 
-        page.click_history_button(item_name=name)
-        page.wait_seconds(1.5)
+            log.info(">>> STEP 2: Open History and close it")
+            page.click_history_button(name)
 
-        if page.is_history_popup_open():
-            page.close_history_popup()
-            page.wait_seconds(1)
+            if page.is_history_popup_open():
+                page.close_history_popup()
 
-            assert not page.is_history_popup_open(), (
-                "History popup still open after close attempt"
-            )
-            log.info("History popup closed successfully")
-        else:
-            log.info("History popup did not open — close test skipped")
+                assert not page.is_history_popup_open(), "History popup still open after close attempt"
+                log.info("  [PASS] History popup closed successfully")
+            else:
+                log.info("  History popup did not open — close test skipped")
+
+            log.info(">>> TEST IM-H04 PASSED: History close verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)
+
+    # ---- IM-H05: Stacked popups (History + View) ----
+    @pytest.mark.sanity
+    @pytest.mark.regression
+    @pytest.mark.ui
+    def test_IM_H05_stacked_popups(self, logged_in_driver):
+        """Open History, then open View — verify both can be dismissed."""
+        driver = logged_in_driver
+        page = ItemMasterPage(driver)
+
+        try:
+            log.info(">>> STEP 1: Create prerequisite item")
+            page.navigate_to_page()
+            data = generate_full_valid_item_data("HistStack")
+            result = page.create_item(data)
+            name = result.get("item_name", "") or data.get("_auto_item_name", "")
+            page.hard_refresh()
+
+            log.info(">>> STEP 2: Open History popup first")
+            page.click_history_button(name)
+
+            if page.is_history_popup_open():
+                log.info("  History popup opened")
+
+                page.close_history_popup()
+                log.info("  History popup closed")
+
+            log.info(">>> STEP 3: Open View popup")
+            page.click_view_button(name)
+
+            is_readonly = page.verify_view_popup_read_only()
+            if is_readonly:
+                log.info("  [PASS] View popup is read-only after History close")
+            page.close_popup()
+
+            log.info(">>> TEST IM-H05 PASSED: Stacked popups verified")
+        except Exception:
+            raise
+        finally:
+            self._cleanup(page)

@@ -107,10 +107,12 @@ def generate_packaging_capacity():
 def generate_valid_item_data(name_prefix="AutoItem"):
     """Generate a complete dict of valid item data for Create form Step 1.
     Dropdown values set to None — must be populated from live UI at runtime.
-    ONLY 3 toggle switches in Step 1 data (NOT 4! Verified 2026-05-18).
+    4 toggle switches in Step 1 (Verified 2026-06-08 on live ERP).
     "Allow Negative Stock" DOES NOT EXIST in Item Master.
     Item Name is auto-generated from Item Attribute values (not typed).
     Item Group is NOT required (confirmed 2026-05-18).
+    Item Sourcing is REQUIRED (confirmed 2026-06-08 on live ERP).
+    Item Attribute 1 is REQUIRED (confirmed 2026-06-08 on live ERP).
     """
     return {
         "item_name": None,           # AUTO-GENERATED from attributes — don't type
@@ -119,16 +121,17 @@ def generate_valid_item_data(name_prefix="AutoItem"):
         "item_category": None,       # Pick from live UI (REQUIRED) — FILL FIRST
         "item_group": None,          # Pick from live UI (NOT required!)
         "item_type": None,           # Pick from live UI (REQUIRED)
-        "item_attribute1": None,     # Pick from live UI (optional)
+        "item_attribute1": None,     # Pick from live UI (REQUIRED! confirmed 2026-06-08)
         "item_attribute2": None,     # Pick from live UI (optional)
         "item_attribute3": None,     # Pick from live UI (optional)
         "item_attribute4": None,     # Pick from live UI (optional)
         "item_attribute5": None,     # Pick from live UI (optional)
         "uom": None,                 # Pick from live UI (REQUIRED)
-        "hsn_sac_code": None,        # Pick from live UI (REQUIRED)
         "base_uom": None,            # Pick from live UI (REQUIRED)
         "base_uom_conversion": generate_base_uom_conversion(),
-        # Toggle switches — 3 on Step 1 (NOT 4! Verified 2026-05-18)
+        "hsn_sac_code": None,        # Pick from live UI (REQUIRED)
+        "item_sourcing": None,       # Pick from live UI (REQUIRED! confirmed 2026-06-08)
+        # Toggle switches — 4 on Step 1 (Verified 2026-06-08)
         "status": True,                  # Active (default)
         "is_critical": False,            # No (default)
         "include_wip": False,            # No (default)
@@ -240,15 +243,16 @@ def generate_empty_data():
         "item_category": "",        # REQUIRED — fill first in order
         "item_group": "",           # NOT required
         "item_type": "",            # REQUIRED
-        "item_attribute1": "",
+        "item_attribute1": "",      # REQUIRED (confirmed 2026-06-08)
         "item_attribute2": "",
         "item_attribute3": "",
         "item_attribute4": "",
         "item_attribute5": "",
         "uom": "",                  # REQUIRED
-        "hsn_sac_code": "",         # REQUIRED
         "base_uom": "",             # REQUIRED (independent of UOM)
         "base_uom_conversion": "",   # REQUIRED
+        "hsn_sac_code": "",         # REQUIRED
+        "item_sourcing": "",        # REQUIRED (confirmed 2026-06-08)
     }
 
 
@@ -290,9 +294,10 @@ def generate_duplicate_name_data(existing_name):
         "item_attribute4": None,
         "item_attribute5": None,
         "uom": None,
-        "hsn_sac_code": None,
         "base_uom": None,            # INDEPENDENT of UOM
         "base_uom_conversion": generate_base_uom_conversion(),
+        "hsn_sac_code": None,
+        "item_sourcing": None,       # REQUIRED (confirmed 2026-06-08)
     }
 
 
