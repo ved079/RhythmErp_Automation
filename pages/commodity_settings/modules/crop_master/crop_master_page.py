@@ -58,12 +58,7 @@ class CropMasterPage(BasePage):
     # ================================================================
 
     def navigate_to_page(self):
-        """Navigate to Crop Master page and wait for table ready.
-        Skips navigation if already on the Crop Master page."""
-        current_url = self.driver.current_url or ""
-        if "Crop%20Master" in current_url or "Crop Master" in current_url:
-            log.info("Already on Crop Master page, skipping navigation")
-            return
+        """Navigate to Crop Master page and wait for table ready."""
         log.info("Navigating to Crop Master page")
         self.driver.get(self.PAGE_URL)
         self._wait_for_page_ready()
@@ -109,34 +104,10 @@ class CropMasterPage(BasePage):
         )
 
     def _cleanup(self):
-        """Cleanup between tests: close popups, panels, swals, clear search.
-        Uses JS-based reset instead of hard_refresh — saves ~1.5s per test."""
-        self._force_close_all_popups()
+        """Cleanup between tests: close any open popups, force close panels, hard refresh."""
         self._force_close_panels()
         self._cleanup_swal2()
-        self.clear_search()
-
-    def _force_close_all_popups(self):
-        """Force-close any open form/history popups via JS."""
-        try:
-            self.driver.execute_script(
-                "var closeBtns = document.querySelectorAll("
-                "'div.edit_pop_up button[mat-icon-button] mat-icon, "
-                "'div.big-model button[mat-icon-button] mat-icon'); "
-                "for(var i=0;i<closeBtns.length;i++){"
-                "  var btn = closeBtns[i].closest('button'); "
-                "  if(btn) btn.click();"
-                "} "
-                "var cancelBtns = document.querySelectorAll("
-                "'div[class*=\"popup-footer\"] button'); "
-                "for(var i=0;i<cancelBtns.length;i++){"
-                "  if(cancelBtns[i].textContent.trim().indexOf('Cancel')!==-1){"
-                "    cancelBtns[i].click();"
-                "  }"
-                "}"
-            )
-        except Exception:
-            pass
+        self.hard_refresh()
 
     # ================================================================
     # Add form
@@ -743,7 +714,7 @@ class CropMasterPage(BasePage):
             time.sleep(0.15)
         return False
 
-    def handle_validation_warning(self, timeout=2):
+    def handle_validation_warning(self, timeout=3):
         """Dismiss validation SweetAlert via JS click on .swal2-confirm.
         Returns the alert title text, or ''."""
         log.info("Handling validation warning")
@@ -765,7 +736,7 @@ class CropMasterPage(BasePage):
         log.info("Validation warning handled: " + title)
         return title
 
-    def handle_success_alert(self, timeout=1.5):
+    def handle_success_alert(self, timeout=2):
         """Handle SweetAlert2 success notification — fast dismiss.
         Returns message text or ''."""
         log.info("Handling success alert")
@@ -790,7 +761,7 @@ class CropMasterPage(BasePage):
             log.info("No SweetAlert found (may have auto-dismissed)")
             return ""
 
-    def is_success_alert_present(self, timeout=2):
+    def is_success_alert_present(self, timeout=3):
         """Check if SweetAlert2 success alert is visible via JS poll."""
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
@@ -1010,7 +981,7 @@ class CropMasterPage(BasePage):
         """Verify crop name appears in table. Polls up to 5s via JS for slow renders.
         Raises AssertionError if not found (consistent with UOM gold standard)."""
         log.info("Verifying crop '" + crop_name + "' exists in table")
-        end_time = time.monotonic() + 3
+        end_time = time.monotonic() + 5
         last_seen = []
         while time.monotonic() < end_time:
             try:
@@ -1379,7 +1350,7 @@ class CropMasterPage(BasePage):
 
         # Check form-closed first (fast path — Crop Master DOES show success SweetAlert),
         # then check for validation alert (slow path)
-        end_time = time.monotonic() + 2
+        end_time = time.monotonic() + 3
         while time.monotonic() < end_time:
             # Quick check: form closed = successful create
             if not self.is_add_form_open():
@@ -1407,13 +1378,13 @@ class CropMasterPage(BasePage):
         return {'status': 'PASSED', 'error': '', 'name': name, 'message': msg}
 
     def edit_crop(self, crop_name, edit_data):
-        """Full edit workflow: search -> click edit -> fill -> update.
+        """Full edit workflow: navigate -> search -> click edit -> fill -> update.
         Returns dict: {status, error, name, message}
-        Optimised: checks form-closed FIRST (fast path), then alert.
-        No navigate_to_page() — fixture already navigates, saves ~2s."""
+        Optimised: checks form-closed FIRST (fast path), then alert."""
         new_name = edit_data.get("name") or crop_name
         log.info("Editing Crop '" + crop_name + "' -> '" + new_name + "'")
 
+        self.navigate_to_page()
         self.search_crop(crop_name)
         self.click_edit_button(crop_name)
         assert self.is_edit_mode(), "Edit mode not activated"
@@ -1422,7 +1393,7 @@ class CropMasterPage(BasePage):
         self.click_update()
 
         # Check form-closed first (fast path), then alert
-        end_time = time.monotonic() + 2
+        end_time = time.monotonic() + 3
         while time.monotonic() < end_time:
             if not self.is_add_form_open():
                 break
