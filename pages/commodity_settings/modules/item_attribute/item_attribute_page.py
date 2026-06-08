@@ -1102,6 +1102,7 @@ class ItemAttributePage(BasePage):
             # Check for success alert
             title = self.handle_success_alert(timeout=3)
             if title and ("success" in title.lower() or "added" in title.lower()):
+                self.hard_refresh()  # Refresh table data so search finds the new item
                 return {"status": "PASSED", "name": data.get("name", ""), "error": ""}
             # Check for save failure (e.g. too long)
             is_failure = self.is_validation_alert_present(timeout=2)
@@ -1141,6 +1142,7 @@ class ItemAttributePage(BasePage):
             # Check for success
             title = self.handle_success_alert(timeout=3)
             if title and ("success" in title.lower() or "updated" in title.lower()):
+                self.hard_refresh()  # Refresh table data so search finds the updated item
                 return {"status": "PASSED", "name": edit_data.get("name") or item_name, "error": ""}
             # Check for save failure
             is_failure = self.is_validation_alert_present(timeout=2)

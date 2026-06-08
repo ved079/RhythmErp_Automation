@@ -1,10 +1,8 @@
 """
 conftest.py - Item Attribute (RhythmERP)
-Fixtures and hooks for Item Attribute automation tests.
-Optimised (UOM gold standard v2):
-- Session-scoped logged_in_driver (login ONCE, reuse browser)
-- Per-test ia_page fixture parameterized by attr_num [1-5]
-- _cleanup() (hard_refresh between tests) for speed
+Shared session-scoped login fixture.
+Each test file provides its own ia_page fixture with hardcoded attr_num.
+NO pytest_generate_tests parametrization — enables xdist -n 5 parallelism.
 """
 
 import os
@@ -37,7 +35,7 @@ def pytest_configure(config):
 
 
 # ================================================================
-# FIXTURES
+# SESSION-SCOPED FIXTURES
 # ================================================================
 
 @pytest.fixture(scope="session")
@@ -93,27 +91,3 @@ def logged_in_driver(driver):
     yield driver
 
     stop_screenshot_broadcast()
-
-
-@pytest.fixture
-def ia_page(logged_in_driver, attr_num):
-    """Item Attribute page object - fresh navigation for each test.
-    Uses _cleanup() (hard_refresh) between tests for speed.
-    Parameterized by attr_num (1-5)."""
-    from pages.commodity_settings.modules.item_attribute.item_attribute_page import (
-        ItemAttributePage,
-    )
-    page = ItemAttributePage(logged_in_driver, attr_num=attr_num)
-    page.navigate_to_page()
-    yield page
-    # Cleanup: hard refresh to clear any leftover state
-    try:
-        page._cleanup()
-    except Exception:
-        pass
-
-
-def pytest_generate_tests(metafunc):
-    """Parameterize tests that use attr_num fixture."""
-    if "attr_num" in metafunc.fixturenames:
-        metafunc.parametrize("attr_num", [1, 2, 3, 4, 5])
