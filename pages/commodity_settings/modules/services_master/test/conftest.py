@@ -138,7 +138,7 @@ _sm_store.record_issue(
     expected="System should enforce maxlength=255 on the Name input and show "
              "inline validation if the limit is exceeded.",
     actual="No maxlength constraint. 256+ char names accepted by client, "
-           "rejected by server with generic error.",
+           "accepted by both client and server without any error.",
     test_ref="SM-C08",
     status="Open",
 )
@@ -152,7 +152,7 @@ _sm_store.record_issue(
                 "Values of 11+ characters are accepted by the client. Server max "
                 "is 10 characters. No client-side length validation exists.",
     expected="System should enforce maxlength=10 on the Base Uom Conversion input.",
-    actual="No maxlength constraint. 11+ char values accepted, server rejects.",
+    actual="No maxlength constraint. 11+ char values accepted by both client and server without any error.",
     test_ref="SM-C09",
     status="Open",
 )

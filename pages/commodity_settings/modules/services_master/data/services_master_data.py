@@ -22,8 +22,8 @@ TABLE COLUMNS (7 columns):
   - Status
 
 KNOWN BUGS:
-  BUG-001 (HIGH)  : No maxlength on Name input; accepts 300+ chars. Server rejects at 255.
-  BUG-002 (HIGH)  : No maxlength on Base Uom Conversion; accepts 11+ chars. Server max is 10.
+  BUG-001 (HIGH)  : No maxlength on Name input; server ACCEPTS 256+ chars (no rejection).
+  BUG-002 (HIGH)  : No maxlength on Base Uom Conversion; server ACCEPTS 11+ chars.
   BUG-003 (HIGH)  : Name accepts ALL characters — special chars, spaces-only — no restrictions.
   BUG-004 (HIGH)  : Base Uom Conversion accepts ALL input — letters, special chars, negative,
                      zero, spaces — no type or range validation at all.

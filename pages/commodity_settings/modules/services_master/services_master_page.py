@@ -30,14 +30,19 @@ TABLE COLUMNS (main listing):
   - Name / UOM / HSN SAC Code / Status
 
 KNOWN BUGS (confirmed via ERP exploration):
-  BUG-001 (HIGH)  : No maxlength on Name input; accepts 300+ chars. Server rejects at 255.
-  BUG-002 (HIGH)  : No maxlength on Base Uom Conversion; accepts 11+ chars. Server max is 10.
+  BUG-001 (HIGH)  : No maxlength on Name input; server ACCEPTS 256+ chars (no rejection).
+  BUG-002 (HIGH)  : No maxlength on Base Uom Conversion; server ACCEPTS 11+ chars.
   BUG-003 (HIGH)  : Name accepts ALL characters — special chars, spaces-only — no restrictions.
   BUG-004 (HIGH)  : Base Uom Conversion accepts ALL input — letters, special chars, negative,
                      zero, spaces — no type or range validation at all.
   BUG-005 (MEDIUM): Duplicate Names ALLOWED — no uniqueness constraint.
-  BUG-006 (MEDIUM): Generic "Failed to save record" error instead of specific field-level message.
+  BUG-006 (MEDIUM): Generic "Failed to save record" error instead of specific message.
   BUG-007 (LOW)   : History popup shows "No data available" even for existing records.
+
+UI CHANGE (same as UOM):
+  Row action buttons changed from separate View/Edit/History columns to a
+  single 3-dot (⋮) menu dropdown in cdk-column-actions.
+  Use _click_action_menu_item() for all View/Edit/History clicks.
 
 POPUP TYPES:
   Type A — "Validation Failed - Please correct the highlighted fields"
@@ -60,6 +65,7 @@ KEY RULES:
   - History column uses cdk-column-archive (NOT cdk-column-history)
   - Edit mode: all fields editable, button says "Update"
   - View mode: all fields disabled, only Cancel button
+  - Row actions use 3-dot menu (same UI change as UOM)
 """
 
 import os
@@ -205,8 +211,14 @@ class ServicesMasterPage(BasePage):
     )
 
     # ==============================================================
-    #  LOCATORS - Row action buttons
+    #  LOCATORS - Row action buttons (3-dot menu)
+    #  Updated: Live system uses 3-dot (⋮) menu dropdown in
+    #  cdk-column-actions (same UI change as UOM).
     # ==============================================================
+    ACTIONS_COLUMN = ("css", "td.cdk-column-actions")
+    THREE_DOT_MENU_BUTTON = ("css", "td.cdk-column-actions button")
+
+    # Legacy locators (kept for backward compat, but NOT used by default)
     VIEW_BUTTON_BY_NAME = (
         "xpath",
         "//td[contains(text(),'{item_name}')]"
@@ -820,7 +832,7 @@ class ServicesMasterPage(BasePage):
     #  SweetAlert2 handlers — JS-only dismissals
     # ==============================================================
 
-    def handle_success_alert(self, timeout=15):
+    def handle_success_alert(self, timeout=5):
         """Handle success SweetAlert2 popup — fast dismiss."""
         log.info("Handling success alert")
         try:
@@ -850,7 +862,7 @@ class ServicesMasterPage(BasePage):
             log.info("No success alert found (may have auto-dismissed)")
             return ""
 
-    def handle_validation_warning(self, timeout=10):
+    def handle_validation_warning(self, timeout=5):
         """Handle 'Validation Failed' SweetAlert2 popup (Type A).
         Appears when required fields are empty (client-side).
         Returns the alert title text, or '' if no alert appeared.
@@ -874,7 +886,7 @@ class ServicesMasterPage(BasePage):
             log.info("No validation warning appeared")
             return ""
 
-    def handle_save_failure_alert(self, timeout=10):
+    def handle_save_failure_alert(self, timeout=5):
         """Handle 'Failed to save record' SweetAlert2 popup (Type B).
         This popup appears when server-side validation rejects the data
         (e.g., Name exceeds 255 char limit, Base Uom Conversion exceeds 10 chars).
@@ -1030,73 +1042,152 @@ class ServicesMasterPage(BasePage):
     # ==============================================================
 
     def click_view_button(self, item_name=None, row_index=0):
-        """Click the View button on a table row."""
+        """Click the View button on a table row.
+        Uses 3-dot menu dropdown (live system UI change, same as UOM).
+        """
         log.info(f"Clicking View button (name={item_name}, row={row_index})...")
-        if item_name:
-            try:
-                locator = (
-                    "xpath",
-                    f"//td[contains(text(),'{item_name}')]"
-                    "/ancestor::tr//td[contains(@class,'cdk-column-view')]"
-                    "//button",
-                )
-                btn = self.find_visible_element(locator, timeout=5)
-                if btn:
-                    self.driver.execute_script("arguments[0].click();", btn)
-                    self.wait_seconds(1)
-                    return True
-            except Exception:
-                pass
-
-        # Fallback: use row index
-        return self._click_action_button_by_index(row_index, 0)
+        self._click_action_menu_item(item_name, row_index, "View")
+        # Wait for view popup to appear
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(("css selector", ".popup-header h3"))
+            )
+        except Exception:
+            pass
 
     def click_edit_button(self, item_name=None, row_index=0):
-        """Click the Edit button on a table row."""
+        """Click the Edit button on a table row.
+        Uses 3-dot menu dropdown (live system UI change, same as UOM).
+        """
         log.info(f"Clicking Edit button (name={item_name}, row={row_index})...")
-        if item_name:
-            try:
-                locator = (
-                    "xpath",
-                    f"//td[contains(text(),'{item_name}')]"
-                    "/ancestor::tr//td[contains(@class,'cdk-column-edit')]"
-                    "//button",
-                )
-                btn = self.find_visible_element(locator, timeout=5)
-                if btn:
-                    self.driver.execute_script("arguments[0].click();", btn)
-                    self.wait_seconds(1)
-                    return True
-            except Exception:
-                pass
-
-        return self._click_action_button_by_index(row_index, 1)
+        self._click_action_menu_item(item_name, row_index, "Edit")
+        # Wait for edit popup to appear
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(("css selector", "input[name='Name']"))
+            )
+        except Exception:
+            pass
 
     def click_history_button(self, item_name=None, row_index=0):
         """Click the History button on a table row.
-        Note: Uses cdk-column-archive (NOT cdk-column-history).
+        Uses 3-dot menu dropdown (live system UI change, same as UOM).
         """
         log.info(f"Clicking History button (name={item_name}, row={row_index})...")
-        if item_name:
+        self._click_action_menu_item(item_name, row_index, "History")
+        # Wait for history popup to appear
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(("css selector", "app-dynamic-history"))
+            )
+        except Exception:
+            # Fallback: check for history h3 header
             try:
-                locator = (
-                    "xpath",
-                    f"//td[contains(text(),'{item_name}')]"
-                    "/ancestor::tr//td[contains(@class,'cdk-column-archive')]"
-                    "//button",
+                WebDriverWait(self.driver, 3).until(
+                    lambda d: any(
+                        "history" in h.text.lower()
+                        for h in d.find_elements("css selector", "h3")
+                    )
                 )
-                btn = self.find_visible_element(locator, timeout=5)
-                if btn:
-                    self.driver.execute_script("arguments[0].click();", btn)
-                    self.wait_seconds(1)
-                    return True
             except Exception:
                 pass
 
-        return self._click_action_button_by_index(row_index, 2)
+    def _click_action_menu_item(self, item_name, row_index, action_name):
+        """Click an action menu item (View/Edit/History) via 3-dot menu dropdown.
+
+        The live system uses a 3-dot (⋮) menu button in cdk-column-actions,
+        same UI change that UOM already went through. This method:
+          1. Finds the target row (by item_name or row_index)
+          2. Opens the 3-dot menu for that row
+          3. Waits for the CDK overlay dropdown
+          4. Clicks the specific menu item (View/Edit/History)
+        """
+        log.info(f"Clicking {action_name} via 3-dot menu for row={row_index}, name={item_name}")
+
+        # Step 1: Open the 3-dot menu for the target row
+        js_open_menu = """
+        var table = document.querySelector('table#excel-table');
+        if (!table) { throw new Error('Table not found'); }
+        var rows = table.querySelectorAll('tbody tr');
+        """
+
+        if item_name:
+            js_open_menu += """
+            for (var i = 0; i < rows.length; i++) {
+                var cells = rows[i].querySelectorAll('td');
+                for (var j = 0; j < cells.length; j++) {
+                    if (cells[j].textContent.trim().indexOf(arguments[0]) !== -1) {
+                        var menuBtn = rows[i].querySelector('td.cdk-column-actions button');
+                        if (!menuBtn) { throw new Error('3-dot menu button not found'); }
+                        menuBtn.scrollIntoView({block:'center'});
+                        menuBtn.click();
+                        return 'menu_opened';
+                    }
+                }
+            }
+            throw new Error('Item "' + arguments[0] + '" not found in table');
+            """
+        else:
+            js_open_menu += """
+            if (arguments[1] >= rows.length) { throw new Error('Row index ' + arguments[1] + ' out of range'); }
+            var menuBtn = rows[arguments[1]].querySelector('td.cdk-column-actions button');
+            if (!menuBtn) { throw new Error('3-dot menu button not found in row ' + arguments[1]); }
+            menuBtn.scrollIntoView({block:'center'});
+            menuBtn.click();
+            return 'menu_opened';
+            """
+
+        try:
+            result = self.driver.execute_script(js_open_menu, item_name, row_index)
+            log.info(f"3-dot menu opened: {result}")
+        except Exception as e:
+            log.warning(f"Failed to open 3-dot menu: {e}")
+            # Fallback: try legacy column-based click
+            return self._click_action_button_by_index(row_index,
+                {"View": 0, "Edit": 1, "History": 2}.get(action_name, 0))
+
+        # Step 2: Wait for CDK overlay dropdown to render
+        try:
+            WebDriverWait(self.driver, 2).until(
+                EC.presence_of_element_located(
+                    ("css selector", ".cdk-overlay-container .cdk-overlay-pane")
+                )
+            )
+        except Exception:
+            pass
+
+        # Step 3: Click the specific menu item from the dropdown overlay
+        js_click_item = """
+        var overlay = document.querySelector('.cdk-overlay-container');
+        if (!overlay) { throw new Error('CDK overlay not found after menu click'); }
+        var items = overlay.querySelectorAll('button, span, div');
+        for (var i = 0; i < items.length; i++) {
+            var text = items[i].textContent.trim();
+            if (text === arguments[0]) {
+                items[i].click();
+                return 'clicked_' + arguments[0];
+            }
+        }
+        // Fallback: try partial match
+        for (var i = 0; i < items.length; i++) {
+            var text = items[i].textContent.trim().toLowerCase();
+            if (text.indexOf(arguments[0].toLowerCase()) !== -1) {
+                items[i].click();
+                return 'clicked_partial_' + arguments[0];
+            }
+        }
+        throw new Error('Menu item "' + arguments[0] + '" not found in dropdown overlay');
+        """
+        try:
+            result = self.driver.execute_script(js_click_item, action_name)
+            log.info(f"Successfully clicked {action_name}: {result}")
+        except Exception as e:
+            log.warning(f"Failed to click {action_name} from menu: {e}")
+            self._force_close_panels()
 
     def _click_action_button_by_index(self, row_index, btn_index):
-        """Click an action button by row and button index."""
+        """Legacy: Click an action button by row and button index.
+        Only used as fallback if 3-dot menu fails."""
         try:
             rows = self.driver.find_elements(
                 By.CSS_SELECTOR, "table#excel-table tbody tr"
@@ -1257,38 +1348,67 @@ class ServicesMasterPage(BasePage):
 
     def search_item(self, search_text):
         """Search for an item by name in the table.
-        Uses JS value injection + event dispatch for Angular compatibility.
+        Optimised: Uses JS click for search button + JS value injection +
+        event dispatch for Angular compatibility. No wait_seconds() between steps.
         """
         log.info(f"Searching for: {search_text}")
+
+        # Step 1: Check if search input is already visible
+        search_input = None
         try:
-            # Toggle search input
-            search_btn = self.driver.find_element(
-                By.CSS_SELECTOR, "button.search-btn"
+            el = self.driver.find_element(By.CSS_SELECTOR, "input#erpSearchInput")
+            rect = self.driver.execute_script(
+                "var r = arguments[0].getBoundingClientRect(); "
+                "return r.width > 0 && r.height > 0;", el
             )
-            self.driver.execute_script("arguments[0].click();", search_btn)
-            self.wait_seconds(0.5)
+            if rect:
+                search_input = el
+        except Exception:
+            pass
 
-            # Set value via JS
-            search_input = self.driver.find_element(
-                By.CSS_SELECTOR, "input#erpSearchInput"
+        # Step 2: If not visible, click search button via JS
+        if search_input is None:
+            try:
+                self.driver.execute_script("""
+                    var btn = document.querySelector('button.search-btn');
+                    if (btn) { btn.scrollIntoView({block:'center'}); btn.click(); }
+                """)
+                search_input = WebDriverWait(self.driver, 3).until(
+                    EC.visibility_of_element_located(
+                        (By.CSS_SELECTOR, "input#erpSearchInput")
+                    )
+                )
+            except Exception as e:
+                log.warning(f"Search input not found: {e}")
+                return False
+
+        # Step 3: Set value via JS (fast, no Selenium keystrokes)
+        self.driver.execute_script("""
+            var inp = arguments[0];
+            inp.value = '';
+            inp.dispatchEvent(new Event('input', { bubbles: true }));
+            inp.value = arguments[1];
+            inp.dispatchEvent(new Event('input', { bubbles: true }));
+            inp.dispatchEvent(new Event('keyup', { bubbles: true }));
+            inp.dispatchEvent(new Event('change', { bubbles: true }));
+        """, search_input, search_text)
+
+        # Step 4: Click search button via JS to submit
+        self.driver.execute_script("""
+            var btn = document.querySelector('button.search-btn');
+            if (btn) { btn.click(); }
+        """)
+
+        # Step 5: Wait for table to refresh (short wait)
+        try:
+            WebDriverWait(self.driver, 3).until(
+                lambda d: d.find_elements("css selector", "table#excel-table tbody tr")
             )
-            self.driver.execute_script("""
-                var inp = arguments[0];
-                var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype, 'value').set;
-                nativeInputValueSetter.call(inp, arguments[1]);
-                inp.dispatchEvent(new Event('input', { bubbles: true }));
-            """, search_input, search_text)
-            self.wait_seconds(0.3)
+        except Exception:
+            pass
 
-            # Press Enter
-            search_input.send_keys(Keys.RETURN)
-            self.wait_seconds(2)
-
-            return True
-        except Exception as e:
-            log.warning(f"Search failed: {e}")
-            return False
+        log.info(f"Search completed for: {search_text}")
+        return True
 
     def is_record_in_table(self, name):
         """Check if a record exists in the table (partial match)."""
