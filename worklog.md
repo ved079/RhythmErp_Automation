@@ -116,3 +116,34 @@ Stage Summary:
 - Created `/pages/commodity_settings/modules/item_group/scripts/batch_create.py` - batch creation script
 - All existing code untouched (Selenium generators, validation helpers, SQL/XSS/unicode test data)
 - Payload structure: {id: "", attribute_name: "Item Group", code: "BEVG021", description: "Beverages Group"}
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Upgrade Services Master code to UOM golden standard for speed/optimization
+
+Work Log:
+- Analyzed UOM golden standard code (905-line page object, 343-line data file, 693-line validation tests)
+- Analyzed Services Master code (1383-line page object, 413-line data file, 1100+ validation tests)
+- Identified 6 critical gaps: missing data constants, missing API method, missing page object methods, duplicate conftest calls, verbose cleanup patterns, excessive wait_seconds
+- Added FIELD_VALIDATION_RULES, STATUS_OPTIONS, UOM_NAMES, HSN_SAC_NAMES, DEFAULT_SERVICES_MASTER_FK_IDS to services_master_data.py
+- Added generate_batch_payloads() standardized batch generator to services_master_data.py
+- Added update_entry() PUT method to erp_api_client.py
+- Added hard_refresh(), search_and_verify(), _cleanup(), get_field_value(), dismiss_any_validation_alert(), clear_search() to services_master_page.py
+- Upgraded get_mat_error_text() with JS parentElement chain (UOM pattern)
+- Optimized open_add_form() to use direct JS click (bypasses overlay)
+- Removed driver.refresh() double-load from navigate_to_page()
+- Fast _wait_for_page_ready() using lambda waits
+- Removed wait_seconds(0.2/0.3/0.5) from _force_close_panels, dropdowns, swal handlers
+- Replaced all 50 verbose cleanup patterns in validation tests with _cleanup()
+- Replaced click_refresh() + wait_seconds(2) with hard_refresh() throughout
+- Fixed duplicate start_screenshot_broadcast() in conftest.py
+- Fixed duplicate login success log in conftest.py
+- All files pass py_compile syntax check
+- Pushed to GitHub: f249637
+
+Stage Summary:
+- 5 files modified: services_master_data.py, services_master_page.py, test_services_master_validation.py, conftest.py, erp_api_client.py
+- 909 insertions, 837 deletions (net reduction in wait time)
+- Key speed wins: hard_refresh vs full navigate, _cleanup vs verbose cancel/force_close/refresh/wait, removed ~20+ wait_seconds calls
+- Target: bring Services Master test runtime under 5 minutes
