@@ -1,7 +1,7 @@
-﻿"""
-conftest.py - Item Attribute 1-5 (RhythmERP)
-Fixtures, hooks, and bug registry for Item Attribute automation tests.
-Uses parameterized fixture for all 5 screens.
+"""
+conftest.py - Item Category Commodity Settings (RhythmERP)
+Fixtures, hooks, and bug registry for Item Category automation tests.
+Golden standard pattern — matches UOM and Services Master.
 """
 
 import os
@@ -26,13 +26,33 @@ from pages.common_settings.cs_report_generator import (
 
 
 # ================================================================
+# PYTEST MARKERS
+# ================================================================
+
+def pytest_configure(config):
+    """Register custom pytest markers for Item Category tests.
+
+    Usage examples:
+        pytest test_item_category_validation.py -m smoke
+        pytest test_item_category_validation.py -m "smoke or sanity"
+        pytest test_item_category_validation.py -m "not bug"
+        pytest test_item_category_validation.py -m ui
+    """
+    config.addinivalue_line("markers", "smoke: Critical path — core create/view/edit/search")
+    config.addinivalue_line("markers", "sanity: Broad functional coverage for quick feedback")
+    config.addinivalue_line("markers", "regression: Full test suite — all 47 tests")
+    config.addinivalue_line("markers", "bug: Tests validating known open bugs (BUG-001 to BUG-007)")
+    config.addinivalue_line("markers", "ui: UI element visibility, layout, and interaction checks")
+
+
+# ================================================================
 # FIXTURES
 # ================================================================
 
 @pytest.fixture(scope="session")
 def driver():
     log.separator()
-    log.info("LAUNCHING BROWSER (RhythmERP - Item Attribute Tests)...")
+    log.info("LAUNCHING BROWSER (RhythmERP - Item Category Tests)...")
     log.separator()
     drv = get_driver()
     drv.maximize_window()
@@ -65,9 +85,6 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    log.step(3, "Selecting facility (Agdi - index 0)")
-#     login_page.select_facility_by_index(index=0)
-
     login_page.wait_seconds(1)
 
     log.step(4, "Clicking Login button")
@@ -75,9 +92,14 @@ def logged_in_driver(driver):
     login_page.wait_seconds(3)
 
     login_page.wait_for_login_complete()
+
+    # Verify login actually succeeded (don't falsely report success)
+    if "login" in driver.current_url.lower():
+        log.error("Login did not complete — still on login page. URL: " + driver.current_url)
+        raise RuntimeError("RhythmERP login failed — still on login page after wait. Check credentials in .env")
+
     log.info("RhythmERP login successful!")
     start_screenshot_broadcast(driver)
-    log.info("RhythmERP login successful!")
 
     yield driver
 
@@ -85,15 +107,18 @@ def logged_in_driver(driver):
 
 
 @pytest.fixture
-def ia_page(logged_in_driver, attr_num):
-    """Item Attribute page object - fresh navigation for each test.
-    Parameterized by attr_num (1-5) from @pytest.mark.parametrize.
-    """
-    from pages.commodity_settings.modules.item_attribute.item_attribute_page import (
-        ItemAttributePage,
+def ic_page(logged_in_driver):
+    """Item Category page object — fresh navigation for each test."""
+    from pages.commodity_settings.modules.item_category.item_category_page import (
+        ItemCategoryPage,
     )
-    page = ItemAttributePage(logged_in_driver, attr_num=attr_num)
-    page.navigate_to_page()
+    page = ItemCategoryPage(logged_in_driver)
+    # Optimised: full navigation only if not already on IC page
+    current_url = logged_in_driver.current_url
+    if "Item%20Category" not in current_url and "Item Category" not in current_url:
+        page.navigate_to_page()
+    else:
+        page.hard_refresh()
     yield page
 
 
@@ -101,92 +126,116 @@ def ia_page(logged_in_driver, attr_num):
 # REPORT GENERATOR HOOKS
 # ================================================================
 
-_ia_store = CSReportStore()
+_ic_store = CSReportStore()
 
-# ---- Item Attribute Known Issues ----
+# ---- Item Category Known Issues ----
 
-# BUG-001 (HIGH): Duplicate Names allowed
-_ia_store.record_issue(
+# BUG-001 (HIGH): No maxlength on Item Category input
+_ic_store.record_issue(
     severity="High",
-    module="Item Attribute",
-    category="Data Integrity",
-    description="Duplicate attribute Names are allowed in the system. "
-                "Two or more attributes with identical Names can exist "
-                "with no warning or rejection.",
-    expected="System should show a validation error like 'Name already exists' "
-             "and keep the form open for correction.",
-    actual="Duplicate Name is accepted and saved without any warning.",
-    test_ref="IA-D01",
-    status="Open",
-)
-
-# BUG-002 (HIGH): Browser-clicked mat-select values don't register in Angular
-_ia_store.record_issue(
-    severity="High",
-    module="Item Attribute",
-    category="Automation / Framework",
-    description="When browser-clicking mat-select dropdown options, the value "
-                "does not register in Angular's reactive form model. This causes "
-                "'Validation Failed' errors on Submit even though the UI appears "
-                "to show the selected value. Fix: Must use JS value-setter + "
-                "dispatchEvent pattern for all dropdown selections.",
-    expected="Standard Selenium .click() on mat-select options should update "
-             "Angular's reactive form model.",
-    actual="Browser-clicked options display correctly in UI but Angular form "
-           "model does not recognize the selection, causing validation failures.",
-    test_ref="All IA1 tests with Base UOM dropdown",
-    status="Open",
-)
-
-# BUG-003 (MEDIUM): History popup shows "No data available"
-_ia_store.record_issue(
-    severity="Medium",
-    module="Item Attribute",
-    category="Functionality",
-    description="History popup shows 'No data available' even for records "
-                "that were just created. The history tracking may not be "
-                "functional for Item Attribute screens.",
-    expected="History popup should show at least the creation record.",
-    actual="History popup shows 'No data available'.",
-    test_ref="IA-H01",
-    status="Open",
-)
-
-# BUG-004 (HIGH): No maxlength on Name and Description fields
-_ia_store.record_issue(
-    severity="High",
-    module="Item Attribute",
+    module="Item Category",
     category="Validation",
-    description="No maxlength attribute on Name or Description input fields. "
-                "Names of 256+ characters are accepted by the UI with no "
-                "client-side validation or warning. The server then rejects "
-                "the record with a generic 'Failed to save record' message. "
-                "Name limit is 255 chars; Description limit is also 255 chars.",
-    expected="System should enforce maxlength=255 on Name and Description inputs, "
-             "or show inline validation like 'Name must be 255 characters or less' "
-             "before the user submits the form.",
-    actual="No maxlength constraint. 256+ char names are accepted by UI, "
-           "rejected by server with no specific error message.",
-    test_ref="IA-C08",
+    description="No maxlength attribute on the Item Category input field. Names of 256+ "
+                "characters are accepted by the client. The server rejects at 255 "
+                "with a generic 'Failed to save record' error instead of a specific "
+                "field-level message. No client-side length validation exists.",
+    expected="System should enforce maxlength=255 on the Item Category input and show "
+             "inline validation if the limit is exceeded.",
+    actual="No maxlength constraint. 256+ char names accepted by client, "
+           "rejected by server with generic 'Failed to save record' message.",
+    test_ref="IC-C09, IC-C10",
     status="Open",
 )
 
-# BUG-005 (MEDIUM): Generic 'Failed to save record' message on length violation
-_ia_store.record_issue(
+# BUG-002 (HIGH): No maxlength on Item Description input
+_ic_store.record_issue(
+    severity="High",
+    module="Item Category",
+    category="Validation",
+    description="No maxlength attribute on the Item Description input field. "
+                "Descriptions of 256+ characters are accepted by the client. "
+                "Server rejects at 255 with a generic error. No client-side "
+                "length validation exists.",
+    expected="System should enforce maxlength=255 on the Item Description input.",
+    actual="No maxlength constraint. 256+ char descriptions accepted by client, "
+           "rejected by server with generic error message.",
+    test_ref="IC-C09, IC-C10",
+    status="Open",
+)
+
+# BUG-003 (HIGH): Duplicate Item Category names allowed
+_ic_store.record_issue(
+    severity="High",
+    module="Item Category",
+    category="Data Integrity",
+    description="Duplicate Item Category names are allowed in the system. "
+                "Two or more categories with identical names can exist "
+                "with no warning or rejection.",
+    expected="System should show a validation error like 'Item Category already exists' "
+             "and keep the form open for correction.",
+    actual="Duplicate name is accepted and saved without any warning.",
+    test_ref="IC-C11",
+    status="Open",
+)
+
+# BUG-004 (MEDIUM): Level field accepts negative integers
+_ic_store.record_issue(
     severity="Medium",
-    module="Item Attribute",
+    module="Item Category",
+    category="Validation",
+    description="The Level field accepts negative integer values (e.g., -5). "
+                "Negative levels have no meaningful interpretation in a category "
+                "hierarchy (levels should be 1, 2, 3 etc.). No minimum value "
+                "validation exists.",
+    expected="System should reject negative Level values and show an inline error "
+             "like 'Level must be a positive integer'.",
+    actual="Negative Level values are accepted and saved without any validation.",
+    test_ref="IC-N02",
+    status="Open",
+)
+
+# BUG-005 (MEDIUM): Level field accepts zero
+_ic_store.record_issue(
+    severity="Medium",
+    module="Item Category",
+    category="Validation",
+    description="The Level field accepts zero (0). A level of zero has no meaningful "
+                "interpretation in a category hierarchy. No minimum value validation exists.",
+    expected="System should reject zero Level and show an inline error.",
+    actual="Zero Level is accepted and saved without any validation.",
+    test_ref="IC-N03",
+    status="Open",
+)
+
+# BUG-006 (MEDIUM): Generic 'Failed to save record' message on length violation
+_ic_store.record_issue(
+    severity="Medium",
+    module="Item Category",
     category="UX / Validation",
-    description="When Name or Description exceeds 255 characters, the server "
+    description="When Item Category or Item Description exceeds 255 characters, the server "
                 "returns a generic 'Failed to save record' popup instead of a "
-                "specific message like 'Name exceeds maximum length of 255 "
+                "specific message like 'Item Category exceeds maximum length of 255 "
                 "characters'. The user has no indication which field caused "
                 "the failure or what the limit is.",
     expected="System should show a specific error message indicating which "
-             "field exceeded the length limit and what the maximum is, e.g. "
-             "'Name must be 255 characters or less'.",
+             "field exceeded the length limit and what the maximum is.",
     actual="Generic 'Failed to save record' popup with no field-specific "
-           "information. User cannot determine the cause of the failure.",
-    test_ref="IA-C08",
+           "information.",
+    test_ref="IC-C10",
+    status="Open",
+)
+
+# BUG-007 (LOW): History popup shows "No data available"
+_ic_store.record_issue(
+    severity="Low",
+    module="Item Category",
+    category="Functionality",
+    description="History popup shows 'No data available' even for records "
+                "that were just created or modified. The history tracking "
+                "may not be functional for Item Category.",
+    expected="History popup should show at least the creation record.",
+    actual="History popup shows 'No data available'.",
+    test_ref="IC-H01, IC-H03",
     status="Open",
 )
 
@@ -216,9 +265,9 @@ _capture_handler = None
 def pytest_runtest_setup(item):
     """Start log capture before each test."""
     global _capture_handler
-    _ia_store.start_test(item.name, item.nodeid)
+    _ic_store.start_test(item.name, item.nodeid)
 
-    _capture_handler = _LogCapture(_ia_store)
+    _capture_handler = _LogCapture(_ic_store)
     _capture_handler.setLevel(logging.INFO)
     try:
         if hasattr(log, "logger") and log.logger:
@@ -259,27 +308,26 @@ def pytest_runtest_makereport(item, call):
         else:
             status = "SKIPPED"
             error = ""
-        _ia_store.finish_test(status, error)
+        _ic_store.finish_test(status, error)
 
 
 def pytest_sessionfinish(session, exitstatus):
     """Generate Excel report at end of test session."""
-    if not _ia_store.has_results():
+    if not _ic_store.has_results():
         return
     output_dir = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "reports"
     )
     try:
         filepath = generate_cs_report(
-            _ia_store.results, output_dir, issues=_ia_store.known_issues
+            _ic_store.results, output_dir, issues=_ic_store.known_issues
         )
         print("")
         print("=" * 60)
-        print("  ITEM ATTRIBUTE REPORT GENERATED: " + filepath)
+        print("  ITEM CATEGORY REPORT GENERATED: " + filepath)
         print("=" * 60)
     except Exception:
         import traceback as tb
         tb.print_exc()
         print("")
         print("  [WARNING] Report generation failed (see traceback above)")
-

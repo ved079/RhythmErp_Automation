@@ -221,32 +221,34 @@ class ItemCategoryPage(BasePage):
         """
         log.info("Navigating to Item Category page...")
         self.navigate_to(self.PAGE_URL)
-        self.driver.refresh()
         self._wait_for_page_ready()
 
-    def _wait_for_page_ready(self):
-        """Wait until the page is fully loaded."""
-        try:
-            WebDriverWait(self.driver, EXPLICIT_WAIT).until(
-                EC.visibility_of_element_located(
-                    (By.CSS_SELECTOR, "table#excel-table")
-                )
-            )
-            log.info("Item Category table loaded")
-        except TimeoutException:
-            log.warning("Item Category table not found, page may be empty")
+    def hard_refresh(self):
+        """Hard refresh the current page (Ctrl+R) and wait for it to be ready.
+        Much faster than full navigate_to_page() for resetting between tests."""
+        log.info("Hard refreshing page")
+        self.driver.refresh()
+        self._wait_for_page_ready()
+        log.info("Page refreshed and ready")
 
+    def _wait_for_page_ready(self):
+        """Wait until the page is fully loaded. Fast — uses short timeouts.
+        Optimised (v3): reduced primary timeout from 15s→10s, fallback from 5s→3s
+        matching QP Master / Services Master golden standard."""
         try:
             WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, "ul.tbl-export-btn")
-                )
+                lambda d: d.find_elements("css selector", "table#excel-table")
             )
-            self.wait_seconds(1)
-            log.info("Item Category toolbar ready")
-        except TimeoutException:
-            log.warning("Toolbar not found, ADD button may be delayed")
-            self.wait_seconds(3)
+            log.info("Page ready (table found)")
+        except Exception:
+            # Fallback: check for search button
+            try:
+                WebDriverWait(self.driver, 3).until(
+                    lambda d: d.find_elements("css selector", "button.search-btn")
+                )
+                log.info("Page ready (search button found, no table)")
+            except Exception:
+                log.warning("Page ready check timed out")
 
     def is_page_loaded(self):
         """Check if the listing page has loaded."""
@@ -268,7 +270,6 @@ class ItemCategoryPage(BasePage):
                 if (!el.querySelector('mat-dialog-container')) el.remove();
             });
         """)
-        self.wait_seconds(0.2)
 
     def force_close_form_popup(self):
         """Force close any form popup via JS."""
@@ -1073,3 +1074,70 @@ class ItemCategoryPage(BasePage):
             return el.get_attribute("value") or ""
         except Exception:
             return ""
+
+    # ==============================================================
+    #  Smart cleanup (golden standard — UOM/SM pattern)
+    # ==============================================================
+
+    def _cleanup(self):
+        """Smart cleanup — close any open popups/forms, then hard refresh.
+        (UOM golden standard pattern — much faster than try/except/cancel/force_close/refresh)
+        Uses JS checks instead of Selenium is_displayed for speed.
+        """
+        # Fast JS check: is any popup/form open?
+        try:
+            popup_open = self.driver.execute_script("""
+                var popup = document.querySelector(
+                    'div.big-model, mat-dialog-container, ' +
+                    'div.edit_pop_up.override_edit_pop_up.popup-mode'
+                );
+                return popup && popup.offsetParent !== null;
+            """)
+            if popup_open:
+                # Close popup via JS (fast, no Selenium)
+                self.driver.execute_script("""
+                    var closeBtn = document.querySelector(
+                        '.popup-header button[mat-icon-button], ' +
+                        '.popup-header button mat-icon'
+                    );
+                    if (closeBtn) {
+                        var btn = closeBtn.closest('button') || closeBtn;
+                        btn.click();
+                    }
+                """)
+                time.sleep(0.1)
+        except Exception:
+            pass
+
+        # Always clean up any leftover overlays/swal
+        try:
+            self.driver.execute_script("""
+                document.querySelectorAll('.swal2-container')
+                    .forEach(function(el) { el.remove(); });
+            """)
+        except Exception:
+            pass
+        self._force_close_panels()
+
+        # Hard refresh — fastest way to reset between tests
+        self.hard_refresh()
+
+    def dismiss_any_validation_alert(self):
+        """Dismiss any SweetAlert validation popup — try Cancel first, then OK. (UOM golden standard)"""
+        log.info("Dismissing any validation alert")
+        self.driver.execute_script("""
+            var cancel = document.querySelector('.swal2-cancel');
+            if (cancel) { cancel.click(); return 'Cancel'; }
+            var confirm = document.querySelector('.swal2-confirm');
+            if (confirm) { confirm.click(); return 'OK'; }
+            return 'none';
+        """)
+        # Wait for SweetAlert to disappear
+        try:
+            WebDriverWait(self.driver, 2).until(
+                EC.invisibility_of_element_located(
+                    (By.CSS_SELECTOR, ".swal2-container")
+                )
+            )
+        except Exception:
+            pass
