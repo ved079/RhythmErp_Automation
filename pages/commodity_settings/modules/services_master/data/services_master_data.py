@@ -367,6 +367,96 @@ def build_services_master_api_payload(
     }
 
 
+# ── Field Validation Rules (from live ERP schema) ────────────────────
+# Services Master is a flat screen — no children, no steppers.
+# 6 fields: name (required), uom (FK dropdown, required),
+# base_uom (FK dropdown, required), base_uom_conversion (required),
+# hsn_code (FK dropdown, required), status (toggle, optional).
+
+FIELD_VALIDATION_RULES = {
+    "name": {
+        "type": "text",
+        "required": True,
+        "max_length": 255,
+        "note": "Accepts all characters (BUG-003: no input restrictions). "
+                 "BUG-001: No maxlength on frontend — server rejects > 255.",
+    },
+    "uom": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": 9,
+        "fk_source": "UOM",
+        "note": "FK dropdown → UOM table. Same pool as base_uom but independent.",
+    },
+    "base_uom": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": 9,
+        "fk_source": "UOM",
+        "note": "FK dropdown → UOM table. Same pool as uom but independent.",
+    },
+    "base_uom_conversion": {
+        "type": "text",
+        "required": True,
+        "max_length": 10,
+        "note": "BUG-002: No maxlength on frontend — server rejects > 10 chars. "
+                 "BUG-004: Accepts all input (letters, special chars, negative, zero, spaces).",
+    },
+    "hsn_code": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": 6,
+        "fk_source": "HSN SAC (Services type only)",
+        "note": "FK dropdown → HSN SAC table, filtered to 'Services' type. "
+                 "6 options: 995411, 995413, 995414, 995415, 996311, 996312.",
+    },
+    "status": {
+        "type": "toggle",
+        "required": False,
+        "default": True,
+        "note": "Boolean toggle. True=Active, False=Inactive. Default is ON.",
+    },
+}
+
+# Status toggle options (display name -> API boolean value)
+STATUS_OPTIONS = {
+    "Active": True,
+    "Inactive": False,
+}
+
+# Name aliases for schema test compatibility
+UOM_NAMES = UOM_ID_MAP
+HSN_SAC_NAMES = HSN_SAC_SERVICES_ID_MAP
+
+# Default FK IDs for batch creation (3 pools: uom, base_uom, hsn_code)
+DEFAULT_SERVICES_MASTER_FK_IDS = {
+    "uom": dict(UOM_ID_MAP),
+    "base_uom": dict(UOM_ID_MAP),
+    "hsn_code": dict(HSN_SAC_SERVICES_ID_MAP),
+}
+
+
+def generate_batch_payloads(
+    count: int = 20,
+    prefix: str = None,
+    dropdown_ids: dict = None,
+) -> list:
+    """Generate a batch of unique Services Master API payloads.
+
+    Standardized batch generator matching the pattern used across all
+    RhythmERP modules (UOM, Customer, Supplier, etc.).
+
+    Args:
+        count: Number of payloads to generate.
+        prefix: Optional prefix for service names.
+        dropdown_ids: Not used (FK IDs are resolved from data pool).
+
+    Returns:
+        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
+    """
+    return generate_services_master_payloads(count=count)
+
+
 def generate_services_master_payloads(count: int = 10, offset: int = 0) -> list:
     """
     Generate N API payloads for Services Master.
@@ -410,77 +500,3 @@ def generate_services_master_payloads(count: int = 10, offset: int = 0) -> list:
         )
 
     return payloads
-
-
-# ──────────────────────────────────────────────
-# FIELD VALIDATION RULES (from live ERP schema)
-# ──────────────────────────────────────────────
-# Services Master is a flat screen — no children, no steppers.
-# 2 character fields + 3 FK dropdowns + 1 toggle = 6 fields total.
-
-FIELD_VALIDATION_RULES = {
-    "name": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "Service name. Duplicates currently allowed (BUG-005).",
-    },
-    "uom": {
-        "type": "dropdown",
-        "required": True,
-        "fk_options_count": len(UOM_ID_MAP),
-        "note": "FK to UOM. 9 options: KG, MT, QT, NOS, Litres, LTR, MTR, SET, KM.",
-    },
-    "base_uom": {
-        "type": "dropdown",
-        "required": True,
-        "fk_options_count": len(UOM_ID_MAP),
-        "note": "FK to UOM (same pool as uom). 9 options.",
-    },
-    "base_uom_conversion": {
-        "type": "character",
-        "required": True,
-        "max_length": 10,
-        "note": "Conversion factor as string. Max 10 chars. BUG-004: no type/range validation.",
-    },
-    "hsn_code": {
-        "type": "dropdown",
-        "required": True,
-        "fk_options_count": len(HSN_SAC_SERVICES_ID_MAP),
-        "note": "FK to HSN SAC Code (Services type). 6 options.",
-    },
-    "status": {
-        "type": "toggle",
-        "required": False,
-        "default": True,
-        "note": "Active/Inactive toggle. Default: Active (True).",
-    },
-}
-
-STATUS_OPTIONS = {"Active": True, "Inactive": False}
-
-UOM_NAMES = dict(UOM_ID_MAP)
-HSN_SAC_NAMES = dict(HSN_SAC_SERVICES_ID_MAP)
-
-DEFAULT_SERVICES_MASTER_FK_IDS = {
-    "uom": UOM_ID_MAP,
-    "base_uom": UOM_ID_MAP,
-    "hsn_code": HSN_SAC_SERVICES_ID_MAP,
-}
-
-
-def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None) -> list:
-    """Generate a batch of unique Services Master API payloads.
-
-    Standardized batch generator matching the pattern used across all
-    RhythmERP modules.
-
-    Args:
-        count: Number of payloads to generate.
-        prefix: Ignored for Services Master (realistic names are used instead).
-        dropdown_ids: Override specific FK ID pools.
-
-    Returns:
-        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
-    """
-    return generate_services_master_payloads(count=count)

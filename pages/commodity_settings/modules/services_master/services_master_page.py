@@ -6,6 +6,15 @@ Page Object Model for RhythmERP Services Master screen.
 Location: Commodity Settings > Commodity Master > Services Master
 URL:      /#/dynamic-screens/Services%20Master
 
+Optimised (v2) — matching UOM golden standard:
+- Replaced most time.sleep() / wait_seconds() with explicit WebDriverWait
+- Added hard_refresh() for fast page reset between tests
+- Added search_and_verify() combining search + existence check
+- Added _cleanup() smart cleanup (only closes form if open, then refreshes)
+- Added get_field_value() via JS (fast)
+- Upgraded get_mat_error_text() and has_field_error() to use JS parentElement chain
+- Reduced unnecessary waits throughout
+
 FORM LAYOUT (Simple popup — NOT a stepper):
 
   - Name                  (text input,   required, name="Name")
@@ -56,6 +65,7 @@ KEY RULES:
 import os
 import sys
 import time
+import json
 
 PROJECT_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
@@ -268,37 +278,36 @@ class ServicesMasterPage(BasePage):
     # ==============================================================
 
     def navigate_to_page(self):
-        """Navigate to the Services Master listing page.
-        Force-refreshes to clear leftover Angular state.
-        """
+        """Navigate to the Services Master listing page via direct URL (fast)."""
         log.info("Navigating to Services Master page...")
-        self.navigate_to(self.PAGE_URL)
+        self.driver.get(self.PAGE_URL)
+        self._wait_for_page_ready()
+        log.info("Arrived at Services Master page")
+
+    def hard_refresh(self):
+        """Hard refresh the current page (Ctrl+R) and wait for it to be ready.
+        Much faster than full navigate_to_page() for resetting between tests."""
+        log.info("Hard refreshing page")
         self.driver.refresh()
         self._wait_for_page_ready()
+        log.info("Page refreshed and ready")
 
     def _wait_for_page_ready(self):
-        """Wait until the page is fully loaded."""
+        """Wait until the page is fully loaded. Fast — uses short timeouts."""
         try:
-            WebDriverWait(self.driver, EXPLICIT_WAIT).until(
-                EC.visibility_of_element_located(
-                    (By.CSS_SELECTOR, "table#excel-table")
-                )
+            WebDriverWait(self.driver, 15).until(
+                lambda d: d.find_elements("css selector", "table#excel-table")
             )
-            log.info("Services Master table loaded")
-        except TimeoutException:
-            log.warning("Services Master table not found, page may be empty")
-
-        try:
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, "ul.tbl-export-btn")
+            log.info("Page ready (table found)")
+        except Exception:
+            # Fallback: check for search button
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    lambda d: d.find_elements("css selector", "button.search-btn")
                 )
-            )
-            self.wait_seconds(1)
-            log.info("Services Master toolbar ready")
-        except TimeoutException:
-            log.warning("Toolbar not found, ADD button may be delayed")
-            self.wait_seconds(3)
+                log.info("Page ready (search button found, no table)")
+            except Exception:
+                log.warning("Page ready check timed out")
 
     def is_page_loaded(self):
         """Check if the listing page has loaded."""
@@ -320,7 +329,6 @@ class ServicesMasterPage(BasePage):
                 if (!el.querySelector('mat-dialog-container')) el.remove();
             });
         """)
-        self.wait_seconds(0.2)
 
     def force_close_form_popup(self):
         """Force close any form popup via JS."""
@@ -336,91 +344,41 @@ class ServicesMasterPage(BasePage):
     # ==============================================================
 
     def open_add_form(self):
-        """Click the ADD (+) button to open the create popup form."""
-        log.info("Clicking ADD button on Services Master...")
-        self._wait_for_toolbar()
-
-        # Strategy 1: button.erp-add-btn
+        """Click the ADD (+) button to open the create popup form.
+        Uses JS click first (fast, bypasses overlay issues), then fallbacks."""
+        log.info("Opening Add Services Master form")
+        # JS click — bypasses overlay/z-index issues (same pattern as UOM)
+        js_click_add = """
+        var btn = document.querySelector('button.erp-add-btn');
+        if (!btn) { throw new Error('Add button not found in DOM'); }
+        btn.scrollIntoView({block:'center'});
+        btn.click();
+        return 'clicked';
+        """
         try:
-            btn = self.driver.find_element(
-                By.CSS_SELECTOR, "button.erp-add-btn"
-            )
-            if btn.is_displayed():
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});"
-                    "arguments[0].click();",
-                    btn,
-                )
-                self.wait_seconds(1.5)
-                if self._is_form_popup_open():
-                    log.info("ADD form opened on Services Master")
-                    return
-        except Exception:
-            pass
-
-        # Strategy 2: mini-fab button with 'add' icon
-        try:
-            add_btns = self.driver.find_elements(
-                By.CSS_SELECTOR, "button.mat-mdc-mini-fab"
-            )
-            for btn in add_btns:
-                try:
-                    icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
-                    if icon.text.strip().lower() == "add" and btn.is_displayed():
-                        self.driver.execute_script(
-                            "arguments[0].scrollIntoView({block:'center'});"
-                            "arguments[0].click();",
-                            btn,
-                        )
-                        self.wait_seconds(1.5)
-                        if self._is_form_popup_open():
-                            log.info("ADD form opened via mini-fab on Services Master")
-                            return
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-        # Strategy 3: click_with_retry
-        try:
+            result = self.driver.execute_script(js_click_add)
+            log.info("Add button clicked via JS: " + str(result))
+        except Exception as e:
+            log.warning("JS click failed, falling back to Selenium click: " + str(e))
             self.click_with_retry(self.ADD_BUTTON)
-            self.wait_seconds(1.5)
-            if self._is_form_popup_open():
-                log.info("ADD form opened via click_with_retry on Services Master")
-                return
-        except Exception:
-            pass
 
-        raise Exception("ADD button not found or not clickable on Services Master")
+        # Wait for the form popup to appear
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(("css selector", "input[name='Name']"))
+            )
+            log.info("Add form opened")
+        except Exception:
+            log.warning("Add form may not have opened — Name input not found")
 
     def _wait_for_toolbar(self):
-        """Wait for the toolbar and ADD button to be ready."""
-        for attempt in range(3):
-            try:
-                add_container = self.driver.find_elements(
-                    By.CSS_SELECTOR, "button.erp-add-btn"
-                )
-                if add_container and add_container[0].is_displayed():
-                    return
-            except Exception:
-                pass
-
-            try:
-                mini_fabs = self.driver.find_elements(
-                    By.CSS_SELECTOR, "button.mat-mdc-mini-fab"
-                )
-                for btn in mini_fabs:
-                    try:
-                        icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
-                        if icon.text.strip().lower() == "add":
-                            return
-                    except Exception:
-                        continue
-            except Exception:
-                pass
-
-            log.info(f"Waiting for toolbar... attempt {attempt + 1}/3")
-            self.wait_seconds(2)
+        """Wait for the toolbar and ADD button to be ready. Fast poll."""
+        try:
+            WebDriverWait(self.driver, 10).until(
+                lambda d: d.find_elements("css selector", "button.erp-add-btn")
+            )
+        except Exception:
+            log.warning("Toolbar not found, ADD button may be delayed")
 
     def _is_form_popup_open(self):
         """Quick check if any form popup is visible."""
@@ -539,11 +497,9 @@ class ServicesMasterPage(BasePage):
                     "arguments[0].click();",
                     el,
                 )
-                self.wait_seconds(0.5)
-
-                # Wait for dropdown panel
+                # Wait for dropdown panel (short wait)
                 try:
-                    WebDriverWait(self.driver, 5).until(
+                    WebDriverWait(self.driver, 3).until(
                         EC.visibility_of_element_located(
                             (By.CSS_SELECTOR, "div[role='listbox'] mat-option")
                         )
@@ -551,7 +507,7 @@ class ServicesMasterPage(BasePage):
                 except TimeoutException:
                     pass
 
-                # Find and click the matching option
+                # Find and click the matching option via JS (fast)
                 options = self.driver.find_elements(
                     By.CSS_SELECTOR, "div[role='listbox'] mat-option"
                 )
@@ -559,7 +515,6 @@ class ServicesMasterPage(BasePage):
                     try:
                         if opt.text.strip() == value_text and opt.is_displayed():
                             self.driver.execute_script("arguments[0].click();", opt)
-                            self.wait_seconds(0.3)
                             log.info(f"Selected '{value_text}'")
                             return True
                     except Exception:
@@ -570,7 +525,6 @@ class ServicesMasterPage(BasePage):
                     try:
                         if value_text in opt.text.strip() and opt.is_displayed():
                             self.driver.execute_script("arguments[0].click();", opt)
-                            self.wait_seconds(0.3)
                             log.info(f"Selected '{opt.text.strip()}' (partial match)")
                             return True
                     except Exception:
@@ -594,10 +548,8 @@ class ServicesMasterPage(BasePage):
                     "arguments[0].click();",
                     el,
                 )
-                self.wait_seconds(0.5)
-
                 try:
-                    WebDriverWait(self.driver, 5).until(
+                    WebDriverWait(self.driver, 3).until(
                         EC.visibility_of_element_located(
                             (By.CSS_SELECTOR, "div[role='listbox'] mat-option")
                         )
@@ -621,7 +573,6 @@ class ServicesMasterPage(BasePage):
                     chosen = random.choice(visible_options)
                     chosen_text = chosen.text.strip()
                     self.driver.execute_script("arguments[0].click();", chosen)
-                    self.wait_seconds(0.3)
                     log.info(f"Randomly selected '{chosen_text}' from {label_name}")
                     return True
                 else:
@@ -870,26 +821,33 @@ class ServicesMasterPage(BasePage):
     # ==============================================================
 
     def handle_success_alert(self, timeout=15):
-        """Handle success SweetAlert2 popup.
-        Returns the alert title text, or '' if no alert appeared.
-        """
-        log.info("Handling success alert...")
+        """Handle success SweetAlert2 popup — fast dismiss."""
+        log.info("Handling success alert")
         try:
             WebDriverWait(self.driver, timeout).until(
                 EC.visibility_of_element_located(
-                    (By.CSS_SELECTOR, "#swal2-title")
+                    (By.CSS_SELECTOR, ".swal2-container")
                 )
             )
             title = self.get_swal_title()
-            log.info(f"Success alert: {title}")
+            log.info("Success alert: " + str(title))
 
             # Dismiss via JS
-            self._dismiss_swal_confirm()
-            self._cleanup_swal_containers()
-
+            self.driver.execute_script("""
+                var btn = document.querySelector('.swal2-confirm');
+                if (btn) { btn.click(); return 'clicked'; }
+                return 'not found';
+            """)
+            # Wait for SweetAlert to disappear (short wait)
+            try:
+                WebDriverWait(self.driver, 3).until(
+                    EC.invisibility_of_element_located(("css selector", ".swal2-container"))
+                )
+            except Exception:
+                pass
             return title or ""
-        except TimeoutException:
-            log.info("No success alert appeared")
+        except Exception:
+            log.info("No success alert found (may have auto-dismissed)")
             return ""
 
     def handle_validation_warning(self, timeout=10):
@@ -960,43 +918,23 @@ class ServicesMasterPage(BasePage):
 
     def _dismiss_swal_confirm(self):
         """Dismiss a SweetAlert2 popup via JS querySelector."""
-        self.wait_seconds(0.5)
         self.driver.execute_script(
             "document.querySelector('.swal2-confirm')?.click();"
         )
-        self.wait_seconds(0.3)
-
-        # Fallback: click ALL swal2-confirm buttons
+        # Wait for SweetAlert to disappear
         try:
-            remaining = self.driver.find_elements(
-                By.CSS_SELECTOR, ".swal2-confirm"
+            WebDriverWait(self.driver, 2).until(
+                EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
             )
-            if remaining:
-                self.driver.execute_script("""
-                    document.querySelectorAll('.swal2-confirm').forEach(
-                        function(b) { b.click(); }
-                    );
-                """)
-                self.wait_seconds(0.3)
         except Exception:
             pass
 
     def _cleanup_swal_containers(self):
         """Remove all leftover .swal2-container elements from the DOM."""
-        try:
-            WebDriverWait(self.driver, 3).until(
-                EC.invisibility_of_element_located(
-                    (By.CSS_SELECTOR, ".swal2-container")
-                )
-            )
-        except Exception:
-            pass
-
         self.driver.execute_script("""
             document.querySelectorAll('.swal2-container')
             .forEach(function(el) { el.remove(); });
         """)
-        self.wait_seconds(0.2)
 
     def get_swal_title(self):
         """Read the SweetAlert2 title text."""
@@ -1026,23 +964,66 @@ class ServicesMasterPage(BasePage):
         except Exception:
             return False
 
-    def get_mat_error_text(self):
-        """Get all mat-error text messages on the form."""
-        errors = []
-        try:
-            error_els = self.driver.find_elements(
-                By.CSS_SELECTOR, "mat-error, .mat-mdc-form-field-error"
-            )
-            for el in error_els:
-                try:
-                    text = el.text.strip()
-                    if text and el.is_displayed():
-                        errors.append(text)
-                except Exception:
-                    continue
-        except Exception:
-            pass
-        return errors
+    def get_mat_error_text(self, field_locator=None):
+        """Get mat-error text below a form field.
+        If field_locator is provided (css selector tuple), uses pure JS parentElement
+        chain (same as UOM golden standard). Otherwise returns all visible mat-errors.
+        """
+        if field_locator:
+            # UOM golden standard: JS parentElement chain for precise error lookup
+            try:
+                css_selector = field_locator[1] if field_locator[0] == "css" else ""
+                if not css_selector:
+                    return ""
+                js = """
+                var input = document.querySelector(arguments[0]);
+                if (!input) return JSON.stringify({found: false, reason: 'input not found'});
+                var current = input;
+                for (var steps = 0; steps < 20; steps++) {
+                    var errors = current.querySelectorAll('mat-error');
+                    if (errors.length > 0) {
+                        var texts = [];
+                        for (var i = 0; i < errors.length; i++) {
+                            var t = errors[i].textContent.trim();
+                            if (t) texts.push(t);
+                        }
+                        return JSON.stringify({found: true, errorText: texts.join(' | ')});
+                    }
+                    current = current.parentElement;
+                    if (!current || current === document.body) break;
+                }
+                return JSON.stringify({found: false, reason: 'no mat-error in ancestor chain'});
+                """
+                result = self.driver.execute_script(js, css_selector)
+                log.info("get_mat_error_text raw: " + str(result))
+                if not result:
+                    return ""
+                data = json.loads(result)
+                if data.get("found"):
+                    return data.get("errorText", "")
+                else:
+                    log.warning("mat-error not found: " + data.get("reason", "unknown"))
+                    return ""
+            except Exception as e:
+                log.warning("get_mat_error_text error: " + str(e))
+                return ""
+        else:
+            # Fallback: return all visible mat-errors
+            errors = []
+            try:
+                error_els = self.driver.find_elements(
+                    By.CSS_SELECTOR, "mat-error, .mat-mdc-form-field-error"
+                )
+                for el in error_els:
+                    try:
+                        text = el.text.strip()
+                        if text and el.is_displayed():
+                            errors.append(text)
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            return errors
 
     # ==============================================================
     #  Row action buttons
@@ -1313,6 +1294,73 @@ class ServicesMasterPage(BasePage):
         """Check if a record exists in the table (partial match)."""
         names = self.get_all_item_names()
         return any(name.lower() in n.lower() for n in names)
+
+    def search_and_verify(self, name):
+        """Search for a record by name, then verify it exists in the filtered results.
+        This is the recommended way to verify a create/update — uses search
+        instead of scanning all rows (handles pagination automatically).
+        Returns True if found. (UOM golden standard pattern)
+        """
+        log.info("Searching and verifying: " + str(name))
+        self.search_item(name)
+        # Poll up to 10s to handle slow Angular re-renders
+        end_time = time.monotonic() + 10
+        while time.monotonic() < end_time:
+            try:
+                names = self.get_all_item_names()
+                for n in names:
+                    if name.lower() in n.lower():
+                        log.info("Found '" + str(name) + "' in table")
+                        return True
+            except Exception:
+                pass
+            time.sleep(0.5)
+        log.warning("NOT found '" + str(name) + "' in table after search")
+        return False
+
+    def clear_search(self):
+        """Clear the search input and refresh to get clean state."""
+        log.info("Clearing search - hard refreshing")
+        self.hard_refresh()
+
+    def get_field_value(self, locator):
+        """Get the current value of an input field via JS (fast). (UOM golden standard)"""
+        try:
+            css_selector = locator[1] if locator[0] == "css" else ""
+            if not css_selector:
+                return ""
+            return self.driver.execute_script(
+                "var el = document.querySelector(arguments[0]); "
+                "return el ? el.value : '';", css_selector
+            ) or ""
+        except Exception:
+            return ""
+
+    def _cleanup(self):
+        """Smart cleanup — only close form if it's still open, then refresh.
+        (UOM golden standard pattern — much faster than try/except/cancel/force_close/refresh)
+        """
+        if self.is_add_form_open():
+            self.force_close_form_popup()
+        self.hard_refresh()
+
+    def dismiss_any_validation_alert(self):
+        """Dismiss any SweetAlert validation popup — try Cancel first, then OK. (UOM golden standard)"""
+        log.info("Dismissing any validation alert")
+        self.driver.execute_script("""
+            var cancel = document.querySelector('.swal2-cancel');
+            if (cancel) { cancel.click(); return 'Cancel'; }
+            var confirm = document.querySelector('.swal2-confirm');
+            if (confirm) { confirm.click(); return 'OK'; }
+            return 'none';
+        """)
+        # Wait for SweetAlert to disappear
+        try:
+            WebDriverWait(self.driver, 2).until(
+                EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
+            )
+        except Exception:
+            pass
 
     # ==============================================================
     #  High-level convenience methods

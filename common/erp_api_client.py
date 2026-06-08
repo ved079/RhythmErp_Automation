@@ -508,6 +508,61 @@ class RhythmERPAPIClient:
             log.error(f"[API] List error: {e}")
             return None
 
+    def update_entry(self, entry_id, payload: Dict) -> Optional[Dict]:
+        """
+        Update an existing entry on any dynamic screen.
+
+        Uses PUT to the entry's detail endpoint.
+
+        Args:
+            entry_id: The entry's ID to update.
+            payload: Complete JSON payload with updated fields.
+                     Must include "attribute_name" matching the screen name.
+
+        Returns:
+            Response JSON dict on success, None on failure.
+        """
+        self._ensure_auth()
+
+        screen_name = payload.get("attribute_name", "unknown")
+        entry_name = (
+            payload.get("name")
+            or payload.get("company_name")
+            or f"entry-{entry_id}"
+        )
+
+        try:
+            resp = self.session.put(
+                f"{self.BASE_URL}{self.API_ENDPOINT}{screen_name}/{entry_id}/",
+                json=payload,
+                timeout=30,
+            )
+        except requests.ConnectionError:
+            log.error(f"[API] Connection error updating {entry_name}")
+            return None
+
+        if resp.status_code in (200, 201):
+            log.info(f"[API] Updated: {entry_name} (id={entry_id})")
+            return resp.json()
+        else:
+            error_msg = f"Status {resp.status_code}"
+            try:
+                error_data = resp.json()
+                if "errors" in error_data:
+                    errs = error_data["errors"]
+                    error_msg = "; ".join(
+                        e.get("error_message", str(e)) for e in errs
+                    )
+                elif "message" in error_data:
+                    error_msg = error_data["message"]
+            except Exception:
+                error_msg = resp.text[:200]
+
+            log.error(
+                f"[API] Failed to update '{entry_name}' (id={entry_id}): {error_msg}"
+            )
+            return None
+
     def get_entry(self, screen_name: str, entry_id) -> Optional[Dict]:
         """
         Get a detailed entry by ID.
@@ -606,68 +661,6 @@ class RhythmERPAPIClient:
             )
 
         return detail
-
-    def update_entry(self, entry_id, payload: Dict) -> Optional[Dict]:
-        """
-        Update an existing entry on any dynamic screen.
-
-        Uses PUT /core/dynamic-screen-wrapper/{entry_id}/ with the full
-        payload (must include 'id' matching entry_id).
-
-        Args:
-            entry_id: The entry's integer ID.
-            payload: Complete JSON payload with updated fields.
-                     Must include "id" set to entry_id and "attribute_name"
-                     matching the screen name.
-
-        Returns:
-            Response JSON dict on success (status 200/201), None on failure.
-        """
-        self._ensure_auth()
-
-        # Ensure payload has the correct id
-        payload["id"] = entry_id
-
-        entry_name = (
-            payload.get("name")
-            or payload.get("company_name")
-            or payload.get("bank_name")
-            or f"entry-{entry_id}"
-        )
-
-        try:
-            resp = self.session.put(
-                f"{self.BASE_URL}{self.API_ENDPOINT}{entry_id}/",
-                json=payload,
-                timeout=30,
-            )
-        except requests.ConnectionError:
-            log.error(f"[API] Connection error updating {entry_name}")
-            return None
-
-        if resp.status_code in (200, 201):
-            log.info(f"[API] Updated: {entry_name} (id: {entry_id})")
-            return resp.json()
-        else:
-            error_msg = f"Status {resp.status_code}"
-            try:
-                error_data = resp.json()
-                if "errors" in error_data:
-                    errs = error_data["errors"]
-                    error_msg = "; ".join(
-                        e.get("error_message", str(e)) for e in errs
-                    )
-                elif "message" in error_data:
-                    error_msg = error_data["message"]
-                elif "detail" in error_data:
-                    error_msg = error_data["detail"]
-            except Exception:
-                error_msg = resp.text[:200]
-
-            log.error(
-                f"[API] Failed to update '{entry_name}': {error_msg}"
-            )
-            return None
 
     def entry_exists(self, screen_name: str, name: str) -> bool:
         """

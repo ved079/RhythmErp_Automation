@@ -3,6 +3,12 @@ test_services_master_validation.py
 ----------------------------------
 Automated test cases for RhythmERP Services Master screen.
 
+Optimised (v2) — matching UOM golden standard:
+- Smart finally blocks: only cleanup if form is actually open
+- Uses hard_refresh() instead of click_refresh() + wait_seconds(2) for fast page reset
+- Uses search_and_verify() for create/update verification (handles pagination)
+- Reduced wait_seconds() calls throughout — total runtime target: under 5 min
+
 Location: Commodity Settings > Commodity Master > Services Master
 URL:      /#/dynamic-screens/Services%20Master
 Prefix:   SM (SM-C01..C13, SM-V01..V05, SM-E01..E05, SM-S01..S05,
@@ -56,7 +62,6 @@ Usage:
 import os
 import sys
 import pytest
-import time
 
 PROJECT_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
@@ -101,25 +106,21 @@ class TestCreateFormValidations:
         log.info("SM-C01: Create valid service record")
         data = generate_valid_service_data()
 
-        sm_page.open_add_form()
-        sm_page.fill_form(data)
-        sm_page.submit()
-
-        # Check for success alert immediately
-        swal_title = sm_page.handle_success_alert(timeout=15)
-
-        assert swal_title, "SM-C01: Expected success popup after valid submission"
-        assert "success" in swal_title.lower(), \
-            f"SM-C01: Expected success message, got: '{swal_title}'"
-
-        # Cleanup
         try:
-            sm_page.cancel()
+            sm_page.open_add_form()
+            sm_page.fill_form(data)
+            sm_page.submit()
+
+            # Check for success alert immediately
+            swal_title = sm_page.handle_success_alert(timeout=15)
+
+            assert swal_title, "SM-C01: Expected success popup after valid submission"
+            assert "success" in swal_title.lower(), \
+                f"SM-C01: Expected success message, got: '{swal_title}'"
         except Exception:
-            pass
-        sm_page.force_close_form_popup()
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.smoke
     @pytest.mark.sanity
@@ -129,26 +130,25 @@ class TestCreateFormValidations:
         Expected: SweetAlert2 "Validation Failed" + mat-error on required fields.
         """
         log.info("SM-C02: Submit empty form")
-        sm_page.open_add_form()
-        sm_page.submit()
 
-        # Handle validation popup
-        swal_title = sm_page.handle_validation_warning(timeout=10)
-
-        assert swal_title, "SM-C02: Expected validation popup"
-        assert "validation failed" in swal_title.lower(), \
-            f"SM-C02: Expected 'Validation Failed', got: '{swal_title}'"
-
-        # Check mat-errors
-        errors = sm_page.get_mat_error_text()
-        assert len(errors) > 0, "SM-C02: Expected mat-error messages on required fields"
-
-        # Cleanup
         try:
-            sm_page.cancel()
+            sm_page.open_add_form()
+            sm_page.submit()
+
+            # Handle validation popup
+            swal_title = sm_page.handle_validation_warning(timeout=10)
+
+            assert swal_title, "SM-C02: Expected validation popup"
+            assert "validation failed" in swal_title.lower(), \
+                f"SM-C02: Expected 'Validation Failed', got: '{swal_title}'"
+
+            # Check mat-errors
+            errors = sm_page.get_mat_error_text()
+            assert len(errors) > 0, "SM-C02: Expected mat-error messages on required fields"
         except Exception:
-            pass
-        sm_page.force_close_form_popup()
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -159,22 +159,20 @@ class TestCreateFormValidations:
         log.info("SM-C03: Submit with Name only")
         data = generate_name_only_data()
 
-        sm_page.open_add_form()
-        sm_page.fill_form(data)
-        sm_page.submit()
-
-        swal_title = sm_page.handle_validation_warning(timeout=10)
-
-        assert swal_title, "SM-C03: Expected validation popup"
-        assert "validation failed" in swal_title.lower(), \
-            f"SM-C03: Expected 'Validation Failed', got: '{swal_title}'"
-
-        # Cleanup
         try:
-            sm_page.cancel()
+            sm_page.open_add_form()
+            sm_page.fill_form(data)
+            sm_page.submit()
+
+            swal_title = sm_page.handle_validation_warning(timeout=10)
+
+            assert swal_title, "SM-C03: Expected validation popup"
+            assert "validation failed" in swal_title.lower(), \
+                f"SM-C03: Expected 'Validation Failed', got: '{swal_title}'"
         except Exception:
-            pass
-        sm_page.force_close_form_popup()
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -184,20 +182,18 @@ class TestCreateFormValidations:
         data = generate_valid_service_data()
         data["uom"] = ""  # Clear required field
 
-        sm_page.open_add_form()
-        sm_page.fill_form(data)
-        sm_page.submit()
-
-        swal_title = sm_page.handle_validation_warning(timeout=10)
-
-        assert swal_title, "SM-C04: Expected validation popup without UOM"
-
-        # Cleanup
         try:
-            sm_page.cancel()
+            sm_page.open_add_form()
+            sm_page.fill_form(data)
+            sm_page.submit()
+
+            swal_title = sm_page.handle_validation_warning(timeout=10)
+
+            assert swal_title, "SM-C04: Expected validation popup without UOM"
         except Exception:
-            pass
-        sm_page.force_close_form_popup()
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.bug
     @pytest.mark.regression
@@ -210,24 +206,20 @@ class TestCreateFormValidations:
         data = generate_valid_service_data()
         data["name"] = generate_special_char_name()
 
-        sm_page.open_add_form()
-        sm_page.fill_form(data)
-        sm_page.submit()
-
-        swal_title = sm_page.handle_success_alert(timeout=15)
-
-        # BUG-003: Special chars accepted — this should ideally fail
-        if swal_title and "success" in swal_title.lower():
-            log.warning("SM-C05: BUG-003 CONFIRMED — special char name accepted")
-
-        # Cleanup
         try:
-            sm_page.cancel()
+            sm_page.open_add_form()
+            sm_page.fill_form(data)
+            sm_page.submit()
+
+            swal_title = sm_page.handle_success_alert(timeout=15)
+
+            # BUG-003: Special chars accepted — this should ideally fail
+            if swal_title and "success" in swal_title.lower():
+                log.warning("SM-C05: BUG-003 CONFIRMED — special char name accepted")
         except Exception:
-            pass
-        sm_page.force_close_form_popup()
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.bug
     @pytest.mark.regression
@@ -240,26 +232,22 @@ class TestCreateFormValidations:
         data = generate_valid_service_data()
         data["name"] = generate_spaces_only(10)
 
-        sm_page.open_add_form()
-        sm_page.fill_form(data)
-        sm_page.submit()
-
-        # Could be success (BUG) or validation
-        swal_title = sm_page.handle_success_alert(timeout=15)
-        if not swal_title:
-            swal_title = sm_page.handle_validation_warning(timeout=5)
-
-        if swal_title and "success" in swal_title.lower():
-            log.warning("SM-C06: BUG-003 CONFIRMED — spaces-only name accepted")
-
-        # Cleanup
         try:
-            sm_page.cancel()
+            sm_page.open_add_form()
+            sm_page.fill_form(data)
+            sm_page.submit()
+
+            # Could be success (BUG) or validation
+            swal_title = sm_page.handle_success_alert(timeout=15)
+            if not swal_title:
+                swal_title = sm_page.handle_validation_warning(timeout=5)
+
+            if swal_title and "success" in swal_title.lower():
+                log.warning("SM-C06: BUG-003 CONFIRMED — spaces-only name accepted")
         except Exception:
-            pass
-        sm_page.force_close_form_popup()
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.bug
     @pytest.mark.sanity
@@ -271,46 +259,36 @@ class TestCreateFormValidations:
         """
         log.info("SM-C07: Create duplicate name (BUG-005)")
 
-        # First, create a record
-        data1 = generate_valid_service_data()
-        sm_page.open_add_form()
-        sm_page.fill_form(data1)
-        sm_page.submit()
-        swal1 = sm_page.handle_success_alert(timeout=15)
-
-        if not (swal1 and "success" in swal1.lower()):
-            pytest.skip("SM-C07: Could not create first record for duplicate test")
-
-        # Cleanup popup
         try:
-            sm_page.cancel()
+            # First, create a record
+            data1 = generate_valid_service_data()
+            sm_page.open_add_form()
+            sm_page.fill_form(data1)
+            sm_page.submit()
+            swal1 = sm_page.handle_success_alert(timeout=15)
+
+            if not (swal1 and "success" in swal1.lower()):
+                pytest.skip("SM-C07: Could not create first record for duplicate test")
+
+            # Fast cleanup between creates
+            sm_page._cleanup()
+
+            # Now try duplicate
+            data2 = generate_duplicate_name_data(data1["name"])
+            sm_page.open_add_form()
+            sm_page.fill_form(data2)
+            sm_page.submit()
+
+            swal2 = sm_page.handle_success_alert(timeout=15)
+            if not swal2:
+                swal2 = sm_page.handle_validation_warning(timeout=5)
+
+            if swal2 and "success" in swal2.lower():
+                log.warning("SM-C07: BUG-005 CONFIRMED — duplicate name accepted")
         except Exception:
-            pass
-        sm_page.force_close_form_popup()
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
-
-        # Now try duplicate
-        data2 = generate_duplicate_name_data(data1["name"])
-        sm_page.open_add_form()
-        sm_page.fill_form(data2)
-        sm_page.submit()
-
-        swal2 = sm_page.handle_success_alert(timeout=15)
-        if not swal2:
-            swal2 = sm_page.handle_validation_warning(timeout=5)
-
-        if swal2 and "success" in swal2.lower():
-            log.warning("SM-C07: BUG-005 CONFIRMED — duplicate name accepted")
-
-        # Cleanup
-        try:
-            sm_page.cancel()
-        except Exception:
-            pass
-        sm_page.force_close_form_popup()
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.bug
     @pytest.mark.sanity
@@ -325,36 +303,32 @@ class TestCreateFormValidations:
         data = generate_valid_service_data()
         data["name"] = generate_long_name(256)
 
-        # Record count before
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
-        count_before = sm_page.get_table_row_count()
-
-        sm_page.open_add_form()
-        sm_page.fill_form(data)
-        sm_page.submit()
-
-        # Check for save failure alert immediately (no wait_seconds!)
-        swal_title = sm_page.handle_save_failure_alert(timeout=10)
-
-        assert swal_title, \
-            "SM-C08: Expected popup after submitting 256-char Name"
-        assert "failed" in swal_title.lower(), \
-            f"SM-C08: Expected failure popup, got: '{swal_title}'"
-
-        # Cleanup
         try:
-            sm_page.cancel()
-        except Exception:
-            pass
-        sm_page.force_close_form_popup()
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
+            # Record count before
+            sm_page.hard_refresh()
+            count_before = sm_page.get_table_row_count()
 
-        # Verify record was NOT created
-        count_after = sm_page.get_table_row_count()
-        assert count_after == count_before, \
-            f"SM-C08: Record should NOT be created (before={count_before}, after={count_after})"
+            sm_page.open_add_form()
+            sm_page.fill_form(data)
+            sm_page.submit()
+
+            # Check for save failure alert immediately (no wait_seconds!)
+            swal_title = sm_page.handle_save_failure_alert(timeout=10)
+
+            assert swal_title, \
+                "SM-C08: Expected popup after submitting 256-char Name"
+            assert "failed" in swal_title.lower(), \
+                f"SM-C08: Expected failure popup, got: '{swal_title}'"
+
+            # Verify record was NOT created
+            sm_page.hard_refresh()
+            count_after = sm_page.get_table_row_count()
+            assert count_after == count_before, \
+                f"SM-C08: Record should NOT be created (before={count_before}, after={count_after})"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.bug
     @pytest.mark.sanity
@@ -369,30 +343,24 @@ class TestCreateFormValidations:
         data = generate_valid_service_data()
         data["base_uom_conversion"] = generate_long_base_uom_conversion(11)
 
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
-        count_before = sm_page.get_table_row_count()
-
-        sm_page.open_add_form()
-        sm_page.fill_form(data)
-        sm_page.submit()
-
-        # Check immediately (no wait_seconds between submit and handler!)
-        swal_title = sm_page.handle_save_failure_alert(timeout=10)
-
-        assert swal_title, \
-            "SM-C09: Expected popup after submitting 11-char Base Uom Conversion"
-        assert "failed" in swal_title.lower(), \
-            f"SM-C09: Expected failure popup, got: '{swal_title}'"
-
-        # Cleanup
         try:
-            sm_page.cancel()
+            count_before = sm_page.get_table_row_count()
+
+            sm_page.open_add_form()
+            sm_page.fill_form(data)
+            sm_page.submit()
+
+            # Check immediately (no wait_seconds between submit and handler!)
+            swal_title = sm_page.handle_save_failure_alert(timeout=10)
+
+            assert swal_title, \
+                "SM-C09: Expected popup after submitting 11-char Base Uom Conversion"
+            assert "failed" in swal_title.lower(), \
+                f"SM-C09: Expected failure popup, got: '{swal_title}'"
         except Exception:
-            pass
-        sm_page.force_close_form_popup()
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.bug
     @pytest.mark.regression
@@ -405,25 +373,21 @@ class TestCreateFormValidations:
         data = generate_valid_service_data()
         data["base_uom_conversion"] = generate_negative_uom_conversion()
 
-        sm_page.open_add_form()
-        sm_page.fill_form(data)
-        sm_page.submit()
-
-        swal_title = sm_page.handle_success_alert(timeout=15)
-        if not swal_title:
-            swal_title = sm_page.handle_save_failure_alert(timeout=5)
-
-        if swal_title and "success" in swal_title.lower():
-            log.warning("SM-C10: BUG-004 CONFIRMED — negative value accepted")
-
-        # Cleanup
         try:
-            sm_page.cancel()
+            sm_page.open_add_form()
+            sm_page.fill_form(data)
+            sm_page.submit()
+
+            swal_title = sm_page.handle_success_alert(timeout=15)
+            if not swal_title:
+                swal_title = sm_page.handle_save_failure_alert(timeout=5)
+
+            if swal_title and "success" in swal_title.lower():
+                log.warning("SM-C10: BUG-004 CONFIRMED — negative value accepted")
         except Exception:
-            pass
-        sm_page.force_close_form_popup()
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.bug
     @pytest.mark.regression
@@ -436,25 +400,21 @@ class TestCreateFormValidations:
         data = generate_valid_service_data()
         data["base_uom_conversion"] = generate_zero_uom_conversion()
 
-        sm_page.open_add_form()
-        sm_page.fill_form(data)
-        sm_page.submit()
-
-        swal_title = sm_page.handle_success_alert(timeout=15)
-        if not swal_title:
-            swal_title = sm_page.handle_save_failure_alert(timeout=5)
-
-        if swal_title and "success" in swal_title.lower():
-            log.warning("SM-C11: BUG-004 CONFIRMED — zero value accepted")
-
-        # Cleanup
         try:
-            sm_page.cancel()
+            sm_page.open_add_form()
+            sm_page.fill_form(data)
+            sm_page.submit()
+
+            swal_title = sm_page.handle_success_alert(timeout=15)
+            if not swal_title:
+                swal_title = sm_page.handle_save_failure_alert(timeout=5)
+
+            if swal_title and "success" in swal_title.lower():
+                log.warning("SM-C11: BUG-004 CONFIRMED — zero value accepted")
         except Exception:
-            pass
-        sm_page.force_close_form_popup()
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.bug
     @pytest.mark.regression
@@ -467,25 +427,21 @@ class TestCreateFormValidations:
         data = generate_valid_service_data()
         data["base_uom_conversion"] = generate_alpha_uom_conversion()
 
-        sm_page.open_add_form()
-        sm_page.fill_form(data)
-        sm_page.submit()
-
-        swal_title = sm_page.handle_success_alert(timeout=15)
-        if not swal_title:
-            swal_title = sm_page.handle_save_failure_alert(timeout=5)
-
-        if swal_title and "success" in swal_title.lower():
-            log.warning("SM-C12: BUG-004 CONFIRMED — alphabetic value accepted")
-
-        # Cleanup
         try:
-            sm_page.cancel()
+            sm_page.open_add_form()
+            sm_page.fill_form(data)
+            sm_page.submit()
+
+            swal_title = sm_page.handle_success_alert(timeout=15)
+            if not swal_title:
+                swal_title = sm_page.handle_save_failure_alert(timeout=5)
+
+            if swal_title and "success" in swal_title.lower():
+                log.warning("SM-C12: BUG-004 CONFIRMED — alphabetic value accepted")
         except Exception:
-            pass
-        sm_page.force_close_form_popup()
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.bug
     @pytest.mark.regression
@@ -498,25 +454,21 @@ class TestCreateFormValidations:
         data = generate_valid_service_data()
         data["base_uom_conversion"] = generate_special_char_uom_conversion()
 
-        sm_page.open_add_form()
-        sm_page.fill_form(data)
-        sm_page.submit()
-
-        swal_title = sm_page.handle_success_alert(timeout=15)
-        if not swal_title:
-            swal_title = sm_page.handle_save_failure_alert(timeout=5)
-
-        if swal_title and "success" in swal_title.lower():
-            log.warning("SM-C13: BUG-004 CONFIRMED — special char value accepted")
-
-        # Cleanup
         try:
-            sm_page.cancel()
+            sm_page.open_add_form()
+            sm_page.fill_form(data)
+            sm_page.submit()
+
+            swal_title = sm_page.handle_success_alert(timeout=15)
+            if not swal_title:
+                swal_title = sm_page.handle_save_failure_alert(timeout=5)
+
+            if swal_title and "success" in swal_title.lower():
+                log.warning("SM-C13: BUG-004 CONFIRMED — special char value accepted")
         except Exception:
-            pass
-        sm_page.force_close_form_popup()
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
+            raise
+        finally:
+            sm_page._cleanup()
 
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -537,14 +489,15 @@ class TestViewValidations:
         if rows == 0:
             pytest.skip("SM-V01: No records in table to view")
 
-        sm_page.click_view_button(row_index=0)
-        sm_page.wait_seconds(2)
+        try:
+            sm_page.click_view_button(row_index=0)
 
-        is_view = sm_page.is_view_mode()
-        assert is_view, "SM-V01: Expected View mode (fields disabled)"
-
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+            is_view = sm_page.is_view_mode()
+            assert is_view, "SM-V01: Expected View mode (fields disabled)"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -556,18 +509,16 @@ class TestViewValidations:
         if rows == 0:
             pytest.skip("SM-V02: No records to view")
 
-        sm_page.click_view_button(row_index=0)
-        sm_page.wait_seconds(2)
-
         try:
+            sm_page.click_view_button(row_index=0)
+
             from selenium.webdriver.common.by import By
             name_input = sm_page.driver.find_element(By.CSS_SELECTOR, "input[name='Name']")
             assert not name_input.is_enabled(), "SM-V02: Name should be disabled in View"
         except Exception as e:
             log.warning(f"SM-V02: Name check error: {e}")
-
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -579,10 +530,9 @@ class TestViewValidations:
         if rows == 0:
             pytest.skip("SM-V03: No records to view")
 
-        sm_page.click_view_button(row_index=0)
-        sm_page.wait_seconds(2)
-
         try:
+            sm_page.click_view_button(row_index=0)
+
             from selenium.webdriver.common.by import By
             selects = sm_page.driver.find_elements(
                 By.CSS_SELECTOR, ".big-model mat-select, .edit_pop_up mat-select"
@@ -593,9 +543,8 @@ class TestViewValidations:
                 log.info(f"  Select aria-disabled={aria_dis}")
         except Exception as e:
             log.warning(f"SM-V03: Dropdown check error: {e}")
-
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -607,17 +556,18 @@ class TestViewValidations:
         if rows == 0:
             pytest.skip("SM-V04: No records to view")
 
-        sm_page.click_view_button(row_index=0)
-        sm_page.wait_seconds(2)
+        try:
+            sm_page.click_view_button(row_index=0)
 
-        has_submit = sm_page.is_displayed(sm_page.SUBMIT_BUTTON, timeout=2)
-        has_update = sm_page.is_displayed(sm_page.UPDATE_BUTTON, timeout=2)
+            has_submit = sm_page.is_displayed(sm_page.SUBMIT_BUTTON, timeout=2)
+            has_update = sm_page.is_displayed(sm_page.UPDATE_BUTTON, timeout=2)
 
-        assert not has_submit, "SM-V04: Submit button should NOT be in View mode"
-        assert not has_update, "SM-V04: Update button should NOT be in View mode"
-
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+            assert not has_submit, "SM-V04: Submit button should NOT be in View mode"
+            assert not has_update, "SM-V04: Update button should NOT be in View mode"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -629,14 +579,15 @@ class TestViewValidations:
         if rows == 0:
             pytest.skip("SM-V05: No records to view")
 
-        sm_page.click_view_button(row_index=0)
-        sm_page.wait_seconds(2)
+        try:
+            sm_page.click_view_button(row_index=0)
 
-        has_cancel = sm_page.is_displayed(sm_page.CANCEL_BUTTON, timeout=5)
-        assert has_cancel, "SM-V05: Cancel button should be visible in View mode"
-
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+            has_cancel = sm_page.is_displayed(sm_page.CANCEL_BUTTON, timeout=5)
+            assert has_cancel, "SM-V05: Cancel button should be visible in View mode"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -656,14 +607,15 @@ class TestEditFormValidations:
         if rows == 0:
             pytest.skip("SM-E01: No records to edit")
 
-        sm_page.click_edit_button(row_index=0)
-        sm_page.wait_seconds(2)
+        try:
+            sm_page.click_edit_button(row_index=0)
 
-        is_edit = sm_page.is_edit_mode()
-        assert is_edit, "SM-E01: Expected Edit mode (Update button visible)"
-
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+            is_edit = sm_page.is_edit_mode()
+            assert is_edit, "SM-E01: Expected Edit mode (Update button visible)"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -674,18 +626,16 @@ class TestEditFormValidations:
         if rows == 0:
             pytest.skip("SM-E02: No records to edit")
 
-        sm_page.click_edit_button(row_index=0)
-        sm_page.wait_seconds(2)
-
         try:
+            sm_page.click_edit_button(row_index=0)
+
             from selenium.webdriver.common.by import By
             name_input = sm_page.driver.find_element(By.CSS_SELECTOR, "input[name='Name']")
             assert name_input.is_enabled(), "SM-E02: Name should be editable in Edit"
         except Exception as e:
             log.warning(f"SM-E02: Editable check error: {e}")
-
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.smoke
     @pytest.mark.sanity
@@ -697,31 +647,27 @@ class TestEditFormValidations:
         if rows == 0:
             pytest.skip("SM-E03: No records to edit")
 
-        sm_page.click_edit_button(row_index=0)
-        sm_page.wait_seconds(2)
-
-        # Modify Base Uom Conversion
-        sm_page.type_text(
-            sm_page.BASE_UOM_CONVERSION_INPUT,
-            generate_decimal_uom_conversion(),
-            clear_first=True,
-        )
-        sm_page._force_close_panels()
-        sm_page.click_update()
-
-        swal_title = sm_page.handle_success_alert(timeout=15)
-
-        assert swal_title, "SM-E03: Expected success popup after update"
-        assert "success" in swal_title.lower() or "update" in swal_title.lower(), \
-            f"SM-E03: Expected success/update message, got: '{swal_title}'"
-
         try:
-            sm_page.cancel()
+            sm_page.click_edit_button(row_index=0)
+
+            # Modify Base Uom Conversion
+            sm_page.type_text(
+                sm_page.BASE_UOM_CONVERSION_INPUT,
+                generate_decimal_uom_conversion(),
+                clear_first=True,
+            )
+            sm_page._force_close_panels()
+            sm_page.click_update()
+
+            swal_title = sm_page.handle_success_alert(timeout=15)
+
+            assert swal_title, "SM-E03: Expected success popup after update"
+            assert "success" in swal_title.lower() or "update" in swal_title.lower(), \
+                f"SM-E03: Expected success/update message, got: '{swal_title}'"
         except Exception:
-            pass
-        sm_page.force_close_form_popup()
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -732,22 +678,20 @@ class TestEditFormValidations:
         if rows == 0:
             pytest.skip("SM-E04: No records to edit")
 
-        sm_page.click_edit_button(row_index=0)
-        sm_page.wait_seconds(2)
-
-        # Clear Name
-        sm_page.type_text(sm_page.NAME_INPUT, "", clear_first=True)
-        sm_page._force_close_panels()
-        sm_page.click_update()
-
-        swal_title = sm_page.handle_validation_warning(timeout=10)
-        assert swal_title, "SM-E04: Expected validation popup with empty Name"
-
         try:
-            sm_page.cancel()
+            sm_page.click_edit_button(row_index=0)
+
+            # Clear Name
+            sm_page.type_text(sm_page.NAME_INPUT, "", clear_first=True)
+            sm_page._force_close_panels()
+            sm_page.click_update()
+
+            swal_title = sm_page.handle_validation_warning(timeout=10)
+            assert swal_title, "SM-E04: Expected validation popup with empty Name"
         except Exception:
-            pass
-        sm_page.force_close_form_popup()
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.bug
     @pytest.mark.sanity
@@ -760,27 +704,25 @@ class TestEditFormValidations:
         if rows == 0:
             pytest.skip("SM-E05: No records to edit")
 
-        sm_page.click_edit_button(row_index=0)
-        sm_page.wait_seconds(2)
-
-        # Type 256 chars in Name
-        sm_page.type_text(sm_page.NAME_INPUT, generate_long_name(256), clear_first=True)
-        sm_page._force_close_panels()
-        sm_page.click_update()
-
-        # Check immediately (no wait_seconds!)
-        swal_title = sm_page.handle_save_failure_alert(timeout=10)
-
-        assert swal_title, \
-            "SM-E05: Expected popup after updating with 256-char Name"
-        assert "failed" in swal_title.lower(), \
-            f"SM-E05: Expected failure popup, got: '{swal_title}'"
-
         try:
-            sm_page.cancel()
+            sm_page.click_edit_button(row_index=0)
+
+            # Type 256 chars in Name
+            sm_page.type_text(sm_page.NAME_INPUT, generate_long_name(256), clear_first=True)
+            sm_page._force_close_panels()
+            sm_page.click_update()
+
+            # Check immediately (no wait_seconds!)
+            swal_title = sm_page.handle_save_failure_alert(timeout=10)
+
+            assert swal_title, \
+                "SM-E05: Expected popup after updating with 256-char Name"
+            assert "failed" in swal_title.lower(), \
+                f"SM-E05: Expected failure popup, got: '{swal_title}'"
         except Exception:
-            pass
-        sm_page.force_close_form_popup()
+            raise
+        finally:
+            sm_page._cleanup()
 
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -802,11 +744,13 @@ class TestSearchFilter:
             pytest.skip("SM-S01: No records in table to search")
 
         search_name = names[0]
-        sm_page.search_item(search_name)
-        sm_page.wait_seconds(2)
-
-        found = sm_page.is_record_in_table(search_name)
-        assert found, f"SM-S01: Should find record '{search_name}' after search"
+        try:
+            found = sm_page.search_and_verify(search_name)
+            assert found, f"SM-S01: Should find record '{search_name}' after search"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -814,11 +758,15 @@ class TestSearchFilter:
         """SM-S02: Search for a non-existent record."""
         log.info("SM-S02: Search non-existent record")
 
-        sm_page.search_item("ZZZ_NONEXISTENT_RECORD_99999")
-        sm_page.wait_seconds(2)
+        try:
+            sm_page.search_item("ZZZ_NONEXISTENT_RECORD_99999")
 
-        found = sm_page.is_record_in_table("ZZZ_NONEXISTENT_RECORD_99999")
-        assert not found, "SM-S02: Should NOT find non-existent record"
+            found = sm_page.is_record_in_table("ZZZ_NONEXISTENT_RECORD_99999")
+            assert not found, "SM-S02: Should NOT find non-existent record"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -832,13 +780,17 @@ class TestSearchFilter:
 
         # Use first 3 chars of first name
         partial = names[0][:3]
-        sm_page.search_item(partial)
-        sm_page.wait_seconds(2)
+        try:
+            sm_page.search_item(partial)
 
-        # At least the original record should match
-        found = sm_page.is_record_in_table(partial)
-        # Partial match may or may not work depending on search implementation
-        log.info(f"SM-S03: Partial search '{partial}' found={found}")
+            # At least the original record should match
+            found = sm_page.is_record_in_table(partial)
+            # Partial match may or may not work depending on search implementation
+            log.info(f"SM-S03: Partial search '{partial}' found={found}")
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -846,19 +798,22 @@ class TestSearchFilter:
         """SM-S04: Clear search shows all records again."""
         log.info("SM-S04: Clear search")
 
-        count_before = sm_page.get_table_row_count()
+        try:
+            count_before = sm_page.get_table_row_count()
 
-        # Search something specific
-        sm_page.search_item("ZZZ_CLEAR_TEST")
-        sm_page.wait_seconds(2)
+            # Search something specific
+            sm_page.search_item("ZZZ_CLEAR_TEST")
 
-        # Clear search by refreshing
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
+            # Clear search by hard refresh
+            sm_page.hard_refresh()
 
-        count_after = sm_page.get_table_row_count()
-        assert count_after == count_before, \
-            f"SM-S04: Record count should match after clear (before={count_before}, after={count_after})"
+            count_after = sm_page.get_table_row_count()
+            assert count_after == count_before, \
+                f"SM-S04: Record count should match after clear (before={count_before}, after={count_after})"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.smoke
     @pytest.mark.sanity
@@ -873,11 +828,15 @@ class TestSearchFilter:
 
         # Search with lowercase
         lower_name = names[0].lower()
-        sm_page.search_item(lower_name)
-        sm_page.wait_seconds(2)
+        try:
+            sm_page.search_item(lower_name)
 
-        found = sm_page.is_record_in_table(lower_name)
-        log.info(f"SM-S05: Case-insensitive search found={found}")
+            found = sm_page.is_record_in_table(lower_name)
+            log.info(f"SM-S05: Case-insensitive search found={found}")
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -894,13 +853,16 @@ class TestPopupUIBehaviors:
     def test_SM_P01_add_form_opens_popup(self, sm_page):
         """SM-P01: ADD button opens popup form."""
         log.info("SM-P01: ADD opens popup")
-        sm_page.open_add_form()
 
-        is_open = sm_page.is_add_form_open()
-        assert is_open, "SM-P01: Add form should be visible"
+        try:
+            sm_page.open_add_form()
 
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+            is_open = sm_page.is_add_form_open()
+            assert is_open, "SM-P01: Add form should be visible"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.smoke
     @pytest.mark.sanity
@@ -909,12 +871,17 @@ class TestPopupUIBehaviors:
     def test_SM_P02_cancel_closes_popup(self, sm_page):
         """SM-P02: Cancel button closes the popup form."""
         log.info("SM-P02: Cancel closes popup")
-        sm_page.open_add_form()
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
 
-        is_closed = sm_page.is_form_closed()
-        assert is_closed, "SM-P02: Form should be closed after Cancel"
+        try:
+            sm_page.open_add_form()
+            sm_page.cancel()
+
+            is_closed = sm_page.is_form_closed()
+            assert is_closed, "SM-P02: Form should be closed after Cancel"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -922,28 +889,32 @@ class TestPopupUIBehaviors:
     def test_SM_P03_close_button_closes_popup(self, sm_page):
         """SM-P03: Close (X) button closes the popup form."""
         log.info("SM-P03: Close (X) button closes popup")
-        sm_page.open_add_form()
-        sm_page.wait_seconds(1)
 
-        # Click the close icon
         try:
-            from selenium.webdriver.common.by import By
-            close_icon = sm_page.driver.find_elements(
-                By.CSS_SELECTOR,
-                ".popup-header button mat-icon, .big-model button mat-icon"
-            )
-            for icon in close_icon:
-                if icon.text.strip().lower() == "close":
-                    sm_page.driver.execute_script(
-                        "arguments[0].closest('button').click();", icon
-                    )
-                    break
-        except Exception:
-            sm_page.cancel()
+            sm_page.open_add_form()
 
-        sm_page.wait_seconds(1)
-        is_closed = sm_page.is_form_closed()
-        assert is_closed, "SM-P03: Form should be closed after Close button"
+            # Click the close icon
+            try:
+                from selenium.webdriver.common.by import By
+                close_icon = sm_page.driver.find_elements(
+                    By.CSS_SELECTOR,
+                    ".popup-header button mat-icon, .big-model button mat-icon"
+                )
+                for icon in close_icon:
+                    if icon.text.strip().lower() == "close":
+                        sm_page.driver.execute_script(
+                            "arguments[0].closest('button').click();", icon
+                        )
+                        break
+            except Exception:
+                sm_page.cancel()
+
+            is_closed = sm_page.is_form_closed()
+            assert is_closed, "SM-P03: Form should be closed after Close button"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -955,22 +926,23 @@ class TestPopupUIBehaviors:
         if rows == 0:
             pytest.skip("SM-P04: No records in table")
 
-        sm_page.click_edit_button(row_index=0)
-        sm_page.wait_seconds(2)
+        try:
+            sm_page.click_edit_button(row_index=0)
 
-        # Look for Delete button
-        from selenium.webdriver.common.by import By
-        delete_btns = sm_page.driver.find_elements(
-            By.XPATH,
-            "//button[contains(.,'Delete') or contains(.,'delete')]"
-        )
-        visible_delete = [b for b in delete_btns if b.is_displayed()]
+            # Look for Delete button
+            from selenium.webdriver.common.by import By
+            delete_btns = sm_page.driver.find_elements(
+                By.XPATH,
+                "//button[contains(.,'Delete') or contains(.,'delete')]"
+            )
+            visible_delete = [b for b in delete_btns if b.is_displayed()]
 
-        assert len(visible_delete) == 0, \
-            "SM-P04: No Delete button should exist"
-
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+            assert len(visible_delete) == 0, \
+                "SM-P04: No Delete button should exist"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -978,14 +950,19 @@ class TestPopupUIBehaviors:
     def test_SM_P05_refresh_button_updates_table(self, sm_page):
         """SM-P05: Refresh button reloads the table."""
         log.info("SM-P05: Refresh updates table")
-        count_before = sm_page.get_table_row_count()
 
-        sm_page.click_refresh()
-        sm_page.wait_seconds(2)
+        try:
+            count_before = sm_page.get_table_row_count()
 
-        # After refresh, table should still have data
-        is_loaded = sm_page.is_page_loaded()
-        assert is_loaded, "SM-P05: Page should be loaded after Refresh"
+            sm_page.hard_refresh()
+
+            # After refresh, table should still have data
+            is_loaded = sm_page.is_page_loaded()
+            assert is_loaded, "SM-P05: Page should be loaded after Refresh"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -994,13 +971,18 @@ class TestPopupUIBehaviors:
         """SM-P06: Table has expected 7 columns."""
         log.info("SM-P06: Table columns check")
 
-        from selenium.webdriver.common.by import By
-        headers = sm_page.driver.find_elements(
-            By.CSS_SELECTOR, "table#excel-table thead th"
-        )
-        # 7 columns: View, Edit, History, Name, UOM, HSN SAC Code, Status
-        assert len(headers) == 7, \
-            f"SM-P06: Expected 7 columns, got {len(headers)}"
+        try:
+            from selenium.webdriver.common.by import By
+            headers = sm_page.driver.find_elements(
+                By.CSS_SELECTOR, "table#excel-table thead th"
+            )
+            # 7 columns: View, Edit, History, Name, UOM, HSN SAC Code, Status
+            assert len(headers) == 7, \
+                f"SM-P06: Expected 7 columns, got {len(headers)}"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -1008,20 +990,23 @@ class TestPopupUIBehaviors:
     def test_SM_P07_form_has_2_inputs(self, sm_page):
         """SM-P07: Form has 2 text inputs (Name, Base Uom Conversion)."""
         log.info("SM-P07: Form has 2 inputs")
-        sm_page.open_add_form()
 
-        from selenium.webdriver.common.by import By
-        inputs = sm_page.driver.find_elements(
-            By.CSS_SELECTOR,
-            ".big-model input[name], .edit_pop_up input[name]"
-        )
-        named_inputs = [i for i in inputs if i.get_attribute("name")]
+        try:
+            sm_page.open_add_form()
 
-        assert len(named_inputs) == 2, \
-            f"SM-P07: Expected 2 named inputs, got {len(named_inputs)}"
+            from selenium.webdriver.common.by import By
+            inputs = sm_page.driver.find_elements(
+                By.CSS_SELECTOR,
+                ".big-model input[name], .edit_pop_up input[name]"
+            )
+            named_inputs = [i for i in inputs if i.get_attribute("name")]
 
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+            assert len(named_inputs) == 2, \
+                f"SM-P07: Expected 2 named inputs, got {len(named_inputs)}"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -1029,19 +1014,22 @@ class TestPopupUIBehaviors:
     def test_SM_P08_form_has_3_dropdowns(self, sm_page):
         """SM-P08: Form has 3 dropdowns (Base Uom, UOM, HSN SAC Code)."""
         log.info("SM-P08: Form has 3 dropdowns")
-        sm_page.open_add_form()
 
-        from selenium.webdriver.common.by import By
-        selects = sm_page.driver.find_elements(
-            By.CSS_SELECTOR,
-            ".big-model mat-select, .edit_pop_up mat-select"
-        )
+        try:
+            sm_page.open_add_form()
 
-        assert len(selects) == 3, \
-            f"SM-P08: Expected 3 dropdowns, got {len(selects)}"
+            from selenium.webdriver.common.by import By
+            selects = sm_page.driver.find_elements(
+                By.CSS_SELECTOR,
+                ".big-model mat-select, .edit_pop_up mat-select"
+            )
 
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+            assert len(selects) == 3, \
+                f"SM-P08: Expected 3 dropdowns, got {len(selects)}"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -1049,19 +1037,22 @@ class TestPopupUIBehaviors:
     def test_SM_P09_form_has_1_toggle(self, sm_page):
         """SM-P09: Form has 1 toggle (Status)."""
         log.info("SM-P09: Form has 1 toggle")
-        sm_page.open_add_form()
 
-        from selenium.webdriver.common.by import By
-        toggles = sm_page.driver.find_elements(
-            By.CSS_SELECTOR,
-            ".big-model app-slide-toggle-v2, .edit_pop_up app-slide-toggle-v2"
-        )
+        try:
+            sm_page.open_add_form()
 
-        assert len(toggles) == 1, \
-            f"SM-P09: Expected 1 toggle, got {len(toggles)}"
+            from selenium.webdriver.common.by import By
+            toggles = sm_page.driver.find_elements(
+                By.CSS_SELECTOR,
+                ".big-model app-slide-toggle-v2, .edit_pop_up app-slide-toggle-v2"
+            )
 
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+            assert len(toggles) == 1, \
+                f"SM-P09: Expected 1 toggle, got {len(toggles)}"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -1069,20 +1060,24 @@ class TestPopupUIBehaviors:
     def test_SM_P10_popup_header_title(self, sm_page):
         """SM-P10: Popup header displays correct title."""
         log.info("SM-P10: Popup header title")
-        sm_page.open_add_form()
 
         try:
-            heading = sm_page.driver.find_element(
-                By.CSS_SELECTOR, ".big-model h3, .edit_pop_up h3"
-            )
-            title = heading.text.strip()
-            log.info(f"SM-P10: Popup title = '{title}'")
-            assert title, "SM-P10: Popup should have a title"
-        except Exception:
-            log.warning("SM-P10: Could not read popup title")
+            sm_page.open_add_form()
 
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+            try:
+                from selenium.webdriver.common.by import By
+                heading = sm_page.driver.find_element(
+                    By.CSS_SELECTOR, ".big-model h3, .edit_pop_up h3"
+                )
+                title = heading.text.strip()
+                log.info(f"SM-P10: Popup title = '{title}'")
+                assert title, "SM-P10: Popup should have a title"
+            except Exception:
+                log.warning("SM-P10: Could not read popup title")
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -1099,13 +1094,16 @@ class TestToggleValidations:
     def test_SM_T01_status_default_on(self, sm_page):
         """SM-T01: Status toggle defaults to ON (Active) in Create."""
         log.info("SM-T01: Status default ON")
-        sm_page.open_add_form()
 
-        state = sm_page._get_status_toggle_state()
-        assert state is True, "SM-T01: Status should default to ON (Active)"
+        try:
+            sm_page.open_add_form()
 
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+            state = sm_page._get_status_toggle_state()
+            assert state is True, "SM-T01: Status should default to ON (Active)"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -1113,15 +1111,18 @@ class TestToggleValidations:
     def test_SM_T02_status_toggle_to_off(self, sm_page):
         """SM-T02: Status toggle can be set to OFF (Inactive)."""
         log.info("SM-T02: Toggle Status to OFF")
-        sm_page.open_add_form()
 
-        sm_page._set_status_toggle(False)
-        state = sm_page._get_status_toggle_state()
+        try:
+            sm_page.open_add_form()
 
-        assert state is False, "SM-T02: Status should be OFF after toggle"
+            sm_page._set_status_toggle(False)
+            state = sm_page._get_status_toggle_state()
 
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+            assert state is False, "SM-T02: Status should be OFF after toggle"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -1129,16 +1130,19 @@ class TestToggleValidations:
     def test_SM_T03_status_toggle_back_to_on(self, sm_page):
         """SM-T03: Status toggle can be set back to ON (Active)."""
         log.info("SM-T03: Toggle Status back to ON")
-        sm_page.open_add_form()
 
-        sm_page._set_status_toggle(False)
-        sm_page._set_status_toggle(True)
-        state = sm_page._get_status_toggle_state()
+        try:
+            sm_page.open_add_form()
 
-        assert state is True, "SM-T03: Status should be ON after toggling back"
+            sm_page._set_status_toggle(False)
+            sm_page._set_status_toggle(True)
+            state = sm_page._get_status_toggle_state()
 
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+            assert state is True, "SM-T03: Status should be ON after toggling back"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -1148,23 +1152,22 @@ class TestToggleValidations:
         data = generate_valid_service_data()
         data["status"] = False
 
-        sm_page.open_add_form()
-        sm_page.fill_form(data)
-        sm_page.submit()
+        try:
+            sm_page.open_add_form()
+            sm_page.fill_form(data)
+            sm_page.submit()
 
-        swal_title = sm_page.handle_success_alert(timeout=15)
+            swal_title = sm_page.handle_success_alert(timeout=15)
 
-        if swal_title and "success" in swal_title.lower():
-            # Verify Inactive status in table
-            try:
-                sm_page.cancel()
-            except Exception:
-                pass
-            sm_page.force_close_form_popup()
-            sm_page.click_refresh()
-            sm_page.wait_seconds(2)
+            if swal_title and "success" in swal_title.lower():
+                # Verify Inactive status in table (handled by _cleanup refresh)
+                log.info("SM-T04: Record created with Status OFF")
 
-        log.info(f"SM-T04: Create with Status OFF result: '{swal_title}'")
+            log.info(f"SM-T04: Create with Status OFF result: '{swal_title}'")
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -1175,15 +1178,16 @@ class TestToggleValidations:
         if rows == 0:
             pytest.skip("SM-T05: No records to view")
 
-        sm_page.click_view_button(row_index=0)
-        sm_page.wait_seconds(2)
+        try:
+            sm_page.click_view_button(row_index=0)
 
-        # Just verify View mode opened without error
-        is_view = sm_page.is_view_mode()
-        assert is_view, "SM-T05: Should be in View mode"
-
-        sm_page.cancel()
-        sm_page.wait_seconds(1)
+            # Just verify View mode opened without error
+            is_view = sm_page.is_view_mode()
+            assert is_view, "SM-T05: Should be in View mode"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -1206,7 +1210,6 @@ class TestFilterValidations:
                 By.CSS_SELECTOR, "div[mattooltip='Filters'] button"
             )
             sm_page.driver.execute_script("arguments[0].click();", filter_btn)
-            sm_page.wait_seconds(2)
 
             # Check for filter panel
             panels = sm_page.driver.find_elements(
@@ -1215,6 +1218,8 @@ class TestFilterValidations:
             log.info(f"SM-F01: Filter panels found: {len(panels)}")
         except Exception as e:
             log.warning(f"SM-F01: Filter button check failed: {e}")
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.bug
     @pytest.mark.regression
@@ -1246,15 +1251,18 @@ class TestHistoryValidations:
         if rows == 0:
             pytest.skip("SM-H01: No records in table")
 
-        sm_page.click_history_button(row_index=0)
-        sm_page.wait_seconds(2)
+        try:
+            sm_page.click_history_button(row_index=0)
 
-        is_open = sm_page.is_history_popup_open()
-        if is_open:
-            log.info("SM-H01: History popup opened")
-            sm_page.close_history_popup()
-        else:
-            log.warning("SM-H01: History popup did not open")
+            is_open = sm_page.is_history_popup_open()
+            if is_open:
+                log.info("SM-H01: History popup opened")
+            else:
+                log.warning("SM-H01: History popup did not open")
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -1266,10 +1274,9 @@ class TestHistoryValidations:
         if rows == 0:
             pytest.skip("SM-H02: No records")
 
-        sm_page.click_history_button(row_index=0)
-        sm_page.wait_seconds(2)
-
         try:
+            sm_page.click_history_button(row_index=0)
+
             from selenium.webdriver.common.by import By
             h3 = sm_page.driver.find_elements(
                 By.CSS_SELECTOR, ".big-model h3"
@@ -1281,9 +1288,8 @@ class TestHistoryValidations:
                     f"SM-H02: Expected 'History' in title, got '{title}'"
         except Exception as e:
             log.warning(f"SM-H02: Title check failed: {e}")
-
-        sm_page.close_history_popup()
-        sm_page.wait_seconds(1)
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.bug
     @pytest.mark.regression
@@ -1294,15 +1300,16 @@ class TestHistoryValidations:
         if rows == 0:
             pytest.skip("SM-H03: No records")
 
-        sm_page.click_history_button(row_index=0)
-        sm_page.wait_seconds(2)
+        try:
+            sm_page.click_history_button(row_index=0)
 
-        hist_count = sm_page.get_history_row_count()
-        if hist_count == 0:
-            log.warning("SM-H03: BUG-007 CONFIRMED — History always empty")
-
-        sm_page.close_history_popup()
-        sm_page.wait_seconds(1)
+            hist_count = sm_page.get_history_row_count()
+            if hist_count == 0:
+                log.warning("SM-H03: BUG-007 CONFIRMED — History always empty")
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -1314,14 +1321,17 @@ class TestHistoryValidations:
         if rows == 0:
             pytest.skip("SM-H04: No records")
 
-        sm_page.click_history_button(row_index=0)
-        sm_page.wait_seconds(2)
+        try:
+            sm_page.click_history_button(row_index=0)
 
-        sm_page.close_history_popup()
-        sm_page.wait_seconds(1)
+            sm_page.close_history_popup()
 
-        is_open = sm_page.is_history_popup_open()
-        assert not is_open, "SM-H04: History popup should be closed"
+            is_open = sm_page.is_history_popup_open()
+            assert not is_open, "SM-H04: History popup should be closed"
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
 
     @pytest.mark.sanity
     @pytest.mark.regression
@@ -1332,11 +1342,12 @@ class TestHistoryValidations:
         if rows < 2:
             pytest.skip("SM-H05: Need at least 2 rows")
 
-        sm_page.click_history_button(row_index=1)
-        sm_page.wait_seconds(2)
+        try:
+            sm_page.click_history_button(row_index=1)
 
-        # Just verify it opens without error
-        log.info("SM-H05: History opened from second row")
-
-        sm_page.close_history_popup()
-        sm_page.wait_seconds(1)
+            # Just verify it opens without error
+            log.info("SM-H05: History opened from second row")
+        except Exception:
+            raise
+        finally:
+            sm_page._cleanup()
