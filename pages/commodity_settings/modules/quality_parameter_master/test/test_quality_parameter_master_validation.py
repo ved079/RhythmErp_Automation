@@ -1,7 +1,7 @@
 """
 Optimized QPM validation suite — 33 tests, 5 classes, 6 bugs.
-ZERO wait_seconds() — uses hard_refresh, is_validation_alert_present(timeout=3),
-and time.sleep(0.2-0.3) only. Every test uses try/finally with _cleanup(page).
+ZERO wait_seconds() — uses hard_refresh, is_validation_alert_present(timeout=2),
+and time.sleep(0.2) only. Every test uses try/finally with _cleanup(page).
 
 Classes: TestCreateFormValidations(12) TestDuplicateValidations(3)
          TestEditFormValidations(6) TestSearchFilter(5) TestPopupUI(7)
@@ -77,9 +77,9 @@ class TestCreateFormValidations:
             page.open_add_form()
             assert page.is_add_form_open(), "Add form did not open"
             page.submit()
-            alert = page.is_validation_alert_present(timeout=3)
+            alert = page.is_validation_alert_present(timeout=2)
             if alert:
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
             errors = page.get_mat_error_text()
             form_open = page.is_add_form_open()
             assert form_open or errors or alert, (
@@ -134,9 +134,9 @@ class TestCreateFormValidations:
             page.open_add_form()
             page.fill_form(data)
             page.submit()
-            alert = page.is_validation_alert_present(timeout=3)
+            alert = page.is_validation_alert_present(timeout=2)
             if alert:
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
             form_open = page.is_add_form_open()
             errors = page.get_mat_error_text()
             assert form_open or errors or alert, (
@@ -165,9 +165,9 @@ class TestCreateFormValidations:
             page.open_add_form()
             page.fill_form(data2)
             page.submit()
-            alert = page.is_validation_alert_present(timeout=3)
+            alert = page.is_validation_alert_present(timeout=2)
             if alert:
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
             form_open = page.is_add_form_open()
             if alert or form_open:
                 log.info("Duplicate name rejected — validation working")
@@ -187,9 +187,9 @@ class TestCreateFormValidations:
             page.open_add_form()
             page.fill_form({"name": generate_string_255()})
             page.submit()
-            alert = page.is_validation_alert_present(timeout=3)
+            alert = page.is_validation_alert_present(timeout=2)
             if alert:
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
             if alert or page.is_add_form_open():
                 log.info("255-char name rejected — maxlength enforced")
             else:
@@ -208,9 +208,9 @@ class TestCreateFormValidations:
             page.open_add_form()
             page.fill_form({"name": generate_string_256()})
             page.submit()
-            alert = page.is_validation_alert_present(timeout=3)
+            alert = page.is_validation_alert_present(timeout=2)
             if alert:
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
             if alert or page.is_add_form_open():
                 log.info("256-char name rejected — maxlength enforced")
             else:
@@ -229,12 +229,12 @@ class TestCreateFormValidations:
             page.open_add_form()
             page.fill_form(generate_valid_quality_parameter_data("NoAlert"))
             page.submit()
-            swal = page.is_validation_alert_present(timeout=3)
+            swal = page.is_validation_alert_present(timeout=2)
             if not swal:
                 log.warning("BUG-004 CONFIRMED: No success SweetAlert after create")
             else:
                 log.info(f"SweetAlert appeared: {page.get_swal_title()}")
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
         finally:
             _cleanup(page)
 
@@ -248,9 +248,9 @@ class TestCreateFormValidations:
             page.open_add_form()
             page.fill_form(generate_special_char_data())
             page.submit()
-            alert = page.is_validation_alert_present(timeout=3)
+            alert = page.is_validation_alert_present(timeout=2)
             if alert:
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
             if alert or page.is_add_form_open():
                 log.info("Special chars rejected — validation working")
             else:
@@ -268,9 +268,9 @@ class TestCreateFormValidations:
             page.open_add_form()
             page.fill_form(generate_sql_injection_data())
             page.submit()
-            alert = page.is_validation_alert_present(timeout=3)
+            alert = page.is_validation_alert_present(timeout=2)
             if alert:
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
             if alert or page.is_add_form_open():
                 log.info("SQL injection rejected — input sanitized")
             else:
@@ -287,9 +287,9 @@ class TestCreateFormValidations:
             page.open_add_form()
             page.fill_form(generate_xss_data())
             page.submit()
-            alert = page.is_validation_alert_present(timeout=3)
+            alert = page.is_validation_alert_present(timeout=2)
             if alert:
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
             if alert or page.is_add_form_open():
                 log.info("XSS payload rejected — input sanitized")
             else:
@@ -306,9 +306,9 @@ class TestCreateFormValidations:
             page.open_add_form()
             page.fill_form(generate_unicode_data())
             page.submit()
-            alert = page.is_validation_alert_present(timeout=3)
+            alert = page.is_validation_alert_present(timeout=2)
             if alert:
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
             if alert or page.is_add_form_open():
                 log.info("Unicode name rejected")
             else:
@@ -365,9 +365,9 @@ class TestDuplicateValidations:
             page.open_add_form()
             page.fill_form(generate_duplicate_name_data(data1["name"]))
             page.submit()
-            alert = page.is_validation_alert_present(timeout=3)
+            alert = page.is_validation_alert_present(timeout=2)
             if alert:
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
             if alert or page.is_add_form_open():
                 log.info("Duplicate name rejected in Create — validation working")
             else:
@@ -393,9 +393,9 @@ class TestDuplicateValidations:
             page.open_add_form()
             page.fill_form({"name": data1["name"].upper()})
             page.submit()
-            alert = page.is_validation_alert_present(timeout=3)
+            alert = page.is_validation_alert_present(timeout=2)
             if alert:
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
             if alert or page.is_add_form_open():
                 log.info("Case-insensitive duplicate check working — rejected")
             else:
@@ -418,9 +418,9 @@ class TestDuplicateValidations:
             assert page.is_edit_mode(), "Edit mode not activated"
             page.type_text(page.NAME_INPUT, data1["name"], clear_first=True)
             page.click_update()
-            alert = page.is_validation_alert_present(timeout=3)
+            alert = page.is_validation_alert_present(timeout=2)
             if alert:
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
             if alert or page.is_add_form_open():
                 log.info("Duplicate name rejected in Edit — validation working")
             else:
@@ -520,12 +520,12 @@ class TestEditFormValidations:
                 "s.call(i,'');i.dispatchEvent(new Event('input',{bubbles:true}));"
                 "i.dispatchEvent(new Event('change',{bubbles:true}));}"
             )
-            time.sleep(0.3)
+            time.sleep(0.2)
             page.click_update()
             alert = ""
-            if page.is_validation_alert_present(timeout=3):
+            if page.is_validation_alert_present(timeout=2):
                 alert = page.get_swal_title() or ""
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
             errors = page.get_mat_error_text()
             assert page.is_add_form_open() or errors or alert, (
                 "BUG: Edit form submitted with empty Name — no validation"
@@ -569,12 +569,12 @@ class TestEditFormValidations:
             assert page.is_edit_mode(), "Edit mode not activated"
             page.fill_form(edit_data)
             page.click_update()
-            swal = page.is_validation_alert_present(timeout=3)
+            swal = page.is_validation_alert_present(timeout=2)
             if not swal:
                 log.warning("BUG-004 CONFIRMED: No success SweetAlert after edit")
             else:
                 log.info(f"SweetAlert appeared after edit: {page.get_swal_title()}")
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
         finally:
             _cleanup(page)
 
@@ -591,9 +591,9 @@ class TestEditFormValidations:
             assert page.is_edit_mode(), "Edit mode not activated"
             page.fill_form(generate_spaces_only_data(8))
             page.click_update()
-            alert = page.is_validation_alert_present(timeout=3)
+            alert = page.is_validation_alert_present(timeout=2)
             if alert:
-                page.handle_validation_warning(timeout=3)
+                page.handle_validation_warning(timeout=2)
             errors = page.get_mat_error_text()
             if page.is_add_form_open() or errors or alert:
                 log.info("Spaces-only name rejected in Edit — validation working")
@@ -680,7 +680,7 @@ class TestSearchFilter:
             if filter_open:
                 log.info("Filter panel opened successfully")
                 page.close_filter_panel()
-                time.sleep(0.3)
+                time.sleep(0.2)
                 still_open = page.is_filter_panel_open()
                 if not still_open:
                     log.info("Filter panel closed successfully")
@@ -703,7 +703,7 @@ class TestSearchFilter:
 
             names_before = page.get_all_qp_names()
             page.click_name_column_header()
-            time.sleep(0.3)
+            time.sleep(0.2)
             names_after = page.get_all_qp_names()
 
             assert names_after, "Table is empty after column sort"
@@ -857,8 +857,8 @@ class TestPopupUI:
             else:
                 log.warning("No form heading found — UX issue")
 
-            submit_visible = page.is_displayed(page.SUBMIT_BUTTON, timeout=3)
-            update_visible = page.is_displayed(page.UPDATE_BUTTON, timeout=2)
+            submit_visible = page.is_displayed(page.SUBMIT_BUTTON, timeout=2)
+            update_visible = page.is_displayed(page.UPDATE_BUTTON, timeout=1)
 
             assert submit_visible, "Submit button not visible in Add form"
             assert not update_visible, (

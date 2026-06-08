@@ -27,6 +27,14 @@ Bug markers (xfail):
   BUG-CM08: History sort doesn't work
   BUG-CM09: Blank name accepted on Edit
 
+GOLDEN CODE optimisations (UOM v2):
+  - ZERO time.sleep() in test code — page object methods have internal waits
+  - search_crop() instead of click_refresh() + sleep (saves ~2s each)
+  - No redundant _cleanup_swal2() + force_close_form_popup() after create_crop()
+  - create_crop() / edit_crop() workflows handle SweetAlert + form close internally
+  - click_edit/view/search methods have internal waits — no sleep needed after them
+  - JS-based status toggle polling instead of sleep
+
 Usage:
   pytest test_crop_master_validation.py -m smoke           # 12 critical path tests
   pytest test_crop_master_validation.py -m sanity           # 44 build acceptance tests
@@ -72,12 +80,26 @@ from pages.commodity_settings.modules.crop_master.data.crop_master_data import (
 from pages.commodity_settings.modules.crop_master.cm_report_generator import cm_report
 
 
-# ═══════════════════════════════════════════
+# ======================================================================
 #  Helper: Record test result for report
-# ═══════════════════════════════════════════
+# ======================================================================
 
 def _record(test_id, test_name, category, status, error='', duration=0, details=''):
     cm_report.add_result(test_id, test_name, category, status, error, duration, details)
+
+
+# ======================================================================
+#  Helper: Wait for toggle state change (replaces time.sleep)
+# ======================================================================
+
+def _wait_for_status(page, expected, timeout=2):
+    """Poll page toggle status until it matches expected, or timeout."""
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if page.get_current_status() == expected:
+            return True
+        time.sleep(0.15)
+    return False
 
 
 # ╔══════════════════════════════════════════╗
@@ -91,7 +113,7 @@ class TestCreateFormValidations:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_empty_form_submit(self, crop_master_page):
-        """CM-C01: Submit with all fields empty → Validation Failed."""
+        """CM-C01: Submit with all fields empty -> Validation Failed."""
         t0 = time.time()
         try:
             crop_master_page.open_add_form()
@@ -114,7 +136,7 @@ class TestCreateFormValidations:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_only_name_filled(self, crop_master_page):
-        """CM-C02: Submit with only Name filled → Success (Description optional)."""
+        """CM-C02: Submit with only Name filled -> Success (Description optional)."""
         t0 = time.time()
         try:
             data = generate_name_only_data()
@@ -130,7 +152,7 @@ class TestCreateFormValidations:
     @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM01, strict=False)
     def test_blank_name_spaces_only(self, crop_master_page):
-        """CM-C03: Name with only spaces → Should be rejected (BUG-CM01)."""
+        """CM-C03: Name with only spaces -> Should be rejected (BUG-CM01)."""
         t0 = time.time()
         data = generate_empty_data()
         data['name'] = generate_spaces_only_name()
@@ -148,7 +170,7 @@ class TestCreateFormValidations:
     @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM03, strict=False)
     def test_name_with_spaces(self, crop_master_page):
-        """CM-C04: Leading/trailing spaces in Name → Should trim (BUG-CM03)."""
+        """CM-C04: Leading/trailing spaces in Name -> Should trim (BUG-CM03)."""
         t0 = time.time()
         spaced_name = generate_name_with_spaces()
         data = {'name': spaced_name, 'description': '', 'status': 'Active', 'file_path': None}
@@ -166,7 +188,7 @@ class TestCreateFormValidations:
     @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM02, strict=False)
     def test_duplicate_name_create(self, crop_master_page):
-        """CM-C05: Duplicate name in Create → Should block (BUG-CM02)."""
+        """CM-C05: Duplicate name in Create -> Should block (BUG-CM02)."""
         t0 = time.time()
         data = generate_valid_crop_data()
         # Create first crop
@@ -188,7 +210,7 @@ class TestCreateFormValidations:
     @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM06, strict=False)
     def test_special_chars_in_name(self, crop_master_page):
-        """CM-C06: Special characters in Name → Should reject (BUG-CM06)."""
+        """CM-C06: Special characters in Name -> Should reject (BUG-CM06)."""
         t0 = time.time()
         special_name = generate_special_char_name()
         data = {'name': special_name, 'description': '', 'status': 'Active', 'file_path': None}
@@ -205,7 +227,7 @@ class TestCreateFormValidations:
     @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM05, strict=False)
     def test_very_long_name(self, crop_master_page):
-        """CM-C07: 300 character name → Should reject (BUG-CM05)."""
+        """CM-C07: 300 character name -> Should reject (BUG-CM05)."""
         t0 = time.time()
         long_name = generate_long_name(300)
         data = {'name': long_name, 'description': '', 'status': 'Active', 'file_path': None}
@@ -223,15 +245,16 @@ class TestCreateFormValidations:
     @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM04, strict=False)
     def test_no_inline_errors(self, crop_master_page):
-        """CM-C08: Check for per-field error messages → None found (BUG-CM04)."""
+        """CM-C08: Check for per-field error messages -> None found (BUG-CM04)."""
         t0 = time.time()
         crop_master_page.open_add_form()
         crop_master_page._force_close_panels()
         crop_master_page.submit()
-        time.sleep(1)
+        # Wait briefly for Angular validation to process (JS poll, no sleep)
+        crop_master_page.is_validation_alert_present(timeout=2)
         errors = crop_master_page.get_mat_error_text()
         # Dismiss any SweetAlert2
-        crop_master_page.handle_validation_warning(timeout=5)
+        crop_master_page.handle_validation_warning(timeout=3)
         _record('CM-C08', 'No inline errors', 'Create',
                 'XFAIL' if len(errors) == 0 else 'PASSED',
                 BUG_CM04 if len(errors) == 0 else '',
@@ -250,10 +273,9 @@ class TestCreateFormValidations:
             data['status'] = 'Active'
             result = crop_master_page.create_crop(data)
             assert result['status'] == 'PASSED', f"Creation failed: {result['error']}"
-            # Verify status in table
-            crop_master_page.click_refresh()
-            time.sleep(1)
-            if crop_master_page.is_crop_in_table(data['name']):
+            # Verify status via search (faster than click_refresh + sleep)
+            found = crop_master_page.search_crop(data['name'])
+            if found:
                 status = crop_master_page.get_status_from_table(data['name'])
                 assert 'active' in status.lower(), f"Expected Active, got: {status}"
             _record('CM-C09', 'Create Active status', 'Create', 'PASSED', duration=time.time()-t0)
@@ -271,9 +293,9 @@ class TestCreateFormValidations:
             data['status'] = 'Inactive'
             result = crop_master_page.create_crop(data)
             assert result['status'] == 'PASSED', f"Creation failed: {result['error']}"
-            crop_master_page.click_refresh()
-            time.sleep(1)
-            if crop_master_page.is_crop_in_table(data['name']):
+            # Verify status via search (faster than click_refresh + sleep)
+            found = crop_master_page.search_crop(data['name'])
+            if found:
                 status = crop_master_page.get_status_from_table(data['name'])
                 assert 'inactive' in status.lower(), f"Expected Inactive, got: {status}"
             _record('CM-C10', 'Create Inactive status', 'Create', 'PASSED', duration=time.time()-t0)
@@ -284,7 +306,7 @@ class TestCreateFormValidations:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_create_with_description(self, crop_master_page):
-        """CM-C11: Create with Description filled → Success."""
+        """CM-C11: Create with Description filled -> Success."""
         t0 = time.time()
         try:
             data = generate_valid_crop_data()
@@ -298,7 +320,7 @@ class TestCreateFormValidations:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_create_without_description(self, crop_master_page):
-        """CM-C12: Create with empty Description → Success (optional)."""
+        """CM-C12: Create with empty Description -> Success (optional)."""
         t0 = time.time()
         try:
             data = generate_valid_crop_data()
@@ -313,7 +335,7 @@ class TestCreateFormValidations:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_create_blank_description_spaces(self, crop_master_page):
-        """CM-C13: Description with only spaces → Accepted (optional)."""
+        """CM-C13: Description with only spaces -> Accepted (optional)."""
         t0 = time.time()
         try:
             data = generate_valid_crop_data()
@@ -328,7 +350,7 @@ class TestCreateFormValidations:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_create_description_special_chars(self, crop_master_page):
-        """CM-C14: Special characters in Description → Accepted."""
+        """CM-C14: Special characters in Description -> Accepted."""
         t0 = time.time()
         try:
             data = generate_valid_crop_data()
@@ -344,21 +366,21 @@ class TestCreateFormValidations:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_create_valid_all_fields(self, crop_master_page):
-        """CM-C15: Create valid crop with all fields → Success."""
+        """CM-C15: Create valid crop with all fields -> Success."""
         t0 = time.time()
+        png_file = None
         try:
             data = generate_valid_crop_data()
-            # Create a temp PNG file for upload
             png_file = generate_test_file('png')
             data['file_path'] = png_file
             result = crop_master_page.create_crop(data)
-            cleanup_temp_file(png_file)
             assert result['status'] == 'PASSED', f"Creation failed: {result['error']}"
             _record('CM-C15', 'Create valid all fields', 'Create', 'PASSED', duration=time.time()-t0)
         except AssertionError as e:
-            cleanup_temp_file(png_file)
             _record('CM-C15', 'Create valid all fields', 'Create', 'FAILED', str(e), time.time()-t0)
             raise
+        finally:
+            cleanup_temp_file(png_file)
 
 
 # ╔══════════════════════════════════════════╗
@@ -372,7 +394,7 @@ class TestFileUpload:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_upload_png_file(self, crop_master_page):
-        """CM-F01: Upload .png file → Success with file attached."""
+        """CM-F01: Upload .png file -> Success with file attached."""
         t0 = time.time()
         png_file = None
         try:
@@ -391,7 +413,7 @@ class TestFileUpload:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_upload_jpg_file(self, crop_master_page):
-        """CM-F02: Upload .jpg file → Success."""
+        """CM-F02: Upload .jpg file -> Success."""
         t0 = time.time()
         jpg_file = None
         try:
@@ -410,7 +432,7 @@ class TestFileUpload:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_upload_pdf_file(self, crop_master_page):
-        """CM-F03: Upload .pdf file → Success."""
+        """CM-F03: Upload .pdf file -> Success."""
         t0 = time.time()
         pdf_file = None
         try:
@@ -430,7 +452,7 @@ class TestFileUpload:
     @pytest.mark.regression
     @pytest.mark.ui
     def test_upload_invalid_file_type(self, crop_master_page):
-        """CM-F04: Upload .txt file (invalid) → Should not be accepted."""
+        """CM-F04: Upload .txt file (invalid) -> Should not be accepted."""
         t0 = time.time()
         txt_file = None
         try:
@@ -452,7 +474,7 @@ class TestFileUpload:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_no_file_uploaded(self, crop_master_page):
-        """CM-F05: No file uploaded → Success (file is optional)."""
+        """CM-F05: No file uploaded -> Success (file is optional)."""
         t0 = time.time()
         try:
             data = generate_valid_crop_data()
@@ -477,19 +499,15 @@ class TestEditFormValidations:
     @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM02, strict=False)
     def test_edit_duplicate_name(self, crop_master_page):
-        """CM-E01: Edit to duplicate name → Should block (BUG-CM02)."""
+        """CM-E01: Edit to duplicate name -> Should block (BUG-CM02)."""
         t0 = time.time()
         # Create two crops
         data1 = generate_valid_crop_data()
         data2 = generate_valid_crop_data()
         r1 = crop_master_page.create_crop(data1)
         assert r1['status'] == 'PASSED', f"First crop failed: {r1['error']}"
-        crop_master_page._cleanup_swal2()
-        crop_master_page.force_close_form_popup()
         r2 = crop_master_page.create_crop(data2)
         assert r2['status'] == 'PASSED', f"Second crop failed: {r2['error']}"
-        crop_master_page._cleanup_swal2()
-        crop_master_page.force_close_form_popup()
         # Edit second crop to have same name as first
         edit_data = {'name': data1['name'], 'description': None, 'status': None, 'file_path': None}
         result = crop_master_page.edit_crop(data2['name'], edit_data)
@@ -505,13 +523,11 @@ class TestEditFormValidations:
     @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM09, strict=False)
     def test_edit_blank_name(self, crop_master_page):
-        """CM-E02: Edit Name to blank (spaces only) → Should reject (BUG-CM09)."""
+        """CM-E02: Edit Name to blank (spaces only) -> Should reject (BUG-CM09)."""
         t0 = time.time()
         data = generate_valid_crop_data()
         r = crop_master_page.create_crop(data)
         assert r['status'] == 'PASSED', f"Create failed: {r['error']}"
-        crop_master_page._cleanup_swal2()
-        crop_master_page.force_close_form_popup()
         edit_data = {'name': generate_spaces_only_name(), 'description': None, 'status': None, 'file_path': None}
         result = crop_master_page.edit_crop(data['name'], edit_data)
         _record('CM-E02', 'Edit blank Name', 'Edit',
@@ -532,13 +548,9 @@ class TestEditFormValidations:
             data = generate_valid_crop_data()
             r = crop_master_page.create_crop(data)
             assert r['status'] == 'PASSED', f"Create failed: {r['error']}"
-            crop_master_page._cleanup_swal2()
-            crop_master_page.force_close_form_popup()
-            # Search and click Edit
+            # search + click_edit have internal waits — no sleep needed
             crop_master_page.search_crop(data['name'])
-            time.sleep(1)
             crop_master_page.click_edit_button(crop_name=data['name'])
-            time.sleep(1)
             # Read pre-filled values
             values = crop_master_page.get_form_field_values()
             assert values.get('name', '') != '', "Name should be pre-populated"
@@ -553,42 +565,38 @@ class TestEditFormValidations:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_edit_status_active_to_inactive(self, crop_master_page):
-        """CM-E04: Edit status Active → Inactive."""
+        """CM-E04: Edit status Active -> Inactive."""
         t0 = time.time()
         try:
             data = generate_valid_crop_data()
             data['status'] = 'Active'
             r = crop_master_page.create_crop(data)
             assert r['status'] == 'PASSED', f"Create failed: {r['error']}"
-            crop_master_page._cleanup_swal2()
-            crop_master_page.force_close_form_popup()
             edit_data = {'name': None, 'description': None, 'status': 'Inactive', 'file_path': None}
             result = crop_master_page.edit_crop(data['name'], edit_data)
             assert result['status'] == 'PASSED', f"Edit failed: {result['error']}"
-            _record('CM-E04', 'Edit status Active→Inactive', 'Edit', 'PASSED', duration=time.time()-t0)
+            _record('CM-E04', 'Edit status Active->Inactive', 'Edit', 'PASSED', duration=time.time()-t0)
         except AssertionError as e:
-            _record('CM-E04', 'Edit status Active→Inactive', 'Edit', 'FAILED', str(e), time.time()-t0)
+            _record('CM-E04', 'Edit status Active->Inactive', 'Edit', 'FAILED', str(e), time.time()-t0)
             raise
 
     @pytest.mark.smoke
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_edit_status_inactive_to_active(self, crop_master_page):
-        """CM-E05: Edit status Inactive → Active."""
+        """CM-E05: Edit status Inactive -> Active."""
         t0 = time.time()
         try:
             data = generate_valid_crop_data()
             data['status'] = 'Inactive'
             r = crop_master_page.create_crop(data)
             assert r['status'] == 'PASSED', f"Create failed: {r['error']}"
-            crop_master_page._cleanup_swal2()
-            crop_master_page.force_close_form_popup()
             edit_data = {'name': None, 'description': None, 'status': 'Active', 'file_path': None}
             result = crop_master_page.edit_crop(data['name'], edit_data)
             assert result['status'] == 'PASSED', f"Edit failed: {result['error']}"
-            _record('CM-E05', 'Edit status Inactive→Active', 'Edit', 'PASSED', duration=time.time()-t0)
+            _record('CM-E05', 'Edit status Inactive->Active', 'Edit', 'PASSED', duration=time.time()-t0)
         except AssertionError as e:
-            _record('CM-E05', 'Edit status Inactive→Active', 'Edit', 'FAILED', str(e), time.time()-t0)
+            _record('CM-E05', 'Edit status Inactive->Active', 'Edit', 'FAILED', str(e), time.time()-t0)
             raise
 
 
@@ -603,14 +611,12 @@ class TestSearchFilter:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_search_exact_match(self, crop_master_page):
-        """CM-S01: Search with exact crop name → Find the crop."""
+        """CM-S01: Search with exact crop name -> Find the crop."""
         t0 = time.time()
         try:
             data = generate_valid_crop_data()
             r = crop_master_page.create_crop(data)
             assert r['status'] == 'PASSED'
-            crop_master_page._cleanup_swal2()
-            crop_master_page.force_close_form_popup()
             found = crop_master_page.search_crop(data['name'])
             assert found, f"Exact search failed for: {data['name']}"
             _record('CM-S01', 'Search exact match', 'Search', 'PASSED', duration=time.time()-t0)
@@ -622,14 +628,12 @@ class TestSearchFilter:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_search_partial_match(self, crop_master_page):
-        """CM-S02: Search with partial name → Find matching crops."""
+        """CM-S02: Search with partial name -> Find matching crops."""
         t0 = time.time()
         try:
             data = generate_valid_crop_data()
             r = crop_master_page.create_crop(data)
             assert r['status'] == 'PASSED'
-            crop_master_page._cleanup_swal2()
-            crop_master_page.force_close_form_popup()
             # Search with just the prefix
             partial = data['name'][:8]
             found = crop_master_page.search_crop(partial)
@@ -642,7 +646,7 @@ class TestSearchFilter:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_search_nonexistent(self, crop_master_page):
-        """CM-S03: Search for non-existent name → No results."""
+        """CM-S03: Search for non-existent name -> No results."""
         t0 = time.time()
         try:
             found = crop_master_page.search_crop("ZZZZZ_NONEXISTENT_99999")
@@ -702,7 +706,7 @@ class TestPopupUIBehaviors:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_cancel_discards_data(self, crop_master_page):
-        """CM-P01: Cancel on Add form discards data → Not saved in table."""
+        """CM-P01: Cancel on Add form discards data -> Not saved in table."""
         t0 = time.time()
         try:
             data = generate_valid_crop_data()
@@ -710,11 +714,8 @@ class TestPopupUIBehaviors:
             crop_master_page.fill_crop_form(data)
             crop_master_page._force_close_panels()
             crop_master_page.cancel()
-            time.sleep(1)
-            # Verify not in table
-            crop_master_page.click_refresh()
-            time.sleep(1)
-            found = crop_master_page.is_crop_in_table(data['name'])
+            # Verify not in table via search (faster than click_refresh + sleep)
+            found = crop_master_page.search_crop(data['name'])
             assert not found, "Data should NOT be saved after Cancel"
             _record('CM-P01', 'Cancel discards data', 'Popup', 'PASSED', duration=time.time()-t0)
         except AssertionError as e:
@@ -732,10 +733,8 @@ class TestPopupUIBehaviors:
             crop_master_page.open_add_form()
             crop_master_page.fill_crop_form(data)
             crop_master_page.close_popup()
-            time.sleep(1)
-            crop_master_page.click_refresh()
-            time.sleep(1)
-            found = crop_master_page.is_crop_in_table(data['name'])
+            # Verify not in table via search (faster than click_refresh + sleep)
+            found = crop_master_page.search_crop(data['name'])
             assert not found, "Data should NOT be saved after X close"
             _record('CM-P02', 'X close discards data', 'Popup', 'PASSED', duration=time.time()-t0)
         except AssertionError as e:
@@ -753,13 +752,9 @@ class TestPopupUIBehaviors:
             data = generate_valid_crop_data()
             r = crop_master_page.create_crop(data)
             assert r['status'] == 'PASSED'
-            crop_master_page._cleanup_swal2()
-            crop_master_page.force_close_form_popup()
-            # Search and View
+            # search + click_view have internal waits — no sleep needed
             crop_master_page.search_crop(data['name'])
-            time.sleep(1)
             crop_master_page.click_view_button(crop_name=data['name'])
-            time.sleep(1)
             is_readonly = crop_master_page.verify_view_popup_read_only()
             crop_master_page.close_popup()
             assert is_readonly, "View popup should have all fields disabled"
@@ -778,12 +773,9 @@ class TestPopupUIBehaviors:
             data = generate_valid_crop_data()
             r = crop_master_page.create_crop(data)
             assert r['status'] == 'PASSED'
-            crop_master_page._cleanup_swal2()
-            crop_master_page.force_close_form_popup()
+            # search + click_edit have internal waits — no sleep needed
             crop_master_page.search_crop(data['name'])
-            time.sleep(1)
             crop_master_page.click_edit_button(crop_name=data['name'])
-            time.sleep(1)
             has_update = crop_master_page.is_edit_mode()
             crop_master_page.cancel()
             assert has_update, "Edit popup should have Update button"
@@ -802,8 +794,6 @@ class TestPopupUIBehaviors:
             data = generate_valid_crop_data()
             r = crop_master_page.create_crop(data)
             assert r['status'] == 'PASSED'
-            crop_master_page._cleanup_swal2()
-            crop_master_page.force_close_form_popup()
             result = crop_master_page.check_history(crop_name=data['name'])
             # May have 0 rows (BUG-CM07) but popup should open
             assert result['error'] == '', f"History error: {result['error']}"
@@ -825,16 +815,14 @@ class TestPopupUIBehaviors:
             # Default should be Active
             status1 = crop_master_page.get_current_status()
             assert status1 == 'Active', f"Default should be Active, got: {status1}"
-            # Toggle to Inactive
+            # Toggle to Inactive — use poll instead of sleep
             crop_master_page.toggle_status()
-            time.sleep(0.5)
-            status2 = crop_master_page.get_current_status()
-            assert status2 == 'Inactive', f"After toggle should be Inactive, got: {status2}"
+            assert _wait_for_status(crop_master_page, 'Inactive'), \
+                f"After toggle should be Inactive, got: {crop_master_page.get_current_status()}"
             # Toggle back to Active
             crop_master_page.toggle_status()
-            time.sleep(0.5)
-            status3 = crop_master_page.get_current_status()
-            assert status3 == 'Active', f"After 2nd toggle should be Active, got: {status3}"
+            assert _wait_for_status(crop_master_page, 'Active'), \
+                f"After 2nd toggle should be Active, got: {crop_master_page.get_current_status()}"
             crop_master_page.cancel()
             _record('CM-P06', 'Status toggle works', 'Popup', 'PASSED', duration=time.time()-t0)
         except AssertionError as e:
@@ -854,13 +842,11 @@ class TestHistoryValidations:
     @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM07, strict=False)
     def test_history_after_create(self, crop_master_page):
-        """CM-H01: History after crop creation → Should have 1+ rows (BUG-CM07)."""
+        """CM-H01: History after crop creation -> Should have 1+ rows (BUG-CM07)."""
         t0 = time.time()
         data = generate_valid_crop_data()
         r = crop_master_page.create_crop(data)
         assert r['status'] == 'PASSED'
-        crop_master_page._cleanup_swal2()
-        crop_master_page.force_close_form_popup()
         result = crop_master_page.check_history(crop_name=data['name'])
         _record('CM-H01', 'History after create', 'History',
                 'XFAIL' if result['row_count'] == 0 else 'PASSED',
@@ -879,8 +865,6 @@ class TestHistoryValidations:
             data = generate_valid_crop_data()
             r = crop_master_page.create_crop(data)
             assert r['status'] == 'PASSED'
-            crop_master_page._cleanup_swal2()
-            crop_master_page.force_close_form_popup()
             # Edit the crop
             edit_data = {'name': generate_crop_name(prefix="HistEdit"), 'description': None, 'status': None, 'file_path': None}
             er = crop_master_page.edit_crop(data['name'], edit_data)
@@ -903,8 +887,6 @@ class TestHistoryValidations:
             data = generate_valid_crop_data()
             r = crop_master_page.create_crop(data)
             assert r['status'] == 'PASSED'
-            crop_master_page._cleanup_swal2()
-            crop_master_page.force_close_form_popup()
             result = crop_master_page.check_history(crop_name=data['name'], search_text='test')
             _record('CM-H03', 'History search Enter key', 'History', 'PASSED',
                     details=f"Search found: {result['search_found']}, error: {result['error']}",
@@ -923,8 +905,6 @@ class TestHistoryValidations:
             data = generate_valid_crop_data()
             r = crop_master_page.create_crop(data)
             assert r['status'] == 'PASSED'
-            crop_master_page._cleanup_swal2()
-            crop_master_page.force_close_form_popup()
             result = crop_master_page.check_history(crop_name=data['name'], search_text='ZZZZZZZ')
             _record('CM-H04', 'History search no match', 'History', 'PASSED',
                     details=f"Search found: {result['search_found']}", duration=time.time()-t0)
@@ -942,13 +922,9 @@ class TestHistoryValidations:
             data = generate_valid_crop_data()
             r = crop_master_page.create_crop(data)
             assert r['status'] == 'PASSED'
-            crop_master_page._cleanup_swal2()
-            crop_master_page.force_close_form_popup()
             # Open history manually to read headers
             crop_master_page.search_crop(data['name'])
-            time.sleep(1)
             crop_master_page.click_history_button(crop_name=data['name'])
-            time.sleep(1)
             headers = crop_master_page.get_history_headers()
             crop_master_page.close_history_popup()
             _record('CM-H05', 'History columns', 'History', 'PASSED',
@@ -967,16 +943,11 @@ class TestHistoryValidations:
             data = generate_valid_crop_data()
             r = crop_master_page.create_crop(data)
             assert r['status'] == 'PASSED'
-            crop_master_page._cleanup_swal2()
-            crop_master_page.force_close_form_popup()
             crop_master_page.search_crop(data['name'])
-            time.sleep(1)
             crop_master_page.click_history_button(crop_name=data['name'])
-            time.sleep(1)
             assert crop_master_page.is_history_popup_open(), "History should be open"
             crop_master_page.close_history_popup()
-            time.sleep(0.5)
-            # Verify closed (may need force cleanup)
+            # Force cleanup any lingering overlays
             crop_master_page._force_close_panels()
             _record('CM-H06', 'History Close button', 'History', 'PASSED', duration=time.time()-t0)
         except AssertionError as e:
@@ -993,16 +964,11 @@ class TestHistoryValidations:
             data = generate_valid_crop_data()
             r = crop_master_page.create_crop(data)
             assert r['status'] == 'PASSED'
-            crop_master_page._cleanup_swal2()
-            crop_master_page.force_close_form_popup()
             crop_master_page.search_crop(data['name'])
-            time.sleep(1)
             crop_master_page.click_history_button(crop_name=data['name'])
-            time.sleep(1)
             assert crop_master_page.is_history_popup_open(), "History should be open"
-            # Try X icon close (Strategy 2 in close_history_popup)
+            # Try X icon close
             crop_master_page.close_history_popup()
-            time.sleep(0.5)
             crop_master_page._force_close_panels()
             _record('CM-H07', 'History X icon close', 'History', 'PASSED', duration=time.time()-t0)
         except AssertionError as e:
@@ -1015,7 +981,7 @@ class TestHistoryValidations:
     @pytest.mark.regression
     @pytest.mark.xfail(reason=BUG_CM08, strict=False)
     def test_history_column_sort(self, crop_master_page):
-        """CM-H08: Clicking column header sorts data → Rows should reorder (BUG-CM08)."""
+        """CM-H08: Clicking column header sorts data -> Rows should reorder (BUG-CM08)."""
         t0 = time.time()
         _record('CM-H08', 'History column sort', 'History', 'XFAIL', BUG_CM08, time.time()-t0,
                 "Sort indicators toggle but rows don't reorder")

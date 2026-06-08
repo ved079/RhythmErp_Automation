@@ -63,13 +63,13 @@ class QualityParameterMasterPage(BasePage):
     def _wait_for_page_ready(self):
         """Wait for the main table to render (proves page is loaded)."""
         try:
-            WebDriverWait(self.driver, 15).until(
+            WebDriverWait(self.driver, 10).until(
                 lambda d: d.find_elements("css selector", "table#excel-table")
             )
             log.info("Page ready (table found)")
         except Exception:
             try:
-                WebDriverWait(self.driver, 5).until(
+                WebDriverWait(self.driver, 3).until(
                     lambda d: d.find_elements("css selector", "button.erp-add-btn")
                 )
                 log.info("Page ready (add button found, no table)")
@@ -113,7 +113,7 @@ class QualityParameterMasterPage(BasePage):
             self.click_with_retry(self.ADD_BUTTON)
         # Wait for Name input to appear
         try:
-            WebDriverWait(self.driver, 5).until(
+            WebDriverWait(self.driver, 3).until(
                 lambda d: d.execute_script(
                     "var el = document.querySelector("
                     "\"input[name='Name'], input[name='name'], input[formcontrolname='name']\"); "
@@ -289,7 +289,7 @@ class QualityParameterMasterPage(BasePage):
             self.search_qp(qp_name)
         self._click_action_menu_item(qp_name, "View")
         try:
-            WebDriverWait(self.driver, 5).until(
+            WebDriverWait(self.driver, 3).until(
                 EC.presence_of_element_located(("css selector", ".popup-header h3"))
             )
         except Exception:
@@ -302,7 +302,7 @@ class QualityParameterMasterPage(BasePage):
             self.search_qp(qp_name)
         self._click_action_menu_item(qp_name, "Edit")
         try:
-            WebDriverWait(self.driver, 5).until(
+            WebDriverWait(self.driver, 3).until(
                 lambda d: d.execute_script(
                     "var el = document.querySelector("
                     "\"input[name='Name'], input[name='name'], input[formcontrolname='name']\"); "
@@ -404,8 +404,8 @@ class QualityParameterMasterPage(BasePage):
     # SweetAlert2 — fast JS-based poll + JS dismiss
     # ================================================================
 
-    def is_validation_alert_present(self, timeout=3):
-        """Check if any SweetAlert validation popup is visible. Fast JS poll (0.2s)."""
+    def is_validation_alert_present(self, timeout=2):
+        """Check if any SweetAlert validation popup is visible. Fast JS poll (0.15s)."""
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
             try:
@@ -418,10 +418,10 @@ class QualityParameterMasterPage(BasePage):
                     return True
             except Exception:
                 pass
-            time.sleep(0.2)
+            time.sleep(0.15)
         return False
 
-    def handle_validation_warning(self, timeout=5):
+    def handle_validation_warning(self, timeout=3):
         """Dismiss validation SweetAlert via JS click on .swal2-confirm.
         Returns the alert title text, or ''."""
         log.info("Handling validation warning")
@@ -435,7 +435,7 @@ class QualityParameterMasterPage(BasePage):
         )
         # Wait for SweetAlert to disappear
         try:
-            WebDriverWait(self.driver, 3).until(
+            WebDriverWait(self.driver, 2).until(
                 EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
             )
         except Exception:
@@ -499,25 +499,23 @@ class QualityParameterMasterPage(BasePage):
                 log.warning("Search button click failed: " + str(e))
                 return False
             try:
-                search_input = WebDriverWait(self.driver, 3).until(
+                search_input = WebDriverWait(self.driver, 2).until(
                     EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
                 )
             except Exception:
                 log.warning("Search input did not become visible")
                 return False
 
-        # Step 3: Clear and set value
-        self.driver.execute_script("arguments[0].value = '';", search_input)
+        # Step 3: Clear and set value via JS — single call
         self.driver.execute_script(
-            "arguments[0].dispatchEvent(new Event('input', {bubbles: true}));", search_input
+            "var el = arguments[0]; el.value = ''; "
+            "el.dispatchEvent(new Event('input',{bubbles:true})); "
+            "el.value = arguments[1]; "
+            "el.dispatchEvent(new Event('input',{bubbles:true})); "
+            "el.dispatchEvent(new Event('keyup',{bubbles:true})); "
+            "el.dispatchEvent(new Event('change',{bubbles:true}));",
+            search_input, qp_name
         )
-        self.driver.execute_script("arguments[0].value = arguments[1];", search_input, qp_name)
-        search_input.click()
-        for event in ["input", "keyup", "change"]:
-            self.driver.execute_script(
-                "arguments[0].dispatchEvent(new Event('" + event + "', {bubbles: true}));",
-                search_input
-            )
 
         # Step 4: Click search button again to submit filter
         self.driver.execute_script(
@@ -526,16 +524,15 @@ class QualityParameterMasterPage(BasePage):
             "if(btn){btn.click();}"
         )
 
-        # Step 5: Wait for table to refresh
+        # Step 5: Wait for table to refresh, then check name via JS (no sleep)
         try:
-            WebDriverWait(self.driver, 3).until(
+            WebDriverWait(self.driver, 2).until(
                 lambda d: d.find_elements("css selector", "table#excel-table tbody tr")
             )
         except Exception:
             pass
 
         # Step 6: Check if the searched name is actually in the filtered results
-        time.sleep(0.3)  # Brief pause for Angular rendering
         found = self.is_qp_in_table(qp_name)
         log.info("Search completed for: " + qp_name + " found=" + str(found))
         return found
@@ -545,42 +542,59 @@ class QualityParameterMasterPage(BasePage):
     # ================================================================
 
     def verify_qp_exists(self, qp_name):
-        """Verify QP name appears in table. Polls up to 10s for slow renders."""
+        """Verify QP name appears in table. Polls up to 8s via JS for slow renders."""
         log.info("Verifying QP '" + qp_name + "' exists in table")
-        end_time = time.monotonic() + 10
+        end_time = time.monotonic() + 8
         last_seen = []
         while time.monotonic() < end_time:
             try:
-                rows = self.find_elements(self.TABLE_ROWS)
-                last_seen = []
-                for row in rows:
-                    cells = row.find_elements("css selector", "td")
-                    row_text = " | ".join(c.text.strip() for c in cells if c.text.strip())
-                    last_seen.append(row_text)
-                    for cell in cells:
-                        if qp_name in cell.text.strip():
-                            log.info("QP '" + qp_name + "' found in table")
-                            return True
+                result = self.driver.execute_script(
+                    "var table = document.querySelector('table#excel-table'); "
+                    "if(!table){return {found:false, rows:[]};} "
+                    "var rows = table.querySelectorAll('tbody tr'); "
+                    "var found = false; var rowTexts = []; "
+                    "for(var i=0;i<rows.length;i++){"
+                    "  var cells = rows[i].querySelectorAll('td'); "
+                    "  var texts = []; "
+                    "  for(var j=0;j<cells.length;j++){"
+                    "    var t = cells[j].textContent.trim(); "
+                    "    if(t){texts.push(t); if(t.indexOf(arguments[0])!==-1){found=true;}} "
+                    "  } "
+                    "  rowTexts.push(texts.join(' | ')); "
+                    "} "
+                    "return {found:found, rows:rowTexts};",
+                    qp_name
+                )
+                if result and result.get('found'):
+                    log.info("QP '" + qp_name + "' found in table")
+                    return True
+                last_seen = result.get('rows', []) if result else []
             except Exception:
                 pass
-            time.sleep(0.5)
+            time.sleep(0.3)
         log.error("QP '" + qp_name + "' NOT found. Table: " + str(last_seen))
         raise AssertionError(
             "QP '" + qp_name + "' NOT found in table after search. Last rows: " + str(last_seen)
         )
 
     def is_qp_in_table(self, qp_name):
-        """Check if a QP name exists in the current table view. Returns True/False."""
+        """Check if a QP name exists in the current table view. Returns True/False.
+        Pure JS — avoids slow Selenium round-trips per cell."""
         try:
-            rows = self.find_elements(self.TABLE_ROWS)
-            for row in rows:
-                cells = row.find_elements("css selector", "td")
-                for cell in cells:
-                    if qp_name in cell.text.strip():
-                        return True
+            return bool(self.driver.execute_script(
+                "var table = document.querySelector('table#excel-table'); "
+                "if(!table){return false;} "
+                "var rows = table.querySelectorAll('tbody tr'); "
+                "for(var i=0;i<rows.length;i++){"
+                "  var cells = rows[i].querySelectorAll('td'); "
+                "  for(var j=0;j<cells.length;j++){"
+                "    if(cells[j].textContent.trim().indexOf(arguments[0])!==-1){return true;} "
+                "  }"
+                "} return false;",
+                qp_name
+            ))
         except Exception:
-            pass
-        return False
+            return False
 
     def get_all_qp_names(self):
         """Return all QP names from the current table view."""
@@ -597,10 +611,13 @@ class QualityParameterMasterPage(BasePage):
         return names or []
 
     def get_table_row_count(self):
-        """Return the number of visible data rows in the table."""
+        """Return the number of visible data rows in the table. Pure JS."""
         try:
-            rows = self.find_elements(self.TABLE_ROWS)
-            return len(rows)
+            count = self.driver.execute_script(
+                "var rows = document.querySelectorAll('table#excel-table tbody tr'); "
+                "return rows ? rows.length : 0;"
+            )
+            return int(count) if count else 0
         except Exception:
             return 0
 
@@ -609,9 +626,34 @@ class QualityParameterMasterPage(BasePage):
     # ================================================================
 
     def clear_search(self):
-        """Clear the search input and refresh to get clean state."""
-        log.info("Clearing search - hard refreshing")
-        self.hard_refresh()
+        """Clear the search input via JS and trigger table reload.
+        Much faster than hard_refresh — no full page reload needed."""
+        log.info("Clearing search via JS")
+        try:
+            self.driver.execute_script(
+                "var el = document.querySelector('input#erpSearchInput'); "
+                "if(!el){return 'no input';} "
+                "el.value = ''; "
+                "el.dispatchEvent(new Event('input',{bubbles:true})); "
+                "el.dispatchEvent(new Event('change',{bubbles:true}));"
+            )
+            # Click search button to apply empty filter (shows all rows)
+            self.driver.execute_script(
+                "var btn = document.querySelector('button.search-btn') "
+                "|| document.querySelector('button[mattooltip=\"Search\"]'); "
+                "if(btn){btn.click();}"
+            )
+            # Wait briefly for table to reload
+            try:
+                WebDriverWait(self.driver, 2).until(
+                    lambda d: d.find_elements("css selector", "table#excel-table tbody tr")
+                )
+            except Exception:
+                pass
+            log.info("Search cleared via JS")
+        except Exception as e:
+            log.warning("JS clear_search failed, falling back to hard_refresh: " + str(e))
+            self.hard_refresh()
 
     # ================================================================
     # Filter panel — needed by test S04
@@ -683,42 +725,32 @@ class QualityParameterMasterPage(BasePage):
 
     def verify_view_popup_read_only(self):
         """Verify the View popup shows Name field as read-only.
-        Returns True if read-only, False if editable."""
+        Returns True if read-only, False if editable.
+        Single JS call — 4x faster than 4 separate execute_script calls."""
         log.info("Verifying View popup is read-only")
         try:
-            name_disabled = self.driver.execute_script(
+            result = self.driver.execute_script(
                 "var el = document.querySelector("
                 "\"input[name='Name'], input[name='name'], input[formcontrolname='name']\"); "
-                "return el && el.disabled;"
+                "var disabled = el && el.disabled; "
+                "var hasSubmit = false, hasUpdate = false, hasCancel = false; "
+                "var footers = document.querySelectorAll('div[class*=\"popup-footer\"]'); "
+                "for(var i=0;i<footers.length;i++){"
+                "  var buttons = footers[i].querySelectorAll('button'); "
+                "  for(var j=0;j<buttons.length;j++){"
+                "    var txt = buttons[j].textContent.trim(); "
+                "    if(txt.indexOf('Submit')!==-1){hasSubmit=true;} "
+                "    if(txt.indexOf('Update')!==-1){hasUpdate=true;} "
+                "    if(txt.indexOf('Cancel')!==-1){hasCancel=true;} "
+                "  }"
+                "} "
+                "return {disabled:disabled, hasSubmit:hasSubmit, hasUpdate:hasUpdate, hasCancel:hasCancel};"
             )
-            no_submit = not bool(self.driver.execute_script(
-                "var footers = document.querySelectorAll('div[class*=\"popup-footer\"]'); "
-                "for(var i=0;i<footers.length;i++){"
-                "  var buttons = footers[i].querySelectorAll('button'); "
-                "  for(var j=0;j<buttons.length;j++){"
-                "    if(buttons[j].textContent.trim().indexOf('Submit')!==-1){return true;}"
-                "  }"
-                "} return false;"
-            ))
-            no_update = not bool(self.driver.execute_script(
-                "var footers = document.querySelectorAll('div[class*=\"popup-footer\"]'); "
-                "for(var i=0;i<footers.length;i++){"
-                "  var buttons = footers[i].querySelectorAll('button'); "
-                "  for(var j=0;j<buttons.length;j++){"
-                "    if(buttons[j].textContent.trim().indexOf('Update')!==-1){return true;}"
-                "  }"
-                "} return false;"
-            ))
-            has_cancel = bool(self.driver.execute_script(
-                "var footers = document.querySelectorAll('div[class*=\"popup-footer\"]'); "
-                "for(var i=0;i<footers.length;i++){"
-                "  var buttons = footers[i].querySelectorAll('button'); "
-                "  for(var j=0;j<buttons.length;j++){"
-                "    if(buttons[j].textContent.trim().indexOf('Cancel')!==-1){return true;}"
-                "  }"
-                "} return false;"
-            ))
-            is_readonly = bool(name_disabled) and no_submit and no_update and has_cancel
+            name_disabled = bool(result.get('disabled'))
+            no_submit = not result.get('hasSubmit')
+            no_update = not result.get('hasUpdate')
+            has_cancel = result.get('hasCancel')
+            is_readonly = name_disabled and no_submit and no_update and has_cancel
             log.info("View popup read-only check: disabled=" + str(name_disabled)
                      + " no_submit=" + str(no_submit) + " no_update=" + str(no_update)
                      + " has_cancel=" + str(has_cancel) + " => readonly=" + str(is_readonly))
@@ -729,27 +761,25 @@ class QualityParameterMasterPage(BasePage):
 
     def verify_edit_popup_editable(self):
         """Verify the Edit popup shows Name field as editable with Update button.
-        Returns True if editable, False if not."""
+        Returns True if editable, False if not.
+        Single JS call — 2x faster than 2 separate execute_script calls."""
         log.info("Verifying Edit popup is editable")
         try:
-            has_update = bool(self.driver.execute_script(
+            result = self.driver.execute_script(
+                "var hasUpdate = false, hasCancel = false; "
                 "var footers = document.querySelectorAll('div[class*=\"popup-footer\"]'); "
                 "for(var i=0;i<footers.length;i++){"
                 "  var buttons = footers[i].querySelectorAll('button'); "
                 "  for(var j=0;j<buttons.length;j++){"
-                "    if(buttons[j].textContent.trim().indexOf('Update')!==-1){return true;}"
+                "    var txt = buttons[j].textContent.trim(); "
+                "    if(txt.indexOf('Update')!==-1){hasUpdate=true;} "
+                "    if(txt.indexOf('Cancel')!==-1){hasCancel=true;} "
                 "  }"
-                "} return false;"
-            ))
-            has_cancel = bool(self.driver.execute_script(
-                "var footers = document.querySelectorAll('div[class*=\"popup-footer\"]'); "
-                "for(var i=0;i<footers.length;i++){"
-                "  var buttons = footers[i].querySelectorAll('button'); "
-                "  for(var j=0;j<buttons.length;j++){"
-                "    if(buttons[j].textContent.trim().indexOf('Cancel')!==-1){return true;}"
-                "  }"
-                "} return false;"
-            ))
+                "} "
+                "return {hasUpdate:hasUpdate, hasCancel:hasCancel};"
+            )
+            has_update = result.get('hasUpdate')
+            has_cancel = result.get('hasCancel')
             is_editable = has_update and has_cancel
             log.info("Edit popup editable check: has_update=" + str(has_update)
                      + " has_cancel=" + str(has_cancel) + " => editable=" + str(is_editable))
@@ -776,8 +806,8 @@ class QualityParameterMasterPage(BasePage):
         self.submit()
 
         # BUG-004: No success SweetAlert — form just closes silently
-        # Check form-closed first (fast path ~1s), then alert (slow path ~2s)
-        end_time = time.monotonic() + 4
+        # Check form-closed first (fast path), then alert (slow path)
+        end_time = time.monotonic() + 3
         while time.monotonic() < end_time:
             if not self.is_add_form_open():
                 break  # Form closed — valid create
@@ -791,11 +821,11 @@ class QualityParameterMasterPage(BasePage):
                 if visible:
                     warning = self.get_swal_title()
                     log.warning("Validation alert after submit: " + warning)
-                    self.handle_validation_warning(timeout=2)
+                    self.handle_validation_warning(timeout=1)
                     return name
             except Exception:
                 pass
-            time.sleep(0.2)
+            time.sleep(0.15)
 
         log.info("Quality Parameter created: " + name)
         return name
@@ -817,7 +847,7 @@ class QualityParameterMasterPage(BasePage):
 
         # BUG-004: No success SweetAlert — form just closes silently
         # Check form-closed first (fast path), then alert
-        end_time = time.monotonic() + 4
+        end_time = time.monotonic() + 3
         while time.monotonic() < end_time:
             if not self.is_add_form_open():
                 break  # Form closed — valid update
@@ -830,11 +860,11 @@ class QualityParameterMasterPage(BasePage):
                 if visible:
                     warning = self.get_swal_title()
                     log.warning("Validation alert after update: " + warning)
-                    self.handle_validation_warning(timeout=2)
+                    self.handle_validation_warning(timeout=1)
                     return new_name
             except Exception:
                 pass
-            time.sleep(0.2)
+            time.sleep(0.15)
 
         log.info("Quality Parameter updated: " + new_name)
         return new_name

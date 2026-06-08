@@ -1,11 +1,13 @@
-﻿"""
+"""
 conftest.py - Crop Master (RhythmERP)
 Fixtures, hooks, and bug registry for Crop Master automation tests.
+Optimised (UOM gold standard v2):
+- Session-scoped logged_in_driver (login ONCE, reuse browser)
+- Per-test crop_master_page fixture with _cleanup() (hard_refresh between tests)
 """
 
 import os
 import sys
-import logging
 import pytest
 
 PROJECT_ROOT = os.path.abspath(
@@ -27,8 +29,8 @@ from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
 def pytest_configure(config):
     """Register custom pytest markers for test categorization."""
     config.addinivalue_line("markers", "smoke: Critical path tests (create, search, view, toggle)")
-    config.addinivalue_line("markers", "sanity: Core validation tests â€” must pass for build acceptance")
-    config.addinivalue_line("markers", "regression: Full regression suite â€” all tests")
+    config.addinivalue_line("markers", "sanity: Core validation tests - must pass for build acceptance")
+    config.addinivalue_line("markers", "regression: Full regression suite - all tests")
     config.addinivalue_line("markers", "bug: Tests documenting known open bugs (BUG-CM01 to BUG-CM09)")
     config.addinivalue_line("markers", "ui: UI-specific behavior tests (popups, toggles, button visibility, filter panels)")
 
@@ -73,19 +75,17 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    log.step(3, "Selecting facility (Agdi - index 0)")
-#     login_page.select_facility_by_index(index=0)
+    log.step(3, "Clicking Login button (1st click)")
+    login_page.click_login()
+    login_page.wait_seconds(3)
 
-    login_page.wait_seconds(1)
-
-    log.step(4, "Clicking Login button")
+    log.step(4, "Clicking Login button (2nd click - autofills tenant)")
     login_page.click_login()
     login_page.wait_seconds(3)
 
     login_page.wait_for_login_complete()
     log.info("RhythmERP login successful!")
     start_screenshot_broadcast(driver)
-    log.info("RhythmERP login successful!")
 
     yield driver
 
@@ -94,10 +94,16 @@ def logged_in_driver(driver):
 
 @pytest.fixture
 def crop_master_page(logged_in_driver):
-    """Crop Master page object - fresh navigation for each test."""
+    """Crop Master page object - fresh navigation for each test.
+    Uses _cleanup() (hard_refresh) between tests for speed."""
     from pages.commodity_settings.modules.crop_master.crop_master_page import (
         CropMasterPage,
     )
     page = CropMasterPage(logged_in_driver)
     page.navigate_to_page()
     yield page
+    # Cleanup: hard refresh to clear any leftover state
+    try:
+        page._cleanup()
+    except Exception:
+        pass
