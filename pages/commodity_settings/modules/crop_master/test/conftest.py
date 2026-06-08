@@ -75,15 +75,17 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    log.step(3, "Clicking Login button (1st click)")
-    login_page.click_login()
-    login_page.wait_seconds(3)
-
-    log.step(4, "Clicking Login button (2nd click - autofills tenant)")
+    log.step(3, "Clicking Login button (click_login double-clicks internally)")
     login_page.click_login()
     login_page.wait_seconds(3)
 
     login_page.wait_for_login_complete()
+
+    # Verify login actually succeeded (don't falsely report success)
+    if "login" in driver.current_url.lower():
+        log.error("Login did not complete — still on login page. URL: " + driver.current_url)
+        raise RuntimeError("RhythmERP login failed — still on login page after wait. Check credentials in .env")
+
     log.info("RhythmERP login successful!")
     start_screenshot_broadcast(driver)
 
