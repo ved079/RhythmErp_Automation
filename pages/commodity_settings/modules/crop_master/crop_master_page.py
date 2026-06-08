@@ -1078,13 +1078,14 @@ class CropMasterPage(BasePage):
                 "btn.scrollIntoView({block:'center'}); btn.click(); return 'clicked';"
             )
             log.info("Filter panel result: " + str(result))
-            # Brief wait for filter panel animation
+            # Brief wait for filter panel animation (getBoundingClientRect check)
             try:
                 WebDriverWait(self.driver, 2).until(
                     lambda d: d.execute_script(
-                        "var p = document.querySelector('.filter-panel, .erp-filter-panel, "
-                        ".cdk-overlay-pane filter-panel, div.cdk-overlay-pane [role=\"listbox\"]'); "
-                        "return p && p.offsetParent !== null;"
+                        "var p = document.querySelector('.filter-panel, .erp-filter-panel'); "
+                        "if(!p){return false;} "
+                        "var r = p.getBoundingClientRect(); "
+                        "return r.width > 0 && r.height > 0;"
                     )
                 )
             except Exception:
@@ -1112,29 +1113,27 @@ class CropMasterPage(BasePage):
             log.warning("Filter panel close failed: " + str(e))
 
     def is_filter_panel_open(self):
-        """Check if the filter panel is currently visible."""
+        """Check if the filter panel is currently visible.
+        Uses getBoundingClientRect (not offsetParent) because
+        the filter panel is position:fixed — offsetParent is always null."""
         try:
             return bool(self.driver.execute_script(
-                "var panel = document.querySelector("
-                "'.filter-panel, .erp-filter-panel, "
-                ".cdk-overlay-pane filter-panel, "
-                "div.cdk-overlay-pane [role=\"listbox\"]'); "
-                "return panel && panel.offsetParent !== null;"
+                "var panel = document.querySelector('.filter-panel, .erp-filter-panel'); "
+                "if(!panel){return false;} "
+                "var r = panel.getBoundingClientRect(); "
+                "return r.width > 0 && r.height > 0;"
             ))
         except Exception:
             return False
 
     def get_filter_categories(self):
-        """Get filter categories from the filter panel. Returns list of strings."""
+        """Get filter categories from the filter panel. Returns list of strings.
+        Uses .category-name spans inside .filter-category divs (actual DOM structure)."""
         try:
             result = self.driver.execute_script(
-                "var panel = document.querySelector("
-                "'.filter-panel, .erp-filter-panel, "
-                ".cdk-overlay-pane filter-panel, "
-                "div.cdk-overlay-pane [role=\"listbox\"]'); "
+                "var panel = document.querySelector('.filter-panel, .erp-filter-panel'); "
                 "if(!panel){return [];} "
-                "var items = panel.querySelectorAll("
-                "'mat-panel-title, .category-title, .filter-category, mat-list-item'); "
+                "var items = panel.querySelectorAll('.category-name'); "
                 "var result = []; "
                 "for(var i=0;i<items.length;i++){"
                 "  var t = items[i].textContent.trim(); if(t) result.push(t);"
