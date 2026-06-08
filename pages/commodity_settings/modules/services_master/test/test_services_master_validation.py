@@ -112,7 +112,7 @@ class TestCreateFormValidations:
             sm_page.submit()
 
             # Check for success alert immediately
-            swal_title = sm_page.handle_success_alert(timeout=15)
+            swal_title = sm_page.handle_success_alert(timeout=8)
 
             assert swal_title, "SM-C01: Expected success popup after valid submission"
             assert "success" in swal_title.lower(), \
@@ -136,7 +136,7 @@ class TestCreateFormValidations:
             sm_page.submit()
 
             # Handle validation popup
-            swal_title = sm_page.handle_validation_warning(timeout=10)
+            swal_title = sm_page.handle_validation_warning(timeout=5)
 
             assert swal_title, "SM-C02: Expected validation popup"
             assert "validation failed" in swal_title.lower(), \
@@ -164,7 +164,7 @@ class TestCreateFormValidations:
             sm_page.fill_form(data)
             sm_page.submit()
 
-            swal_title = sm_page.handle_validation_warning(timeout=10)
+            swal_title = sm_page.handle_validation_warning(timeout=5)
 
             assert swal_title, "SM-C03: Expected validation popup"
             assert "validation failed" in swal_title.lower(), \
@@ -187,7 +187,7 @@ class TestCreateFormValidations:
             sm_page.fill_form(data)
             sm_page.submit()
 
-            swal_title = sm_page.handle_validation_warning(timeout=10)
+            swal_title = sm_page.handle_validation_warning(timeout=5)
 
             assert swal_title, "SM-C04: Expected validation popup without UOM"
         except Exception:
@@ -211,7 +211,7 @@ class TestCreateFormValidations:
             sm_page.fill_form(data)
             sm_page.submit()
 
-            swal_title = sm_page.handle_success_alert(timeout=15)
+            swal_title = sm_page.handle_success_alert(timeout=8)
 
             # BUG-003: Special chars accepted — this should ideally fail
             if swal_title and "success" in swal_title.lower():
@@ -238,7 +238,7 @@ class TestCreateFormValidations:
             sm_page.submit()
 
             # Could be success (BUG) or validation
-            swal_title = sm_page.handle_success_alert(timeout=15)
+            swal_title = sm_page.handle_success_alert(timeout=8)
             if not swal_title:
                 swal_title = sm_page.handle_validation_warning(timeout=5)
 
@@ -265,7 +265,7 @@ class TestCreateFormValidations:
             sm_page.open_add_form()
             sm_page.fill_form(data1)
             sm_page.submit()
-            swal1 = sm_page.handle_success_alert(timeout=15)
+            swal1 = sm_page.handle_success_alert(timeout=8)
 
             if not (swal1 and "success" in swal1.lower()):
                 pytest.skip("SM-C07: Could not create first record for duplicate test")
@@ -279,7 +279,7 @@ class TestCreateFormValidations:
             sm_page.fill_form(data2)
             sm_page.submit()
 
-            swal2 = sm_page.handle_success_alert(timeout=15)
+            swal2 = sm_page.handle_success_alert(timeout=8)
             if not swal2:
                 swal2 = sm_page.handle_validation_warning(timeout=5)
 
@@ -378,7 +378,7 @@ class TestCreateFormValidations:
             sm_page.fill_form(data)
             sm_page.submit()
 
-            swal_title = sm_page.handle_success_alert(timeout=15)
+            swal_title = sm_page.handle_success_alert(timeout=8)
             if not swal_title:
                 swal_title = sm_page.handle_save_failure_alert(timeout=5)
 
@@ -405,7 +405,7 @@ class TestCreateFormValidations:
             sm_page.fill_form(data)
             sm_page.submit()
 
-            swal_title = sm_page.handle_success_alert(timeout=15)
+            swal_title = sm_page.handle_success_alert(timeout=8)
             if not swal_title:
                 swal_title = sm_page.handle_save_failure_alert(timeout=5)
 
@@ -432,7 +432,7 @@ class TestCreateFormValidations:
             sm_page.fill_form(data)
             sm_page.submit()
 
-            swal_title = sm_page.handle_success_alert(timeout=15)
+            swal_title = sm_page.handle_success_alert(timeout=8)
             if not swal_title:
                 swal_title = sm_page.handle_save_failure_alert(timeout=5)
 
@@ -459,7 +459,7 @@ class TestCreateFormValidations:
             sm_page.fill_form(data)
             sm_page.submit()
 
-            swal_title = sm_page.handle_success_alert(timeout=15)
+            swal_title = sm_page.handle_success_alert(timeout=8)
             if not swal_title:
                 swal_title = sm_page.handle_save_failure_alert(timeout=5)
 
@@ -659,7 +659,7 @@ class TestEditFormValidations:
             sm_page._force_close_panels()
             sm_page.click_update()
 
-            swal_title = sm_page.handle_success_alert(timeout=15)
+            swal_title = sm_page.handle_success_alert(timeout=8)
 
             assert swal_title, "SM-E03: Expected success popup after update"
             assert "success" in swal_title.lower() or "update" in swal_title.lower(), \
@@ -686,7 +686,7 @@ class TestEditFormValidations:
             sm_page._force_close_panels()
             sm_page.click_update()
 
-            swal_title = sm_page.handle_validation_warning(timeout=10)
+            swal_title = sm_page.handle_validation_warning(timeout=5)
             assert swal_title, "SM-E04: Expected validation popup with empty Name"
         except Exception:
             raise
@@ -1165,7 +1165,7 @@ class TestToggleValidations:
             sm_page.fill_form(data)
             sm_page.submit()
 
-            swal_title = sm_page.handle_success_alert(timeout=15)
+            swal_title = sm_page.handle_success_alert(timeout=8)
 
             if swal_title and "success" in swal_title.lower():
                 # Verify Inactive status in table (handled by _cleanup refresh)

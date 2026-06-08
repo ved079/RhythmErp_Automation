@@ -411,8 +411,15 @@ class ServicesMasterPage(BasePage):
         return False
 
     def is_add_form_open(self):
-        """Check if the Add form is open by looking for Name input."""
-        return self.is_displayed(self.NAME_INPUT, timeout=5)
+        """Check if the Add form is open by looking for Name input.
+        Uses JS check for speed — no Selenium timeout overhead."""
+        try:
+            return self.driver.execute_script("""
+                var el = document.querySelector("input[name='Name']");
+                return el && el.offsetParent !== null;
+            """)
+        except Exception:
+            return False
 
     def is_form_closed(self):
         """Check if the form popup is closed."""
@@ -632,7 +639,7 @@ class ServicesMasterPage(BasePage):
                         "//input[@type='checkbox']"
                     )
                     self.driver.execute_script("arguments[0].click();", checkbox)
-                    self.wait_seconds(0.5)
+                    time.sleep(0.3)
                     new_state = self._get_status_toggle_state()
                     if new_state == desired_state:
                         log.info(f"Status toggle set to {target_label} (via checkbox input, attempt {attempt})")
@@ -650,7 +657,7 @@ class ServicesMasterPage(BasePage):
                         "//div[contains(@class,'switch-wrapper')]"
                     )
                     self.driver.execute_script("arguments[0].click();", wrapper)
-                    self.wait_seconds(0.5)
+                    time.sleep(0.3)
                     new_state = self._get_status_toggle_state()
                     if new_state == desired_state:
                         log.info(f"Status toggle set to {target_label} (via wrapper click, attempt {attempt})")
@@ -671,7 +678,7 @@ class ServicesMasterPage(BasePage):
                             }));
                         }
                     """)
-                    self.wait_seconds(0.5)
+                    time.sleep(0.3)
                     new_state = self._get_status_toggle_state()
                     if new_state == desired_state:
                         log.info(f"Status toggle set to {target_label} (via dispatchEvent, attempt {attempt})")
@@ -816,17 +823,21 @@ class ServicesMasterPage(BasePage):
         log.warning("Update button not found")
 
     def cancel(self):
-        """Click the Cancel button."""
+        """Click the Cancel button via JS (fast, no Selenium wait)."""
         log.info("Clicking Cancel button...")
-        try:
-            btn = self.find_visible_element(self.CANCEL_BUTTON, timeout=5)
-            if btn:
-                self.driver.execute_script("arguments[0].click();", btn)
-                self.wait_seconds(0.5)
-                return
-        except Exception:
-            pass
-        log.warning("Cancel button not found")
+        self.driver.execute_script("""
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.indexOf('Cancel') !== -1) {
+                        buttons[j].click();
+                        return 'clicked';
+                    }
+                }
+            }
+            return 'not found';
+        """)
 
     # ==============================================================
     #  SweetAlert2 handlers — JS-only dismissals
@@ -1044,53 +1055,79 @@ class ServicesMasterPage(BasePage):
     def click_view_button(self, item_name=None, row_index=0):
         """Click the View button on a table row.
         Uses 3-dot menu dropdown (live system UI change, same as UOM).
+        Retries up to 3 times if popup doesn't open.
         """
         log.info(f"Clicking View button (name={item_name}, row={row_index})...")
-        self._click_action_menu_item(item_name, row_index, "View")
-        # Wait for view popup to appear
-        try:
-            WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located(("css selector", ".popup-header h3"))
-            )
-        except Exception:
-            pass
+        for attempt in range(1, 4):
+            self._click_action_menu_item(item_name, row_index, "View")
+            # Wait for view popup to appear
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located(("css selector", ".popup-header h3"))
+                )
+                log.info(f"View popup opened (attempt {attempt})")
+                return
+            except Exception:
+                log.warning(f"View popup not detected after attempt {attempt}")
+                if attempt < 3:
+                    self._force_close_panels()
+                    time.sleep(0.3)
+        log.warning("View popup may not have opened after 3 attempts")
 
     def click_edit_button(self, item_name=None, row_index=0):
         """Click the Edit button on a table row.
         Uses 3-dot menu dropdown (live system UI change, same as UOM).
+        Retries up to 3 times if popup doesn't open.
         """
         log.info(f"Clicking Edit button (name={item_name}, row={row_index})...")
-        self._click_action_menu_item(item_name, row_index, "Edit")
-        # Wait for edit popup to appear
-        try:
-            WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located(("css selector", "input[name='Name']"))
-            )
-        except Exception:
-            pass
+        for attempt in range(1, 4):
+            self._click_action_menu_item(item_name, row_index, "Edit")
+            # Wait for edit popup to appear
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located(("css selector", "input[name='Name']"))
+                )
+                log.info(f"Edit popup opened (attempt {attempt})")
+                return
+            except Exception:
+                log.warning(f"Edit popup not detected after attempt {attempt}")
+                if attempt < 3:
+                    self._force_close_panels()
+                    time.sleep(0.3)
+        log.warning("Edit popup may not have opened after 3 attempts")
 
     def click_history_button(self, item_name=None, row_index=0):
         """Click the History button on a table row.
         Uses 3-dot menu dropdown (live system UI change, same as UOM).
+        Retries up to 3 times if popup doesn't open.
         """
         log.info(f"Clicking History button (name={item_name}, row={row_index})...")
-        self._click_action_menu_item(item_name, row_index, "History")
-        # Wait for history popup to appear
-        try:
-            WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located(("css selector", "app-dynamic-history"))
-            )
-        except Exception:
-            # Fallback: check for history h3 header
+        for attempt in range(1, 4):
+            self._click_action_menu_item(item_name, row_index, "History")
+            # Wait for history popup to appear
             try:
-                WebDriverWait(self.driver, 3).until(
-                    lambda d: any(
-                        "history" in h.text.lower()
-                        for h in d.find_elements("css selector", "h3")
-                    )
+                WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located(("css selector", "app-dynamic-history"))
                 )
+                log.info(f"History popup opened (attempt {attempt})")
+                return
             except Exception:
-                pass
+                # Fallback: check for history h3 header
+                try:
+                    WebDriverWait(self.driver, 3).until(
+                        lambda d: any(
+                            "history" in h.text.lower()
+                            for h in d.find_elements("css selector", "h3")
+                        )
+                    )
+                    log.info(f"History popup opened via h3 fallback (attempt {attempt})")
+                    return
+                except Exception:
+                    pass
+                if attempt < 3:
+                    self._force_close_panels()
+                    time.sleep(0.3)
+        log.warning("History popup may not have opened after 3 attempts")
 
     def _click_action_menu_item(self, item_name, row_index, action_name):
         """Click an action menu item (View/Edit/History) via 3-dot menu dropdown.
@@ -1101,6 +1138,9 @@ class ServicesMasterPage(BasePage):
           2. Opens the 3-dot menu for that row
           3. Waits for the CDK overlay dropdown
           4. Clicks the specific menu item (View/Edit/History)
+
+        Matched to UOM golden standard: uses scoped overlay search
+        (only searches within .cdk-overlay-pane, not entire container).
         """
         log.info(f"Clicking {action_name} via 3-dot menu for row={row_index}, name={item_name}")
 
@@ -1157,10 +1197,14 @@ class ServicesMasterPage(BasePage):
             pass
 
         # Step 3: Click the specific menu item from the dropdown overlay
+        # UOM golden standard: only search within the overlay pane, not entire container
+        # This avoids matching random elements in the CDK overlay container
         js_click_item = """
-        var overlay = document.querySelector('.cdk-overlay-container');
-        if (!overlay) { throw new Error('CDK overlay not found after menu click'); }
-        var items = overlay.querySelectorAll('button, span, div');
+        var overlay = document.querySelector('.cdk-overlay-container .cdk-overlay-pane');
+        if (!overlay) { throw new Error('CDK overlay pane not found after menu click'); }
+        // Only search direct children and first-level items — avoid matching
+        // the entire page content that might be inside the overlay container
+        var items = overlay.querySelectorAll('button, span, div[role="menuitem"], a[role="menuitem"]');
         for (var i = 0; i < items.length; i++) {
             var text = items[i].textContent.trim();
             if (text === arguments[0]) {
@@ -1168,12 +1212,22 @@ class ServicesMasterPage(BasePage):
                 return 'clicked_' + arguments[0];
             }
         }
-        // Fallback: try partial match
+        // Fallback: try partial match (scoped to pane only)
         for (var i = 0; i < items.length; i++) {
             var text = items[i].textContent.trim().toLowerCase();
             if (text.indexOf(arguments[0].toLowerCase()) !== -1) {
                 items[i].click();
                 return 'clicked_partial_' + arguments[0];
+            }
+        }
+        // Second fallback: broader search within overlay pane
+        var allElements = overlay.querySelectorAll('*');
+        for (var i = 0; i < allElements.length; i++) {
+            var text = allElements[i].textContent.trim();
+            // Only match leaf-ish elements (not containers with lots of text)
+            if (text === arguments[0] && allElements[i].children.length === 0) {
+                allElements[i].click();
+                return 'clicked_broad_' + arguments[0];
             }
         }
         throw new Error('Menu item "' + arguments[0] + '" not found in dropdown overlay');
@@ -1212,37 +1266,52 @@ class ServicesMasterPage(BasePage):
     # ==============================================================
 
     def is_edit_mode(self):
-        """Check if the form is in Edit mode (has Update button)."""
+        """Check if the form is in Edit mode (has Update button).
+        Uses JS check for speed — no Selenium timeout overhead."""
         try:
-            return self.is_displayed(self.UPDATE_BUTTON, timeout=5)
+            result = self.driver.execute_script("""
+                var btns = document.querySelectorAll('.popup-footer button');
+                for (var i = 0; i < btns.length; i++) {
+                    if (btns[i].textContent.trim().indexOf('Update') !== -1
+                        && btns[i].offsetParent !== null) {
+                        return true;
+                    }
+                }
+                return false;
+            """)
+            return bool(result)
         except (InvalidSessionIdException, WebDriverException):
             raise
         except Exception:
             return False
 
     def is_view_mode(self):
-        """Check if the form is in View mode (all fields disabled, no Submit/Update)."""
+        """Check if the form is in View mode (all fields disabled, no Submit/Update).
+        Uses JS check for speed — no Selenium timeout overhead."""
         try:
-            has_submit = self.is_displayed(self.SUBMIT_BUTTON, timeout=2)
-            has_update = self.is_displayed(self.UPDATE_BUTTON, timeout=2)
-            if has_submit or has_update:
-                return False
-
-            # Check if Name input is disabled
-            try:
-                name_input = self.driver.find_element(
-                    By.CSS_SELECTOR, "input[name='Name']"
-                )
-                if not name_input.is_enabled():
-                    return True
-            except Exception:
-                pass
+            result = self.driver.execute_script("""
+                // Check no Submit/Update button visible
+                var btns = document.querySelectorAll('.popup-footer button');
+                for (var i = 0; i < btns.length; i++) {
+                    var text = btns[i].textContent.trim();
+                    if ((text.indexOf('Submit') !== -1 || text.indexOf('Update') !== -1)
+                        && btns[i].offsetParent !== null) {
+                        return false;
+                    }
+                }
+                // Check if Name input is disabled (read-only)
+                var nameInput = document.querySelector("input[name='Name']");
+                if (nameInput && nameInput.disabled) {
+                    return true;
+                }
+                return false;
+            """)
+            return bool(result)
         except (InvalidSessionIdException, WebDriverException):
             log.error("Browser session lost during view mode check")
             raise
         except Exception:
-            pass
-        return False
+            return False
 
     # ==============================================================
     #  History popup
@@ -1271,36 +1340,22 @@ class ServicesMasterPage(BasePage):
         return False
 
     def close_history_popup(self):
-        """Close the History popup."""
+        """Close the History popup via JS (fast, no Selenium wait)."""
         log.info("Closing History popup...")
-        try:
-            close_btn = self.find_visible_element(self.HISTORY_CLOSE_BUTTON, timeout=5)
-            if close_btn:
-                self.driver.execute_script("arguments[0].click();", close_btn)
-                self.wait_seconds(0.5)
-                return
-        except Exception:
-            pass
-
-        # Fallback: find any Cancel/Close in visible popup
-        try:
-            btns = self.driver.find_elements(
-                By.XPATH,
-                "//div[contains(@class,'big-model')]//button"
-                "[contains(.,'Cancel') or contains(.,'Close')]"
-            )
-            for btn in btns:
-                try:
-                    if btn.is_displayed():
-                        self.driver.execute_script("arguments[0].click();", btn)
-                        self.wait_seconds(0.5)
-                        return
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-        log.warning("Could not close History popup")
+        self.driver.execute_script("""
+            var footers = document.querySelectorAll('.popup-footer');
+            for (var i = 0; i < footers.length; i++) {
+                var buttons = footers[i].querySelectorAll('button');
+                for (var j = 0; j < buttons.length; j++) {
+                    if (buttons[j].textContent.indexOf('Cancel') !== -1
+                        || buttons[j].textContent.indexOf('Close') !== -1) {
+                        buttons[j].click();
+                        return 'clicked';
+                    }
+                }
+            }
+            return 'not found';
+        """)
 
     def get_history_row_count(self):
         """Count rows in the History popup table."""
@@ -1457,11 +1512,46 @@ class ServicesMasterPage(BasePage):
             return ""
 
     def _cleanup(self):
-        """Smart cleanup — only close form if it's still open, then refresh.
+        """Smart cleanup — close any open popups/forms, then hard refresh.
         (UOM golden standard pattern — much faster than try/except/cancel/force_close/refresh)
+        Uses JS checks instead of Selenium is_displayed for speed.
         """
-        if self.is_add_form_open():
-            self.force_close_form_popup()
+        # Fast JS check: is any popup/form open?
+        try:
+            popup_open = self.driver.execute_script("""
+                var popup = document.querySelector(
+                    'div.big-model, mat-dialog-container, ' +
+                    'div.edit_pop_up.override_edit_pop_up.popup-mode'
+                );
+                return popup && popup.offsetParent !== null;
+            """)
+            if popup_open:
+                # Close popup via JS (fast, no Selenium)
+                self.driver.execute_script("""
+                    var closeBtn = document.querySelector(
+                        '.popup-header button[mat-icon-button], ' +
+                        '.popup-header button mat-icon'
+                    );
+                    if (closeBtn) {
+                        var btn = closeBtn.closest('button') || closeBtn;
+                        btn.click();
+                    }
+                """)
+                time.sleep(0.2)
+        except Exception:
+            pass
+
+        # Always clean up any leftover overlays/swal
+        try:
+            self.driver.execute_script("""
+                document.querySelectorAll('.swal2-container')
+                    .forEach(function(el) { el.remove(); });
+            """)
+        except Exception:
+            pass
+        self._force_close_panels()
+
+        # Hard refresh — fastest way to reset between tests
         self.hard_refresh()
 
     def dismiss_any_validation_alert(self):

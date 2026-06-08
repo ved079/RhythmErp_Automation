@@ -114,7 +114,12 @@ def sm_page(logged_in_driver):
         ServicesMasterPage,
     )
     page = ServicesMasterPage(logged_in_driver)
-    page.navigate_to_page()
+    # Optimised: full navigation only if not already on SM page
+    current_url = logged_in_driver.current_url
+    if "Services%20Master" not in current_url and "Services Master" not in current_url:
+        page.navigate_to_page()
+    else:
+        page.hard_refresh()
     yield page
 
 
