@@ -391,23 +391,35 @@ class ItemAttributePage(BasePage):
             elif button_text == "Cancel":
                 self.click_with_retry(self.CANCEL_BUTTON)
 
+    def is_popup_open(self):
+        """Check if any popup overlay is currently visible."""
+        try:
+            return bool(self.driver.execute_script(
+                "var popup = document.querySelector('div.edit_pop_up, div.big-model, mat-dialog-container'); "
+                "return popup && popup.offsetParent !== null;"
+            ))
+        except Exception:
+            return False
+
     def close_popup(self):
-        """Close popup via X button (JS click) or Cancel fallback."""
+        """Close popup via X button (JS click) or Cancel fallback.
+        Returns True if popup was closed, False if no popup found."""
         log.info("Closing popup")
         result = self.driver.execute_script(
             "var popup = document.querySelector('div.edit_pop_up, div.big-model, mat-dialog-container'); "
-            "if(!popup){return 'no popup found';} "
+            "if(!popup){return false;} "
             "var closeIcon = popup.querySelector('button[mat-icon-button] mat-icon'); "
-            "if(closeIcon){var btn=closeIcon.closest('button'); if(btn){btn.click(); return 'clicked close';}} "
+            "if(closeIcon){var btn=closeIcon.closest('button'); if(btn){btn.click(); return true;}} "
             "var footers = popup.querySelectorAll('div[class*=\"popup-footer\"] button'); "
             "for(var i=0;i<footers.length;i++){"
             "  if(footers[i].textContent.trim().indexOf('Cancel')!==-1){"
-            "    footers[i].click(); return 'clicked Cancel';"
+            "    footers[i].click(); return true;"
             "  }"
             "} "
-            "return 'no close button found';"
+            "return false;"
         )
         log.info("Close popup result: " + str(result))
+        return bool(result)
 
     def force_close_form_popup(self):
         log.info("Force closing form popup")
