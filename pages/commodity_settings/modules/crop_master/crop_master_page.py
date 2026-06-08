@@ -72,13 +72,13 @@ class CropMasterPage(BasePage):
     def _wait_for_page_ready(self):
         """Wait for the main table to render (proves page is loaded)."""
         try:
-            WebDriverWait(self.driver, 10).until(
+            WebDriverWait(self.driver, 8).until(
                 lambda d: d.find_elements("css selector", "table#excel-table")
             )
             log.info("Page ready (table found)")
         except Exception:
             try:
-                WebDriverWait(self.driver, 3).until(
+                WebDriverWait(self.driver, 2).until(
                     lambda d: d.find_elements("css selector", "button.erp-add-btn")
                 )
                 log.info("Page ready (add button found, no table)")
@@ -416,9 +416,9 @@ class CropMasterPage(BasePage):
 
     def click_view_button(self, crop_name):
         """Click View via 3-dot menu for a specific crop row.
-        Searches first to ensure the crop is on the current page."""
-        if not self.is_crop_in_table(crop_name):
-            self.search_crop(crop_name)
+        Searches first to ensure the crop is on the current page.
+        Retries with hard_refresh if search fails to find the crop."""
+        self._ensure_crop_visible(crop_name)
         self._click_action_menu_item(crop_name, "View")
         try:
             WebDriverWait(self.driver, 3).until(
@@ -429,9 +429,9 @@ class CropMasterPage(BasePage):
 
     def click_edit_button(self, crop_name):
         """Click Edit via 3-dot menu for a specific crop row.
-        Searches first to ensure the crop is on the current page."""
-        if not self.is_crop_in_table(crop_name):
-            self.search_crop(crop_name)
+        Searches first to ensure the crop is on the current page.
+        Retries with hard_refresh if search fails to find the crop."""
+        self._ensure_crop_visible(crop_name)
         self._click_action_menu_item(crop_name, "Edit")
         try:
             WebDriverWait(self.driver, 3).until(
@@ -446,17 +446,45 @@ class CropMasterPage(BasePage):
 
     def click_history_button(self, crop_name):
         """Click History via 3-dot menu for a specific crop row.
-        Searches first to ensure the crop is on the current page."""
-        if not self.is_crop_in_table(crop_name):
-            self.search_crop(crop_name)
+        Searches first to ensure the crop is on the current page.
+        Retries with hard_refresh if search fails to find the crop."""
+        self._ensure_crop_visible(crop_name)
         self._click_action_menu_item(crop_name, "History")
-        # Wait for history popup (uses app-dynamic-history component like UOM)
+        # Wait for history popup (uses heading text matching like Vehicle Master)
         try:
             WebDriverWait(self.driver, 3).until(
-                EC.presence_of_element_located(("css selector", "app-dynamic-history, .popup-overlay"))
+                lambda d: d.execute_script(
+                    "var headings = document.querySelectorAll("
+                    "'h3.popup-title, .big-model h3, mat-dialog-container h3, .popup-header h3'); "
+                    "for(var i=0;i<headings.length;i++){"
+                    "  if(headings[i].offsetParent !== null "
+                    "     && headings[i].textContent.toLowerCase().indexOf('history')!==-1){"
+                    "    return true;"
+                    "  }"
+                    "} "
+                    "var el = document.querySelector('app-dynamic-history, .popup-overlay'); "
+                    "return el && el.offsetParent !== null;"
+                )
             )
         except Exception:
             pass
+
+    def _ensure_crop_visible(self, crop_name, max_attempts=2):
+        """Ensure a crop is visible in the table before clicking its 3-dot menu.
+        Tries: is_crop_in_table -> search_crop -> hard_refresh + search."""
+        for attempt in range(max_attempts):
+            if self.is_crop_in_table(crop_name):
+                return
+            found = self.search_crop(crop_name)
+            if found:
+                return
+            # Search failed — hard refresh and try again
+            if attempt < max_attempts - 1:
+                log.info("Crop not found via search, hard refreshing and retrying: " + crop_name)
+                self.hard_refresh()
+        # Final check — if still not in table, search one more time
+        if not self.is_crop_in_table(crop_name):
+            self.search_crop(crop_name)
 
     # ================================================================
     # Form state checks — offsetParent instead of is_displayed()
@@ -708,7 +736,7 @@ class CropMasterPage(BasePage):
         log.info("Validation warning handled: " + title)
         return title
 
-    def handle_success_alert(self, timeout=3):
+    def handle_success_alert(self, timeout=2):
         """Handle SweetAlert2 success notification — fast dismiss.
         Returns message text or ''."""
         log.info("Handling success alert")
@@ -723,7 +751,7 @@ class CropMasterPage(BasePage):
                 "if(btn){btn.click(); return 'clicked';} return 'not found';"
             )
             try:
-                WebDriverWait(self.driver, 2).until(
+                WebDriverWait(self.driver, 1).until(
                     EC.invisibility_of_element_located(("css selector", ".swal2-popup"))
                 )
             except Exception:
@@ -1042,11 +1070,25 @@ class CropMasterPage(BasePage):
             result = self.driver.execute_script(
                 "var btn = document.querySelector('button.filter-btn') "
                 "|| document.querySelector('button[mattooltip=\"Filter\"]') "
-                "|| document.querySelector('button[mattooltip=\"filter\"]'); "
+                "|| document.querySelector('button[mattooltip=\"filter\"]') "
+                "|| document.querySelector('.filter-btn') "
+                "|| document.querySelector('button[aria-label=\"Filter\"]') "
+                "|| document.querySelector('button[aria-label=\"filter\"]'); "
                 "if(!btn){return 'not found';} "
                 "btn.scrollIntoView({block:'center'}); btn.click(); return 'clicked';"
             )
             log.info("Filter panel result: " + str(result))
+            # Brief wait for filter panel animation
+            try:
+                WebDriverWait(self.driver, 2).until(
+                    lambda d: d.execute_script(
+                        "var p = document.querySelector('.filter-panel, .erp-filter-panel, "
+                        ".cdk-overlay-pane filter-panel, div.cdk-overlay-pane [role=\"listbox\"]'); "
+                        "return p && p.offsetParent !== null;"
+                    )
+                )
+            except Exception:
+                pass
             return 'clicked' in str(result)
         except Exception as e:
             log.warning("Filter panel open failed: " + str(e))
@@ -1073,7 +1115,10 @@ class CropMasterPage(BasePage):
         """Check if the filter panel is currently visible."""
         try:
             return bool(self.driver.execute_script(
-                "var panel = document.querySelector('.filter-panel, .erp-filter-panel'); "
+                "var panel = document.querySelector("
+                "'.filter-panel, .erp-filter-panel, "
+                ".cdk-overlay-pane filter-panel, "
+                "div.cdk-overlay-pane [role=\"listbox\"]'); "
                 "return panel && panel.offsetParent !== null;"
             ))
         except Exception:
@@ -1083,9 +1128,13 @@ class CropMasterPage(BasePage):
         """Get filter categories from the filter panel. Returns list of strings."""
         try:
             result = self.driver.execute_script(
-                "var panel = document.querySelector('.filter-panel, .erp-filter-panel'); "
+                "var panel = document.querySelector("
+                "'.filter-panel, .erp-filter-panel, "
+                ".cdk-overlay-pane filter-panel, "
+                "div.cdk-overlay-pane [role=\"listbox\"]'); "
                 "if(!panel){return [];} "
-                "var items = panel.querySelectorAll('mat-panel-title, .category-title, .filter-category'); "
+                "var items = panel.querySelectorAll("
+                "'mat-panel-title, .category-title, .filter-category, mat-list-item'); "
                 "var result = []; "
                 "for(var i=0;i<items.length;i++){"
                 "  var t = items[i].textContent.trim(); if(t) result.push(t);"
@@ -1233,9 +1282,18 @@ class CropMasterPage(BasePage):
             return False
 
     def is_history_popup_open(self):
-        """Check if the history popup is currently visible."""
+        """Check if the history popup is currently visible.
+        Uses heading text matching (same pattern as Vehicle Master)."""
         try:
             return bool(self.driver.execute_script(
+                "var headings = document.querySelectorAll("
+                "'h3.popup-title, .big-model h3, mat-dialog-container h3, .popup-header h3'); "
+                "for(var i=0;i<headings.length;i++){"
+                "  if(headings[i].offsetParent !== null "
+                "     && headings[i].textContent.toLowerCase().indexOf('history')!==-1){"
+                "    return true;"
+                "  }"
+                "} "
                 "var el = document.querySelector('app-dynamic-history, .popup-overlay'); "
                 "return el && el.offsetParent !== null;"
             ))
@@ -1324,7 +1382,7 @@ class CropMasterPage(BasePage):
         """Full edit workflow: navigate -> search -> click edit -> fill -> update.
         Returns dict: {status, error, name, message}
         Optimised: checks form-closed FIRST (fast path), then alert."""
-        new_name = edit_data.get("name", crop_name)
+        new_name = edit_data.get("name") or crop_name
         log.info("Editing Crop '" + crop_name + "' -> '" + new_name + "'")
 
         self.navigate_to_page()
