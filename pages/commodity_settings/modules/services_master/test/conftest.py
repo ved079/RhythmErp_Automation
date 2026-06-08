@@ -109,17 +109,31 @@ def logged_in_driver(driver):
 
 @pytest.fixture
 def sm_page(logged_in_driver):
-    """Services Master page object â€” fresh navigation for each test."""
+    """Services Master page object — fresh navigation for each test.
+    Optimised (v3): eliminates double hard_refresh between tests.
+    _cleanup() in each test's finally block already does hard_refresh,
+    so the fixture only refreshes if the page is NOT in a clean state.
+    This saves ~3-4s per test x 49 tests = ~150-200s total."""
     from pages.commodity_settings.modules.services_master.services_master_page import (
         ServicesMasterPage,
     )
     page = ServicesMasterPage(logged_in_driver)
-    # Optimised: full navigation only if not already on SM page
     current_url = logged_in_driver.current_url
     if "Services%20Master" not in current_url and "Services Master" not in current_url:
+        # Not on SM page at all — full navigation needed
         page.navigate_to_page()
     else:
-        page.hard_refresh()
+        # Already on SM page — _cleanup() from previous test already
+        # did a hard_refresh. Just verify the page is in a clean state
+        # with a fast JS check. Only refresh if the table is missing.
+        try:
+            table_present = logged_in_driver.execute_script(
+                "return !!document.querySelector('table#excel-table');"
+            )
+            if not table_present:
+                page.hard_refresh()
+        except Exception:
+            page.hard_refresh()
     yield page
 
 

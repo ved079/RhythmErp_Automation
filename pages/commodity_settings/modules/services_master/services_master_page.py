@@ -305,16 +305,18 @@ class ServicesMasterPage(BasePage):
         log.info("Page refreshed and ready")
 
     def _wait_for_page_ready(self):
-        """Wait until the page is fully loaded. Fast — uses short timeouts."""
+        """Wait until the page is fully loaded. Fast — uses short timeouts.
+        Optimised (v3): reduced primary timeout from 15s→10s, fallback from 5s→3s
+        matching QP Master golden standard."""
         try:
-            WebDriverWait(self.driver, 15).until(
+            WebDriverWait(self.driver, 10).until(
                 lambda d: d.find_elements("css selector", "table#excel-table")
             )
             log.info("Page ready (table found)")
         except Exception:
             # Fallback: check for search button
             try:
-                WebDriverWait(self.driver, 5).until(
+                WebDriverWait(self.driver, 3).until(
                     lambda d: d.find_elements("css selector", "button.search-btn")
                 )
                 log.info("Page ready (search button found, no table)")
@@ -639,7 +641,7 @@ class ServicesMasterPage(BasePage):
                         "//input[@type='checkbox']"
                     )
                     self.driver.execute_script("arguments[0].click();", checkbox)
-                    time.sleep(0.3)
+                    time.sleep(0.15)
                     new_state = self._get_status_toggle_state()
                     if new_state == desired_state:
                         log.info(f"Status toggle set to {target_label} (via checkbox input, attempt {attempt})")
@@ -657,7 +659,7 @@ class ServicesMasterPage(BasePage):
                         "//div[contains(@class,'switch-wrapper')]"
                     )
                     self.driver.execute_script("arguments[0].click();", wrapper)
-                    time.sleep(0.3)
+                    time.sleep(0.15)
                     new_state = self._get_status_toggle_state()
                     if new_state == desired_state:
                         log.info(f"Status toggle set to {target_label} (via wrapper click, attempt {attempt})")
@@ -678,7 +680,7 @@ class ServicesMasterPage(BasePage):
                             }));
                         }
                     """)
-                    time.sleep(0.3)
+                    time.sleep(0.15)
                     new_state = self._get_status_toggle_state()
                     if new_state == desired_state:
                         log.info(f"Status toggle set to {target_label} (via dispatchEvent, attempt {attempt})")
@@ -861,13 +863,8 @@ class ServicesMasterPage(BasePage):
                 if (btn) { btn.click(); return 'clicked'; }
                 return 'not found';
             """)
-            # Wait for SweetAlert to disappear (short wait)
-            try:
-                WebDriverWait(self.driver, 3).until(
-                    EC.invisibility_of_element_located(("css selector", ".swal2-container"))
-                )
-            except Exception:
-                pass
+            # Clean up SweetAlert DOM remnants (faster than 3s WebDriverWait)
+            self._cleanup_swal_containers()
             return title or ""
         except Exception:
             log.info("No success alert found (may have auto-dismissed)")
@@ -1071,7 +1068,7 @@ class ServicesMasterPage(BasePage):
                 log.warning(f"View popup not detected after attempt {attempt}")
                 if attempt < 3:
                     self._force_close_panels()
-                    time.sleep(0.3)
+                    time.sleep(0.1)
         log.warning("View popup may not have opened after 3 attempts")
 
     def click_edit_button(self, item_name=None, row_index=0):
@@ -1093,7 +1090,7 @@ class ServicesMasterPage(BasePage):
                 log.warning(f"Edit popup not detected after attempt {attempt}")
                 if attempt < 3:
                     self._force_close_panels()
-                    time.sleep(0.3)
+                    time.sleep(0.1)
         log.warning("Edit popup may not have opened after 3 attempts")
 
     def click_history_button(self, item_name=None, row_index=0):
@@ -1126,7 +1123,7 @@ class ServicesMasterPage(BasePage):
                     pass
                 if attempt < 3:
                     self._force_close_panels()
-                    time.sleep(0.3)
+                    time.sleep(0.1)
         log.warning("History popup may not have opened after 3 attempts")
 
     def _click_action_menu_item(self, item_name, row_index, action_name):
@@ -1252,7 +1249,12 @@ class ServicesMasterPage(BasePage):
                     self.driver.execute_script(
                         "arguments[0].click();", btns[btn_index]
                     )
-                    self.wait_seconds(1)
+                    try:
+                        WebDriverWait(self.driver, 0.5).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, ".popup-header h3, input[name='Name']"))
+                        )
+                    except Exception:
+                        pass
                     return True
         except (InvalidSessionIdException, WebDriverException):
             log.error("Browser session lost during action button click")
@@ -1489,7 +1491,7 @@ class ServicesMasterPage(BasePage):
                         return True
             except Exception:
                 pass
-            time.sleep(0.5)
+            time.sleep(0.15)
         log.warning("NOT found '" + str(name) + "' in table after search")
         return False
 
@@ -1537,7 +1539,7 @@ class ServicesMasterPage(BasePage):
                         btn.click();
                     }
                 """)
-                time.sleep(0.2)
+                time.sleep(0.1)
         except Exception:
             pass
 
@@ -1622,9 +1624,8 @@ class ServicesMasterPage(BasePage):
                 pass
             self.force_close_form_popup()
 
-            # Refresh to see new record
-            self.click_refresh()
-            self.wait_seconds(2)
+            # Refresh to see new record — hard_refresh is faster than click_refresh + wait
+            self.hard_refresh()
 
             SM_SUBMISSIONS.append(result)
             return result
