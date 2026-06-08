@@ -18,7 +18,7 @@ Optimised (UOM gold standard v2 — Item Group variant):
 - _js_set_input() with Angular event dispatch for text fields
 - _js_set_mat_select() for Base UOM dropdown (IA1 only) — works around BUG-IA02
 - _set_status_toggle() / _get_status_toggle_state() via .on.active class check
-- Search with multi-selector fallback for search button
+- Search input class is 'search-bar-input' (NOT 'erpSearchInput' — no id on IA pages!)
 - _force_close_panels() only removes .erp-action-menu and .cdk-overlay-backdrop
 - cancel() is graceful — returns 'no_cancel_found' instead of throwing
 - clear_search() uses JS-based clearing (no hard_refresh — saves ~4s per call)
@@ -26,6 +26,9 @@ Optimised (UOM gold standard v2 — Item Group variant):
 - Filter panel uses position:fixed -> getBoundingClientRect for visibility
 - History via 3-dot menu "History" item
 - Field names: name="Name" / name="Description" (capital N and D!)
+- NO formcontrolname on any element — must use name attribute selectors
+- Base UOM mat-select is inside .big-model — must target '.big-model mat-select' NOT bare 'mat-select'
+  (bare mat-select hits the paginator first!)
 """
 
 import time
@@ -190,22 +193,25 @@ class ItemAttributePage(BasePage):
 
     def _js_set_mat_select(self, value_text):
         """Select an option in the Base UOM mat-select dropdown via JS.
+        CRITICAL: Must target mat-select inside .big-model popup, NOT the paginator!
+        Bare document.querySelector('mat-select') hits the paginator's mat-select first.
         Works around BUG-IA02: browser-clicked mat-select values don't
-        register in Angular reactive form. Uses JS click on the option
-        AND sets the form control value via Angular's NgModel."""
+        register in Angular reactive form."""
         if not value_text:
-            # Select a random option if no specific value given
             self._js_select_random_mat_option()
             return
         log.info("Selecting Base UOM: " + str(value_text))
         try:
-            # Step 1: Open the mat-select dropdown
-            self.driver.execute_script(
-                "var sel = document.querySelector('mat-select'); "
-                "if(!sel){throw new Error('mat-select not found');} "
+            # Step 1: Open the mat-select dropdown INSIDE the popup form
+            result = self.driver.execute_script(
+                "var popup = document.querySelector('.big-model, .edit_pop_up, mat-dialog-container'); "
+                "if(!popup){throw new Error('Popup not found');} "
+                "var sel = popup.querySelector('mat-select'); "
+                "if(!sel){throw new Error('mat-select not found inside popup');} "
                 "sel.scrollIntoView({block:'center'}); sel.click(); "
                 "return 'opened';"
             )
+            log.info("Base UOM dropdown opened: " + str(result))
             # Step 2: Wait for options to appear
             try:
                 WebDriverWait(self.driver, 3).until(
@@ -219,43 +225,76 @@ class ItemAttributePage(BasePage):
                 "for(var i=0;i<options.length;i++){"
                 "  var txt = options[i].textContent.trim(); "
                 "  if(txt === arguments[0] || txt.indexOf(arguments[0])!==-1){"
-                "    options[i].click(); return 'selected_'+txt;"
+                "    options[i].scrollIntoView({block:'center'}); "
+                "    options[i].dispatchEvent(new MouseEvent('click',{bubbles:true})); "
+                "    options[i].click(); "
+                "    return 'selected_'+txt;"
                 "  }"
                 "} "
                 "return 'option_not_found';",
                 str(value_text)
             )
             log.info("Base UOM selection result: " + str(result))
-            # Step 4: Close any leftover overlay
+            # Step 4: Verify the value was set in the mat-select trigger
+            verify = self.driver.execute_script(
+                "var popup = document.querySelector('.big-model, .edit_pop_up, mat-dialog-container'); "
+                "if(!popup){return 'no_popup';} "
+                "var sel = popup.querySelector('mat-select'); "
+                "if(!sel){return 'no_select';} "
+                "var trigger = sel.querySelector('.mat-mdc-select-value-text'); "
+                "return trigger ? trigger.textContent.trim() : 'no_trigger_text';"
+            )
+            log.info("Base UOM verify: " + str(verify))
+            # Step 5: Close any leftover overlay
             self._force_close_panels()
         except Exception as e:
             log.warning("Base UOM selection failed: " + str(e))
             self._force_close_panels()
 
     def _js_select_random_mat_option(self):
-        """Select a random option from the Base UOM dropdown."""
+        """Select a random option from the Base UOM dropdown.
+        Targets mat-select INSIDE the popup form, not the paginator."""
         log.info("Selecting random Base UOM option")
         try:
-            self.driver.execute_script(
-                "var sel = document.querySelector('mat-select'); "
-                "if(!sel){throw new Error('mat-select not found');} "
+            # Open mat-select INSIDE popup
+            result = self.driver.execute_script(
+                "var popup = document.querySelector('.big-model, .edit_pop_up, mat-dialog-container'); "
+                "if(!popup){throw new Error('Popup not found');} "
+                "var sel = popup.querySelector('mat-select'); "
+                "if(!sel){throw new Error('mat-select not found inside popup');} "
                 "sel.scrollIntoView({block:'center'}); sel.click(); "
                 "return 'opened';"
             )
+            log.info("Base UOM dropdown opened: " + str(result))
             try:
                 WebDriverWait(self.driver, 3).until(
                     EC.presence_of_element_located(("css selector", "div[role='listbox'] mat-option"))
                 )
             except Exception:
                 pass
+            # Pick a random option (skip first if it's a placeholder)
             result = self.driver.execute_script(
                 "var options = document.querySelectorAll('div[role=\"listbox\"] mat-option'); "
                 "if(options.length===0){return 'no_options';} "
-                "var idx = Math.floor(Math.random() * options.length); "
+                "var start = options.length > 1 ? 1 : 0; "
+                "var idx = start + Math.floor(Math.random() * (options.length - start)); "
                 "var txt = options[idx].textContent.trim(); "
-                "options[idx].click(); return 'selected_'+txt;"
+                "options[idx].scrollIntoView({block:'center'}); "
+                "options[idx].dispatchEvent(new MouseEvent('click',{bubbles:true})); "
+                "options[idx].click(); "
+                "return 'selected_'+txt;"
             )
             log.info("Random Base UOM: " + str(result))
+            # Verify the selection
+            verify = self.driver.execute_script(
+                "var popup = document.querySelector('.big-model, .edit_pop_up, mat-dialog-container'); "
+                "if(!popup){return 'no_popup';} "
+                "var sel = popup.querySelector('mat-select'); "
+                "if(!sel){return 'no_select';} "
+                "var trigger = sel.querySelector('.mat-mdc-select-value-text'); "
+                "return trigger ? trigger.textContent.trim() : 'no_trigger_text';"
+            )
+            log.info("Base UOM verify: " + str(verify))
             self._force_close_panels()
         except Exception as e:
             log.warning("Random Base UOM selection failed: " + str(e))
@@ -795,7 +834,7 @@ class ItemAttributePage(BasePage):
         log.info("Searching for: " + item_name)
         try:
             self.driver.execute_script(
-                "var input = document.querySelector('input#erpSearchInput, .erp-search-wrapper input'); "
+                "var input = document.querySelector('input.search-bar-input, input#erpSearchInput, .erp-search-wrapper input, input[placeholder*=\"earch\"]'); "
                 "if(!input){return 'no search input';} "
                 "var setter = Object.getOwnPropertyDescriptor("
                 "window.HTMLInputElement.prototype,'value').set;"
@@ -805,15 +844,25 @@ class ItemAttributePage(BasePage):
                 "return 'typed';",
                 item_name
             )
-            self.driver.execute_script(
+            # First try: click the Search button
+            btn_result = self.driver.execute_script(
                 "var btn = document.querySelector("
                 "'button[aria-label=\"Search\"], "
                 "button.search-btn, "
                 "button.erp-outline-btn[mattooltip=\"Search\"]'); "
                 "if(btn){btn.click(); return 'clicked';} return 'no search button';"
             )
+            log.info("Search button result: " + str(btn_result))
+            # Also press Enter in the search input as a fallback (some screens need this)
+            self.driver.execute_script(
+                "var input = document.querySelector('input.search-bar-input, input#erpSearchInput, input[placeholder*=\"earch\"]'); "
+                "if(input){input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true})); "
+                "input.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true})); "
+                "input.dispatchEvent(new Event('change',{bubbles:true}));}"
+            )
+            # Wait longer for search results — the ERP search can be slow
             try:
-                WebDriverWait(self.driver, 3).until(
+                WebDriverWait(self.driver, 5).until(
                     lambda d: d.execute_script(
                         "var rows = document.querySelectorAll('table#excel-table tbody tr'); "
                         "if(rows.length === 0){return true;} "
@@ -828,6 +877,8 @@ class ItemAttributePage(BasePage):
                 )
             except Exception:
                 pass
+            # Give the table an extra moment to load after search
+            time.sleep(0.3)
             found = self.is_item_in_table(item_name)
             log.info("Search result for '" + item_name + "': " + str(found))
             return found
@@ -839,7 +890,7 @@ class ItemAttributePage(BasePage):
         log.info("Clearing search")
         try:
             self.driver.execute_script(
-                "var input = document.querySelector('input#erpSearchInput, .erp-search-wrapper input'); "
+                "var input = document.querySelector('input.search-bar-input, input#erpSearchInput, .erp-search-wrapper input, input[placeholder*=\"earch\"]'); "
                 "if(!input){return;} "
                 "var setter = Object.getOwnPropertyDescriptor("
                 "window.HTMLInputElement.prototype,'value').set;"
@@ -853,6 +904,12 @@ class ItemAttributePage(BasePage):
                 "button.search-btn, "
                 "button.erp-outline-btn[mattooltip=\"Search\"]'); "
                 "if(btn){btn.click(); return 'clicked';} return 'no search button';"
+            )
+            # Also press Enter as fallback
+            self.driver.execute_script(
+                "var input = document.querySelector('input.search-bar-input, input#erpSearchInput, input[placeholder*=\"earch\"]'); "
+                "if(input){input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true})); "
+                "input.dispatchEvent(new Event('change',{bubbles:true}));}"
             )
             try:
                 WebDriverWait(self.driver, 3).until(
