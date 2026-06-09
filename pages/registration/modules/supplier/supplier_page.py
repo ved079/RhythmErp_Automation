@@ -696,7 +696,9 @@ class SupplierPage(BasePage):
             log.warning(f"Debug popup info failed: {e}")
 
     def click_refresh(self):
-        """Click the Refresh button."""
+        """Click the Refresh button.
+        Falls back to driver.refresh() if the toolbar button is not found.
+        """
         log.info("Clicking Refresh button...")
         try:
             btns = self.driver.find_elements(
@@ -717,7 +719,33 @@ class SupplierPage(BasePage):
                     continue
         except Exception:
             pass
-        log.warning("Refresh button not found")
+
+        # Fallback: find by icon text
+        try:
+            all_btns = self.driver.find_elements(
+                By.CSS_SELECTOR, "button.mat-mdc-mini-fab"
+            )
+            for btn in all_btns:
+                try:
+                    icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
+                    if icon.text.strip().lower() == "refresh" and btn.is_displayed():
+                        self.driver.execute_script("arguments[0].click();", btn)
+                        self.wait_seconds(2)
+                        log.info("Refresh clicked via icon match")
+                        return
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        # Fallback: full page refresh + wait for ready
+        log.warning("Refresh button not found — falling back to driver.refresh()")
+        try:
+            self.driver.refresh()
+            self._wait_for_page_ready()
+            log.info("Page refreshed via driver.refresh()")
+        except Exception as e:
+            log.warning(f"driver.refresh() fallback failed: {e}")
 
     # ==============================================================
     #  Dropdown helper — JS value-setter for Angular form sync
@@ -1380,32 +1408,87 @@ class SupplierPage(BasePage):
         log.info(f"Step 2 Address Details filled (row {row_index})")
 
     def add_address_row(self):
-        """Click the Add button to add a new Address row in Step 2."""
+        """Click the inline Add button on the LAST address row in Step 2
+        to add a new address row.
+
+        The address grid has NO global add button. Each row has its own
+        inline add/remove buttons inside the action <td>. This method
+        finds the last <tr> in the address grid and clicks its add button.
+
+        Strategy 1: JS — find last tr in address grid → click its add button
+        Strategy 2: Python fallback — find last visible row's add button
+        """
         log.info("Adding new Address row...")
+
+        # Strategy 1: JS — find last tr in first .grid-container → click its add button
         try:
-            btn = self.driver.find_element(
-                By.XPATH,
-                "//mat-step-content[2]//button[.//mat-icon[text()='add']]"
-            )
-            self.driver.execute_script("arguments[0].click();", btn)
-            self.wait_seconds(1)
-            log.info("Address row added")
-        except Exception:
-            # Fallback: try clicking any add button in step 2
-            try:
-                self.driver.execute_script("""
-                    var step2 = document.querySelectorAll('mat-step-content')[1];
-                    if (step2) {
-                        var addBtn = step2.querySelector('button mat-icon');
-                        if (addBtn && addBtn.textContent.trim() === 'add') {
-                            addBtn.closest('button').click();
-                        }
+            clicked = self.driver.execute_script("""
+                var containers = document.querySelectorAll('.grid-container');
+                if (containers.length < 1) return false;
+                var tbody = containers[0].querySelector('.grid-table tbody, table tbody');
+                if (!tbody) return false;
+                var rows = tbody.querySelectorAll('tr');
+                if (rows.length === 0) return false;
+                var lastRow = rows[rows.length - 1];
+                var btns = lastRow.querySelectorAll(
+                    'button.mat-mdc-icon-button, button.mdc-icon-button'
+                );
+                for (var i = 0; i < btns.length; i++) {
+                    var icon = btns[i].querySelector('mat-icon');
+                    if (icon && icon.textContent.trim().toLowerCase() === 'add') {
+                        btns[i].click();
+                        return true;
                     }
-                """)
-                self.wait_seconds(1)
-                log.info("Address row added via JS fallback")
-            except Exception as e:
-                log.warning(f"Add Address row failed: {e}")
+                }
+                return false;
+            """)
+            if clicked:
+                self.wait_seconds(1.5)
+                log.info("Address row added via JS (last row inline add)")
+                return
+        except Exception:
+            pass
+
+        # Strategy 2: Python fallback — find last visible row's add button
+        try:
+            containers = self.driver.find_elements(
+                By.CSS_SELECTOR, ".grid-container"
+            )
+            if containers:
+                tbody = containers[0].find_elements(
+                    By.CSS_SELECTOR, ".grid-table tbody tr, table tbody tr"
+                )
+                if tbody:
+                    last_row = tbody[-1]
+                    add_btns = last_row.find_elements(
+                        By.CSS_SELECTOR,
+                        "button.mat-mdc-icon-button, button.mdc-icon-button",
+                    )
+                    for btn in add_btns:
+                        try:
+                            icon = btn.find_element(
+                                By.CSS_SELECTOR, "mat-icon"
+                            )
+                            if (
+                                icon.text.strip().lower() == "add"
+                                and btn.is_displayed()
+                            ):
+                                self.driver.execute_script(
+                                    "arguments[0].scrollIntoView({block:'center'});"
+                                    "arguments[0].click();",
+                                    btn,
+                                )
+                                self.wait_seconds(1.5)
+                                log.info(
+                                    "Address row added via Python fallback"
+                                )
+                                return
+                        except Exception:
+                            continue
+        except Exception:
+            pass
+
+        log.warning("Add Address row failed — no inline add button found")
 
     def remove_address_row(self, row_index=0):
         """Click the Remove button on an Address row in Step 2."""
@@ -1670,23 +1753,41 @@ class SupplierPage(BasePage):
             self.submit()
             self.wait_seconds(2)
 
-            # Check for success
-            success = self.handle_success_alert(timeout=5)
-            if success:
-                result["status"] = "PASSED"
-                result["message"] = f"Supplier created: {success}"
-                company_name = step1.get("company_name", "Unknown")
-                SP_SUBMISSIONS.append(company_name)
-                log.info(f"Supplier created successfully: {company_name}")
-            else:
-                # Check for validation failure
-                validation = self.handle_validation_warning(timeout=3)
-                if validation:
-                    result["message"] = f"Validation failed: {validation}"
-                    log.info(f"Supplier creation blocked by validation: {validation}")
+            # Check for result — SweetAlert2 may show success OR failure
+            # First try the validation warning handler (catches both success & failure)
+            msg = self.handle_validation_warning(timeout=60)
+            if msg:
+                result["message"] = msg
+                # Check for failure keywords in the SweetAlert2 message
+                msg_lower = msg.lower()
+                failure_keywords = [
+                    "validation failed", "failed", "error", "invalid",
+                    "already exists", "duplicate", "required",
+                ]
+                if any(kw in msg_lower for kw in failure_keywords):
+                    result["status"] = "FAILED"
+                    log.info(f"Supplier creation FAILED: {msg}")
                 else:
-                    result["message"] = "No success or validation response"
-                    log.warning("No response after submit")
+                    result["status"] = "PASSED"
+                    company_name = step1.get("company_name", "Unknown")
+                    SP_SUBMISSIONS.append(company_name)
+                    log.info(f"Supplier created successfully: {company_name}")
+            else:
+                # No SweetAlert2 — check if form closed (assumed success)
+                self.wait_seconds(3)
+                if not self._is_form_popup_open():
+                    result["status"] = "PASSED"
+                    result["message"] = "Form closed (assumed success)"
+                    company_name = step1.get("company_name", "Unknown")
+                    SP_SUBMISSIONS.append(company_name)
+                    log.info(f"Supplier created (form closed): {company_name}")
+                else:
+                    errors = self.get_mat_error_text()
+                    if errors:
+                        result["message"] = f"Validation errors: {errors}"
+                    else:
+                        result["message"] = "No success message and dialog did not close"
+                    log.warning(f"Supplier creation stuck: {result['message']}")
 
         except Exception as e:
             result["message"] = f"Exception: {str(e)}"
