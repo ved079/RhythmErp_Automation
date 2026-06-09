@@ -20,6 +20,7 @@ FORM LAYOUT (3-STEP HORIZONTAL STEPPER inside popup):
     - PAN Number             (text input,   required, maxlength=255)
 
   TOGGLE SWITCHES:
+    - Copy From Existing Party (app-slide-toggle-v2, No/Yes, default No, OUTSIDE stepper)
     - Status                 (app-slide-toggle-v2, Active/Inactive, default Active, OUTSIDE stepper)
     - Is TDS Applicable      (app-slide-toggle-v2, No/Yes, default No, INSIDE stepper step 0)
 
@@ -27,7 +28,8 @@ FORM LAYOUT (3-STEP HORIZONTAL STEPPER inside popup):
     - Contact Person Name    (text input,   optional, maxlength=255)
     - Office Number          (text input,   optional, maxlength=255)
     - Preferred Payment Method (mat-select, optional)
-    - Gst Registration Type  (mat-select,   optional)
+    - Gst Registration Status (mat-select,  optional, Registered/Unregistered)
+    - Gst Registration Type  (mat-select,   optional, Composit/Regular)
     - Payment Terms          (mat-select,   optional)
     - Delivery Terms         (mat-select,   optional)
     - Mode Of Delivery       (mat-select,   optional)
@@ -36,9 +38,9 @@ FORM LAYOUT (3-STEP HORIZONTAL STEPPER inside popup):
     - Quantity Tolerance     (number input, optional)
     - Rate Tolerance         (number input, optional)
 
-  Step 1 — "Customer Details" (Address Grid):
-    Grid table with columns: Action, Address Type*, Country*, State*,
-    District*, Taluka*, Village, Address*, Pin Code, GSTIN
+  Step 1 — "Address Details" (Address Grid):
+    Grid table with columns: Action, Same as Above, Address Type*, Country*,
+    State*, District*, Taluka*, Village, Address*, Pin Code*, GSTIN
     Starts with 1 default empty row; Add (+) button to add more rows
     Cascading dropdowns: Country -> State -> District -> Taluka -> Village
 
@@ -46,6 +48,7 @@ FORM LAYOUT (3-STEP HORIZONTAL STEPPER inside popup):
     Grid table with columns: Action, Bank Name*, Branch*, IFSC Code,
     Account Type*, Account Holder Name*, Account Number*, Bank Proof*, Attachment
     Starts with 1 default empty row; Add (+) button to add more rows
+    NOTE: Account Type and Bank Proof are now required=True in the ERP UI
 
 TABLE COLUMNS (main listing):
   - View / Edit / History   (action buttons per row)
@@ -232,6 +235,11 @@ class CustomerPage(BasePage):
     PREFERRED_PAYMENT_METHOD_SELECT = (
         "xpath",
         "//mat-label[contains(.,'Preferred Payment Method')]"
+        "/ancestor::mat-form-field//mat-select",
+    )
+    GST_REGISTRATION_STATUS_SELECT = (
+        "xpath",
+        "//mat-label[contains(.,'Gst Registration Status')]"
         "/ancestor::mat-form-field//mat-select",
     )
     GST_REGISTRATION_TYPE_SELECT = (
@@ -1279,6 +1287,7 @@ class CustomerPage(BasePage):
           - Contact Person Name        (text input)
           - Office Number              (text input)
           - Preferred Payment Method   (mat-select)
+          - Gst Registration Status    (mat-select, Registered/Unregistered)
           - Gst Registration Type      (mat-select)
           - Payment Terms              (mat-select)
           - Delivery Terms             (mat-select)
@@ -1330,6 +1339,10 @@ class CustomerPage(BasePage):
         self._fill_dropdown_if_provided(
             data, "preferred_payment_method",
             self.PREFERRED_PAYMENT_METHOD_SELECT, "Preferred Payment Method",
+        )
+        self._fill_dropdown_if_provided(
+            data, "gst_registration_status",
+            self.GST_REGISTRATION_STATUS_SELECT, "Gst Registration Status",
         )
         self._fill_dropdown_if_provided(
             data, "gst_registration_type",

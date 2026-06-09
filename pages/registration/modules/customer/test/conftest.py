@@ -167,18 +167,26 @@ _cu_store.record_issue(
     status="Confirmed",
 )
 
-# BUG-004 (MEDIUM): Bank Name/Branch/Holder/Number headers show asterisk but NOT required
+# BUG-004 (RESOLVED): Bank Name/Branch/Holder/Number headers show asterisk — NOW REQUIRED
+# NOTE: As of the latest ERP update, Account Type and Bank Proof dropdowns are
+# also required=True in the UI. The header asterisks for Bank Name, Branch,
+# Account Holder Name, Account Number are still mismatched (header says required,
+# input attribute says optional), but Account Type and Bank Proof are now
+# genuinely required.
 _cu_store.record_issue(
-    severity="Medium",
+    severity="Low",
     module="Customer",
     category="UI Bug",
     description="Bank Details grid column headers show asterisks for Bank Name, Branch, "
-                "Account Holder Name, and Account Number, suggesting they are required. "
-                "However, the HTML input elements have required=false.",
+                "Account Holder Name, and Account Number. The HTML input elements still "
+                "have required=false, but Account Type and Bank Proof dropdowns are now "
+                "required=True in the ERP UI. The text input header/input mismatch remains "
+                "but is a low-priority cosmetic issue.",
     expected="Column headers and field required attributes should match.",
-    actual="CONFIRMED: Headers say required, but fields are optional.",
+    actual="PARTIALLY RESOLVED: Account Type & Bank Proof now required. "
+           "Text inputs (Bank Name, Branch, etc.) header/input mismatch remains.",
     test_ref="CU-C13",
-    status="Confirmed",
+    status="Partially Resolved",
 )
 
 

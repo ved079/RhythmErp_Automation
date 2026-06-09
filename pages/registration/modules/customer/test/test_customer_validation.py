@@ -16,13 +16,16 @@ Known Bugs (suspected — to be confirmed during test execution):
   BUG-001 (CRITICAL): Browser-clicked mat-select does NOT update Angular form model
   BUG-002 (MEDIUM)  : Stepper allows advancing with empty required fields
   BUG-003 (MEDIUM)  : Pin Code header shows asterisk but field is NOT required
-  BUG-004 (MEDIUM)  : Bank Name/Branch headers show asterisk but fields are NOT required
+  BUG-004 (RESOLVED): Bank Name/Branch headers show asterisk, Account Type & Bank Proof
+                       are now required in ERP UI. Text input mismatch remains.
+  NEW FIELD: Gst Registration Status dropdown added (Registered/Unregistered)
 
 Bug Handling Decisions:
   BUG-001: Test expects Validation Failed — mark xfail, will XPASS when ERP is fixed
   BUG-002: Document as confirmed bug — test confirms the stepper is non-linear
   BUG-003: Document as known issue — test confirms the mismatch
-  BUG-004: Document as known issue — test confirms the mismatch
+  BUG-004: Partially resolved — Account Type & Bank Proof now required.
+           Text input header/attribute mismatch remains but is low priority.
 
 Run:
   pytest test_customer_validation.py -v --tb=short
@@ -722,18 +725,23 @@ class TestCreateFormValidations:
     @pytest.mark.bug
     @pytest.mark.regression
     def test_CU_C13_bank_fields_required_mismatch(self, cu_page):
-        """Fill all required fields but leave Bank Name/Branch empty — submit.
-        BUG-004: Headers show asterisks but HTML says optional.
-        Document: Does it require these fields or not?
+        """Fill all required fields but leave Account Type and Bank Proof empty — submit.
+        BUG-004 (PARTIALLY RESOLVED): Account Type and Bank Proof are now
+        required=True in the ERP UI. Leaving them empty should trigger
+        validation errors. Text input headers (Bank Name, Branch, etc.)
+        still show asterisks while input attributes say optional.
         """
-        log.info("CU-C13: Bank fields required mismatch test (BUG-004)")
+        log.info("CU-C13: Bank fields required mismatch test (BUG-004 — partially resolved)")
         page = cu_page
 
         data = generate_full_valid_customer_data("BankBug")
-        # Ensure bank name and branch are empty
+        # Ensure Account Type and Bank Proof are NOT provided
         if "bank_rows" in data and data["bank_rows"]:
             data["bank_rows"][0]["bank_name"] = ""
             data["bank_rows"][0]["branch"] = ""
+            # Explicitly set to empty string to skip the dropdown fill
+            data["bank_rows"][0]["account_type"] = ""
+            data["bank_rows"][0]["bank_proof"] = ""
 
         page.open_add_form()
         page.wait_seconds(1)
@@ -747,7 +755,7 @@ class TestCreateFormValidations:
         page.click_stepper_next()
         page.wait_seconds(1)
 
-        # Fill bank row but leave Bank Name/Branch empty
+        # Fill bank row but leave Account Type, Bank Proof, Bank Name, Branch empty
         page.fill_bank_row(0, data["bank_rows"][0])
         page.click_submit()
         page.wait_seconds(2)
@@ -756,15 +764,18 @@ class TestCreateFormValidations:
         form_still_open = page.is_add_form_open()
         errors = page.get_mat_error_text()
 
+        # Account Type and Bank Proof are NOW required in ERP UI —
+        # submission should be blocked if they are empty
         if form_still_open or errors or validation_alert:
             log.info(
-                "BUG-004: Bank Name/Branch IS required on submit — "
-                "header asterisks are correct, HTML attributes are wrong"
+                "BUG-004 PARTIALLY RESOLVED: Account Type & Bank Proof "
+                "are now required — submission blocked as expected. "
+                "Text input header/attribute mismatch still exists."
             )
         else:
-            log.info(
-                "BUG-004 CONFIRMED: Bank Name/Branch are NOT required on submit — "
-                "header asterisks are misleading"
+            log.warning(
+                "BUG: Form submitted without Account Type & Bank Proof — "
+                "required validation may not be enforced on these dropdowns"
             )
 
         # Cleanup

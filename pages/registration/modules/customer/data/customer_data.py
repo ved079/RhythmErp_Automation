@@ -20,6 +20,7 @@ FORM LAYOUT (3-step horizontal stepper inside popup):
     - PAN Number             (text input,   required, maxlength=255)
 
   TOGGLE SWITCHES:
+    - Copy From Existing Party (app-slide-toggle-v2, No/Yes, default No, OUTSIDE stepper)
     - Status                 (app-slide-toggle-v2, Active/Inactive, default Active, OUTSIDE stepper)
     - Is TDS Applicable      (app-slide-toggle-v2, No/Yes, default No, INSIDE stepper step 0)
 
@@ -27,7 +28,8 @@ FORM LAYOUT (3-step horizontal stepper inside popup):
     - Contact Person Name    (text input,   optional, maxlength=255)
     - Office Number          (text input,   optional, maxlength=255)
     - Preferred Payment Method (mat-select, optional)
-    - Gst Registration Type  (mat-select,   optional)
+    - Gst Registration Status (mat-select,  optional, Registered/Unregistered)
+    - Gst Registration Type  (mat-select,   optional, Composit/Regular)
     - Payment Terms          (mat-select,   optional)
     - Delivery Terms         (mat-select,   optional)
     - Mode Of Delivery       (mat-select,   optional)
@@ -36,9 +38,9 @@ FORM LAYOUT (3-step horizontal stepper inside popup):
     - Quantity Tolerance     (number input, optional)
     - Rate Tolerance         (number input, optional)
 
-  Step 1 — "Customer Details" (Address Grid):
-    Grid table with columns: Action, Address Type*, Country*, State*,
-    District*, Taluka*, Village, Address*, Pin Code, GSTIN
+  Step 1 — "Address Details" (Address Grid):
+    Grid table with columns: Action, Same as Above, Address Type*, Country*,
+    State*, District*, Taluka*, Village, Address*, Pin Code*, GSTIN
     Starts with 1 default empty row; Add (+) button to add more rows
     Cascading dropdowns: Country -> State -> District -> Taluka -> Village
 
@@ -46,6 +48,7 @@ FORM LAYOUT (3-step horizontal stepper inside popup):
     Grid table with columns: Action, Bank Name*, Branch*, IFSC Code,
     Account Type*, Account Holder Name*, Account Number*, Bank Proof*, Attachment
     Starts with 1 default empty row; Add (+) button to add more rows
+    NOTE: Account Type and Bank Proof are now required=True in the ERP UI
 
 KEY RULES:
   - NEVER use Keys.ESCAPE (use backdrop click + JS overlay removal)
@@ -240,7 +243,8 @@ def generate_valid_customer_data(name_prefix="AutoCust"):
         "contact_person_name": "Contact Person",
         "office_number": "",
         "preferred_payment_method": None,   # Pick from live UI (optional)
-        "gst_registration_type": None,      # Pick from live UI (optional)
+        "gst_registration_status": None,    # Pick from live UI (optional, Registered/Unregistered)
+        "gst_registration_type": None,      # Pick from live UI (optional, Composit/Regular)
         "payment_terms": None,              # Pick from live UI (optional)
         "delivery_terms": None,             # Pick from live UI (optional)
         "mode_of_delivery": None,           # Pick from live UI (optional)
@@ -278,10 +282,10 @@ def generate_valid_bank_row():
         "bank_name": "Bank",
         "branch": "Branch",
         "ifsc_code": generate_ifsc_code(),
-        "account_type": None,               # Pick from live UI (REQUIRED: Current/Saving)
+        "account_type": None,               # Pick from live UI (REQUIRED in ERP UI: Current/Saving)
         "account_holder_name": "Jason Holder",
         "account_number": generate_account_number(),
-        "bank_proof": None,                 # Pick from live UI (REQUIRED: Cancelled Cheque/Passbook)
+        "bank_proof": None,                 # Pick from live UI (REQUIRED in ERP UI: Cancelled Cheque/Passbook/Bank Statement)
         "attachment": None,                 # File path (optional)
     }
 
@@ -588,6 +592,11 @@ PREFERRED_PAYMENT_METHOD_IDS = [53, 54, 55, 141, 143]
 COURIER_TERMS_IDS = [51, 52, 1252]
 #   Various courier terms
 
+GST_REGISTRATION_STATUS_IDS = [49, 50]
+#   49 = Registered, 50 = Unregistered
+#   NOTE: The ERP shows "Registered" / "Unregistered" labels for this dropdown.
+#   This is a separate field from Gst Registration Type (Composit/Regular).
+
 GST_REGISTRATION_TYPE_IDS = [49, 50]
 #   49 = Unregistered, 50 = Regular
 
@@ -606,6 +615,7 @@ DEFAULT_CUSTOMER_FK_IDS = {
     "account_type": 1849,                    # Current
     "bank_doc_id": 36,                       # Bank Statement
     "preferred_payment_method_ref_id": 55,
+    "gst_registration_status": 49,           # Registered
     "gst_registration_type": 50,             # Regular
     "payment_terms_ref_id": 131,             # Immediate
     "delivery_terms_ref_id": 129,            # Delivery
@@ -686,6 +696,11 @@ COURIER_TERMS_NAMES = {
     1252: "Ex-Works",
 }
 
+GST_REGISTRATION_STATUS_NAMES = {
+    49: "Registered",
+    50: "Unregistered",
+}
+
 GST_REGISTRATION_TYPE_NAMES = {
     49: "Unregistered",
     50: "Regular",
@@ -739,7 +754,7 @@ FIELD_VALIDATION_RULES = {
     "bank_name": {"type": "character", "required": True, "max_length": 255},
     "bank_branch_code": {"type": "character", "required": False, "max_length": 255},
     "bank_ifsc_code": {"type": "character", "required": False, "max_length": 255},
-    "account_type": {"type": "dropdown", "required": False, "fk_options_count": 2},
+    "account_type": {"type": "dropdown", "required": True, "fk_options_count": 2},
     "bank_account_holder_name": {"type": "character", "required": True, "max_length": 255},
     "bank_account_no": {"type": "character", "required": True, "max_length": 255},
     "bank_doc_id": {"type": "dropdown", "required": True, "fk_options_count": 3},
@@ -767,6 +782,7 @@ def generate_random_fk_ids() -> dict:
         "account_type": random.choice(ACCOUNT_TYPE_IDS),
         "bank_doc_id": random.choice(BANK_DOC_IDS),
         "preferred_payment_method_ref_id": random.choice(PREFERRED_PAYMENT_METHOD_IDS),
+        "gst_registration_status": random.choice(GST_REGISTRATION_STATUS_IDS),
         "gst_registration_type": random.choice(GST_REGISTRATION_TYPE_IDS),
         "payment_terms_ref_id": random.choice(PAYMENT_TERMS_IDS),
         "delivery_terms_ref_id": random.choice(DELIVERY_TERMS_IDS),
@@ -839,6 +855,8 @@ def build_customer_api_payload(
     additional_details["packing_material_ref_id"] = None
     if _fk("preferred_payment_method_ref_id") is not None:
         additional_details["preferred_payment_method_ref_id"] = _fk("preferred_payment_method_ref_id")
+    if _fk("gst_registration_status") is not None:
+        additional_details["gst_registration_status"] = _fk("gst_registration_status")
     if _fk("gst_registration_type") is not None:
         additional_details["gst_registration_type"] = _fk("gst_registration_type")
     if _fk("payment_terms_ref_id") is not None:
