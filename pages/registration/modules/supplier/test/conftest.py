@@ -116,7 +116,6 @@ def logged_in_driver(driver):
 
     log.step(3, "Clicking Login button")
     login_page.click_login()
-    login_page.click_login()
     login_page.wait_seconds(3)
     login_page.wait_for_login_complete()
     log.info("RhythmERP login successful!")
