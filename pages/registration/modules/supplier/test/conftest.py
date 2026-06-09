@@ -52,7 +52,7 @@ def pytest_configure(config):
         pytest test_supplier_validation.py -m "not bug"          # Skip known-bug tests
         pytest test_supplier_validation.py -m bug                # Known bug tracking only
         pytest test_supplier_validation.py -m ui                 # Popup/toggle/behavior checks
-        pytest test_supplier_validation.py                       # Full regression (all 42 tests)
+        pytest test_supplier_validation.py                       # Full regression (15 functions, ~31 invocations)
     """
     config.addinivalue_line(
         "markers", "smoke: Critical happy-path tests — build not broken (~10-15 min)"
