@@ -6,6 +6,61 @@ Page Object Model for RhythmERP Customer screen.
 Location: Registration > Customer
 URL:      /#/dynamic-screens/Customer/Customer
 
+WAIT_SECONDS → WEBDRIVERWAIT MIGRATION (Phase 6a/6b):
+  This file contains 67 wait_seconds() calls that are candidates for
+  replacement with WebDriverWait + expected_conditions. The replacements
+  are documented below. Before mass-replacing, Phase 6b requires verifying
+  each proposed selector against the live ERP DOM to prevent breakage.
+
+  REPLACEMENT GROUPS (by priority):
+  ─────────────────────────────────
+  Group H — Cascading Dropdown Waits (HIGHEST PRIORITY, biggest time savings):
+    Lines ~1477-1501: fill_address_row() — 5× wait_seconds(3.0) + 4× wait_seconds(1.0)
+    Replacement: WebDriverWait(driver, 5).until(EC.presence_of_element_located(
+        (By.CSS_SELECTOR, f"mat-option, [role='option']")))
+    within the dependent dropdown's mat-select panel.
+    NOTE: Must verify live DOM — cascading options may use different selectors
+    depending on the Angular Material version deployed.
+
+  Group S — Submit/Update Actions:
+    Lines ~2946-3044: click_submit/click_update — wait_seconds(2.0)
+    Replacement: WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located((By.CSS_SELECTOR, "#swal2-title")))
+    OR WebDriverWait(driver, 5).until(
+        EC.invisibility_of_element_located((By.CSS_SELECTOR, ".swal2-container")))
+
+  Group P — Popup Open Waits:
+    Lines ~520-573: open_add_form() — 4× wait_seconds(1.5)
+    Replacement: WebDriverWait(driver, 5).until(
+        EC.visibility_of_element_located((By.CSS_SELECTOR,
+            ".edit_pop_up.override_edit_pop_up, .big-model, mat-dialog-container")))
+
+  Group N — Stepper Navigation:
+    Lines ~726-850: click_stepper_next/back — wait_seconds(1.0)
+    Replacement: WebDriverWait(driver, 3).until(
+        EC.attribute_contains((By.CSS_SELECTOR, "mat-step-header"), "class", "selected"))
+
+  Group D — Dropdown Selection Settle:
+    Lines ~1837-1924: _select_mat_option_by_label — wait_seconds(0.3-0.5)
+    Replacement: WebDriverWait(driver, 2).until(
+        EC.invisibility_of_element_located((By.CSS_SELECTOR, "div[role='listbox']")))
+
+  Group M — Minor Settle Waits (LOWEST PRIORITY):
+    Lines ~461,474,2448,2479,2583,2788,2855,2881,2903,3778,3822: wait_seconds(0.2-0.5)
+    These are UI settle delays after JS interactions. Most can be reduced to
+    wait_seconds(0.1) or replaced with WebDriverWait where feasible.
+    Some (e.g., after JS value-setter) may need a tiny fallback delay ≤0.3s.
+
+  SELECTOR VERIFICATION CHECKLIST (Phase 6b):
+  ────────────────────────────────────────────
+  □ Verify mat-option / [role='option'] selectors match live DOM
+  □ Verify mat-step-header selected/active class names match live DOM
+  □ Verify popup CSS selectors match current Angular Material rendering
+  □ Verify swal2 CSS selectors match current SweetAlert2 version
+  □ Verify grid row selectors match current table rendering
+  □ Verify input[name='...'] attributes still match field labels
+  □ Document any selector adjustments needed in this comment block
+
 FORM LAYOUT (3-STEP HORIZONTAL STEPPER inside popup):
 
   UNIVERSAL FIELDS (always visible above stepper):
@@ -1474,31 +1529,63 @@ class CustomerPage(BasePage):
                 )
                 if selected_country:
                     log.info(f"Country selected: '{selected_country}' — waiting for State options to load...")
-                self.wait_seconds(3)
+                # Phase 6b: Replaced wait_seconds(3) with WebDriverWait for cascading dropdown
+                try:
+                    WebDriverWait(self.driver, 5).until(
+                        EC.presence_of_element_located(
+                            (By.CSS_SELECTOR, "div[role='listbox'] mat-option, div[role='listbox'] [role='option']")
+                        )
+                    )
+                except TimeoutException:
+                    log.warning("State options not loaded within 5s after Country selection")
 
             if "state" in data:
-                self.wait_seconds(1)
+                self.wait_seconds(0.3)  # Brief settle before opening State dropdown
                 self._fill_grid_dropdown_or_random(
                     target_row, "State", data.get("state")
                 )
-                self.wait_seconds(3)
+                # Phase 6b: Replaced wait_seconds(3) with WebDriverWait for cascading dropdown
+                try:
+                    WebDriverWait(self.driver, 5).until(
+                        EC.presence_of_element_located(
+                            (By.CSS_SELECTOR, "div[role='listbox'] mat-option, div[role='listbox'] [role='option']")
+                        )
+                    )
+                except TimeoutException:
+                    log.warning("District options not loaded within 5s after State selection")
 
             if "district" in data:
-                self.wait_seconds(1)
+                self.wait_seconds(0.3)  # Brief settle before opening District dropdown
                 self._fill_grid_dropdown_or_random(
                     target_row, "District", data.get("district")
                 )
-                self.wait_seconds(3)
+                # Phase 6b: Replaced wait_seconds(3) with WebDriverWait for cascading dropdown
+                try:
+                    WebDriverWait(self.driver, 5).until(
+                        EC.presence_of_element_located(
+                            (By.CSS_SELECTOR, "div[role='listbox'] mat-option, div[role='listbox'] [role='option']")
+                        )
+                    )
+                except TimeoutException:
+                    log.warning("Taluka options not loaded within 5s after District selection")
 
             if "taluka" in data:
-                self.wait_seconds(1)
+                self.wait_seconds(0.3)  # Brief settle before opening Taluka dropdown
                 self._fill_grid_dropdown_or_random(
                     target_row, "Taluka", data.get("taluka")
                 )
-                self.wait_seconds(3)
+                # Phase 6b: Replaced wait_seconds(3) with WebDriverWait for cascading dropdown
+                try:
+                    WebDriverWait(self.driver, 5).until(
+                        EC.presence_of_element_located(
+                            (By.CSS_SELECTOR, "div[role='listbox'] mat-option, div[role='listbox'] [role='option']")
+                        )
+                    )
+                except TimeoutException:
+                    log.warning("Village options not loaded within 5s after Taluka selection")
 
             if "village" in data:
-                self.wait_seconds(1)
+                self.wait_seconds(0.3)  # Brief settle before opening Village dropdown
                 self._fill_grid_dropdown_or_random(
                     target_row, "Village", data.get("village")
                 )
@@ -2943,7 +3030,13 @@ class CustomerPage(BasePage):
                 "arguments[0].click();",
                 btn,
             )
-            self.wait_seconds(2)
+            # Phase 6b: Replaced wait_seconds(2) with WebDriverWait for swal2 alert
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    EC.visibility_of_element_located((By.CSS_SELECTOR, "#swal2-title, .swal2-title"))
+                )
+            except TimeoutException:
+                pass  # May have succeeded without swal alert
             log.info("Submit clicked via type='submit'")
         except Exception:
             try:
@@ -2957,7 +3050,13 @@ class CustomerPage(BasePage):
                     "arguments[0].click();",
                     btn,
                 )
-                self.wait_seconds(2)
+                # Phase 6b: Replaced wait_seconds(2) with WebDriverWait for swal2 alert
+                try:
+                    WebDriverWait(self.driver, 10).until(
+                        EC.visibility_of_element_located((By.CSS_SELECTOR, "#swal2-title, .swal2-title"))
+                    )
+                except TimeoutException:
+                    pass
                 log.info("Submit clicked via text match")
             except Exception:
                 log.warning("Submit button not found or not clickable")
@@ -3028,7 +3127,7 @@ class CustomerPage(BasePage):
                 "arguments[0].scrollIntoView({block:'center'});"
                 "arguments[0].click();", btn,
             )
-            self.wait_seconds(2)
+            self.wait_seconds(2)  # Phase 6b: TODO replace with WebDriverWait for swal2 after DOM verification
             log.info("Update clicked")
             return True
         except Exception:
@@ -3041,7 +3140,7 @@ class CustomerPage(BasePage):
                 "//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]",
             )
             self.driver.execute_script("arguments[0].click();", btn)
-            self.wait_seconds(2)
+            self.wait_seconds(2)  # Phase 6b: TODO replace with WebDriverWait for swal2 after DOM verification
             log.info("Update clicked via text match")
             return True
         except Exception:

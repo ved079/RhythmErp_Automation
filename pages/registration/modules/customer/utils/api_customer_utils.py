@@ -9,8 +9,9 @@ Wraps the generic RhythmERPAPIClient with Customer-screen helpers:
   - update_customer()        — update via PUT
   - search_customers()       — list/search with pagination
   - assert_validation_error() — validate server-side error responses
+  - create_and_expect_failure() — send invalid payload, track accidental creation
   - generate_unique_payload() — timestamp+UUID namespaced payload
-  - track_created_id()       — record IDs for cleanup reporting
+  - track_created_id()       — record IDs via CleanupTracker
   - generate_cleanup_report() — export tracked IDs as JSON/CSV
 
 NO-DELETE CONSTRAINT:
@@ -21,6 +22,9 @@ NO-DELETE CONSTRAINT:
 Thread Safety:
   This module reads _last_raw_response from RhythmERPAPIClient, which
   is NOT thread-safe. See WARNING comments below.
+
+URL Convention:
+  All URL paths come from api/endpoints.py — no hardcoded paths.
 """
 
 import json
@@ -28,13 +32,19 @@ import csv
 import os
 from datetime import datetime
 from typing import Dict, List, Optional
+import uuid
 
 from common.erp_api_client import RhythmERPAPIClient
 from common.logger import log
+from pages.registration.modules.customer.api.endpoints import SCREEN_NAME
 from pages.registration.modules.customer.data.customer_data import (
     build_customer_api_payload,
     generate_valid_customer_data,
     generate_random_fk_ids,
+)
+from pages.registration.modules.customer.utils.customer_cleanup import (
+    CleanupTracker,
+    CreatedRecord,
 )
 
 
@@ -42,8 +52,8 @@ class CustomerAPIUtils:
     """
     Customer-specific API utility for the hybrid test migration.
 
-    Each instance wraps a single RhythmERPAPIClient and maintains
-    a list of created customer IDs for cleanup reporting.
+    Each instance wraps a single RhythmERPAPIClient and a CleanupTracker
+    for recording created customer IDs.
 
     Usage:
         api = CustomerAPIUtils()
@@ -54,7 +64,7 @@ class CustomerAPIUtils:
         assert result is not None
 
         # Validate an error
-        api.create_and_expect_failure({"name": ""})
+        api.create_and_expect_failure(invalid_payload)
         api.assert_validation_error(
             field="name",
             expected_status=400,
@@ -62,20 +72,26 @@ class CustomerAPIUtils:
         )
 
         # Generate cleanup report at session end
-        api.generate_cleanup_report("/tmp/cleanup_report.json")
+        api.tracker.generate_reports()
     """
 
-    def __init__(self, api_client: RhythmERPAPIClient = None):
+    def __init__(
+        self,
+        api_client: RhythmERPAPIClient = None,
+        tracker: CleanupTracker = None,
+    ):
         """
-        Initialize with an existing API client or create a new one.
+        Initialize with an existing API client + tracker, or create new ones.
 
         Args:
             api_client: Optional pre-authenticated RhythmERPAPIClient.
                         If None, a new unauthenticated client is created.
                         You MUST call client.login() before use.
+            tracker:    Optional existing CleanupTracker.
+                        If None, a new one is created.
         """
         self.client = api_client or RhythmERPAPIClient()
-        self._created_ids: List[Dict] = []
+        self.tracker = tracker or CleanupTracker()
 
     # ================================================================
     # Core CRUD Operations
@@ -94,10 +110,11 @@ class CustomerAPIUtils:
             customer_data: Override data dict (merged with defaults).
             dropdown_ids:  Override FK IDs (merged with defaults).
             name_prefix:   Prefix for auto-generated company name.
+                           Format: {prefix}_{timestamp}_{uuid8}
 
         Returns:
             Response JSON dict on success, None on failure.
-            The created ID is automatically tracked for cleanup reporting.
+            The created ID is automatically tracked via CleanupTracker.
         """
         payload = self.generate_unique_payload(
             customer_data=customer_data,
@@ -110,10 +127,10 @@ class CustomerAPIUtils:
         if result is not None:
             created_id = result.get("id")
             company_name = payload.get("name", "unknown")
-            self.track_created_id(
-                customer_id=created_id,
+            self.tracker.track(
+                id=created_id,
                 company_name=company_name,
-                payload=payload,
+                payload_summary=f"Created via API with prefix={name_prefix}",
             )
             log.info(
                 f"[CustomerAPI] Created customer id={created_id} "
@@ -138,7 +155,7 @@ class CustomerAPIUtils:
             Complete customer dict with all fields and nested structures,
             or None if not found.
         """
-        return self.client.get_entry("Customer", customer_id)
+        return self.client.get_entry(SCREEN_NAME, customer_id)
 
     def update_customer(
         self, customer_id: int, payload: Dict
@@ -154,7 +171,7 @@ class CustomerAPIUtils:
         Returns:
             Response JSON dict on success, None on failure.
         """
-        payload.setdefault("attribute_name", "Customer")
+        payload.setdefault("attribute_name", SCREEN_NAME)
         return self.client.update_entry(customer_id, payload)
 
     def search_customers(
@@ -175,7 +192,7 @@ class CustomerAPIUtils:
             Response dict with screenmatlistingdata_set, or None.
         """
         return self.client.list_entries(
-            "Customer",
+            SCREEN_NAME,
             page=page,
             page_size=page_size,
             search=search,
@@ -194,7 +211,9 @@ class CustomerAPIUtils:
         Send a deliberately invalid payload to trigger validation errors.
 
         Does NOT attempt cleanup — logs a warning with the ID/prefix
-        in case the ERP unexpectedly creates the entry.
+        in case the ERP unexpectedly creates the entry. If the entry
+        is accidentally created, it is tracked via CleanupTracker for
+        manual purging.
 
         Args:
             invalid_payload: A payload designed to fail validation.
@@ -209,6 +228,11 @@ class CustomerAPIUtils:
         if result is not None:
             # ERP unexpectedly accepted invalid data
             unexpected_id = result.get("id", "unknown")
+            unexpected_name = invalid_payload.get("name", "unknown")
+            self.tracker.track_accidental(
+                id=unexpected_id,
+                company_name=unexpected_name,
+            )
             log.warning(
                 f"[CustomerAPI] UNEXPECTED: Invalid payload was accepted! "
                 f"id={unexpected_id} prefix='{name_prefix}'. "
@@ -347,7 +371,7 @@ class CustomerAPIUtils:
         """
         Generate a timestamped+UUID namespaced Customer API payload.
 
-        Uses format: AutoCust_{timestamp}_{uuid4_short} to prevent
+        Uses format: {prefix}_{timestamp}_{uuid8} to prevent
         collisions and enable manual cleanup identification.
 
         Args:
@@ -356,10 +380,8 @@ class CustomerAPIUtils:
             name_prefix:   Prefix for the company name.
 
         Returns:
-            Complete JSON payload ready for POST /core/dynamic-screen-wrapper/
+            Complete JSON payload ready for POST (uses endpoints.py paths).
         """
-        import uuid
-
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         uuid_short = uuid.uuid4().hex[:8]
 
@@ -385,7 +407,7 @@ class CustomerAPIUtils:
         )
 
     # ================================================================
-    # ID Tracking & Cleanup Reporting (NO DELETE)
+    # Legacy Compatibility (kept for backward compat)
     # ================================================================
 
     def track_created_id(
@@ -396,6 +418,7 @@ class CustomerAPIUtils:
     ):
         """
         Record a created customer ID for cleanup reporting.
+        Delegates to CleanupTracker.track().
 
         Since the ERP has NO delete endpoint, we track all created
         IDs and generate reports for manual database purging.
@@ -405,15 +428,10 @@ class CustomerAPIUtils:
             company_name: The company name for easy identification.
             payload:      The full payload used (for audit trail).
         """
-        self._created_ids.append({
-            "id": customer_id,
-            "company_name": company_name,
-            "timestamp": datetime.now().isoformat(),
-            "prefix": company_name.split("_")[0] if "_" in company_name else "",
-        })
-        log.info(
-            f"[CustomerAPI] Tracked ID: {customer_id} "
-            f"('{company_name}') — total tracked: {len(self._created_ids)}"
+        self.tracker.track(
+            id=customer_id,
+            company_name=company_name,
+            payload_summary="Created via API",
         )
 
     def generate_cleanup_report(
@@ -423,72 +441,38 @@ class CustomerAPIUtils:
     ) -> str:
         """
         Generate a cleanup report of all tracked customer IDs.
-
-        Since the ERP has no delete functionality, this report
-        is used for manual database purging after test sessions.
+        Delegates to CleanupTracker.generate_reports().
 
         Args:
-            output_path: File path for the report. If None, auto-generates
-                         a path in the reports directory.
+            output_path: File path for the report. If None, auto-generates.
             fmt:         Output format — "json" or "csv".
 
         Returns:
             Absolute path to the generated report file.
         """
-        if not self._created_ids:
-            log.info("[CustomerAPI] No tracked IDs to report.")
-            return ""
-
-        # Auto-generate path if not provided
-        if output_path is None:
-            reports_dir = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "..", "reports",
-            )
-            os.makedirs(reports_dir, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            ext = "json" if fmt == "json" else "csv"
-            output_path = os.path.join(
-                reports_dir,
-                f"customer_cleanup_{timestamp}.{ext}",
-            )
-
-        if fmt == "json":
-            report_data = {
-                "generated_at": datetime.now().isoformat(),
-                "total_tracked": len(self._created_ids),
-                "note": (
-                    "NO-DELETE CONSTRAINT: The ERP has no delete endpoint. "
-                    "These IDs must be manually purged from the database."
-                ),
-                "entries": self._created_ids,
-            }
-            with open(output_path, "w") as f:
-                json.dump(report_data, f, indent=2)
-
-        elif fmt == "csv":
-            with open(output_path, "w", newline="") as f:
-                writer = csv.DictWriter(
-                    f,
-                    fieldnames=["id", "company_name", "timestamp", "prefix"],
-                )
-                writer.writeheader()
-                writer.writerows(self._created_ids)
+        if output_path:
+            output_dir = os.path.dirname(output_path)
         else:
-            raise ValueError(f"Unsupported format: {fmt}. Use 'json' or 'csv'.")
+            output_dir = None
 
-        log.info(
-            f"[CustomerAPI] Cleanup report generated: {output_path} "
-            f"({len(self._created_ids)} entries, format={fmt})"
-        )
-        return output_path
+        paths = self.tracker.generate_reports(output_dir=output_dir)
+
+        if fmt == "json" and "json" in paths:
+            return paths["json"]
+        elif fmt == "csv" and "csv" in paths:
+            return paths["csv"]
+        return ""
 
     @property
     def tracked_count(self) -> int:
         """Number of customer IDs currently tracked."""
-        return len(self._created_ids)
+        return self.tracker.count
 
     @property
     def tracked_ids(self) -> List[Dict]:
         """Copy of the tracked IDs list."""
-        return list(self._created_ids)
+        return [
+            {"id": r.id, "company_name": r.company_name,
+             "timestamp": r.timestamp, "prefix": r.prefix}
+            for r in self.tracker.records
+        ]

@@ -1,5 +1,15 @@
 """
 conftest.py - Customer Screen (RhythmERP Registration)
+
+Fixtures and markers for all Customer test layers:
+  - API-only tests    (@pytest.mark.api)
+  - UI-only tests     (@pytest.mark.ui)
+  - Hybrid tests      (@pytest.mark.hybrid)
+  - Critical gate     (@pytest.mark.critical)
+
+NO-DELETE CONSTRAINT:
+  The ERP has no delete endpoint. All fixtures use CleanupTracker
+  for tracking + reporting. No delete calls in any teardown.
 """
 
 import os
@@ -44,10 +54,28 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "ui: Popup, dialog, form UI behavior and visual checks"
     )
+    config.addinivalue_line(
+        "markers", "api: API-only tests — no browser needed, fast validation"
+    )
+    config.addinivalue_line(
+        "markers", "hybrid: API setup + UI verification — cross-layer tests"
+    )
+    config.addinivalue_line(
+        "markers", "critical: Must-pass tests for CI gate — subset of smoke/api"
+    )
 
 
 # ================================================================
-# FIXTURES
+# HELPER: Detect test type from markers
+# ================================================================
+
+def _is_api_only_test(item) -> bool:
+    """Check if a test item is marked as API-only (no browser needed)."""
+    return item.get_closest_marker("api") is not None
+
+
+# ================================================================
+# FIXTURES — Browser (session-scoped, only for UI/Hybrid tests)
 # ================================================================
 
 @pytest.fixture(scope="session")
@@ -86,9 +114,6 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    # log.step(3, "Selecting facility (blank - first option)")
-    # login_page.select_facility_by_index(index=0)
-
     login_page.wait_seconds(5)
 
     log.step(4, "Clicking Login button")
@@ -104,15 +129,84 @@ def logged_in_driver(driver):
     stop_screenshot_broadcast()
 
 
+# ================================================================
+# FIXTURES — API Client (session-scoped, for API/Hybrid tests)
+# ================================================================
+
+@pytest.fixture(scope="session")
+def api_client():
+    """Authenticated RhythmERPAPIClient — shared across API/Hybrid tests.
+
+    Logs in once per session. Reused by cu_api fixture.
+    """
+    from common.erp_api_client import RhythmERPAPIClient
+    client = RhythmERPAPIClient()
+    token, tenant_id = client.login()
+    log.info(f"[Fixture] api_client ready — token={token[:20]}... tenant={tenant_id}")
+    yield client
+    client.close()
+    log.info("[Fixture] api_client session closed")
+
+
+# ================================================================
+# FIXTURES — Cleanup Tracker (session-scoped, generates reports)
+# ================================================================
+
+@pytest.fixture(scope="session")
+def cleanup_tracker():
+    """CleanupTracker — records all created IDs for no-delete cleanup reporting.
+
+    Generates JSON + CSV reports at session end.
+    No delete calls — reports are for manual DB purging only.
+    """
+    from pages.registration.modules.customer.utils.customer_cleanup import CleanupTracker
+    tracker = CleanupTracker()
+    log.info("[Fixture] cleanup_tracker initialized")
+    yield tracker
+    # Session teardown: generate cleanup reports
+    if tracker.count > 0:
+        reports = tracker.generate_reports()
+        log.info(
+            f"[Fixture] Cleanup reports generated: {reports} "
+            f"({tracker.count} records tracked)"
+        )
+        # Optionally attempt deactivation
+        # deactivate_results = tracker.deactivate_all(api_client)
+    else:
+        log.info("[Fixture] No records tracked — no cleanup report needed")
+
+
+# ================================================================
+# FIXTURES — Test-Layer Specific
+# ================================================================
+
 @pytest.fixture
 def cu_page(logged_in_driver):
-    """Customer page object — fresh navigation for each test."""
+    """Customer page object — fresh navigation for each UI/Hybrid test."""
     from pages.registration.modules.customer.customer_page import (
         CustomerPage,
     )
     page = CustomerPage(logged_in_driver)
     page.navigate_to_page()
     yield page
+
+
+@pytest.fixture
+def cu_api(api_client, cleanup_tracker):
+    """CustomerAPIUtils — function-scoped API utility with cleanup tracking.
+
+    Uses the session-scoped api_client and cleanup_tracker.
+    Each test gets a fresh CustomerAPIUtils instance, but all tracked
+    IDs accumulate in the shared cleanup_tracker for end-of-session reporting.
+    """
+    from pages.registration.modules.customer.utils.api_customer_utils import (
+        CustomerAPIUtils,
+    )
+    utils = CustomerAPIUtils(
+        api_client=api_client,
+        tracker=cleanup_tracker,
+    )
+    yield utils
 
 
 # ================================================================
