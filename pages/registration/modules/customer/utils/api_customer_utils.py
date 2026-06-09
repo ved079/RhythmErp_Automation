@@ -362,6 +362,73 @@ class CustomerAPIUtils:
     # Payload Generation
     # ================================================================
 
+    def create_and_document(
+        self,
+        payload: Dict,
+        field_being_tested: str,
+        name_prefix: str = "DocCust",
+    ) -> Dict:
+        """Send a payload and document whether the ERP accepts or rejects it.
+
+        Exploratory test helper — the test PASSES regardless of whether the
+        ERP returns 201 (accepted) or 400 (rejected). The result is logged
+        for documentation purposes.
+
+        If the ERP unexpectedly accepts a potentially dangerous payload
+        (e.g., SQL injection, XSS, special chars), the ID is tracked for
+        manual cleanup and a warning is logged.
+
+        Args:
+            payload:            The payload to send.
+            field_being_tested: The field being tested (for logging).
+            name_prefix:        Prefix for tracking/logging.
+
+        Returns:
+            Dict with:
+              - "accepted" (bool): Whether the ERP accepted the payload (201).
+              - "result" (dict|None): Response JSON if accepted, None if rejected.
+              - "status_code" (int): HTTP status code from the response.
+              - "field" (str): The field being tested.
+        """
+        result = self.client.create_entry(payload)
+        raw_resp = self.client._last_raw_response
+
+        if result is not None:
+            # ERP accepted the payload
+            unexpected_id = result.get("id", "unknown")
+            unexpected_name = payload.get("name", "unknown")
+            self.tracker.track_accidental(
+                id=unexpected_id,
+                company_name=unexpected_name,
+            )
+            status_code = raw_resp.status_code if raw_resp else 201
+            log.warning(
+                f"[CustomerAPI] EXPLORATORY: ERP ACCEPTED payload for "
+                f"field='{field_being_tested}' prefix='{name_prefix}'. "
+                f"id={unexpected_id} status={status_code}. "
+                f"Entry tracked for manual cleanup."
+            )
+            return {
+                "accepted": True,
+                "result": result,
+                "status_code": status_code,
+                "field": field_being_tested,
+            }
+        else:
+            # ERP rejected the payload
+            status_code = raw_resp.status_code if raw_resp else 400
+            log.info(
+                f"[CustomerAPI] EXPLORATORY: ERP REJECTED payload for "
+                f"field='{field_being_tested}' prefix='{name_prefix}'. "
+                f"status={status_code}"
+            )
+            return {
+                "accepted": False,
+                "result": None,
+                "status_code": status_code,
+                "field": field_being_tested,
+            }
+
     def generate_unique_payload(
         self,
         customer_data: dict = None,

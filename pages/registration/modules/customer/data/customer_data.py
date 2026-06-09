@@ -839,9 +839,6 @@ def build_customer_api_payload(
     if customer_data is None:
         customer_data = generate_valid_customer_data()
 
-    # Get address chain
-    address_chain = get_random_address_chain()
-
     # ── Build Additional Details stepper ──
     # NOTE: For Customer, Additional Details fields live on the child object
     # itself (NOT inside details[]). The details[] array is empty.
@@ -888,24 +885,35 @@ def build_customer_api_payload(
         additional_details["rate_tolerance"] = None
 
     # ── Build Address Details (Address) stepper ──
-    address_detail = {}
-    if _fk("address_type") is not None:
-        address_detail["address_type"] = _fk("address_type")
-    if _fk("country_ref_id_id") is not None:
-        address_detail["country_ref_id_id"] = _fk("country_ref_id_id")
-    # Use address chain FK IDs
-    address_detail["state_ref_id_id"] = address_chain.get("state_ref_id_id")
-    address_detail["district_ref_id_id"] = address_chain.get("district_ref_id_id")
-    address_detail["sub_district_ref_id_id"] = address_chain.get("sub_district_ref_id_id")
-    address_detail["village_ref_id_id"] = address_chain.get("village_ref_id_id")
-    address_detail["address"] = customer_data.get("address", generate_address())
-    pin = customer_data.get("pin_code", generate_pin_code())
-    address_detail["pin_code"] = int(pin) if pin and str(pin).isdigit() else None
-    address_detail["gstin"] = generate_luhn_gstin()
-    address_detail["same_as_above"] = None
-    address_detail["address2"] = None
-    address_detail["demo_details"] = None
-    address_detail["details"] = []
+    # ERP REQUIRES both Shipping AND Billing address rows for Customer.
+    # Each row gets its own independent address chain (state/district/taluka/village)
+    # for maximum variety and to test cascading dropdown independence.
+
+    def _build_address_row(addr_type_id, chain):
+        """Build one address detail row with the given address_type and chain."""
+        row = {}
+        row["address_type"] = addr_type_id
+        if _fk("country_ref_id_id") is not None:
+            row["country_ref_id_id"] = _fk("country_ref_id_id")
+        row["state_ref_id_id"] = chain.get("state_ref_id_id")
+        row["district_ref_id_id"] = chain.get("district_ref_id_id")
+        row["sub_district_ref_id_id"] = chain.get("sub_district_ref_id_id")
+        row["village_ref_id_id"] = chain.get("village_ref_id_id")
+        row["address"] = customer_data.get("address", generate_address())
+        pin = customer_data.get("pin_code", generate_pin_code())
+        row["pin_code"] = int(pin) if pin and str(pin).isdigit() else None
+        row["gstin"] = generate_luhn_gstin()
+        row["same_as_above"] = None
+        row["address2"] = None
+        row["demo_details"] = None
+        row["details"] = []
+        return row
+
+    # Row 0: Shipping (address_type=43), Row 1: Billing (address_type=42)
+    shipping_chain = get_random_address_chain()
+    billing_chain = get_random_address_chain()
+    shipping_address = _build_address_row(43, shipping_chain)   # 43 = Shipping
+    billing_address = _build_address_row(42, billing_chain)     # 42 = Billing
 
     # ── Build Customer Bank Details stepper ──
     bank_detail = {}
@@ -966,7 +974,7 @@ def build_customer_api_payload(
             {
                 "stepper_name": "Address Details",
                 "is_stepper": True,
-                "details": [address_detail],
+                "details": [shipping_address, billing_address],
                 "children": [],
             },
             {
