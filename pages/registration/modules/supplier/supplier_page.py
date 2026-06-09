@@ -1243,168 +1243,572 @@ class SupplierPage(BasePage):
     # ==============================================================
 
     # ==============================================================
-    #  Address row-scoped locator helpers
+    #  Address Grid — Row-WebElement helpers (ported from Customer)
     # ==============================================================
-    # When the ERP renders multiple address rows in Step 2, the
-    # generic class-level locators (ADDRESS_TYPE_SELECT, etc.) always
-    # match the FIRST row.  These helpers build row-scoped XPath/CSS
-    # locators that target the Nth address-row container inside
-    # mat-step-content[2] (0-indexed: step 2 = index 1 in DOM, but
-    # mat-step-content uses 1-based indexing in XPath).
-    #
-    # RhythmERP renders each address row inside a container div under
-    # <mat-step-content> (the 2nd one for Step 2).  We scope to the
-    # Nth such container using position().
+    # Instead of position-based XPaths (which break after add_address_row
+    # mutates the DOM), we get actual <tr> WebElements and scope all
+    # find_element calls inside each row element. This is how the Customer
+    # module does it — proven to work for Shipping + Billing rows.
     # ==============================================================
 
-    def _addr_row_select_locator(self, label, row_index=0):
-        """Return a row-scoped mat-select locator for an address dropdown.
+    def _get_address_grid_rows(self):
+        """Get visible rows from the Address grid (first .grid-container).
+        Uses JS to find rows, scoping to the FIRST .grid-container only,
+        avoiding the bank grid which is the second .grid-container.
+        Returns a list of WebElement rows.
+        """
+        # Use JS to find the first grid-container's table rows (Address grid)
+        try:
+            row_elements = self.driver.execute_script("""
+                var containers = document.querySelectorAll('.grid-container');
+                if (containers.length < 1) return [];
+                var addressTable = containers[0].querySelector('.grid-table, table');
+                if (!addressTable) return [];
+                var trs = addressTable.querySelectorAll('tbody tr');
+                var visible = [];
+                for (var i = 0; i < trs.length; i++) {
+                    if (trs[i].offsetParent !== null) visible.push(trs[i]);
+                }
+                return visible;
+            """)
+            if row_elements:
+                return row_elements
+        except Exception:
+            pass
+
+        # Fallback: CSS selector
+        try:
+            rows = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                ".grid-container:first-of-type .grid-table tbody tr, "
+                ".grid-container .grid-table tbody tr"
+            )
+            visible_rows = []
+            for r in rows:
+                try:
+                    if r.is_displayed():
+                        visible_rows.append(r)
+                except Exception:
+                    continue
+            return visible_rows
+        except Exception:
+            pass
+
+        return []
+
+    def _select_grid_dropdown(self, row_element, column_label, option_value):
+        """Select an option from a mat-select dropdown within a specific
+        grid row.
+
+        Uses the mat-label → ancestor mat-form-field → mat-select pattern,
+        but scoped to the given row element.
 
         Args:
-            label: The mat-label text (e.g. 'Address Type', 'Country')
-            row_index: 0-based address row index (0 = first row, 1 = second)
-
-        Returns:
-            ("xpath", scoped_xpath) tuple targeting the Nth row only.
+            row_element: The Selenium WebElement for the grid row
+            column_label: The mat-label text (e.g., 'Country', 'Address Type')
+            option_value: The option text to select
         """
-        pos = row_index + 1  # XPath position() is 1-based
-        xpath = (
-            f"(//mat-step-content[2]"
-            f"//mat-label[contains(.,'{label}')]"
-            f"/ancestor::mat-form-field//mat-select)[{pos}]"
+        log.info(
+            f"Selecting '{option_value}' from grid dropdown '{column_label}'..."
         )
-        return ("xpath", xpath)
 
-    def _addr_row_input_locator(self, field_name, row_index=0):
-        """Return a row-scoped input locator for an address text field.
+        try:
+            # Find mat-select within this row by label text
+            selects = row_element.find_elements(
+                By.CSS_SELECTOR, "mat-select"
+            )
+
+            # Try to find the right select by matching label
+            target_select = None
+            for sel in selects:
+                try:
+                    form_field = sel.find_element(
+                        By.XPATH, "ancestor::mat-form-field"
+                    )
+                    labels = form_field.find_elements(
+                        By.CSS_SELECTOR, "mat-label"
+                    )
+                    for lbl in labels:
+                        if column_label.lower() in lbl.text.lower():
+                            target_select = sel
+                            break
+                    if target_select:
+                        break
+                except Exception:
+                    continue
+
+            # Fallback: if no label match, try all selects
+            if not target_select:
+                visible_selects = [
+                    s for s in selects
+                    if s.is_displayed()
+                ]
+                if visible_selects:
+                    target_select = visible_selects[0]
+                else:
+                    log.warning(
+                        f"No visible mat-select in grid row for '{column_label}'"
+                    )
+                    return False
+
+            # Click the select via JS
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block:'center'});"
+                "arguments[0].click();",
+                target_select,
+            )
+            self.wait_seconds(0.5)
+
+            # Wait for options to appear
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located(
+                        (
+                            By.CSS_SELECTOR,
+                            "div[role='listbox'] mat-option, "
+                            "div[role='listbox'] [role='option']",
+                        )
+                    )
+                )
+            except TimeoutException:
+                log.warning(
+                    f"No options loaded in grid dropdown '{column_label}'"
+                )
+                self._close_dropdown_panel_only()
+                return False
+
+            # If dropdown has a search textbox, type into it
+            try:
+                search_inputs = self.driver.find_elements(
+                    By.CSS_SELECTOR,
+                    "div[role='listbox'] input",
+                )
+                for inp in search_inputs:
+                    try:
+                        if inp.is_displayed():
+                            inp.clear()
+                            inp.send_keys(option_value)
+                            self.wait_seconds(0.5)
+                            break
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+            # Find and click the matching option
+            option_clicked = False
+            try:
+                opt_xpath = (
+                    f"//div[@role='listbox']//mat-option"
+                    f"[contains(.,'{option_value}')]"
+                )
+                opt = self.driver.find_element(By.XPATH, opt_xpath)
+                self.driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center'});"
+                    "arguments[0].click();",
+                    opt,
+                )
+                option_clicked = True
+            except Exception:
+                opts = self.driver.find_elements(
+                    By.CSS_SELECTOR,
+                    "div[role='listbox'] mat-option, "
+                    "div[role='listbox'] [role='option']",
+                )
+                for o in opts:
+                    try:
+                        if option_value in o.text:
+                            self.driver.execute_script(
+                                "arguments[0].scrollIntoView({block:'center'});"
+                                "arguments[0].click();",
+                                o,
+                            )
+                            option_clicked = True
+                            break
+                    except Exception:
+                        continue
+
+            self.wait_seconds(0.3)
+            self._force_close_panels()
+
+            if option_clicked:
+                log.info(
+                    f"Selected '{option_value}' from grid '{column_label}'"
+                )
+                return True
+            else:
+                log.warning(
+                    f"Option '{option_value}' not found in grid "
+                    f"dropdown '{column_label}'"
+                )
+                return False
+
+        except Exception as e:
+            log.error(f"Failed to select grid dropdown '{column_label}': {e}")
+            self._force_close_panels()
+            return False
+
+    def _select_grid_dropdown_random(self, row_element, column_label):
+        """Pick a random non-placeholder option from a grid row's dropdown.
+
+        Used for cascading dropdowns where we need to pick a valid option
+        so the next level's options can load (e.g., pick random State so
+        District options populate).
 
         Args:
-            field_name: The input[name] value (e.g. 'Address', 'Pin Code', 'GSTIN')
-            row_index: 0-based address row index
+            row_element: The Selenium WebElement for the grid row
+            column_label: The mat-label text (e.g., 'State', 'Address Type')
 
         Returns:
-            ("xpath", scoped_xpath) tuple targeting the Nth row only.
+            The text of the selected option, or None if failed.
         """
-        pos = row_index + 1
-        xpath = (
-            f"(//mat-step-content[2]"
-            f"//input[@name='{field_name}'])[{pos}]"
+        log.info(
+            f"Selecting random option from grid dropdown '{column_label}'..."
         )
-        return ("xpath", xpath)
+
+        try:
+            # Find mat-select within this row by label text
+            selects = row_element.find_elements(
+                By.CSS_SELECTOR, "mat-select"
+            )
+
+            target_select = None
+            for sel in selects:
+                try:
+                    form_field = sel.find_element(
+                        By.XPATH, "ancestor::mat-form-field"
+                    )
+                    labels = form_field.find_elements(
+                        By.CSS_SELECTOR, "mat-label"
+                    )
+                    for lbl in labels:
+                        if column_label.lower() in lbl.text.lower():
+                            target_select = sel
+                            break
+                    if target_select:
+                        break
+                except Exception:
+                    continue
+
+            # Fallback: try all visible selects and pick first
+            if not target_select:
+                visible_selects = [
+                    s for s in selects if s.is_displayed()
+                ]
+                if visible_selects:
+                    target_select = visible_selects[0]
+                else:
+                    log.warning(
+                        f"No visible mat-select in grid row for '{column_label}'"
+                    )
+                    return None
+
+            # Click the select via JS
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block:'center'});"
+                "arguments[0].click();",
+                target_select,
+            )
+            self.wait_seconds(0.5)
+
+            # Wait for options to appear
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located(
+                        (
+                            By.CSS_SELECTOR,
+                            "div[role='listbox'] mat-option, "
+                            "div[role='listbox'] [role='option']",
+                        )
+                    )
+                )
+            except TimeoutException:
+                log.warning(
+                    f"No options loaded in grid dropdown '{column_label}'"
+                )
+                self._close_dropdown_panel_only()
+                return None
+
+            # If dropdown has a search textbox, clear it to show all options
+            try:
+                search_inputs = self.driver.find_elements(
+                    By.CSS_SELECTOR,
+                    "div[role='listbox'] input",
+                )
+                for inp in search_inputs:
+                    try:
+                        if inp.is_displayed():
+                            inp.clear()
+                            self.wait_seconds(0.3)
+                            break
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+            # Read all options, filter out placeholders
+            options = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "div[role='listbox'] mat-option, "
+                "div[role='listbox'] [role='option']",
+            )
+
+            valid_options = []
+            for opt in options:
+                try:
+                    text = opt.text.strip()
+                    is_visible = opt.is_displayed()
+                    is_placeholder = (
+                        text.startswith("Select ")
+                        or text == ""
+                        or text.lower() == "select"
+                    )
+                    if text and is_visible and not is_placeholder:
+                        valid_options.append((opt, text))
+                except Exception:
+                    continue
+
+            if not valid_options:
+                log.warning(
+                    f"No valid options in grid dropdown '{column_label}'"
+                )
+                self._close_dropdown_panel_only()
+                return None
+
+            # Pick a random option
+            chosen_opt, chosen_text = random.choice(valid_options)
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block:'center'});"
+                "arguments[0].click();",
+                chosen_opt,
+            )
+            self.wait_seconds(0.3)
+            self._force_close_panels()
+
+            log.info(
+                f"Random '{column_label}' selected: '{chosen_text}'"
+            )
+            return chosen_text
+
+        except Exception as e:
+            log.error(
+                f"Failed to select random grid dropdown '{column_label}': {e}"
+            )
+            self._force_close_panels()
+            return None
+
+    def _fill_grid_dropdown_or_random(self, row_element, column_label, value):
+        """Fill a grid dropdown: select specific option, or pick random if
+        value is None.
+
+        When value is None, it means "pick a random valid option from the
+        live UI" — essential for cascading dropdowns where a selection
+        must be made for the next level to populate.
+
+        Args:
+            row_element: The Selenium WebElement for the grid row
+            column_label: The mat-label text (e.g., 'Country', 'State')
+            value: Specific option text, None (pick random), or "" (skip)
+
+        Returns:
+            The text of the selected option, or None if skipped/failed.
+        """
+        if value is None:
+            # Pick a random valid (non-placeholder) option
+            return self._select_grid_dropdown_random(
+                row_element, column_label
+            )
+        elif value == "":
+            return None  # Skip empty strings
+        else:
+            result = self._select_grid_dropdown(
+                row_element, column_label, value
+            )
+            return value if result else None
+
+    def _fill_grid_text_input(self, row_element, field_name, value):
+        """Fill a text input within a specific grid row by field name.
+
+        Uses the input's 'name' attribute to locate the correct field.
+        Uses the native value setter + dispatchEvent pattern (Angular-safe).
+
+        Args:
+            row_element: The Selenium WebElement for the grid row
+            field_name: The name attribute of the input (e.g., 'Address')
+            value: The text value to type
+        """
+        try:
+            inputs = row_element.find_elements(
+                By.CSS_SELECTOR, "input"
+            )
+            for inp in inputs:
+                try:
+                    name_attr = inp.get_attribute("name") or ""
+                    if name_attr.lower() == field_name.lower():
+                        # Scroll into view first
+                        self.driver.execute_script(
+                            "arguments[0].scrollIntoView({block:'center'});",
+                            inp,
+                        )
+                        # Clear and type via JS (Angular-safe)
+                        self.driver.execute_script(
+                            "var el = arguments[0];"
+                            "var newText = arguments[1];"
+                            "var nativeSet = Object.getOwnPropertyDescriptor("
+                            "  window.HTMLInputElement.prototype, 'value'"
+                            ").set;"
+                            "nativeSet.call(el, '');"
+                            "el.dispatchEvent(new Event('input',{bubbles:true}));"
+                            "nativeSet.call(el, newText);"
+                            "el.dispatchEvent(new Event('input',{bubbles:true}));"
+                            "el.dispatchEvent(new Event('change',{bubbles:true}));",
+                            inp,
+                            str(value),
+                        )
+                        self.wait_seconds(0.3)
+                        log.info(
+                            f"Grid text input '{field_name}' set to '{value}'"
+                        )
+                        return
+                except Exception:
+                    continue
+
+            # Fallback: fill by name attribute CSS selector
+            try:
+                input_el = row_element.find_element(
+                    By.CSS_SELECTOR, f"input[name='{field_name}']"
+                )
+                self.driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center'});",
+                    input_el,
+                )
+                self.driver.execute_script(
+                    "var el = arguments[0];"
+                    "var newText = arguments[1];"
+                    "var nativeSet = Object.getOwnPropertyDescriptor("
+                    "  window.HTMLInputElement.prototype, 'value'"
+                    ").set;"
+                    "nativeSet.call(el, '');"
+                    "el.dispatchEvent(new Event('input',{bubbles:true}));"
+                    "nativeSet.call(el, newText);"
+                    "el.dispatchEvent(new Event('input',{bubbles:true}));"
+                    "el.dispatchEvent(new Event('change',{bubbles:true}));",
+                    input_el,
+                    str(value),
+                )
+                self.wait_seconds(0.3)
+                log.info(
+                    f"Grid text input '{field_name}' set to '{value}' (fallback)"
+                )
+            except Exception:
+                log.warning(
+                    f"Grid text input '{field_name}' not found in row"
+                )
+
+        except Exception as e:
+            log.error(f"Failed to fill grid text input '{field_name}': {e}")
 
     def fill_step2_address(self, data, row_index=0):
-        """Fill the Address Details fields in Step 2.
+        """Fill the Address Details fields in Step 2 using row-WebElement
+        scoping (ported from Customer module).
+
+        Instead of position-based XPaths, this method gets actual row
+        WebElements from the grid and scopes all dropdown/text operations
+        to the target row element. This avoids the stale-element and
+        wrong-row issues that the old position-based XPaths caused.
 
         IMPORTANT (verified 2026-06-05): ERP now REQUIRES both Shipping
         AND Billing address rows for Supplier roles.  This method fills
         ONE row at a time.  Call it once per address row, using
         row_index=0 for Shipping and row_index=1 for Billing.
 
-        When row_index > 0, row-scoped XPath locators are used so the
-        correct address-row container is targeted (not the first row).
-
         Cascading dropdowns MUST be filled in order:
-        Country → State → District → Taluka → Village
+        Address Type → Country → State → District → Taluka → Village
 
         data dict keys: address_type, country, state, district,
         taluka, village, address, pin_code, gstin
         """
         log.info(f"Filling Step 2 — Address Details (row {row_index})...")
 
-        # Pick locators: row-scoped when row_index > 0, class-level for row 0
-        if row_index == 0:
-            addr_type_loc = self.ADDRESS_TYPE_SELECT
-            country_loc = self.COUNTRY_SELECT
-            state_loc = self.STATE_SELECT
-            district_loc = self.DISTRICT_SELECT
-            taluka_loc = self.TALUKA_SELECT
-            village_loc = self.VILLAGE_SELECT
-            address_loc = self.ADDRESS_INPUT
-            pin_code_loc = self.PIN_CODE_INPUT
-            gstin_loc = self.GSTIN_INPUT
-        else:
-            addr_type_loc = self._addr_row_select_locator("Address Type", row_index)
-            country_loc = self._addr_row_select_locator("Country", row_index)
-            state_loc = self._addr_row_select_locator("State", row_index)
-            district_loc = self._addr_row_select_locator("District", row_index)
-            taluka_loc = self._addr_row_select_locator("Taluka", row_index)
-            village_loc = self._addr_row_select_locator("Village", row_index)
-            address_loc = self._addr_row_input_locator("Address", row_index)
-            pin_code_loc = self._addr_row_input_locator("Pin Code", row_index)
-            gstin_loc = self._addr_row_input_locator("GSTIN", row_index)
+        try:
+            visible_rows = self._get_address_grid_rows()
 
-        # Address Type (REQUIRED) — Shipping/Billing
-        addr_type = data.get("address_type")
-        if addr_type is None:
-            self._select_mat_option(addr_type_loc)
-        elif addr_type != "":
-            self._select_mat_option(addr_type_loc, addr_type)
-        self.wait_seconds(0.5)
+            if row_index >= len(visible_rows):
+                log.warning(
+                    f"Address row index {row_index} out of range "
+                    f"(visible rows: {len(visible_rows)})"
+                )
+                return
 
-        # Country (REQUIRED) — MUST be filled first for cascading
-        country = data.get("country")
-        if country is None:
-            country_selected = self._select_mat_option(country_loc)
-        elif country != "":
-            country_selected = self._select_mat_option(country_loc, country)
-        else:
-            country_selected = None
-        self.wait_seconds(1)  # Wait for State options to load
+            target_row = visible_rows[row_index]
 
-        # State (REQUIRED, depends on Country)
-        state = data.get("state")
-        if state is None:
-            state_selected = self._select_mat_option(state_loc)
-        elif state != "":
-            state_selected = self._select_mat_option(state_loc, state)
-        else:
-            state_selected = None
-        self.wait_seconds(1)  # Wait for District options to load
+            # --- Cascading dropdowns (order matters!) ---
 
-        # District (REQUIRED, depends on State)
-        district = data.get("district")
-        if district is None:
-            district_selected = self._select_mat_option(district_loc)
-        elif district != "":
-            district_selected = self._select_mat_option(district_loc, district)
-        else:
-            district_selected = None
-        self.wait_seconds(1)  # Wait for Taluka options to load
+            # Address Type (REQUIRED) — Shipping/Billing
+            if "address_type" in data:
+                self._fill_grid_dropdown_or_random(
+                    target_row, "Address Type", data.get("address_type")
+                )
+                self.wait_seconds(1)
 
-        # Taluka (REQUIRED, depends on District)
-        taluka = data.get("taluka")
-        if taluka is None:
-            self._select_mat_option(taluka_loc)
-        elif taluka != "":
-            self._select_mat_option(taluka_loc, taluka)
-        self.wait_seconds(1)  # Wait for Village options to load
+            # Country (REQUIRED) — MUST be filled first for cascading
+            if "country" in data:
+                selected_country = self._fill_grid_dropdown_or_random(
+                    target_row, "Country", data.get("country")
+                )
+                if selected_country:
+                    log.info(
+                        f"Country selected: '{selected_country}' — "
+                        f"waiting for State options to load..."
+                    )
+                self.wait_seconds(3)  # Wait for State options to load
 
-        # Village (optional, depends on Taluka)
-        village = data.get("village")
-        if village is None:
-            self._select_mat_option(village_loc)
-        elif village != "":
-            self._select_mat_option(village_loc, village)
-        self.wait_seconds(0.3)
+            # State (REQUIRED, depends on Country)
+            if "state" in data:
+                self.wait_seconds(1)  # Extra wait for dependent options
+                self._fill_grid_dropdown_or_random(
+                    target_row, "State", data.get("state")
+                )
+                self.wait_seconds(3)  # Wait for District options to load
 
-        # Address (REQUIRED)
-        address = data.get("address", "")
-        if address:
-            self.type_text(address_loc, address, clear_first=True)
-            self.wait_seconds(0.3)
+            # District (REQUIRED, depends on State)
+            if "district" in data:
+                self.wait_seconds(1)
+                self._fill_grid_dropdown_or_random(
+                    target_row, "District", data.get("district")
+                )
+                self.wait_seconds(3)  # Wait for Taluka options to load
 
-        # Pin Code (optional)
-        pin_code = data.get("pin_code", "")
-        if pin_code:
-            self.type_text(pin_code_loc, pin_code, clear_first=True)
-            self.wait_seconds(0.3)
+            # Taluka (REQUIRED, depends on District)
+            if "taluka" in data:
+                self.wait_seconds(1)
+                self._fill_grid_dropdown_or_random(
+                    target_row, "Taluka", data.get("taluka")
+                )
+                self.wait_seconds(3)  # Wait for Village options to load
 
-        # GSTIN (optional)
-        gstin = data.get("gstin", "")
-        if gstin:
-            self.type_text(gstin_loc, gstin, clear_first=True)
-            self.wait_seconds(0.3)
+            # Village (optional, depends on Taluka)
+            if "village" in data:
+                self.wait_seconds(1)
+                self._fill_grid_dropdown_or_random(
+                    target_row, "Village", data.get("village")
+                )
+                self.wait_seconds(0.3)
 
+            # --- Text inputs in the grid row ---
+            if data.get("address"):
+                self._fill_grid_text_input(target_row, "Address", data["address"])
+
+            if data.get("pin_code"):
+                self._fill_grid_text_input(target_row, "Pin Code", data["pin_code"])
+
+            if data.get("gstin"):
+                self._fill_grid_text_input(target_row, "GSTIN", data["gstin"])
+
+        except Exception as e:
+            log.error(f"Failed to fill address row {row_index}: {e}")
+
+        self._force_close_panels()
         log.info(f"Step 2 Address Details filled (row {row_index})")
 
     def add_address_row(self):
@@ -1738,7 +2142,7 @@ class SupplierPage(BasePage):
                 if i > 0:
                     # Add a new row for Billing (and beyond)
                     self.add_address_row()
-                    self.wait_seconds(1)
+                    self.wait_seconds(1.5)
                 self.fill_step2_address(addr_data, row_index=i)
 
             # Click Next to go to Step 3
