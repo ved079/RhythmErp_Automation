@@ -905,8 +905,6 @@ def build_customer_api_payload(
         row["gstin"] = generate_luhn_gstin()
         row["same_as_above"] = None
         row["address2"] = None
-        row["demo_details"] = None
-        row["details"] = []
         return row
 
     # Row 0: Shipping (address_type=43), Row 1: Billing (address_type=42)
@@ -940,7 +938,6 @@ def build_customer_api_payload(
     if _fk("bank_doc_id") is not None:
         bank_detail["bank_doc_id"] = _fk("bank_doc_id")
     bank_detail["bank_attachment_path"] = None
-    bank_detail["details"] = []
 
     # ── Assemble payload ──
     payload = {
