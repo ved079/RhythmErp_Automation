@@ -503,6 +503,13 @@ HSN_SAC_CODE_OPTIONS = {
 
 BASE_UOM_OPTIONS = UOM_OPTIONS  # Same pool as UOM
 
+# Item Sourcing options (confirmed 2026-06-08 on live ERP)
+ITEM_SOURCING_OPTIONS = {
+    "In-House": 1,
+    "Outsourced": 2,
+    "Both": 3,
+}
+
 PACKAGING_OPTIONS = {
     "KG": 249, "MT": 250, "QT": 251, "NOS": 252, "Litres": 253,
     "LTR": 501, "MTR": 502, "dozens": 504, "Litre": 506, "ML": 507,
@@ -757,9 +764,9 @@ FIELD_VALIDATION_RULES = {
     },
     "item_attribute1": {
         "type": "dropdown",
-        "required": False,
+        "required": True,
         "fk_options_count": len(ITEM_ATTRIBUTE1_OPTIONS),
-        "note": "FK to Item Attribute1. 31 options. Optional.",
+        "note": "FK to Item Attribute1. 31 options. REQUIRED (confirmed 2026-06-08).",
     },
     "item_attribute2": {
         "type": "dropdown",
@@ -791,6 +798,13 @@ FIELD_VALIDATION_RULES = {
         "required": False,
         "default": True,
         "note": "Active/Inactive toggle. Default: Active (True).",
+    },
+    # Item Sourcing (confirmed 2026-06-08 on live ERP)
+    "item_sourcing": {
+        "type": "dropdown",
+        "required": True,
+        "fk_options_count": len(ITEM_SOURCING_OPTIONS),
+        "note": "FK to Item Sourcing. 3 options: In-House, Outsourced, Both. REQUIRED.",
     },
     # Stepper toggles (on children[0])
     "is_critical": {
@@ -842,6 +856,7 @@ DEFAULT_ITEM_MASTER_FK_IDS = {
     "uom": UOM_OPTIONS,
     "hsn_sac_code": HSN_SAC_CODE_OPTIONS,
     "base_uom": BASE_UOM_OPTIONS,
+    "item_sourcing": ITEM_SOURCING_OPTIONS,
 }
 
 def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None):

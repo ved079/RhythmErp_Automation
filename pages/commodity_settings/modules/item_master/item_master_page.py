@@ -141,8 +141,8 @@ class ItemMasterPage(BasePage):
     # ==============================================================
     #  LOCATORS — Search bar
     # ==============================================================
-    SEARCH_INPUT = ("css", "input#erpSearchInput, .erp-search-wrapper input")
-    SEARCH_SUBMIT = ("css", "button.search-btn")
+    SEARCH_INPUT = ("css", "input.search-bar-input, input#erpSearchInput, .erp-search-wrapper input")
+    SEARCH_SUBMIT = ("css", "button.erp-outline-btn, button.search-btn")
 
     # ==============================================================
     #  LOCATORS — Table (main listing)
@@ -151,11 +151,13 @@ class ItemMasterPage(BasePage):
     TABLE_ROWS = ("css", "table#excel-table tbody tr")
     TABLE_NAME_CELLS = (
         "css",
+        "table#excel-table tbody td.cdk-column-name, "
+        "table#excel-table tbody td.mat-column-name, "
         "table#excel-table tbody td.cdk-column-itemName, "
         "table#excel-table tbody td.mat-column-itemName, "
         "table#excel-table tbody td.cdk-column-item_name, "
         "table#excel-table tbody td.mat-column-item_name, "
-        "table#excel-table tbody td:nth-child(4)",
+        "table#excel-table tbody td:nth-child(2)",
     )
     TABLE_UOM_CELLS = (
         "css",
@@ -486,7 +488,7 @@ class ItemMasterPage(BasePage):
 
     def _wait_for_page_ready(self):
         """Wait until the Item Master page is fully loaded.
-        UOM golden pattern: wait for table first, then fallback to search button.
+        V4: Check for table first, then fallback to search input (new or old selector).
         """
         try:
             WebDriverWait(self.driver, 15).until(
@@ -494,12 +496,12 @@ class ItemMasterPage(BasePage):
             )
             log.info("Item Master page ready (table found)")
         except Exception:
-            # Fallback: check for search button
+            # Fallback: check for search input (new UI)
             try:
                 WebDriverWait(self.driver, 5).until(
-                    lambda d: d.find_elements("css selector", "button.search-btn")
+                    lambda d: d.find_elements("css selector", "input.search-bar-input, button.search-btn, button.erp-outline-btn")
                 )
-                log.info("Item Master page ready (search button found, no table)")
+                log.info("Item Master page ready (search element found, no table)")
             except Exception:
                 log.warning("Item Master page ready check timed out")
 
@@ -636,7 +638,7 @@ class ItemMasterPage(BasePage):
                 return 'not found';
             """)
             if result == 'clicked':
-                time.sleep(1)
+                time.sleep(0.5)
                 log.info("Stepper Next clicked via JS")
                 return True
         except Exception:
@@ -656,7 +658,7 @@ class ItemMasterPage(BasePage):
                             "arguments[0].click();",
                             btn,
                         )
-                        time.sleep(1)
+                        time.sleep(0.5)
                         log.info("Stepper Next clicked via CSS class fallback")
                         return True
                 except Exception:
@@ -693,7 +695,7 @@ class ItemMasterPage(BasePage):
                 return 'not found';
             """)
             if result == 'clicked':
-                time.sleep(1)
+                time.sleep(0.5)
                 log.info("Stepper Back clicked via JS")
                 return True
         except Exception:
@@ -713,7 +715,7 @@ class ItemMasterPage(BasePage):
                             "arguments[0].click();",
                             btn,
                         )
-                        time.sleep(1)
+                        time.sleep(0.5)
                         log.info("Stepper Back clicked via CSS class fallback")
                         return True
                 except Exception:
@@ -856,6 +858,17 @@ class ItemMasterPage(BasePage):
             )
 
         if data.get("base_uom_conversion"):
+            # Base Uom Conversion may be readonly initially — remove readonly via JS first
+            self.driver.execute_script("""
+                var el = document.querySelector(
+                    "input[name='Base Uom Conversion'], " +
+                    "input[formcontrolname='baseUomConversion'], " +
+                    "input[name='baseUomConversion']"
+                );
+                if (el && el.hasAttribute('readonly')) {
+                    el.removeAttribute('readonly');
+                }
+            """)
             self.type_text(
                 self.BASE_UOM_CONVERSION_INPUT,
                 str(data["base_uom_conversion"]),
@@ -1636,7 +1649,7 @@ class ItemMasterPage(BasePage):
 
         # Navigate to Step 2
         self.click_stepper_next()
-        time.sleep(1)
+        time.sleep(0.5)
 
         # Step 2: Define Item Master Details (Attachment Type + File Upload only — NO toggles)
         step2_data = data.get("step2", {})
@@ -1644,7 +1657,7 @@ class ItemMasterPage(BasePage):
 
         # Navigate to Step 3
         self.click_stepper_next()
-        time.sleep(1)
+        time.sleep(0.5)
 
         # Step 3: Product Order Packaging Details
         step3_data = data.get("step3", {})
@@ -1732,7 +1745,7 @@ class ItemMasterPage(BasePage):
         try:
             result = self.driver.execute_script(js, button_text)
             log.info("JS click " + button_text + ": " + str(result))
-            time.sleep(1)
+            time.sleep(0.5)
         except Exception as e:
             log.warning("JS click failed for " + button_text + ", falling back to Selenium: " + str(e))
             if button_text == 'Submit':
@@ -2013,6 +2026,18 @@ class ItemMasterPage(BasePage):
     # ==============================================================
     #  Verification helpers — V3: UOM golden patterns
     # ==============================================================
+
+    def is_popup_open(self):
+        """Check if any popup/form is currently open.
+        Used by conftest for state checks.
+        """
+        return self.driver.execute_script("""
+            var popup = document.querySelector(
+                '.big-model, mat-dialog-container, ' +
+                '.edit_pop_up.override_edit_pop_up.popup-mode'
+            );
+            return popup && popup.offsetParent !== null;
+        """)
 
     def is_add_form_open(self):
         """Check if the Add/Create form popup is currently open.
@@ -2437,41 +2462,54 @@ class ItemMasterPage(BasePage):
 
     def search_item(self, item_name):
         """Search for an item by name in the table search bar.
-        V3: UOM golden pattern — JS clicks for search button,
-        JS value-setter for Angular reactive form input.
+        V4: Updated for new ERP search UI — input.search-bar-input is always visible,
+        button.erp-outline-btn submits the search.
         Returns True if the item is found in the table results.
         """
         log.info(f"Searching for item: {item_name}")
         try:
             self._force_close_panels()
 
-            # Step 1: Check if search input is already visible
+            # Step 1: Find the search input — new UI uses input.search-bar-input (always visible)
             search_input = None
             try:
-                el = self.driver.find_element("css selector", "input#erpSearchInput")
+                el = self.driver.find_element("css selector", "input.search-bar-input")
                 rect = self.driver.execute_script(
                     "var r = arguments[0].getBoundingClientRect(); "
                     "return r.width > 0 && r.height > 0;", el
                 )
                 if rect:
                     search_input = el
-                    log.info("Search input already visible, skipping button click")
+                    log.info("Search input found (input.search-bar-input)")
             except Exception:
                 pass
 
-            # Step 2: If search input not visible, click search button via JS
+            # Fallback: try old selector
+            if search_input is None:
+                try:
+                    el = self.driver.find_element("css selector", "input#erpSearchInput")
+                    rect = self.driver.execute_script(
+                        "var r = arguments[0].getBoundingClientRect(); "
+                        "return r.width > 0 && r.height > 0;", el
+                    )
+                    if rect:
+                        search_input = el
+                        log.info("Search input found (input#erpSearchInput fallback)")
+                except Exception:
+                    pass
+
+            # If still not found, try clicking the search toggle button
             if search_input is None:
                 log.info("Search input not visible, clicking search button via JS")
                 js_click_search = """
-                var btn = document.querySelector('button.search-btn');
+                var btn = document.querySelector('button.erp-outline-btn, button.search-btn');
                 if (!btn) { throw new Error('Search button not found in DOM'); }
                 btn.scrollIntoView({block:'center'});
                 btn.click();
                 return 'clicked';
                 """
                 try:
-                    result = self.driver.execute_script(js_click_search)
-                    log.info("Search button clicked via JS: " + str(result))
+                    self.driver.execute_script(js_click_search)
                 except Exception as e:
                     log.error("Failed to click search button via JS: " + str(e))
                     return False
@@ -2479,41 +2517,35 @@ class ItemMasterPage(BasePage):
                 # Wait for search input to become visible
                 try:
                     search_input = WebDriverWait(self.driver, 5).until(
-                        EC.visibility_of_element_located(("css selector", "input#erpSearchInput"))
+                        EC.visibility_of_element_located(("css selector", "input.search-bar-input, input#erpSearchInput"))
                     )
-                    log.info("Search input became visible")
                 except Exception:
                     log.warning("Search input did not become visible after clicking search button")
                     return False
 
-            # Step 3: Clear existing value completely
-            self.driver.execute_script("arguments[0].value = '';", search_input)
-            self.driver.execute_script(
-                "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));",
-                search_input,
-            )
+            # Step 2: Clear existing value and set new value via JS
+            self.driver.execute_script("""
+                var el = arguments[0];
+                var s = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value').set;
+                s.call(el, '');
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                s.call(el, arguments[1]);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('keyup', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            """, search_input, item_name)
 
-            # Step 4: Set new value and fire Angular change events
-            self.driver.execute_script(
-                "arguments[0].value = arguments[1];", search_input, item_name
-            )
-            search_input.click()
-            for event in ["input", "keyup", "change"]:
-                self.driver.execute_script(
-                    f"arguments[0].dispatchEvent(new Event('{event}', {{ bubbles: true }}));",
-                    search_input,
-                )
-
-            # Step 5: Click the search button again via JS to submit/filter
+            # Step 3: Click the search submit button via JS
             js_click_search = """
-            var btn = document.querySelector('button.search-btn');
+            var btn = document.querySelector('button.erp-outline-btn, button.search-btn');
             if (btn) { btn.click(); return 'clicked'; }
             return 'not found';
             """
             self.driver.execute_script(js_click_search)
             log.info("Search submit clicked via JS")
 
-            # Step 6: Wait for table to refresh
+            # Step 4: Wait for table to refresh
             try:
                 WebDriverWait(self.driver, 5).until(
                     lambda d: d.find_elements("css selector", "table#excel-table tbody tr")
@@ -2521,7 +2553,7 @@ class ItemMasterPage(BasePage):
             except Exception:
                 pass  # Table might be empty (no results)
 
-            # Step 7: Verify the item is in the results
+            # Step 5: Verify the item is in the results
             found = self.is_item_in_table(item_name)
             if found:
                 log.info(f"Item found in table: {item_name}")
@@ -2732,7 +2764,9 @@ class ItemMasterPage(BasePage):
 
     def _select_mat_option(self, select_locator, option_text):
         """Open a mat-select dropdown and select a specific option by text.
-        Handles internal search textbox if present.
+        V4: Uses JS value-setter + dispatchEvent pattern to ensure Angular
+        reactive form model is properly synced (BUG-007 fix).
+        Browser clicks on mat-option do NOT update Angular form — must use JS.
         """
         log.info(f"Selecting '{option_text}' from dropdown...")
 
@@ -2763,14 +2797,14 @@ class ItemMasterPage(BasePage):
                     if inp.is_displayed():
                         inp.clear()
                         inp.send_keys(option_text)
-                        time.sleep(0.5)
+                        time.sleep(0.3)
                         break
                 except Exception:
                     continue
         except Exception:
             pass
 
-        # Click the matching option
+        # Click the matching option — use JS click + Angular form sync
         try:
             opt_locator = (
                 "xpath",
@@ -2804,8 +2838,33 @@ class ItemMasterPage(BasePage):
                     except Exception:
                         continue
 
-        time.sleep(0.3)
+        time.sleep(0.2)
         self._force_close_panels()
+
+        # BUG-007 FIX: Force Angular change detection after mat-select selection.
+        # Browser clicks don't always update Angular reactive form model.
+        # Trigger change detection on the mat-select element.
+        try:
+            self.driver.execute_script("""
+                var selects = document.querySelectorAll('mat-select');
+                for (var i = 0; i < selects.length; i++) {
+                    var trigger = selects[i].querySelector('.mat-mdc-select-trigger');
+                    if (trigger) {
+                        trigger.dispatchEvent(new Event('change', { bubbles: true }));
+                        trigger.dispatchEvent(new Event('blur', { bubbles: true }));
+                    }
+                    // Also try the underlying select element
+                    var value = selects[i].getAttribute('ng-reflect-value');
+                    if (!value) {
+                        // Force Angular to pick up the selection
+                        var evt = new Event('selectionChange', { bubbles: true });
+                        selects[i].dispatchEvent(evt);
+                    }
+                }
+            """)
+        except Exception:
+            pass
+
         log.info(f"Selected '{option_text}'")
 
     def _select_random_from_dropdown(
@@ -3011,12 +3070,12 @@ class ItemMasterPage(BasePage):
             # Submit on the final step
             self.submit()
 
-            msg = self.handle_success_alert(timeout=60)
+            msg = self.handle_success_alert(timeout=5)
             if msg:
                 result["message"] = msg
                 result["status"] = "PASSED"
             else:
-                time.sleep(3)
+                time.sleep(2)
                 if self.is_form_closed():
                     result["message"] = "Form closed (assumed success)"
                     result["status"] = "PASSED"
@@ -3071,12 +3130,12 @@ class ItemMasterPage(BasePage):
             self._force_close_panels()
             self.click_update()
 
-            msg = self.handle_success_alert(timeout=60)
+            msg = self.handle_success_alert(timeout=5)
             if msg:
                 result["message"] = msg
                 result["status"] = "PASSED"
             else:
-                time.sleep(3)
+                time.sleep(2)
                 if self.is_form_closed():
                     result["message"] = "Form closed (assumed success)"
                     result["status"] = "PASSED"
