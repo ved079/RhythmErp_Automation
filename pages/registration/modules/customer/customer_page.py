@@ -1367,89 +1367,74 @@ class CustomerPage(BasePage):
     #  Fill Step 1: Customer Details (Address Grid)
     # ==============================================================
 
-    def add_address_row(self):
-        """Click the Add Row (+) button in the Address grid
-        to add a new address row.
-        """
-        log.info("Clicking Add Row in Address grid...")
 
-        # Strategy 1: ADDRESS_GRID_ADD_BUTTON locator
+    def add_address_row(self):
+        """Click the Add Row (+) button on the LAST row of the Address grid.
+        Each row has its own inline add button — there is no global add button.
+        Scoped to the first .grid-container to avoid hitting the bank grid.
+        """
+        log.info("Clicking Add Row (on last row) in Address grid...")
+
+        # Strategy 1: JS — find last tr in address grid → click its add button
         try:
-            btn = self.driver.find_element(
-                By.XPATH, self.ADDRESS_GRID_ADD_BUTTON[1]
-            )
-            if btn.is_displayed():
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});"
-                    "arguments[0].click();",
-                    btn,
-                )
+            clicked = self.driver.execute_script("""
+                var containers = document.querySelectorAll('.grid-container');
+                if (containers.length < 1) return false;
+                var tbody = containers[0].querySelector('.grid-table tbody, table tbody');
+                if (!tbody) return false;
+                var rows = tbody.querySelectorAll('tr');
+                if (rows.length === 0) return false;
+                var lastRow = rows[rows.length - 1];
+                var btns = lastRow.querySelectorAll(
+                    'button.mat-mdc-icon-button, button.mdc-icon-button'
+                );
+                for (var i = 0; i < btns.length; i++) {
+                    var icon = btns[i].querySelector('mat-icon');
+                    if (icon && icon.textContent.trim().toLowerCase() === 'add') {
+                        btns[i].click();
+                        return true;
+                    }
+                }
+                return false;
+            """)
+            if clicked:
                 self.wait_seconds(1)
-                log.info("Address Add Row clicked via locator")
+                log.info("Address Add Row clicked via JS (last row inline button)")
                 return
         except Exception:
             pass
 
-        # Strategy 2: Find add icon button inside first grid-container
+        # Strategy 2: Python — find last visible address row, click its add button
         try:
-            add_btns = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                ".grid-container button.mat-mdc-icon-button",
-            )
-            for btn in add_btns:
-                try:
-                    icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
-                    if icon.text.strip().lower() == "add" and btn.is_displayed():
-                        self.driver.execute_script(
-                            "arguments[0].scrollIntoView({block:'center'});"
-                            "arguments[0].click();",
-                            btn,
-                        )
-                        self.wait_seconds(1)
-                        log.info("Address Add Row clicked via icon search")
-                        return
-                except Exception:
-                    continue
+            visible_rows = self._get_address_grid_rows()
+            if visible_rows:
+                last_row = visible_rows[-1]
+                add_btns = last_row.find_elements(
+                    By.CSS_SELECTOR,
+                    "button.mat-mdc-icon-button, button.mdc-icon-button",
+                )
+                for btn in add_btns:
+                    try:
+                        icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
+                        if icon.text.strip().lower() == "add" and btn.is_displayed():
+                            self.driver.execute_script(
+                                "arguments[0].scrollIntoView({block:'center'});"
+                                "arguments[0].click();",
+                                btn,
+                            )
+                            self.wait_seconds(1)
+                            log.info("Address Add Row clicked via last-row Python strategy")
+                            return
+                    except Exception:
+                        continue
         except Exception:
             pass
 
-        # Strategy 3: JS click
-        try:
-            self.driver.execute_script("""
-                var containers = document.querySelectorAll('.grid-container');
-                if (containers.length > 0) {
-                    var btns = containers[0].querySelectorAll(
-                        'button.mat-mdc-icon-button'
-                    );
-                    for (var i = 0; i < btns.length; i++) {
-                        var icon = btns[i].querySelector('mat-icon');
-                        if (icon && icon.textContent.trim().toLowerCase() === 'add') {
-                            btns[i].click();
-                            break;
-                        }
-                    }
-                }
-            """)
-            self.wait_seconds(1)
-            log.info("Address Add Row clicked via JS")
-        except Exception:
-            log.warning("Address Add Row button not found")
+        log.warning("Address Add Row button not found on last row")
+    
 
     def fill_address_row(self, row_index, data):
-        """Fill one address row in the Customer Details grid.
-
-        For cascading dropdowns, the order MUST be:
-        Address Type → Country → State → District → Taluka → Village
-        Each selection triggers loading of the next dropdown's options.
-
-        For dropdown fields where the value is None, a random valid option
-        is picked from the live UI (essential for cascading — a selection
-        must be made so the next level's options can load).
-
-        Args:
-            row_index: 0-based index of the address row
-            data: dict with address fields. None = pick random, "" = skip.
-        """
+        """Fill one address row in the Customer Details grid."""
         log.info(f"Filling address row {row_index}...")
 
         try:
@@ -1464,60 +1449,47 @@ class CustomerPage(BasePage):
 
             target_row = visible_rows[row_index]
 
-            # --- Cascading dropdowns (order matters!) ---
-
-            # Address Type (required *)
             if "address_type" in data:
                 self._fill_grid_dropdown_or_random(
                     target_row, "Address Type", data.get("address_type")
                 )
                 self.wait_seconds(1)
 
-            # Country (cascading — must select before State)
-            # IMPORTANT: For cascading to work, Country should be "India"
             if "country" in data:
                 selected_country = self._fill_grid_dropdown_or_random(
                     target_row, "Country", data.get("country")
                 )
                 if selected_country:
-                    log.info(
-                        f"Country selected: '{selected_country}' — "
-                        f"waiting for State options to load..."
-                    )
-                self.wait_seconds(3)  # Wait for State options to load
+                    log.info(f"Country selected: '{selected_country}' — waiting for State options to load...")
+                self.wait_seconds(3)
 
-            # State (cascading — must select after Country, before District)
             if "state" in data:
-                self.wait_seconds(1)  # Extra wait for dependent options
+                self.wait_seconds(1)
                 self._fill_grid_dropdown_or_random(
                     target_row, "State", data.get("state")
                 )
-                self.wait_seconds(3)  # Wait for District options to load
+                self.wait_seconds(3)
 
-            # District (cascading — must select after State, before Taluka)
             if "district" in data:
                 self.wait_seconds(1)
                 self._fill_grid_dropdown_or_random(
                     target_row, "District", data.get("district")
                 )
-                self.wait_seconds(3)  # Wait for Taluka options to load
+                self.wait_seconds(3)
 
-            # Taluka (cascading — must select after District, before Village)
             if "taluka" in data:
                 self.wait_seconds(1)
                 self._fill_grid_dropdown_or_random(
                     target_row, "Taluka", data.get("taluka")
                 )
-                self.wait_seconds(3)  # Wait for Village options to load
+                self.wait_seconds(3)
 
-            # Village (cascading — last level)
             if "village" in data:
                 self.wait_seconds(1)
                 self._fill_grid_dropdown_or_random(
                     target_row, "Village", data.get("village")
                 )
 
-            # --- Text inputs in the grid row ---
             if data.get("address"):
                 self._fill_grid_text_input(target_row, "Address", data["address"])
 
@@ -1530,33 +1502,34 @@ class CustomerPage(BasePage):
         except Exception as e:
             log.error(f"Failed to fill address row {row_index}: {e}")
 
+
     def fill_step1(self, data):
         """Fill Step 1 — Customer Details (Address Grid).
         Data format:
-          {
-              "address_rows": [
-                  {
-                      "address_type": "Shipping",
-                      "country": "India",
-                      "state": "Maharashtra",
-                      "district": "Pune",
-                      "taluka": "Haveli",
-                      "village": None,
-                      "address": "123 MG Road",
-                      "pin_code": "411001",
-                      "gstin": "27ABCDE1234F1Z5",
-                  },
-              ]
-          }
+        {
+            "address_rows": [
+                {
+                    "address_type": "Shipping",
+                    "country": "India",
+                    "state": "Maharashtra",
+                    "district": "Pune",
+                    "taluka": "Haveli",
+                    "village": None,
+                    "address": "123 MG Road",
+                    "pin_code": "411001",
+                    "gstin": "27ABCDE1234F1Z5",
+                },
+            ]
+        }
         """
         log.info("Filling Step 1 — Customer Details (Address Grid)...")
         address_rows = data.get("address_rows", [])
 
         for i, row_data in enumerate(address_rows):
             if i > 0:
-                # Add a new row for each additional entry
+                # Click add on the last existing row to append a new row
                 self.add_address_row()
-                self.wait_seconds(1)
+                self.wait_seconds(1.5)  # Wait for new row to render
 
             self.fill_address_row(i, row_data)
 
@@ -3514,8 +3487,13 @@ class CustomerPage(BasePage):
             # Step 9: Handle result
             msg = self.handle_validation_warning(timeout=60)
             if msg:
-                result["message"] = msg
-                result["status"] = "PASSED"
+                failure_keywords = ["validation failed", "failed", "error", "invalid"]
+                if any(kw in msg.lower() for kw in failure_keywords):
+                    result["status"] = "FAILED"
+                    result["error"] = msg
+                else:
+                    result["message"] = msg
+                    result["status"] = "PASSED"
             else:
                 self.wait_seconds(3)
                 if not self._is_form_popup_open():

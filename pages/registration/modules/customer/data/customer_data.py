@@ -291,7 +291,13 @@ def generate_full_valid_customer_data(name_prefix="AutoCust"):
     Used for end-to-end happy path tests.
     """
     data = generate_valid_customer_data(name_prefix)
-    data["address_rows"] = [generate_valid_address_row()]
+    data["address_rows"] = [
+        generate_valid_address_row(),   # Shipping (row 0, default)
+        generate_valid_address_row(),   # Billing  (row 1, added via inline button)
+    ]
+    # Force address types so row 0 = Shipping, row 1 = Billing
+    data["address_rows"][0]["address_type"] = "Shipping"
+    data["address_rows"][1]["address_type"] = "Billing"
     data["bank_rows"] = [generate_valid_bank_row()]
     return data
 
