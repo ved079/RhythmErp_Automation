@@ -98,8 +98,6 @@ def logged_in_driver(driver):
     login_page.wait_for_login_complete()
     log.info("RhythmERP login successful!")
     start_screenshot_broadcast(driver)
-    start_screenshot_broadcast(driver)
-    log.info("RhythmERP login successful!")
 
     yield driver
 

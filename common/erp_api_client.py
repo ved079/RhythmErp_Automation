@@ -71,6 +71,11 @@ class RhythmERPAPIClient:
         self.token = None
         self._logged_in = False
 
+        # WARNING: _last_raw_response is NOT thread-safe. Concurrent API calls may
+        # overwrite this value. Do not run API validation tests in parallel until
+        # the base client is refactored to return (result, response) tuples.
+        self._last_raw_response = None
+
     # ================================================================
     # Authentication
     # ================================================================
@@ -292,7 +297,13 @@ class RhythmERPAPIClient:
             )
         except requests.ConnectionError:
             log.error(f"[API] Connection error creating {entry_name}")
+            self._last_raw_response = None
             return None
+
+        # WARNING: _last_raw_response is NOT thread-safe. Concurrent API calls may
+        # overwrite this value. Do not run API validation tests in parallel until
+        # the base client is refactored to return (result, response) tuples.
+        self._last_raw_response = resp
 
         if resp.status_code in (200, 201):
             log.info(f"[API] Created: {entry_name} (screen: {screen_name})")
