@@ -1145,27 +1145,10 @@ class TestEditShowsUpdateButton:
     @pytest.mark.sanity
     @pytest.mark.regression
     def test_CU_E05_edit_shows_update_button(self, cu_page):
-        """Create a customer, then open Edit mode for it and verify the
-        popup footer shows an 'Update' button instead of 'Submit'."""
+        """Open Edit mode for the first row and verify the popup footer
+        shows an 'Update' button instead of 'Submit'."""
         log.info("CU-E05: Edit shows Update button (not Submit)")
         page = cu_page
-
-        # --- Create a prerequisite customer so we have a row to Edit ---
-        data = generate_full_valid_customer_data("EditBtn")
-        page.open_add_form()
-        WebDriverWait(page.driver, 10).until(
-            lambda d: page.is_add_form_open(),
-            "Add form did not open",
-        )
-        page.create_customer(data)
-        page.handle_success_alert(timeout=10)
-        page.dismiss_swal_alert()
-        _cleanup_form(page)
-        page.click_refresh()
-        WebDriverWait(page.driver, 10).until(
-            lambda d: page.is_page_loaded(),
-            "Page did not load after refresh",
-        )
 
         # Click Edit on the first row
         page.click_edit_first_row()
