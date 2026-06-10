@@ -430,6 +430,19 @@ _sp_store.record_issue(
     status="Fixed",
 )
 
+# BUG-006 (MEDIUM): Company Name accepts spaces-only
+_sp_store.record_issue(
+    severity="Medium",
+    module="Supplier",
+    category="Validation",
+    description="Company Name accepts spaces-only input (e.g., '          ') without any validation. "
+                "The ERP creates the entry successfully with a blank-looking name.",
+    expected="Should strip/reject whitespace-only input and show validation error.",
+    actual="CONFIRMED: '          ' (10 spaces) saved successfully as id=21.",
+    test_ref="SP-C03",
+    status="Confirmed",
+)
+
 
 # ================================================================
 # LOG CAPTURE + PYTEST HOOKS

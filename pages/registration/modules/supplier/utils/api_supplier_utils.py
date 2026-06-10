@@ -338,7 +338,11 @@ class SupplierAPIUtils:
         for err in all_errors:
             err_field = err.get("field", err.get("field_key", ""))
             err_msg = err.get("error_message", str(err))
-            if err_field == field or not err_field:
+            if field is None:
+                # field=None means "accept any error" — used for empty submit
+                # where the ERP may flag Address Details before name
+                field_errors.append(err_msg)
+            elif err_field == field or not err_field:
                 # Match if field matches OR if field is empty (generic error)
                 field_errors.append(err_msg)
 

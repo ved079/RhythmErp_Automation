@@ -7,7 +7,7 @@ API-only validation test suite for RhythmERP Supplier screen.
 Migrated test inventory:
   Create Validation (SP-C01–SP-C10, 10 tests):
     SP-C01  Empty submit — all fields empty
-    SP-C03  Spaces-only company name
+    SP-C03  Spaces-only company name (xfail — BUG-006)
     SP-C04  Special chars in company name (xfail — BUG-001)
     SP-C05  SQL injection in company name (xfail — BUG-001)
     SP-C06  XSS payload in company name (xfail — BUG-001)
@@ -79,7 +79,12 @@ class TestCreateValidation:
     @pytest.mark.api
     @pytest.mark.smoke
     def test_SP_C01_empty_submit(self, sp_api):
-        """Submit with all fields empty — server should reject."""
+        """Submit with all fields empty — server should reject.
+
+        The ERP may return validation errors on ANY field (e.g., Address Details
+        is checked before company name). We assert that SOME validation error
+        occurs, regardless of which field is flagged first.
+        """
         log.info("SP-C01 (API): Empty submit")
         empty_payload = {
             "attribute_name": SCREEN_NAME,
@@ -87,17 +92,19 @@ class TestCreateValidation:
         }
         sp_api.create_and_expect_failure(empty_payload, name_prefix="EmptySup")
         sp_api.assert_validation_error(
-            field="name",
+            field=None,  # Accept any validation error — ERP checks Address Details first
             expected_status=400,
             expected_message_substring="",
             accept_statuses=[400, 500],
         )
 
-    # ---- SP-C03: Spaces-only company name ----
+    # ---- SP-C03: Spaces-only company name (BUG-006) ----
     @pytest.mark.api
     @pytest.mark.sanity
+    @pytest.mark.bug
+    @pytest.mark.xfail(reason=KnownBugs.BUG_006, strict=False)
     def test_SP_C03_spaces_only_company_name(self, sp_api):
-        """Spaces-only company name — server should reject."""
+        """Spaces-only company name — BUG-006: accepted, no whitespace validation."""
         log.info("SP-C03 (API): Spaces-only company name")
         payload = sp_api.generate_unique_payload(name_prefix="SpaceSup")
         payload["name"] = generate_spaces_only(10)
