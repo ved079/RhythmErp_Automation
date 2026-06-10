@@ -1209,23 +1209,63 @@ class SupplierPage(BasePage):
         log.info("Clicking stepper Back button...")
         self._force_close_panels()
 
+        # Strategy 1: CSS locator — scroll first, then check enabled
         try:
             back_btns = self.driver.find_elements(
                 By.CSS_SELECTOR, "button.mat-stepper-previous"
             )
             for btn in back_btns:
                 try:
-                    if btn.is_displayed() and btn.is_enabled():
+                    # Scroll into view FIRST — the button may be off-screen
+                    # after scrolling down for Additional Details
+                    self.driver.execute_script(
+                        "arguments[0].scrollIntoView({block:'center'});",
+                        btn,
+                    )
+                    if btn.is_enabled():
                         self.driver.execute_script(
-                            "arguments[0].scrollIntoView({block:'center'});"
                             "arguments[0].click();",
                             btn,
                         )
-                        # Step transition handled by Angular stepper — brief settle
-                        log.info("Back clicked")
+                        log.info("Back clicked via CSS")
                         return
                 except Exception:
                     continue
+        except Exception:
+            pass
+
+        # Strategy 2: Text search
+        try:
+            back_btns = self.driver.find_elements(
+                By.XPATH,
+                "//button[contains(@class,'mat-stepper-previous') or contains(.,'Back')]"
+            )
+            for btn in back_btns:
+                try:
+                    self.driver.execute_script(
+                        "arguments[0].scrollIntoView({block:'center'});"
+                        "arguments[0].click();",
+                        btn,
+                    )
+                    log.info("Back clicked via text search")
+                    return
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        # Strategy 3: JS click
+        try:
+            self.driver.execute_script("""
+                var btns = document.querySelectorAll('button.mat-stepper-previous');
+                for (var i = 0; i < btns.length; i++) {
+                    btns[i].scrollIntoView({block:'center'});
+                    btns[i].click();
+                    break;
+                }
+            """)
+            log.info("Back clicked via JS")
+            return
         except Exception:
             pass
 
