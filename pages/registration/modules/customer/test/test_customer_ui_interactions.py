@@ -895,7 +895,7 @@ class TestBankFieldsRequiredMismatch:
         log.info("CU-C13: Bank fields required mismatch (BUG-004)")
         page = cu_page
 
-        data = generate_valid_customer_data("BankChk")
+        data = generate_full_valid_customer_data("BankChk")
 
         page.open_add_form()
         WebDriverWait(page.driver, 10).until(
