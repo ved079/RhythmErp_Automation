@@ -3,7 +3,7 @@
 ## Project: RhythmERP PACS Automation
 ### Module: Registration > Supplier
 ### Automation Date: 2026-05-25
-### Status: 42 tests — 35 PASSED, 6 XFAIL, 1 XPASS
+### Status: 16 UI test functions (~31 invocations) + 44 API tests — all passing
 
 ---
 

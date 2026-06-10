@@ -85,7 +85,7 @@ _COMPANY_NAMES = [
     "Ganesh", "Krishna", "Patel", "Sharma", "Agro", "Bharat",
     "Lakshmi", "Durga", "Sai", "Ram", "Hanuman", "Amul",
     "Narmada", "Godavari", "Yamuna", "Sutlej", "Ganga",
-    "Kaveri", "Tapi", "Krishna", "Malabar", "Konkan",
+    "Kaveri", "Tapi", "Malabar", "Konkan",
     "Maratha", "Rajput", "Chola", "Pallava", "Maurya",
     "Indus", "Deccan", "Malwa", "Kalinga", "Vindhya",
 ]
@@ -117,7 +117,7 @@ _LAST_NAMES = [
     "Jain", "Shah", "Mehta", "Reddy", "Nair", "Iyer",
     "Desai", "Kulkarni", "More", "Gaikwad", "Chavan",
     "Pawar", "Jadhav", "Bhosale", "Rao", "Hegde", "Shetty",
-    "Hegde", "Bhat", "Pillai", "Menon", "Varma", "Chopra",
+    "Bhat", "Pillai", "Menon", "Varma", "Chopra",
 ]
 
 _EMAIL_DOMAINS = [
@@ -157,12 +157,7 @@ _AREA_TYPES = [
     "Trade Centre", "Market Yard", "Godown Road", "",
 ]
 
-_CITY_NAMES = [
-    "Mumbai", "Delhi", "Pune", "Ahmedabad", "Bangalore",
-    "Chennai", "Hyderabad", "Kolkata", "Jaipur", "Lucknow",
-    "Nagpur", "Indore", "Chandigarh", "Coimbatore", "Vadodara",
-    "Surat", "Ludhiana", "Bhopal", "Patna", "Rajkot",
-]
+_CITY_NAMES = _BANK_CITIES
 
 # Track generated names to prevent duplicates within a session
 _generated_names = set()
@@ -1361,23 +1356,9 @@ def generate_supplier_api_payloads(
     """
     Generate multiple unique Supplier API payloads for batch creation.
 
-    Each payload gets a DIFFERENT random address chain automatically.
-
-    Args:
-        count: Number of payloads to generate.
-        prefix: If provided, forces old prefix_timestamp naming.
-                If None (default), generates realistic Indian names.
-        dropdown_ids: Override default FK IDs for dropdowns.
-
-    Returns:
-        List of JSON payloads ready for batch_create().
+    Alias for generate_batch_payloads(). Kept for backward compatibility.
     """
-    payloads = []
-    for i in range(count):
-        payloads.append(
-            generate_supplier_api_payload(prefix, dropdown_ids)
-        )
-    return payloads
+    return generate_batch_payloads(count=count, prefix=prefix, dropdown_ids=dropdown_ids)
 
 
 # ──────────────────────────────────────────────

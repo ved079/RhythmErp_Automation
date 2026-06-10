@@ -92,7 +92,6 @@ LOGIN: Assistant@mail.com / Vedant@12345 / Facility: RuralLife Producer Company 
 
 import os
 import sys
-import time
 import random
 
 PROJECT_ROOT = os.path.abspath(
@@ -113,10 +112,6 @@ from selenium.common.exceptions import (
 from common.base_page import BasePage
 from common.logger import log
 from config import RHYTHMERP_BASE_URL, EXPLICIT_WAIT
-
-# Global list to track every submission for reporting
-SP_SUBMISSIONS = []
-
 
 class SupplierPage(BasePage):
     PAGE_URL = f"{RHYTHMERP_BASE_URL}/#/dynamic-screens/Supplier/Supplier"
@@ -2174,7 +2169,6 @@ class SupplierPage(BasePage):
                 else:
                     result["status"] = "PASSED"
                     company_name = step1.get("company_name", "Unknown")
-                    SP_SUBMISSIONS.append(company_name)
                     log.info(f"Supplier created successfully: {company_name}")
             else:
                 # No SweetAlert2 — check if form closed (assumed success)
@@ -2183,7 +2177,6 @@ class SupplierPage(BasePage):
                     result["status"] = "PASSED"
                     result["message"] = "Form closed (assumed success)"
                     company_name = step1.get("company_name", "Unknown")
-                    SP_SUBMISSIONS.append(company_name)
                     log.info(f"Supplier created (form closed): {company_name}")
                 else:
                     errors = self.get_mat_error_text()
