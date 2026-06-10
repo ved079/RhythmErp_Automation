@@ -2621,15 +2621,18 @@ class SupplierPage(BasePage):
                 By.CSS_SELECTOR, "button.mat-mdc-menu-trigger.erp-row-trigger"
             )
             self.driver.execute_script("arguments[0].click();", trigger)
-            WebDriverWait(self.driver, 3).until(
-                EC.visibility_of_element_located((By.CSS_SELECTOR, "div.mat-menu-content button")),
+            WebDriverWait(self.driver, 5).until(
+                EC.visibility_of_element_located((
+                    By.CSS_SELECTOR,
+                    "div.mat-mdc-menu-content button, div.mat-menu-content button"
+                )),
                 "Menu options did not appear",
             )
 
             # Click View from the dropdown menu
             view_btn = self.driver.find_element(
                 By.XPATH,
-                "//div[contains(@class,'mat-mdc-menu-content')]"
+                "//div[contains(@class,'mat-mdc-menu-content') or contains(@class,'mat-menu-content')]"
                 "//span[contains(@class,'erp-menu-title') and text()='View']"
                 "/ancestor::button"
             )
@@ -2656,15 +2659,18 @@ class SupplierPage(BasePage):
                 By.CSS_SELECTOR, "button.mat-mdc-menu-trigger.erp-row-trigger"
             )
             self.driver.execute_script("arguments[0].click();", trigger)
-            WebDriverWait(self.driver, 3).until(
-                EC.visibility_of_element_located((By.CSS_SELECTOR, "div.mat-menu-content button")),
+            WebDriverWait(self.driver, 5).until(
+                EC.visibility_of_element_located((
+                    By.CSS_SELECTOR,
+                    "div.mat-mdc-menu-content button, div.mat-menu-content button"
+                )),
                 "Menu options did not appear",
             )
 
             # Click Edit from the dropdown menu
             edit_btn = self.driver.find_element(
                 By.XPATH,
-                "//div[contains(@class,'mat-mdc-menu-content')]"
+                "//div[contains(@class,'mat-mdc-menu-content') or contains(@class,'mat-menu-content')]"
                 "//span[contains(@class,'erp-menu-title') and text()='Edit']"
                 "/ancestor::button"
             )
@@ -2682,23 +2688,23 @@ class SupplierPage(BasePage):
         """Click View on the first row in the table (no creation needed)."""
         log.info("Opening View for first row...")
         self._click_first_menu_option("View")
-        WebDriverWait(self.driver, 5).until(
+        WebDriverWait(self.driver, 10).until(
             lambda d: self.is_add_form_open(),
             "View popup did not open",
         )
         if not self._is_form_popup_open():
-            self._wait_for_form_content(timeout=5)
+            self._wait_for_form_content(timeout=10)
 
     def click_edit_first_row(self):
         """Click Edit on the first row in the table (no creation needed)."""
         log.info("Opening Edit for first row...")
         self._click_first_menu_option("Edit")
-        WebDriverWait(self.driver, 5).until(
+        WebDriverWait(self.driver, 10).until(
             lambda d: self.is_add_form_open(),
             "Edit popup did not open",
         )
         if not self._is_form_popup_open():
-            self._wait_for_form_content(timeout=5)
+            self._wait_for_form_content(timeout=10)
     
     def get_first_row_name(self):
         """Get the Company Name from the first row in the table."""
@@ -2729,29 +2735,48 @@ class SupplierPage(BasePage):
         )
 
     def _click_first_menu_option(self, option="view"):
-        """Click the first 3-dot menu trigger, then select View/Edit/History."""
+        """Click the first 3-dot menu trigger, then select View/Edit/History.
+
+        The ERP uses Angular Material's mat-menu with both old-style
+        (mat-menu-content) and MDC-style (mat-mdc-menu-content) class names.
+        We check both to handle tenant/version differences.
+        """
         try:
             triggers = self.driver.find_elements(
                 By.CSS_SELECTOR, "button.mat-mdc-menu-trigger.erp-row-trigger"
             )
+            # Fallback: also try generic trigger class
+            if not triggers:
+                triggers = self.driver.find_elements(
+                    By.CSS_SELECTOR, "button.mat-menu-trigger"
+                )
             for trigger in triggers:
                 try:
                     if trigger.is_displayed():
                         self.driver.execute_script("arguments[0].click();", trigger)
-                        WebDriverWait(self.driver, 3).until(
-                            EC.visibility_of_element_located((By.CSS_SELECTOR, "div.mat-menu-content button")),
-                            "Menu options did not appear",
-                        )
+                        # Wait for the dropdown menu panel to appear —
+                        # try both MDC and legacy Angular Material selectors
+                        try:
+                            WebDriverWait(self.driver, 5).until(
+                                EC.visibility_of_element_located((
+                                    By.CSS_SELECTOR,
+                                    "div.mat-mdc-menu-content button, "
+                                    "div.mat-menu-content button"
+                                )),
+                            )
+                        except TimeoutException:
+                            log.warning("Menu options did not appear after trigger click")
+                            continue
 
                         # Click the desired option from the menu
                         option_btn = self.driver.find_element(
                             By.XPATH,
-                            f"//div[contains(@class,'mat-mdc-menu-content')]"
+                            f"//div[contains(@class,'mat-mdc-menu-content') or contains(@class,'mat-menu-content')]"
                             f"//span[contains(@class,'erp-menu-title') and text()='{option.capitalize()}']"
                             f"/ancestor::button"
                         )
                         self.driver.execute_script("arguments[0].click();", option_btn)
-                        WebDriverWait(self.driver, 5).until(
+                        WebDriverWait(self.driver, 10).until(
                             lambda d: self.is_add_form_open(),
                             "Popup did not open after clicking menu option",
                         )
