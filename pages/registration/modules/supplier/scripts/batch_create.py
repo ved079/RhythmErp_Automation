@@ -26,7 +26,7 @@ from common.logger import log
 from pages.registration.modules.supplier.data.supplier_data import generate_supplier_api_payload
 
 # Default config — override with --token and --count flags
-DEFAULT_TENANT_ID = "599"
+DEFAULT_TENANT_ID = "681"
 DEFAULT_COUNT = 10
 
 

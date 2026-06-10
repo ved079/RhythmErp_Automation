@@ -26,7 +26,7 @@ sys.path.insert(0, PROJECT_ROOT)
 from common.erp_api_client import RhythmERPAPIClient
 from common.logger import log
 
-TENANT_ID = "599"
+TENANT_ID = "681"
 
 # The 10 Common Settings screens to discover
 SCREENS = [

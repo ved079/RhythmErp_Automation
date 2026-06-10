@@ -557,7 +557,7 @@ def generate_unicode_name():
 #     Same as Supplier bank fields
 # ──────────────────────────────────────────────
 
-# Dropdown FK ID pools (verified on tenant 599)
+# Dropdown FK ID pools (verified on tenant 681)
 OWNERSHIP_STATUS_IDS = [5, 6, 7, 8, 9, 1262, 1263, 1853]
 #   5 = Cooperative Society, 6 = Limited, 7 = Private Limited Company,
 #   8 = Public Limited Company, 9 = Government, 1262 = Partnership,

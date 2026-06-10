@@ -2,7 +2,7 @@
 member_data.py
 --------------
 Test data & API payload builder for Rhythm ERP Member Screen.
-Derived from live ERP schema at /core/dynamic-screen/Member/ (tenant 599).
+Derived from live ERP schema at /core/dynamic-screen/Member/ (tenant 681).
 
 FIELD REFERENCE (15 top-level fields + KYC stepper with 3 child fields):
 
@@ -115,7 +115,7 @@ _generated_names = set()
 
 
 # ──────────────────────────────────────────────
-# FK ID pools (verified on tenant 599, 2026-06-04)
+# FK ID pools (verified on tenant 681, 2026-06-04)
 # ──────────────────────────────────────────────
 
 # Prefix dropdown — 3 options

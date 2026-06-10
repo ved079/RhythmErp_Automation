@@ -36,7 +36,7 @@ def main():
         sys.exit(1)
 
     client = RhythmERPAPIClient()
-    client.login_from_browser(token=token, tenant_id="599")
+    client.login_from_browser(token=token, tenant_id="681")
 
     all_chains = []
     seen = set()

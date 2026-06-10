@@ -4,13 +4,13 @@ import re
 
 BASE = 'https://rhythmerp.algorhythms.in'
 r = requests.post(BASE + '/auth/login1/', json={
-    'username': 'user@admin.com', 'password': 'Tenant@123456789', 'tenant': '599'
-}, headers={'X-Tenant-ID': '599'})
+    'username': 'user@admin.com', 'password': 'Tenant@123456789', 'tenant': '681'
+}, headers={'X-Tenant-ID': '681'})
 match = re.search(r'refresh_token=([^;]+)', r.headers.get('Set-Cookie', ''))
 token = match.group(1) if match else r.json().get('access')
 print(f'Login OK')
 
-H = {'Authorization': 'Bearer ' + token, 'X-Tenant-ID': '599'}
+H = {'Authorization': 'Bearer ' + token, 'X-Tenant-ID': '681'}
 
 # Get full schema with all dropdown options
 r = requests.get(BASE + '/core/dynamic-screen/Item%20Master/', headers=H)

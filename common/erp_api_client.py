@@ -10,7 +10,7 @@ Uses the same endpoint that the Angular frontend uses:
 Authentication:
   - Bearer token obtained via /auth/login1/ (pure API, no browser needed)
   - Token extracted from refresh_token cookie in Set-Cookie header
-  - X-Tenant-ID header (e.g., "599")
+  - X-Tenant-ID header (e.g., "681")
 
 Usage:
     client = RhythmERPAPIClient()
@@ -19,7 +19,7 @@ Usage:
 
     # Or use existing browser token:
     client = RhythmERPAPIClient()
-    client.login_from_browser(token="eyJ...", tenant_id="599")
+    client.login_from_browser(token="eyJ...", tenant_id="681")
 
     # Discover a screen's payload structure:
     structure = client.discover_structure("Supplier")
@@ -54,7 +54,7 @@ class RhythmERPAPIClient:
         self,
         username: str = None,
         password: str = None,
-        tenant_id: str = "599",
+        tenant_id: str = "681",
     ):
         """
         Initialize the API client.
@@ -62,7 +62,7 @@ class RhythmERPAPIClient:
         Args:
             username: Email for login (defaults to RHYTHMERP_EMAIL from .env)
             password: Password for login (defaults to RHYTHMERP_PASSWORD from .env)
-            tenant_id: X-Tenant-ID header value (default "599")
+            tenant_id: X-Tenant-ID header value (default "681")
         """
         self.username = username or config.RHYTHMERP_EMAIL
         self.password = password or config.RHYTHMERP_PASSWORD
@@ -213,7 +213,7 @@ class RhythmERPAPIClient:
             "Use login_from_browser() with a token captured from DevTools."
         )
 
-    def login_from_browser(self, token: str, tenant_id: str = "599"):
+    def login_from_browser(self, token: str, tenant_id: str = "681"):
         """
         Set auth using a token captured from the browser's DevTools.
 
@@ -225,7 +225,7 @@ class RhythmERPAPIClient:
 
         Args:
             token: Bearer token string (WITHOUT "Bearer " prefix)
-            tenant_id: X-Tenant-ID value (default "599")
+            tenant_id: X-Tenant-ID value (default "681")
         """
         self.token = token
         self.tenant_id = tenant_id
@@ -769,13 +769,13 @@ class ErpApiClient(RhythmERPAPIClient):
         token = input("  Token: ").strip()
         return token
 
-    def set_session_from_token(self, token: str, tenant_id: str = "599"):
+    def set_session_from_token(self, token: str, tenant_id: str = "681"):
         """
         Set the session using a Bearer token from DevTools.
 
         Args:
             token: Bearer token string (with or without "Bearer " prefix)
-            tenant_id: X-Tenant-ID value (default "599")
+            tenant_id: X-Tenant-ID value (default "681")
         """
         # Strip "Bearer " prefix if the user pasted the full header
         if token.startswith("Bearer "):

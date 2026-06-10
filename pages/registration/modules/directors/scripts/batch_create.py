@@ -24,7 +24,7 @@ from common.erp_api_client import RhythmERPAPIClient
 from common.logger import log
 from pages.registration.modules.directors.data.directors_data import generate_directors_api_payload
 
-DEFAULT_TENANT_ID = "599"
+DEFAULT_TENANT_ID = "681"
 DEFAULT_COUNT = 10
 
 

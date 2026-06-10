@@ -27,7 +27,7 @@ def api_client():
     from common.erp_api_client import RhythmERPAPIClient
 
     token = os.environ.get("ERP_TOKEN", "").strip()
-    tenant_id = os.environ.get("ERP_TENANT_ID", "599")
+    tenant_id = os.environ.get("ERP_TENANT_ID", "681")
 
     client = RhythmERPAPIClient()
     if token:
