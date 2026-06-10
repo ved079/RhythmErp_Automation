@@ -3,9 +3,9 @@ conftest.py - Supplier Screen (RhythmERP)
 ==========================================
 Session-scoped driver + login fixtures for Supplier Screen tests.
 
-IMPORTANT: Uses DIFFERENT login credentials than other screens!
-  Email:    Assistant@mail.com
-  Password: Vedant@12345
+Login credentials:
+  Email:    Gautam@gmail.com
+  Password: TestGS@262726
   Facility: RuralLife Producer Company (index 0)
 """
 
@@ -33,8 +33,8 @@ from pages.common_settings.cs_report_generator import (
 # ================================================================
 # LOGIN CREDENTIALS — Supplier Screen (DIFFERENT from other screens!)
 # ================================================================
-SP_LOGIN_EMAIL = "user@admin.com"
-SP_LOGIN_PASSWORD = "Tenant@123456789"
+SP_LOGIN_EMAIL = "Gautam@gmail.com"
+SP_LOGIN_PASSWORD = "TestGS@262726"
 SP_LOGIN_FACILITY_INDEX = 0  # RuralLife Producer Company
 
 
@@ -164,6 +164,41 @@ def sp_page(logged_in_driver):
 #       erp_api.batch_create(payloads)
 # ================================================================
 
+def _prompt_for_api_credentials():
+    """Interactively prompt user for ERP API token and tenant ID.
+
+    Called only when env vars are not set and API login fails.
+    Shows instructions on how to grab the token from DevTools.
+    """
+    print()
+    print("=" * 60)
+    print("  API AUTHENTICATION REQUIRED")
+    print("=" * 60)
+    print()
+    print("  The ERP login endpoint is unavailable (502/404).")
+    print("  Please provide your Bearer token from Chrome DevTools:")
+    print()
+    print("    1. Open ERP in Chrome -> F12 -> Network tab")
+    print("    2. Click any XHR request to /core/...")
+    print("    3. Copy the Authorization header value (after 'Bearer ')")
+    print()
+
+    token = input("  Paste your ERP Bearer token: ").strip()
+    if not token:
+        print("  [ABORT] No token entered. API tests will fail.")
+        return None, None
+
+    # Strip "Bearer " prefix if user pasted the full header
+    if token.startswith("Bearer "):
+        token = token[7:]
+
+    tenant_id = input("  Enter Tenant ID [681]: ").strip()
+    if not tenant_id:
+        tenant_id = "681"
+
+    return token, tenant_id
+
+
 @pytest.fixture(scope="session")
 def erp_api():
     """Session-scoped ERP API client.
@@ -171,11 +206,11 @@ def erp_api():
     Authenticates once and reuses the token for the entire test session.
 
     Auth strategy (in order):
-      1. ERP_TOKEN env var (set via PowerShell: $env:ERP_TOKEN="ey...")
+      1. ERP_TOKEN + ERP_TENANT_ID env vars (no prompt, fastest)
       2. API login via /auth/login1/ (auto, no manual step)
-      3. If both fail, tests will raise RuntimeError at call time
+      3. Interactive prompt — asks user to paste token from DevTools
 
-    To set token in PowerShell:
+    To skip the prompt, set env vars in PowerShell:
         $env:ERP_TOKEN = "eyJhbGciOiJIUzI1NiIs..."
         $env:ERP_TENANT_ID = "681"
     """
@@ -189,9 +224,11 @@ def erp_api():
         tenant_id=tenant_id,
     )
 
-    # Strategy 1: Try ERP_TOKEN env var (fastest, no login endpoint needed)
+    # Strategy 1: Try ERP_TOKEN env var (fastest, no prompt)
     token = os.environ.get("ERP_TOKEN", "").strip()
     if token:
+        if token.startswith("Bearer "):
+            token = token[7:]
         try:
             client.login_from_browser(token=token, tenant_id=tenant_id)
             log.info(f"[API] Session set from ERP_TOKEN env var. Tenant: {tenant_id}")
@@ -205,19 +242,37 @@ def erp_api():
                     pass
                 return
             else:
-                log.warning("[API] ERP_TOKEN auth verification failed — falling back to login()")
+                log.warning("[API] ERP_TOKEN auth verification failed — trying next strategy")
         except Exception as e:
-            log.warning(f"[API] ERP_TOKEN auth failed: {e} — falling back to login()")
+            log.warning(f"[API] ERP_TOKEN auth failed: {e} — trying next strategy")
 
     # Strategy 2: Try API login
     try:
         client.login()
-        log.info("[API] ERP API client ready")
-    except Exception as e:
-        log.warning(
-            f"[API] API login failed: {e}. "
-            "Set ERP_TOKEN env var or check login endpoint."
-        )
+        log.info("[API] ERP API client ready (auto login)")
+        yield client
+        try:
+            client.close()
+        except Exception:
+            pass
+        return
+    except Exception:
+        log.warning("[API] Auto login failed — will prompt for token")
+
+    # Strategy 3: Interactive prompt
+    prompt_token, prompt_tenant = _prompt_for_api_credentials()
+    if prompt_token:
+        tenant_id = prompt_tenant or tenant_id
+        client.tenant_id = tenant_id
+        client.login_from_browser(token=prompt_token, tenant_id=tenant_id)
+        # Verify
+        result = client.list_entries("Supplier", page=1, page_size=1)
+        if result:
+            log.info(f"[API] Interactive auth successful. Tenant: {tenant_id}")
+        else:
+            log.warning("[API] Interactive auth verification failed — token may be invalid")
+    else:
+        log.warning("[API] No token provided — API tests will fail")
 
     yield client
 
