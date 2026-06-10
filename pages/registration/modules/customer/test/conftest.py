@@ -66,15 +66,6 @@ def pytest_configure(config):
 
 
 # ================================================================
-# HELPER: Detect test type from markers
-# ================================================================
-
-def _is_api_only_test(item) -> bool:
-    """Check if a test item is marked as API-only (no browser needed)."""
-    return item.get_closest_marker("api") is not None
-
-
-# ================================================================
 # FIXTURES — Browser (session-scoped, only for UI/Hybrid tests)
 # ================================================================
 

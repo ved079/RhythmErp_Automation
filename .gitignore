@@ -77,3 +77,6 @@ tsconfig.tsbuildinfo
 bun.lock
 mini-services/
 uom_cross_verify.py
+
+# Stale download/workspace folder
+download/

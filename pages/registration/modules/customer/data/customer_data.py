@@ -175,8 +175,10 @@ def generate_address():
 
 
 def generate_pin_code():
-    """Generate a random 6-digit Indian pin code."""
-    return f"{random.randint(4, 4)}{random.randint(0, 9)}{random.randint(0, 9)}{random.randint(0, 9)}{random.randint(0, 9)}{random.randint(0, 9)}"
+    """Generate a random 6-digit Indian pin code.
+    First digit is 1-8 (valid Indian pin prefix range).
+    """
+    return f"{random.randint(1, 8)}{random.randint(0, 9)}{random.randint(0, 9)}{random.randint(0, 9)}{random.randint(0, 9)}{random.randint(0, 9)}"
 
 
 def generate_gstin():
@@ -270,7 +272,7 @@ def generate_valid_address_row():
         "village": None,                    # Pick random from live UI (optional, cascading)
         "address": generate_address(),
         "pin_code": generate_pin_code(),
-        "gstin": generate_gstin(),
+        "gstin": generate_luhn_gstin(),
     }
 
 

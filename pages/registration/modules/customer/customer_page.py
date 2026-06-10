@@ -130,7 +130,6 @@ KEY RULES:
 
 import os
 import sys
-import time
 import random
 import copy
 
@@ -152,10 +151,6 @@ from selenium.common.exceptions import (
 from common.base_page import BasePage
 from common.logger import log
 from config import RHYTHMERP_BASE_URL, EXPLICIT_WAIT
-
-# Global list to track every submission for reporting
-IM_SUBMISSIONS = []
-
 
 class CustomerPage(BasePage):
     """Page Object for the RhythmERP Customer screen.
@@ -380,26 +375,6 @@ class CustomerPage(BasePage):
         "/ancestor::mat-form-field//mat-select",
     )
     BANK_ATTACHMENT_INPUT = ("css", "input[type='file']")
-
-    # # ==============================================================
-    # #  LOCATORS — Row action buttons (parametrised by company name)
-    # # ==============================================================
-    # VIEW_BUTTON = (
-    #     "xpath",
-    #     "//td[contains(text(),'{company_name}')]"
-    #     "/ancestor::tr//td[contains(@class,'cdk-column-view') "
-    #     "or contains(@class,'cdk-column-viewDetails')]//button",
-    # )
-    # EDIT_BUTTON = (
-    #     "xpath",
-    #     "//td[contains(text(),'{company_name}')]"
-    #     "/ancestor::tr//td[contains(@class,'cdk-column-edit')]//button",
-    # )
-    # HISTORY_BUTTON = (
-    #     "xpath",
-    #     "//td[contains(text(),'{company_name}')]"
-    #     "/ancestor::tr//td[contains(@class,'cdk-column-archive')]//button",
-    # )
 
     # ==============================================================
     #  LOCATORS — SweetAlert2
@@ -3636,7 +3611,6 @@ class CustomerPage(BasePage):
         except Exception:
             pass
 
-        IM_SUBMISSIONS.append(result)
         return result
 
     # ==============================================================
