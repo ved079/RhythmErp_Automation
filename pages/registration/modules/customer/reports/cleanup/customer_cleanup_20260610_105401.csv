@@ -1,0 +1,19 @@
+id,company_name,timestamp,prefix,payload_summary,deactivated
+445,ValidCust_20260610105353_aec79459,2026-06-10T10:53:53.505018,ValidCust,Created via API with prefix=ValidCust,False
+446,          ,2026-06-10T10:53:53.821198,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+447,"Test!@#$%^&*()_+-=[]{}|;':"",./<>?",2026-06-10T10:53:55.446534,Test!@#$%^&*(),"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+448,'; DROP TABLE customers; --,2026-06-10T10:53:55.654092,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+449,<script>alert('xss')</script>,2026-06-10T10:53:55.962398,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+450,PanSpCust_20260610105356_3ce10a90,2026-06-10T10:53:56.587499,PanSpCust,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+451,Test Company 😀🎉,2026-06-10T10:53:57.493709,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+452,DupPan1_20260610105357_a34443ac,2026-06-10T10:53:57.800020,DupPan1,Created via API with prefix=DupPan1,False
+453,DupName1_20260610105358_0f56bb7d,2026-06-10T10:53:58.221496,DupName1,Created via API with prefix=DupName1,False
+454,DupName1_20260610105358_0f56bb7d,2026-06-10T10:53:58.516988,DupName1,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+455,DupEmail1_20260610105358_26583260,2026-06-10T10:53:58.721381,DupEmail1,Created via API with prefix=DupEmail1,False
+456,DupEmail2_20260610105358_24105350,2026-06-10T10:53:58.928916,DupEmail2,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+457,EditDupPan1_20260610105358_78dc8c32,2026-06-10T10:53:59.140920,EditDupPan1,Created via API with prefix=EditDupPan1,False
+458,EditDupPan2_20260610105359_599a290c,2026-06-10T10:53:59.362337,EditDupPan2,Created via API with prefix=EditDupPan2,False
+459,EditNameCust_20260610105359_c00a6693,2026-06-10T10:53:59.850266,EditNameCust,Created via API with prefix=EditNameCust,False
+460,EditClearCust_20260610105359_d77771f7,2026-06-10T10:54:00.271325,EditClearCust,Created via API with prefix=EditClearCust,False
+461,EditEmailCust_20260610105400_b4866b1f,2026-06-10T10:54:00.778224,EditEmailCust,Created via API with prefix=EditEmailCust,False
+462,SearchCust_20260610105400_eb27812b,2026-06-10T10:54:01.130088,SearchCust,Created via API with prefix=SearchCust,False
