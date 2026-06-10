@@ -66,6 +66,12 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "ui: Popup, toggle, close button, readonly behavior checks (~15-20 min)"
     )
+    config.addinivalue_line(
+        "markers", "api: Pure API tests — no browser needed (~5 min)"
+    )
+    config.addinivalue_line(
+        "markers", "hybrid: API creates data + UI verifies display (~15-20 min)"
+    )
 
 
 # ================================================================
@@ -193,6 +199,48 @@ def erp_api():
         client.close()
     except Exception:
         pass
+
+
+@pytest.fixture(scope="session")
+def sp_cleanup_tracker():
+    """CleanupTracker — records all created supplier IDs for no-delete cleanup reporting.
+
+    Generates JSON + CSV reports at session end.
+    """
+    from pages.registration.modules.supplier.utils.supplier_cleanup import (
+        CleanupTracker,
+    )
+    tracker = CleanupTracker()
+    log.info("[Fixture] sp_cleanup_tracker initialized")
+    yield tracker
+    # Session teardown: generate cleanup reports
+    if tracker.count > 0:
+        try:
+            paths = tracker.generate_reports()
+            if paths:
+                log.info(f"[Cleanup] Reports generated: {paths}")
+        except Exception as e:
+            log.warning(f"[Cleanup] Report generation failed: {e}")
+    else:
+        log.info("[Cleanup] No tracked supplier IDs to report")
+
+
+@pytest.fixture
+def sp_api(erp_api, sp_cleanup_tracker):
+    """SupplierAPIUtils — function-scoped API utility with cleanup tracking.
+
+    Uses the session-scoped erp_api and sp_cleanup_tracker.
+    Each test gets a fresh SupplierAPIUtils instance, but all tracked
+    IDs accumulate in the shared sp_cleanup_tracker for end-of-session reporting.
+    """
+    from pages.registration.modules.supplier.utils.api_supplier_utils import (
+        SupplierAPIUtils,
+    )
+    utils = SupplierAPIUtils(
+        api_client=erp_api,
+        tracker=sp_cleanup_tracker,
+    )
+    yield utils
 
 
 @pytest.fixture(scope="session")
