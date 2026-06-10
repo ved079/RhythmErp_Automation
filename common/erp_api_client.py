@@ -523,14 +523,13 @@ class RhythmERPAPIClient:
         """
         Update an existing entry on any dynamic screen.
 
-        Uses POST to the entry's detail endpoint.
+        The ERP uses POST to the same create endpoint for updates.
+        It distinguishes create vs update by the ``id`` field:
+          - Create: POST /core/dynamic-screen-wrapper/  with id="" (empty)
+          - Update: POST /core/dynamic-screen-wrapper/  with id=<existing_id>
 
-        The ERP's dynamic-screen-wrapper uses POST for BOTH create and update:
-          - Create: POST /core/dynamic-screen-wrapper/ with id="" or absent
-          - Update: POST /core/dynamic-screen-wrapper/{ScreenName}/{id}/ with id set
-
-        PUT was tried first but returns HTTP 405 (Method Not Allowed).
-        The Angular UI also uses POST for updates.
+        Neither PUT nor POST work on /{ScreenName}/{id}/ — both return 405.
+        The {id}/ sub-path only accepts GET (for reading entries).
 
         Args:
             entry_id: The entry's ID to update.
@@ -543,7 +542,6 @@ class RhythmERPAPIClient:
         """
         self._ensure_auth()
 
-        screen_name = payload.get("attribute_name", "unknown")
         entry_name = (
             payload.get("name")
             or payload.get("company_name")
@@ -551,12 +549,12 @@ class RhythmERPAPIClient:
         )
 
         # Ensure the payload has the correct ID for update
-        if "id" not in payload or payload["id"] == "":
-            payload["id"] = entry_id
+        # This is how the ERP distinguishes create (id="") from update (id=<int>)
+        payload["id"] = entry_id
 
         try:
             resp = self.session.post(
-                f"{self.BASE_URL}{self.API_ENDPOINT}{screen_name}/{entry_id}/",
+                f"{self.BASE_URL}{self.API_ENDPOINT}",
                 json=payload,
                 timeout=30,
             )
