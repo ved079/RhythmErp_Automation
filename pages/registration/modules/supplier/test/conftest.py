@@ -3,9 +3,9 @@ conftest.py - Supplier Screen (RhythmERP)
 ==========================================
 Session-scoped driver + login fixtures for Supplier Screen tests.
 
-IMPORTANT: Uses DIFFERENT login credentials than other screens!
-  Email:    Assistant@mail.com
-  Password: Vedant@12345
+Login credentials:
+  Email:    Gautam@gmail.com
+  Password: TestGS@262726
   Facility: RuralLife Producer Company (index 0)
 """
 
@@ -33,8 +33,8 @@ from pages.common_settings.cs_report_generator import (
 # ================================================================
 # LOGIN CREDENTIALS — Supplier Screen (DIFFERENT from other screens!)
 # ================================================================
-SP_LOGIN_EMAIL = "user@admin.com"
-SP_LOGIN_PASSWORD = "Tenant@123456789"
+SP_LOGIN_EMAIL = "Gautam@gmail.com"
+SP_LOGIN_PASSWORD = "TestGS@262726"
 SP_LOGIN_FACILITY_INDEX = 0  # RuralLife Producer Company
 
 
