@@ -742,7 +742,7 @@ class KnownBugs:
 #   - PAN must match [A-Z]{5}[0-9]{4}[A-Z] (use generate_pan())
 # ──────────────────────────────────────────────
 
-# Default FK IDs for common dropdowns (verified on tenant 599).
+# Default FK IDs for common dropdowns (verified on tenant 681).
 # These can be overridden per test via the dropdown_ids parameter.
 # Source: RhythmERP Universal API Reference v2.0 (June 2026)
 #
@@ -750,7 +750,7 @@ class KnownBugs:
 # GET /core/dynamic-screen-wrapper/<SCREEN_NAME>/?page_number=1&page_size=50
 # or use client.discover_structure("Supplier") before relying on them.
 # ──────────────────────────────────────────────
-# Dropdown FK ID pools (verified on tenant 599)
+# Dropdown FK ID pools (verified on tenant 681)
 # ──────────────────────────────────────────────
 # Each pool contains all known valid IDs for that dropdown.
 # generate_supplier_api_payload() picks randomly from these
@@ -864,7 +864,7 @@ DEFAULT_SUPPLIER_FK_IDS = {
 _ADDRESS_CHAINS = [
     # ──────────────────────────────────────────────────
     # VERIFIED chains — harvested from live Supplier entries
-    # on tenant 599 via scripts/full_harvest.py
+    # on tenant 681 via scripts/full_harvest.py
     # All chains have been confirmed valid by the API.
     # ──────────────────────────────────────────────────
 

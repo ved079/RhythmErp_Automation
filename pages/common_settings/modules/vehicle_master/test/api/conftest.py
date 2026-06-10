@@ -13,7 +13,7 @@ def pytest_configure(config):
 def api_client():
     from common.erp_api_client import RhythmERPAPIClient
     token = os.environ.get("ERP_TOKEN", "").strip()
-    tenant_id = os.environ.get("ERP_TENANT_ID", "599")
+    tenant_id = os.environ.get("ERP_TENANT_ID", "681")
     client = RhythmERPAPIClient()
     if token:
         client.login_from_browser(token=token, tenant_id=tenant_id)

@@ -552,7 +552,7 @@ if __name__ == "__main__":
 # ──────────────────────────────────────────────────────────────
 # API PAYLOAD INFRASTRUCTURE
 # ──────────────────────────────────────────────────────────────
-# Dropdown FK ID pools (verified on tenant 599, 2026-06-03)
+# Dropdown FK ID pools (verified on tenant 681, 2026-06-03)
 # ──────────────────────────────────────────────────────────────
 
 # Entity Group: only "Branch" available (level > current tenant)

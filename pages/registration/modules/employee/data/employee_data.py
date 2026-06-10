@@ -2,7 +2,7 @@
 employee_data.py
 ----------------
 Test data & API payload builder for Rhythm ERP Employee Screen.
-Derived from live ERP schema at /core/dynamic-screen/Employee/ (tenant 599).
+Derived from live ERP schema at /core/dynamic-screen/Employee/ (tenant 681).
 
 FIELD REFERENCE (FLAT FORM — NO STEPPERS):
 
@@ -88,7 +88,7 @@ _generated_names = set()
 
 
 # ──────────────────────────────────────────────
-# FK ID pools (verified on tenant 599, 2026-06-02)
+# FK ID pools (verified on tenant 681, 2026-06-02)
 # ──────────────────────────────────────────────
 
 DESIGNATION_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,

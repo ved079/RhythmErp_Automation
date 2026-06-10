@@ -169,28 +169,54 @@ def erp_api():
     """Session-scoped ERP API client.
 
     Authenticates once and reuses the token for the entire test session.
-    Uses the same credentials from config.py / .env file.
 
-    Note: If the login endpoint doesn't work with these credentials,
-    use login_from_browser() with a token captured from DevTools:
-        client = RhythmERPAPIClient()
-        client.login_from_browser(token="eyJ...", tenant_id="599")
+    Auth strategy (in order):
+      1. ERP_TOKEN env var (set via PowerShell: $env:ERP_TOKEN="ey...")
+      2. API login via /auth/login1/ (auto, no manual step)
+      3. If both fail, tests will raise RuntimeError at call time
+
+    To set token in PowerShell:
+        $env:ERP_TOKEN = "eyJhbGciOiJIUzI1NiIs..."
+        $env:ERP_TENANT_ID = "681"
     """
     from common.erp_api_client import RhythmERPAPIClient
+
+    tenant_id = os.environ.get("ERP_TENANT_ID", "681")
 
     client = RhythmERPAPIClient(
         username=SP_LOGIN_EMAIL,
         password=SP_LOGIN_PASSWORD,
+        tenant_id=tenant_id,
     )
 
+    # Strategy 1: Try ERP_TOKEN env var (fastest, no login endpoint needed)
+    token = os.environ.get("ERP_TOKEN", "").strip()
+    if token:
+        try:
+            client.login_from_browser(token=token, tenant_id=tenant_id)
+            log.info(f"[API] Session set from ERP_TOKEN env var. Tenant: {tenant_id}")
+            # Verify auth works
+            result = client.list_entries("Supplier", page=1, page_size=1)
+            if result:
+                yield client
+                try:
+                    client.close()
+                except Exception:
+                    pass
+                return
+            else:
+                log.warning("[API] ERP_TOKEN auth verification failed — falling back to login()")
+        except Exception as e:
+            log.warning(f"[API] ERP_TOKEN auth failed: {e} — falling back to login()")
+
+    # Strategy 2: Try API login
     try:
         client.login()
         log.info("[API] ERP API client ready")
     except Exception as e:
         log.warning(
             f"[API] API login failed: {e}. "
-            "API-based tests will be skipped. "
-            "Use login_from_browser() as fallback."
+            "Set ERP_TOKEN env var or check login endpoint."
         )
 
     yield client
