@@ -151,14 +151,29 @@ def main():
     if not result:
         raw = client._last_raw_response
         if raw is not None:
-            print(f"  API error: {raw.status_code} — {raw.text[:200]}")
-            if "Tenant not found" in raw.text:
-                print(f"  Hint: Tenant ID '{tenant_id}' does not exist. Use --tenant <id> with the")
-                print("  correct tenant from DevTools (check X-Tenant-ID in any /core/ request).")
-            elif raw.status_code == 401:
-                print("  Hint: Token expired. Get a new one from DevTools.")
+            status = raw.status_code
+            body = raw.text[:300]
+            print()
+            print(f"  API error: {status} — {body}")
+            print()
+            if "Tenant not found" in body or status == 404:
+                print(f"  !! Tenant ID '{tenant_id}' does NOT exist in the ERP database.")
+                print("     Fix: Open DevTools -> Network -> click any /core/ request")
+                print("     -> copy the X-Tenant-ID header value -> re-run with --tenant <id>")
+                print()
+                print(f"     Example:  python batch_create.py --tenant <correct_id>")
+            elif "tenant access" in body.lower() or status == 403:
+                print(f"  !! Tenant ID '{tenant_id}' exists but your user has NO ACCESS to it.")
+                print("     Fix: Switch to a tenant your user belongs to,")
+                print("     or ask an admin to grant access.")
+            elif status == 401:
+                print("  !! Token expired or invalid. Get a fresh one from DevTools.")
+            else:
+                print("  Check the error above and fix accordingly.")
         else:
-            print("  API error: No response received (network issue?).")
+            print()
+            print("  API error: No response received (network issue or ERP unreachable).")
+            print("  Check your internet connection and that the ERP is up.")
         client.close()
         return
 

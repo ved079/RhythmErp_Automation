@@ -512,10 +512,20 @@ class RhythmERPAPIClient:
                 params=params,
                 timeout=30,
             )
+            self._last_raw_response = resp
             if resp.status_code == 200:
                 return resp.json()
+            log.warning(
+                f"[API] List entries failed for '{screen_name}': "
+                f"{resp.status_code} — {resp.text[:200]}"
+            )
+            return None
+        except requests.ConnectionError:
+            self._last_raw_response = None
+            log.error(f"[API] Connection error listing '{screen_name}'")
             return None
         except Exception as e:
+            self._last_raw_response = None
             log.error(f"[API] List error: {e}")
             return None
 
