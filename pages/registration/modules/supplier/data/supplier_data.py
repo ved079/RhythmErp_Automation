@@ -647,6 +647,7 @@ class KnownBugs:
     """Bug IDs from master spec for @pytest.mark.xfail references."""
     BUG_001 = "BUG-001: Company Name accepts special characters — no validation"
     BUG_003 = "BUG-003: Phone Number field shows spinner controls (type=number)"
+    BUG_006 = "BUG-006: Company Name accepts spaces-only — no whitespace validation"
     # BUG-002 (No email validation) — FIXED, ERP now shows "Invalid Email"
     # BUG-004 (No PAN validation) — FIXED, ERP now shows "Invalid PAN Number"
     # BUG-005 (No Update button in Edit) — FIXED, Update button now visible
