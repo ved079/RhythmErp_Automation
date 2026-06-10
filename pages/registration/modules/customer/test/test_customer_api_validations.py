@@ -815,6 +815,13 @@ class TestEditValidation:
 
         Creates a customer, then updates its name field.
         Verifies the updated name is reflected in the response.
+
+        Note: The update payload must be a complete valid payload (with
+        children for bank + addresses) because the ERP validates the
+        entire payload on update, not just the changed fields. We cannot
+        simply copy the create response as the update payload because
+        nested children (bank details, addresses) are not preserved in
+        the response format.
         """
         log.info("CU-E02 [API]: Edit modify company name test")
 
@@ -826,9 +833,16 @@ class TestEditValidation:
         log.info(f"CU-E02 [API]: Created customer id={customer_id} "
                  f"name='{original_name}'")
 
-        # Step 2: Build update payload with new name
-        update_payload = dict(result)
-        new_name = f"EditedCust_{result.get('id', 'unknown')}"
+        # Step 2: Build a COMPLETE update payload with new name
+        # Cannot use dict(result) — the create response doesn't preserve
+        # nested children (bank, addresses) in the format the ERP expects
+        # for update. Generate a fresh payload instead.
+        new_name = f"EditedCust_{customer_id}"
+        update_payload = cu_api.generate_unique_payload(
+            name_prefix="EditNameCust",
+        )
+        # Set the existing ID so the ERP knows this is an update
+        update_payload["id"] = customer_id
         update_payload["name"] = new_name
         update_payload.setdefault("attribute_name", "Customer")
 
