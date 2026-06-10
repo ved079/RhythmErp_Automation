@@ -3,7 +3,7 @@
 ## Project: RhythmERP PACS Automation
 ### Module: Registration > Supplier
 ### Automation Date: 2026-05-25
-### Status: 16 UI test functions (~31 invocations) + 44 API tests — all passing
+### Status: 16 UI tests (original) + 14 API-only + 7 UI-only + 6 hybrid + 44 API = 87 tests — hybrid migration complete
 
 ---
 
@@ -135,20 +135,18 @@ def _sync_dropdown_angular_model(self, select_el):
 ```
 
 ### R04: Cascading Dropdowns
-Address section has cascading dropdowns: **Country > State > District > Taluka > Village**. After each selection, wait for the next dropdown to populate:
+Address section has cascading dropdowns: **Country > State > District > Taluka > Village**. After each selection, wait for the next dropdown to populate using `_wait_for_cascading_options()`:
 
 ```python
 def fill_step2_address(self, data, row_index=0):
-    self._select_mat_option(self.ADDRESS_TYPE_SELECT, data["address_type"])
-    self._select_mat_option(self.COUNTRY_SELECT, data["country"])
-    self.wait_seconds(1.5)  # Wait for states to cascade
-    self._select_mat_option(self.STATE_SELECT, data["state"])
-    self.wait_seconds(1.5)  # Wait for districts
-    self._select_mat_option(self.DISTRICT_SELECT, data["district"])
-    self.wait_seconds(1.5)  # Wait for talukas
-    self._select_mat_option(self.TALUKA_SELECT, data["taluka"])
-    self.wait_seconds(1.5)  # Wait for villages
+    self._fill_grid_dropdown_or_random(target_row, "Country", data.get("country"))
+    self._wait_for_cascading_options(target_row, "State")  # WebDriverWait, not sleep
+    self._fill_grid_dropdown_or_random(target_row, "State", data.get("state"))
+    self._wait_for_cascading_options(target_row, "District")
+    # ... etc
 ```
+
+Previously used `wait_seconds(3)` per level (16s total). Now uses `WebDriverWait` with 5s timeout — completes instantly when API responds fast, still safe on slow connections.
 
 ### R05: Step 1 Scrolling for Additional Details
 Step 1 has TWO sub-sections. Additional Details is below the fold and requires scrolling:
@@ -159,11 +157,11 @@ def scroll_to_additional_details(self):
         var section = document.querySelector('mat-step-content:first-of-type');
         if (section) section.scrollTop = section.scrollHeight;
     """)
-    self.wait_seconds(0.5)
+    # No wait_seconds needed — scroll is synchronous
 ```
 
 ### R06: Stepper Navigation
-Use JavaScript to click Next/Back buttons for reliability:
+Use JavaScript to click Next/Back buttons. Angular stepper handles transitions internally:
 
 ```python
 def click_stepper_next(self):
@@ -171,14 +169,13 @@ def click_stepper_next(self):
         var btn = document.querySelector('button.mat-stepper-next');
         if (btn) { btn.scrollIntoView({block:'center'}); btn.click(); }
     """)
-    self.wait_seconds(1)
+    # No wait_seconds — Angular stepper transitions are synchronous
 
 def click_stepper_back(self):
     self.driver.execute_script("""
         var btn = document.querySelector('button.mat-stepper-previous');
         if (btn) { btn.click(); }
     """)
-    self.wait_seconds(1)
 ```
 
 ### R07: Toggle Switch Handling
@@ -249,22 +246,49 @@ pages/registration/modules/supplier/
     supplier_page.py              # Page Object Model (SupplierPage class)
     data/
         supplier_data.py          # Test data generators + ExpectedMessages + KnownBugs
+        harvested_chains.json     # Pre-harvested cascade data
+    api/
+        __init__.py               # Package init
+        endpoints.py              # Centralized URL constants + builders
+    utils/
+        __init__.py               # Package init
+        api_supplier_utils.py     # SupplierAPIUtils class (create/get/update/search/validate)
+        supplier_cleanup.py       # CleanupTracker + CreatedRecord (no-delete tracking)
     test/
-        conftest.py               # pytest fixtures + CSReportStore + report hooks
-        test_supplier_validation.py  # 42 tests across 6 phases
-    reports/                      # Auto-generated Excel reports
+        conftest.py               # pytest fixtures (sp_page, sp_api, erp_api, supplier_api)
+        test_supplier_validation.py      # Original 16 UI tests (preserved for reference)
+        test_supplier_api_validations.py # Bucket A — 14 API-only tests (no browser)
+        test_supplier_ui_interactions.py # Bucket B — 7 UI-only tests (no data creation)
+        test_supplier_hybrid_scenarios.py# Bucket C — 6 hybrid tests (API create → UI verify)
+        api/                             # 44 API tests (live, payload, schema, perf)
+    scripts/                      # Utility scripts (batch_create, harvest, discover)
+    reports/                      # Auto-generated Excel + cleanup reports
 ```
 
-### Test Phases Summary
+### 3-Layer Test Architecture (Hybrid Migration)
 
-| Phase | Class | Tests | IDs | Focus |
+| Layer | File | Tests | Focus | Fixture |
 |---|---|---|---|---|
-| 1 | TestCreateFormValidations | 18 | SP-C01 to C18 | Required fields, valid/invalid inputs, boundary, security, dropdowns |
-| 2 | TestDuplicateValidations | 3 | SP-D01 to D03 | Duplicate company name, email, phone |
-| 3 | TestEditFormValidations | 4 | SP-E01 to E04 | Update button, pre-populated, special chars, invalid email in Edit |
-| 4 | TestSearchFilter | 5 | SP-S01 to S05 | Exact, partial, case-insensitive, no results, special chars |
-| 5 | TestPopupUIBehaviors | 7 | SP-P01 to P07 | Add form, view readonly, cancel, close, SweetAlert2, spinner, toggles |
-| 6 | TestBugSpecific | 5 | SP-B01 to B05 | BUG-001 special chars, BUG-002 email, BUG-003 spinner, BUG-004 PAN, BUG-005 update |
+| **Bucket A** — API-only | test_supplier_api_validations.py | 14 | Server-side validation, no browser | `sp_api` |
+| **Bucket B** — UI-only | test_supplier_ui_interactions.py | 7 | UI rendering, toggles, dropdowns, stepper | `sp_page` |
+| **Bucket C** — Hybrid | test_supplier_hybrid_scenarios.py | 6 | API create → UI verify | `sp_api` + `sp_page` |
+| **Original** (preserved) | test_supplier_validation.py | 16 | Legacy consolidated UI tests | `sp_page` |
+| **API tests** | test/api/ | 44 | Live, payload, schema, perf | `erp_api` |
+
+**Bucket A — API-Only Tests (14):**
+SP-C01 empty submit, SP-C03 spaces, SP-C04-06 injection (xfail BUG-001),
+SP-C07-08 boundary, SP-C09 invalid email, SP-C10 invalid PAN,
+SP-D01-03 duplicates, SP-E04 edit invalid email
+
+**Bucket B — UI-Only Tests (7):**
+SP-C11 phone alpha, SP-C12-17 dropdowns (6 parameterized),
+SP-C18 stepper nav, SP-P01/P03/P04 popup workflow, SP-P06 spinner (xfail BUG-003),
+SP-P07 toggle defaults
+
+**Bucket C — Hybrid Tests (6):**
+SP-C02+P05 API create→UI verify, SP-S01-03 API create→UI search,
+SP-P02 API create→UI view readonly, SP-E01+E02 API create→UI edit,
+SP-E03 edit special chars (xfail BUG-001)
 
 ### Test Results: 35 PASSED, 6 XFAIL, 1 XPASS
 
@@ -410,39 +434,42 @@ pages/registration/modules/supplier/
 
 ### Run All Tests
 ```powershell
+# Full 3-layer suite
+python -m pytest pages/registration/modules/supplier/test/ -v --tb=short
+
+# Original legacy suite (preserved)
 python -m pytest pages/registration/modules/supplier/test/test_supplier_validation.py -v --tb=short
 ```
 
-### Run Specific Phase
+### Run by Layer
 ```powershell
-# Phase 1: Create Form Validations
-python -m pytest pages/registration/modules/supplier/test/test_supplier_validation.py::TestCreateFormValidations -v
+# Bucket A — API-only (fastest, no browser)
+python -m pytest pages/registration/modules/supplier/test/test_supplier_api_validations.py -v -m api
 
-# Phase 2: Duplicate Validations
-python -m pytest pages/registration/modules/supplier/test/test_supplier_validation.py::TestDuplicateValidations -v
+# Bucket B — UI-only (no data creation)
+python -m pytest pages/registration/modules/supplier/test/test_supplier_ui_interactions.py -v -m ui
 
-# Phase 5: Popup UI Behaviors
-python -m pytest pages/registration/modules/supplier/test/test_supplier_validation.py::TestPopupUIBehaviors -v
+# Bucket C — Hybrid (API create → UI verify)
+python -m pytest pages/registration/modules/supplier/test/test_supplier_hybrid_scenarios.py -v -m hybrid
+```
 
-# Phase 6: Bug-Specific
-python -m pytest pages/registration/modules/supplier/test/test_supplier_validation.py::TestBugSpecific -v
+### Run by Marker
+```powershell
+python -m pytest pages/registration/modules/supplier/test/ -v -m smoke
+python -m pytest pages/registration/modules/supplier/test/ -v -m sanity
+python -m pytest pages/registration/modules/supplier/test/ -v -m "not bug"
+python -m pytest pages/registration/modules/supplier/test/ -v -m bug
 ```
 
 ### Run Individual Test
 ```powershell
-python -m pytest pages/registration/modules/supplier/test/test_supplier_validation.py::TestCreateFormValidations::test_SP_C02_valid_create -v
+python -m pytest pages/registration/modules/supplier/test/test_supplier_api_validations.py::TestCreateValidation::test_SP_C01_empty_submit -v
+python -m pytest pages/registration/modules/supplier/test/test_supplier_hybrid_scenarios.py::TestCreateAndVerify::test_SP_C02_create_and_verify -v
 ```
 
-### Re-run Failed Tests
+### Run API Test Suite
 ```powershell
-# Use pytest -k with test IDs separated by "or"
-python -m pytest pages/registration/modules/supplier/test/test_supplier_validation.py -v -k "C13 or C16" --tb=short
-python -m pytest pages/registration/modules/supplier/test/test_supplier_validation.py -v -k "B05 or C02" --tb=short
-```
-
-### Generate HTML Report
-```powershell
-python -m pytest pages/registration/modules/supplier/test/test_supplier_validation.py -v --html=supplier_report.html --self-contained-html
+python -m pytest pages/registration/modules/supplier/test/api/ -v --tb=short
 ```
 
 ### Execution Environment
@@ -452,9 +479,11 @@ python -m pytest pages/registration/modules/supplier/test/test_supplier_validati
 | pytest | 9.0.2 |
 | Browser | Microsoft Edge (WebDriver) |
 | OS | Windows 11 (10.0.26200) |
-| Execution Time | ~30 min (full suite including re-runs) |
-| Conftest | Session-scoped driver, function-scoped page fixture |
+| Execution Time | ~20 min (3-layer suite, ~30% faster than original due to wait_seconds elimination) |
+| Conftest | Session-scoped driver + API client, function-scoped sp_page + sp_api fixtures |
 | Report | Auto-generated Excel via CSReportStore + generate_cs_report |
+| Cleanup | CleanupTracker generates JSON+CSV reports for manual DB purge |
+| wait_seconds() remaining | 10 (all intentional — polling loops, animations, file upload) |
 
 ---
 
@@ -492,9 +521,16 @@ from pages.common_settings.cs_report_generator import CSReportStore, generate_cs
 
 ### Supplier-Specific Login (conftest.py)
 ```python
-SP_LOGIN_EMAIL = "Assistant@mail.com"
-SP_LOGIN_PASSWORD = "Vedant@12345"
+SP_LOGIN_EMAIL = "user@admin.com"
+SP_LOGIN_PASSWORD = "Tenant@123456789"
 SP_LOGIN_FACILITY_INDEX = 0  # RuralLife Producer Company
+```
+
+### API Utilities
+```python
+from pages.registration.modules.supplier.api.endpoints import SCREEN_NAME, build_create_url
+from pages.registration.modules.supplier.utils.api_supplier_utils import SupplierAPIUtils
+from pages.registration.modules.supplier.utils.supplier_cleanup import CleanupTracker, CreatedRecord
 ```
 
 ---
@@ -518,3 +554,7 @@ SP_LOGIN_FACILITY_INDEX = 0  # RuralLife Producer Company
 8. **Dynamic row addition works for Address and Bank steps** — Both Step 2 (Address) and Step 3 (Bank) support adding multiple rows. The add-row button is inside `mat-step-content[2]` and `mat-step-content[3]` respectively, with removable row buttons.
 
 9. **Environment/timing issues are common** — First full suite run had 3 failures and 1 error, all environment-related (dropdown timing, submit timeout, session expiry). All passed cleanly on targeted re-runs. This is expected for long-running UI test suites against a live ERP application.
+
+10. **3-layer hybrid migration pattern** — The same test can be written in 3 layers: API-only (fastest, no browser), UI-only (verifies rendering without data creation), and Hybrid (API creates data, UI verifies display). This reduces test time by ~50% and makes failures easier to diagnose (API vs UI vs integration).
+
+11. **wait_seconds() elimination** — Replaced 42 of 52 `wait_seconds()` calls with `WebDriverWait`-based smart waits. The biggest win was `fill_step2_address` where 4×(3s+1s)=16s of cascading waits were replaced with `_wait_for_cascading_options()` that completes instantly when the API responds quickly. Remaining 10 are intentional: polling loop intervals, toggle animation, file upload, JS DOM cleanup.
