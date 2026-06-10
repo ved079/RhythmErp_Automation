@@ -2887,6 +2887,14 @@ class SupplierPage(BasePage):
             pass
         return False
 
+    def is_edit_mode(self):
+        """Check if the currently open popup is in Edit mode.
+
+        Edit mode is identified by the presence of an 'Update' button
+        in the popup footer (vs 'Save' in Add mode).
+        """
+        return self.has_update_button()
+
     # ==============================================================
     #  Search
     # ==============================================================
