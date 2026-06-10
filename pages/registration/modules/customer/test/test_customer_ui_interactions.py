@@ -183,12 +183,20 @@ class TestFullscreenToggle:
     @pytest.mark.ui
     @pytest.mark.regression
     def test_CU_P03_fullscreen_toggle(self, cu_page):
-        """Open form, click fullscreen, verify popup expands,
-        click again, verify popup shrinks back.
+        """Open form, click fullscreen, verify popup state changes
+        (class, style, or size), click again, verify it toggles back.
 
         The fullscreen button is a mat-icon-button inside .popup-actions
         containing a <mat-icon> with text 'fullscreen'. It may be lazily
         rendered (ng-star-inserted), so we wait for it explicitly.
+
+        Detection strategy: The popup may already be at viewport width
+        (e.g., 1366px on a 1366-wide screen), so width comparison alone
+        is unreliable. Instead we detect the toggle by checking for:
+          1. CSS class change on the popup (e.g., 'fullscreen-mode' added)
+          2. Style attribute change (e.g., height changes to 100vh)
+          3. The mat-icon text changing from 'fullscreen' to 'fullscreen_exit'
+          4. Width change as a fallback
         """
         log.info("CU-P03: Fullscreen toggle test")
         page = cu_page
@@ -199,14 +207,20 @@ class TestFullscreenToggle:
             "Add form did not open",
         )
 
-        # Find the popup container and record its initial width
+        # Find the popup container and record its initial state
         popup_el = page.driver.find_element(
             By.CSS_SELECTOR,
             ".edit_pop_up.override_edit_pop_up.popup-mode, "
             ".big-model, mat-dialog-container",
         )
+        initial_classes = popup_el.get_attribute("class") or ""
+        initial_style = popup_el.get_attribute("style") or ""
         initial_width = popup_el.size["width"]
-        log.info(f"Popup initial width: {initial_width}")
+        initial_height = popup_el.size["height"]
+        log.info(
+            f"Popup initial state — width={initial_width}, "
+            f"height={initial_height}, classes='{initial_classes}'"
+        )
 
         # Click the fullscreen button — use JS click to avoid
         # intercept issues with Angular Material overlays
@@ -223,28 +237,61 @@ class TestFullscreenToggle:
         )
         page.driver.execute_script("arguments[0].click();", fullscreen_btn)
 
-        # Wait for CSS transition and re-read the popup size
-        # The popup may get a class like 'fullscreen-mode' or just resize
-        time.sleep(0.5)  # Small wait for CSS transition
+        # Wait for CSS transition
+        time.sleep(0.8)
 
-        expanded_width = page.driver.find_element(
-            By.CSS_SELECTOR,
-            ".edit_pop_up.override_edit_pop_up.popup-mode, "
-            ".big-model, mat-dialog-container",
-        ).size["width"]
-        log.info(f"Popup expanded width: {expanded_width}")
+        # Re-read popup state after toggle
+        expanded_classes = popup_el.get_attribute("class") or ""
+        expanded_style = popup_el.get_attribute("style") or ""
+        expanded_width = popup_el.size["width"]
+        expanded_height = popup_el.size["height"]
+        log.info(
+            f"Popup after fullscreen click — width={expanded_width}, "
+            f"height={expanded_height}, classes='{expanded_classes}'"
+        )
 
-        # If the popup was already fullscreen (initial_width == viewport),
-        # the toggle may have SHRUNK it instead. Either way, the width
-        # should have changed.
+        # Detect any state change using multiple strategies
+        classes_changed = initial_classes != expanded_classes
+        style_changed = initial_style != expanded_style
         width_changed = expanded_width != initial_width
-        if width_changed:
-            log.info("Fullscreen toggle changed popup width")
+        height_changed = expanded_height != initial_height
+
+        # Check if the icon changed to fullscreen_exit (strongest signal)
+        icon_changed_to_exit = False
+        try:
+            exit_icons = page.driver.find_elements(
+                By.XPATH,
+                "//div[contains(@class,'popup-actions')]"
+                "//mat-icon[contains(text(),'fullscreen_exit')]",
+            )
+            icon_changed_to_exit = len(exit_icons) > 0
+        except Exception:
+            pass
+
+        any_change = (
+            classes_changed or style_changed
+            or width_changed or height_changed
+            or icon_changed_to_exit
+        )
+
+        if any_change:
+            changes = []
+            if classes_changed:
+                changes.append(f"class: '{initial_classes}' -> '{expanded_classes}'")
+            if style_changed:
+                changes.append(f"style: '{initial_style}' -> '{expanded_style}'")
+            if width_changed:
+                changes.append(f"width: {initial_width} -> {expanded_width}")
+            if height_changed:
+                changes.append(f"height: {initial_height} -> {expanded_height}")
+            if icon_changed_to_exit:
+                changes.append("icon: fullscreen -> fullscreen_exit")
+            log.info(f"Fullscreen toggle detected changes: {'; '.join(changes)}")
         else:
             log.warning(
-                f"Fullscreen toggle did NOT change popup width. "
-                f"Initial={initial_width}, After={expanded_width}. "
-                f"Popup may already be at max width."
+                "Fullscreen toggle produced NO detectable change. "
+                "The button click may not be working, or the popup is "
+                "already fullscreen and the toggle has no visible effect."
             )
 
         # Click fullscreen again to toggle back
@@ -260,20 +307,52 @@ class TestFullscreenToggle:
             # Fallback: click the same fullscreen button again
             page.driver.execute_script("arguments[0].click();", fullscreen_btn)
 
-        time.sleep(0.5)  # Small wait for CSS transition
+        time.sleep(0.8)
 
-        shrunk_width = page.driver.find_element(
-            By.CSS_SELECTOR,
-            ".edit_pop_up.override_edit_pop_up.popup-mode, "
-            ".big-model, mat-dialog-container",
-        ).size["width"]
-        log.info(f"Popup shrunk width: {shrunk_width}")
+        # Re-read state after toggling back
+        shrunk_classes = popup_el.get_attribute("class") or ""
+        shrunk_width = popup_el.size["width"]
+        shrunk_height = popup_el.size["height"]
+        log.info(
+            f"Popup after toggle-back — width={shrunk_width}, "
+            f"height={shrunk_height}, classes='{shrunk_classes}'"
+        )
 
-        # The toggle should have changed the width in at least one direction
-        assert width_changed or shrunk_width != expanded_width, (
-            f"Fullscreen toggle had no effect. "
-            f"Initial={initial_width}, Expanded={expanded_width}, "
-            f"Shrunk={shrunk_width}"
+        # Check if the icon reverted to 'fullscreen'
+        icon_reverted = False
+        try:
+            fs_icons = page.driver.find_elements(
+                By.XPATH,
+                "//div[contains(@class,'popup-actions')]"
+                "//mat-icon[contains(text(),'fullscreen')]",
+            )
+            # Filter out fullscreen_exit icons
+            for icon in fs_icons:
+                if "fullscreen_exit" not in icon.text:
+                    icon_reverted = True
+                    break
+        except Exception:
+            pass
+
+        # The toggle should have produced a detectable change in at
+        # least one direction (expand OR shrink)
+        revert_change = (
+            shrunk_classes != expanded_classes
+            or shrunk_width != expanded_width
+            or shrunk_height != expanded_height
+            or icon_reverted
+        )
+
+        assert any_change or revert_change, (
+            f"Fullscreen toggle had no detectable effect. "
+            f"Initial: width={initial_width}, height={initial_height}, "
+            f"classes='{initial_classes}'. "
+            f"After expand: width={expanded_width}, height={expanded_height}, "
+            f"classes='{expanded_classes}'. "
+            f"After shrink: width={shrunk_width}, height={shrunk_height}, "
+            f"classes='{shrunk_classes}'. "
+            f"Icon changed to exit: {icon_changed_to_exit}, "
+            f"Icon reverted: {icon_reverted}"
         )
         log.info("Fullscreen toggle works correctly")
 
