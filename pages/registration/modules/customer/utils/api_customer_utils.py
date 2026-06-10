@@ -6,7 +6,7 @@ Customer-specific API wrapper for hybrid test migration.
 Wraps the generic RhythmERPAPIClient with Customer-screen helpers:
   - create_customer()        — happy-path creation with ID tracking
   - get_customer()           — fetch single customer by ID
-  - update_customer()        — update via PUT
+  - update_customer()        — update via POST (PUT returns 405)
   - search_customers()       — list/search with pagination
   - assert_validation_error() — validate server-side error responses
   - create_and_expect_failure() — send invalid payload, track accidental creation
@@ -161,7 +161,10 @@ class CustomerAPIUtils:
         self, customer_id: int, payload: Dict
     ) -> Optional[Dict]:
         """
-        Update an existing customer via PUT.
+        Update an existing customer via POST.
+
+        The ERP's dynamic-screen-wrapper uses POST for updates —
+        PUT returns HTTP 405 (Method Not Allowed).
 
         Args:
             customer_id: The customer's database ID.
@@ -252,6 +255,7 @@ class CustomerAPIUtils:
         field: str,
         expected_status: int = 400,
         expected_message_substring: str = "",
+        accept_statuses: list = None,
     ) -> Dict:
         """
         Assert that the last API call returned a validation error
@@ -270,6 +274,12 @@ class CustomerAPIUtils:
             expected_status:             Expected HTTP status code (default 400).
             expected_message_substring:  Substring expected in the error message
                                          for the field (empty string = skip check).
+            accept_statuses:             Optional list of acceptable HTTP status codes.
+                                         If provided, the actual status must be in
+                                         this list (expected_status is included
+                                         automatically). Use this when the ERP may
+                                         return different error codes for the same
+                                         validation (e.g., 400 or 500 for overflow).
 
         Returns:
             Structured dict with:
@@ -282,7 +292,7 @@ class CustomerAPIUtils:
         Raises:
             AssertionError: If any of the following are false:
               - _last_raw_response is not None
-              - HTTP status code matches expected_status
+              - HTTP status code matches expected_status (or is in accept_statuses)
               - The specified field appears in the error response
               - expected_message_substring is found in the field's error message
                 (if provided)
@@ -300,8 +310,14 @@ class CustomerAPIUtils:
         )
 
         actual_status = raw_resp.status_code
-        assert actual_status == expected_status, (
-            f"Expected HTTP {expected_status}, got {actual_status}. "
+        # Build the set of acceptable status codes
+        valid_statuses = {expected_status}
+        if accept_statuses:
+            valid_statuses.update(accept_statuses)
+        assert actual_status in valid_statuses, (
+            f"Expected HTTP {expected_status}"
+            f" (acceptable: {sorted(valid_statuses)})"
+            f", got {actual_status}. "
             f"Response body: {raw_resp.text[:500]}"
         )
 

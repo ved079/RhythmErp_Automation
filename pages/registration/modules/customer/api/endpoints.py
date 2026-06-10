@@ -31,7 +31,7 @@ SCREEN_NAME = "Customer"
 CUSTOMER_CREATE = DYNAMIC_SCREEN_WRAPPER                       # POST
 CUSTOMER_LIST = f"{DYNAMIC_SCREEN_WRAPPER}{SCREEN_NAME}/"      # GET  (list/search)
 CUSTOMER_GET = f"{DYNAMIC_SCREEN_WRAPPER}{SCREEN_NAME}/{{entry_id}}/"   # GET  (detail)
-CUSTOMER_UPDATE = f"{DYNAMIC_SCREEN_WRAPPER}{SCREEN_NAME}/{{entry_id}}/"  # PUT
+CUSTOMER_UPDATE = f"{DYNAMIC_SCREEN_WRAPPER}{SCREEN_NAME}/{{entry_id}}/"  # POST (PUT returns 405)
 CUSTOMER_SCHEMA = SCREEN_SCHEMA.format(screen_name=SCREEN_NAME)  # GET
 
 # ──────────────────────────────────────────────

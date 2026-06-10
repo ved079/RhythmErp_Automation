@@ -523,12 +523,20 @@ class RhythmERPAPIClient:
         """
         Update an existing entry on any dynamic screen.
 
-        Uses PUT to the entry's detail endpoint.
+        Uses POST to the entry's detail endpoint.
+
+        The ERP's dynamic-screen-wrapper uses POST for BOTH create and update:
+          - Create: POST /core/dynamic-screen-wrapper/ with id="" or absent
+          - Update: POST /core/dynamic-screen-wrapper/{ScreenName}/{id}/ with id set
+
+        PUT was tried first but returns HTTP 405 (Method Not Allowed).
+        The Angular UI also uses POST for updates.
 
         Args:
             entry_id: The entry's ID to update.
             payload: Complete JSON payload with updated fields.
-                     Must include "attribute_name" matching the screen name.
+                     Must include "attribute_name" matching the screen name
+                     and "id" set to the existing entry ID.
 
         Returns:
             Response JSON dict on success, None on failure.
@@ -542,15 +550,25 @@ class RhythmERPAPIClient:
             or f"entry-{entry_id}"
         )
 
+        # Ensure the payload has the correct ID for update
+        if "id" not in payload or payload["id"] == "":
+            payload["id"] = entry_id
+
         try:
-            resp = self.session.put(
+            resp = self.session.post(
                 f"{self.BASE_URL}{self.API_ENDPOINT}{screen_name}/{entry_id}/",
                 json=payload,
                 timeout=30,
             )
         except requests.ConnectionError:
             log.error(f"[API] Connection error updating {entry_name}")
+            self._last_raw_response = None
             return None
+
+        # WARNING: _last_raw_response is NOT thread-safe. Concurrent API calls may
+        # overwrite this value. Do not run API validation tests in parallel until
+        # the base client is refactored to return (result, response) tuples.
+        self._last_raw_response = resp
 
         if resp.status_code in (200, 201):
             log.info(f"[API] Updated: {entry_name} (id={entry_id})")

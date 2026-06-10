@@ -177,7 +177,7 @@ class CleanupTracker:
         log.info(f"[CleanupTracker] JSON report: {json_path}")
 
         # Generate CSV report
-        with open(csv_path, "w", newline="") as f:
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(
                 f,
                 fieldnames=["id", "company_name", "timestamp", "prefix",
