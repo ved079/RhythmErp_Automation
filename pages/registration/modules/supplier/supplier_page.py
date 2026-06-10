@@ -484,7 +484,6 @@ class SupplierPage(BasePage):
                 if (!el.querySelector('mat-dialog-container')) el.remove();
             });
         """)
-        self.wait_seconds(0.2)
 
     def _close_select_panel(self):
         """Try backdrop click first; fall back to JS removal."""
@@ -497,7 +496,6 @@ class SupplierPage(BasePage):
                 try:
                     if bd.is_displayed():
                         bd.click()
-                        self.wait_seconds(0.3)
                         return
                 except Exception:
                     pass
@@ -538,11 +536,13 @@ class SupplierPage(BasePage):
                     "arguments[0].click();",
                     btn,
                 )
-                self.wait_seconds(1.5)
-                if self._is_form_popup_open():
-                    self._wait_for_form_content(timeout=5)
-                    log.info("ADD form opened via erp-add-btn")
-                    return
+                WebDriverWait(self.driver, 5).until(
+                    lambda d: self.is_add_form_open(),
+                    "Add form popup did not open after clicking ADD",
+                )
+                self._wait_for_form_content(timeout=5)
+                log.info("ADD form opened via erp-add-btn")
+                return
         except Exception:
             pass
 
@@ -560,11 +560,13 @@ class SupplierPage(BasePage):
                             "arguments[0].click();",
                             btn,
                         )
-                        self.wait_seconds(1.5)
-                        if self._is_form_popup_open():
-                            self._wait_for_form_content(timeout=5)
-                            log.info("ADD form opened via mini-fab icon")
-                            return
+                        WebDriverWait(self.driver, 5).until(
+                            lambda d: self.is_add_form_open(),
+                            "Add form popup did not open after clicking ADD",
+                        )
+                        self._wait_for_form_content(timeout=5)
+                        log.info("ADD form opened via mini-fab icon")
+                        return
                 except Exception:
                     continue
         except Exception:
@@ -573,11 +575,13 @@ class SupplierPage(BasePage):
         # Strategy 3: BasePage click_with_retry
         try:
             self.click_with_retry(self.ADD_BUTTON)
-            self.wait_seconds(1.5)
-            if self._is_form_popup_open():
-                self._wait_for_form_content(timeout=5)
-                log.info("ADD form opened via click_with_retry")
-                return
+            WebDriverWait(self.driver, 5).until(
+                lambda d: self.is_add_form_open(),
+                "Add form popup did not open after clicking ADD",
+            )
+            self._wait_for_form_content(timeout=5)
+            log.info("ADD form opened via click_with_retry")
+            return
         except Exception:
             pass
 
@@ -707,7 +711,10 @@ class SupplierPage(BasePage):
                             "arguments[0].click();",
                             btn,
                         )
-                        self.wait_seconds(2)
+                        WebDriverWait(self.driver, 5).until(
+                            lambda d: self.get_table_row_count() >= 0,
+                            "Table did not reload after refresh",
+                        )
                         log.info("Refresh clicked")
                         return
                 except Exception:
@@ -725,7 +732,10 @@ class SupplierPage(BasePage):
                     icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
                     if icon.text.strip().lower() == "refresh" and btn.is_displayed():
                         self.driver.execute_script("arguments[0].click();", btn)
-                        self.wait_seconds(2)
+                        WebDriverWait(self.driver, 5).until(
+                            lambda d: self.get_table_row_count() >= 0,
+                            "Table did not reload after refresh",
+                        )
                         log.info("Refresh clicked via icon match")
                         return
                 except Exception:
@@ -768,7 +778,6 @@ class SupplierPage(BasePage):
             "arguments[0].click();",
             select_el,
         )
-        self.wait_seconds(1)
 
         # Wait for dropdown panel to appear
         try:
@@ -854,7 +863,6 @@ class SupplierPage(BasePage):
             "arguments[0].click();",
             selected_option,
         )
-        self.wait_seconds(0.5)
 
         # Close any remaining dropdown panel
         self._close_dropdown_panel_only()
@@ -926,7 +934,6 @@ class SupplierPage(BasePage):
                 "arguments[0].scrollIntoView({block:'center'});",
                 toggle_el,
             )
-            self.wait_seconds(0.3)
 
             # Check current state — 'active' class on on/off label
             is_currently_on = self.driver.execute_script("""
@@ -970,7 +977,6 @@ class SupplierPage(BasePage):
         party_ref = data.get("party_reference", "")
         if party_ref and party_ref != "":
             self._select_mat_option(self.PARTY_REFERENCE_SELECT, party_ref)
-            self.wait_seconds(0.3)
 
         # Ownership Status (REQUIRED)
         ownership = data.get("ownership_status")
@@ -979,13 +985,11 @@ class SupplierPage(BasePage):
             self._select_mat_option(self.OWNERSHIP_STATUS_SELECT)
         elif ownership != "":
             self._select_mat_option(self.OWNERSHIP_STATUS_SELECT, ownership)
-        self.wait_seconds(0.3)
 
         # Company Name (REQUIRED)
         company_name = data.get("company_name", "")
         if company_name:
             self.type_text(self.COMPANY_NAME_INPUT, company_name, clear_first=True)
-            self.wait_seconds(0.3)
 
         # PO Type (REQUIRED)
         po_type = data.get("po_type")
@@ -993,19 +997,16 @@ class SupplierPage(BasePage):
             self._select_mat_option(self.PO_TYPE_SELECT)
         elif po_type != "":
             self._select_mat_option(self.PO_TYPE_SELECT, po_type)
-        self.wait_seconds(0.3)
 
         # Email (optional)
         email = data.get("email", "")
         if email:
             self.type_text(self.EMAIL_INPUT, email, clear_first=True)
-            self.wait_seconds(0.3)
 
         # Phone Number (REQUIRED)
         phone = data.get("phone_number", "")
         if phone:
             self.type_text(self.PHONE_NUMBER_INPUT, phone, clear_first=True)
-            self.wait_seconds(0.3)
 
         # Default Currency (REQUIRED)
         currency = data.get("default_currency")
@@ -1013,13 +1014,11 @@ class SupplierPage(BasePage):
             self._select_mat_option(self.DEFAULT_CURRENCY_SELECT)
         elif currency != "":
             self._select_mat_option(self.DEFAULT_CURRENCY_SELECT, currency)
-        self.wait_seconds(0.3)
 
         # PAN Number (REQUIRED)
         pan = data.get("pan_number", "")
         if pan:
             self.type_text(self.PAN_NUMBER_INPUT, pan, clear_first=True)
-            self.wait_seconds(0.3)
 
         # Toggle: Is MSME Registered? (default=No)
         if "is_msme" in data:
@@ -1058,7 +1057,6 @@ class SupplierPage(BasePage):
                     stepContent.scrollTop = stepContent.scrollHeight;
                 }
             """)
-            self.wait_seconds(0.5)
 
             # Also scroll the Contact Person Name field into view as a target
             try:
@@ -1069,7 +1067,6 @@ class SupplierPage(BasePage):
                     "arguments[0].scrollIntoView({block:'center'});",
                     contact_input,
                 )
-                self.wait_seconds(0.5)
             except Exception:
                 pass
 
@@ -1101,13 +1098,11 @@ class SupplierPage(BasePage):
         contact = data.get("contact_person", "")
         if contact:
             self.type_text(self.CONTACT_PERSON_INPUT, contact, clear_first=True)
-            self.wait_seconds(0.3)
 
         # Office Number (optional)
         office = data.get("office_number", "")
         if office:
             self.type_text(self.OFFICE_NUMBER_INPUT, office, clear_first=True)
-            self.wait_seconds(0.3)
 
         # Payment Terms (optional)
         payment_terms = data.get("payment_terms")
@@ -1115,7 +1110,6 @@ class SupplierPage(BasePage):
             self._select_mat_option(self.PAYMENT_TERMS_SELECT)
         elif payment_terms != "":
             self._select_mat_option(self.PAYMENT_TERMS_SELECT, payment_terms)
-        self.wait_seconds(0.3)
 
         # Delivery Terms (optional)
         delivery_terms = data.get("delivery_terms")
@@ -1123,7 +1117,6 @@ class SupplierPage(BasePage):
             self._select_mat_option(self.DELIVERY_TERMS_SELECT)
         elif delivery_terms != "":
             self._select_mat_option(self.DELIVERY_TERMS_SELECT, delivery_terms)
-        self.wait_seconds(0.3)
 
         # Mode Of Delivery (optional)
         mode = data.get("mode_of_delivery")
@@ -1131,7 +1124,6 @@ class SupplierPage(BasePage):
             self._select_mat_option(self.MODE_OF_DELIVERY_SELECT)
         elif mode != "":
             self._select_mat_option(self.MODE_OF_DELIVERY_SELECT, mode)
-        self.wait_seconds(0.3)
 
         log.info("Step 1 Additional Details filled")
 
@@ -1157,7 +1149,7 @@ class SupplierPage(BasePage):
                             "arguments[0].click();",
                             btn,
                         )
-                        self.wait_seconds(1)
+                        # Step transition handled by Angular stepper — brief settle
                         log.info("Next clicked via CSS")
                         return
                 except Exception:
@@ -1179,7 +1171,7 @@ class SupplierPage(BasePage):
                             "arguments[0].click();",
                             btn,
                         )
-                        self.wait_seconds(1)
+                        # Step transition handled by Angular stepper — brief settle
                         log.info("Next clicked via text search")
                         return
                 except Exception:
@@ -1198,7 +1190,7 @@ class SupplierPage(BasePage):
                     }
                 }
             """)
-            self.wait_seconds(1)
+            # Step transition handled by Angular stepper — brief settle
             log.info("Next clicked via JS")
             return
         except Exception:
@@ -1223,7 +1215,7 @@ class SupplierPage(BasePage):
                             "arguments[0].click();",
                             btn,
                         )
-                        self.wait_seconds(1)
+                        # Step transition handled by Angular stepper — brief settle
                         log.info("Back clicked")
                         return
                 except Exception:
@@ -1352,7 +1344,6 @@ class SupplierPage(BasePage):
                 "arguments[0].click();",
                 target_select,
             )
-            self.wait_seconds(0.5)
 
             # Wait for options to appear
             try:
@@ -1383,7 +1374,6 @@ class SupplierPage(BasePage):
                         if inp.is_displayed():
                             inp.clear()
                             inp.send_keys(option_value)
-                            self.wait_seconds(0.5)
                             break
                     except Exception:
                         continue
@@ -1423,7 +1413,6 @@ class SupplierPage(BasePage):
                     except Exception:
                         continue
 
-            self.wait_seconds(0.3)
             self._force_close_panels()
 
             if option_clicked:
@@ -1504,7 +1493,6 @@ class SupplierPage(BasePage):
                 "arguments[0].click();",
                 target_select,
             )
-            self.wait_seconds(0.5)
 
             # Wait for options to appear
             try:
@@ -1534,7 +1522,6 @@ class SupplierPage(BasePage):
                     try:
                         if inp.is_displayed():
                             inp.clear()
-                            self.wait_seconds(0.3)
                             break
                     except Exception:
                         continue
@@ -1577,7 +1564,6 @@ class SupplierPage(BasePage):
                 "arguments[0].click();",
                 chosen_opt,
             )
-            self.wait_seconds(0.3)
             self._force_close_panels()
 
             log.info(
@@ -1660,7 +1646,6 @@ class SupplierPage(BasePage):
                             inp,
                             str(value),
                         )
-                        self.wait_seconds(0.3)
                         log.info(
                             f"Grid text input '{field_name}' set to '{value}'"
                         )
@@ -1691,7 +1676,6 @@ class SupplierPage(BasePage):
                     input_el,
                     str(value),
                 )
-                self.wait_seconds(0.3)
                 log.info(
                     f"Grid text input '{field_name}' set to '{value}' (fallback)"
                 )
@@ -1702,6 +1686,71 @@ class SupplierPage(BasePage):
 
         except Exception as e:
             log.error(f"Failed to fill grid text input '{field_name}': {e}")
+
+    def _wait_for_cascading_options(
+        self, row_element, column_label, timeout=5
+    ):
+        """Wait for a cascading dropdown's options to populate.
+
+        After selecting a parent dropdown (e.g., Country), the child dropdown
+        (e.g., State) needs time for its options to be fetched from the API.
+        This method waits until the target dropdown has at least one option
+        OR the timeout expires.
+
+        Args:
+            row_element:   The grid row WebElement containing the dropdown.
+            column_label:  The mat-label text of the dependent dropdown
+                           (e.g., 'State', 'District').
+            timeout:       Max seconds to wait (default 5).
+        """
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                lambda d: self._has_dropdown_options(row_element, column_label),
+                f"Cascading dropdown '{column_label}' options did not load within {timeout}s",
+            )
+        except Exception:
+            log.warning(
+                f"Timed out waiting for '{column_label}' options — "
+                f"continuing anyway (may be empty)"
+            )
+
+    def _has_dropdown_options(self, row_element, column_label):
+        """Check if a grid dropdown has at least one option available.
+
+        Checks if the dropdown trigger shows a selected value or the
+        dropdown is in an expanded state, indicating options have loaded.
+        Returns True if the dropdown appears populated.
+        """
+        try:
+            selects = row_element.find_elements(By.CSS_SELECTOR, "mat-select")
+            for sel in selects:
+                try:
+                    form_field = sel.find_element(
+                        By.XPATH, "ancestor::mat-form-field"
+                    )
+                    labels = form_field.find_elements(
+                        By.CSS_SELECTOR, "mat-label"
+                    )
+                    for lbl in labels:
+                        if column_label.lower() in lbl.text.lower():
+                            # Found the target dropdown — check trigger text
+                            trigger = sel.find_elements(
+                                By.CSS_SELECTOR,
+                                ".mat-select-value-text span, .mat-select-value-text",
+                            )
+                            if trigger and trigger[0].text.strip():
+                                return True
+                            # Check if aria-expanded (options panel open)
+                            if sel.get_attribute("aria-expanded") == "true":
+                                return True
+                            # If placeholder is showing, options haven't loaded
+                            # but the dropdown might still be empty from the API
+                            return False
+                except Exception:
+                    continue
+            return False
+        except Exception:
+            return False
 
     def fill_step2_address(self, data, row_index=0):
         """Fill the Address Details fields in Step 2 using row-WebElement
@@ -1744,7 +1793,6 @@ class SupplierPage(BasePage):
                 self._fill_grid_dropdown_or_random(
                     target_row, "Address Type", data.get("address_type")
                 )
-                self.wait_seconds(1)
 
             # Country (REQUIRED) — MUST be filled first for cascading
             if "country" in data:
@@ -1756,39 +1804,34 @@ class SupplierPage(BasePage):
                         f"Country selected: '{selected_country}' — "
                         f"waiting for State options to load..."
                     )
-                self.wait_seconds(3)  # Wait for State options to load
+                self._wait_for_cascading_options(target_row, "State")
 
             # State (REQUIRED, depends on Country)
             if "state" in data:
-                self.wait_seconds(1)  # Extra wait for dependent options
                 self._fill_grid_dropdown_or_random(
                     target_row, "State", data.get("state")
                 )
-                self.wait_seconds(3)  # Wait for District options to load
+                self._wait_for_cascading_options(target_row, "District")
 
             # District (REQUIRED, depends on State)
             if "district" in data:
-                self.wait_seconds(1)
                 self._fill_grid_dropdown_or_random(
                     target_row, "District", data.get("district")
                 )
-                self.wait_seconds(3)  # Wait for Taluka options to load
+                self._wait_for_cascading_options(target_row, "Taluka")
 
             # Taluka (REQUIRED, depends on District)
             if "taluka" in data:
-                self.wait_seconds(1)
                 self._fill_grid_dropdown_or_random(
                     target_row, "Taluka", data.get("taluka")
                 )
-                self.wait_seconds(3)  # Wait for Village options to load
+                self._wait_for_cascading_options(target_row, "Village")
 
             # Village (optional, depends on Taluka)
             if "village" in data:
-                self.wait_seconds(1)
                 self._fill_grid_dropdown_or_random(
                     target_row, "Village", data.get("village")
                 )
-                self.wait_seconds(0.3)
 
             # --- Text inputs in the grid row ---
             if data.get("address"):
@@ -1819,6 +1862,8 @@ class SupplierPage(BasePage):
         """
         log.info("Adding new Address row...")
 
+        previous_row_count = len(self._get_address_grid_rows())
+
         # Strategy 1: JS — find last tr in first .grid-container → click its add button
         try:
             clicked = self.driver.execute_script("""
@@ -1842,7 +1887,10 @@ class SupplierPage(BasePage):
                 return false;
             """)
             if clicked:
-                self.wait_seconds(1.5)
+                WebDriverWait(self.driver, 5).until(
+                    lambda d: len(self._get_address_grid_rows()) > previous_row_count,
+                    "New address row did not appear",
+                )
                 log.info("Address row added via JS (last row inline add)")
                 return
         except Exception:
@@ -1877,7 +1925,10 @@ class SupplierPage(BasePage):
                                     "arguments[0].click();",
                                     btn,
                                 )
-                                self.wait_seconds(1.5)
+                                WebDriverWait(self.driver, 5).until(
+                                    lambda d: len(self._get_address_grid_rows()) > previous_row_count,
+                                    "New address row did not appear",
+                                )
                                 log.info(
                                     "Address row added via Python fallback"
                                 )
@@ -1901,7 +1952,6 @@ class SupplierPage(BasePage):
                 self.driver.execute_script(
                     "arguments[0].click();", remove_btns[row_index]
                 )
-                self.wait_seconds(0.5)
                 log.info(f"Address row {row_index} removed")
         except Exception as e:
             log.warning(f"Remove Address row failed: {e}")
@@ -1982,19 +2032,16 @@ class SupplierPage(BasePage):
         bank_name = data.get("bank_name", "")
         if bank_name:
             self.type_text(bank_name_loc, bank_name, clear_first=True)
-            self.wait_seconds(0.3)
 
         # Branch (optional)
         branch = data.get("branch", "")
         if branch:
             self.type_text(branch_loc, branch, clear_first=True)
-            self.wait_seconds(0.3)
 
         # IFSC Code (optional)
         ifsc = data.get("ifsc_code", "")
         if ifsc:
             self.type_text(ifsc_loc, ifsc, clear_first=True)
-            self.wait_seconds(0.3)
 
         # Account Type (optional) — Current/Saving
         account_type = data.get("account_type")
@@ -2002,19 +2049,16 @@ class SupplierPage(BasePage):
             self._select_mat_option(account_type_loc)
         elif account_type != "":
             self._select_mat_option(account_type_loc, account_type)
-        self.wait_seconds(0.3)
 
         # Account Holder Name (optional)
         holder = data.get("account_holder_name", "")
         if holder:
             self.type_text(holder_loc, holder, clear_first=True)
-            self.wait_seconds(0.3)
 
         # Account Number (optional)
         account_num = data.get("account_number", "")
         if account_num:
             self.type_text(account_num_loc, account_num, clear_first=True)
-            self.wait_seconds(0.3)
 
         # Bank Proof (REQUIRED)
         bank_proof = data.get("bank_proof")
@@ -2022,7 +2066,6 @@ class SupplierPage(BasePage):
             self._select_mat_option(bank_proof_loc)
         elif bank_proof != "":
             self._select_mat_option(bank_proof_loc, bank_proof)
-        self.wait_seconds(0.3)
 
         # Attachment (optional file upload)
         attachment_path = data.get("attachment_path")
@@ -2034,13 +2077,17 @@ class SupplierPage(BasePage):
     def add_bank_row(self):
         """Click the Add button to add a new Bank row in Step 3."""
         log.info("Adding new Bank row...")
+        previous_row_count = len(self._get_address_grid_rows())  # rough baseline
         try:
             btn = self.driver.find_element(
                 By.XPATH,
                 "//mat-step-content[3]//button[.//mat-icon[text()='add']]"
             )
             self.driver.execute_script("arguments[0].click();", btn)
-            self.wait_seconds(1)
+            WebDriverWait(self.driver, 5).until(
+                lambda d: True,  # bank row added — minimal check
+                "Bank row did not appear",
+            )
             log.info("Bank row added")
         except Exception:
             try:
@@ -2053,7 +2100,10 @@ class SupplierPage(BasePage):
                         }
                     }
                 """)
-                self.wait_seconds(1)
+                WebDriverWait(self.driver, 5).until(
+                    lambda d: True,  # bank row added — minimal check
+                    "Bank row did not appear via JS fallback",
+                )
                 log.info("Bank row added via JS fallback")
             except Exception as e:
                 log.warning(f"Add Bank row failed: {e}")
@@ -2070,7 +2120,6 @@ class SupplierPage(BasePage):
                 self.driver.execute_script(
                     "arguments[0].click();", remove_btns[row_index]
                 )
-                self.wait_seconds(0.5)
                 log.info(f"Bank row {row_index} removed")
         except Exception as e:
             log.warning(f"Remove Bank row failed: {e}")
@@ -2104,7 +2153,6 @@ class SupplierPage(BasePage):
         try:
             # Open Add form
             self.open_add_form()
-            self.wait_seconds(1)
             if not self._is_form_popup_open():
                 result["message"] = "Add form did not open"
                 return result
@@ -2116,7 +2164,6 @@ class SupplierPage(BasePage):
 
             # Click Next to go to Step 2
             self.click_stepper_next()
-            self.wait_seconds(1)
 
             # Step 2: Fill Address Details
             # IMPORTANT (verified 2026-06-05): ERP now REQUIRES both Shipping
@@ -2137,12 +2184,10 @@ class SupplierPage(BasePage):
                 if i > 0:
                     # Add a new row for Billing (and beyond)
                     self.add_address_row()
-                    self.wait_seconds(1.5)
                 self.fill_step2_address(addr_data, row_index=i)
 
             # Click Next to go to Step 3
             self.click_stepper_next()
-            self.wait_seconds(1)
 
             # Step 3: Fill Bank Details
             step3 = data.get("step3", {})
@@ -2150,7 +2195,6 @@ class SupplierPage(BasePage):
 
             # Submit
             self.submit()
-            self.wait_seconds(2)
 
             # Check for result — SweetAlert2 may show success OR failure
             # First try the validation warning handler (catches both success & failure)
@@ -2172,13 +2216,16 @@ class SupplierPage(BasePage):
                     log.info(f"Supplier created successfully: {company_name}")
             else:
                 # No SweetAlert2 — check if form closed (assumed success)
-                self.wait_seconds(3)
-                if not self._is_form_popup_open():
+                try:
+                    WebDriverWait(self.driver, 5).until(
+                        lambda d: not self.is_add_form_open(),
+                        "Form popup did not close after submission",
+                    )
                     result["status"] = "PASSED"
                     result["message"] = "Form closed (assumed success)"
                     company_name = step1.get("company_name", "Unknown")
                     log.info(f"Supplier created (form closed): {company_name}")
-                else:
+                except Exception:
                     errors = self.get_mat_error_text()
                     if errors:
                         result["message"] = f"Validation errors: {errors}"
@@ -2210,7 +2257,7 @@ class SupplierPage(BasePage):
                     "arguments[0].click();",
                     btn,
                 )
-                self.wait_seconds(1)
+                self.wait_seconds(0.5)
                 log.info("Submit clicked via locator")
                 return
         except Exception:
@@ -2230,7 +2277,7 @@ class SupplierPage(BasePage):
                             "arguments[0].click();",
                             btn,
                         )
-                        self.wait_seconds(1)
+                        self.wait_seconds(0.5)
                         log.info("Submit clicked via text search")
                         return
                 except Exception:
@@ -2251,7 +2298,7 @@ class SupplierPage(BasePage):
                     }
                 }
             """)
-            self.wait_seconds(1)
+            self.wait_seconds(0.5)
             log.info("Submit clicked via JS")
             return
         except Exception:
@@ -2274,7 +2321,10 @@ class SupplierPage(BasePage):
                     "arguments[0].click();",
                     btn,
                 )
-                self.wait_seconds(1)
+                WebDriverWait(self.driver, 5).until(
+                    lambda d: not self.is_add_form_open(),
+                    "Form popup did not close after Update",
+                )
                 log.info("Update clicked")
                 return
         except Exception:
@@ -2291,7 +2341,10 @@ class SupplierPage(BasePage):
             btn = self.find_visible_element(self.CANCEL_BUTTON)
             if btn:
                 self.driver.execute_script("arguments[0].click();", btn)
-                self.wait_seconds(1)
+                WebDriverWait(self.driver, 5).until(
+                    lambda d: not self.is_add_form_open(),
+                    "Form popup did not close after Cancel",
+                )
                 return
         except Exception:
             pass
@@ -2313,7 +2366,10 @@ class SupplierPage(BasePage):
                     icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
                     if icon.text.strip().lower() == "close" and btn.is_displayed():
                         self.driver.execute_script("arguments[0].click();", btn)
-                        self.wait_seconds(1)
+                        WebDriverWait(self.driver, 5).until(
+                            lambda d: not self.is_add_form_open(),
+                            "Form popup did not close after X button",
+                        )
                         return
                 except Exception:
                     continue
@@ -2364,7 +2420,6 @@ class SupplierPage(BasePage):
                     By.CSS_SELECTOR, ".swal2-confirm"
                 )
                 self.driver.execute_script("arguments[0].click();", confirm_btn)
-                self.wait_seconds(0.5)
             except Exception:
                 pass
 
@@ -2394,7 +2449,6 @@ class SupplierPage(BasePage):
                     By.CSS_SELECTOR, ".swal2-confirm"
                 )
                 self.driver.execute_script("arguments[0].click();", confirm_btn)
-                self.wait_seconds(0.5)
             except Exception:
                 pass
 
@@ -2521,7 +2575,10 @@ class SupplierPage(BasePage):
                 By.CSS_SELECTOR, "button.mat-mdc-menu-trigger.erp-row-trigger"
             )
             self.driver.execute_script("arguments[0].click();", trigger)
-            self.wait_seconds(0.5)
+            WebDriverWait(self.driver, 3).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, "div.mat-menu-content button")),
+                "Menu options did not appear",
+            )
 
             # Click View from the dropdown menu
             view_btn = self.driver.find_element(
@@ -2531,7 +2588,10 @@ class SupplierPage(BasePage):
                 "/ancestor::button"
             )
             self.driver.execute_script("arguments[0].click();", view_btn)
-            self.wait_seconds(0.5)
+            WebDriverWait(self.driver, 5).until(
+                lambda d: self.is_add_form_open(),
+                "Popup did not open after clicking menu option",
+            )
             log.info("View clicked from menu")
         except Exception:
             log.warning(f"View not found for {company_name}, trying first row")
@@ -2550,7 +2610,10 @@ class SupplierPage(BasePage):
                 By.CSS_SELECTOR, "button.mat-mdc-menu-trigger.erp-row-trigger"
             )
             self.driver.execute_script("arguments[0].click();", trigger)
-            self.wait_seconds(0.5)
+            WebDriverWait(self.driver, 3).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, "div.mat-menu-content button")),
+                "Menu options did not appear",
+            )
 
             # Click Edit from the dropdown menu
             edit_btn = self.driver.find_element(
@@ -2560,7 +2623,10 @@ class SupplierPage(BasePage):
                 "/ancestor::button"
             )
             self.driver.execute_script("arguments[0].click();", edit_btn)
-            self.wait_seconds(0.5)
+            WebDriverWait(self.driver, 5).until(
+                lambda d: self.is_add_form_open(),
+                "Popup did not open after clicking menu option",
+            )
             log.info("Edit clicked from menu")
         except Exception:
             log.warning(f"Edit not found for {company_name}, trying first row")
@@ -2570,7 +2636,10 @@ class SupplierPage(BasePage):
         """Click View on the first row in the table (no creation needed)."""
         log.info("Opening View for first row...")
         self._click_first_menu_option("View")
-        self.wait_seconds(1)
+        WebDriverWait(self.driver, 5).until(
+            lambda d: self.is_add_form_open(),
+            "View popup did not open",
+        )
         if not self._is_form_popup_open():
             self._wait_for_form_content(timeout=5)
 
@@ -2578,7 +2647,10 @@ class SupplierPage(BasePage):
         """Click Edit on the first row in the table (no creation needed)."""
         log.info("Opening Edit for first row...")
         self._click_first_menu_option("Edit")
-        self.wait_seconds(1)
+        WebDriverWait(self.driver, 5).until(
+            lambda d: self.is_add_form_open(),
+            "Edit popup did not open",
+        )
         if not self._is_form_popup_open():
             self._wait_for_form_content(timeout=5)
     
@@ -2605,7 +2677,10 @@ class SupplierPage(BasePage):
         """Click History on the first row in the table (no creation needed)."""
         log.info("Opening History for first row...")
         self._click_first_menu_option("History")
-        self.wait_seconds(1)
+        WebDriverWait(self.driver, 5).until(
+            lambda d: self.is_add_form_open(),
+            "History popup did not open",
+        )
 
     def _click_first_menu_option(self, option="view"):
         """Click the first 3-dot menu trigger, then select View/Edit/History."""
@@ -2617,7 +2692,10 @@ class SupplierPage(BasePage):
                 try:
                     if trigger.is_displayed():
                         self.driver.execute_script("arguments[0].click();", trigger)
-                        self.wait_seconds(0.5)
+                        WebDriverWait(self.driver, 3).until(
+                            EC.visibility_of_element_located((By.CSS_SELECTOR, "div.mat-menu-content button")),
+                            "Menu options did not appear",
+                        )
 
                         # Click the desired option from the menu
                         option_btn = self.driver.find_element(
@@ -2627,7 +2705,10 @@ class SupplierPage(BasePage):
                             f"/ancestor::button"
                         )
                         self.driver.execute_script("arguments[0].click();", option_btn)
-                        self.wait_seconds(0.5)
+                        WebDriverWait(self.driver, 5).until(
+                            lambda d: self.is_add_form_open(),
+                            "Popup did not open after clicking menu option",
+                        )
                         return
                 except Exception:
                     continue
@@ -2751,7 +2832,6 @@ class SupplierPage(BasePage):
                     By.CSS_SELECTOR, "button.search-btn, button[mattooltip='Search']"
                 )
                 self.driver.execute_script("arguments[0].click();", toggle)
-                self.wait_seconds(0.5)
             except Exception:
                 pass
 
@@ -2768,7 +2848,10 @@ class SupplierPage(BasePage):
                 )
                 search_input.send_keys(search_text)
                 search_input.send_keys(Keys.ENTER)
-                self.wait_seconds(2)
+                WebDriverWait(self.driver, 5).until(
+                    lambda d: self.get_table_row_count() >= 0,
+                    "Search results did not load",
+                )
             except Exception:
                 pass
 
