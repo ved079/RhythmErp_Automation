@@ -99,7 +99,7 @@ def main():
     client = RhythmERPAPIClient()
 
     if token:
-        client.login_from_browser(token=token, tenant_id="599")
+        client.login_from_browser(token=token, tenant_id="681")
     else:
         print("=" * 60)
         print("USAGE: python harvest_chains.py --token <YOUR_TOKEN>")

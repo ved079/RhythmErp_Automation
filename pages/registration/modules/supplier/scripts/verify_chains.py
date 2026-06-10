@@ -87,7 +87,7 @@ def main():
         sys.exit(1)
 
     client = RhythmERPAPIClient()
-    client.login_from_browser(token=token, tenant_id="599")
+    client.login_from_browser(token=token, tenant_id="681")
 
     results = verify_chains(client, test_all)
     client.close()

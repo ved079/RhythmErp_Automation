@@ -1,7 +1,7 @@
 import json, subprocess, random, string
 
 TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzgwMzI5MzU5LCJpYXQiOjE3ODAzMTQ5NTksImp0aSI6IjZiMjUzZDY4MDM5ZjRlMDQ5NTY2YzZiMWFjMjViMWJhIiwidXNlcl9pZCI6IjE0NiJ9.br6PtTvqO8iinvJQI-oMoHpj4OZ47Vy_Fl7WooPwXuQ"
-TENANT = "599"
+TENANT = "681"
 URL = "https://rhythmerp.algorhythms.in/core/dynamic-screen-wrapper/"
 
 # FK IDs from captured payload + schemas

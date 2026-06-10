@@ -28,7 +28,7 @@ def main():
             return
 
     client = RhythmERPAPIClient()
-    client.login_from_browser(token=token, tenant_id="599")
+    client.login_from_browser(token=token, tenant_id="681")
 
     # 1. Check screen schema for payment_terms_ref_id
     print("\n" + "=" * 70)

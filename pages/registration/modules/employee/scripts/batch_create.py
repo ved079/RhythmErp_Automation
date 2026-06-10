@@ -27,7 +27,7 @@ from pages.registration.modules.employee.data.employee_data import (
     generate_employee_api_payload,
 )
 
-DEFAULT_TENANT_ID = "599"
+DEFAULT_TENANT_ID = "681"
 DEFAULT_COUNT = 10
 
 

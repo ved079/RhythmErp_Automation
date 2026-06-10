@@ -32,7 +32,7 @@ def main():
         sys.exit(1)
 
     client = RhythmERPAPIClient()
-    client.login_from_browser(token=token, tenant_id="599")
+    client.login_from_browser(token=token, tenant_id="681")
 
     # Fetch screen schema
     print("Fetching Supplier screen schema...\n")
