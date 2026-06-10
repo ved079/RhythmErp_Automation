@@ -768,7 +768,13 @@ class SupplierPage(BasePage):
         self._force_close_panels()
 
         # Find and click the mat-select trigger
-        select_el = self.find_visible_element(select_locator)
+        # Gracefully handle elements that don't exist on all tenants
+        # (e.g. ownership_status missing on tenant 681)
+        try:
+            select_el = self.find_visible_element(select_locator, timeout=3)
+        except Exception:
+            log.warning(f"mat-select not found or not visible: {select_locator}")
+            return None
         if not select_el:
             log.warning(f"mat-select not found: {select_locator}")
             return None
