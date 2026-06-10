@@ -10,7 +10,7 @@ that cannot be tested via API. Each test uses ``sp_page`` fixture only.
 Test Inventory (7 tests):
   SP-C11 — Phone Number alpha chars (HTML5 input type check)
   SP-C12 — Ownership Status (REMOVED: field not on tenant 681)
-  SP-C13-C17 — Dropdown options display (5 parameterized, C16 skipped on tenant 681)
+  SP-C13-C17 — Dropdown options display (5 parameterized, C16+C17 skipped on tenant 681)
   SP-C18 — Stepper Next/Back navigation
   SP-P01/P03/P04 — Popup open/close workflow
   SP-P06 — Phone spinner controls (BUG-003, xfail)
@@ -139,7 +139,7 @@ _DROPDOWN_PARAMS = [
         ["air", "courier", "sea", "railway", "truck"],
         True,
         id="SP-C17-mode-of-delivery",
-        marks=pytest.mark.sanity,
+        marks=pytest.mark.skip(reason="Tenant 681: mode_of_delivery dropdown has no options configured"),
     ),
 ]
 
