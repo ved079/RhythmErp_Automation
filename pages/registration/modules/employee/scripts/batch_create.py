@@ -27,13 +27,13 @@ from pages.registration.modules.employee.data.employee_data import (
     generate_employee_api_payload,
 )
 
-TENANT_ID = "599"
+DEFAULT_TENANT_ID = "599"
 DEFAULT_COUNT = 10
 
 
 def parse_args():
     """Parse simple --key value args from sys.argv."""
-    args = {"token": None, "count": DEFAULT_COUNT, "dry_run": False}
+    args = {"token": None, "count": DEFAULT_COUNT, "dry_run": False, "tenant": DEFAULT_TENANT_ID}
     i = 1
     while i < len(sys.argv):
         arg = sys.argv[i]
@@ -42,6 +42,9 @@ def parse_args():
             i += 2
         elif arg == "--count" and i + 1 < len(sys.argv):
             args["count"] = int(sys.argv[i + 1])
+            i += 2
+        elif arg == "--tenant" and i + 1 < len(sys.argv):
+            args["tenant"] = sys.argv[i + 1]
             i += 2
         elif arg == "--dry-run":
             args["dry_run"] = True
@@ -130,12 +133,22 @@ def main():
             print("  No token entered. Exiting.")
             return
 
+    tenant_id = args.get("tenant", DEFAULT_TENANT_ID)
     client = ErpApiClient()
-    client.set_session_from_token(token)
+    client.set_session_from_token(token, tenant_id=tenant_id)
 
     result = client.list_entries("Employee", page=1, page_size=1)
     if not result:
-        print("  Token invalid or expired. Get a new one from DevTools.")
+        raw = client._last_raw_response
+        if raw is not None:
+            print(f"  API error: {raw.status_code} — {raw.text[:200]}")
+            if "Tenant not found" in raw.text:
+                print(f"  Hint: Tenant ID '{tenant_id}' does not exist. Use --tenant <id> with the")
+                print("  correct tenant from DevTools (check X-Tenant-ID in any /core/ request).")
+            elif raw.status_code == 401:
+                print("  Hint: Token expired. Get a new one from DevTools.")
+        else:
+            print("  API error: No response received (network issue?).")
         client.close()
         return
 
