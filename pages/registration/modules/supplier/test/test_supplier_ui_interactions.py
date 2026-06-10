@@ -10,7 +10,8 @@ that cannot be tested via API. Each test uses ``sp_page`` fixture only.
 Test Inventory (7 tests):
   SP-C11 — Phone Number alpha chars (HTML5 input type check)
   SP-C12 — Ownership Status (REMOVED: field not on tenant 681)
-  SP-C13-C17 — Dropdown options display (5 parameterized, C16+C17 skipped on tenant 681)
+  SP-C13-C17 — All dropdowns checked in ONE test (open form once, read all)
+                C16/C17 skipped on tenant 681 (no options configured)
   SP-C18 — Stepper Next/Back navigation
   SP-P01/P03/P04 — Popup open/close workflow
   SP-P06 — Phone spinner controls (BUG-003, xfail)
@@ -38,6 +39,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
 from common.logger import log
+from common.soft_assert import SoftAssert
 from pages.registration.modules.supplier.data.supplier_data import (
     generate_valid_step1_data,
     generate_alpha_phone,
@@ -90,74 +92,59 @@ class TestPhoneNumberInput:
 
 
 # ====================================================================
-# SP-C12-C17: Dropdown options display (parameterized)
+# SP-C13-C17: Dropdown options display (single test, open form once)
 # ====================================================================
 
-_DROPDOWN_PARAMS = [
+# Dropdowns to validate: (test_id, field_name, page_locator_attr,
+#   expected_keywords or None, needs_scroll, skip_reason or None)
+_DROPDOWN_CHECKS = [
     # SP-C12 (ownership_status) — REMOVED: field does not exist on tenant 681.
-    # The ERP removed the Ownership Status dropdown from the Supplier screen.
     # If it reappears on another tenant, add it back with:
-    #   pytest.param("ownership_status", "OWNERSHIP_STATUS_SELECT",
-    #       ["owned", "leased", "proprietorship", "partnership",
-    #        "llp", "plc", "private limited company", "individual"],
-    #       False, id="SP-C12-ownership-status", marks=pytest.mark.sanity),
-    pytest.param(
-        "po_type",
-        "PO_TYPE_SELECT",
-        ["domestic", "import"],
-        False,
-        id="SP-C13-po-type",
-        marks=pytest.mark.sanity,
+    #   ("SP-C12", "ownership_status", "OWNERSHIP_STATUS_SELECT",
+    #    ["owned", "leased", "proprietorship", "partnership",
+    #     "llp", "plc", "private limited company", "individual"],
+    #    False, None),
+    (
+        "SP-C13", "po_type", "PO_TYPE_SELECT",
+        ["domestic", "import"], False, None,
     ),
-    pytest.param(
-        "default_currency",
-        "DEFAULT_CURRENCY_SELECT",
-        None,
-        False,
-        id="SP-C14-currency",
-        marks=pytest.mark.sanity,
+    (
+        "SP-C14", "default_currency", "DEFAULT_CURRENCY_SELECT",
+        None, False, None,
     ),
-    pytest.param(
-        "payment_terms",
-        "PAYMENT_TERMS_SELECT",
-        None,
-        True,
-        id="SP-C15-payment-terms",
-        marks=pytest.mark.sanity,
+    (
+        "SP-C15", "payment_terms", "PAYMENT_TERMS_SELECT",
+        None, True, None,
     ),
-    pytest.param(
-        "delivery_terms",
-        "DELIVERY_TERMS_SELECT",
-        None,
-        True,
-        id="SP-C16-delivery-terms",
-        marks=pytest.mark.skip(reason="Tenant 681: delivery_terms dropdown has no options configured"),
+    (
+        "SP-C16", "delivery_terms", "DELIVERY_TERMS_SELECT",
+        None, True,
+        "Tenant 681: delivery_terms dropdown has no options configured",
     ),
-    pytest.param(
-        "mode_of_delivery",
-        "MODE_OF_DELIVERY_SELECT",
-        ["air", "courier", "sea", "railway", "truck"],
-        True,
-        id="SP-C17-mode-of-delivery",
-        marks=pytest.mark.skip(reason="Tenant 681: mode_of_delivery dropdown has no options configured"),
+    (
+        "SP-C17", "mode_of_delivery", "MODE_OF_DELIVERY_SELECT",
+        ["air", "courier", "sea", "railway", "truck"], True,
+        "Tenant 681: mode_of_delivery dropdown has no options configured",
     ),
 ]
 
 
 class TestDropdownValidation:
-    """UI-only: Verify dropdown options display correctly."""
+    """UI-only: Verify dropdown options display correctly.
+
+    Opens the Add form ONCE and checks all dropdowns sequentially.
+    Uses SoftAssert so every dropdown is checked even if one fails.
+    Skipped dropdowns (tenant-specific data gaps) are logged but
+    do not count as failures.
+    """
 
     @pytest.mark.ui
-    @pytest.mark.parametrize(
-        "case_name,locator_attr,expected_keywords,needs_scroll",
-        _DROPDOWN_PARAMS,
-    )
-    def test_dropdown_validation(
-        self, sp_page, case_name, locator_attr, expected_keywords, needs_scroll
-    ):
-        """Validate dropdown shows correct options."""
-        log.info(f"Dropdown validation (UI): {case_name}")
+    @pytest.mark.sanity
+    def test_SP_C13_to_C17_all_dropdowns(self, sp_page):
+        """Validate all dropdown options in a single form open."""
+        log.info("SP-C13-to-C17 (UI): All dropdown validation (single form)")
         page = sp_page
+        sa = SoftAssert()
 
         page.open_add_form()
         WebDriverWait(page.driver, 10).until(
@@ -165,31 +152,49 @@ class TestDropdownValidation:
             "Add form did not open",
         )
 
-        if needs_scroll:
-            page.scroll_to_additional_details()
+        already_scrolled = False
 
-        locator = getattr(page, locator_attr)
-        options = page.get_dropdown_options(locator)
+        for test_id, field_name, locator_attr, expected_keywords, needs_scroll, skip_reason in _DROPDOWN_CHECKS:
+            # --- Skip tenant-specific data gaps ---
+            if skip_reason:
+                log.info(f"{test_id} ({field_name}): SKIPPED — {skip_reason}")
+                continue
 
-        if expected_keywords is not None:
-            options_lower = [o.lower() for o in options]
-            found = any(
-                any(ek in opt for opt in options_lower)
-                for ek in expected_keywords
-            )
-            assert found or len(options) > 0, (
-                f"{case_name} options missing. Expected keywords: {expected_keywords}. "
-                f"Found: {options}"
-            )
-        else:
-            assert len(options) > 0, f"No {case_name} options found"
+            # --- Scroll once when we hit Additional Details dropdowns ---
+            if needs_scroll and not already_scrolled:
+                page.scroll_to_additional_details()
+                already_scrolled = True
 
-        log.info(f"{case_name} options: {options}")
+            # --- Read dropdown options ---
+            locator = getattr(page, locator_attr)
+            options = page.get_dropdown_options(locator)
+            log.info(f"{test_id} ({field_name}): options = {options}")
+
+            # --- Validate ---
+            if expected_keywords is not None:
+                options_lower = [o.lower() for o in options]
+                found = any(
+                    any(ek in opt for opt in options_lower)
+                    for ek in expected_keywords
+                )
+                sa.assert_true(
+                    found or len(options) > 0,
+                    f"{test_id} ({field_name}): options missing. "
+                    f"Expected keywords: {expected_keywords}. Found: {options}",
+                )
+            else:
+                sa.assert_true(
+                    len(options) > 0,
+                    f"{test_id} ({field_name}): no options found",
+                )
 
         try:
             page.cancel()
         except Exception:
             page.force_close_form_popup()
+
+        # Raise combined assertion if any dropdown failed
+        sa.check_all()
 
 
 # ====================================================================
@@ -202,7 +207,7 @@ class TestStepperNavigation:
     @pytest.mark.ui
     @pytest.mark.smoke
     def test_SP_C18_stepper_navigation(self, sp_page):
-        """Navigate through steps via Next/Back buttons."""
+        """Navigate Step 0 → Next → Step 1 → Back → Step 0."""
         log.info("SP-C18 (UI): Stepper navigation")
         page = sp_page
 
@@ -224,7 +229,10 @@ class TestStepperNavigation:
             lambda d: page.get_current_step_index() == 1,
             "Did not navigate to Step 1 after Next",
         )
+        log.info("Navigated to Step 1 — now testing Back button")
 
+        # Give Angular stepper a moment to render the Back button
+        page.wait_seconds(1)
         page.click_stepper_back()
         WebDriverWait(page.driver, 10).until(
             lambda d: page.get_current_step_index() == 0,
