@@ -224,7 +224,7 @@ class TestPopupWorkflow:
         page.wait_seconds(1)
         assert page.is_add_form_open(), "Form should be open before close"
 
-        page._force_close_panels()
+        page.force_close_form_popup()
         page.wait_seconds(0.5)
 
         is_still_open = page.is_add_form_open()

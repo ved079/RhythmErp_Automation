@@ -1082,6 +1082,9 @@ class EmployeePage(BasePage):
                     values[key] = ""
 
             # Dropdown values — read the selected text from mat-select
+            # In View mode, Angular Material may render the value differently
+            # (e.g. in a span without .mat-mdc-select-value-text, or via
+            # aria attribute), so we try multiple selectors.
             for label, key in [
                 ("Party Reference", "Party Reference"),
                 ("Designation", "Designation"),
@@ -1094,8 +1097,41 @@ class EmployeePage(BasePage):
                             if (labels[i].textContent.trim().includes('{label}')) {{
                                 var field = labels[i].closest('mat-form-field');
                                 if (field) {{
-                                    var valText = field.querySelector('.mat-mdc-select-value-text');
-                                    return valText ? valText.textContent.trim() : '';
+                                    // Strategy 1: Standard Angular Material select value text
+                                    var valText = field.querySelector(
+                                        '.mat-mdc-select-value-text'
+                                    );
+                                    if (valText && valText.textContent.trim()) {{
+                                        return valText.textContent.trim();
+                                    }}
+                                    // Strategy 2: Any span inside mat-select-trigger
+                                    var trigger = field.querySelector(
+                                        '.mat-mdc-select-trigger span'
+                                    );
+                                    if (trigger && trigger.textContent.trim()) {{
+                                        return trigger.textContent.trim();
+                                    }}
+                                    // Strategy 3: Read from the mat-select value attribute
+                                    var matSel = field.querySelector('mat-select');
+                                    if (matSel) {{
+                                        // Check aria-label or value text
+                                        var spans = matSel.querySelectorAll('span');
+                                        for (var s = 0; s < spans.length; s++) {{
+                                            var txt = spans[s].textContent.trim();
+                                            if (txt && txt !== '{label}'
+                                                && !txt.toLowerCase().startsWith('select')) {{
+                                                return txt;
+                                            }}
+                                        }}
+                                    }}
+                                    // Strategy 4: Check for disabled/read-only text display
+                                    var readonlySpan = field.querySelector(
+                                        '.mat-mdc-select-value span:not(.mat-mdc-select-placeholder)'
+                                    );
+                                    if (readonlySpan && readonlySpan.textContent.trim()) {{
+                                        return readonlySpan.textContent.trim();
+                                    }}
+                                    return '';
                                 }}
                             }}
                         }}
@@ -1143,9 +1179,13 @@ class EmployeePage(BasePage):
             log.warning(f"Update form failed: {e}")
 
     def force_close_form_popup(self):
-        """Force close any open form popup — alias for _force_close_panels.
+        """Force close any open form popup.
 
-        Also tries the Close (X) button and Cancel button first.
+        Strategy order:
+          1. Cancel button
+          2. Close (X) button
+          3. Click dark backdrop
+          4. JS removal of all overlays (including dialog containers)
         """
         # Try Cancel button first
         try:
@@ -1175,8 +1215,33 @@ class EmployeePage(BasePage):
         except Exception:
             pass
 
-        # Force remove all overlays via JS
-        self._force_close_panels()
+        # Try clicking the dark backdrop
+        try:
+            backdrops = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "div.cdk-overlay-backdrop.cdk-overlay-dark-backdrop"
+            )
+            for bd in backdrops:
+                try:
+                    if bd.is_displayed():
+                        self.driver.execute_script("arguments[0].click();", bd)
+                        self.wait_seconds(0.5)
+                        if not self._is_form_popup_open():
+                            return
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        # Nuclear: JS remove ALL overlays including dialog containers
+        self.driver.execute_script("""
+            document.querySelectorAll(
+                'div.cdk-overlay-backdrop'
+            ).forEach(function(el) { el.remove(); });
+            document.querySelectorAll(
+                'div.cdk-overlay-pane'
+            ).forEach(function(el) { el.remove(); });
+        """)
         self.wait_seconds(0.3)
 
     # ==============================================================
