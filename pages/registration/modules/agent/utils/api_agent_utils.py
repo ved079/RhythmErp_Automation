@@ -20,10 +20,18 @@ NO-DELETE CONSTRAINT:
   via status=False. Cleanup = tracking + reporting for manual purge.
   This module will NEVER contain delete_agent() or cleanup_all().
 
-ZERO FK POOLS:
-  Unlike Supplier/Customer, Agent has no FK pool system. All dropdown
-  values (Country, State, Account Type, etc.) are hardcoded from known
-  tenant 681 data. The generate_unique_payload() uses these fixed values.
+FK FIELD KEYS (from Agent schema):
+  Agent uses the same party_master table as Supplier/Customer.
+  Field keys differ from UI labels:
+    UI "Agent Name"   -> API key "name"
+    UI "Phone Number" -> API key "mobile_no" (integer)
+    UI "Email"        -> API key "email_id"
+  Sub-records use the children[] stepper format (same as Supplier).
+
+KNOWN BUGS:
+  - GET /core/dynamic-screen-wrapper/Agent/{id}/ returns HTTP 500
+    ('NoneType' object has no attribute '__dict__') — cannot fetch by ID.
+  - No server-side validation on POST (empty/invalid data accepted).
 """
 
 import json
@@ -56,21 +64,29 @@ from pages.registration.modules.agent.utils.agent_cleanup import (
 
 
 # ──────────────────────────────────────────────
-# Hardcoded dropdown values for tenant 681
-# (Agent has zero FK pools — these are fixed)
+# FK IDs for tenant 681 (from API dropdown endpoints)
 # ──────────────────────────────────────────────
 
-# Address step dropdown defaults
-DEFAULT_ADDRESS_TYPE = "Permanent"
-DEFAULT_COUNTRY = "India"
-DEFAULT_STATE = "Maharashtra"
-DEFAULT_DISTRICT = "Pune"
-DEFAULT_TALUKA = "Haveli"
+# Country
+COUNTRY_INDIA_ID = 8
 
-# Payment step dropdown defaults (optional — no defaults needed)
+# Account Type
+ACCOUNT_TYPE_CURRENT_ID = 1849  # "Current"
+ACCOUNT_TYPE_SAVING_ID = 1850   # "Saving"
 
-# Bank step dropdown defaults
-DEFAULT_ACCOUNT_TYPE = "Current"
+# Payment Terms (optional — None if not needed)
+PAYMENT_TERMS_IMMEDIATE_ID = 131
+PAYMENT_TERMS_7_DAYS_ID = 549
+PAYMENT_TERMS_14_DAYS_ID = 550
+PAYMENT_TERMS_21_DAYS_ID = 551
+PAYMENT_TERMS_60_DAYS_ID = 27
+
+# Preferred Payment Method (optional — None if not needed)
+PAYMENT_METHOD_CASH_ID = 53
+PAYMENT_METHOD_CHEQUE_ID = 54
+PAYMENT_METHOD_DD_ID = 55
+PAYMENT_METHOD_IMPS_ID = 141
+PAYMENT_METHOD_RTGS_ID = 143
 
 
 class AgentAPIUtils:
@@ -148,7 +164,7 @@ class AgentAPIUtils:
 
         if result is not None:
             created_id = result.get("id")
-            agent_name = payload.get("agent_name", "unknown")
+            agent_name = result.get("name", payload.get("name", "unknown"))
             self.tracker.track(
                 id=created_id,
                 agent_name=agent_name,
@@ -161,13 +177,18 @@ class AgentAPIUtils:
         else:
             log.warning(
                 f"[AgentAPI] Failed to create agent "
-                f"name='{payload.get('agent_name', 'unknown')}'"
+                f"name='{payload.get('name', 'unknown')}'"
             )
 
         return result
 
     def get_agent(self, agent_id: int) -> Optional[Dict]:
-        """Fetch a single agent by ID."""
+        """Fetch a single agent by ID.
+
+        NOTE: GET /core/dynamic-screen-wrapper/Agent/{id}/ currently
+        returns HTTP 500 ('NoneType' object has no attribute '__dict__').
+        This is a known backend bug. Returns None until fixed.
+        """
         return self.client.get_entry(SCREEN_NAME, agent_id)
 
     def update_agent(
@@ -179,6 +200,10 @@ class AgentAPIUtils:
         The ERP's dynamic-screen-wrapper uses POST for updates —
         PUT returns HTTP 405 (Method Not Allowed).
 
+        NOTE: get_agent() currently returns 500, so fetching the full
+        record for update is broken. This method may not work until
+        the GET endpoint is fixed.
+
         Args:
             agent_id:  The agent's database ID.
             payload:   Complete JSON payload with updated fields.
@@ -188,6 +213,7 @@ class AgentAPIUtils:
             Response JSON dict on success, None on failure.
         """
         payload.setdefault("attribute_name", SCREEN_NAME)
+        payload.setdefault("id", agent_id)
         return self.client.update_entry(agent_id, payload)
 
     def search_agents(
@@ -243,7 +269,7 @@ class AgentAPIUtils:
 
         if result is not None:
             unexpected_id = result.get("id", "unknown")
-            unexpected_name = invalid_payload.get("agent_name", "unknown")
+            unexpected_name = result.get("name", invalid_payload.get("name", "unknown"))
             self.tracker.track_accidental(
                 id=unexpected_id,
                 agent_name=unexpected_name,
@@ -375,7 +401,7 @@ class AgentAPIUtils:
 
         if result is not None:
             unexpected_id = result.get("id", "unknown")
-            unexpected_name = payload.get("agent_name", "unknown")
+            unexpected_name = result.get("name", payload.get("name", "unknown"))
             self.tracker.track_accidental(
                 id=unexpected_id,
                 agent_name=unexpected_name,
@@ -430,39 +456,62 @@ class AgentAPIUtils:
 
         agent_name = f"{name_prefix}_{timestamp}_{uuid_short}"
 
-        # Build the full payload
+        # Build the full payload using correct API field keys from schema:
+        #   UI "Agent Name"   -> API "name"
+        #   UI "Phone Number" -> API "mobile_no" (integer)
+        #   UI "Email"        -> API "email_id"
+        # Sub-records use children[] stepper format (same as Supplier).
         payload = {
+            "id": "",
             "attribute_name": SCREEN_NAME,
-            "agent_name": agent_name,
-            "phone_number": generate_phone_number(),
-            "email": generate_email(name_prefix.lower()),
+            "party_ref_id": None,
+            "copy_from_party": False,
+            "name": agent_name,
+            "mobile_no": int(generate_phone_number()),
+            "email_id": generate_email(name_prefix.lower()),
             "status": True,
-            "screenmatlistingdata_set": [
+            "children": [
                 {
-                    "address_type": DEFAULT_ADDRESS_TYPE,
-                    "country": DEFAULT_COUNTRY,
-                    "state": DEFAULT_STATE,
-                    "district": DEFAULT_DISTRICT,
-                    "taluka": DEFAULT_TALUKA,
-                    "village": "",
-                    "address": generate_address(),
-                    "pin_code": generate_pin_code(),
-                    "gst_number": generate_gst(),
-                }
-            ],
-            "payment_details": {
-                "payment_terms": "",
-                "preferred_payment_method": "",
-            },
-            "bank_details": [
+                    "stepper_name": "Additional Details",
+                    "is_stepper": True,
+                    "payment_terms_ref_id": None,
+                    "preferred_payment_method_ref_id": None,
+                    "is_gst_set_off": False,
+                    "details": [],
+                    "children": [],
+                },
                 {
-                    "bank_name": generate_bank_name(),
-                    "branch": generate_branch(),
-                    "ifsc_code": generate_ifsc_code(),
-                    "account_type": DEFAULT_ACCOUNT_TYPE,
-                    "account_holder_name": generate_account_holder_name(),
-                    "account_number": generate_account_number(),
-                }
+                    "stepper_name": "Address Details",
+                    "is_stepper": True,
+                    "details": [
+                        {
+                            "country_ref_id_id": COUNTRY_INDIA_ID,
+                            "address": generate_address(),
+                            "pin_code": int(generate_pin_code()),
+                            "same_as_above": None,
+                            "details": [],
+                        }
+                    ],
+                    "children": [],
+                },
+                {
+                    "stepper_name": "Bank Details",
+                    "is_stepper": True,
+                    "details": [
+                        {
+                            "bank_name": generate_bank_name(),
+                            "bank_branch_code": generate_branch(),
+                            "bank_ifsc_code": generate_ifsc_code(),
+                            "account_type": ACCOUNT_TYPE_CURRENT_ID,
+                            "bank_account_holder_name": generate_account_holder_name(),
+                            "bank_account_no": generate_account_number(),
+                            "bank_doc_id": None,
+                            "bank_attachment_path": None,
+                            "details": [],
+                        }
+                    ],
+                    "children": [],
+                },
             ],
         }
 

@@ -64,7 +64,7 @@ class TestCreateAndVerify:
         # API creates agent
         result = agt_api.create_agent(name_prefix="HybridCreate")
         assert result is not None, "API agent creation failed"
-        agent_name = result.get("agent_name", "")
+        agent_name = result.get("name", "")
         log.info(f"API created agent: {agent_name}")
 
         # UI: Search for it
@@ -89,7 +89,7 @@ class TestSearchViaAPI:
 
         result = agt_api.create_agent(name_prefix="SearchExact")
         assert result is not None, "API creation failed"
-        agent_name = result.get("agent_name", "")
+        agent_name = result.get("name", "")
         log.info(f"API created agent: {agent_name}")
 
         found = page.search_agent(agent_name)
@@ -104,7 +104,7 @@ class TestSearchViaAPI:
 
         result = agt_api.create_agent(name_prefix="SearchPartial")
         assert result is not None, "API creation failed"
-        agent_name = result.get("agent_name", "")
+        agent_name = result.get("name", "")
 
         # Use first 15 chars of the name as partial search
         partial = agent_name[:15] if len(agent_name) > 15 else agent_name
@@ -122,7 +122,7 @@ class TestSearchViaAPI:
 
         result = agt_api.create_agent(name_prefix="CaseSearch")
         assert result is not None, "API creation failed"
-        agent_name = result.get("agent_name", "")
+        agent_name = result.get("name", "")
 
         # Search with lowercase
         lower_name = agent_name.lower()
@@ -155,7 +155,7 @@ class TestViewReadOnly:
 
         result = agt_api.create_agent(name_prefix="ViewRO")
         assert result is not None, "API creation failed"
-        agent_name = result.get("agent_name", "")
+        agent_name = result.get("name", "")
 
         # Search and click View
         page.search_agent(agent_name)
@@ -197,7 +197,7 @@ class TestEditVerification:
 
         result = agt_api.create_agent(name_prefix="EditPre")
         assert result is not None, "API creation failed"
-        agent_name = result.get("agent_name", "")
+        agent_name = result.get("name", "")
 
         # Search and click Edit
         page.search_agent(agent_name)

@@ -6,6 +6,12 @@ Tests various payload structures, missing fields, and edge cases.
 
 ~10 tests, all headless API calls.
 
+Field Key Mapping (from Agent schema):
+  UI "Agent Name"   -> API key "name"
+  UI "Phone Number" -> API key "mobile_no" (integer)
+  UI "Email"        -> API key "email_id"
+  Sub-records use children[] stepper format (same as Supplier).
+
 Run:
   pytest test_agent_payload.py -v --tb=short
 """
@@ -21,6 +27,10 @@ sys.path.insert(0, PROJECT_ROOT)
 import pytest
 
 from common.logger import log
+from pages.registration.modules.agent.utils.api_agent_utils import (
+    COUNTRY_INDIA_ID,
+    ACCOUNT_TYPE_CURRENT_ID,
+)
 
 
 class TestPayloadVariations:
@@ -33,14 +43,14 @@ class TestPayloadVariations:
         log.info("Payload: Minimal (required only)")
         payload = {
             "attribute_name": "Agent",
-            "agent_name": f"MinPayload_{__import__('datetime').datetime.now().strftime('%Y%m%d%H%M%S')}",
-            "phone_number": "9876543210",
+            "name": f"MinPayload_{__import__('datetime').datetime.now().strftime('%Y%m%d%H%M%S')}",
+            "mobile_no": 9876543210,
         }
         result = agt_api.client.create_entry(payload)
         if result is not None:
             agt_api.tracker.track(
                 id=result.get("id"),
-                agent_name=payload["agent_name"],
+                agent_name=payload["name"],
                 payload_summary="Minimal payload test",
             )
             log.info(f"Minimal payload accepted: id={result.get('id')}")
@@ -66,7 +76,7 @@ class TestPayloadVariations:
         if result is not None:
             agt_api.tracker.track(
                 id=result.get("id"),
-                agent_name=payload.get("agent_name", "unknown"),
+                agent_name=payload.get("name", "unknown"),
                 payload_summary="Missing attribute_name — still accepted",
             )
             log.info("Payload accepted even without attribute_name")
@@ -75,27 +85,38 @@ class TestPayloadVariations:
 
     @pytest.mark.api
     @pytest.mark.sanity
+    @pytest.mark.bug
+    @pytest.mark.xfail(
+        strict=False,
+        reason="BUG: Agent API has no validation — empty address accepted (AGT-BUG-003)",
+    )
     def test_empty_address_set(self, agt_api):
-        """Agent with empty address array — should fail (address required)."""
+        """Agent with empty address details — should fail (address required)."""
         log.info("Payload: Empty address set")
         payload = agt_api.generate_unique_payload(name_prefix="NoAddr")
-        payload["screenmatlistingdata_set"] = []
+        # Clear address details in children[]
+        for child in payload.get("children", []):
+            if child.get("stepper_name") == "Address Details":
+                child["details"] = []
         result = agt_api.create_and_expect_failure(payload, name_prefix="NoAddr")
         assert result is None, "Agent without address should be rejected"
 
     @pytest.mark.api
     @pytest.mark.sanity
+    @pytest.mark.bug
+    @pytest.mark.xfail(
+        strict=False,
+        reason="BUG: Agent API has no validation — empty bank details accepted (AGT-BUG-003)",
+    )
     def test_empty_bank_details(self, agt_api):
-        """Agent with empty bank details — may or may not be required."""
+        """Agent with empty bank details — should fail (bank required)."""
         log.info("Payload: Empty bank details")
         payload = agt_api.generate_unique_payload(name_prefix="NoBank")
-        payload["bank_details"] = []
-        doc = agt_api.create_and_document(
-            payload,
-            field_being_tested="bank_details",
-            name_prefix="NoBank",
-        )
-        log.info(f"Empty bank details: accepted={doc['accepted']}")
+        for child in payload.get("children", []):
+            if child.get("stepper_name") == "Bank Details":
+                child["details"] = []
+        result = agt_api.create_and_expect_failure(payload, name_prefix="NoBank")
+        assert result is None, "Agent without bank details should be rejected"
 
     @pytest.mark.api
     @pytest.mark.sanity
@@ -117,12 +138,12 @@ class TestPayloadVariations:
         """Agent Name with unicode characters — document behavior."""
         log.info("Payload: Unicode agent name")
         payload = agt_api.generate_unique_payload(
-            agent_data={"agent_name": "Agent\u00e9\u00f1\u00fc"},
+            agent_data={"name": "Agent\u00e9\u00f1\u00fc"},
             name_prefix="UnicodeAGT",
         )
         doc = agt_api.create_and_document(
             payload,
-            field_being_tested="agent_name",
+            field_being_tested="name",
             name_prefix="UnicodeAGT",
         )
         log.info(f"Unicode name: accepted={doc['accepted']}")
@@ -150,35 +171,30 @@ class TestPayloadVariations:
             generate_address, generate_pin_code,
         )
         payload = agt_api.generate_unique_payload(name_prefix="MultiAddr")
-        payload["screenmatlistingdata_set"] = [
-            {
-                "address_type": "Permanent",
-                "country": "India",
-                "state": "Maharashtra",
-                "district": "Pune",
-                "taluka": "Haveli",
-                "village": "",
-                "address": generate_address(),
-                "pin_code": generate_pin_code(),
-                "gst_number": "",
-            },
-            {
-                "address_type": "Communication",
-                "country": "India",
-                "state": "Maharashtra",
-                "district": "Pune",
-                "taluka": "Haveli",
-                "village": "",
-                "address": generate_address(),
-                "pin_code": generate_pin_code(),
-                "gst_number": "",
-            },
-        ]
+        # Override Address Details stepper with multiple rows
+        for child in payload.get("children", []):
+            if child.get("stepper_name") == "Address Details":
+                child["details"] = [
+                    {
+                        "country_ref_id_id": COUNTRY_INDIA_ID,
+                        "address": generate_address(),
+                        "pin_code": int(generate_pin_code()),
+                        "same_as_above": None,
+                        "details": [],
+                    },
+                    {
+                        "country_ref_id_id": COUNTRY_INDIA_ID,
+                        "address": generate_address(),
+                        "pin_code": int(generate_pin_code()),
+                        "same_as_above": None,
+                        "details": [],
+                    },
+                ]
         result = agt_api.client.create_entry(payload)
         if result is not None:
             agt_api.tracker.track(
                 id=result.get("id"),
-                agent_name=payload["agent_name"],
+                agent_name=payload["name"],
                 payload_summary="Multiple address rows",
             )
             log.info(f"Multiple addresses accepted: id={result.get('id')}")
@@ -192,12 +208,12 @@ class TestPayloadVariations:
         log.info("Payload: Long email")
         long_email = f"{'a' * 200}@example.com"
         payload = agt_api.generate_unique_payload(
-            agent_data={"email": long_email},
+            agent_data={"email_id": long_email},
             name_prefix="LongEmail",
         )
         doc = agt_api.create_and_document(
             payload,
-            field_being_tested="email",
+            field_being_tested="email_id",
             name_prefix="LongEmail",
         )
         log.info(f"Long email: accepted={doc['accepted']}, status={doc['status_code']}")

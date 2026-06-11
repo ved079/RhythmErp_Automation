@@ -64,6 +64,10 @@ class TestAgentPerformance:
 
     @pytest.mark.api
     @pytest.mark.sanity
+    @pytest.mark.xfail(
+        strict=False,
+        reason="BUG: GET Agent by ID returns HTTP 500 (AGT-BUG-004)",
+    )
     def test_get_response_time(self, agt_api):
         """Agent get-detail should respond within baseline time."""
         log.info("Perf: Get response time")
@@ -106,7 +110,7 @@ class TestAgentPerformance:
 
         # Create an agent to search for
         create_result = agt_api.create_agent(name_prefix="PerfSearch")
-        agent_name = create_result.get("agent_name", "") if create_result else ""
+        agent_name = create_result.get("name", "") if create_result else ""
 
         start = time.time()
         result = agt_api.search_agents(search=agent_name)
