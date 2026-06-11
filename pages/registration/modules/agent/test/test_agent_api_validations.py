@@ -8,33 +8,39 @@ No browser needed — all tests use ``agt_api`` fixture only.
 Bucket A — API-Only Tests: Verify server-side validation, boundary
 conditions, and security that can only be tested at the API level.
 
-IMPORTANT — Known Backend Bugs (Agent-specific):
-  - NO server-side validation on POST — empty/invalid data accepted
-  - GET /core/dynamic-screen-wrapper/Agent/{id}/ returns HTTP 500 for
-    records created with broken children data (wrong stepper_name,
-    missing address FK chains, etc.). Properly created records work.
-  - Customer and Supplier DO validate — Agent does not
+PROBE RESULTS (2026-06-11, after field mapping fix):
+  With correct field keys (name, mobile_no, email_id), the server DOES
+  validate most inputs. Previous "no validation" finding was caused by
+  wrong field names in our payloads (agent_name, phone_number, email).
 
-PAYLOAD FIX (2026-06-11):
-  The Agent API requires exact stepper names in children[]:
-    children[0] = "Address Details" (NOT just any name)
-    children[1] = "Payment Details" (NOT "Additional Details"!)
-    children[2] = "Bank Details"
-  Using wrong names causes broken records that GET can't retrieve.
+  Server REJECTS:  empty mobile_no, 256-char name, invalid email,
+                   invalid phone, invalid IFSC
+  Server ACCEPTS:  spaces-only name, special chars, SQL injection,
+                   XSS payload (genuine validation gaps)
+  GET 200 OK:      all accepted records open fine (no NoneType crash)
+  GET 500 NoneType: was caused by wrong field names creating blank records
+
+Known Backend Bugs (Agent-specific, confirmed via probe 2026-06-11):
+  AGT-BUG-004: Spaces-only name accepted (server stores as None)
+  AGT-BUG-001: SQL injection payload accepted (no sanitization)
+  AGT-BUG-002: XSS payload accepted (no sanitization)
+  AGT-BUG-005: Special characters in name accepted (no format validation)
+  AGT-BUG-006: Duplicate agent name accepted (no uniqueness check)
+  AGT-BUG-007: Invalid email accepted on UPDATE (validated on CREATE only)
 
 Test Inventory (12 tests):
-  AGT-AC01 — Empty submit (xfail — BUG: accepted)
-  AGT-AC02 — Spaces-only agent name (xfail — BUG: accepted)
-  AGT-AC03 — Special chars agent name (document behavior)
-  AGT-AC04 — SQL injection agent name (xfail — BUG: accepted)
-  AGT-AC05 — XSS payload agent name (xfail — BUG: accepted)
-  AGT-AC06 — 255-char agent name (max boundary)
-  AGT-AC07 — 256-char agent name (xfail — BUG: accepted)
-  AGT-AC08 — Invalid email format (xfail — BUG: accepted)
-  AGT-AC09 — Invalid phone number (xfail — BUG: accepted)
-  AGT-AC10 — Invalid IFSC code (xfail — BUG: accepted)
-  AGT-AD01 — Duplicate agent name (xfail — BUG: accepted)
-  AGT-AE01 — Edit with invalid email (xfail — no email validation on update)
+  AGT-AC01 — Empty submit             (server REJECTS — validates mobile_no)
+  AGT-AC02 — Spaces-only agent name   (xfail — BUG: accepted as None)
+  AGT-AC03 — Special chars agent name (xfail — BUG: no name format validation)
+  AGT-AC04 — SQL injection agent name (xfail — BUG: no sanitization)
+  AGT-AC05 — XSS payload agent name   (xfail — BUG: no sanitization)
+  AGT-AC06 — 255-char agent name      (server ACCEPTS — max boundary)
+  AGT-AC07 — 256-char agent name      (server REJECTS — length check works)
+  AGT-AC08 — Invalid email format     (server REJECTS — email validated)
+  AGT-AC09 — Invalid phone number     (server REJECTS — phone validated)
+  AGT-AC10 — Invalid IFSC code        (server REJECTS — IFSC validated)
+  AGT-AD01 — Duplicate agent name     (xfail — BUG: no uniqueness check)
+  AGT-AE01 — Edit with invalid email  (xfail — BUG: not validated on update)
 
 Field Key Mapping (from Agent schema):
   UI "Agent Name"   -> API key "name"
@@ -72,20 +78,19 @@ from pages.registration.modules.agent.data.agent_data import (
 
 
 # ====================================================================
-# AGT-AC01: Empty submit
+# AGT-AC01 through AGT-AC10: Create Validation
 # ====================================================================
 
 class TestCreateValidation:
     """API-only: Validate Agent creation with various invalid payloads."""
 
     @pytest.mark.api
-    @pytest.mark.bug
-    @pytest.mark.xfail(
-        strict=False,
-        reason="BUG: Agent API has no server-side validation — empty payload accepted (AGT-BUG-003)",
-    )
+    @pytest.mark.sanity
     def test_AGT_AC01_empty_submit(self, agt_api):
-        """POST with all empty required fields → should fail validation."""
+        """POST with all empty required fields -> server rejects (validates mobile_no).
+
+        Probe result: Server returns "'mobile_no' is required".
+        """
         log.info("AGT-AC01: Empty submit via API")
         payload = {
             "attribute_name": "Agent",
@@ -100,10 +105,14 @@ class TestCreateValidation:
     @pytest.mark.bug
     @pytest.mark.xfail(
         strict=False,
-        reason="BUG: Agent API has no server-side validation — spaces-only name accepted (AGT-BUG-003)",
+        reason="BUG: Spaces-only name accepted — server stores as None (AGT-BUG-004)",
     )
     def test_AGT_AC02_spaces_only_name(self, agt_api):
-        """Agent Name = spaces only → should be rejected."""
+        """Agent Name = spaces only -> should be rejected.
+
+        Probe result: Server ACCEPTS, stores name as None in DB.
+        This creates a record with a null name — no format validation.
+        """
         log.info("AGT-AC02: Spaces-only agent name via API")
         payload = agt_api.generate_unique_payload(
             agent_data={"name": generate_spaces_only()},
@@ -113,29 +122,37 @@ class TestCreateValidation:
         assert result is None, "Spaces-only agent name should be rejected"
 
     @pytest.mark.api
-    @pytest.mark.sanity
+    @pytest.mark.bug
+    @pytest.mark.xfail(
+        strict=False,
+        reason="BUG: Special characters in name accepted — no name format validation (AGT-BUG-005)",
+    )
     def test_AGT_AC03_special_chars_name(self, agt_api):
-        """Agent Name with special chars → document accept/reject behavior."""
+        """Agent Name with special chars -> should be rejected.
+
+        Probe result: Server ACCEPTS '!@#$%^&*()Agent'. No name format
+        validation on the server side.
+        """
         log.info("AGT-AC03: Special chars agent name via API")
         payload = agt_api.generate_unique_payload(
             agent_data={"name": generate_special_char_name()},
             name_prefix="SpecialAGT",
         )
-        doc = agt_api.create_and_document(
-            payload,
-            field_being_tested="name",
-            name_prefix="SpecialAGT",
-        )
-        log.info(f"Special chars result: accepted={doc['accepted']}, status={doc['status_code']}")
+        result = agt_api.create_and_expect_failure(payload, name_prefix="SpecialAGT")
+        assert result is None, "Special chars agent name should be rejected"
 
     @pytest.mark.api
     @pytest.mark.bug
     @pytest.mark.xfail(
         strict=False,
-        reason="BUG: SQL injection payloads accepted by server (AGT-BUG-001)",
+        reason="BUG: SQL injection payloads accepted — no input sanitization (AGT-BUG-001)",
     )
     def test_AGT_AC04_sql_injection(self, agt_api):
-        """Agent Name with SQL injection → should be rejected."""
+        """Agent Name with SQL injection -> should be rejected.
+
+        Probe result: Server ACCEPTS "'; DROP TABLE Agent; --".
+        No input sanitization or parameterized query enforcement.
+        """
         log.info("AGT-AC04: SQL injection via API")
         payload = agt_api.generate_unique_payload(
             agent_data={"name": generate_sql_injection()},
@@ -148,10 +165,14 @@ class TestCreateValidation:
     @pytest.mark.bug
     @pytest.mark.xfail(
         strict=False,
-        reason="BUG: XSS payloads accepted by server (AGT-BUG-002)",
+        reason="BUG: XSS payloads accepted — no input sanitization (AGT-BUG-002)",
     )
     def test_AGT_AC05_xss_payload(self, agt_api):
-        """Agent Name with XSS payload → should be rejected."""
+        """Agent Name with XSS payload -> should be rejected.
+
+        Probe result: Server ACCEPTS "<script>alert('xss')</script>".
+        No HTML/script sanitization — potential stored XSS vulnerability.
+        """
         log.info("AGT-AC05: XSS payload via API")
         payload = agt_api.generate_unique_payload(
             agent_data={"name": generate_xss_payload()},
@@ -163,25 +184,25 @@ class TestCreateValidation:
     @pytest.mark.api
     @pytest.mark.sanity
     def test_AGT_AC06_255_char_name(self, agt_api):
-        """Agent Name with 255 chars → should be accepted (max boundary)."""
+        """Agent Name with 255 chars -> should be accepted (max boundary).
+
+        Probe result: Server ACCEPTS — within max length.
+        """
         log.info("AGT-AC06: 255-char agent name via API")
         result = agt_api.create_agent(
             agent_data={"name": generate_string_255()},
             name_prefix="255AGT",
         )
-        if result is not None:
-            log.info("255-char agent name accepted (max boundary)")
-        else:
-            log.warning("255-char agent name rejected — may be below max")
+        assert result is not None, "255-char agent name should be accepted (max boundary)"
 
     @pytest.mark.api
-    @pytest.mark.bug
-    @pytest.mark.xfail(
-        strict=False,
-        reason="BUG: Agent API has no length validation — 256-char name accepted (AGT-BUG-003)",
-    )
+    @pytest.mark.sanity
     def test_AGT_AC07_256_char_name(self, agt_api):
-        """Agent Name with 256 chars → should be rejected (over max)."""
+        """Agent Name with 256 chars -> server rejects (length check works).
+
+        Probe result: Server REJECTS with "Failed to save record".
+        The server does enforce a max length on the name field.
+        """
         log.info("AGT-AC07: 256-char agent name via API")
         payload = agt_api.generate_unique_payload(
             agent_data={"name": generate_string_256()},
@@ -191,13 +212,13 @@ class TestCreateValidation:
         assert result is None, "256-char agent name should be rejected (over max)"
 
     @pytest.mark.api
-    @pytest.mark.bug
-    @pytest.mark.xfail(
-        strict=False,
-        reason="BUG: Agent API has no email format validation — invalid email accepted (AGT-BUG-003)",
-    )
+    @pytest.mark.sanity
     def test_AGT_AC08_invalid_email(self, agt_api):
-        """Invalid email format → should be rejected."""
+        """Invalid email format -> server rejects.
+
+        Probe result: Server REJECTS with "Invalid Email".
+        Email format validation IS enforced on CREATE.
+        """
         log.info("AGT-AC08: Invalid email via API")
         payload = agt_api.generate_unique_payload(
             agent_data={"email_id": generate_invalid_email()},
@@ -207,13 +228,13 @@ class TestCreateValidation:
         assert result is None, "Invalid email should be rejected"
 
     @pytest.mark.api
-    @pytest.mark.bug
-    @pytest.mark.xfail(
-        strict=False,
-        reason="BUG: Agent API has no phone format validation — invalid phone accepted (AGT-BUG-003)",
-    )
+    @pytest.mark.sanity
     def test_AGT_AC09_invalid_phone(self, agt_api):
-        """Invalid phone number → should be rejected."""
+        """Invalid phone number -> server rejects.
+
+        Probe result: Server REJECTS with "Invalid Phone Number".
+        Phone format validation IS enforced on CREATE.
+        """
         log.info("AGT-AC09: Invalid phone via API")
         payload = agt_api.generate_unique_payload(
             agent_data={"mobile_no": generate_invalid_phone()},
@@ -223,13 +244,13 @@ class TestCreateValidation:
         assert result is None, "Invalid phone number should be rejected"
 
     @pytest.mark.api
-    @pytest.mark.bug
-    @pytest.mark.xfail(
-        strict=False,
-        reason="BUG: Agent API has no IFSC format validation — invalid IFSC accepted (AGT-BUG-003)",
-    )
+    @pytest.mark.sanity
     def test_AGT_AC10_invalid_ifsc(self, agt_api):
-        """Invalid IFSC code → should be rejected."""
+        """Invalid IFSC code -> server rejects.
+
+        Probe result: Server REJECTS with "Invalid IFSC Code".
+        IFSC format validation IS enforced on CREATE.
+        """
         log.info("AGT-AC10: Invalid IFSC via API")
         payload = agt_api.generate_unique_payload(
             name_prefix="InvIFSAGT",
@@ -254,10 +275,13 @@ class TestDuplicateValidation:
     @pytest.mark.bug
     @pytest.mark.xfail(
         strict=False,
-        reason="BUG: Agent API has no duplicate name validation — accepted (AGT-BUG-003)",
+        reason="BUG: Agent API has no duplicate name validation — accepted (AGT-BUG-006)",
     )
     def test_AGT_AD01_duplicate_name(self, agt_api):
-        """Create agent with same name twice → second should be rejected."""
+        """Create agent with same name twice -> second should be rejected.
+
+        The server does not enforce name uniqueness for Agent records.
+        """
         log.info("AGT-AD01: Duplicate agent name via API")
 
         # Create first agent
@@ -295,10 +319,15 @@ class TestEditValidation:
     @pytest.mark.bug
     @pytest.mark.xfail(
         strict=False,
-        reason="BUG: Agent API has no email validation on update — invalid email accepted (AGT-BUG-003)",
+        reason="BUG: Agent API has no email validation on update — invalid email accepted (AGT-BUG-007)",
     )
     def test_AGT_AE01_edit_invalid_email(self, agt_api):
-        """Update agent with invalid email → should be rejected."""
+        """Update agent with invalid email -> should be rejected.
+
+        Email IS validated on CREATE (probe confirmed "Invalid Email"
+        rejection), but may NOT be validated on UPDATE. This test
+        verifies whether the same validation applies to edits.
+        """
         log.info("AGT-AE01: Edit with invalid email via API")
 
         # Create an agent first (with correct payload — GET works for these)
