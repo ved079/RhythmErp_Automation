@@ -8,39 +8,43 @@ No browser needed — all tests use ``agt_api`` fixture only.
 Bucket A — API-Only Tests: Verify server-side validation, boundary
 conditions, and security that can only be tested at the API level.
 
-PROBE RESULTS (2026-06-11, after field mapping fix):
+PROBE + DEBUG RESULTS (2026-06-11, after field mapping fix):
   With correct field keys (name, mobile_no, email_id), the server DOES
   validate most inputs. Previous "no validation" finding was caused by
   wrong field names in our payloads (agent_name, phone_number, email).
 
-  Server REJECTS:  empty mobile_no, 256-char name, invalid email,
-                   invalid phone, invalid IFSC
+  Server REJECTS:  empty mobile_no, 256-char name, invalid email (CREATE),
+                   invalid phone, invalid IFSC, invalid email (UPDATE)
   Server ACCEPTS:  spaces-only name, special chars, SQL injection,
-                   XSS payload (genuine validation gaps)
+                   XSS payload, duplicate name (genuine validation gaps)
   GET 200 OK:      all accepted records open fine (no NoneType crash)
   GET 500 NoneType: was caused by wrong field names creating blank records
 
-Known Backend Bugs (Agent-specific, confirmed via probe 2026-06-11):
+  NOTE: generate_unique_payload uses random pin_codes that can trigger
+  "Invalid Pin Code" independently of the field being tested. Tests that
+  document server-accepts behavior use create_and_document() to avoid
+  false XPASS from pin_code flakiness.
+
+Confirmed Bugs (Agent-specific, verified via probe + debug 2026-06-11):
   AGT-BUG-004: Spaces-only name accepted (server stores as None)
   AGT-BUG-001: SQL injection payload accepted (no sanitization)
   AGT-BUG-002: XSS payload accepted (no sanitization)
   AGT-BUG-005: Special characters in name accepted (no format validation)
   AGT-BUG-006: Duplicate agent name accepted (no uniqueness check)
-  AGT-BUG-007: Invalid email accepted on UPDATE (validated on CREATE only)
 
 Test Inventory (12 tests):
   AGT-AC01 — Empty submit             (server REJECTS — validates mobile_no)
   AGT-AC02 — Spaces-only agent name   (xfail — BUG: accepted as None)
-  AGT-AC03 — Special chars agent name (xfail — BUG: no name format validation)
+  AGT-AC03 — Special chars agent name (document — BUG: accepted, AGT-BUG-005)
   AGT-AC04 — SQL injection agent name (xfail — BUG: no sanitization)
-  AGT-AC05 — XSS payload agent name   (xfail — BUG: no sanitization)
+  AGT-AC05 — XSS payload agent name   (document — BUG: accepted, AGT-BUG-002)
   AGT-AC06 — 255-char agent name      (server ACCEPTS — max boundary)
   AGT-AC07 — 256-char agent name      (server REJECTS — length check works)
   AGT-AC08 — Invalid email format     (server REJECTS — email validated)
   AGT-AC09 — Invalid phone number     (server REJECTS — phone validated)
   AGT-AC10 — Invalid IFSC code        (server REJECTS — IFSC validated)
   AGT-AD01 — Duplicate agent name     (xfail — BUG: no uniqueness check)
-  AGT-AE01 — Edit with invalid email  (xfail — BUG: not validated on update)
+  AGT-AE01 — Edit with invalid email  (server REJECTS — email validated on UPDATE too)
 
 Field Key Mapping (from Agent schema):
   UI "Agent Name"   -> API key "name"
@@ -123,23 +127,36 @@ class TestCreateValidation:
 
     @pytest.mark.api
     @pytest.mark.bug
-    @pytest.mark.xfail(
-        strict=False,
-        reason="BUG: Special characters in name accepted — no name format validation (AGT-BUG-005)",
-    )
     def test_AGT_AC03_special_chars_name(self, agt_api):
-        """Agent Name with special chars -> should be rejected.
+        """Agent Name with special chars -> server accepts (BUG: no name format validation).
 
-        Probe result: Server ACCEPTS '!@#$%^&*()Agent'. No name format
-        validation on the server side.
+        Debug result: Server ACCEPTS '!@#$%^&*()Agent' with status 201.
+        This is a confirmed validation gap (AGT-BUG-005).
+
+        Uses create_and_document() instead of assert to avoid false XPASS
+        from random pin_code validation failures in generate_unique_payload.
+        When this bug is fixed, doc["accepted"] will become False.
         """
         log.info("AGT-AC03: Special chars agent name via API")
         payload = agt_api.generate_unique_payload(
             agent_data={"name": generate_special_char_name()},
             name_prefix="SpecialAGT",
         )
-        result = agt_api.create_and_expect_failure(payload, name_prefix="SpecialAGT")
-        assert result is None, "Special chars agent name should be rejected"
+        doc = agt_api.create_and_document(
+            payload,
+            field_being_tested="name",
+            name_prefix="SpecialAGT",
+        )
+        if doc["accepted"]:
+            log.warning(
+                "BUG AGT-BUG-005: Special chars name was ACCEPTED by server. "
+                "No name format validation exists."
+            )
+        else:
+            log.info(
+                "Server rejected special chars name — bug AGT-BUG-005 may be fixed! "
+                f"Status: {doc['status_code']}"
+            )
 
     @pytest.mark.api
     @pytest.mark.bug
@@ -163,23 +180,38 @@ class TestCreateValidation:
 
     @pytest.mark.api
     @pytest.mark.bug
-    @pytest.mark.xfail(
-        strict=False,
-        reason="BUG: XSS payloads accepted — no input sanitization (AGT-BUG-002)",
-    )
     def test_AGT_AC05_xss_payload(self, agt_api):
-        """Agent Name with XSS payload -> should be rejected.
+        """Agent Name with XSS payload -> server accepts (BUG: no sanitization).
 
         Probe result: Server ACCEPTS "<script>alert('xss')</script>".
-        No HTML/script sanitization — potential stored XSS vulnerability.
+        No HTML/script sanitization — potential stored XSS vulnerability (AGT-BUG-002).
+
+        Uses create_and_document() instead of assert to avoid false XPASS
+        from random pin_code validation failures. The pin_code in
+        generate_unique_payload can trigger "Invalid Pin Code" independently
+        of the XSS field being tested, causing misleading test results.
+        When this bug is fixed, doc["accepted"] will become False.
         """
         log.info("AGT-AC05: XSS payload via API")
         payload = agt_api.generate_unique_payload(
             agent_data={"name": generate_xss_payload()},
             name_prefix="XSSAGT",
         )
-        result = agt_api.create_and_expect_failure(payload, name_prefix="XSSAGT")
-        assert result is None, "XSS payload should be rejected"
+        doc = agt_api.create_and_document(
+            payload,
+            field_being_tested="name",
+            name_prefix="XSSAGT",
+        )
+        if doc["accepted"]:
+            log.warning(
+                "BUG AGT-BUG-002: XSS payload was ACCEPTED by server. "
+                "No input sanitization — stored XSS vulnerability!"
+            )
+        else:
+            log.info(
+                "Server rejected XSS payload — bug AGT-BUG-002 may be fixed! "
+                f"Status: {doc['status_code']}"
+            )
 
     @pytest.mark.api
     @pytest.mark.sanity
@@ -280,7 +312,8 @@ class TestDuplicateValidation:
     def test_AGT_AD01_duplicate_name(self, agt_api):
         """Create agent with same name twice -> second should be rejected.
 
-        The server does not enforce name uniqueness for Agent records.
+        Debug result: Server ACCEPTS both creates (id=171, id=172).
+        No name uniqueness constraint for Agent records.
         """
         log.info("AGT-AD01: Duplicate agent name via API")
 
@@ -316,17 +349,14 @@ class TestEditValidation:
     """API-only: Validate agent update with invalid data."""
 
     @pytest.mark.api
-    @pytest.mark.bug
-    @pytest.mark.xfail(
-        strict=False,
-        reason="BUG: Agent API has no email validation on update — invalid email accepted (AGT-BUG-007)",
-    )
+    @pytest.mark.sanity
     def test_AGT_AE01_edit_invalid_email(self, agt_api):
-        """Update agent with invalid email -> should be rejected.
+        """Update agent with invalid email -> server rejects.
 
-        Email IS validated on CREATE (probe confirmed "Invalid Email"
-        rejection), but may NOT be validated on UPDATE. This test
-        verifies whether the same validation applies to edits.
+        Debug result: Server REJECTS with "Invalid Email" on UPDATE.
+        Email validation IS enforced on both CREATE and UPDATE.
+        This was previously thought to be a bug (AGT-BUG-007) but
+        debug confirmed the server correctly validates email on update.
         """
         log.info("AGT-AE01: Edit with invalid email via API")
 
@@ -350,11 +380,7 @@ class TestEditValidation:
         # Attempt update
         update_result = agt_api.update_agent(agent_id, detail)
 
-        if update_result is None:
-            log.info("Invalid email correctly rejected on update")
-        else:
-            log.warning(
-                f"BUG: Invalid email was accepted on update for agent id={agent_id}"
-            )
-
-        assert update_result is None, "Invalid email should be rejected on update"
+        assert update_result is None, (
+            "Invalid email should be rejected on update. "
+            f"Server accepted invalid email for agent id={agent_id}"
+        )
