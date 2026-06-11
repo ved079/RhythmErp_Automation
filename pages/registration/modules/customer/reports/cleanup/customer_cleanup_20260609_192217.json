@@ -1,0 +1,152 @@
+{
+  "generated_at": "2026-06-09T19:22:17.764054",
+  "total_tracked": 18,
+  "accidental_count": 8,
+  "note": "NO-DELETE CONSTRAINT: The ERP has no delete endpoint. These IDs must be manually purged from the database.",
+  "records": [
+    {
+      "id": 409,
+      "company_name": "ValidCust_20260609192210_f8a8eaaf",
+      "timestamp": "2026-06-09T19:22:10.680710",
+      "prefix": "ValidCust",
+      "payload_summary": "Created via API with prefix=ValidCust",
+      "deactivated": false
+    },
+    {
+      "id": 410,
+      "company_name": "          ",
+      "timestamp": "2026-06-09T19:22:10.868720",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 411,
+      "company_name": "Test!@#$%^&*()_+-=[]{}|;':\",./<>?",
+      "timestamp": "2026-06-09T19:22:12.216894",
+      "prefix": "Test!@#$%^&*()",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 412,
+      "company_name": "'; DROP TABLE customers; --",
+      "timestamp": "2026-06-09T19:22:12.402676",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 413,
+      "company_name": "<script>alert('xss')</script>",
+      "timestamp": "2026-06-09T19:22:12.626539",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 414,
+      "company_name": "PanSpCust_20260609192212_de5c1b48",
+      "timestamp": "2026-06-09T19:22:13.136680",
+      "prefix": "PanSpCust",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 415,
+      "company_name": "Test Company \ud83d\ude00\ud83c\udf89",
+      "timestamp": "2026-06-09T19:22:13.956220",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 416,
+      "company_name": "DupPan1_20260609192213_f11af2e6",
+      "timestamp": "2026-06-09T19:22:14.159666",
+      "prefix": "DupPan1",
+      "payload_summary": "Created via API with prefix=DupPan1",
+      "deactivated": false
+    },
+    {
+      "id": 417,
+      "company_name": "DupName1_20260609192214_66995d29",
+      "timestamp": "2026-06-09T19:22:14.573369",
+      "prefix": "DupName1",
+      "payload_summary": "Created via API with prefix=DupName1",
+      "deactivated": false
+    },
+    {
+      "id": 418,
+      "company_name": "DupName1_20260609192214_66995d29",
+      "timestamp": "2026-06-09T19:22:14.744361",
+      "prefix": "DupName1",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 419,
+      "company_name": "DupEmail1_20260609192214_2d6b5a94",
+      "timestamp": "2026-06-09T19:22:14.988600",
+      "prefix": "DupEmail1",
+      "payload_summary": "Created via API with prefix=DupEmail1",
+      "deactivated": false
+    },
+    {
+      "id": 420,
+      "company_name": "DupEmail2_20260609192214_642a8b1d",
+      "timestamp": "2026-06-09T19:22:15.185042",
+      "prefix": "DupEmail2",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 421,
+      "company_name": "EditDupPan1_20260609192215_beff6c72",
+      "timestamp": "2026-06-09T19:22:15.505104",
+      "prefix": "EditDupPan1",
+      "payload_summary": "Created via API with prefix=EditDupPan1",
+      "deactivated": false
+    },
+    {
+      "id": 422,
+      "company_name": "EditDupPan2_20260609192215_032af205",
+      "timestamp": "2026-06-09T19:22:15.695797",
+      "prefix": "EditDupPan2",
+      "payload_summary": "Created via API with prefix=EditDupPan2",
+      "deactivated": false
+    },
+    {
+      "id": 423,
+      "company_name": "EditNameCust_20260609192215_be3892d5",
+      "timestamp": "2026-06-09T19:22:16.119772",
+      "prefix": "EditNameCust",
+      "payload_summary": "Created via API with prefix=EditNameCust",
+      "deactivated": false
+    },
+    {
+      "id": 424,
+      "company_name": "EditClearCust_20260609192216_82e1a94e",
+      "timestamp": "2026-06-09T19:22:16.617013",
+      "prefix": "EditClearCust",
+      "payload_summary": "Created via API with prefix=EditClearCust",
+      "deactivated": false
+    },
+    {
+      "id": 425,
+      "company_name": "EditEmailCust_20260609192216_38645e11",
+      "timestamp": "2026-06-09T19:22:17.028866",
+      "prefix": "EditEmailCust",
+      "payload_summary": "Created via API with prefix=EditEmailCust",
+      "deactivated": false
+    },
+    {
+      "id": 426,
+      "company_name": "SearchCust_20260609192217_d8779faa",
+      "timestamp": "2026-06-09T19:22:17.438425",
+      "prefix": "SearchCust",
+      "payload_summary": "Created via API with prefix=SearchCust",
+      "deactivated": false
+    }
+  ]
+}
