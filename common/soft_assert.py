@@ -107,6 +107,19 @@ class SoftAssert:
         if value is None:
             self.failures.append(msg or "Expected non-None value, got None")
 
+    # ----- Generic failure -----
+
+    def fail(self, msg: str = "") -> None:
+        """Explicitly record a failure with the given message.
+
+        Useful when a check is too complex for a simple assert_* call
+        and the caller has already determined that a failure occurred.
+
+        Args:
+            msg: Human-readable message describing the failure.
+        """
+        self.failures.append(msg or "Explicit failure (no message provided)")
+
     # ----- Check & raise -----
 
     @property

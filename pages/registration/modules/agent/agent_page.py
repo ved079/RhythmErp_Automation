@@ -724,47 +724,162 @@ class AgentPage(BasePage):
 
     def select_dropdown_by_label(self, label_text, option_text, index=0):
         """Select a mat-select dropdown by its <mat-label> text, then pick an option.
-        
+
         Works for app-dropdown-v2 components where the label is in <mat-label>
-        and there's no placeholder attribute on the mat-select.
-        
+        and there's no placeholder attribute on the mat-select. For searchable
+        dropdowns (with filter input), types the option text in the search field
+        first to filter, then selects the matching option.
+
         Args:
             label_text: The visible label text (e.g., "Country", "State")
             option_text: The option to select (e.g., "India", "Maharashtra")
             index: Which matching dropdown (0-based) if multiple have same label
         """
         log.info(f"Selecting dropdown by label '{label_text}': {option_text}")
-        
+
         # Find all mat-labels matching the text
-        labels = self.driver.find_elements(By.XPATH, f"//mat-label[normalize-space()='{label_text}']")
-        
+        labels = self.driver.find_elements(
+            By.XPATH, f"//mat-label[normalize-space()='{label_text}']"
+        )
+
         if len(labels) <= index:
-            log.warning(f"[WARNING] Label '{label_text}' not found (found {len(labels)}, index={index})")
+            log.warning(
+                f"[WARNING] Label '{label_text}' not found "
+                f"(found {len(labels)}, index={index})"
+            )
             return False
-        
+
         # Get the specific label, walk up to mat-form-field, then find mat-select inside
         label_el = labels[index]
         form_field = label_el.find_element(By.XPATH, "./ancestor::mat-form-field")
         mat_select = form_field.find_element(By.CSS_SELECTOR, "mat-select")
-        
+
         # Click to open the dropdown
         self.driver.execute_script("arguments[0].click();", mat_select)
         self.wait_seconds(1)
-        
-        # Find and click the option
-        options = self.driver.find_elements(By.XPATH, f"//mat-option//span[normalize-space()='{option_text}']/ancestor::mat-option")
-        if not options:
-            # Try broader match
-            options = self.driver.find_elements(By.XPATH, f"//mat-option[contains(., '{option_text}')]")
-        
-        if options:
-            self.driver.execute_script("arguments[0].click();", options[0])
+
+        # STRATEGY 1: Use the search/filter input inside the dropdown overlay
+        # Searchable Angular Material dropdowns have an <input> for filtering
+        search_used = False
+        try:
+            search_inputs = self.driver.find_elements(
+                By.CSS_SELECTOR, ".cdk-overlay-pane input"
+            )
+            for si in search_inputs:
+                try:
+                    if si.is_displayed():
+                        si.clear()
+                        si.send_keys(option_text)
+                        self.wait_seconds(1.5)
+                        search_used = True
+                        log.info(
+                            f"Typed '{option_text}' in dropdown search input"
+                        )
+                        break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        # STRATEGY 2: Find and click the option (multiple XPath strategies)
+        option_found = False
+
+        # 2a: Exact span match inside mat-option
+        if not option_found:
+            try:
+                options = self.driver.find_elements(
+                    By.XPATH,
+                    f"//mat-option//span[normalize-space()='{option_text}']"
+                    f"/ancestor::mat-option",
+                )
+                if options:
+                    self.driver.execute_script("arguments[0].click();", options[0])
+                    option_found = True
+            except Exception:
+                pass
+
+        # 2b: Contains match on mat-option text
+        if not option_found:
+            try:
+                options = self.driver.find_elements(
+                    By.XPATH,
+                    f"//mat-option[contains(., '{option_text}')]",
+                )
+                if options:
+                    self.driver.execute_script("arguments[0].click();", options[0])
+                    option_found = True
+            except Exception:
+                pass
+
+        # 2c: role=option with contains match
+        if not option_found:
+            try:
+                options = self.driver.find_elements(
+                    By.XPATH,
+                    f"//*[@role='option'][contains(., '{option_text}')]",
+                )
+                if options:
+                    self.driver.execute_script("arguments[0].click();", options[0])
+                    option_found = True
+            except Exception:
+                pass
+
+        # 2d: Case-insensitive contains via JS (catches odd formatting)
+        if not option_found:
+            js = f"""
+                var opts = document.querySelectorAll(
+                    '.cdk-overlay-pane mat-option, '
+                    + '.cdk-overlay-pane [role="option"]'
+                );
+                var lower = '{option_text}'.toLowerCase();
+                for (var i = 0; i < opts.length; i++) {{
+                    if (opts[i].textContent.trim().toLowerCase()
+                            .indexOf(lower) > -1) {{
+                        opts[i].click();
+                        return 'Selected: ' + opts[i].textContent.trim();
+                    }}
+                }}
+                return 'Not found';
+            """
+            result = self.driver.execute_script(js)
+            self.wait_seconds(1)
+            if "Selected" in str(result):
+                option_found = True
+                selected_text = str(result).replace("Selected: ", "")
+                log.info(
+                    f"Selected '{selected_text}' from '{label_text}' "
+                    f"(case-insensitive match for '{option_text}')"
+                )
+
+        if option_found:
             log.info(f"Selected '{option_text}' from '{label_text}'")
             self.wait_seconds(1)
             return True
         else:
-            log.warning(f"[WARNING] Option '{option_text}' not found in '{label_text}' dropdown")
-            # Close the dropdown panel via JS DOM removal — NEVER use Keys.ESCAPE
+            # Log available options for debugging
+            try:
+                available = self.driver.execute_script("""
+                    var opts = document.querySelectorAll(
+                        '.cdk-overlay-pane mat-option, '
+                        + '.cdk-overlay-pane [role="option"]'
+                    );
+                    var texts = [];
+                    for (var i = 0; i < Math.min(opts.length, 10); i++) {
+                        texts.push(opts[i].textContent.trim());
+                    }
+                    return texts;
+                """)
+                log.warning(
+                    f"[WARNING] Option '{option_text}' not found in "
+                    f"'{label_text}' dropdown (search_used={search_used}). "
+                    f"First 10 available: {available}"
+                )
+            except Exception:
+                log.warning(
+                    f"[WARNING] Option '{option_text}' not found in "
+                    f"'{label_text}' dropdown (search_used={search_used})"
+                )
+            # Close the dropdown panel via JS DOM removal
             self._force_close_panels()
             return False
         

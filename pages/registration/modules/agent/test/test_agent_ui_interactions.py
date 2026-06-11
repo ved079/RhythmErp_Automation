@@ -200,7 +200,7 @@ class TestDropdownValidation:
         except Exception:
             page.force_close_form_popup()
 
-        sa.assert_all("AGT-I02: Dropdown options check")
+        sa.check_all()
 
 
 # ====================================================================

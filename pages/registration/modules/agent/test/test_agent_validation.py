@@ -419,11 +419,8 @@ class TestUniversalStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-U13: SQL injection in Agent Name ----
-    @pytest.mark.xfail(
-        reason="BUG: SQL injection strings may be accepted. "
-               "Verifying if accepted (BUG) or rejected (security).",
-        strict=False,
-    )
+    # Confirmed BUG: SQL injection strings ARE accepted by the server
+    # (AGT-BUG-001). Keep as regular test to document the bug behavior.
     @pytest.mark.bug
     @pytest.mark.regression
     def test_AGT_U13_sql_injection(self, agt_page):
@@ -444,11 +441,8 @@ class TestUniversalStepValidations:
         _cleanup_form(page)
 
     # ---- AGT-U14: XSS in Agent Name ----
-    @pytest.mark.xfail(
-        reason="BUG: XSS payloads may be accepted. "
-               "Verifying if accepted (BUG) or rejected (security).",
-        strict=False,
-    )
+    # Confirmed BUG: XSS payloads ARE accepted by the server
+    # (AGT-BUG-002). Keep as regular test to document the bug behavior.
     @pytest.mark.bug
     @pytest.mark.regression
     def test_AGT_U14_xss_payload(self, agt_page):

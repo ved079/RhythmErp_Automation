@@ -225,13 +225,14 @@ class TestEditVerification:
         page.wait_seconds(0.5)
 
         # Click through steps and Update
+        # Step 0 -> Step 1 (Payment)
         page.click_next()
         page.wait_seconds(1.5)
-        page.click_next()
-        page.wait_seconds(1.5)
+        # Step 1 -> Step 2 (Bank Details)
         page.click_next()
         page.wait_seconds(1.5)
 
+        # On Step 2 (last step), click Update (no Next button on last step)
         page.update()
         page.wait_seconds(3)
 
