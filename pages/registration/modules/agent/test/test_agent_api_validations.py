@@ -43,7 +43,7 @@ Test Inventory (12 tests):
   AGT-AC08 — Invalid email format     (server REJECTS — email validated)
   AGT-AC09 — Invalid phone number     (server REJECTS — phone validated)
   AGT-AC10 — Invalid IFSC code        (server REJECTS — IFSC validated)
-  AGT-AD01 — Duplicate agent name     (xfail — BUG: no uniqueness check)
+  AGT-AD01 — Duplicate agent name     (document — BUG: no uniqueness check, AGT-BUG-006)
   AGT-AE01 — Edit with invalid email  (server REJECTS — email validated on UPDATE too)
 
 Field Key Mapping (from Agent schema):
@@ -305,15 +305,15 @@ class TestDuplicateValidation:
 
     @pytest.mark.api
     @pytest.mark.bug
-    @pytest.mark.xfail(
-        strict=False,
-        reason="BUG: Agent API has no duplicate name validation — accepted (AGT-BUG-006)",
-    )
     def test_AGT_AD01_duplicate_name(self, agt_api):
-        """Create agent with same name twice -> second should be rejected.
+        """Create agent with same name twice -> server accepts (BUG: no uniqueness check).
 
-        Debug result: Server ACCEPTS both creates (id=171, id=172).
-        No name uniqueness constraint for Agent records.
+        Debug result: Server ACCEPTS both creates (id=171, id=172) with the
+        same name. No name uniqueness constraint for Agent records (AGT-BUG-006).
+
+        Uses create_and_document() for the second create to avoid false XPASS
+        from random pin_code validation failures in generate_unique_payload.
+        When this bug is fixed, doc["accepted"] will become False.
         """
         log.info("AGT-AD01: Duplicate agent name via API")
 
@@ -328,17 +328,22 @@ class TestDuplicateValidation:
             agent_data={"name": agent_name},
             name_prefix="DupAGT",
         )
-        result2 = agt_api.create_and_expect_failure(payload2, name_prefix="DupAGT2")
-
-        if result2 is None:
-            log.info("Duplicate agent name correctly rejected")
-        else:
+        doc = agt_api.create_and_document(
+            payload2,
+            field_being_tested="name (duplicate)",
+            name_prefix="DupAGT2",
+        )
+        if doc["accepted"]:
             log.warning(
-                f"BUG: Duplicate agent name was accepted! "
-                f"Second agent id={result2.get('id')}"
+                f"BUG AGT-BUG-006: Duplicate agent name was ACCEPTED! "
+                f"Second agent created with same name '{agent_name}'. "
+                f"No name uniqueness constraint exists."
             )
-
-        assert result2 is None, "Duplicate agent name should be rejected"
+        else:
+            log.info(
+                "Server rejected duplicate agent name — bug AGT-BUG-006 may be fixed! "
+                f"Status: {doc['status_code']}"
+            )
 
 
 # ====================================================================
