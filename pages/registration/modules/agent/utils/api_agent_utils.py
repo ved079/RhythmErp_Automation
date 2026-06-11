@@ -20,7 +20,7 @@ NO-DELETE CONSTRAINT:
   via status=False. Cleanup = tracking + reporting for manual purge.
   This module will NEVER contain delete_agent() or cleanup_all().
 
-FK FIELD KEYS (from Agent schema):
+FK FIELD KEYS (from Agent schema — verified 2026-06-11):
   Agent uses the same party_master table as Supplier/Customer.
   Field keys differ from UI labels:
     UI "Agent Name"   -> API key "name"
@@ -28,15 +28,24 @@ FK FIELD KEYS (from Agent schema):
     UI "Email"        -> API key "email_id"
   Sub-records use the children[] stepper format (same as Supplier).
 
+STEPPER NAMES (verified from live API response 2026-06-11):
+  children[0] = "Address Details"  (NOT "Address Details")
+  children[1] = "Payment Details"  (NOT "Additional Details"!)
+  children[2] = "Bank Details"
+  IMPORTANT: Using wrong stepper_name causes the record to be created
+  but with broken children data, which makes GET return 500.
+
 KNOWN BUGS:
-  - GET /core/dynamic-screen-wrapper/Agent/{id}/ returns HTTP 500
-    ('NoneType' object has no attribute '__dict__') — cannot fetch by ID.
+  - GET /core/dynamic-screen-wrapper/Agent/{id}/ returns HTTP 500 for
+    records created with wrong/missing children data. Records created
+    with the correct payload structure return 200 correctly.
   - No server-side validation on POST (empty/invalid data accepted).
 """
 
 import json
 import csv
 import os
+import random
 from datetime import datetime
 from typing import Dict, List, Optional
 import uuid
@@ -74,6 +83,15 @@ COUNTRY_INDIA_ID = 8
 ACCOUNT_TYPE_CURRENT_ID = 1849  # "Current"
 ACCOUNT_TYPE_SAVING_ID = 1850   # "Saving"
 
+# Address Types (same as Supplier)
+ADDRESS_TYPE_SHIPPING_ID = 43   # "Shipping"
+ADDRESS_TYPE_BILLING_ID = 42    # "Billing"
+
+# Bank Doc Types
+BANK_DOC_CANCELLED_CHEQUE_ID = 36  # "Cancelled Cheque"
+BANK_DOC_PASSBOOK_ID = 35         # "Passbook"
+BANK_DOC_BANK_STATEMENT_ID = 1883  # "Bank Statement"
+
 # Payment Terms (optional — None if not needed)
 PAYMENT_TERMS_IMMEDIATE_ID = 131
 PAYMENT_TERMS_7_DAYS_ID = 549
@@ -87,6 +105,35 @@ PAYMENT_METHOD_CHEQUE_ID = 54
 PAYMENT_METHOD_DD_ID = 55
 PAYMENT_METHOD_IMPS_ID = 141
 PAYMENT_METHOD_RTGS_ID = 143
+
+# ──────────────────────────────────────────────
+# Cascading Address Pool (verified on tenant 681)
+# Reuse the same chains from Supplier — same country/state/district IDs
+# ──────────────────────────────────────────────
+
+_ADDRESS_CHAINS = [
+    # Maharashtra / Akola
+    {
+        "state_ref_id_id": 12,
+        "district_ref_id_id": 208,
+        "sub_district_ref_id_id": 13041,
+        "village_ref_id_id": 422660,
+    },
+    # Punjab / multiple districts
+    {
+        "state_ref_id_id": 82,
+        "district_ref_id_id": 764,
+        "sub_district_ref_id_id": 13939,
+        "village_ref_id_id": 775472,
+    },
+    # State 101 / district 233
+    {
+        "state_ref_id_id": 101,
+        "district_ref_id_id": 233,
+        "sub_district_ref_id_id": 12979,
+        "village_ref_id_id": None,
+    },
+]
 
 
 class AgentAPIUtils:
@@ -185,9 +232,10 @@ class AgentAPIUtils:
     def get_agent(self, agent_id: int) -> Optional[Dict]:
         """Fetch a single agent by ID.
 
-        NOTE: GET /core/dynamic-screen-wrapper/Agent/{id}/ currently
-        returns HTTP 500 ('NoneType' object has no attribute '__dict__').
-        This is a known backend bug. Returns None until fixed.
+        NOTE: GET /core/dynamic-screen-wrapper/Agent/{id}/ returns HTTP 500
+        for records created with broken/incomplete children data (missing
+        address FK chains, wrong stepper_name, etc.). Records created with
+        the correct payload structure (since 2026-06-11 fix) return 200.
         """
         return self.client.get_entry(SCREEN_NAME, agent_id)
 
@@ -200,9 +248,10 @@ class AgentAPIUtils:
         The ERP's dynamic-screen-wrapper uses POST for updates —
         PUT returns HTTP 405 (Method Not Allowed).
 
-        NOTE: get_agent() currently returns 500, so fetching the full
-        record for update is broken. This method may not work until
-        the GET endpoint is fixed.
+        NOTE: get_agent() returns 500 for records with broken children
+        data, but works for properly created records. If you need to
+        fetch the full record for update, ensure the record was created
+        with the correct payload structure.
 
         Args:
             agent_id:  The agent's database ID.
@@ -444,6 +493,26 @@ class AgentAPIUtils:
         Uses format: {prefix}_{timestamp}_{uuid8} to prevent
         collisions and enable manual cleanup identification.
 
+        PAYLOAD STRUCTURE (verified 2026-06-11 from live API):
+          The Agent screen uses a children[] stepper format with
+          EXACT stepper names that must match the backend:
+            children[0] = "Address Details"  (2 rows: Shipping + Billing)
+            children[1] = "Payment Details"  (NOT "Additional Details"!)
+            children[2] = "Bank Details"
+
+          IMPORTANT: Using wrong stepper_name (e.g., "Additional Details"
+          instead of "Payment Details") causes the record to be created
+          but with broken children data, which makes GET return 500 and
+          the UI show NoneType errors when trying to open the record.
+
+        FIELD KEY MAPPING (from Agent schema):
+          UI "Agent Name"   -> API "name"
+          UI "Phone Number" -> API "mobile_no" (integer)
+          UI "Email"        -> API "email_id"
+          Address fields use same FK keys as Supplier/Customer
+          (country_ref_id_id, state_ref_id_id, district_ref_id_id,
+           sub_district_ref_id_id, village_ref_id_id)
+
         Args:
             agent_data:  Override data (merged with generated defaults).
             name_prefix: Prefix for the agent name.
@@ -456,11 +525,15 @@ class AgentAPIUtils:
 
         agent_name = f"{name_prefix}_{timestamp}_{uuid_short}"
 
-        # Build the full payload using correct API field keys from schema:
-        #   UI "Agent Name"   -> API "name"
-        #   UI "Phone Number" -> API "mobile_no" (integer)
-        #   UI "Email"        -> API "email_id"
-        # Sub-records use children[] stepper format (same as Supplier).
+        # Pick a random verified address chain for realistic data
+        chain = random.choice(_ADDRESS_CHAINS)
+
+        # Build the full payload using correct structure from live API:
+        # Key fixes (2026-06-11):
+        #   1. Stepper name "Payment Details" (not "Additional Details")
+        #   2. Address needs full cascading chain (state, district, sub_district, village)
+        #   3. Bank details needs bank_doc_id (required by schema)
+        #   4. Address should have 2 rows (Shipping + Billing) like Supplier
         payload = {
             "id": "",
             "attribute_name": SCREEN_NAME,
@@ -471,8 +544,42 @@ class AgentAPIUtils:
             "email_id": generate_email(name_prefix.lower()),
             "status": True,
             "children": [
+                # children[0] — Address Details (2 rows: Shipping + Billing)
                 {
-                    "stepper_name": "Additional Details",
+                    "stepper_name": "Address Details",
+                    "is_stepper": True,
+                    "details": [
+                        {
+                            "address_type": ADDRESS_TYPE_SHIPPING_ID,
+                            "country_ref_id_id": COUNTRY_INDIA_ID,
+                            "state_ref_id_id": chain["state_ref_id_id"],
+                            "district_ref_id_id": chain["district_ref_id_id"],
+                            "sub_district_ref_id_id": chain["sub_district_ref_id_id"],
+                            "village_ref_id_id": chain.get("village_ref_id_id"),
+                            "address": generate_address(),
+                            "pin_code": int(generate_pin_code()),
+                            "same_as_above": None,
+                            "details": [],
+                        },
+                        {
+                            "address_type": ADDRESS_TYPE_BILLING_ID,
+                            "country_ref_id_id": COUNTRY_INDIA_ID,
+                            "state_ref_id_id": chain["state_ref_id_id"],
+                            "district_ref_id_id": chain["district_ref_id_id"],
+                            "sub_district_ref_id_id": chain["sub_district_ref_id_id"],
+                            "village_ref_id_id": chain.get("village_ref_id_id"),
+                            "address": generate_address(),
+                            "pin_code": int(generate_pin_code()),
+                            "same_as_above": None,
+                            "details": [],
+                        },
+                    ],
+                    "children": [],
+                },
+                # children[1] — Payment Details (NOT "Additional Details"!)
+                # Fields go on the stepper object itself, not in details[]
+                {
+                    "stepper_name": "Payment Details",
                     "is_stepper": True,
                     "payment_terms_ref_id": None,
                     "preferred_payment_method_ref_id": None,
@@ -480,20 +587,7 @@ class AgentAPIUtils:
                     "details": [],
                     "children": [],
                 },
-                {
-                    "stepper_name": "Address Details",
-                    "is_stepper": True,
-                    "details": [
-                        {
-                            "country_ref_id_id": COUNTRY_INDIA_ID,
-                            "address": generate_address(),
-                            "pin_code": int(generate_pin_code()),
-                            "same_as_above": None,
-                            "details": [],
-                        }
-                    ],
-                    "children": [],
-                },
+                # children[2] — Bank Details
                 {
                     "stepper_name": "Bank Details",
                     "is_stepper": True,
@@ -504,8 +598,8 @@ class AgentAPIUtils:
                             "bank_ifsc_code": generate_ifsc_code(),
                             "account_type": ACCOUNT_TYPE_CURRENT_ID,
                             "bank_account_holder_name": generate_account_holder_name(),
-                            "bank_account_no": generate_account_number(),
-                            "bank_doc_id": None,
+                            "bank_account_no": int(generate_account_number()),
+                            "bank_doc_id": BANK_DOC_CANCELLED_CHEQUE_ID,
                             "bank_attachment_path": None,
                             "details": [],
                         }

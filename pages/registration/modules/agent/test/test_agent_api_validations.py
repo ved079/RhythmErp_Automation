@@ -10,9 +10,17 @@ conditions, and security that can only be tested at the API level.
 
 IMPORTANT — Known Backend Bugs (Agent-specific):
   - NO server-side validation on POST — empty/invalid data accepted
-  - GET /core/dynamic-screen-wrapper/Agent/{id}/ returns HTTP 500
-    ('NoneType' object has no attribute '__dict__')
+  - GET /core/dynamic-screen-wrapper/Agent/{id}/ returns HTTP 500 for
+    records created with broken children data (wrong stepper_name,
+    missing address FK chains, etc.). Properly created records work.
   - Customer and Supplier DO validate — Agent does not
+
+PAYLOAD FIX (2026-06-11):
+  The Agent API requires exact stepper names in children[]:
+    children[0] = "Address Details" (NOT just any name)
+    children[1] = "Payment Details" (NOT "Additional Details"!)
+    children[2] = "Bank Details"
+  Using wrong names causes broken records that GET can't retrieve.
 
 Test Inventory (12 tests):
   AGT-AC01 — Empty submit (xfail — BUG: accepted)
@@ -26,7 +34,7 @@ Test Inventory (12 tests):
   AGT-AC09 — Invalid phone number (xfail — BUG: accepted)
   AGT-AC10 — Invalid IFSC code (xfail — BUG: accepted)
   AGT-AD01 — Duplicate agent name (xfail — BUG: accepted)
-  AGT-AE01 — Edit with invalid email (xfail — GET 500 bug)
+  AGT-AE01 — Edit with invalid email (xfail — no email validation on update)
 
 Field Key Mapping (from Agent schema):
   UI "Agent Name"   -> API key "name"
@@ -287,21 +295,25 @@ class TestEditValidation:
     @pytest.mark.bug
     @pytest.mark.xfail(
         strict=False,
-        reason="BUG: GET Agent by ID returns 500 — cannot fetch record for update (AGT-BUG-004)",
+        reason="BUG: Agent API has no email validation on update — invalid email accepted (AGT-BUG-003)",
     )
     def test_AGT_AE01_edit_invalid_email(self, agt_api):
         """Update agent with invalid email → should be rejected."""
         log.info("AGT-AE01: Edit with invalid email via API")
 
-        # Create an agent first
+        # Create an agent first (with correct payload — GET works for these)
         result = agt_api.create_agent(name_prefix="EditInvEmail")
         assert result is not None, "Agent creation for edit test failed"
         agent_id = result.get("id")
         agent_name = result.get("name", "")
 
-        # Fetch full record for update — currently returns 500
+        # Fetch full record for update
+        # NOTE: GET works for records created with correct payload structure
         detail = agt_api.get_agent(agent_id)
-        assert detail is not None, f"Failed to fetch agent id={agent_id} (GET 500 bug)"
+        assert detail is not None, (
+            f"Failed to fetch agent id={agent_id}. "
+            f"This may happen if the record was created with broken children data."
+        )
 
         # Modify email to invalid
         detail["email_id"] = generate_invalid_email()
@@ -315,3 +327,5 @@ class TestEditValidation:
             log.warning(
                 f"BUG: Invalid email was accepted on update for agent id={agent_id}"
             )
+
+        assert update_result is None, "Invalid email should be rejected on update"

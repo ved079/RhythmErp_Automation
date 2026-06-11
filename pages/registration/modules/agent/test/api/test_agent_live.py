@@ -7,9 +7,10 @@ Tests real API calls against the live server for end-to-end validation.
 ~5 tests, all headless API calls.
 
 KNOWN BUGS:
-  - GET /core/dynamic-screen-wrapper/Agent/{id}/ returns HTTP 500
-    ('NoneType' object has no attribute '__dict__')
-  - Tests that rely on GET are marked xfail until fixed.
+  - GET /core/dynamic-screen-wrapper/Agent/{id}/ returns HTTP 500 for
+    records created with broken children data (wrong stepper_name,
+    missing address FK chains). Properly created records return 200.
+  - No server-side validation on POST for Agent (empty/invalid accepted).
 
 Field Key Mapping:
   UI "Agent Name"   -> API "name"
@@ -73,10 +74,6 @@ class TestAgentLive:
 
     @pytest.mark.api
     @pytest.mark.smoke
-    @pytest.mark.xfail(
-        strict=False,
-        reason="BUG: GET Agent by ID returns HTTP 500 (AGT-BUG-004)",
-    )
     def test_create_and_get(self, agt_api):
         """Create an agent and retrieve it — data should match."""
         log.info("Live: Create and get agent")
@@ -87,9 +84,12 @@ class TestAgentLive:
         agent_name = create_result.get("name", "")
         log.info(f"Created: id={agent_id}, name='{agent_name}'")
 
-        # Retrieve — currently returns 500
+        # Retrieve — should work for properly created records
         get_result = agt_api.get_agent(agent_id)
-        assert get_result is not None, f"Get should return agent id={agent_id}"
+        assert get_result is not None, (
+            f"Get should return agent id={agent_id}. "
+            f"If this fails, the record may have been created with broken children data."
+        )
         log.info(f"Retrieved: id={get_result.get('id')}, name='{get_result.get('name', '')}'")
 
     @pytest.mark.api
@@ -125,10 +125,6 @@ class TestAgentLive:
 
     @pytest.mark.api
     @pytest.mark.sanity
-    @pytest.mark.xfail(
-        strict=False,
-        reason="BUG: GET Agent by ID returns HTTP 500 — cannot fetch/update (AGT-BUG-004)",
-    )
     def test_update_agent(self, agt_api):
         """Create an agent, update phone number, verify update."""
         log.info("Live: Update agent")
@@ -138,9 +134,12 @@ class TestAgentLive:
         assert create_result is not None
         agent_id = create_result.get("id")
 
-        # Fetch full record — currently returns 500
+        # Fetch full record — should work for properly created records
         detail = agt_api.get_agent(agent_id)
-        assert detail is not None, f"Failed to fetch agent id={agent_id} (GET 500 bug)"
+        assert detail is not None, (
+            f"Failed to fetch agent id={agent_id}. "
+            f"If this fails, the record may have been created with broken children data."
+        )
 
         # Update phone
         from pages.registration.modules.agent.data.agent_data import generate_phone_number

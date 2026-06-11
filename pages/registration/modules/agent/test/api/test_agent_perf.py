@@ -64,10 +64,6 @@ class TestAgentPerformance:
 
     @pytest.mark.api
     @pytest.mark.sanity
-    @pytest.mark.xfail(
-        strict=False,
-        reason="BUG: GET Agent by ID returns HTTP 500 (AGT-BUG-004)",
-    )
     def test_get_response_time(self, agt_api):
         """Agent get-detail should respond within baseline time."""
         log.info("Perf: Get response time")
@@ -82,7 +78,10 @@ class TestAgentPerformance:
         elapsed = time.time() - start
         log.info(f"Get response time: {elapsed:.2f}s (baseline: {self.GET_BASELINE_S}s)")
 
-        assert result is not None, f"Get for id={agent_id} should return data"
+        assert result is not None, (
+            f"Get for id={agent_id} should return data. "
+            f"If this fails, the record may have been created with broken children data."
+        )
         assert elapsed < self.GET_BASELINE_S, \
             f"Get took {elapsed:.2f}s — exceeds baseline {self.GET_BASELINE_S}s"
 
