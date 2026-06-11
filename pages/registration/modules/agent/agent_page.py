@@ -8,12 +8,13 @@ URL:      /#/dynamic-screens/Agent
 
 FORM LAYOUT (multi-step STEPPER popup):
 
-  Step 1 - Universal:
+  Step 0 - Universal + Address Details (SAME PAGE, click "Next" to advance):
+    Universal fields:
     - Agent Name             (text input,   required)
     - Phone Number           (text input,   required)
     - Email                  (text input,   required)
 
-  Step 2 - Address Details (click "Next" to advance):
+    Address Details (on same page as Universal):
     - Add Row button         (to add address rows)
     For EACH row:
     - Address Type           (mat-select,   required, searchable)
@@ -26,11 +27,11 @@ FORM LAYOUT (multi-step STEPPER popup):
     - Pin Code               (text input,   required)
     - GST                    (text input,   optional)
 
-  Step 3 - Payment Details (click "Next"):
+  Step 1 - Payment Details (after clicking "Next" from Step 0):
     - Payment Terms          (mat-select,   optional)
     - Preferred Payment Method (mat-select, optional)
 
-  Step 4 - Bank Details (click "Next"):
+  Step 2 - Bank Details (after clicking "Next" from Step 1):
     - Add Row button         (to add bank rows)
     For EACH row:
     - Bank Name              (text input,   required)
@@ -42,9 +43,11 @@ FORM LAYOUT (multi-step STEPPER popup):
     - Bank Proof             (file upload,  required)
     - Attachment             (file upload,  optional)
 
-  Step 5 - Submit (click "Submit" on the last step or footer)
+  Submit (click "Submit" on the last step or footer)
 
 KEY RULES:
+  - Universal and Address Details are on the SAME page (Step 0)
+  - DO NOT click Next between Universal and Address — fill both, then click Next once
   - Multi-step STEPPER form - must click "Next" / "Back" to navigate steps
   - Angular Material UI - use execute_script for reading/writing input values
   - Address and Bank Details are repeatable rows (add multiple)
@@ -880,11 +883,11 @@ class AgentPage(BasePage):
         log.info(f"Add bank row: {result}")
 
     # ==============================================================
-    #  Form fill - Step 1: Universal
+    #  Form fill - Step 0: Universal
     # ==============================================================
 
     def fill_universal_step(self, data):
-        """Fill Step 1 (Universal) fields: Agent Name, Phone Number, Email."""
+        """Fill Step 0 (Universal) fields: Agent Name, Phone Number, Email."""
         log.info("Filling Universal step...")
 
         if data.get("agent_name"):
@@ -897,11 +900,11 @@ class AgentPage(BasePage):
         self.wait_seconds(0.5)
 
     # ==============================================================
-    #  Form fill - Step 2: Address Details
+    #  Form fill - Step 0: Address Details (same page as Universal)
     # ==============================================================
 
     def fill_address_step(self, addr_data=None):
-        """Fill the required Address fields (cascading dropdowns + inputs) on Step 1.
+        """Fill the required Address fields (cascading dropdowns + inputs) on Step 0.
         
         Args:
             addr_data: Optional dict with address data. The cascading dropdowns
@@ -945,11 +948,11 @@ class AgentPage(BasePage):
         log.info("Address step filled")
 
         # ==============================================================
-    #  Form fill - Step 3: Payment Details
+    #  Form fill - Step 1: Payment Details
     # ==============================================================
 
     def fill_payment_step(self, data):
-        """Fill Step 3 (Payment Details): Payment Terms, Preferred Payment Method."""
+        """Fill Step 1 (Payment Details): Payment Terms, Preferred Payment Method."""
         log.info("Filling Payment Details step...")
 
         if data.get("payment_terms"):
@@ -962,11 +965,11 @@ class AgentPage(BasePage):
         self.wait_seconds(0.5)
 
     # ==============================================================
-    #  Form fill - Step 4: Bank Details
+    #  Form fill - Step 2: Bank Details
     # ==============================================================
 
     def fill_bank_detail_step(self, data, row_index=0):
-        """Fill Step 4 (Bank Details) for a specific row.
+        """Fill Step 2 (Bank Details) for a specific row.
 
         Args:
             data: Dict with bank detail fields.
@@ -998,30 +1001,28 @@ class AgentPage(BasePage):
     def fill_agent_form(self, data):
         """Fill all stepper steps with provided data dict.
 
+        Flow: Universal + Address (same page) -> Payment -> Bank Details
+
         Args:
             data: Dict with keys: agent_name, phone_number, email,
                   address (dict), payment (dict), bank (dict).
         """
         log.info("Filling Agent form (all steps)...")
 
-        # Step 1: Universal
+        # Step 0: Universal + Address Details (SAME PAGE)
         self.fill_universal_step(data)
-        self.click_next()
-        self.wait_seconds(1)
-
-        # Step 2: Address Details
         if data.get("address"):
             self.fill_address_step(data["address"])
-        self.click_next()
+        self.click_next()  # Step 0 -> Step 1 (Payment)
         self.wait_seconds(1)
 
-        # Step 3: Payment Details
+        # Step 1: Payment Details
         if data.get("payment"):
             self.fill_payment_step(data["payment"])
-        self.click_next()
+        self.click_next()  # Step 1 -> Step 2 (Bank Details)
         self.wait_seconds(1)
 
-        # Step 4: Bank Details
+        # Step 2: Bank Details
         if data.get("bank"):
             self.fill_bank_detail_step(data["bank"])
 

@@ -14,15 +14,18 @@ Phases:
   7. Bug-specific                 (5 tests) - AGT-X01 to AGT-X05
 
 FORM LAYOUT (multi-step STEPPER):
-  Step 1 - Universal:  Agent Name, Phone Number, Email
-  Step 2 - Address Details: Address Type, Country, State, District,
-           Taluka, Village, Address, Pin Code, GST
-  Step 3 - Payment Details: Payment Terms, Preferred Payment Method
-  Step 4 - Bank Details: Bank Name, Branch, IFSC Code, Account Type,
+  Step 0 - Universal + Address Details (SAME PAGE):
+    Universal: Agent Name, Phone Number, Email
+    Address:   Address Type, Country, State, District,
+               Taluka, Village, Address, Pin Code, GST
+  Step 1 - Payment Details: Payment Terms, Preferred Payment Method
+  Step 2 - Bank Details: Bank Name, Branch, IFSC Code, Account Type,
            Account Holder Name, Account Number, Bank Proof, Attachment
 
 KEY RULES:
-  - Multi-step STEPPER - use Next/Back to navigate
+  - Universal and Address are on the SAME page (Step 0)
+  - DO NOT click Next between Universal and Address — fill both, then click Next once
+  - Multi-step STEPPER - use Next/Back to navigate between steps
   - Angular Material UI - use execute_script for reading values
   - Address & Bank are repeatable rows
   - State depends on Country, District depends on State (cascading)
@@ -540,11 +543,7 @@ class TestAddressStepValidations:
 
         data = generate_valid_agent_data("AddrA02")
         page.fill_universal_step(data)
-        page.click_next()
-        page.wait_seconds(1.5)
-
-        addr = data["address"]
-        page.fill_address_step(addr)
+        page.fill_address_step(data["address"])
         page.wait_seconds(0.5)
 
         values = page.get_form_field_values()
@@ -565,8 +564,6 @@ class TestAddressStepValidations:
 
         data = generate_valid_agent_data("PinA03")
         page.fill_universal_step(data)
-        page.click_next()
-        page.wait_seconds(1.5)
 
         valid_pin = generate_pin_code()
         page._fill_input_by_name("Pin Code", valid_pin)
@@ -590,8 +587,6 @@ class TestAddressStepValidations:
 
         data = generate_valid_agent_data("PinA04")
         page.fill_universal_step(data)
-        page.click_next()
-        page.wait_seconds(1.5)
 
         invalid_pin = generate_invalid_pin_code()
         page._fill_input_by_name("Pin Code", invalid_pin)
@@ -618,8 +613,6 @@ class TestAddressStepValidations:
 
         data = generate_valid_agent_data("GstA05")
         page.fill_universal_step(data)
-        page.click_next()
-        page.wait_seconds(1.5)
 
         valid_gst = generate_gst()
         page._fill_input_by_name("GST", valid_gst)
@@ -642,8 +635,6 @@ class TestAddressStepValidations:
 
         data = generate_valid_agent_data("GstA06")
         page.fill_universal_step(data)
-        page.click_next()
-        page.wait_seconds(1.5)
 
         page._fill_input_by_name("GST", "")
         page.wait_seconds(0.3)
@@ -668,9 +659,9 @@ class TestAddressStepValidations:
 
         data = generate_valid_agent_data("SpA07")
         page.fill_universal_step(data)
-        page.click_next()
-        page.wait_seconds(1.5)
+        page.fill_address_step()  # Fill required address dropdowns first
 
+        # Override with spaces-only to test validation
         page._fill_input_by_name("Address", generate_spaces_only())
         page._fill_input_by_name("Pin Code", generate_spaces_only())
         page.wait_seconds(0.5)
@@ -725,8 +716,6 @@ class TestAddressStepValidations:
 
         data = generate_valid_agent_data("MaxA09")
         page.fill_universal_step(data)
-        page.click_next()
-        page.wait_seconds(1.5)
 
         long_255 = generate_string_255()
         page._fill_input_by_name("Address", long_255)
@@ -793,10 +782,8 @@ class TestPaymentStepValidations:
 
         data = generate_valid_agent_data("PayP01")
         page.fill_universal_step(data)
-        page.click_next()
-        page.wait_seconds(1.5)
         page.fill_address_step(data["address"])
-        page.click_next()
+        page.click_next()  # Step 0 -> Step 1 (Payment)
         page.wait_seconds(1.5)
 
         step = page.get_active_step_index()
@@ -818,13 +805,12 @@ class TestPaymentStepValidations:
 
         data = generate_valid_agent_data("PayP02")
         page.fill_universal_step(data)
-        page.click_next()
-        page.wait_seconds(1.5)
         page.fill_address_step(data["address"])
-        page.click_next()
+        page.click_next()  # Step 0 -> Step 1 (Payment)
         page.wait_seconds(1.5)
 
-        page.click_next()
+        # Skip payment (both fields optional), advance to Bank Details
+        page.click_next()  # Step 1 -> Step 2 (Bank Details)
         page.wait_seconds(1.5)
 
         step = page.get_active_step_index()
@@ -847,13 +833,11 @@ class TestPaymentStepValidations:
 
         data = generate_valid_agent_data("PayP03")
         page.fill_universal_step(data)
-        page.click_next()
-        page.wait_seconds(1.5)
         page.fill_address_step(data["address"])
-        page.click_next()
+        page.click_next()  # Step 0 -> Step 1 (Payment)
         page.wait_seconds(1.5)
 
-        page.click_back()
+        page.click_back()  # Step 1 -> Step 0 (Universal + Address)
         page.wait_seconds(1)
 
         step = page.get_active_step_index()
@@ -876,10 +860,8 @@ class TestPaymentStepValidations:
 
         data = generate_valid_agent_data("PayP04")
         page.fill_universal_step(data)
-        page.click_next()
-        page.wait_seconds(1.5)
         page.fill_address_step(data["address"])
-        page.click_next()
+        page.click_next()  # Step 0 -> Step 1 (Payment)
         page.wait_seconds(1.5)
 
         opts = page.get_dropdown_options_by_label("Payment Terms")
@@ -900,20 +882,18 @@ class TestPaymentStepValidations:
 
         data = generate_valid_agent_data("PayP05")
         page.fill_universal_step(data)
-        page.click_next()
-        page.wait_seconds(1.5)
         page.fill_address_step(data["address"])
-        page.click_next()
+        page.click_next()  # Step 0 -> Step 1 (Payment)
         page.wait_seconds(1.5)
 
-        page.click_next()
+        page.click_next()  # Step 1 -> Step 2 (Bank Details)
         page.wait_seconds(1.5)
 
         step = page.get_active_step_index()
         step_label = page.get_active_step_label()
         log.info(f"Current step: index={step}, label='{step_label}'")
 
-        assert step >= 2, f"Should reach Bank Details step (2+), got {step3}"
+        assert step >= 2, f"Should reach Bank Details step (2+), got {step}"
 
         _cleanup_form(page)
 

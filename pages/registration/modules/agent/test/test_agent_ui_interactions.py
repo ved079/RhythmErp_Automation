@@ -123,13 +123,11 @@ class TestDropdownValidation:
             "Add form did not open",
         )
 
-        # Fill Universal to enable stepping
+        # Fill Universal + Address (same page, Step 0)
         data = generate_valid_agent_data("I02")
         page.fill_universal_step(data)
-        page.click_next()
-        page.wait_seconds(1.5)
 
-        # Check Address-level dropdowns (Step 2)
+        # Check Address-level dropdowns (Step 0 — same page as Universal)
         for test_id, field_name, min_opts, skip_reason in _DROPDOWN_CHECKS[:3]:
             if skip_reason and field_name in ("State", "District"):
                 # These need cascading — select Country first for State, etc.
@@ -155,12 +153,12 @@ class TestDropdownValidation:
             except Exception as e:
                 sa.fail(f"{test_id}: Error checking '{field_name}': {e}")
 
-        # Navigate to Payment step for those dropdowns
+        # Fill Address fully, then advance to Payment step
         page.fill_address_step(data["address"])
-        page.click_next()
+        page.click_next()  # Step 0 -> Step 1 (Payment)
         page.wait_seconds(1.5)
 
-        # Check Payment-level dropdowns (Step 3)
+        # Check Payment-level dropdowns (Step 1)
         for test_id, field_name, min_opts, skip_reason in _DROPDOWN_CHECKS[3:5]:
             try:
                 options = page.get_dropdown_options_by_label(field_name)
@@ -224,44 +222,38 @@ class TestStepperNavigation:
 
         data = generate_valid_agent_data("I03")
 
-        # Forward: Universal → Address → Payment → Bank
+        # Forward: Universal + Address (Step 0) → Payment (Step 1) → Bank (Step 2)
         page.fill_universal_step(data)
-        page.click_next()
+        page.fill_address_step(data["address"])
+        page.click_next()  # Step 0 -> Step 1 (Payment)
         page.wait_seconds(1.5)
         step1 = page.get_active_step_index()
         label1 = page.get_active_step_label()
         log.info(f"After Next 1: step={step1}, label='{label1}'")
 
-        page.fill_address_step(data["address"])
-        page.click_next()
+        page.click_next()  # Step 1 -> Step 2 (Bank)
         page.wait_seconds(1.5)
         step2 = page.get_active_step_index()
         label2 = page.get_active_step_label()
         log.info(f"After Next 2: step={step2}, label='{label2}'")
 
-        page.click_next()
-        page.wait_seconds(1.5)
+        # Step 2 is the last step — no more Next
         step3 = page.get_active_step_index()
         label3 = page.get_active_step_label()
         log.info(f"After Next 3: step={step3}, label='{label3}'")
 
-        # Back: Bank → Payment → Address → Universal
-        page.click_back()
-        page.wait_seconds(1.5)
-        step_back2 = page.get_active_step_index()
-        log.info(f"After Back 1: step={step_back2}")
-
-        page.click_back()
+        # Back: Bank (Step 2) → Payment (Step 1) → Universal+Address (Step 0)
+        page.click_back()  # Step 2 -> Step 1
         page.wait_seconds(1.5)
         step_back1 = page.get_active_step_index()
-        log.info(f"After Back 2: step={step_back1}")
+        log.info(f"After Back 1: step={step_back1}")
 
-        page.click_back()
+        page.click_back()  # Step 1 -> Step 0
         page.wait_seconds(1.5)
         step_back0 = page.get_active_step_index()
-        log.info(f"After Back 3: step={step_back0}")
+        log.info(f"After Back 2: step={step_back0}")
 
-        assert step_back0 == 0, f"After 3 Back clicks, should be on step 0, got {step_back0}"
+        assert step_back0 == 0, f"After Back clicks, should be on step 0, got {step_back0}"
 
         try:
             page.cancel()
