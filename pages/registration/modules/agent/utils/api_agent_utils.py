@@ -191,6 +191,7 @@ class AgentAPIUtils:
         self,
         agent_data: dict = None,
         name_prefix: str = "AutoAGT",
+        retries: int = 2,
     ) -> Optional[Dict]:
         """
         Create an agent via API and track the resulting ID.
@@ -198,38 +199,66 @@ class AgentAPIUtils:
         Args:
             agent_data:  Override data dict (merged with defaults).
             name_prefix: Prefix for auto-generated agent name.
-                         Format: {prefix}_{timestamp}_{uuid8}
+                         Format: {prefix} {timestamp} {uuid8}
+            retries:     Number of retries on transient failures (default 2).
 
         Returns:
             Response JSON dict on success, None on failure.
             The created ID is automatically tracked via CleanupTracker.
         """
-        payload = self.generate_unique_payload(
-            agent_data=agent_data,
-            name_prefix=name_prefix,
-        )
-
-        result = self.client.create_entry(payload)
-
-        if result is not None:
-            created_id = result.get("id")
-            agent_name = result.get("name", payload.get("name", "unknown"))
-            self.tracker.track(
-                id=created_id,
-                agent_name=agent_name,
-                payload_summary=f"Created via API with prefix={name_prefix}",
+        for attempt in range(retries + 1):
+            payload = self.generate_unique_payload(
+                agent_data=agent_data,
+                name_prefix=name_prefix,
             )
-            log.info(
-                f"[AgentAPI] Created agent id={created_id} "
-                f"name='{agent_name}'"
-            )
-        else:
+
+            result = self.client.create_entry(payload)
+
+            if result is not None:
+                created_id = result.get("id")
+                agent_name = result.get("name", payload.get("name", "unknown"))
+                self.tracker.track(
+                    id=created_id,
+                    agent_name=agent_name,
+                    payload_summary=f"Created via API with prefix={name_prefix}",
+                )
+                log.info(
+                    f"[AgentAPI] Created agent id={created_id} "
+                    f"name='{agent_name}'"
+                )
+                return result
+
+            # Check if the error is "Invalid Name" — retry with new name
+            raw_resp = self.client._last_raw_response
+            is_name_error = False
+            if raw_resp is not None:
+                try:
+                    err_body = raw_resp.json()
+                    err_msg = str(err_body.get("message", ""))
+                    err_errors = err_body.get("errors", [])
+                    for e in err_errors:
+                        err_msg += " " + e.get("error_message", "")
+                    if "invalid name" in err_msg.lower():
+                        is_name_error = True
+                except Exception:
+                    pass
+
+            if is_name_error and attempt < retries:
+                log.warning(
+                    f"[AgentAPI] 'Invalid Name' on attempt {attempt + 1}/{retries + 1}, "
+                    f"retrying with new name..."
+                )
+                import time
+                time.sleep(1)
+                continue
+
             log.warning(
                 f"[AgentAPI] Failed to create agent "
                 f"name='{payload.get('name', 'unknown')}'"
             )
+            return None
 
-        return result
+        return None
 
     def get_agent(self, agent_id: int) -> Optional[Dict]:
         """Fetch a single agent by ID.
@@ -525,7 +554,7 @@ class AgentAPIUtils:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         uuid_short = uuid.uuid4().hex[:8]
 
-        agent_name = f"{name_prefix}_{timestamp}_{uuid_short}"
+        agent_name = f"{name_prefix} {timestamp} {uuid_short}"
 
         # Pick a random verified address chain for realistic data
         chain = random.choice(_ADDRESS_CHAINS)
