@@ -382,9 +382,9 @@ class TestEmployeeFieldValidation:
     # --- Designation FK validation ---
 
     def test_designation_ids_are_valid(self):
-        """All designation IDs in the pool should be in range 1-31."""
+        """All designation IDs in the pool should be in range 1-56."""
         for did in DESIGNATION_IDS:
-            assert 1 <= did <= 31, f"Designation ID {did} out of range"
+            assert 1 <= did <= 56, f"Designation ID {did} out of range"
 
     def test_designation_names_map_complete(self):
         """DESIGNATION_NAMES should have an entry for every ID."""
@@ -418,9 +418,9 @@ class TestEmployeeSchema:
         phone_rule = FIELD_VALIDATION_RULES["mobile_no"]
         assert phone_rule["pattern"] == r"^[6-9]\d{9}$"
 
-    def test_designation_has_31_options(self):
-        """Designation dropdown should have 31 options."""
-        assert FIELD_VALIDATION_RULES["designation"]["fk_options_count"] == 31
+    def test_designation_has_56_options(self):
+        """Designation dropdown should have 56 options."""
+        assert FIELD_VALIDATION_RULES["designation"]["fk_options_count"] == 56
 
     def test_department_has_0_options(self):
         """Department dropdown should have 0 options currently."""

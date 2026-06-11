@@ -211,15 +211,21 @@ def generate_employee_name(prefix=None):
 
     Composes: FirstName LastName (e.g., "Rajesh Sharma", "Priya Patel").
     The name matches the ERP validation pattern: ^[A-Za-z ]+$
+    Only letters and spaces allowed — no digits, underscores, or special chars.
 
     Args:
-        prefix: Optional override — if provided, uses the
-                prefix_timestamp format for guaranteed uniqueness.
+        prefix: Optional prefix for guaranteed uniqueness.
+                Format: {prefix} {FirstName} {LastName} {rand_letters}
     """
+    _rand_alpha = lambda n: "".join(random.choices(string.ascii_lowercase, k=n))
+
     if prefix:
-        ts = datetime.now().strftime("%Y%m%d%H%M%S")
-        rand = random.randint(100, 999)
-        return f"{prefix}_{ts}_{rand}"
+        first = random.choice(_FIRST_NAMES_MALE + _FIRST_NAMES_FEMALE)
+        last = random.choice(_LAST_NAMES)
+        suffix = _rand_alpha(5)
+        name = f"{prefix} {first} {last} {suffix}"
+        _generated_names.add(name)
+        return name
 
     for _ in range(200):
         first = random.choice(_FIRST_NAMES_MALE + _FIRST_NAMES_FEMALE)
@@ -229,10 +235,10 @@ def generate_employee_name(prefix=None):
             _generated_names.add(name)
             return name
 
-    # Fallback
-    ts = datetime.now().strftime("%H%M%S")
-    rand = random.randint(100, 999)
-    fallback = f"{random.choice(_FIRST_NAMES_MALE + _FIRST_NAMES_FEMALE)} {random.choice(_LAST_NAMES)} {ts}{rand}"
+    # Fallback — add random letter suffix instead of digits
+    first = random.choice(_FIRST_NAMES_MALE + _FIRST_NAMES_FEMALE)
+    last = random.choice(_LAST_NAMES)
+    fallback = f"{first} {last} {_rand_alpha(6)}"
     _generated_names.add(fallback)
     return fallback
 
@@ -243,9 +249,8 @@ def generate_email(prefix=None):
     Examples: "rajesh.sharma@gmail.com", "patel.kumar@rediffmail.com"
     """
     if prefix:
-        ts = datetime.now().strftime("%Y%m%d%H%M%S")
-        rand = random.randint(100, 999)
-        return f"{prefix}_{ts}_{rand}@employee-test.com"
+        rand_suffix = "".join(random.choices(string.ascii_lowercase, k=8))
+        return f"{prefix.lower()}.{rand_suffix}@employee-test.com"
 
     first = random.choice(_FIRST_NAMES_MALE + _FIRST_NAMES_FEMALE).lower()
     last = random.choice(_LAST_NAMES).lower()

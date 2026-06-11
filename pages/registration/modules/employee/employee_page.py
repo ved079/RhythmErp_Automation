@@ -17,7 +17,7 @@ FORM LAYOUT (FLAT — verified 2026-06-02 on live app):
        Validation: standard email regex
     4. Phone Number          (integer input, optional)
        Validation: ^[6-9]\\d{9}$ — 10-digit Indian mobile starting with 6-9
-    5. Designation           (mat-select, optional) — 31 options
+    5. Designation           (mat-select, optional) — 56 options
     6. Department            (mat-select, optional) — 0 options currently
     7. Status                (toggle switch, REQUIRED, default=true)
 
