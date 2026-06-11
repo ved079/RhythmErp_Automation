@@ -449,6 +449,19 @@ class TestViewReadOnly:
 
         # Verify Designation is set
         ui_designation = values.get("Designation", "")
+        if not ui_designation.strip():
+            # Diagnostic: dump popup HTML to understand the View-mode DOM
+            try:
+                popup_html = page.driver.execute_script("""
+                    var popup = document.querySelector(
+                        '.big-model, .edit_pop_up, mat-dialog-container, '
+                        + 'div.cdk-overlay-container div.popup-wrapper'
+                    );
+                    return popup ? popup.innerHTML.substring(0, 3000) : 'NO POPUP FOUND';
+                """)
+                log.warning(f"View popup HTML (first 3000 chars): {popup_html}")
+            except Exception as e:
+                log.warning(f"Failed to dump popup HTML: {e}")
         sa.assert_true(
             bool(ui_designation.strip()),
             "Designation should be set in View mode"

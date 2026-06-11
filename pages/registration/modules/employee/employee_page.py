@@ -1067,6 +1067,16 @@ class EmployeePage(BasePage):
         """
         values = {}
         try:
+            # --- Find the popup container first ---
+            # The popup could be .big-model, .edit_pop_up, or mat-dialog-container
+            popup_js = """
+                var popup = document.querySelector(
+                    '.big-model, .edit_pop_up.override_edit_pop_up.popup-mode, '
+                    + 'mat-dialog-container, div.cdk-overlay-container div.popup-wrapper'
+                );
+                return popup;
+            """
+
             # Text inputs — read via JS for Angular Material compatibility
             for field_name, key in [
                 ("Employee Name", "Employee Name"),
@@ -1074,17 +1084,23 @@ class EmployeePage(BasePage):
                 ("Phone Number", "Phone Number"),
             ]:
                 try:
-                    val = self.driver.execute_script(
-                        f"return document.querySelector(\"input[name='{field_name}']\")?.value || '';"
-                    )
+                    val = self.driver.execute_script(f"""
+                        var popup = document.querySelector(
+                            '.big-model, .edit_pop_up.override_edit_pop_up.popup-mode, '
+                            + 'mat-dialog-container, div.cdk-overlay-container div.popup-wrapper'
+                        );
+                        if (!popup) return '';
+                        var inp = popup.querySelector("input[name='{field_name}']");
+                        return inp ? (inp.value || '') : '';
+                    """)
                     values[key] = val
                 except Exception:
                     values[key] = ""
 
-            # Dropdown values — read the selected text from mat-select
-            # In View mode, Angular Material may render the value differently
-            # (e.g. in a span without .mat-mdc-select-value-text, or via
-            # aria attribute), so we try multiple selectors.
+            # Dropdown values — try multiple strategies for both Edit and View mode
+            # In Edit mode: mat-select with .mat-mdc-select-value-text works
+            # In View mode: the dropdown may be disabled/readonly, or rendered
+            #   as plain text, or the value may be in a sibling element
             for label, key in [
                 ("Party Reference", "Party Reference"),
                 ("Designation", "Designation"),
@@ -1092,30 +1108,28 @@ class EmployeePage(BasePage):
             ]:
                 try:
                     selected = self.driver.execute_script(f"""
-                        var labels = document.querySelectorAll('mat-label');
+                        var popup = document.querySelector(
+                            '.big-model, .edit_pop_up.override_edit_pop_up.popup-mode, '
+                            + 'mat-dialog-container, div.cdk-overlay-container div.popup-wrapper'
+                        );
+                        if (!popup) return '';
+
+                        // Strategy 1: mat-label → mat-form-field → mat-select value text
+                        var labels = popup.querySelectorAll('mat-label');
                         for (var i = 0; i < labels.length; i++) {{
                             if (labels[i].textContent.trim().includes('{label}')) {{
                                 var field = labels[i].closest('mat-form-field');
                                 if (field) {{
-                                    // Strategy 1: Standard Angular Material select value text
-                                    var valText = field.querySelector(
-                                        '.mat-mdc-select-value-text'
-                                    );
-                                    if (valText && valText.textContent.trim()) {{
-                                        return valText.textContent.trim();
-                                    }}
-                                    // Strategy 2: Any span inside mat-select-trigger
-                                    var trigger = field.querySelector(
-                                        '.mat-mdc-select-trigger span'
-                                    );
-                                    if (trigger && trigger.textContent.trim()) {{
-                                        return trigger.textContent.trim();
-                                    }}
-                                    // Strategy 3: Read from the mat-select value attribute
-                                    var matSel = field.querySelector('mat-select');
-                                    if (matSel) {{
-                                        // Check aria-label or value text
-                                        var spans = matSel.querySelectorAll('span');
+                                    // 1a: Standard value text
+                                    var vt = field.querySelector('.mat-mdc-select-value-text');
+                                    if (vt && vt.textContent.trim()) return vt.textContent.trim();
+                                    // 1b: Any span in trigger
+                                    var tr = field.querySelector('.mat-mdc-select-trigger span');
+                                    if (tr && tr.textContent.trim()) return tr.textContent.trim();
+                                    // 1c: Scan all spans in mat-select
+                                    var ms = field.querySelector('mat-select');
+                                    if (ms) {{
+                                        var spans = ms.querySelectorAll('span');
                                         for (var s = 0; s < spans.length; s++) {{
                                             var txt = spans[s].textContent.trim();
                                             if (txt && txt !== '{label}'
@@ -1124,17 +1138,80 @@ class EmployeePage(BasePage):
                                             }}
                                         }}
                                     }}
-                                    // Strategy 4: Check for disabled/read-only text display
-                                    var readonlySpan = field.querySelector(
-                                        '.mat-mdc-select-value span:not(.mat-mdc-select-placeholder)'
-                                    );
-                                    if (readonlySpan && readonlySpan.textContent.trim()) {{
-                                        return readonlySpan.textContent.trim();
+                                    // 1d: .mat-mdc-select-value direct child span
+                                    var sv = field.querySelector('.mat-mdc-select-value');
+                                    if (sv) {{
+                                        var kids = sv.querySelectorAll('span');
+                                        for (var k = 0; k < kids.length; k++) {{
+                                            var kt = kids[k].textContent.trim();
+                                            if (kt && kt !== '{label}'
+                                                && !kt.toLowerCase().startsWith('select')) {{
+                                                return kt;
+                                            }}
+                                        }}
                                     }}
-                                    return '';
+                                }}
+                                // 1e: Label's parent wrapper — search siblings
+                                var parent = labels[i].parentElement;
+                                if (parent) {{
+                                    // Check sibling elements that might contain the value
+                                    var siblings = parent.parentElement
+                                        ? parent.parentElement.children
+                                        : [];
+                                    for (var j = 0; j < siblings.length; j++) {{
+                                        if (siblings[j] !== parent && siblings[j] !== labels[i]) {{
+                                            var st = siblings[j].textContent.trim();
+                                            if (st && st !== '{label}'
+                                                && !st.toLowerCase().startsWith('select')
+                                                && st.length < 100) {{
+                                                return st;
+                                            }}
+                                        }}
+                                    }}
                                 }}
                             }}
                         }}
+
+                        // Strategy 2: Look for any element with a label-like text
+                        // and read the next sibling or associated value element
+                        var allLabels = popup.querySelectorAll(
+                            'label, .field-label, .form-label, '
+                            + 'span.label, div.label, mat-label'
+                        );
+                        for (var i = 0; i < allLabels.length; i++) {{
+                            if (allLabels[i].textContent.trim().includes('{label}')) {{
+                                // Check next sibling
+                                var next = allLabels[i].nextElementSibling;
+                                if (next) {{
+                                    var nt = next.textContent.trim();
+                                    if (nt && nt !== '{label}'
+                                        && !nt.toLowerCase().startsWith('select')
+                                        && nt.length < 100) {{
+                                        return nt;
+                                    }}
+                                }}
+                                // Check parent's other children
+                                var p = allLabels[i].parentElement;
+                                if (p) {{
+                                    var pc = p.children;
+                                    for (var c = 0; c < pc.length; c++) {{
+                                        if (pc[c] !== allLabels[i]) {{
+                                            var ct = pc[c].textContent.trim();
+                                            if (ct && ct !== '{label}'
+                                                && !ct.toLowerCase().startsWith('select')
+                                                && ct.length < 100) {{
+                                                // Skip if it's another label
+                                                if (!pc[c].querySelector('mat-label')
+                                                    && pc[c].tagName !== 'LABEL') {{
+                                                    return ct;
+                                                }}
+                                            }}
+                                        }}
+                                    }}
+                                }}
+                            }}
+                        }}
+
                         return '';
                     """)
                     values[key] = selected
