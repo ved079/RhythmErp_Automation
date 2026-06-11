@@ -1034,3 +1034,377 @@ class EmployeePage(BasePage):
             log.info("Edit clicked from menu")
         except Exception as e:
             log.warning(f"Edit click failed: {e}")
+
+    # ==============================================================
+    #  Form state helpers (for hybrid/UI tests)
+    # ==============================================================
+
+    def is_edit_mode(self):
+        """Check if the form is in edit mode (Update button present).
+
+        In add mode, only Submit is shown. In edit mode, Update is shown.
+        Returns True if Update button is visible, False otherwise.
+        """
+        try:
+            update_btn = self.driver.find_element(
+                By.XPATH,
+                "//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]"
+            )
+            if update_btn.is_displayed():
+                return True
+        except Exception:
+            pass
+        return False
+
+    def get_form_field_values(self):
+        """Read all field values from the currently open form popup.
+
+        Returns a dict with UI-facing field names as keys:
+          - Employee Name, Email, Phone Number
+          - Designation (selected text), Department (selected text)
+          - Status (True/False)
+          - Party Reference (selected text or None)
+        """
+        values = {}
+        try:
+            # Text inputs — read via JS for Angular Material compatibility
+            for field_name, key in [
+                ("Employee Name", "Employee Name"),
+                ("Email", "Email"),
+                ("Phone Number", "Phone Number"),
+            ]:
+                try:
+                    val = self.driver.execute_script(
+                        f"return document.querySelector(\"input[name='{field_name}']\")?.value || '';"
+                    )
+                    values[key] = val
+                except Exception:
+                    values[key] = ""
+
+            # Dropdown values — read the selected text from mat-select
+            for label, key in [
+                ("Party Reference", "Party Reference"),
+                ("Designation", "Designation"),
+                ("Department", "Department"),
+            ]:
+                try:
+                    selected = self.driver.execute_script(f"""
+                        var labels = document.querySelectorAll('mat-label');
+                        for (var i = 0; i < labels.length; i++) {{
+                            if (labels[i].textContent.trim().includes('{label}')) {{
+                                var field = labels[i].closest('mat-form-field');
+                                if (field) {{
+                                    var valText = field.querySelector('.mat-mdc-select-value-text');
+                                    return valText ? valText.textContent.trim() : '';
+                                }}
+                            }}
+                        }}
+                        return '';
+                    """)
+                    values[key] = selected
+                except Exception:
+                    values[key] = ""
+
+            # Status toggle state
+            try:
+                is_active = self.driver.execute_script("""
+                    var toggle = document.querySelector(
+                        'app-slide-toggle-v2 .switch-wrapper'
+                    );
+                    if (!toggle) return null;
+                    var onLabel = toggle.querySelector('span.state-label.on');
+                    return onLabel && onLabel.classList.contains('active');
+                """)
+                values["Status"] = is_active
+            except Exception:
+                values["Status"] = None
+
+        except Exception as e:
+            log.warning(f"Error reading form field values: {e}")
+
+        return values
+
+    def update(self):
+        """Click the Update button on the Employee edit form."""
+        log.info("Updating Employee form...")
+        try:
+            update_btn = self.find_visible_element(self.UPDATE_BUTTON)
+            if update_btn:
+                self.driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center'});"
+                    "arguments[0].click();",
+                    update_btn,
+                )
+                self.wait_seconds(1)
+                log.info("Update button clicked")
+            else:
+                log.warning("Update button not found")
+        except Exception as e:
+            log.warning(f"Update form failed: {e}")
+
+    def force_close_form_popup(self):
+        """Force close any open form popup — alias for _force_close_panels.
+
+        Also tries the Close (X) button and Cancel button first.
+        """
+        # Try Cancel button first
+        try:
+            cancel_btn = self.driver.find_elements(
+                By.XPATH,
+                "//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
+            )
+            if cancel_btn and cancel_btn[0].is_displayed():
+                self.driver.execute_script("arguments[0].click();", cancel_btn[0])
+                self.wait_seconds(0.5)
+                if not self._is_form_popup_open():
+                    return
+        except Exception:
+            pass
+
+        # Try Close (X) button
+        try:
+            close_btn = self.driver.find_elements(
+                By.XPATH,
+                "//div[contains(@class,'popup-actions')]/button[last()]"
+            )
+            if close_btn and close_btn[0].is_displayed():
+                self.driver.execute_script("arguments[0].click();", close_btn[0])
+                self.wait_seconds(0.5)
+                if not self._is_form_popup_open():
+                    return
+        except Exception:
+            pass
+
+        # Force remove all overlays via JS
+        self._force_close_panels()
+        self.wait_seconds(0.3)
+
+    # ==============================================================
+    #  Cascading dropdown helpers (Agent-pattern search-input strategy)
+    # ==============================================================
+
+    def get_dropdown_options_by_label(self, field_label):
+        """Open a dropdown by its mat-label text and return all option texts.
+
+        Uses the Agent search-input strategy for cascading dropdowns:
+          1. Find the mat-select by label
+          2. Click to open
+          3. If a search/filter input appears, type a space to trigger loading
+          4. Collect all option texts
+          5. Close the dropdown panel
+
+        Args:
+            field_label: The mat-label text (e.g., "Designation", "Department").
+
+        Returns:
+            List of option text strings.
+        """
+        options_text = []
+        self._force_close_panels()
+
+        # Find the mat-select by label
+        select_el = self.driver.execute_script(f"""
+            var labels = document.querySelectorAll('mat-label');
+            for (var i = 0; i < labels.length; i++) {{
+                if (labels[i].textContent.trim().includes('{field_label}')) {{
+                    var field = labels[i].closest('mat-form-field');
+                    if (field) {{
+                        return field.querySelector('mat-select');
+                    }}
+                }}
+            }}
+            return null;
+        """)
+
+        if not select_el:
+            log.warning(f"get_dropdown_options: mat-select for '{field_label}' not found")
+            return options_text
+
+        # Click to open the dropdown
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView({block:'center'});"
+            "arguments[0].click();",
+            select_el,
+        )
+        self.wait_seconds(1)
+
+        # Strategy: If there's a search/filter input, type a space to trigger loading
+        try:
+            search_inputs = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "div[role='listbox'] input, .cdk-overlay-pane input[placeholder]"
+            )
+            if search_inputs:
+                search_inputs[0].send_keys(" ")
+                self.wait_seconds(1)
+        except Exception:
+            pass
+
+        # Wait for options to appear
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "div[role='listbox'] mat-option")
+                )
+            )
+        except TimeoutException:
+            log.warning(f"get_dropdown_options: No options appeared for '{field_label}'")
+            self._close_dropdown_panel_only()
+            return options_text
+
+        # Collect option texts
+        try:
+            options = self.driver.find_elements(
+                By.CSS_SELECTOR, "div[role='listbox'] mat-option"
+            )
+            for opt in options:
+                try:
+                    text = opt.text.strip()
+                    if text:
+                        options_text.append(text)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        # Close the dropdown
+        self._close_dropdown_panel_only()
+
+        log.info(f"get_dropdown_options('{field_label}'): found {len(options_text)} options")
+        return options_text
+
+    def select_dropdown_by_label(self, field_label, value=None):
+        """Select an option from a dropdown by its mat-label text.
+
+        Uses the Agent search-input strategy for cascading dropdowns:
+          1. Find the mat-select by label
+          2. Click to open
+          3. If a search/filter input appears, type the value to filter
+          4. Find and click the matching option
+          5. Close panel and sync Angular form
+
+        Args:
+            field_label: The mat-label text (e.g., "Designation", "Department").
+            value:       Option text to select. If None, picks a random option.
+
+        Returns:
+            Selected option text, or None on failure.
+        """
+        self._force_close_panels()
+
+        # Find the mat-select by label
+        select_el = self.driver.execute_script(f"""
+            var labels = document.querySelectorAll('mat-label');
+            for (var i = 0; i < labels.length; i++) {{
+                if (labels[i].textContent.trim().includes('{field_label}')) {{
+                    var field = labels[i].closest('mat-form-field');
+                    if (field) {{
+                        return field.querySelector('mat-select');
+                    }}
+                }}
+            }}
+            return null;
+        """)
+
+        if not select_el:
+            log.warning(f"select_dropdown: mat-select for '{field_label}' not found")
+            return None
+
+        # Click to open
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView({block:'center'});"
+            "arguments[0].click();",
+            select_el,
+        )
+        self.wait_seconds(1)
+
+        # Strategy 1: If there's a search/filter input, type the value to filter
+        if value:
+            try:
+                search_inputs = self.driver.find_elements(
+                    By.CSS_SELECTOR,
+                    "div[role='listbox'] input, .cdk-overlay-pane input[placeholder]"
+                )
+                if search_inputs:
+                    search_inputs[0].clear()
+                    search_inputs[0].send_keys(value)
+                    self.wait_seconds(1)
+            except Exception:
+                pass
+
+        # Wait for options
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "div[role='listbox'] mat-option")
+                )
+            )
+        except TimeoutException:
+            log.warning(f"select_dropdown: No options for '{field_label}'")
+            self._close_dropdown_panel_only()
+            return None
+
+        # Find and click the option
+        options = self.driver.find_elements(
+            By.CSS_SELECTOR, "div[role='listbox'] mat-option"
+        )
+
+        selected_option = None
+        selected_text = None
+
+        if value:
+            # Strategy 2: Exact match
+            for opt in options:
+                try:
+                    opt_text = opt.text.strip()
+                    if opt_text.lower() == value.lower():
+                        selected_option = opt
+                        selected_text = opt_text
+                        break
+                except Exception:
+                    continue
+
+            # Strategy 3: Partial match
+            if not selected_option:
+                for opt in options:
+                    try:
+                        opt_text = opt.text.strip()
+                        if value.lower() in opt_text.lower():
+                            selected_option = opt
+                            selected_text = opt_text
+                            break
+                    except Exception:
+                        continue
+
+        # Strategy 4: Pick random valid option
+        if not selected_option:
+            valid_options = []
+            for opt in options:
+                try:
+                    opt_text = opt.text.strip()
+                    if opt_text and not opt_text.lower().startswith("select "):
+                        valid_options.append((opt, opt_text))
+                except Exception:
+                    continue
+
+            if valid_options:
+                selected_option, selected_text = random.choice(valid_options)
+            else:
+                log.warning(f"select_dropdown: No valid options for '{field_label}'")
+                self._close_dropdown_panel_only()
+                return None
+
+        # Click the option via JS
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView({block:'center'});"
+            "arguments[0].click();",
+            selected_option,
+        )
+        self.wait_seconds(0.5)
+
+        # Close panel and sync Angular form
+        self._close_dropdown_panel_only()
+        self._sync_dropdown_angular_model(select_el)
+
+        log.info(f"select_dropdown('{field_label}'): selected '{selected_text}'")
+        return selected_text

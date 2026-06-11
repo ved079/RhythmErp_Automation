@@ -63,6 +63,12 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "bug: Test documenting a known bug"
     )
+    config.addinivalue_line(
+        "markers", "smoke: Critical smoke tests (fast, must-pass)"
+    )
+    config.addinivalue_line(
+        "markers", "sanity: Core feature sanity tests"
+    )
 
 
 # ================================================================

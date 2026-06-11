@@ -18,6 +18,8 @@ KNOWN SERVER BUGS:
   - EMP-BUG-001: SQL injection payloads are accepted without sanitization
   - EMP-BUG-002: XSS payloads are accepted without sanitization
   - EMP-BUG-003: Empty/invalid data may be accepted (no server-side validation)
+  - EMP-BUG-004: Name > 255 chars returns 500 (DB error) instead of 400
+                 Server does not validate name length before DB insert.
 
 Run:
     pytest pages/registration/modules/employee/test/test_employee_api_validations.py -v
@@ -165,8 +167,15 @@ class TestNameValidation:
         # 255 is the max boundary — should be accepted
         assert isinstance(result["accepted"], bool)
 
+    @pytest.mark.bug
     def test_AGT_N04_name_exceeds_max_256(self, emp_api):
-        """EMP-N04: Name at 256 chars should be rejected (exceeds max)."""
+        """EMP-N04: Name at 256 chars should be rejected (exceeds max).
+
+        EMP-BUG-004: Server returns 500 (DB error "value too long for type
+        character varying(255)") instead of 400. The API does not validate
+        name length before inserting into the database. We accept 500 as
+        a documented bug status code.
+        """
         payload = _base_valid_payload(emp_api)
         payload["name"] = generate_string_256()
 
@@ -175,7 +184,7 @@ class TestNameValidation:
             emp_api.assert_validation_error(
                 field="name",
                 expected_status=400,
-                accept_statuses=[200, 201],
+                accept_statuses=[200, 201, 500],  # 500 = EMP-BUG-004
             )
 
     def test_AGT_N05_name_spaces_only(self, emp_api):

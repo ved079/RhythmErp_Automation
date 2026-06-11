@@ -369,6 +369,9 @@ class EmployeeAPIUtils:
         all_errors = error_body.get("errors", [])
         if not all_errors and "message" in error_body:
             all_errors = [{"error_message": error_body["message"]}]
+        # Also capture the "error" key (used by 500 DB-level errors)
+        if "error" in error_body and error_body["error"]:
+            all_errors.append({"error_message": error_body["error"]})
 
         field_errors = []
         for err in all_errors:
