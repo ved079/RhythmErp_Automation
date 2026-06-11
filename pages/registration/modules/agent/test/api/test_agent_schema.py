@@ -6,6 +6,11 @@ Verifies the Agent screen schema endpoint returns expected field definitions.
 
 ~5 tests, all headless API calls.
 
+Schema Structure (verified 2026-06-11):
+  The Agent schema endpoint returns a dict with key 'screendefinition_set'
+  containing all field definitions (top-level + children steppers).
+  NOT 'fields', 'field_set', or 'screen_fields'.
+
 Run:
   pytest test_agent_schema.py -v --tb=short
 """
@@ -50,48 +55,70 @@ class TestAgentSchema:
     @pytest.mark.api
     @pytest.mark.sanity
     def test_schema_has_fields(self, agt_api):
-        """Schema should define fields for the Agent screen."""
+        """Schema should define fields for the Agent screen.
+
+        The schema uses 'screendefinition_set' for field definitions,
+        NOT 'fields' or 'field_set'.
+        """
         log.info("Schema: Has fields")
         schema = agt_api.client.get_screen_schema(SCREEN_NAME)
         assert schema is not None
-        # Fields may be in different locations
-        fields = schema.get("fields", schema.get("field_set", []))
+
+        # Primary key: screendefinition_set (verified from live API)
+        fields = schema.get("screendefinition_set", [])
+
+        # Fallbacks for other possible key names
         if not fields:
-            # Try flattening from nested structure
-            for key in ("screenmatfieldconfiguration_set", "screen_fields"):
-                if key in schema:
+            for key in ("fields", "field_set", "screenmatfieldconfiguration_set", "screen_fields"):
+                if key in schema and schema[key]:
                     fields = schema[key]
+                    log.info(f"Found fields under key: '{key}'")
                     break
-        assert len(fields) > 0, f"Schema has no fields defined. Keys: {list(schema.keys())}"
+
+        assert len(fields) > 0, (
+            f"Schema has no fields defined. "
+            f"Available keys: {list(schema.keys())}"
+        )
 
     @pytest.mark.api
     @pytest.mark.sanity
     def test_schema_has_required_fields(self, agt_api):
-        """Schema should include Agent Name and Phone Number as required."""
+        """Schema should include field definitions with field_key entries.
+
+        The Agent schema uses 'screendefinition_set' with nested children
+        for stepper fields. We verify that field definitions exist and
+        contain recognizable field keys.
+        """
         log.info("Schema: Has required fields")
         schema = agt_api.client.get_screen_schema(SCREEN_NAME)
         assert schema is not None
 
-        # Collect all field names/keys
-        all_field_names = set()
-        fields = schema.get("fields", schema.get("field_set", []))
-        if not fields:
-            for key in ("screenmatfieldconfiguration_set", "screen_fields"):
-                if key in schema:
-                    fields = schema[key]
+        # Flatten all fields (top-level + children)
+        all_fields = agt_api.client._flatten_fields(
+            schema.get("screendefinition_set", [])
+        )
+
+        # Fallback if screendefinition_set is empty
+        if not all_fields:
+            for key in ("fields", "field_set", "screenmatfieldconfiguration_set"):
+                if key in schema and schema[key]:
+                    all_fields = schema[key]
                     break
 
-        for f in fields:
+        # Collect field names/keys
+        all_field_names = set()
+        for f in all_fields:
             if isinstance(f, dict):
                 name = f.get("field_name", f.get("field_key", f.get("name", "")))
                 if name:
-                    all_field_names.add(name.lower())
+                    all_field_names.add(str(name).lower())
 
-        log.info(f"Schema field names: {all_field_names}")
+        log.info(f"Schema field names ({len(all_field_names)}): {all_field_names}")
 
-        # We just verify there are fields — the exact naming convention
-        # varies between screen implementations
-        assert len(all_field_names) > 0, "No field names found in schema"
+        assert len(all_field_names) > 0, (
+            "No field names found in schema. "
+            f"Top-level keys: {list(schema.keys())}"
+        )
 
     @pytest.mark.api
     @pytest.mark.sanity
