@@ -761,9 +761,8 @@ class AgentPage(BasePage):
             return True
         else:
             log.warning(f"[WARNING] Option '{option_text}' not found in '{label_text}' dropdown")
-            # Close the dropdown panel by pressing Escape
-            from selenium.webdriver.common.keys import Keys
-            mat_select.send_keys(Keys.ESCAPE)
+            # Close the dropdown panel via JS DOM removal — NEVER use Keys.ESCAPE
+            self._force_close_panels()
             return False
         
 
@@ -902,7 +901,7 @@ class AgentPage(BasePage):
     # ==============================================================
 
     def fill_address_step(self, addr_data=None):
-        """Fill the required Address fields (cascading dropdowns + inputs) on Step 0.
+        """Fill the required Address fields (cascading dropdowns + inputs) on Step 1.
         
         Args:
             addr_data: Optional dict with address data. The cascading dropdowns
@@ -911,6 +910,13 @@ class AgentPage(BasePage):
                     (Address, Pin Code) use values from addr_data if provided.
         """
         log.info("Filling Address step (cascading dropdowns + inputs)...")
+        
+        # Address Type — REQUIRED dropdown (first in the address form)
+        addr_type = "Permanent"
+        if addr_data and isinstance(addr_data, dict):
+            addr_type = addr_data.get("address_type", addr_data.get("Address Type", addr_type))
+        self.select_dropdown_by_label("Address Type", addr_type)
+        self.wait_seconds(1)
         
         # Cascading dropdowns — each selection populates the next
         self.select_dropdown_by_label("Country", "India")
@@ -947,9 +953,9 @@ class AgentPage(BasePage):
         log.info("Filling Payment Details step...")
 
         if data.get("payment_terms"):
-            self.select_dropdown_by_placeholder("Payment Terms", data["payment_terms"])
+            self.select_dropdown_by_label("Payment Terms", data["payment_terms"])
         if data.get("preferred_payment_method"):
-            self.select_dropdown_by_placeholder(
+            self.select_dropdown_by_label(
                 "Preferred Payment Method", data["preferred_payment_method"]
             )
 
@@ -975,7 +981,7 @@ class AgentPage(BasePage):
         if data.get("ifsc_code"):
             self._fill_input_by_name("IFSC Code", data["ifsc_code"], row_index=row_index)
         if data.get("account_type"):
-            self.select_dropdown_by_placeholder("Account Type", data["account_type"])
+            self.select_dropdown_by_label("Account Type", data["account_type"])
         if data.get("account_holder_name"):
             self._fill_input_by_name(
                 "Account Holder Name", data["account_holder_name"], row_index=row_index
@@ -1375,6 +1381,22 @@ class AgentPage(BasePage):
         except Exception as e:
             log.warning(f"Search failed: {e}")
 
+    def search_agent(self, agent_name):
+        """Search for an agent by name and return True if found in the table.
+        
+        Handles search toggle, input, submit, and result check.
+        """
+        self.click_refresh()
+        self.wait_seconds(2)
+        self.search(agent_name)
+        self.wait_seconds(2)
+        found = self.is_agent_in_table(agent_name)
+        if found:
+            log.info(f"Agent found in table: {agent_name}")
+        else:
+            log.warning(f"Agent NOT found in table: {agent_name}")
+        return found
+
     def is_agent_in_table(self, agent_name):
         """Check if an agent name exists in the table rows."""
         js = f"""
@@ -1404,55 +1426,92 @@ class AgentPage(BasePage):
         return self.driver.execute_script(js)
 
     # ==============================================================
-    #  Row action buttons
+    #  Row action buttons (3-dot ERP menu pattern)
     # ==============================================================
 
-    def click_edit_button(self, agent_name):
-        """Click the Edit button for a specific agent in the table."""
-        log.info(f"Clicking Edit for: {agent_name}")
-        js = f"""
+    def is_edit_mode(self):
+        """Check if the form is in Edit mode (has Update button in footer)."""
+        try:
+            update_btns = self.driver.find_elements(
+                By.XPATH,
+                "//div[@class='popup-footer']//button[contains(.,'Update')]"
+            )
+            for btn in update_btns:
+                try:
+                    if btn.is_displayed():
+                        return True
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return False
+
+    def _click_first_menu_option(self, agent_name, option_text):
+        """Open the 3-dot menu on a table row and click the given option.
+        
+        Args:
+            agent_name: Text to find the correct table row.
+            option_text: 'Edit', 'View', or 'History' — the menu item to click.
+        """
+        log.info(f"Opening 3-dot menu for '{agent_name}' → clicking '{option_text}'")
+        
+        # Step 1: Find the row containing the agent name and click its 3-dot trigger
+        js_trigger = f"""
             var rows = document.querySelectorAll('table#excel-table tbody tr');
             for (var i = 0; i < rows.length; i++) {{
                 if (rows[i].textContent.indexOf('{agent_name}') > -1) {{
-                    var editBtn = rows[i].querySelector('td:nth-child(2) button');
-                    if (editBtn) {{
-                        editBtn.click();
-                        return 'Clicked edit';
+                    var trigger = rows[i].querySelector(
+                        'button.mat-mdc-menu-trigger.erp-row-trigger'
+                    );
+                    if (trigger) {{
+                        trigger.click();
+                        return 'Trigger clicked';
                     }}
-                    var buttons = rows[i].querySelectorAll('button');
-                    for (var j = 0; j < buttons.length; j++) {{
-                        if (buttons[j].textContent.trim().toLowerCase().indexOf('edit') > -1) {{
-                            buttons[j].click();
-                            return 'Clicked edit (text match)';
-                        }}
+                    // Fallback: any button with mat-mdc-menu-trigger
+                    var anyTrigger = rows[i].querySelector(
+                        'button.mat-mdc-menu-trigger'
+                    );
+                    if (anyTrigger) {{
+                        anyTrigger.click();
+                        return 'Trigger clicked (fallback)';
+                    }}
+                    return 'No trigger found in row';
+                }}
+            }}
+            return 'Row not found: {agent_name}';
+        """
+        result = self.driver.execute_script(js_trigger)
+        log.info(f"3-dot trigger: {result}")
+        self.wait_seconds(1)
+        
+        # Step 2: Click the desired option from the mat-mdc-menu-content
+        js_option = f"""
+            var menus = document.querySelectorAll(
+                'div.mat-mdc-menu-content'
+            );
+            for (var i = 0; i < menus.length; i++) {{
+                var items = menus[i].querySelectorAll('button');
+                for (var j = 0; j < items.length; j++) {{
+                    if (items[j].textContent.trim().indexOf('{option_text}') > -1) {{
+                        items[j].click();
+                        return 'Clicked {option_text}';
                     }}
                 }}
             }}
-            return 'Not found';
+            return '{option_text} not found in menu';
         """
-        result = self.driver.execute_script(js)
+        result2 = self.driver.execute_script(js_option)
         self.wait_seconds(2)
-        log.info(f"Edit button: {result}")
+        log.info(f"Menu option: {result2}")
+        return "Clicked" in str(result2)
+
+    def click_edit_button(self, agent_name):
+        """Click the Edit button for a specific agent in the table via 3-dot menu."""
+        return self._click_first_menu_option(agent_name, "Edit")
 
     def click_view_button(self, agent_name):
-        """Click the View button for a specific agent in the table."""
-        log.info(f"Clicking View for: {agent_name}")
-        js = f"""
-            var rows = document.querySelectorAll('table#excel-table tbody tr');
-            for (var i = 0; i < rows.length; i++) {{
-                if (rows[i].textContent.indexOf('{agent_name}') > -1) {{
-                    var viewBtn = rows[i].querySelector('td:nth-child(1) button');
-                    if (viewBtn) {{
-                        viewBtn.click();
-                        return 'Clicked view';
-                    }}
-                }}
-            }}
-            return 'Not found';
-        """
-        result = self.driver.execute_script(js)
-        self.wait_seconds(2)
-        log.info(f"View button: {result}")
+        """Click the View button for a specific agent in the table via 3-dot menu."""
+        return self._click_first_menu_option(agent_name, "View")
 
     def dump_address_fields(self):
         """Dump ALL input/select fields in the popup, regardless of container."""

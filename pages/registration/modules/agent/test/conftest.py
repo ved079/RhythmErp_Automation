@@ -44,6 +44,12 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "ui: Popup, dialog, form UI behavior and visual checks"
     )
+    config.addinivalue_line(
+        "markers", "hybrid: API creates data + UI verifies display/behavior"
+    )
+    config.addinivalue_line(
+        "markers", "api: API-only tests — no browser, headless validation"
+    )
 
 
 # ================================================================
@@ -113,6 +119,30 @@ def agt_page(logged_in_driver):
     page = AgentPage(logged_in_driver)
     page.navigate_to_page()
     yield page
+
+
+@pytest.fixture(scope="session")
+def agt_api():
+    """Authenticated Agent API utility - session scoped.
+    
+    Logs in once, shares the API client across all API/hybrid tests.
+    Generates cleanup report at session end.
+    """
+    from pages.registration.modules.agent.utils.api_agent_utils import AgentAPIUtils
+    from common.erp_api_client import RhythmERPAPIClient
+
+    client = RhythmERPAPIClient()
+    client.login()
+
+    api = AgentAPIUtils(api_client=client)
+
+    yield api
+
+    # Session cleanup — generate cleanup report
+    try:
+        api.tracker.generate_reports()
+    except Exception as e:
+        log.warning(f"Failed to generate cleanup report: {e}")
 
 
 # ================================================================
