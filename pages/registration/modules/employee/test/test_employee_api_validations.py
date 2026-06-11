@@ -202,12 +202,14 @@ class TestNameValidation:
         assert isinstance(result["accepted"], bool)
 
     def test_AGT_N06_name_valid_letters_and_spaces(self, emp_api):
-        """EMP-N06: Valid name with letters and spaces should be accepted."""
-        payload = _base_valid_payload(emp_api)
-        payload["name"] = "Rajesh Sharma"
+        """EMP-N06: Valid name with letters and spaces should be accepted.
 
-        result = emp_api.create_employee(employee_data={"name": "Rajesh Sharma"})
-        assert result is not None, "Valid name 'Rajesh Sharma' should be accepted"
+        Uses a unique name (prefix + random letters) instead of a hardcoded
+        name to avoid 'already exists' errors from previous test runs.
+        """
+        # Generate a unique valid name: prefix + FirstName LastName + rand
+        result = emp_api.create_employee(name_prefix="ValidName")
+        assert result is not None, "Valid name with letters and spaces should be accepted"
 
 
 # ═══════════════════════════════════════════════════════════════
