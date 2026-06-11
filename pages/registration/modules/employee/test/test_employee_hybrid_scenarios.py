@@ -408,8 +408,20 @@ class TestViewReadOnly:
         emp_name = result.get("name", "")
         emp_email = result.get("email_id", "")
         emp_phone = str(result.get("mobile_no", ""))
+        emp_designation_id = result.get("designation")
 
-        log.info(f"API created: name='{emp_name}', email='{emp_email}', phone='{emp_phone}'")
+        log.info(f"API created: name='{emp_name}', email='{emp_email}', "
+                 f"phone='{emp_phone}', designation_id='{emp_designation_id}'")
+
+        # Resolve expected designation name from ID
+        from pages.registration.modules.employee.data.employee_data import (
+            DESIGNATION_NAMES,
+        )
+        expected_designation = ""
+        if emp_designation_id and emp_designation_id in DESIGNATION_NAMES:
+            expected_designation = DESIGNATION_NAMES[emp_designation_id]
+            log.info(f"Expected designation: '{expected_designation}' "
+                     f"(id={emp_designation_id})")
 
         # Search and open View
         page.search_employee(emp_name)
@@ -448,9 +460,16 @@ class TestViewReadOnly:
             )
 
         # Verify Designation is set
+        # In View mode, the disabled mat-select may return:
+        #   - The designation name (e.g., "Farm Supervisor") via Angular model
+        #   - The designation ID (e.g., "2") via ng-reflect attribute
+        #   - Empty string if Angular model doesn't expose the value
         ui_designation = values.get("Designation", "")
+        log.info(f"UI Designation value: '{ui_designation}' "
+                 f"(expected: '{expected_designation}' or id={emp_designation_id})")
+
         if not ui_designation.strip():
-            # Diagnostic: dump Designation-related DOM from popup
+            # Diagnostic: dump Angular debug attributes and mat-select state
             try:
                 desig_debug = page.driver.execute_script("""
                     var popup = document.querySelector(
@@ -459,41 +478,80 @@ class TestViewReadOnly:
                     );
                     if (!popup) return 'NO POPUP FOUND';
 
-                    // Find any element containing 'Designation' text
                     var results = [];
-                    var allEls = popup.querySelectorAll('*');
-                    for (var i = 0; i < allEls.length; i++) {
-                        var txt = allEls[i].textContent.trim();
-                        if (txt.toLowerCase().indexOf('designation') > -1
-                            && txt.length < 200
-                            && allEls[i].children.length < 5) {
+                    var matSelects = popup.querySelectorAll('mat-select');
+                    for (var ms = 0; ms < matSelects.length; ms++) {
+                        var sel = matSelects[ms];
+                        var labelledBy = sel.getAttribute('aria-labelledby') || '';
+                        var labelEl = labelledBy ? document.getElementById(labelledBy) : null;
+                        var labelText = labelEl ? labelEl.textContent.trim() : '';
+                        if (labelText.toLowerCase().indexOf('designation') > -1) {
+                            // Collect all ng-reflect attributes
+                            var attrs = {};
+                            for (var a = 0; a < sel.attributes.length; a++) {
+                                var attrName = sel.attributes[a].name;
+                                if (attrName.startsWith('ng-reflect') || attrName.startsWith('aria-')) {
+                                    attrs[attrName] = sel.attributes[a].value;
+                                }
+                            }
+                            // Also check app-dropdown-v2 parent
+                            var dropdown = sel.closest('app-dropdown-v2');
+                            var dropAttrs = {};
+                            if (dropdown) {
+                                for (var b = 0; b < dropdown.attributes.length; b++) {
+                                    var dAttrName = dropdown.attributes[b].name;
+                                    if (dAttrName.startsWith('ng-reflect') || dAttrName === 'value' || dAttrName === 'selected-value') {
+                                        dropAttrs[dAttrName] = dropdown.attributes[b].value;
+                                    }
+                                }
+                            }
+                            // Check __ngContext__ for value
+                            var ngVal = 'N/A';
+                            try {
+                                var ctx = sel.__ngContext__;
+                                if (ctx && Array.isArray(ctx)) {
+                                    for (var c = 0; c < ctx.length; c++) {
+                                        if (ctx[c] && typeof ctx[c] === 'object') {
+                                            if (ctx[c].value !== undefined) {
+                                                ngVal = JSON.stringify(ctx[c].value);
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch(e) { ngVal = 'error: ' + e.message; }
+
                             results.push({
-                                tag: allEls[i].tagName,
-                                class: allEls[i].className,
-                                text: txt.substring(0, 100),
-                                parentTag: allEls[i].parentElement
-                                    ? allEls[i].parentElement.tagName : '',
-                                parentClass: allEls[i].parentElement
-                                    ? allEls[i].parentElement.className : '',
-                                outerHTML: allEls[i].outerHTML.substring(0, 500)
+                                labelText: labelText,
+                                selectClass: sel.className,
+                                selectAttrs: attrs,
+                                dropdownAttrs: dropAttrs,
+                                ngContextValue: ngVal,
+                                selectInnerHTML: sel.innerHTML.substring(0, 1000)
                             });
                         }
                     }
-                    // Also dump full HTML (more chars this time)
-                    return JSON.stringify({
-                        designation_elements: results,
-                        full_html_length: popup.innerHTML.length,
-                        html_sample_end: popup.innerHTML.substring(
-                            popup.innerHTML.length - 5000
-                        )
-                    });
+                    return JSON.stringify(results);
                 """)
-                log.warning(f"Designation DOM debug: {desig_debug}")
+                log.warning(f"Designation Angular debug: {desig_debug}")
             except Exception as e:
-                log.warning(f"Failed to dump Designation DOM: {e}")
+                log.warning(f"Failed to dump Designation Angular debug: {e}")
+
+        # Accept designation as set if:
+        # 1. UI shows the designation name (matches expected_designation)
+        # 2. UI shows the designation ID (matches emp_designation_id)
+        # 3. UI shows any non-empty string (we trust it's the designation)
+        designation_ok = bool(ui_designation.strip())
+        if designation_ok and expected_designation:
+            # Verify it matches either name or ID
+            designation_ok = (
+                expected_designation.lower() in ui_designation.lower()
+                or str(emp_designation_id) == ui_designation.strip()
+            )
         sa.assert_true(
-            bool(ui_designation.strip()),
-            "Designation should be set in View mode"
+            designation_ok,
+            f"Designation should be set in View mode, got: '{ui_designation}' "
+            f"(expected: '{expected_designation}' or id={emp_designation_id})"
         )
 
         try:

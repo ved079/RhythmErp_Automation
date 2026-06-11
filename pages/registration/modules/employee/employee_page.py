@@ -1099,8 +1099,10 @@ class EmployeePage(BasePage):
 
             # Dropdown values — try multiple strategies for both Edit and View mode
             # In Edit mode: mat-select with .mat-mdc-select-value-text works
-            # In View mode: the dropdown may be disabled/readonly, or rendered
-            #   as plain text, or the value may be in a sibling element
+            # In View mode: mat-select shows mat-mdc-select-empty even when a value
+            #   exists in the Angular form model. The disabled dropdown doesn't
+            #   render the selected option text, so we must read the value from
+            #   Angular's internal component model.
             for label, key in [
                 ("Party Reference", "Party Reference"),
                 ("Designation", "Designation"),
@@ -1114,7 +1116,148 @@ class EmployeePage(BasePage):
                         );
                         if (!popup) return '';
 
-                        // Strategy 1: mat-label → mat-form-field → mat-select value text
+                        // ── Strategy 0: Read Angular model value from mat-select ──
+                        // In View mode, the mat-select is disabled/empty but the
+                        // Angular component still holds the selected value in its
+                        // internal model. Access via __ngContext__ lView chain or
+                        // via ng-reflect-selected-value attribute.
+                        var matSelects = popup.querySelectorAll('mat-select');
+                        for (var ms = 0; ms < matSelects.length; ms++) {{
+                            var sel = matSelects[ms];
+                            // Check the aria-labelledby to match the right label
+                            var labelledBy = sel.getAttribute('aria-labelledby') || '';
+                            var labelEl = labelledBy ? document.getElementById(labelledBy) : null;
+                            var labelText = labelEl ? labelEl.textContent.trim() : '';
+
+                            if (labelText.includes('{label}')) {{
+                                // 0a: ng-reflect-selected-value attribute (Angular debug mode)
+                                var rv = sel.getAttribute('ng-reflect-selected-value');
+                                if (rv && rv !== 'null' && rv !== '') {{
+                                    try {{
+                                        var parsed = JSON.parse(rv);
+                                        if (parsed && typeof parsed === 'object' && parsed.viewValue) {{
+                                            return parsed.viewValue;
+                                        }}
+                                        if (parsed && typeof parsed === 'object' && parsed.label) {{
+                                            return parsed.label;
+                                        }}
+                                        if (typeof parsed === 'string' && parsed) {{
+                                            return parsed;
+                                        }}
+                                    }} catch(e) {{}}
+                                    if (rv !== '[object Object]') return rv;
+                                }}
+
+                                // 0b: ng-reflect-value attribute on the mat-select
+                                var rv2 = sel.getAttribute('ng-reflect-value');
+                                if (rv2 && rv2 !== 'null' && rv2 !== '') {{
+                                    try {{
+                                        var parsed2 = JSON.parse(rv2);
+                                        if (typeof parsed2 === 'string' && parsed2) return parsed2;
+                                        if (typeof parsed2 === 'number') return String(parsed2);
+                                    }} catch(e) {{}}
+                                    if (rv2 !== '[object Object]') return rv2;
+                                }}
+
+                                // 0c: Read Angular component instance via __ngContext__
+                                // The __ngContext__ array (lView) contains component
+                                // directive instances. We scan for objects with a
+                                // `value` property that holds the selected value.
+                                try {{
+                                    var ngCtx = sel.__ngContext__;
+                                    if (ngCtx) {{
+                                        // __ngContext__ may be an array (lView) or an object
+                                        var items = Array.isArray(ngCtx) ? ngCtx : [ngCtx];
+                                        for (var li = 0; li < items.length; li++) {{
+                                            if (items[li] && typeof items[li] === 'object') {{
+                                                var comp = items[li];
+                                                // MatSelect component: .value holds the control value
+                                                if (comp.value !== undefined
+                                                    && comp.value !== null
+                                                    && comp.value !== '') {{
+                                                    if (typeof comp.value === 'object'
+                                                        && comp.value.viewValue) {{
+                                                        return comp.value.viewValue;
+                                                    }}
+                                                    if (typeof comp.value === 'string'
+                                                        || typeof comp.value === 'number') {{
+                                                        return String(comp.value);
+                                                    }}
+                                                }}
+                                                // MatSelect: .selected holds the MatOption
+                                                if (comp.selected
+                                                    && typeof comp.selected === 'object') {{
+                                                    if (comp.selected.viewValue) {{
+                                                        return comp.selected.viewValue;
+                                                    }}
+                                                    if (comp.selected.label) {{
+                                                        return comp.selected.label;
+                                                    }}
+                                                }}
+                                            }}
+                                        }}
+                                    }}
+                                }} catch(e) {{}}
+
+                                // 0d: Walk up to app-dropdown-v2 and read its ng-reflect attrs
+                                var dropdown = sel.closest('app-dropdown-v2');
+                                if (dropdown) {{
+                                    var dVal = dropdown.getAttribute('ng-reflect-selected-value');
+                                    if (dVal && dVal !== 'null' && dVal !== '') {{
+                                        try {{
+                                            var dParsed = JSON.parse(dVal);
+                                            if (typeof dParsed === 'string' && dParsed) return dParsed;
+                                            if (typeof dParsed === 'number') return String(dParsed);
+                                            if (dParsed && dParsed.viewValue) return dParsed.viewValue;
+                                        }} catch(e) {{}}
+                                        if (dVal !== '[object Object]') return dVal;
+                                    }}
+                                    var dVal2 = dropdown.getAttribute('ng-reflect-value');
+                                    if (dVal2 && dVal2 !== 'null' && dVal2 !== '') {{
+                                        try {{
+                                            var dParsed2 = JSON.parse(dVal2);
+                                            if (typeof dParsed2 === 'string' && dParsed2) return dParsed2;
+                                            if (typeof dParsed2 === 'number') return String(dParsed2);
+                                        }} catch(e) {{}}
+                                        if (dVal2 !== '[object Object]') return dVal2;
+                                    }}
+                                    // 0e: Try reading Angular component from dropdown element
+                                    try {{
+                                        var ddCtx = dropdown.__ngContext__;
+                                        if (ddCtx) {{
+                                            var ddItems = Array.isArray(ddCtx) ? ddCtx : [ddCtx];
+                                            for (var di = 0; di < ddItems.length; di++) {{
+                                                if (ddItems[di] && typeof ddItems[di] === 'object') {{
+                                                    var ddComp = ddItems[di];
+                                                    if (ddComp.selectedValue !== undefined
+                                                        && ddComp.selectedValue !== null
+                                                        && ddComp.selectedValue !== '') {{
+                                                        if (typeof ddComp.selectedValue === 'string')
+                                                            return ddComp.selectedValue;
+                                                        if (typeof ddComp.selectedValue === 'number')
+                                                            return String(ddComp.selectedValue);
+                                                        if (ddComp.selectedValue.viewValue)
+                                                            return ddComp.selectedValue.viewValue;
+                                                    }}
+                                                    if (ddComp.value !== undefined
+                                                        && ddComp.value !== null
+                                                        && ddComp.value !== '') {{
+                                                        if (typeof ddComp.value === 'string')
+                                                            return ddComp.value;
+                                                        if (typeof ddComp.value === 'number')
+                                                            return String(ddComp.value);
+                                                    }}
+                                                }}
+                                            }}
+                                        }}
+                                    }} catch(e) {{}}
+                                }}
+                            }}
+                        }}
+
+                        // ── Strategy 1: mat-label → mat-form-field → mat-select value text ──
+                        // This works in Edit mode where the mat-select actually
+                        // renders the selected option text.
                         var labels = popup.querySelectorAll('mat-label');
                         for (var i = 0; i < labels.length; i++) {{
                             if (labels[i].textContent.trim().includes('{label}')) {{
@@ -1127,9 +1270,9 @@ class EmployeePage(BasePage):
                                     var tr = field.querySelector('.mat-mdc-select-trigger span');
                                     if (tr && tr.textContent.trim()) return tr.textContent.trim();
                                     // 1c: Scan all spans in mat-select
-                                    var ms = field.querySelector('mat-select');
-                                    if (ms) {{
-                                        var spans = ms.querySelectorAll('span');
+                                    var msEl = field.querySelector('mat-select');
+                                    if (msEl) {{
+                                        var spans = msEl.querySelectorAll('span');
                                         for (var s = 0; s < spans.length; s++) {{
                                             var txt = spans[s].textContent.trim();
                                             if (txt && txt !== '{label}'
@@ -1147,64 +1290,6 @@ class EmployeePage(BasePage):
                                             if (kt && kt !== '{label}'
                                                 && !kt.toLowerCase().startsWith('select')) {{
                                                 return kt;
-                                            }}
-                                        }}
-                                    }}
-                                }}
-                                // 1e: Label's parent wrapper — search siblings
-                                var parent = labels[i].parentElement;
-                                if (parent) {{
-                                    // Check sibling elements that might contain the value
-                                    var siblings = parent.parentElement
-                                        ? parent.parentElement.children
-                                        : [];
-                                    for (var j = 0; j < siblings.length; j++) {{
-                                        if (siblings[j] !== parent && siblings[j] !== labels[i]) {{
-                                            var st = siblings[j].textContent.trim();
-                                            if (st && st !== '{label}'
-                                                && !st.toLowerCase().startsWith('select')
-                                                && st.length < 100) {{
-                                                return st;
-                                            }}
-                                        }}
-                                    }}
-                                }}
-                            }}
-                        }}
-
-                        // Strategy 2: Look for any element with a label-like text
-                        // and read the next sibling or associated value element
-                        var allLabels = popup.querySelectorAll(
-                            'label, .field-label, .form-label, '
-                            + 'span.label, div.label, mat-label'
-                        );
-                        for (var i = 0; i < allLabels.length; i++) {{
-                            if (allLabels[i].textContent.trim().includes('{label}')) {{
-                                // Check next sibling
-                                var next = allLabels[i].nextElementSibling;
-                                if (next) {{
-                                    var nt = next.textContent.trim();
-                                    if (nt && nt !== '{label}'
-                                        && !nt.toLowerCase().startsWith('select')
-                                        && nt.length < 100) {{
-                                        return nt;
-                                    }}
-                                }}
-                                // Check parent's other children
-                                var p = allLabels[i].parentElement;
-                                if (p) {{
-                                    var pc = p.children;
-                                    for (var c = 0; c < pc.length; c++) {{
-                                        if (pc[c] !== allLabels[i]) {{
-                                            var ct = pc[c].textContent.trim();
-                                            if (ct && ct !== '{label}'
-                                                && !ct.toLowerCase().startsWith('select')
-                                                && ct.length < 100) {{
-                                                // Skip if it's another label
-                                                if (!pc[c].querySelector('mat-label')
-                                                    && pc[c].tagName !== 'LABEL') {{
-                                                    return ct;
-                                                }}
                                             }}
                                         }}
                                     }}
