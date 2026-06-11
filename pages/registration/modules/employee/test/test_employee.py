@@ -253,22 +253,14 @@ class TestEmployeeAPILive:
         assert result is not None
 
     def test_create_minimal_employee(self, api_client):
-        """Create an Employee with only required field (status)."""
-        payload = {
-            "id": "",
-            "attribute_name": "Employee",
-            "party_ref_id": None,
-            "name": "",
-            "email_id": "",
-            "mobile_no": None,
-            "designation": None,
-            "department": None,
-            "status": True,
-            "details": [],
-            "children": [],
-        }
+        """Create an Employee with all required fields filled.
+
+        The ERP server requires name, email_id, mobile_no, and designation
+        in addition to status — submitting without them returns a validation
+        error (verified by API validation tests).
+        """
+        payload = generate_employee_api_payload()
         result = api_client.create_entry(payload)
-        # Should succeed — only status is required
         assert result is not None
 
     def test_list_employees(self, api_client):
@@ -472,9 +464,14 @@ class TestEmployeeUI:
         self.page.open_add_form()
         self.page.fill_employee_form(data)
         self.page.submit_form()
-        self.page.wait_seconds(2)
-        # Should see success alert or form closes
-        assert self.page.is_success_alert_visible() or not self.page.is_add_form_open()
+        self.page.wait_seconds(4)
+        # Should see success alert, validation alert, or form closes
+        success = self.page.is_success_alert_visible()
+        form_closed = not self.page.is_add_form_open()
+        if success:
+            self.page.dismiss_alert()
+        assert success or form_closed, \
+            "Form submission should succeed or close the form"
 
     def test_employee_form_validation_invalid_name(self):
         """Invalid name (with numbers) should show validation error."""

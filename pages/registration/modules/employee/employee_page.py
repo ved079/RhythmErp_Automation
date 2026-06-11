@@ -11,19 +11,19 @@ FORM LAYOUT (FLAT — verified 2026-06-02 on live app):
   All fields on a single screen (no stepper navigation):
     1. Party Reference      (mat-select, optional) — FK to party_master (excludes Customers)
        Auto-patches: name, email_id, mobile_no when selected
-    2. Employee Name         (text input, optional, maxlength=255)
+    2. Employee Name         (text input, REQUIRED, maxlength=255)
        Validation: ^[A-Za-z ]+$ — letters and spaces only
-    3. Email                 (text input, optional, maxlength=255)
+    3. Email                 (text input, REQUIRED, maxlength=255)
        Validation: standard email regex
-    4. Phone Number          (integer input, optional)
+    4. Phone Number          (integer input, REQUIRED)
        Validation: ^[6-9]\\d{9}$ — 10-digit Indian mobile starting with 6-9
-    5. Designation           (mat-select, optional) — 56 options
+    5. Designation           (mat-select, REQUIRED) — 56 options
     6. Department            (mat-select, optional) — 0 options currently
     7. Status                (toggle switch, REQUIRED, default=true)
 
-KEY RULES (verified 2026-06-02):
+KEY RULES (verified 2026-06-11):
   - FLAT FORM: No steppers, no children array
-  - Only `status` is required — all other fields optional
+  - Required fields: name, email_id, mobile_no, designation, status
   - party_ref_id auto-fills name, email, mobile when selected
   - Employee Name: letters and spaces only (no numbers, no special chars)
   - Phone: must start with 6-9, exactly 10 digits

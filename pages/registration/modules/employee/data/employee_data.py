@@ -8,19 +8,19 @@ FIELD REFERENCE (FLAT FORM — NO STEPPERS):
 
   1. Party Reference      (dropdown, optional) — FK to party_master (excludes Customers)
      Auto-patches: name, email_id, mobile_no when a party is selected
-  2. Employee Name         (text input, optional, maxlength=255)
+  2. Employee Name         (text input, REQUIRED, maxlength=255)
      Validation: ^[A-Za-z ]+$ — letters and spaces only
-  3. Email                 (text input, optional, maxlength=255)
+  3. Email                 (text input, REQUIRED, maxlength=255)
      Validation: standard email regex
-  4. Phone Number          (integer input, optional, maxlength=255)
+  4. Phone Number          (integer input, REQUIRED, maxlength=255)
      Validation: ^[6-9]\\d{9}$ — 10-digit Indian mobile starting with 6-9
-  5. Designation           (dropdown, optional) — FK to designation table (56 options)
+  5. Designation           (dropdown, REQUIRED) — FK to designation table (56 options)
   6. Department            (dropdown, optional) — FK to department table (0 options currently)
   7. Status                (toggle, REQUIRED, default=true) — Active/Inactive
 
-KEY RULES (verified 2026-06-04 on live app):
+KEY RULES (verified 2026-06-11 on live app):
   - FLAT FORM: No steppers, no children array — all fields at root level
-  - Only `status` is required — all other fields are optional
+  - Required fields: name, email_id, mobile_no, designation, status
   - party_ref_id auto-fills name, email, mobile via auto_patch_query
   - Designation has 56 options; Department has 0 options currently
   - Employee Name must match ^[A-Za-z ]+$ (letters + spaces only)
@@ -299,34 +299,40 @@ def generate_valid_employee_data():
     """Generate complete valid data for the Employee form.
 
     This is the UI-facing format (field names match the Angular form controls).
-    All fields are optional except status, but we fill them for happy-path tests.
+    All fields are populated with valid data — name, email, phone, designation,
+    and status are required by the ERP server.
 
     Returns:
         dict with all form fields populated with realistic data.
     """
+    desig_id = generate_designation_id()
+    desig_name = DESIGNATION_NAMES.get(desig_id, "")
     return {
         "party_reference": None,                          # Skip by default
         "employee_name": generate_employee_name(),
         "email": generate_email(),
         "phone_number": generate_phone(),
-        "designation": None,                              # Pick from live UI
+        "designation": desig_name,                        # Required — UI name string
         "department": None,                               # No options currently
         "status": True,                                   # Default: Active
     }
 
 
 def generate_minimal_employee_data():
-    """Generate minimal data — only the required field (status).
+    """Generate data with all required fields filled.
 
-    All other fields are empty/null. Use for mandatory field validation tests.
+    The ERP server requires name, email_id, mobile_no, and designation
+    in addition to status. This generates valid values for all required fields.
     """
+    desig_id = generate_designation_id()
+    desig_name = DESIGNATION_NAMES.get(desig_id, "")
     return {
         "party_reference": None,
-        "employee_name": "",
-        "email": "",
-        "phone_number": "",
-        "designation": None,
-        "department": None,
+        "employee_name": generate_employee_name(),
+        "email": generate_email(),
+        "phone_number": generate_phone(),
+        "designation": desig_name,                        # Required — UI name string
+        "department": None,                               # No options currently
         "status": True,
     }
 
@@ -605,7 +611,7 @@ FIELD_VALIDATION_RULES = {
         "field_key": "name",
         "label": "Employee Name",
         "type": "character",
-        "required": False,
+        "required": True,
         "max_length": 255,
         "pattern": r"^[A-Za-z ]+$",
         "error_message": "Invalid Name",
@@ -616,7 +622,7 @@ FIELD_VALIDATION_RULES = {
         "field_key": "email_id",
         "label": "Email",
         "type": "character",
-        "required": False,
+        "required": True,
         "max_length": 255,
         "pattern": r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$",
         "error_message": "Invalid Email",
@@ -627,7 +633,7 @@ FIELD_VALIDATION_RULES = {
         "field_key": "mobile_no",
         "label": "Phone Number",
         "type": "integer",
-        "required": False,
+        "required": True,
         "max_length": 255,
         "pattern": r"^[6-9]\d{9}$",
         "error_message": "Invalid Phone Number",
@@ -638,7 +644,7 @@ FIELD_VALIDATION_RULES = {
         "field_key": "designation",
         "label": "Designation",
         "type": "dropdown",
-        "required": False,
+        "required": True,
         "fk_options_count": 56,
     },
     "department": {

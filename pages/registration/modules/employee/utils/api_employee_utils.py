@@ -38,11 +38,11 @@ EMPLOYEE SCREEN STRUCTURE (FLAT — NO STEPPERS):
     }
 
 FIELD KEY MAPPING (from Employee schema):
-  UI "Employee Name" -> API "name"        (string, pattern: ^[A-Za-z ]+$)
-  UI "Email"         -> API "email_id"    (string)
-  UI "Phone Number"  -> API "mobile_no"   (integer)
-  UI "Designation"   -> API "designation" (FK to designation table)
-  UI "Department"    -> API "department"  (FK to department table)
+  UI "Employee Name" -> API "name"        (string, REQUIRED, pattern: ^[A-Za-z ]+$)
+  UI "Email"         -> API "email_id"    (string, REQUIRED)
+  UI "Phone Number"  -> API "mobile_no"   (integer, REQUIRED)
+  UI "Designation"   -> API "designation" (FK, REQUIRED)
+  UI "Department"    -> API "department"  (FK, optional — 0 options currently)
   UI "Status"        -> API "status"      (boolean, REQUIRED)
 
 NAME VALIDATION:
@@ -56,8 +56,7 @@ UPDATE METHOD:
   PUT /core/dynamic-screen-wrapper/Employee/{id}/
 
 KNOWN BUGS:
-  - No server-side validation on POST — empty/invalid data accepted
-  - SQL injection and XSS payloads are accepted without sanitization
+  - SQL injection and XSS payloads are accepted without sanitization in name field
 """
 
 import json
@@ -488,12 +487,12 @@ class EmployeeAPIUtils:
           No children[] or details[] arrays needed (both are empty []).
 
         FIELD KEY MAPPING:
-          UI "Employee Name" -> API "name"        (string, ^[A-Za-z ]+$)
-          UI "Email"         -> API "email_id"    (string)
-          UI "Phone Number"  -> API "mobile_no"   (integer)
-          UI "Designation"   -> API "designation" (FK integer)
-          UI "Department"    -> API "department"  (FK integer, null = skip)
-          UI "Status"        -> API "status"      (boolean, required)
+          UI "Employee Name" -> API "name"        (string, REQUIRED, ^[A-Za-z ]+$)
+          UI "Email"         -> API "email_id"    (string, REQUIRED)
+          UI "Phone Number"  -> API "mobile_no"   (integer, REQUIRED)
+          UI "Designation"   -> API "designation" (FK integer, REQUIRED)
+          UI "Department"    -> API "department"  (FK integer, optional — null = skip)
+          UI "Status"        -> API "status"      (boolean, REQUIRED)
 
         Args:
             employee_data:  Override data (merged with generated defaults).
