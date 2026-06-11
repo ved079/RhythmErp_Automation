@@ -36,8 +36,11 @@ class CreatedRecord:
     def __post_init__(self):
         if not self.timestamp:
             self.timestamp = datetime.now().isoformat()
-        if not self.prefix and "_" in self.agent_name:
+        # Handle None or empty agent_name (server may return None for garbage data)
+        if not self.prefix and self.agent_name and "_" in self.agent_name:
             self.prefix = self.agent_name.split("_")[0]
+        elif not self.agent_name:
+            self.agent_name = self.agent_name or "<null>"
 
 
 class CleanupTracker:
