@@ -450,18 +450,47 @@ class TestViewReadOnly:
         # Verify Designation is set
         ui_designation = values.get("Designation", "")
         if not ui_designation.strip():
-            # Diagnostic: dump popup HTML to understand the View-mode DOM
+            # Diagnostic: dump Designation-related DOM from popup
             try:
-                popup_html = page.driver.execute_script("""
+                desig_debug = page.driver.execute_script("""
                     var popup = document.querySelector(
                         '.big-model, .edit_pop_up, mat-dialog-container, '
                         + 'div.cdk-overlay-container div.popup-wrapper'
                     );
-                    return popup ? popup.innerHTML.substring(0, 3000) : 'NO POPUP FOUND';
+                    if (!popup) return 'NO POPUP FOUND';
+
+                    // Find any element containing 'Designation' text
+                    var results = [];
+                    var allEls = popup.querySelectorAll('*');
+                    for (var i = 0; i < allEls.length; i++) {
+                        var txt = allEls[i].textContent.trim();
+                        if (txt.toLowerCase().indexOf('designation') > -1
+                            && txt.length < 200
+                            && allEls[i].children.length < 5) {
+                            results.push({
+                                tag: allEls[i].tagName,
+                                class: allEls[i].className,
+                                text: txt.substring(0, 100),
+                                parentTag: allEls[i].parentElement
+                                    ? allEls[i].parentElement.tagName : '',
+                                parentClass: allEls[i].parentElement
+                                    ? allEls[i].parentElement.className : '',
+                                outerHTML: allEls[i].outerHTML.substring(0, 500)
+                            });
+                        }
+                    }
+                    // Also dump full HTML (more chars this time)
+                    return JSON.stringify({
+                        designation_elements: results,
+                        full_html_length: popup.innerHTML.length,
+                        html_sample_end: popup.innerHTML.substring(
+                            popup.innerHTML.length - 5000
+                        )
+                    });
                 """)
-                log.warning(f"View popup HTML (first 3000 chars): {popup_html}")
+                log.warning(f"Designation DOM debug: {desig_debug}")
             except Exception as e:
-                log.warning(f"Failed to dump popup HTML: {e}")
+                log.warning(f"Failed to dump Designation DOM: {e}")
         sa.assert_true(
             bool(ui_designation.strip()),
             "Designation should be set in View mode"
