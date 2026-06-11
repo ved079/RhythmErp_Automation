@@ -1,11 +1,10 @@
-"""
+r"""
 probe_get_none_type.py
 ----------------------
 Create one Agent per API validation test case, then try GET on each.
 Reports which records can be opened vs which crash with NoneType 500.
 
 Run:
-    cd C:\Users\vedantd\Desktop\Pacs_Automation
     python -m scripts.probe_get_none_type
 """
 
