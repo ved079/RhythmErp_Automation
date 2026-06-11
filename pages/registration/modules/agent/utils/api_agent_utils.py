@@ -58,7 +58,6 @@ from pages.registration.modules.agent.data.agent_data import (
     generate_phone_number,
     generate_email,
     generate_address,
-    generate_pin_code,
     generate_gst,
     generate_bank_name,
     generate_branch,
@@ -112,26 +111,29 @@ PAYMENT_METHOD_RTGS_ID = 143
 # ──────────────────────────────────────────────
 
 _ADDRESS_CHAINS = [
-    # Maharashtra / Akola
+    # Maharashtra / Akola  (PIN 444001 — verified 2026-06-11)
     {
         "state_ref_id_id": 12,
         "district_ref_id_id": 208,
         "sub_district_ref_id_id": 13041,
         "village_ref_id_id": 422660,
+        "pin_code": 444001,
     },
-    # Punjab / multiple districts
+    # Punjab  (PIN 141001 — verified 2026-06-11)
     {
         "state_ref_id_id": 82,
         "district_ref_id_id": 764,
         "sub_district_ref_id_id": 13939,
         "village_ref_id_id": 775472,
+        "pin_code": 141001,
     },
-    # State 101 / district 233
+    # State 101 / district 233  (PIN 380001 — verified 2026-06-11)
     {
         "state_ref_id_id": 101,
         "district_ref_id_id": 233,
         "sub_district_ref_id_id": 12979,
         "village_ref_id_id": None,
+        "pin_code": 380001,
     },
 ]
 
@@ -557,7 +559,7 @@ class AgentAPIUtils:
                             "sub_district_ref_id_id": chain["sub_district_ref_id_id"],
                             "village_ref_id_id": chain.get("village_ref_id_id"),
                             "address": generate_address(),
-                            "pin_code": int(generate_pin_code()),
+                            "pin_code": chain["pin_code"],
                             "same_as_above": None,
                             "details": [],
                         },
@@ -569,7 +571,7 @@ class AgentAPIUtils:
                             "sub_district_ref_id_id": chain["sub_district_ref_id_id"],
                             "village_ref_id_id": chain.get("village_ref_id_id"),
                             "address": generate_address(),
-                            "pin_code": int(generate_pin_code()),
+                            "pin_code": chain["pin_code"],
                             "same_as_above": None,
                             "details": [],
                         },
