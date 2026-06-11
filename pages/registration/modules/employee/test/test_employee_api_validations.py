@@ -31,7 +31,7 @@ import sys
 import os
 
 PROJECT_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..")
 )
 sys.path.insert(0, PROJECT_ROOT)
 
@@ -68,7 +68,7 @@ def _base_valid_payload(emp_api):
 class TestEmptySubmission:
     """Test what happens when submitting empty or minimal payloads."""
 
-    def test_AGT_E01_empty_payload_only_status(self, emp_api):
+    def test_EMP_E01_empty_payload_only_status(self, emp_api):
         """EMP-E01: Submit with only status=true — all other fields empty.
 
         Only status is required per schema. The server should accept this
@@ -95,7 +95,7 @@ class TestEmptySubmission:
             f"Expected boolean 'accepted', got {result}"
         )
 
-    def test_AGT_E02_all_fields_empty_strings(self, emp_api):
+    def test_EMP_E02_all_fields_empty_strings(self, emp_api):
         """EMP-E02: Submit with all text fields as empty strings.
 
         Tests whether the server differentiates between null and empty string.
@@ -128,7 +128,7 @@ class TestEmptySubmission:
 class TestNameValidation:
     """Test server-side name validation (pattern: ^[A-Za-z ]+$)."""
 
-    def test_AGT_N01_name_with_numbers(self, emp_api):
+    def test_EMP_N01_name_with_numbers(self, emp_api):
         """EMP-N01: Name containing digits should be rejected (^[A-Za-z ]+$)."""
         payload = _base_valid_payload(emp_api)
         payload["name"] = generate_invalid_name_numbers()
@@ -142,7 +142,7 @@ class TestNameValidation:
                 expected_message_substring=ExpectedMessages.INVALID_NAME,
             )
 
-    def test_AGT_N02_name_with_special_chars(self, emp_api):
+    def test_EMP_N02_name_with_special_chars(self, emp_api):
         """EMP-N02: Name with special characters should be rejected."""
         payload = _base_valid_payload(emp_api)
         payload["name"] = generate_invalid_name_special_chars()
@@ -156,7 +156,7 @@ class TestNameValidation:
                 expected_message_substring=ExpectedMessages.INVALID_NAME,
             )
 
-    def test_AGT_N03_name_max_length_255(self, emp_api):
+    def test_EMP_N03_name_max_length_255(self, emp_api):
         """EMP-N03: Name at exactly 255 chars should be accepted (boundary)."""
         payload = _base_valid_payload(emp_api)
         payload["name"] = generate_string_255()
@@ -168,7 +168,7 @@ class TestNameValidation:
         assert isinstance(result["accepted"], bool)
 
     @pytest.mark.bug
-    def test_AGT_N04_name_exceeds_max_256(self, emp_api):
+    def test_EMP_N04_name_exceeds_max_256(self, emp_api):
         """EMP-N04: Name at 256 chars should be rejected (exceeds max).
 
         EMP-BUG-004: Server returns 500 (DB error "value too long for type
@@ -187,7 +187,7 @@ class TestNameValidation:
                 accept_statuses=[200, 201, 500],  # 500 = EMP-BUG-004
             )
 
-    def test_AGT_N05_name_spaces_only(self, emp_api):
+    def test_EMP_N05_name_spaces_only(self, emp_api):
         """EMP-N05: Name that's only spaces — edge case for ^[A-Za-z ]+$.
 
         Spaces are in the character class but a name of only spaces
@@ -201,7 +201,7 @@ class TestNameValidation:
         )
         assert isinstance(result["accepted"], bool)
 
-    def test_AGT_N06_name_valid_letters_and_spaces(self, emp_api):
+    def test_EMP_N06_name_valid_letters_and_spaces(self, emp_api):
         """EMP-N06: Valid name with letters and spaces should be accepted.
 
         Uses a unique name (prefix + random letters) instead of a hardcoded
@@ -226,10 +226,10 @@ class TestSecurityValidation:
     Tests PASS to document the bug behavior (not xfail).
     """
 
-    def test_AGT_S01_sql_injection(self, emp_api):
+    def test_EMP_S01_sql_injection(self, emp_api):
         """EMP-S01: SQL injection in name — BUG: server accepts it.
 
-        AGT-BUG-001 equivalent for Employee. The server should reject
+        EMP-BUG-001: Server accepts SQL injection without sanitization. The server should reject
         SQL injection but currently accepts it without sanitization.
         """
         payload = _base_valid_payload(emp_api)
@@ -241,10 +241,10 @@ class TestSecurityValidation:
         # BUG: This should be rejected but server accepts it
         assert isinstance(result["accepted"], bool)
 
-    def test_AGT_S02_xss_payload(self, emp_api):
+    def test_EMP_S02_xss_payload(self, emp_api):
         """EMP-S02: XSS payload in name — BUG: server accepts it.
 
-        AGT-BUG-002 equivalent for Employee. The server should reject
+        EMP-BUG-002: Server accepts XSS payloads without sanitization. The server should reject
         XSS payloads but currently accepts them without sanitization.
         """
         payload = _base_valid_payload(emp_api)
@@ -266,7 +266,7 @@ class TestSecurityValidation:
 class TestEmailValidation:
     """Test server-side email validation."""
 
-    def test_AGT_EM01_invalid_email_no_at(self, emp_api):
+    def test_EMP_EM01_invalid_email_no_at(self, emp_api):
         """EMP-EM01: Email without @ sign should be rejected."""
         payload = _base_valid_payload(emp_api)
         payload["email_id"] = generate_invalid_email_no_at()
@@ -280,7 +280,7 @@ class TestEmailValidation:
                 expected_message_substring=ExpectedMessages.INVALID_EMAIL,
             )
 
-    def test_AGT_EM02_invalid_email_no_domain(self, emp_api):
+    def test_EMP_EM02_invalid_email_no_domain(self, emp_api):
         """EMP-EM02: Email without domain should be rejected."""
         payload = _base_valid_payload(emp_api)
         payload["email_id"] = "user@"
@@ -303,7 +303,7 @@ class TestEmailValidation:
 class TestPhoneValidation:
     """Test server-side phone validation (pattern: ^[6-9]\\d{9}$)."""
 
-    def test_AGT_P01_phone_starts_with_5(self, emp_api):
+    def test_EMP_P01_phone_starts_with_5(self, emp_api):
         """EMP-P01: Phone starting with 5 should be rejected (^[6-9]\\d{9}$)."""
         payload = _base_valid_payload(emp_api)
         payload["mobile_no"] = generate_invalid_phone_starts_with_5()
@@ -317,7 +317,7 @@ class TestPhoneValidation:
                 expected_message_substring=ExpectedMessages.INVALID_PHONE,
             )
 
-    def test_AGT_P02_phone_too_short(self, emp_api):
+    def test_EMP_P02_phone_too_short(self, emp_api):
         """EMP-P02: Phone with less than 10 digits should be rejected."""
         payload = _base_valid_payload(emp_api)
         payload["mobile_no"] = 12345
@@ -340,7 +340,7 @@ class TestPhoneValidation:
 class TestDuplicateName:
     """Test whether the server rejects duplicate employee names."""
 
-    def test_AGT_D01_duplicate_name(self, emp_api):
+    def test_EMP_D01_duplicate_name(self, emp_api):
         """EMP-D01: Creating two employees with the same name.
 
         The Employee schema does not mark 'name' as unique.
@@ -374,7 +374,7 @@ class TestDuplicateName:
 class TestEditValidation:
     """Test validation when updating existing employees."""
 
-    def test_AGT_V01_edit_with_invalid_email(self, emp_api):
+    def test_EMP_V01_edit_with_invalid_email(self, emp_api):
         """EMP-V01: Update employee with invalid email should be rejected."""
         result = emp_api.create_employee(name_prefix="EditInvEmail")
         assert result is not None, "Employee creation failed"
