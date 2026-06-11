@@ -199,7 +199,8 @@ class AgentAPIUtils:
         Args:
             agent_data:  Override data dict (merged with defaults).
             name_prefix: Prefix for auto-generated agent name.
-                         Format: {prefix} {timestamp} {uuid8}
+                         Format: {prefix}{rand10letters}
+                         Only alphabetic chars allowed — no digits/spaces/special chars.
             retries:     Number of retries on transient failures (default 2).
 
         Returns:
@@ -521,8 +522,10 @@ class AgentAPIUtils:
         """
         Generate a timestamped+UUID namespaced Agent API payload.
 
-        Uses format: {prefix}_{timestamp}_{uuid8} to prevent
-        collisions and enable manual cleanup identification.
+        Uses format: {prefix}{rand_letters} to prevent collisions and
+        enable manual cleanup identification. Server only accepts
+        alphabetic characters in the name field — no digits, spaces,
+        or special characters allowed.
 
         PAYLOAD STRUCTURE (verified 2026-06-11 from live API):
           The Agent screen uses a children[] stepper format with
@@ -551,10 +554,11 @@ class AgentAPIUtils:
         Returns:
             Complete JSON payload ready for POST.
         """
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        uuid_short = uuid.uuid4().hex[:8]
+        # Server only accepts alphabetic characters in name — no digits, no special chars, no spaces.
+        # Use random letters for uniqueness instead of timestamp/UUID.
+        rand_suffix = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz', k=10))
 
-        agent_name = f"{name_prefix} {timestamp} {uuid_short}"
+        agent_name = f"{name_prefix}{rand_suffix}"
 
         # Pick a random verified address chain for realistic data
         chain = random.choice(_ADDRESS_CHAINS)

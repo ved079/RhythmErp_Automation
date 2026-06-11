@@ -59,7 +59,7 @@ class CleanupTracker:
 
     Usage:
         tracker = CleanupTracker()
-        tracker.track(id=123, agent_name="AutoAGT_20260611_abc12345")
+        tracker.track(id=123, agent_name="AutoAGTabcdefghij")
         ...
         # At session end:
         paths = tracker.generate_reports(output_dir="/tmp/reports/cleanup")

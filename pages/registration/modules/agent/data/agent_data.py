@@ -72,8 +72,8 @@ def _rand_alpha(n):
 # --------------------------------------------------
 
 def generate_agent_name(prefix="AGT"):
-    """Generate a valid Agent Name."""
-    return f"{prefix}{_rand_upper(3)}{_rand_digits(4)}"
+    """Generate a valid Agent Name. Only alphabetic characters — server rejects digits/special chars."""
+    return f"{prefix}{_rand_alpha(7)}"
 
 
 def generate_phone_number():
