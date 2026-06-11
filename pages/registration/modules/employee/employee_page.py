@@ -1408,3 +1408,290 @@ class EmployeePage(BasePage):
 
         log.info(f"select_dropdown('{field_label}'): selected '{selected_text}'")
         return selected_text
+
+    # ==============================================================
+    #  Additional helpers (Phase 3 hardening)
+    # ==============================================================
+
+    def is_field_readonly(self, field_name):
+        """Check if a form field is read-only (disabled/readonly attribute).
+
+        Used in View mode verification — fields should be read-only when
+        viewing an existing employee record.
+
+        Args:
+            field_name: The input name attribute (e.g., 'Employee Name', 'Email').
+
+        Returns:
+            True if the field is readonly/disabled, False otherwise.
+        """
+        try:
+            inp = self.driver.find_element(
+                By.CSS_SELECTOR, f"input[name='{field_name}']"
+            )
+            is_readonly = inp.get_attribute("readonly") is not None
+            is_disabled = inp.get_attribute("disabled") is not None
+            aria_disabled = inp.get_attribute("aria-disabled") == "true"
+            # Also check via ng-readonly directive
+            ng_readonly = self.driver.execute_script(
+                f"""var el = document.querySelector("input[name='{field_name}']");
+                return el ? el.hasAttribute('ng-readonly') || el.readOnly : false;"""
+            )
+            return is_readonly or is_disabled or aria_disabled or ng_readonly
+        except Exception:
+            return False
+
+    def is_dropdown_readonly(self, field_label):
+        """Check if a mat-select dropdown is disabled (read-only in view mode).
+
+        Args:
+            field_label: The mat-label text (e.g., 'Designation', 'Department').
+
+        Returns:
+            True if the dropdown is disabled, False otherwise.
+        """
+        try:
+            is_disabled = self.driver.execute_script(f"""
+                var labels = document.querySelectorAll('mat-label');
+                for (var i = 0; i < labels.length; i++) {{
+                    if (labels[i].textContent.trim().includes('{field_label}')) {{
+                        var field = labels[i].closest('mat-form-field');
+                        if (field) {{
+                            var select = field.querySelector('mat-select');
+                            if (select) {{
+                                return select.classList.contains('mat-mdc-select-disabled')
+                                    || select.hasAttribute('disabled')
+                                    || select.getAttribute('aria-disabled') === 'true';
+                            }}
+                        }}
+                    }}
+                }}
+                return false;
+            """)
+            return bool(is_disabled)
+        except Exception:
+            return False
+
+    def get_table_cell_value(self, row_index, column_name):
+        """Get the text value of a specific table cell.
+
+        Args:
+            row_index: 0-based row index.
+            column_name: CSS column class name (e.g., 'name', 'email_id',
+                         'mobile_no', 'designation', 'status').
+
+        Returns:
+            Cell text string, or '' if not found.
+        """
+        try:
+            rows = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "table#excel-table tbody tr, "
+                "table.mat-mdc-table tbody tr.mat-mdc-row",
+            )
+            if row_index < len(rows):
+                cell = rows[row_index].find_element(
+                    By.CSS_SELECTOR,
+                    f"td.cdk-column-{column_name}, td.mat-column-{column_name}"
+                )
+                return cell.text.strip()
+        except Exception:
+            pass
+        return ""
+
+    def get_table_row_data(self, row_index):
+        """Get all visible cell values from a table row.
+
+        Args:
+            row_index: 0-based row index.
+
+        Returns:
+            Dict with column names as keys, or empty dict if not found.
+        """
+        data = {}
+        try:
+            rows = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "table#excel-table tbody tr, "
+                "table.mat-mdc-table tbody tr.mat-mdc-row",
+            )
+            if row_index < len(rows):
+                row = rows[row_index]
+                for col in ["name", "email_id", "mobile_no", "designation", "status"]:
+                    try:
+                        cell = row.find_element(
+                            By.CSS_SELECTOR,
+                            f"td.cdk-column-{col}, td.mat-column-{col}"
+                        )
+                        data[col] = cell.text.strip()
+                    except Exception:
+                        data[col] = ""
+        except Exception:
+            pass
+        return data
+
+    def clear_search(self):
+        """Clear the search input and reset the table listing."""
+        log.info("Clearing search input...")
+        try:
+            search_input = self.driver.find_elements(
+                By.CSS_SELECTOR, "#erpSearchInput, input.erp-search-input"
+            )
+            if search_input:
+                search_input[0].clear()
+                search_input[0].send_keys("\b")  # Trigger Angular change detection
+                self.wait_seconds(1)
+                log.info("Search input cleared")
+        except Exception as e:
+            log.warning(f"Clear search failed: {e}")
+
+    def wait_for_table_refresh(self, timeout=10):
+        """Wait for the table to reload after refresh/search.
+
+        Args:
+            timeout: Max seconds to wait.
+        """
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                EC.visibility_of_element_located(
+                    (By.CSS_SELECTOR,
+                     "table#excel-table, table.mat-mdc-table, table[mat-table]")
+                )
+            )
+            self.wait_seconds(1)
+        except TimeoutException:
+            log.warning("Table did not refresh within timeout")
+
+    def is_submit_button_visible(self):
+        """Check if the Submit button is visible on the form.
+
+        Returns True if in add mode (Submit button present).
+        """
+        try:
+            btn = self.driver.find_element(
+                By.XPATH,
+                "//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
+            )
+            return btn.is_displayed()
+        except Exception:
+            return False
+
+    def is_update_button_visible(self):
+        """Check if the Update button is visible on the form.
+
+        Returns True if in edit mode (Update button present).
+        """
+        try:
+            btn = self.driver.find_element(
+                By.XPATH,
+                "//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]"
+            )
+            return btn.is_displayed()
+        except Exception:
+            return False
+
+    def get_form_heading(self):
+        """Get the heading text of the form popup.
+
+        Returns:
+            Heading text string, or '' if not found.
+        """
+        try:
+            heading = self.driver.find_element(
+                By.CSS_SELECTOR, ".big-model h3, .edit_pop_up h3, mat-dialog-container h3"
+            )
+            return heading.text.strip()
+        except Exception:
+            return ""
+
+    def click_close_button(self):
+        """Click the Close (X) button on the form popup."""
+        log.info("Clicking Close (X) button...")
+        try:
+            close_btn = self.driver.find_elements(
+                By.XPATH,
+                "//div[contains(@class,'popup-actions')]/button[last()]"
+            )
+            if close_btn and close_btn[0].is_displayed():
+                self.driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center'});"
+                    "arguments[0].click();",
+                    close_btn[0],
+                )
+                self.wait_seconds(0.5)
+                log.info("Close button clicked")
+                return
+        except Exception:
+            pass
+        log.warning("Close button not found")
+
+    def get_all_table_data(self):
+        """Get all rows from the Employee listing table.
+
+        Returns:
+            List of dicts, each with column_name: value pairs.
+        """
+        all_data = []
+        try:
+            rows = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "table#excel-table tbody tr, "
+                "table.mat-mdc-table tbody tr.mat-mdc-row",
+            )
+            for row in rows:
+                row_data = {}
+                for col in ["name", "email_id", "mobile_no", "designation", "status"]:
+                    try:
+                        cell = row.find_element(
+                            By.CSS_SELECTOR,
+                            f"td.cdk-column-{col}, td.mat-column-{col}"
+                        )
+                        row_data[col] = cell.text.strip()
+                    except Exception:
+                        row_data[col] = ""
+                if any(v for v in row_data.values()):
+                    all_data.append(row_data)
+        except Exception:
+            pass
+        return all_data
+
+    def find_employee_row_index(self, name):
+        """Find the row index of an employee by name.
+
+        Args:
+            name: The employee name to search for.
+
+        Returns:
+            0-based row index, or -1 if not found.
+        """
+        try:
+            cells = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                "td.cdk-column-name, td.mat-column-name",
+            )
+            for i, cell in enumerate(cells):
+                try:
+                    if cell.text.strip().lower() == name.lower():
+                        return i
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return -1
+
+    def is_status_active(self, row_index=0):
+        """Check if the status column shows Active for a given row.
+
+        Args:
+            row_index: 0-based row index.
+
+        Returns:
+            True if status shows Active/Yes, False otherwise.
+        """
+        try:
+            status_text = self.get_table_cell_value(row_index, "status")
+            if status_text:
+                return status_text.lower() in ("active", "yes", "true", "1")
+        except Exception:
+            pass
+        return False
