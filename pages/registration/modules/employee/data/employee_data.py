@@ -313,7 +313,7 @@ def generate_valid_employee_data():
         "email": generate_email(),
         "phone_number": generate_phone(),
         "designation": desig_name,                        # Required — UI name string
-        "department": None,                               # No options currently
+        "department": None,                               # Auto-pick from UI dropdown
         "status": True,                                   # Default: Active
     }
 
@@ -332,7 +332,7 @@ def generate_minimal_employee_data():
         "email": generate_email(),
         "phone_number": generate_phone(),
         "designation": desig_name,                        # Required — UI name string
-        "department": None,                               # No options currently
+        "department": None,                               # Auto-pick from UI dropdown
         "status": True,
     }
 

@@ -464,10 +464,15 @@ class TestEmployeeUI:
         self.page.open_add_form()
         self.page.fill_employee_form(data)
         self.page.submit_form()
-        self.page.wait_seconds(4)
-        # Should see success alert, validation alert, or form closes
-        success = self.page.is_success_alert_visible()
-        form_closed = not self.page.is_add_form_open()
+        # Wait and retry for success alert or form close
+        success = False
+        form_closed = False
+        for attempt in range(5):
+            self.page.wait_seconds(2)
+            success = self.page.is_success_alert_visible()
+            form_closed = not self.page.is_add_form_open()
+            if success or form_closed:
+                break
         if success:
             self.page.dismiss_alert()
         assert success or form_closed, \

@@ -740,9 +740,12 @@ class EmployeePage(BasePage):
             self._select_mat_option(self.DESIGNATION_SELECT, designation)
         self.wait_seconds(0.3)
 
-        # 6. Department (dropdown — 0 options currently, skip)
+        # 6. Department (dropdown — required by ERP)
         department = data.get("department")
-        if department:
+        if department is None:
+            # Auto-pick random from UI
+            self._select_mat_option(self.DEPARTMENT_SELECT)
+        elif department != "":
             self._select_mat_option(self.DEPARTMENT_SELECT, department)
         self.wait_seconds(0.3)
 
