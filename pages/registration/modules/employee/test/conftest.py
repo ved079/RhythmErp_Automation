@@ -26,10 +26,10 @@ from pages.common_settings.cs_report_generator import (
 
 
 # ================================================================
-# LOGIN CREDENTIALS — Employee Screen
+# LOGIN CREDENTIALS — Employee Screen (from config.py / .env)
 # ================================================================
-EMP_LOGIN_EMAIL = "user@admin.com"
-EMP_LOGIN_PASSWORD = "Tenant@123456789"
+EMP_LOGIN_EMAIL = RHYTHMERP_EMAIL
+EMP_LOGIN_PASSWORD = RHYTHMERP_PASSWORD
 EMP_LOGIN_FACILITY_INDEX = 0
 
 
