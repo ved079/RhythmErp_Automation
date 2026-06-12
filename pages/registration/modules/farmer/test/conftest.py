@@ -24,6 +24,14 @@ from pages.common_settings.cs_report_generator import (
 
 
 # ================================================================
+# LOGIN CREDENTIALS — Farmer Screen (from config.py / .env)
+# ================================================================
+FR_LOGIN_EMAIL = RHYTHMERP_EMAIL
+FR_LOGIN_PASSWORD = RHYTHMERP_PASSWORD
+FR_LOGIN_FACILITY_INDEX = 0
+
+
+# ================================================================
 # FIXTURES
 # ================================================================
 
@@ -57,18 +65,15 @@ def logged_in_driver(driver):
     driver.get(RHYTHMERP_LOGIN_URL)
     login_page.wait_seconds(2)
 
-    log.step(1, "Entering email: " + str(RHYTHMERP_EMAIL))
-    login_page.enter_email(RHYTHMERP_EMAIL)
+    log.step(1, "Entering email: " + str(FR_LOGIN_EMAIL))
+    login_page.enter_email(FR_LOGIN_EMAIL)
 
     log.step(2, "Entering password")
-    login_page.enter_password(RHYTHMERP_PASSWORD)
+    login_page.enter_password(FR_LOGIN_PASSWORD)
 
-    # log.step(3, "Selecting facility (blank - first option)")
-    # login_page.select_facility_by_index(index=0)
+    login_page._dismiss_tenant_dropdown()
 
-    login_page.wait_seconds(1)
-
-    log.step(4, "Clicking Login button (JS click)")
+    log.step(3, "Clicking Login button")
     login_page.click_login()
     login_page.wait_seconds(3)
 
@@ -88,6 +93,158 @@ def fr_page(logged_in_driver):
     page = FarmerPage(logged_in_driver)
     page.navigate_to_page()
     yield page
+
+
+# ================================================================
+# API FIXTURES — for hybrid (API+UI) tests
+# ================================================================
+
+def _prompt_for_api_credentials():
+    """Interactive prompt for ERP API token (fallback auth strategy)."""
+    print("\n" + "=" * 50)
+    print("  ERP API Authentication Required")
+    print("=" * 50)
+    token = input("  Paste ERP token from DevTools: ").strip()
+    if not token:
+        return "", ""
+    tenant_id = input("  Enter Tenant ID [681]: ").strip()
+    if not tenant_id:
+        tenant_id = "681"
+    return token, tenant_id
+
+
+@pytest.fixture(scope="session")
+def erp_api():
+    """Session-scoped ERP API client.
+
+    Authenticates once and reuses the token for the entire test session.
+
+    Auth strategy (in order):
+      1. ERP_TOKEN + ERP_TENANT_ID env vars (no prompt, fastest)
+      2. API login via /auth/login1/ (auto, no manual step)
+      3. Interactive prompt — asks user to paste token from DevTools
+
+    To skip the prompt, set env vars in PowerShell:
+        $env:ERP_TOKEN = "eyJhbGciOiJIUzI1NiIs..."
+        $env:ERP_TENANT_ID = "681"
+
+    NOTE: Known ERP bug — Farmer creation via API POST returns 500
+    "token has wrong type". The client is still useful for listing,
+    get-by-ID, schema retrieval, and other read operations.
+    """
+    from common.erp_api_client import RhythmERPAPIClient
+
+    tenant_id = os.environ.get("ERP_TENANT_ID", "681")
+
+    client = RhythmERPAPIClient(
+        username=FR_LOGIN_EMAIL,
+        password=FR_LOGIN_PASSWORD,
+        tenant_id=tenant_id,
+    )
+
+    # Strategy 1: Try ERP_TOKEN env var (fastest, no prompt)
+    token = os.environ.get("ERP_TOKEN", "").strip()
+    if token:
+        if token.startswith("Bearer "):
+            token = token[7:]
+        try:
+            client.login_from_browser(token=token, tenant_id=tenant_id)
+            log.info(f"[API] Session set from ERP_TOKEN env var. Tenant: {tenant_id}")
+            # Verify auth works
+            result = client.list_entries("Farmer", page=1, page_size=1)
+            if result:
+                yield client
+                try:
+                    client.close()
+                except Exception:
+                    pass
+                return
+            else:
+                log.warning("[API] ERP_TOKEN auth verification failed — trying next strategy")
+        except Exception as e:
+            log.warning(f"[API] ERP_TOKEN auth failed: {e} — trying next strategy")
+
+    # Strategy 2: Try API login
+    try:
+        client.login()
+        log.info("[API] ERP API client ready (auto login)")
+        yield client
+        try:
+            client.close()
+        except Exception:
+            pass
+        return
+    except Exception:
+        log.warning("[API] Auto login failed — will prompt for token")
+
+    # Strategy 3: Interactive prompt
+    prompt_token, prompt_tenant = _prompt_for_api_credentials()
+    if prompt_token:
+        tenant_id = prompt_tenant or tenant_id
+        client.tenant_id = tenant_id
+        client.login_from_browser(token=prompt_token, tenant_id=tenant_id)
+        # Verify
+        result = client.list_entries("Farmer", page=1, page_size=1)
+        if result:
+            log.info(f"[API] Interactive auth successful. Tenant: {tenant_id}")
+        else:
+            log.warning("[API] Interactive auth verification failed — token may be invalid")
+    else:
+        log.warning("[API] No token provided — API tests will fail")
+
+    yield client
+
+    try:
+        client.close()
+    except Exception:
+        pass
+
+
+@pytest.fixture(scope="session")
+def fr_cleanup_tracker():
+    """CleanupTracker — records all created farmer IDs for no-delete cleanup reporting.
+
+    Generates JSON + CSV reports at session end.
+    """
+    from pages.registration.modules.farmer.utils.farmer_cleanup import (
+        CleanupTracker,
+    )
+    tracker = CleanupTracker()
+    log.info("[Fixture] fr_cleanup_tracker initialized")
+    yield tracker
+    # Session teardown: generate cleanup reports
+    if tracker.count > 0:
+        try:
+            paths = tracker.generate_reports()
+            if paths:
+                log.info(f"[Cleanup] Reports generated: {paths}")
+        except Exception as e:
+            log.warning(f"[Cleanup] Report generation failed: {e}")
+    else:
+        log.info("[Cleanup] No tracked farmer IDs to report")
+
+
+@pytest.fixture
+def fr_api(erp_api, fr_cleanup_tracker):
+    """FarmerAPIUtils — function-scoped API utility with cleanup tracking.
+
+    Uses the session-scoped erp_api and fr_cleanup_tracker.
+    Each test gets a fresh FarmerAPIUtils instance, but all tracked
+    IDs accumulate in the shared fr_cleanup_tracker for end-of-session reporting.
+
+    NOTE: Known ERP bug — Farmer creation via API POST returns 500
+    "token has wrong type". The fr_api is primarily used for read
+    operations (get, search, list) in hybrid tests. Creation should
+    be done via UI (fr_page.create_farmer()).
+    """
+    from pages.registration.modules.farmer.utils.api_farmer_utils import (
+        FarmerAPIUtils,
+    )
+    utils = FarmerAPIUtils(
+        api_client=erp_api,
+        tracker=fr_cleanup_tracker,
+    )
+    yield utils
 
 
 # ================================================================
