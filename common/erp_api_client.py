@@ -821,8 +821,15 @@ class ErpApiClient(RhythmERPAPIClient):
                 results.append({"success": True, "data": result})
                 print("OK")
             else:
-                results.append({"success": False, "error": "Failed to save record"})
-                print("FAILED")
+                last_resp = self._last_raw_response
+                if last_resp is not None:
+                    status = last_resp.status_code
+                    body = last_resp.text[:500].replace('\n', ' ').replace('\r', '')
+                    error_detail = f"HTTP {status}: {body}"
+                else:
+                    error_detail = "No response (network error)"
+                results.append({"success": False, "error": error_detail})
+                print(f"FAILED ({error_detail[:120]})")
 
             if delay and i < total:
                 time.sleep(delay)

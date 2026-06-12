@@ -8,6 +8,7 @@ Shows a summary at the end.
 
 import sys
 import os
+import argparse
 import time
 from datetime import datetime
 
@@ -101,15 +102,46 @@ def resolve_fk_for_screen(resolver, fk_screens):
     return fk_ids
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run all 7 Common Settings batch creates in sequence")
+    parser.add_argument("--token", default=None, help="ERP Bearer token (omit to prompt)")
+    parser.add_argument("--tenant", default=None, help="Tenant ID (omit to prompt)")
+    parser.add_argument("--count", type=int, default=None, help="Number of entries per screen (omit to prompt)")
+    return parser.parse_args()
+
+
+def prompt_missing_args(args):
+    if not args.token:
+        print("\n  No token provided. Open DevTools -> Network -> any /core/ request -> Authorization header")
+        args.token = input("  Token: ").strip()
+        if not args.token:
+            print("  No token entered. Exiting.")
+            sys.exit(1)
+    if not args.tenant:
+        args.tenant = input("  Tenant ID (e.g., 711): ").strip()
+        if not args.tenant:
+            print("  No tenant entered. Exiting.")
+            sys.exit(1)
+    if not args.count:
+        count_str = input("  Count (default 10): ").strip()
+        args.count = int(count_str) if count_str else 10
+    return args
+
+
 def main():
+    args = parse_args()
+    args = prompt_missing_args(args)
+    global COUNT
+    COUNT = args.count
+
     print("=" * 70)
     print("  COMMON SETTINGS — RUN ALL 7 BATCH CREATES")
+    print(f"  Count per screen: {COUNT}")
     print("=" * 70)
     print()
 
     api = ErpApiClient()
-    token = api.prompt_for_token()
-    api.set_session_from_token(token)
+    api.set_session_from_token(args.token, tenant_id=args.tenant)
 
     # ── Pre-resolve all FK IDs ────────────────────────────────────────
     print()

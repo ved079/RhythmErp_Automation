@@ -67,29 +67,36 @@ PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "..", "..", 
 sys.path.insert(0, PROJECT_ROOT)
 
 from common.erp_api_client import ErpApiClient
+from common.fk_resolver import FkResolver
 from common.logger import log
 from pages.commodity_settings.modules.commodity_quality_parameter.data.commodity_quality_parameter_data import (
     generate_cqp_payloads,
     COMMODITY_QUALITY_PARAMETER_API_DATA,
-    ITEM_ID_MAP,
     TRANSACTION_TYPE_ID_MAP,
-    QUALITY_PARAM_ID_MAP,
-    CQP_USED_ITEM_IDS,
 )
 
 SCREEN_NAME = "Commodity Quality Parameter"
+
+# FK fields that need resolution from live ERP
+FK_SCREEN_MAP = {
+    "item_ref_id": "Item Master",
+    "quality_type": "Quality Parameter Master",
+}
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Batch create Commodity Quality Parameter entries via API")
     parser.add_argument(
-        "--count", type=int, default=10,
-        help="Number of entries to create. Default: 10"
+        "--count", type=int, default=None,
+        help="Number of entries to create (omit to prompt)"
     )
     parser.add_argument(
         "--offset", type=int, default=0,
         help="Start index in data pool (to skip already-used entries). Default: 0"
     )
+    parser.add_argument("--token", default=None, help="ERP Bearer token (omit to prompt)")
+    parser.add_argument("--tenant", default=None, help="Tenant ID (omit to prompt)")
+    parser.add_argument("--dry-run", action="store_true", help="Print payloads without sending")
     return parser.parse_args()
 
 
@@ -236,8 +243,46 @@ def create_with_retry(api: ErpApiClient, payloads: list, target_count: int,
     return results
 
 
+def resolve_all_fk_ids(resolver):
+    """Resolve all CQP FK IDs from the live ERP."""
+    fk_ids = {}
+    for field, screen in FK_SCREEN_MAP.items():
+        try:
+            resolved = resolver.resolve(screen)
+            if resolved:
+                print(f"    {field}: {len(resolved)} options found from '{screen}'")
+                samples = list(resolved.items())[:3]
+                for name, fid in samples:
+                    print(f"      {name}: {fid}")
+                fk_ids[field] = resolved
+            else:
+                print(f"    {field}: NOT FOUND — will fall back to hardcoded IDs")
+        except Exception as e:
+            print(f"    {field}: ERROR — {e}")
+    return fk_ids
+
+
+def prompt_missing_args(args):
+    if not args.token:
+        print("\n  No token provided. Open DevTools -> Network -> any /core/ request -> Authorization header")
+        args.token = input("  Token: ").strip()
+        if not args.token:
+            print("  No token entered. Exiting.")
+            sys.exit(1)
+    if not args.tenant:
+        args.tenant = input("  Tenant ID (e.g., 711): ").strip()
+        if not args.tenant:
+            print("  No tenant entered. Exiting.")
+            sys.exit(1)
+    if not args.count:
+        count_str = input("  Count (default 10): ").strip()
+        args.count = int(count_str) if count_str else 10
+    return args
+
+
 def main():
     args = parse_args()
+    args = prompt_missing_args(args)
     count = args.count
     offset = args.offset
 
@@ -247,15 +292,18 @@ def main():
     print(f"  Entries to create: {count}")
     print(f"  Data pool offset: {offset}")
     print(f"  Data pool size: {len(COMMODITY_QUALITY_PARAMETER_API_DATA)}")
-    print(f"  Item IDs mapped: {len(ITEM_ID_MAP)}")
-    print(f"  Transaction Type IDs: {len(TRANSACTION_TYPE_ID_MAP)}")
-    print(f"  Quality Param IDs: {len(QUALITY_PARAM_ID_MAP)}")
-    print(f"  Static used item IDs (skip): {len(CQP_USED_ITEM_IDS)}")
+    if args.dry_run:
+        print("  ** DRY-RUN MODE — no entries will be created **")
     print("=" * 70)
 
     api = ErpApiClient()
-    token = api.prompt_for_token()
-    api.set_session_from_token(token)
+    api.set_session_from_token(args.token, tenant_id=args.tenant)
+
+    # ── Resolve FK IDs ────────────────────────────────────────────────
+    print()
+    print("  Resolving FK IDs from live ERP...")
+    resolver = FkResolver(api)
+    fk_ids = resolve_all_fk_ids(resolver)
 
     # ── Dynamic dedup: fetch used item IDs from live ERP ──────────────
     print()
@@ -274,6 +322,7 @@ def main():
             count=oversample,
             offset=offset,
             skip_item_ids=dynamic_used_ids,
+            fk_ids=fk_ids,
         )
     except Exception as e:
         print(f"  ERROR generating payloads: {e}")
@@ -282,12 +331,23 @@ def main():
 
     if not payloads:
         print("  ERROR: No payloads generated. Data pool may be exhausted.")
-        print("  → Add more items to COMMODITY_QUALITY_PARAMETER_API_DATA or")
+        print("  >> Add more items to COMMODITY_QUALITY_PARAMETER_API_DATA or")
         print("    use a different --offset value.")
         api.close()
         return
 
     print(f"  Generated {len(payloads)} candidate payloads")
+
+    if args.dry_run:
+        print(f"  [DRY-RUN] {len(payloads)} payloads generated")
+        for j, p in enumerate(payloads):
+            item_id = p.get("item_ref_id", "?")
+            txn_type = p.get("transaction_type", "?")
+            stepper = p.get("children", [{}])[0] if p.get("children") else {}
+            detail_count = len(stepper.get("details", []))
+            print(f"    [{j+1}] item_ref_id={item_id} txn_type={txn_type} details={detail_count}")
+        api.close()
+        return
 
     # Validate FK fields before sending
     for i, p in enumerate(payloads):
@@ -296,7 +356,6 @@ def main():
             missing.append("item_ref_id")
         if p.get("transaction_type") is None:
             missing.append("transaction_type")
-        # Check detail rows
         stepper = p.get("children", [{}])[0] if p.get("children") else {}
         detail_rows = stepper.get("details", [])
         for j, row in enumerate(detail_rows):
@@ -329,7 +388,6 @@ def main():
     print(f"  [{status_icon}] {SCREEN_NAME:<35} {created:>3}/{count} created")
     print("-" * 70)
 
-    # Show details for non-duplicate failures only
     if other_failed > 0:
         for i, r in enumerate(results):
             if not r.get("success") and "Duplicate" not in str(r.get("error", "")):
@@ -343,7 +401,7 @@ def main():
     if created < count:
         print(f"  WARNING: Only {created}/{count} entries created. "
               f"Data pool may be exhausted.")
-        print(f"  → Add more items to COMMODITY_QUALITY_PARAMETER_API_DATA, or")
+        print(f"  >> Add more items to COMMODITY_QUALITY_PARAMETER_API_DATA, or")
         print(f"    try running with --offset to skip already-used entries.")
 
     print(f"  Total: {created} created, {skipped_dup} duplicates skipped, "

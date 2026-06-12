@@ -26,7 +26,6 @@ Transaction Type Options (8):
 """
 
 import random
-import string
 from datetime import datetime, timedelta
 
 
@@ -384,112 +383,32 @@ TRANSACTION_TYPE_ID_MAP = {
     "Return Stock Down": 222,
 }
 
-# Item Master options (clean/useful items — excluding test/None/auto-generated items)
+# Item Master options (tenant 711 — auto-computed attribute names)
 ITEM_ID_MAP = {
-    # ── Agricultural Commodities ──────────────────────────────
-    "Sugarcane": 94,
-    "Groundnut": 95,
-    "Sunflower Seeds": 96,
-    "Mustard Seeds": 97,
-    "Green Gram": 98,
-    "Black Gram": 99,
-    "Chickpeas": 100,
-    "Turmeric Powder": 101,
-    "Red Chilli": 102,
-    "Coriander Seeds": 103,
-    "Cumin Seeds": 104,
-    "Onion": 105,
-    "Potato": 106,
-    "Tomato": 107,
-    "Mango": 108,
-    # ── Construction & Industrial ─────────────────────────────
-    "Iron Pipe": 130,
-    "Cement Bag": 131,
-    "Paint Bucket": 132,
-    "Nut Bolt Set": 133,
-    "PVC Pipe": 134,
-    "Drill Machine": 135,
-    "Hammer": 136,
-    "Welding Rod": 137,
-    "Measuring Tape": 138,
-    # ── FMCG / Household ─────────────────────────────────────
-    "Bath Soap": 109,
-    "Shampoo Bottle": 110,
-    "Hair Oil": 111,
-    "Toothpaste": 112,
-    "Detergent Powder": 113,
-    "Dish Wash Liquid": 114,
-    "Floor Cleaner": 115,
-    "Hand Wash": 116,
-    "Face Cream": 117,
-    "Talcum Powder": 118,
-    # ── Electrical & Appliances ──────────────────────────────
-    "LED Bulb": 119,
-    "Ceiling Fan": 120,
-    "Extension Board": 121,
-    "Electric Wire": 122,
-    "Switch Board": 123,
-    "Water Heater": 124,
-    "Mixer Grinder": 125,
-    "Electric Kettle": 126,
-    "Inverter Battery": 127,
-    "Solar Panel": 128,
-    # ── Office & Stationery ──────────────────────────────────
-    "A4 Paper": 139,
-    "Ball Pen": 140,
-    "Stapler": 141,
-    "Printer Ink": 142,
-    "File Folder": 143,
-    "Marker Pen": 145,
-    "Whiteboard": 146,
-    "Calculator": 147,
+    "Spinach Flexible Green Huge Droplet": 5,
+    "Cherry Flexible Green Huge Droplet": 6,
+    "Ginger Hollow Orange Minute Heart": 7,
+    "Ginger Fuzzy Ruby Teeny Heart": 9,
+    "Apple Stiff Blue Deep Heart": 12,
+    "Spinach Fuzzy Magenta Small Circle": 13,
+    "Banana Hollow Peach Enormous Crescent": 14,
+    "Apple Bumpy Charcoal Broad Ring": 15,
+    "Onion Silky Brown Teeny Hexagon": 16,
+    "Papaya Stiff Cream Micro Loop": 17,
 }
 
-# Quality Parameter options (production-use only — excludes Test_QP entries)
+# Quality Parameter options (tenant 711)
 QUALITY_PARAM_ID_MAP = {
-    "Moisture Content": 1,
-    "Protein Content": 2,
-    "Foreign Matter": 3,
-    "Damaged Grains": 4,
-    "Broken Grains": 5,
-    "Weeviled Grains": 6,
-    "Admixture Content": 7,
-    "Oil Content": 8,
-    "Ash Content": 9,
-    "Fiber Content": 10,
-    "Gluten Content": 11,
-    "Fat Content": 12,
-    "Hardness Index": 13,
-    "Test Weight": 14,
-    "Impurities": 15,
-    "Insect Damage": 16,
-    "Mould Damage": 17,
-    "Germination Rate": 18,
-    "Shrivelled Grains": 19,
-    "Chalky Grains": 20,
-    "Bulk Density": 23,
-    "Particle Size": 24,
-    "Color Value": 27,
-    "Hardness": 28,
-    "Texture Score": 29,
-    "Thousand Grain Weight": 30,
-    "Hectoliter Weight": 31,
-    "Grain Uniformity": 32,
-    "Length-Breadth Ratio": 33,
-    "Grain Whiteness": 34,
+    "Bulk Density": 1,
+    "Particle Size": 2,
+    "Color Value": 3,
+    "Hardness": 4,
+    "Texture Score": 5,
 }
 
-# Items already used in CQP (item_ref_id values with to_date=2099-12-30T18:30:00Z)
-# These items CANNOT be reused with the same to_date; they can be reused
-# with a different to_date if needed.
-# Updated 2026-06-02: Added 94,101,102,103,130 (discovered via API duplicate
-# errors). Added 131-135 (batch run #1).  Added 109-115,136-138 (batch run #2).
-# NOTE: The batch_create.py script also fetches used items dynamically from
-# the API at runtime — this static list is a safety net / baseline.
-CQP_USED_ITEM_IDS = {85, 86, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98,
-                     99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109,
-                     110, 111, 112, 113, 114, 115, 129, 130, 131, 132, 133,
-                     134, 135, 136, 137, 138}
+# Items already used in CQP are discovered dynamically via the API at runtime.
+# No static CQP_USED_ITEM_IDS — the batch script fetches existing entries
+# and passes skip_item_ids to the payload generator.
 
 
 # ── Data Pool ─────────────────────────────────────────────────────────
@@ -507,189 +426,52 @@ CQP_USED_ITEM_IDS = {85, 86, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98,
 # to_date=2099-12-30T18:30:00Z.
 
 COMMODITY_QUALITY_PARAMETER_API_DATA = [
-    # ── Agricultural Commodities — Cereals & Grains ────────────────────
-    ("Sugarcane", "Purchase", "Rev-001", [
-        ("Moisture Content", "10", "15", True, "1.0"),
-        ("Foreign Matter", "0", "2", True, "0.5"),
-        ("Fiber Content", "10", "14", True, "1.5"),
-    ]),
-    # NOTE: Groundnut(95), Sunflower Seeds(96), Mustard Seeds(97), Green Gram(98),
-    # Black Gram(99), Chickpeas(100) are already used in CQP with to_date=2099-12-30.
-    # Using only items NOT in CQP_USED_ITEM_IDS to avoid unique constraint violations.
-    ("Turmeric Powder", "Purchase", "Rev-001", [
-        ("Moisture Content", "8", "10", True, "1.0"),
-        ("Foreign Matter", "0", "1", True, "0.5"),
+    ("Spinach Flexible Green Huge Droplet", "Purchase", "Rev-001", [
+        ("Bulk Density", "10", "15", True, "1.0"),
+        ("Particle Size", "0.5", "2.0", True, "0.5"),
         ("Color Value", "70", "90", True, "2.0"),
     ]),
-    ("Red Chilli", "Purchase", "Rev-001", [
-        ("Moisture Content", "10", "14", True, "1.0"),
+    ("Cherry Flexible Green Huge Droplet", "Purchase", "Rev-001", [
+        ("Bulk Density", "12", "18", True, "1.0"),
+        ("Hardness", "5", "8", True, "1.5"),
+    ]),
+    ("Ginger Hollow Orange Minute Heart", "Purchase", "Rev-001", [
         ("Color Value", "60", "80", True, "2.0"),
-        ("Foreign Matter", "0", "2", True, "0.5"),
+        ("Texture Score", "3", "7", True, "1.0"),
+        ("Particle Size", "1.0", "3.0", True, "0.5"),
     ]),
-    ("Coriander Seeds", "Sales", "Rev-001", [
-        ("Moisture Content", "6", "9", True, "1.0"),
-        ("Foreign Matter", "0", "1", True, "0.5"),
-        ("Damaged Grains", "0", "2", True, "1.0"),
+    ("Ginger Fuzzy Ruby Teeny Heart", "Sales", "Rev-001", [
+        ("Bulk Density", "8", "14", True, "1.0"),
+        ("Color Value", "65", "85", True, "2.0"),
     ]),
-
-    # NOTE: Onion(105), Potato(106), Tomato(107), Mango(108) are already used
-    # in CQP with to_date=2099-12-30. Skipped to avoid unique constraint violations.
-
-    # ── Construction & Industrial Materials ─────────────────────────────
-    ("Iron Pipe", "Purchase", "Rev-001", [
-        ("Hardness Index", "50", "70", True, "1.0"),
-        ("Impurities", "0", "2", True, "0.5"),
+    ("Apple Stiff Blue Deep Heart", "Purchase", "Rev-001", [
+        ("Hardness", "4", "7", True, "1.5"),
+        ("Texture Score", "5", "9", True, "1.0"),
     ]),
-    ("Cement Bag", "Purchase", "Rev-001", [
-        ("Moisture Content", "0", "1", True, "1.0"),
-        ("Foreign Matter", "0", "1", True, "0.5"),
-        ("Test Weight", "1440", "1500", True, "1.0"),
+    ("Spinach Fuzzy Magenta Small Circle", "Sales", "Rev-001", [
+        ("Bulk Density", "11", "16", True, "1.0"),
+        ("Particle Size", "0.5", "1.5", True, "0.5"),
     ]),
-    ("Paint Bucket", "Purchase", "Rev-001", [
-        ("Moisture Content", "0", "2", True, "1.0"),
-        ("Impurities", "0", "1", True, "0.5"),
+    ("Banana Hollow Peach Enormous Crescent", "Purchase", "Rev-001", [
+        ("Texture Score", "2", "6", True, "1.0"),
+        ("Color Value", "75", "95", True, "2.0"),
+        ("Hardness", "3", "6", True, "1.5"),
     ]),
-    ("Nut Bolt Set", "Purchase", "Rev-001", [
-        ("Hardness Index", "55", "75", True, "1.0"),
-        ("Impurities", "0", "1", True, "0.5"),
+    ("Apple Bumpy Charcoal Broad Ring", "Purchase", "Rev-001", [
+        ("Hardness", "5", "9", True, "1.5"),
+        ("Particle Size", "0.5", "2.0", True, "0.5"),
     ]),
-    ("PVC Pipe", "Sales", "Rev-001", [
-        ("Hardness Index", "40", "60", True, "1.0"),
-        ("Impurities", "0", "1", True, "0.5"),
+    ("Onion Silky Brown Teeny Hexagon", "Sales", "Rev-001", [
+        ("Bulk Density", "9", "15", True, "1.0"),
+        ("Color Value", "60", "80", True, "2.0"),
+        ("Texture Score", "4", "8", True, "1.0"),
     ]),
-    ("Drill Machine", "Purchase", "Rev-001", [
-        ("Hardness Index", "60", "80", True, "1.0"),
+    ("Papaya Stiff Cream Micro Loop", "Purchase", "Rev-001", [
+        ("Bulk Density", "10", "17", True, "1.0"),
+        ("Hardness", "6", "10", True, "1.5"),
+        ("Color Value", "70", "90", True, "2.0"),
+        ("Texture Score", "3", "7", True, "1.0"),
     ]),
-    ("Hammer", "Purchase", "Rev-001", [
-        ("Hardness Index", "55", "75", True, "1.0"),
-        ("Impurities", "0", "1", True, "0.5"),
-    ]),
-    ("Welding Rod", "Purchase", "Rev-001", [
-        ("Moisture Content", "0", "1", True, "1.0"),
-        ("Impurities", "0", "2", True, "0.5"),
-    ]),
-    ("Measuring Tape", "Sales", "Rev-001", [
-        ("Impurities", "0", "1", True, "0.5"),
-    ]),
-
-    # ── FMCG / Household Products ──────────────────────────────────────
-    ("Bath Soap", "Purchase", "Rev-001", [
-        ("Moisture Content", "8", "15", True, "1.0"),
-        ("Fat Content", "50", "70", True, "2.0"),
-    ]),
-    ("Shampoo Bottle", "Purchase", "Rev-001", [
-        ("Moisture Content", "60", "80", True, "1.0"),
-        ("Foreign Matter", "0", "1", True, "0.5"),
-    ]),
-    ("Hair Oil", "Sales", "Rev-001", [
-        ("Moisture Content", "0", "2", True, "1.0"),
-        ("Oil Content", "90", "100", True, "2.0"),
-        ("Foreign Matter", "0", "1", True, "0.5"),
-    ]),
-    ("Toothpaste", "Purchase", "Rev-001", [
-        ("Moisture Content", "20", "35", True, "1.0"),
-        ("Foreign Matter", "0", "1", True, "0.5"),
-    ]),
-    ("Detergent Powder", "Purchase", "Rev-001", [
-        ("Moisture Content", "5", "12", True, "1.0"),
-        ("Foreign Matter", "0", "1", True, "0.5"),
-    ]),
-    ("Dish Wash Liquid", "Sales", "Rev-001", [
-        ("Moisture Content", "65", "80", True, "1.0"),
-        ("Foreign Matter", "0", "1", True, "0.5"),
-    ]),
-    ("Floor Cleaner", "Purchase", "Rev-001", [
-        ("Moisture Content", "70", "85", True, "1.0"),
-        ("Foreign Matter", "0", "1", True, "0.5"),
-    ]),
-    ("Hand Wash", "Purchase", "Rev-001", [
-        ("Moisture Content", "65", "80", True, "1.0"),
-    ]),
-    ("Face Cream", "Sales", "Rev-001", [
-        ("Moisture Content", "30", "50", True, "1.0"),
-        ("Fat Content", "15", "30", True, "2.0"),
-        ("Foreign Matter", "0", "1", True, "0.5"),
-    ]),
-    ("Talcum Powder", "Purchase", "Rev-001", [
-        ("Moisture Content", "0", "5", True, "1.0"),
-        ("Foreign Matter", "0", "1", True, "0.5"),
-    ]),
-
-    # ── Electrical & Appliances ────────────────────────────────────────
-    ("LED Bulb", "Purchase", "Rev-001", [
-        ("Impurities", "0", "1", True, "0.5"),
-        ("Hardness Index", "30", "50", True, "1.0"),
-    ]),
-    ("Ceiling Fan", "Purchase", "Rev-001", [
-        ("Hardness Index", "40", "60", True, "1.0"),
-        ("Impurities", "0", "1", True, "0.5"),
-    ]),
-    ("Extension Board", "Sales", "Rev-001", [
-        ("Hardness Index", "35", "55", True, "1.0"),
-    ]),
-    ("Electric Wire", "Purchase", "Rev-001", [
-        ("Impurities", "0", "1", True, "0.5"),
-        ("Moisture Content", "0", "1", True, "1.0"),
-    ]),
-    ("Switch Board", "Purchase", "Rev-001", [
-        ("Hardness Index", "35", "55", True, "1.0"),
-        ("Impurities", "0", "1", True, "0.5"),
-    ]),
-    ("Water Heater", "Purchase", "Rev-001", [
-        ("Hardness Index", "45", "65", True, "1.0"),
-        ("Impurities", "0", "2", True, "0.5"),
-    ]),
-    ("Mixer Grinder", "Sales", "Rev-001", [
-        ("Hardness Index", "50", "70", True, "1.0"),
-    ]),
-    ("Electric Kettle", "Purchase", "Rev-001", [
-        ("Hardness Index", "40", "60", True, "1.0"),
-        ("Impurities", "0", "1", True, "0.5"),
-    ]),
-    ("Inverter Battery", "Purchase", "Rev-001", [
-        ("Moisture Content", "0", "2", True, "1.0"),
-        ("Impurities", "0", "1", True, "0.5"),
-    ]),
-    ("Solar Panel", "Sales", "Rev-001", [
-        ("Hardness Index", "40", "60", True, "1.0"),
-        ("Impurities", "0", "1", True, "0.5"),
-    ]),
-
-    # ── Office & Stationery ────────────────────────────────────────────
-    ("A4 Paper", "Purchase", "Rev-001", [
-        ("Moisture Content", "4", "7", True, "1.0"),
-        ("Foreign Matter", "0", "1", True, "0.5"),
-    ]),
-    ("Ball Pen", "Purchase", "Rev-001", [
-        ("Impurities", "0", "1", True, "0.5"),
-    ]),
-    ("Stapler", "Purchase", "Rev-001", [
-        ("Hardness Index", "45", "65", True, "1.0"),
-    ]),
-    ("Printer Ink", "Sales", "Rev-001", [
-        ("Moisture Content", "50", "70", True, "1.0"),
-        ("Foreign Matter", "0", "1", True, "0.5"),
-    ]),
-    ("File Folder", "Purchase", "Rev-001", [
-        ("Moisture Content", "4", "8", True, "1.0"),
-    ]),
-    ("Marker Pen", "Purchase", "Rev-001", [
-        ("Moisture Content", "50", "70", True, "1.0"),
-    ]),
-    ("Whiteboard", "Sales", "Rev-001", [
-        ("Hardness Index", "30", "50", True, "1.0"),
-        ("Impurities", "0", "1", True, "0.5"),
-    ]),
-    ("Calculator", "Purchase", "Rev-001", [
-        ("Hardness Index", "35", "55", True, "1.0"),
-    ]),
-
-    # ── Additional items — Stock movement transaction types ──────────────
-    # These use the same item but with different transaction types.
-    # Since the unique constraint is (item_ref_id, to_date), these entries
-    # would fail with default to_date=2099-12-30. They use a different
-    # to_date to avoid the constraint. The batch_create script handles
-    # this by adjusting to_date automatically.
 ]
 
 
@@ -738,33 +520,36 @@ def build_cqp_api_payload(
 
 
 def generate_cqp_payloads(count: int = 10, offset: int = 0,
-                            skip_item_ids: set = None) -> list:
+                            skip_item_ids: set = None, fk_ids: dict = None) -> list:
     """
     Generate N API payloads for Commodity Quality Parameter.
 
-    Resolves FK dropdown names to live ERP IDs using the ID maps.
-    Validates that all FK fields resolve before building payloads.
+    Resolves FK dropdown names to live ERP IDs via FkResolver results
+    (fk_ids), falling back to hardcoded ID maps if not available.
     Skips items whose item_ref_id is in skip_item_ids (to avoid
     duplicate (item_ref_id, to_date) constraint violations).
 
     Args:
         count: Number of payloads to generate
         offset: Start index in the data pool (to skip already-used entries)
-        skip_item_ids: Set of item_ref_id integers to skip (merged with
-                       CQP_USED_ITEM_IDS).  Typically populated by
-                       fetching existing CQP entries from the API at runtime.
+        skip_item_ids: Set of item_ref_id integers to skip. Typically
+                       populated by fetching existing CQP entries from
+                       the API at runtime.
+        fk_ids: Optional dict of resolved FK IDs, e.g.
+                {"item_ref_id": {"Sugarcane": 94, ...},
+                 "quality_type": {"Moisture Content": 1, ...}}
 
     Returns:
         list[dict]: List of API payloads ready for batch_create
     """
+    fk_ids = fk_ids or {}
+    item_id_map = fk_ids.get("item_ref_id", ITEM_ID_MAP)
+    quality_param_id_map = fk_ids.get("quality_type", QUALITY_PARAM_ID_MAP)
+
     pool = COMMODITY_QUALITY_PARAMETER_API_DATA
     payloads = []
 
-    # Merge static + dynamic skip sets
-    used_items = set(CQP_USED_ITEM_IDS)
-    if skip_item_ids:
-        used_items.update(skip_item_ids)
-
+    used_items = set(skip_item_ids or [])
     if used_items:
         print(f"  [DEDUP] Skipping {len(used_items)} already-used item IDs: "
               f"{sorted(used_items)}")
@@ -781,7 +566,7 @@ def generate_cqp_payloads(count: int = 10, offset: int = 0,
         item_name, txn_type_name, rev_status, qp_tuples = entry
 
         # Resolve FK codes to ERP IDs
-        item_id = ITEM_ID_MAP.get(item_name)
+        item_id = item_id_map.get(item_name)
         txn_type_id = TRANSACTION_TYPE_ID_MAP.get(txn_type_name)
 
         if item_id is None:
@@ -799,7 +584,7 @@ def generate_cqp_payloads(count: int = 10, offset: int = 0,
         # Build detail rows from quality parameter tuples
         detail_rows = []
         for qp_name, min_val, max_val, rate_pct, mult in qp_tuples:
-            qp_id = QUALITY_PARAM_ID_MAP.get(qp_name)
+            qp_id = quality_param_id_map.get(qp_name)
             if qp_id is None:
                 print(f"  WARNING: Quality Parameter '{qp_name}' not found in QUALITY_PARAM_ID_MAP, skipping row")
                 continue
@@ -917,6 +702,11 @@ FIELD_VALIDATION_RULES = {
 ITEM_NAMES = dict(ITEM_ID_MAP)
 TRANSACTION_TYPE_NAMES = dict(TRANSACTION_TYPE_ID_MAP)
 QUALITY_PARAM_NAMES = dict(QUALITY_PARAM_ID_MAP)
+
+SCREEN_NAME_FIELDS = {
+    "item_ref_id": "Item Master",
+    "quality_type": "Quality Parameter Master",
+}
 
 DEFAULT_COMMODITY_QUALITY_PARAMETER_FK_IDS = {
     "item_ref_id": ITEM_ID_MAP,

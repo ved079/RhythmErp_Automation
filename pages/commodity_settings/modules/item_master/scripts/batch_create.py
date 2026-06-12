@@ -7,8 +7,8 @@ Handles the 3-step stepper payload structure with children arrays.
 
 Usage:
     python batch_create.py              # Creates 10 entries
-    python batch_create.py --count 20   # Creates 20 entries
-    python batch_create.py --offset 20  # Skip first 20 in data pool
+    python batch_create.py --count 1    # Creates 1 entry
+    python batch_create.py --dry-run    # Preview payloads without sending
 
 Screen structure:
   Item Master: 3-step stepper form
@@ -27,6 +27,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "..", "..", 
 sys.path.insert(0, PROJECT_ROOT)
 
 from common.erp_api_client import ErpApiClient
+from common.fk_resolver import FkResolver
 from pages.commodity_settings.modules.item_master.data.item_master_data import (
     generate_item_master_payloads,
     ITEM_MASTER_DATA_POOL,
@@ -34,23 +35,94 @@ from pages.commodity_settings.modules.item_master.data.item_master_data import (
 
 SCREEN_NAME = "Item Master"
 
+# All FK fields that Item Master needs resolved
+FK_FIELDS = [
+    "item_category",
+    "item_group",
+    "item_attribute1",
+    "item_attribute2",
+    "item_attribute3",
+    "item_attribute4",
+    "item_attribute5",
+    "uom",
+    "base_uom",
+    "hsn_sac_code",
+]
+
+# Map FK field to the screen name used in FkResolver
+FK_SCREEN_MAP = {
+    "item_category": "Item Category",
+    "item_group": "Item Group",
+    "item_attribute1": "Item Attribute1",
+    "item_attribute2": "Item Attribute2",
+    "item_attribute3": "Item Attribute3",
+    "item_attribute4": "Item Attribute4",
+    "item_attribute5": "Item Attribute5",
+    "uom": "UOM",
+    "base_uom": "UOM",
+    "hsn_sac_code": "HSN SAC",
+}
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Batch create Item Master entries via API")
     parser.add_argument(
-        "--count", type=int, default=10,
-        help="Number of entries to create. Default: 10"
+        "--count", type=int, default=None,
+        help="Number of entries to create (omit to prompt)"
     )
     parser.add_argument(
         "--offset", type=int, default=0,
         help="Start index in data pool (to skip already-used entries). Default: 0"
     )
+    parser.add_argument("--token", default=None, help="ERP Bearer token (omit to prompt)")
+    parser.add_argument("--tenant", default=None, help="Tenant ID (omit to prompt)")
+    parser.add_argument("--dry-run", action="store_true", help="Print payloads without sending")
     return parser.parse_args()
+
+
+def prompt_missing_args(args):
+    if not args.token:
+        print("\n  No token provided. Open DevTools -> Network -> any /core/ request -> Authorization header")
+        args.token = input("  Token: ").strip()
+        if not args.token:
+            print("  No token entered. Exiting.")
+            sys.exit(1)
+    if not args.tenant:
+        args.tenant = input("  Tenant ID (e.g., 711): ").strip()
+        if not args.tenant:
+            print("  No tenant entered. Exiting.")
+            sys.exit(1)
+    if not args.count:
+        count_str = input("  Count (default 10): ").strip()
+        args.count = int(count_str) if count_str else 10
+    return args
+
+
+def resolve_all_fk_ids(resolver):
+    """Resolve all Item Master FK IDs from the live ERP."""
+    fk_ids = {}
+    for field, screen in FK_SCREEN_MAP.items():
+        try:
+            resolved = resolver.resolve(screen)
+            if resolved:
+                print(f"    {field}: {len(resolved)} options found")
+                # Show first 3 sample values
+                samples = list(resolved.items())[:3]
+                for name, fid in samples:
+                    print(f"      {name}: {fid}")
+                fk_ids[field] = resolved
+            else:
+                print(f"    {field}: NOT FOUND — will fall back to hardcoded IDs")
+        except Exception as e:
+            print(f"    {field}: ERROR — {e}")
+    return fk_ids
 
 
 def main():
     args = parse_args()
-    count = args.count
+
+    args = prompt_missing_args(args)
+    count = args.count if args.count else 10
     offset = args.offset
 
     print("=" * 70)
@@ -59,17 +131,37 @@ def main():
     print(f"  Entries to create: {count}")
     print(f"  Data pool offset: {offset}")
     print(f"  Data pool size: {len(ITEM_MASTER_DATA_POOL)}")
+    if args.dry_run:
+        print("  ** DRY-RUN MODE — no entries will be created **")
     print("=" * 70)
 
+    api = None
+    fk_ids = {}
+
     api = ErpApiClient()
-    token = api.prompt_for_token()
-    api.set_session_from_token(token)
+    api.set_session_from_token(args.token, tenant_id=args.tenant)
+
+    # ── Resolve FK IDs ────────────────────────────────────────────
+    print()
+    print("  Resolving FK IDs from live ERP...")
+    resolver = FkResolver(api)
+    fk_ids = resolve_all_fk_ids(resolver)
 
     # ── Generate payloads ─────────────────────────────────────────────
+    print()
+    print(f"  Generating {count} payloads...")
     try:
-        payloads = generate_item_master_payloads(count=count, offset=offset)
+        payloads = generate_item_master_payloads(count=count, offset=offset, fk_ids=fk_ids)
     except Exception as e:
         print(f"  ERROR generating payloads: {e}")
+        if api:
+            api.close()
+        return
+
+    if args.dry_run:
+        print(f"  [DRY-RUN] {len(payloads)} payloads generated")
+        for j, p in enumerate(payloads):
+            print(f"    [{j+1}] name={p.get('name','')[:60]} cat={p.get('item_category')} type={p.get('item_type')} uom={p.get('uom')} base_uom={p.get('base_uom')} hsn={p.get('hsn_sac_code')} src={p.get('sourcing_type')} desc={p.get('description','')[:30]}")
         api.close()
         return
 
@@ -81,7 +173,6 @@ def main():
                 missing.append(fk_field)
         if missing:
             print(f"  WARNING: Payload {i+1} has None FK fields: {missing}")
-            print(f"    Data pool entry: {ITEM_MASTER_DATA_POOL[(offset + i) % len(ITEM_MASTER_DATA_POOL)]}")
 
     # ── Create entries ────────────────────────────────────────────────
     print()

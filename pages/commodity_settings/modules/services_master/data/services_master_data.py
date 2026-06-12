@@ -229,24 +229,27 @@ def generate_valid_edit_data(name_prefix="EditSvc"):
 # ── FK ID Mappings (from live ERP) ────────────────────────────────────
 
 UOM_ID_MAP = {
-    "KG": 249,
-    "MT": 250,
-    "QT": 251,
-    "NOS": 252,
-    "Litres": 253,
-    "LTR": 501,
-    "MTR": 502,
-    "SET": 533,
-    "KM": 534,
+    "QUIN76": 11,
+    "HRS": 10,
+    "CM": 9,
+    "BTL": 8,
+    "KWH": 7,
+    "QTL": 6,
+    "LB": 5,
+    "CAN": 4,
+    "QUIN": 3,
+    "NOS": 2,
+    "TESTUOM": 1,
 }
 
 HSN_SAC_SERVICES_ID_MAP = {
-    "995411": 108,
-    "995413": 122,
-    "995414": 123,
-    "995415": 124,
-    "996311": 125,
-    "996312": 126,
+    "998322": 7,
+    "0401": 6,
+    "996121": 5,
+    "996412": 4,
+    "998311": 3,
+    "23456765": 2,
+    "293729": 1,
 }
 
 # ── Data Pool ─────────────────────────────────────────────────────────
@@ -254,82 +257,86 @@ HSN_SAC_SERVICES_ID_MAP = {
 # uom_code and base_uom_code are string keys that map to FK IDs via UOM_ID_MAP
 # hsn_sac_code is a string key that maps to FK ID via HSN_SAC_SERVICES_ID_MAP
 
+# Map: old → tenant-711 UOM codes
+# "KG" → "LB", "MT" → "QUIN", "Litres" → "BTL", "SET" → "NOS"
+# HSN codes cycle through available: 998322, 0401, 996121, 996412, 998311, 23456765, 293729
+
 SERVICES_MASTER_API_DATA = [
     # ── Transportation & Logistics ──────────────────────────────────────
-    ("Cold Chain Transport", "KG", "KG", "1", "996312", True),
-    ("Bulk Cargo Transport", "MT", "MT", "1", "996312", True),
-    ("Container Transport", "NOS", "NOS", "1", "996311", True),
-    ("Last Mile Delivery", "NOS", "NOS", "1", "996312", True),
-    ("Interstate Transport", "MT", "MT", "1", "996311", True),
-    ("Express Courier Service", "NOS", "NOS", "1", "996312", True),
-    ("Tanker Transport", "Litres", "Litres", "1", "996312", True),
-    ("Rail Freight Service", "MT", "MT", "1", "996311", True),
+    ("Cold Chain Transport", "LB", "LB", "1", "998322", True),
+    ("Bulk Cargo Transport", "QUIN", "QUIN", "1", "0401", True),
+    ("Container Transport", "NOS", "NOS", "1", "996121", True),
+    ("Last Mile Delivery", "NOS", "NOS", "1", "996412", True),
+    ("Interstate Transport", "QUIN", "QUIN", "1", "998311", True),
+    ("Express Courier Service", "NOS", "NOS", "1", "23456765", True),
+    ("Tanker Transport", "BTL", "BTL", "1", "293729", True),
+    ("Rail Freight Service", "QUIN", "QUIN", "1", "998322", True),
 
     # ── Warehousing & Storage ──────────────────────────────────────────
-    ("Cold Storage Service", "KG", "KG", "1", "995411", True),
-    ("Bulk Storage Service", "MT", "MT", "1", "995411", True),
-    ("Warehouse Leasing", "SET", "SET", "1", "995411", True),
-    ("Inventory Management Service", "NOS", "NOS", "1", "995413", True),
-    ("Stock Audit Service", "NOS", "NOS", "1", "995413", True),
-    ("Bonded Warehouse Service", "KG", "KG", "1", "995411", True),
+    ("Cold Storage Service", "LB", "LB", "1", "0401", True),
+    ("Bulk Storage Service", "QUIN", "QUIN", "1", "996121", True),
+    ("Warehouse Leasing", "NOS", "NOS", "1", "996412", True),
+    ("Inventory Management Service", "NOS", "NOS", "1", "998311", True),
+    ("Stock Audit Service", "NOS", "NOS", "1", "23456765", True),
+    ("Bonded Warehouse Service", "LB", "LB", "1", "293729", True),
 
     # ── Quality & Testing ──────────────────────────────────────────────
-    ("Lab Testing Service", "NOS", "NOS", "1", "995413", True),
-    ("Microbial Analysis Service", "NOS", "NOS", "1", "995413", True),
-    ("Chemical Analysis Service", "NOS", "NOS", "1", "995413", True),
-    ("Pesticide Residue Testing", "NOS", "NOS", "1", "995413", True),
-    ("Shelf Life Testing", "NOS", "NOS", "1", "995413", True),
-    ("Nutritional Analysis Service", "NOS", "NOS", "1", "995413", True),
-    ("Sample Collection Service", "NOS", "NOS", "1", "995414", True),
-    ("Third Party Inspection", "NOS", "NOS", "1", "995414", True),
+    ("Lab Testing Service", "NOS", "NOS", "1", "998322", True),
+    ("Microbial Analysis Service", "NOS", "NOS", "1", "0401", True),
+    ("Chemical Analysis Service", "NOS", "NOS", "1", "996121", True),
+    ("Pesticide Residue Testing", "NOS", "NOS", "1", "996412", True),
+    ("Shelf Life Testing", "NOS", "NOS", "1", "998311", True),
+    ("Nutritional Analysis Service", "NOS", "NOS", "1", "23456765", True),
+    ("Sample Collection Service", "NOS", "NOS", "1", "293729", True),
+    ("Third Party Inspection", "NOS", "NOS", "1", "998322", True),
 
     # ── Packaging & Processing ─────────────────────────────────────────
-    ("Vacuum Packaging Service", "KG", "KG", "1", "995415", True),
-    ("Shrink Wrapping Service", "NOS", "NOS", "1", "995415", True),
-    ("Custom Packaging Service", "KG", "KG", "1", "995415", True),
-    ("Labeling Service", "NOS", "NOS", "1", "995415", True),
-    ("Batch Coding Service", "NOS", "NOS", "1", "995415", True),
-    ("Grading & Sorting Service", "MT", "MT", "1", "995411", True),
-    ("Milling Service Premium", "MT", "MT", "1", "995411", True),
-    ("Dehusking Service", "MT", "MT", "1", "995411", True),
+    ("Vacuum Packaging Service", "LB", "LB", "1", "0401", True),
+    ("Shrink Wrapping Service", "NOS", "NOS", "1", "996121", True),
+    ("Custom Packaging Service", "LB", "LB", "1", "996412", True),
+    ("Labeling Service", "NOS", "NOS", "1", "998311", True),
+    ("Batch Coding Service", "NOS", "NOS", "1", "23456765", True),
+    ("Grading & Sorting Service", "QUIN", "QUIN", "1", "293729", True),
+    ("Milling Service Premium", "QUIN", "QUIN", "1", "998322", True),
+    ("Dehusking Service", "QUIN", "QUIN", "1", "0401", True),
 
     # ── Agricultural Services ───────────────────────────────────────────
-    ("Crop Spraying Service", "Litres", "Litres", "1", "996311", True),
-    ("Soil Testing Service", "NOS", "NOS", "1", "995413", True),
-    ("Harvesting Service", "MT", "MT", "1", "996311", True),
-    ("Sowing Service", "KG", "KG", "1", "996311", True),
-    ("Irrigation Management", "SET", "SET", "1", "996311", True),
-    ("Organic Certification Service", "NOS", "NOS", "1", "995414", True),
+    ("Crop Spraying Service", "BTL", "BTL", "1", "996121", True),
+    ("Soil Testing Service", "NOS", "NOS", "1", "996412", True),
+    ("Harvesting Service", "QUIN", "QUIN", "1", "998311", True),
+    ("Sowing Service", "LB", "LB", "1", "23456765", True),
+    ("Irrigation Management", "NOS", "NOS", "1", "293729", True),
+    ("Organic Certification Service", "NOS", "NOS", "1", "998322", True),
 
     # ── Insurance & Financial ──────────────────────────────────────────
-    ("Crop Insurance Service", "NOS", "NOS", "1", "995414", True),
-    ("Transit Insurance Service", "NOS", "NOS", "1", "995414", True),
-    ("Warehouse Insurance Service", "NOS", "NOS", "1", "995414", True),
-    ("Commodity Valuation Service", "NOS", "NOS", "1", "995414", True),
+    ("Crop Insurance Service", "NOS", "NOS", "1", "0401", True),
+    ("Transit Insurance Service", "NOS", "NOS", "1", "996121", True),
+    ("Warehouse Insurance Service", "NOS", "NOS", "1", "996412", True),
+    ("Commodity Valuation Service", "NOS", "NOS", "1", "998311", True),
 
     # ── Weighbridge & Measurement ──────────────────────────────────────
-    ("Weighbridge Service Premium", "MT", "MT", "1", "995415", True),
-    ("Volume Measurement Service", "Litres", "Litres", "1", "995415", True),
-    ("Moisture Measurement Service", "NOS", "NOS", "1", "995415", True),
+    ("Weighbridge Service Premium", "QUIN", "QUIN", "1", "23456765", True),
+    ("Volume Measurement Service", "BTL", "BTL", "1", "293729", True),
+    ("Moisture Measurement Service", "NOS", "NOS", "1", "998322", True),
 
     # ── Cleaning & Fumigation ──────────────────────────────────────────
-    ("Fumigation Service Premium", "NOS", "NOS", "1", "995411", True),
-    ("Sanitization Service", "SET", "SET", "1", "995411", True),
-    ("Pest Control Service", "NOS", "NOS", "1", "995411", True),
-    ("Silo Cleaning Service", "NOS", "NOS", "1", "995411", True),
+    ("Fumigation Service Premium", "NOS", "NOS", "1", "0401", True),
+    ("Sanitization Service", "NOS", "NOS", "1", "996121", True),
+    ("Pest Control Service", "NOS", "NOS", "1", "996412", True),
+    ("Silo Cleaning Service", "NOS", "NOS", "1", "998311", True),
 
     # ── Professional & Consultancy ──────────────────────────────────────
-    ("Agri Consultancy Service", "NOS", "NOS", "1", "996312", True),
-    ("Supply Chain Consulting", "NOS", "NOS", "1", "996312", True),
-    ("Regulatory Compliance Service", "NOS", "NOS", "1", "996312", True),
-    ("Market Intelligence Service", "NOS", "NOS", "1", "996312", True),
-    ("Export Documentation Service", "NOS", "NOS", "1", "996312", True),
+    ("Agri Consultancy Service", "NOS", "NOS", "1", "23456765", True),
+    ("Supply Chain Consulting", "NOS", "NOS", "1", "293729", True),
+    ("Regulatory Compliance Service", "NOS", "NOS", "1", "998322", True),
+    ("Market Intelligence Service", "NOS", "NOS", "1", "0401", True),
+    ("Export Documentation Service", "NOS", "NOS", "1", "996121", True),
 
     # ── Technology & Digital ────────────────────────────────────────────
-    ("ERP Integration Service", "NOS", "NOS", "1", "996311", True),
-    ("IoT Monitoring Service", "SET", "SET", "1", "996311", True),
-    ("Data Analytics Service", "NOS", "NOS", "1", "996311", True),
-    ("GPS Tracking Service", "NOS", "NOS", "1", "996311", True),
+    ("ERP Integration Service", "NOS", "NOS", "1", "996412", True),
+    ("IoT Monitoring Service", "NOS", "NOS", "1", "998311", True),
+    ("Data Analytics Service", "NOS", "NOS", "1", "23456765", True),
+    ("GPS Tracking Service", "NOS", "NOS", "1", "293729", True),
 ]
 
 
@@ -457,20 +464,25 @@ def generate_batch_payloads(
     return generate_services_master_payloads(count=count)
 
 
-def generate_services_master_payloads(count: int = 10, offset: int = 0) -> list:
+def generate_services_master_payloads(count: int = 10, offset: int = 0, fk_ids: dict = None) -> list:
     """
     Generate N API payloads for Services Master.
 
-    Resolves FK dropdown codes to live ERP IDs using the ID maps.
-    Validates that all FK fields resolve before building payloads.
+    Resolves FK dropdown codes to live ERP IDs using the provided fk_ids
+    (FkResolver output) or falls back to hardcoded ID maps.
 
     Args:
         count: Number of payloads to generate
         offset: Start index in the data pool (to skip already-used entries)
+        fk_ids: Optional dict of resolved FK IDs, e.g. {"uom": {"LB": 5, ...}, "hsn_code": {...}}
 
     Returns:
         list[dict]: List of API payloads ready for batch_create
     """
+    fk_ids = fk_ids or {}
+    uom_map = fk_ids.get("uom", UOM_ID_MAP)
+    hsn_map = fk_ids.get("hsn_code", HSN_SAC_SERVICES_ID_MAP)
+
     pool = SERVICES_MASTER_API_DATA
     payloads = []
 
@@ -484,9 +496,9 @@ def generate_services_master_payloads(count: int = 10, offset: int = 0) -> list:
             name = f"{name} (Batch {wrap_count})"
 
         # Resolve FK codes to ERP IDs
-        uom_id = UOM_ID_MAP.get(uom_code)
-        base_uom_id = UOM_ID_MAP.get(base_uom_code)
-        hsn_id = HSN_SAC_SERVICES_ID_MAP.get(hsn_code_str)
+        uom_id = uom_map.get(uom_code)
+        base_uom_id = uom_map.get(base_uom_code)
+        hsn_id = hsn_map.get(hsn_code_str)
 
         payloads.append(
             build_services_master_api_payload(

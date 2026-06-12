@@ -8,6 +8,7 @@ Auto-discovers FK IDs at startup.
 
 import sys
 import os
+import argparse
 import time
 
 # ── Path setup ────────────────────────────────────────────────────────
@@ -24,14 +25,43 @@ from pages.common_settings.modules.tax_rate.data.tax_rate_data import (
 SCREEN_NAME = "Tax Rate"
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Batch create Tax Rate entries via API")
+    parser.add_argument("--token", default=None, help="ERP Bearer token (omit to prompt)")
+    parser.add_argument("--tenant", default=None, help="Tenant ID (omit to prompt)")
+    parser.add_argument("--count", type=int, default=None, help="Number of entries to create (omit to prompt)")
+    return parser.parse_args()
+
+
+def prompt_missing_args(args):
+    if not args.token:
+        print("\n  No token provided. Open DevTools -> Network -> any /core/ request -> Authorization header")
+        args.token = input("  Token: ").strip()
+        if not args.token:
+            print("  No token entered. Exiting.")
+            sys.exit(1)
+    if not args.tenant:
+        args.tenant = input("  Tenant ID (e.g., 711): ").strip()
+        if not args.tenant:
+            print("  No tenant entered. Exiting.")
+            sys.exit(1)
+    if not args.count:
+        count_str = input("  Count (default 10): ").strip()
+        args.count = int(count_str) if count_str else 10
+    return args
+
+
 def main():
+    args = parse_args()
+    args = prompt_missing_args(args)
+    count = args.count
+
     print("=" * 70)
-    print(f"  {SCREEN_NAME.upper()} BATCH CREATE")
+    print(f"  {SCREEN_NAME.upper()} BATCH CREATE — {count} entries")
     print("=" * 70)
 
     api = ErpApiClient()
-    token = api.prompt_for_token()
-    api.set_session_from_token(token)
+    api.set_session_from_token(args.token, tenant_id=args.tenant)
 
     # ── Resolve FK IDs ────────────────────────────────────────────────
     print()
@@ -57,7 +87,6 @@ def main():
     }
 
     # ── Generate payloads ─────────────────────────────────────────────
-    count = 10
     print()
     print(f"  Generating {count} payloads...")
     payloads = generate_tax_rate_api_payloads(count=count, fk_ids=fk_ids)

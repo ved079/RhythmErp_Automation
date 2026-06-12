@@ -69,14 +69,25 @@ PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "..", "..", 
 sys.path.insert(0, PROJECT_ROOT)
 
 from common.erp_api_client import ErpApiClient
+from common.fk_resolver import FkResolver
 from common.logger import log
 from pages.commodity_settings.modules.commodity_base_rate.data.cbr_data import (
     PRICING_TYPE_ID_MAP,
     LOCATION_ID_MAP,
+    ITEM_ID_MAP,
+    UOM_ID_MAP,
+    CBR_GRID_DATA,
 )
 
 SCREEN_NAME = "Commodity Base Rate"
 LOCATION_SCREEN = "Location"
+
+# FK fields that need resolution from live ERP
+FK_SCREEN_MAP = {
+    "location_ref_id": "Location",
+    "item_ref_id": "Item Master",
+    "uom": "UOM",
+}
 
 # Location names for auto-creation (descriptive, not in existing LOCATION_ID_MAP)
 NEW_LOCATION_NAMES = [
@@ -108,9 +119,12 @@ def parse_args():
         description="Batch create Commodity Base Rate entries via API"
     )
     parser.add_argument(
-        "--count", type=int, default=10,
-        help="Number of entries to create. Default: 10"
+        "--count", type=int, default=None,
+        help="Number of entries to create (omit to prompt)"
     )
+    parser.add_argument("--token", default=None, help="ERP Bearer token (omit to prompt)")
+    parser.add_argument("--tenant", default=None, help="Tenant ID (omit to prompt)")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be created without sending")
     return parser.parse_args()
 
 
@@ -379,22 +393,30 @@ def create_new_location(api: ErpApiClient, name: str) -> int:
 # ── Step 4: Create CBR entries for free locations ─────────────────────
 
 def create_cbr_entry(api: ErpApiClient, pricing_type_id: int,
-                     location_id: int) -> dict:
+                     location_id: int, item_ref_id: int = None,
+                     uom_id: int = None, item_rate: str = "1500") -> dict:
     """
-    Create a single CBR header entry for a given location.
-
-    Since the server overrides to_date to 2099-12-30 (BUG-004), we
-    send the default value. The location must NOT already have a CBR
-    entry (otherwise duplicate error on (to_date, location_ref_id)).
+    Create a single CBR header entry with a grid detail row.
 
     Args:
         api: Authenticated ErpApiClient instance
         pricing_type_id: 118 (Common) or 120 (Supplier)
         location_id: Integer FK for the location
+        item_ref_id: FK for Item Master (grid detail row)
+        uom_id: FK for UOM (grid detail row)
+        item_rate: Item rate string (grid detail row)
 
     Returns:
         Result dict: {"success": bool, "data": ..., "error": ..., "payload": ...}
     """
+    detail_rows = []
+    if item_ref_id is not None and uom_id is not None:
+        detail_rows.append({
+            "item_ref_id": item_ref_id,
+            "uom": uom_id,
+            "item_rate": item_rate,
+        })
+
     payload = {
         "id": "",
         "attribute_name": SCREEN_NAME,
@@ -402,6 +424,15 @@ def create_cbr_entry(api: ErpApiClient, pricing_type_id: int,
         "from_date": "2026-06-02T00:00:00Z",
         "to_date": "2099-12-30T18:30:00Z",
         "location_ref_id": location_id,
+        "details": [],
+        "children": [
+            {
+                "stepper_name": "Define Item Rate Commision Details",
+                "is_stepper": True,
+                "details": detail_rows,
+                "children": [],
+            }
+        ],
     }
 
     try:
@@ -414,16 +445,58 @@ def create_cbr_entry(api: ErpApiClient, pricing_type_id: int,
         return {"success": False, "error": str(e), "payload": payload}
 
 
+# ── FK Resolution ──────────────────────────────────────────────────
+
+def resolve_all_fk_ids(resolver):
+    """Resolve all CBR FK IDs from the live ERP."""
+    fk_ids = {}
+    for field, screen in FK_SCREEN_MAP.items():
+        try:
+            resolved = resolver.resolve(screen)
+            if resolved:
+                print(f"    {field}: {len(resolved)} options found from '{screen}'")
+                samples = list(resolved.items())[:3]
+                for name, fid in samples:
+                    print(f"      {name}: {fid}")
+                fk_ids[field] = resolved
+            else:
+                print(f"    {field}: NOT FOUND — will fall back to hardcoded IDs")
+        except Exception as e:
+            print(f"    {field}: ERROR — {e}")
+    return fk_ids
+
+
 # ── Main ──────────────────────────────────────────────────────────────
+
+def prompt_missing_args(args):
+    if not args.token:
+        print("\n  No token provided. Open DevTools -> Network -> any /core/ request -> Authorization header")
+        args.token = input("  Token: ").strip()
+        if not args.token:
+            print("  No token entered. Exiting.")
+            sys.exit(1)
+    if not args.tenant:
+        args.tenant = input("  Tenant ID (e.g., 711): ").strip()
+        if not args.tenant:
+            print("  No tenant entered. Exiting.")
+            sys.exit(1)
+    if not args.count:
+        count_str = input("  Count (default 10): ").strip()
+        args.count = int(count_str) if count_str else 10
+    return args
+
 
 def main():
     args = parse_args()
+    args = prompt_missing_args(args)
     count = args.count
 
     print("=" * 70)
     print("  COMMODITY BASE RATE — BATCH CREATE (API)")
     print(f"  Screen: {SCREEN_NAME}")
     print(f"  Entries to create: {count}")
+    if args.dry_run:
+        print("  ** DRY-RUN MODE — no entries will be created **")
     print("=" * 70)
     print()
     print("  NOTE: The ERP overrides to_date to 2099-12-30 (BUG-004).")
@@ -431,18 +504,29 @@ def main():
     print("=" * 70)
 
     api = ErpApiClient()
-    token = api.prompt_for_token()
-    api.set_session_from_token(token)
+    api.set_session_from_token(args.token, tenant_id=args.tenant)
 
-    # ── Step 1: Fetch ALL locations first (needed for dedup resolution) ─
+    # ── Resolve FK IDs ────────────────────────────────────────────────
+    print()
+    print("  Resolving FK IDs from live ERP...")
+    resolver = FkResolver(api)
+    fk_ids = resolve_all_fk_ids(resolver)
+
+    # ── Step 1: Fetch ALL locations ────────────────────────────────────
     print()
     print("  Step 1: Fetching all locations from ERP...")
     print("-" * 70)
 
     all_locations = fetch_all_location_ids(api)
+    # Supplement with FkResolver results if they have extras
+    loc_fk = fk_ids.get("location_ref_id", {})
+    for name, lid in loc_fk.items():
+        if name not in all_locations:
+            all_locations[name] = lid
 
     print(f"  Total locations in ERP: {len(all_locations)}")
     print(f"  Static LOCATION_ID_MAP: {len(LOCATION_ID_MAP)} entries")
+    print(f"  FkResolver: {len(loc_fk)} entries")
     print(f"  Dynamic (from dropdown): {len(all_locations) - len(LOCATION_ID_MAP)} additional")
 
     # ── Step 2: Find which locations already have CBR entries ──────────
@@ -450,10 +534,8 @@ def main():
     print("  Step 2: Checking existing CBR entries (with full dedup)...")
     print("-" * 70)
 
-    # PASS all_locations to the dedup function for PROPER name resolution
     used_locations = fetch_existing_cbr_locations(api, all_locations=all_locations)
 
-    # Find FREE locations (exist in ERP but have NO CBR entry at all)
     free_locations = {
         name: loc_id for name, loc_id in all_locations.items()
         if loc_id not in used_locations
@@ -467,70 +549,107 @@ def main():
     else:
         print("  (!) ALL locations already have CBR entries — must create new ones")
 
-    # ── Step 3: Ensure we have enough free locations ──────────────────
+    # ── Step 3: Ensure enough free locations ──────────────────────────
     needed = count
     available = len(free_locations)
+    will_create_locations = 0
 
     if available < needed:
-        to_create = needed - available
+        will_create_locations = needed - available
         print()
-        print(f"  Step 3: Need {needed} free locations, only {available} available.")
-        print(f"  Creating {to_create} new locations via the Location API...")
-        print("-" * 70)
+        if args.dry_run:
+            print(f"  Step 3: Would need {needed} free locations, only {available} available.")
+            print(f"  Would create {will_create_locations} new locations via Location API.")
+            print()
+        else:
+            print(f"  Step 3: Need {needed} free locations, only {available} available.")
+            print(f"  Creating {will_create_locations} new locations via the Location API...")
+            print("-" * 70)
 
-        # Pick names that don't already exist
-        existing_names = set(n.lower() for n in all_locations.keys())
-        name_idx = 0
-        created_locs = 0
+            existing_names = set(n.lower() for n in all_locations.keys())
+            name_idx = 0
+            created_locs = 0
 
-        while created_locs < to_create:
-            # Find a name that doesn't exist yet
-            candidate = None
-            while name_idx < len(NEW_LOCATION_NAMES):
-                candidate = NEW_LOCATION_NAMES[name_idx]
-                name_idx += 1
-                if candidate.lower() not in existing_names:
-                    break
-            else:
-                # Exhausted the name list — generate numbered fallback
-                fallback_num = name_idx + 1
-                candidate = f"CBR Test Location {fallback_num}"
+            while created_locs < will_create_locations:
+                candidate = None
+                while name_idx < len(NEW_LOCATION_NAMES):
+                    candidate = NEW_LOCATION_NAMES[name_idx]
+                    name_idx += 1
+                    if candidate.lower() not in existing_names:
+                        break
+                else:
+                    fallback_num = name_idx + 1
+                    candidate = f"CBR Test Location {fallback_num}"
 
-            new_id = create_new_location(api, candidate)
-            if new_id:
-                free_locations[candidate] = new_id
-                all_locations[candidate] = new_id
-                existing_names.add(candidate.lower())
-                created_locs += 1
-                print(f"    Created: {candidate} (id={new_id})")
-            else:
-                print(f"    FAILED to create: {candidate}")
-                # If location creation fails, try the next name
-                if name_idx >= len(NEW_LOCATION_NAMES) + 20:
-                    print("  ERROR: Too many location creation failures — stopping")
-                    break
+                new_id = create_new_location(api, candidate)
+                if new_id:
+                    free_locations[candidate] = new_id
+                    all_locations[candidate] = new_id
+                    existing_names.add(candidate.lower())
+                    created_locs += 1
+                    print(f"    Created: {candidate} (id={new_id})")
+                else:
+                    print(f"    FAILED to create: {candidate}")
+                    if name_idx >= len(NEW_LOCATION_NAMES) + 20:
+                        print("  ERROR: Too many location creation failures — stopping")
+                        break
 
-            time.sleep(0.3)
+                time.sleep(0.3)
 
-        print(f"  Created {created_locs} new locations. Now have {len(free_locations)} free locations")
+            print(f"  Created {created_locs} new locations. Now have {len(free_locations)} free locations")
     else:
         print()
         print(f"  Step 3: {available} free locations available — enough for {needed}.")
         print("  No new locations needed.")
 
-    # ── Step 4: Create CBR entries for free locations ──────────────────
+    # ── Dry-run: show what would be created ────────────────────────────
+    if args.dry_run:
+        # Build resolved maps for item and UOM
+        item_map = fk_ids.get("item_ref_id", ITEM_ID_MAP)
+        uom_map = fk_ids.get("uom", UOM_ID_MAP)
+
+        print()
+        print(f"  [DRY-RUN] Would create {count} CBR entries:")
+        print("-" * 70)
+        pricing_types = [118, 120]
+        sorted_free = sorted(free_locations.items(), key=lambda x: x[1])
+        for i in range(count):
+            if i >= len(sorted_free):
+                print(f"    [{i+1}/{count}] No more free locations — would stop")
+                break
+            loc_name, loc_id = sorted_free[i]
+            pt_id = pricing_types[i % len(pricing_types)]
+            pt_name = "Common" if pt_id == 118 else "Supplier"
+            # Resolve grid detail
+            gidx = i % len(CBR_GRID_DATA)
+            item_name, uom_name = CBR_GRID_DATA[gidx]
+            item_id = item_map.get(item_name)
+            uid = uom_map.get(uom_name)
+            item_display = f"item={item_id}({item_name})" if item_id else "item=?"
+            uom_display = f"uom={uid}({uom_name})" if uid else "uom=?"
+            print(f"    [{i+1}/{count}] CBR: {pt_name}/{loc_name} (loc_id={loc_id}) "
+                  f"{item_display} {uom_display}")
+        if will_create_locations > 0:
+            print(f"    (would also create {will_create_locations} new locations)")
+        print()
+        print("  [DRY-RUN] No entries were created.")
+        api.close()
+        return
+
+    # ── Step 4: Create CBR entries ─────────────────────────────────────
     print()
     print(f"  Step 4: Creating {count} CBR entries for free locations...")
     print("-" * 70)
 
-    # Build a list of (pricing_type_id, location_id) pairs
-    # Alternate between Common and Supplier pricing types
-    pricing_types = [118, 120]  # Common, Supplier
+    # Resolve item and UOM maps from FkResolver (fallback to hardcoded)
+    item_map = fk_ids.get("item_ref_id", ITEM_ID_MAP)
+    uom_map = fk_ids.get("uom", UOM_ID_MAP)
+
+    pricing_types = [118, 120]
     results = []
     created = 0
     failed = 0
 
-    # Sort free locations by ID for consistent ordering
     sorted_free = sorted(free_locations.items(), key=lambda x: x[1])
 
     for i in range(count):
@@ -542,14 +661,24 @@ def main():
         pt_id = pricing_types[i % len(pricing_types)]
         pt_name = "Common" if pt_id == 118 else "Supplier"
 
+        # Pick grid detail row from CBR_GRID_DATA
+        gidx = i % len(CBR_GRID_DATA)
+        item_name, uom_name = CBR_GRID_DATA[gidx]
+        item_id = item_map.get(item_name)
+        uid = uom_map.get(uom_name)
+        item_rate = str(1500 + i * 100)
+
         print(
             f"    [{i+1}/{count}] Creating CBR: {pt_name}/{loc_name} "
-            f"(loc_id={loc_id})...",
+            f"(loc_id={loc_id}) item={item_id} uom={uid} rate={item_rate}...",
             end=" ",
             flush=True,
         )
 
-        result = create_cbr_entry(api, pt_id, loc_id)
+        result = create_cbr_entry(api, pt_id, loc_id,
+                                   item_ref_id=item_id,
+                                   uom_id=uid,
+                                   item_rate=item_rate)
 
         if result.get("success"):
             created += 1
@@ -579,8 +708,11 @@ def main():
                 p = r.get("payload", {})
                 loc_id = p.get("location_ref_id", "?")
                 pt_id = p.get("pricing_type_ref_id", "?")
-                print(f"  FAILED (pricing={pt_id}, location={loc_id}): "
-                      f"{r.get('error', 'Unknown')}")
+                children = p.get("children", [])
+                detail = children[0].get("details", [{}])[0] if children else {}
+                item_id = detail.get("item_ref_id", "?")
+                print(f"  FAILED (pricing={pt_id}, location={loc_id}, "
+                      f"item={item_id}): {r.get('error', 'Unknown')}")
 
     if created < count:
         print(f"  WARNING: Only {created}/{count} entries created.")

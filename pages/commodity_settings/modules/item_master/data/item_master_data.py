@@ -589,38 +589,34 @@ def build_item_master_api_payload(
     include_wip=False,
     is_packing_material=False,
     status=True,
+    fk_ids=None,
 ):
     """
     Build a complete API payload for Item Master (3-step stepper).
 
-    Args:
-        category, group, item_type, attr1-5, uom, base_uom, hsn:
-            Display names from the FK option dicts above.
-        description: Free text description.
-        base_uom_conversion: Numeric string (default "1").
-        is_critical, include_wip, is_packing_material: Toggle booleans.
-        status: Active/inactive toggle.
-
-    Returns:
-        dict: Complete JSON payload ready for POST /core/dynamic-screen-wrapper/
+    name and code are auto-computed from attr1-5 (matching frontend behavior).
+    item_type and item_source are hardcoded (screen not resolvable in this tenant).
     """
-    return {
+    fk_ids = fk_ids or {}
+
+    def _fk(name, field_key):
+        """Resolve FK name to ID using runtime fk_ids only. Returns None if unresolved."""
+        options = fk_ids.get(field_key)
+        if not options:
+            return None  # Screen not resolved — skip this field
+        return _resolve_fk(name, options)
+
+    # Auto-compute name and code from attributes (matching frontend)
+    attrs = [a for a in [attr1, attr2, attr3, attr4, attr5] if a]
+    auto_name = " ".join(attrs)
+    auto_code = "-".join(attrs)
+
+    payload = {
         "id": "",
         "attribute_name": "Item Master",
-        "name": "",
-        "code": "",
+        "name": auto_name,
+        "code": auto_code,
         "description": description,
-        "item_category": _resolve_fk(category, ITEM_CATEGORY_OPTIONS),
-        "item_group": _resolve_fk(group, ITEM_GROUP_OPTIONS),
-        "item_type": _resolve_fk(item_type, ITEM_TYPE_OPTIONS),
-        "item_attribute1": _resolve_fk(attr1, ITEM_ATTRIBUTE1_OPTIONS),
-        "item_attribute2": _resolve_fk(attr2, ITEM_ATTRIBUTE2_OPTIONS),
-        "item_attribute3": _resolve_fk(attr3, ITEM_ATTRIBUTE3_OPTIONS),
-        "item_attribute4": _resolve_fk(attr4, ITEM_ATTRIBUTE4_OPTIONS),
-        "item_attribute5": _resolve_fk(attr5, ITEM_ATTRIBUTE5_OPTIONS),
-        "uom": _resolve_fk(uom, UOM_OPTIONS),
-        "hsn_sac_code": _resolve_fk(hsn, HSN_SAC_CODE_OPTIONS),
-        "base_uom": _resolve_fk(base_uom, BASE_UOM_OPTIONS),
         "base_uom_conversion": base_uom_conversion,
         "status": status,
         "children": [
@@ -650,38 +646,84 @@ def build_item_master_api_payload(
         ],
     }
 
+    # Hardcoded fields (screens don't exist or aren't resolvable in this tenant)
+    payload["item_type"] = 113       # Farm
+    payload["item_source"] = 1       # In-House
+    payload["sourcing_type"] = 1     # In-House
 
-def generate_item_master_payloads(count=10, offset=0):
+    # Add resolved FK fields only (skip unresolved ones)
+    fk_fields = {
+        "item_category":     _fk(category, "item_category"),
+        "item_group":        _fk(group, "item_group"),
+        "item_attribute1":   _fk(attr1, "item_attribute1"),
+        "item_attribute2":   _fk(attr2, "item_attribute2"),
+        "item_attribute3":   _fk(attr3, "item_attribute3"),
+        "item_attribute4":   _fk(attr4, "item_attribute4"),
+        "item_attribute5":   _fk(attr5, "item_attribute5"),
+        "uom":               _fk(uom, "uom"),
+        "hsn_sac_code":      _fk(hsn, "hsn_sac_code"),
+        "base_uom":          _fk(base_uom, "base_uom"),
+    }
+    for key, val in fk_fields.items():
+        if val is not None:
+            payload[key] = val
+
+    return payload
+
+
+def generate_item_master_payloads(count=10, offset=0, fk_ids=None):
     """
-    Generate N API payloads for Item Master from the data pool.
+    Generate N API payloads for Item Master.
+
+    When fk_ids provided, picks random FK display names from the resolved
+    dicts to ensure tenant-specific IDs. Falls back to data pool + hardcoded
+    dicts when fk_ids is empty.
 
     Args:
         count: Number of payloads to generate.
         offset: Start index in the data pool (skip already-used entries).
+        fk_ids: Dict of runtime-resolved FK dicts, e.g. {"item_category": {...}}.
 
     Returns:
         list[dict]: List of complete API payloads.
     """
+    fk_ids = fk_ids or {}
     pool = ITEM_MASTER_DATA_POOL
     payloads = []
+
+    # Pre-shuffle FK option names for variety
+    shuffled = {}
+    for key, opts in fk_ids.items():
+        names = list(opts.keys()) if opts else []
+        if names:
+            random.shuffle(names)
+        shuffled[key] = names
 
     for i in range(count):
         idx = (offset + i) % len(pool)
         entry = pool[idx]
 
+        def pick(field_key, pool_index):
+            """Pick FK name from resolved dict (cycling) or fall back to pool value."""
+            names = shuffled.get(field_key, [])
+            if names:
+                return names[i % len(names)]
+            return entry[pool_index]
+
         payload = build_item_master_api_payload(
-            category=entry[0],
-            group=entry[1],
-            item_type=entry[2],
-            attr1=entry[3],
-            attr2=entry[4],
-            attr3=entry[5],
-            attr4=entry[6],
-            attr5=entry[7],
-            uom=entry[8],
-            base_uom=entry[9],
-            hsn=entry[10],
+            category=pick("item_category", 0),
+            group=pick("item_group", 1),
+            item_type=pick("item_type", 2),
+            attr1=pick("item_attribute1", 3),
+            attr2=pick("item_attribute2", 4),
+            attr3=pick("item_attribute3", 5),
+            attr4=pick("item_attribute4", 6),
+            attr5=pick("item_attribute5", 7),
+            uom=pick("uom", 8),
+            base_uom=pick("base_uom", 9),
+            hsn=pick("hsn_sac_code", 10),
             description=entry[11],
+            fk_ids=fk_ids,
         )
         payloads.append(payload)
 

@@ -39,19 +39,43 @@ SCREEN_NAME = "Item Category"
 def parse_args():
     parser = argparse.ArgumentParser(description="Batch create Item Category entries via API")
     parser.add_argument(
-        "--count", type=int, default=10,
-        help="Number of entries to create. Default: 10"
+        "--count", type=int, default=None,
+        help="Number of entries to create (omit to prompt)"
     )
     parser.add_argument(
         "--offset", type=int, default=0,
         help="Start index in data pool (to skip already-used entries). Default: 0"
     )
+    parser.add_argument("--token", default=None, help="ERP Bearer token (omit to prompt)")
+    parser.add_argument("--tenant", default=None, help="Tenant ID (omit to prompt)")
+    parser.add_argument("--dry-run", action="store_true", help="Print payloads without sending")
     return parser.parse_args()
+
+
+def prompt_missing_args(args):
+    if not args.token:
+        print("\n  No token provided. Open DevTools -> Network -> any /core/ request -> Authorization header")
+        args.token = input("  Token: ").strip()
+        if not args.token:
+            print("  No token entered. Exiting.")
+            sys.exit(1)
+    if not args.tenant:
+        args.tenant = input("  Tenant ID (e.g., 711): ").strip()
+        if not args.tenant:
+            print("  No tenant entered. Exiting.")
+            sys.exit(1)
+    if not args.count:
+        count_str = input("  Count (default 10): ").strip()
+        args.count = int(count_str) if count_str else 10
+    return args
 
 
 def main():
     args = parse_args()
-    count = args.count
+
+    if not args.dry_run:
+        args = prompt_missing_args(args)
+    count = args.count if args.count else 10
     offset = args.offset
 
     print("=" * 70)
@@ -60,19 +84,25 @@ def main():
     print(f"  Entries to create: {count}")
     print(f"  Data pool offset: {offset}")
     print(f"  Data pool size: {len(ITEM_CATEGORY_API_DATA)}")
+    if args.dry_run:
+        print("  ** DRY-RUN MODE — no entries will be created **")
     print("=" * 70)
-
-    api = ErpApiClient()
-    token = api.prompt_for_token()
-    api.set_session_from_token(token)
 
     # ── Generate payloads ─────────────────────────────────────────────
     try:
         payloads = generate_item_category_payloads(count=count, offset=offset)
     except Exception as e:
         print(f"  ERROR generating payloads: {e}")
-        api.close()
         return
+
+    if args.dry_run:
+        print(f"  [DRY-RUN] {len(payloads)} payloads generated")
+        for j, p in enumerate(payloads):
+            print(f"    [{j+1}] {p.get('item_code','?')}  level={p.get('level')}  desc={p.get('item_description','')[:40]}")
+        return
+
+    api = ErpApiClient()
+    api.set_session_from_token(args.token, tenant_id=args.tenant)
 
     # ── Create entries ────────────────────────────────────────────────
     print()

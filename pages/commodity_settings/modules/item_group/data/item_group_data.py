@@ -161,26 +161,26 @@ def generate_long_code(length=300):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 ITEM_GROUP_API_DATA = [
-    ("BEVG021", "Beverages Group"),
-    ("SUGR022", "Sugar & Sweeteners Group"),
-    ("ANFD023", "Animal Feed Group"),
-    ("FRST024", "Forestry Products Group"),
-    ("MRNP025", "Marine Products Group"),
-    ("PHRM026", "Pharmaceuticals Group"),
-    ("PKGM027", "Packaging Materials Group"),
-    ("AUTO028", "Automotive Parts Group"),
-    ("SEED029", "Seeds & Planting Material Group"),
-    ("FIBR030", "Fiber & Textile Products Group"),
-    ("CRL031", "Coarse Cereals Group"),
-    ("PDDY032", "Paddy Rice Group"),
-    ("GRAM033", "Gram Varieties Group"),
-    ("LENT034", "Lentil Varieties Group"),
-    ("WSPC035", "Whole Spices Group"),
-    ("GSPC036", "Ground Spices Group"),
-    ("DRFR037", "Dry Fruits & Nuts Group"),
-    ("EDOL038", "Edible Oils Group"),
-    ("OLCA039", "Oilseed Cakes Group"),
-    ("RSUG040", "Raw Sugar Group"),
+    ("Beverages", "Tea, coffee, juices and drink products"),
+    ("Sugar & Sweeteners", "Sugar, jaggery, honey and sweetener products"),
+    ("Animal Feed", "Cattle feed, poultry feed and fodder products"),
+    ("Forestry Products", "Timber, bamboo and forest produce"),
+    ("Marine Products", "Fish, shrimp and seafood products"),
+    ("Pharmaceuticals", "OTC medicines and pharmaceutical raw materials"),
+    ("Packaging Materials", "Woven sacks, HDPE bags and packaging supplies"),
+    ("Automotive Parts", "Spare parts and automotive components"),
+    ("Seeds & Planting Material", "Agricultural seeds and planting stock"),
+    ("Fiber & Textile Products", "Cotton, jute and textile raw materials"),
+    ("Coarse Cereals", "Maize, millet, barley and other coarse grains"),
+    ("Paddy Rice", "Paddy, rice and rice by-products"),
+    ("Gram Varieties", "Chickpeas, Bengal gram and gram variants"),
+    ("Lentil Varieties", "Red lentils, yellow lentils and pulse varieties"),
+    ("Whole Spices", "Black pepper, cardamom, cinnamon and whole spices"),
+    ("Ground Spices", "Turmeric powder, chili powder and ground masalas"),
+    ("Dry Fruits & Nuts", "Almonds, cashews, raisins and dry fruit products"),
+    ("Edible Oils", "Mustard oil, soybean oil and cooking oils"),
+    ("Oilseed Cakes", "Mustard cake, groundnut cake and oilseed meals"),
+    ("Raw Sugar", "Raw sugar, brown sugar and molasses"),
 ]
 
 
@@ -203,7 +203,7 @@ def generate_item_group_payloads(count: int = 10, offset: int = 0) -> list:
         code, description = pool[idx]
         if (offset + i) >= len(pool):
             wrap_count = (offset + i) // len(pool) + 1
-            code = f"{code}-B{wrap_count}"
+            code = f"{code} (Batch {wrap_count})"
         payloads.append(build_item_group_api_payload(code=code, description=description))
     return payloads
 

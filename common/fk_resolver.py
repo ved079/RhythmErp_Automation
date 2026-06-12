@@ -32,7 +32,7 @@ class FkResolver:
     # Known screens and the field to use as the display name
     # (some screens use 'name', others use 'uom_code', 'tax_name', etc.)
     SCREEN_NAME_FIELDS = {
-        "UOM":              "uom_description",
+        "UOM":              "uom_code",
         "UOM Code":         "uom_code",
         "Tax Type":         "name",
         "Country":          "name",
@@ -47,6 +47,10 @@ class FkResolver:
         "HSN SAC Type":     "name",
         "Ownership Status": "name",
         "Bank":             "bank_name",
+        "Item Category":    "item_code",
+        "Item Group":       "code",
+        "HSN SAC Code":     "code",
+        "HSN SAC":          "hsn_sac_no",
     }
 
     # Known hardcoded IDs (verified, stable across sessions)

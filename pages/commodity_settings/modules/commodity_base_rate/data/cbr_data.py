@@ -157,113 +157,75 @@ PRICING_TYPE_ID_MAP = {
 }
 
 LOCATION_ID_MAP = {
-    "Charholi": 1,
-    "Pune": 2,
-    "Kothurd": 3,
-    "London": 4,
-    "Barcelona": 5,
-    "Mumbai": 6,
-    "Akola": 7,
-    "Delhi": 8,
-    "Agra": 9,
-    "Indore": 10,
+    "Pune": 1,
+    "Mumbai": 2,
+    "London": 3,
+    "Amravati": 4,
+    "Akole": 5,
+    "Thane": 6,
+    "Manchester": 7,
+    "Himachal": 8,
+    "Kothrud": 9,
 }
 
 ITEM_ID_MAP = {
-    "Sugarcane": 94,
-    "Groundnut": 95,
-    "Sunflower Seeds": 96,
-    "Mustard Seeds": 97,
-    "Green Gram": 98,
-    "Black Gram": 99,
-    "Chickpeas": 100,
-    "Turmeric Powder": 101,
-    "Red Chilli": 102,
-    "Coriander Seeds": 103,
-    "Cumin Seeds": 104,
-    "Onion": 105,
-    "Potato": 106,
-    "Tomato": 107,
-    "Mango": 108,
-    "Iron Pipe": 130,
-    "Cement Bag": 131,
-    "Paint Bucket": 132,
-    "Nut Bolt Set": 133,
-    "PVC Pipe": 134,
-    "Drill Machine": 135,
-    "Hammer": 136,
-    "Welding Rod": 137,
-    "Measuring Tape": 138,
-    "Bath Soap": 109,
-    "Shampoo Bottle": 110,
-    "Hair Oil": 111,
-    "Toothpaste": 112,
-    "Detergent Powder": 113,
-    "Dish Wash Liquid": 114,
-    "Floor Cleaner": 115,
-    "Hand Wash": 116,
-    "Face Cream": 117,
-    "Talcum Powder": 118,
-    "LED Bulb": 119,
-    "Ceiling Fan": 120,
-    "Extension Board": 121,
-    "Electric Wire": 122,
-    "Switch Board": 123,
-    "Water Heater": 124,
-    "Mixer Grinder": 125,
-    "Electric Kettle": 126,
-    "Inverter Battery": 127,
-    "Solar Panel": 128,
-    "A4 Paper": 139,
-    "Ball Pen": 140,
-    "Stapler": 141,
-    "Printer Ink": 142,
-    "File Folder": 143,
-    "Marker Pen": 145,
-    "Whiteboard": 146,
-    "Calculator": 147,
+    "Spinach Flexible Green Huge Droplet": 5,
+    "Cherry Flexible Green Huge Droplet": 6,
+    "Ginger Hollow Orange Minute Heart": 7,
+    "Ginger Fuzzy Ruby Teeny Heart": 9,
+    "Apple Stiff Blue Deep Heart": 12,
+    "Spinach Fuzzy Magenta Small Circle": 13,
+    "Banana Hollow Peach Enormous Crescent": 14,
+    "Apple Bumpy Charcoal Broad Ring": 15,
+    "Onion Silky Brown Teeny Hexagon": 16,
+    "Papaya Stiff Cream Micro Loop": 17,
 }
 
 UOM_ID_MAP = {
-    "KG": 249,
-    "MT": 250,
-    "QT": 251,
-    "NOS": 252,
-    "Litres": 253,
-    "LTR": 501,
-    "MTR": 502,
-    "dozens": 504,
-    "MUND": 528,
-    "BIGHA": 529,
-    "CAN": 531,
-    "SET": 533,
-    "KM": 534,
-    "MM": 536,
+    "TESTUOM": 1,
+    "NOS": 2,
+    "QUIN": 3,
+    "CAN": 4,
+    "LB": 5,
+    "QTL": 6,
+    "KWH": 7,
+    "BTL": 8,
+    "CM": 9,
+    "HRS": 10,
+    "QUIN76": 11,
 }
 
-CBR_USED_LOCATION_IDS = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+# Grid detail data: (item_name, uom_name) pairs for CBR detail rows
+CBR_GRID_DATA = [
+    ("Spinach Flexible Green Huge Droplet", "NOS"),
+    ("Cherry Flexible Green Huge Droplet", "QUIN"),
+    ("Ginger Hollow Orange Minute Heart", "CAN"),
+    ("Ginger Fuzzy Ruby Teeny Heart", "LB"),
+    ("Apple Stiff Blue Deep Heart", "NOS"),
+    ("Spinach Fuzzy Magenta Small Circle", "QUIN"),
+    ("Banana Hollow Peach Enormous Crescent", "CAN"),
+    ("Apple Bumpy Charcoal Broad Ring", "LB"),
+    ("Onion Silky Brown Teeny Hexagon", "NOS"),
+    ("Papaya Stiff Cream Micro Loop", "QUIN"),
+]
+
+CBR_USED_LOCATION_IDS = set()
 
 COMMODITY_BASE_RATE_API_DATA = [
-    ("Common", "Kothurd"),
     ("Common", "London"),
-    ("Common", "Barcelona"),
-    ("Supplier", "Kothurd"),
+    ("Common", "Amravati"),
+    ("Common", "Akole"),
+    ("Common", "Thane"),
+    ("Common", "Manchester"),
+    ("Common", "Himachal"),
+    ("Common", "Kothrud"),
     ("Supplier", "London"),
-    ("Supplier", "Barcelona"),
-    ("Common", "Charholi"),
-    ("Common", "Pune"),
-    ("Common", "Akola"),
-    ("Common", "Delhi"),
-    ("Supplier", "Charholi"),
-    ("Supplier", "Pune"),
-    ("Supplier", "Mumbai"),
-    ("Supplier", "Akola"),
-    ("Common", "Mumbai"),
-    ("Common", "Agra"),
-    ("Common", "Indore"),
-    ("Supplier", "Delhi"),
-    ("Supplier", "Agra"),
-    ("Supplier", "Indore"),
+    ("Supplier", "Amravati"),
+    ("Supplier", "Akole"),
+    ("Supplier", "Thane"),
+    ("Supplier", "Manchester"),
+    ("Supplier", "Himachal"),
+    ("Supplier", "Kothrud"),
 ]
 
 
@@ -281,15 +243,18 @@ def build_cbr_api_payload(pricing_type_ref_id, location_ref_id,
     }
 
 
-def generate_cbr_payloads(count=10, offset=0, skip_location_ids=None, used_combos=None):
-    """Generate N API payloads for CBR. Resolves FK names to IDs.
-    Automatically shifts to_date years when a location would cause a duplicate."""
+def generate_cbr_payloads(count=10, offset=0, skip_location_ids=None, used_combos=None, fk_ids=None):
+    """Generate N API payloads for CBR. Resolves FK names to IDs via FkResolver
+    or fallback maps. Automatically shifts to_date years when a location would
+    cause a duplicate."""
+    fk_ids = fk_ids or {}
+    loc_map = fk_ids.get("location_ref_id", LOCATION_ID_MAP)
+    pt_map = PRICING_TYPE_ID_MAP
+
     pool = COMMODITY_BASE_RATE_API_DATA
     payloads = []
 
     combo_set = set()
-    for loc_id in CBR_USED_LOCATION_IDS:
-        combo_set.add((2099, loc_id))
     if skip_location_ids:
         for loc_id in skip_location_ids:
             combo_set.add((2099, loc_id))
@@ -300,8 +265,8 @@ def generate_cbr_payloads(count=10, offset=0, skip_location_ids=None, used_combo
         idx = (offset + i) % len(pool)
         pricing_type_name, location_name = pool[idx]
 
-        pt_id = PRICING_TYPE_ID_MAP.get(pricing_type_name)
-        loc_id = LOCATION_ID_MAP.get(location_name)
+        pt_id = pt_map.get(pricing_type_name)
+        loc_id = loc_map.get(location_name)
         if pt_id is None or loc_id is None:
             continue
 
@@ -343,6 +308,13 @@ FIELD_VALIDATION_RULES = {
         "fk_options_count": len(LOCATION_ID_MAP),
         "note": "FK to Location. 10 options.",
     },
+}
+
+SCREEN_NAME_FIELDS = {
+    "pricing_type_ref_id": None,
+    "location_ref_id": "Location",
+    "item_ref_id": "Item Master",
+    "uom": "UOM",
 }
 
 PRICING_TYPE_NAMES = dict(PRICING_TYPE_ID_MAP)

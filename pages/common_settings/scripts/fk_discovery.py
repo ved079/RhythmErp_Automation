@@ -15,6 +15,7 @@ Output:
 
 import sys
 import os
+import argparse
 import json
 import time
 from pathlib import Path
@@ -78,7 +79,32 @@ def resolve_screen(api, display_name, attempts):
     return None, {}
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Discover FK IDs for Common Settings screens")
+    parser.add_argument("--token", default=None, help="ERP Bearer token (omit to prompt)")
+    parser.add_argument("--tenant", default=None, help="Tenant ID (omit to prompt)")
+    return parser.parse_args()
+
+
+def prompt_missing_args(args):
+    if not args.token:
+        print("\n  No token provided. Open DevTools -> Network -> any /core/ request -> Authorization header")
+        args.token = input("  Token: ").strip()
+        if not args.token:
+            print("  No token entered. Exiting.")
+            sys.exit(1)
+    if not args.tenant:
+        args.tenant = input("  Tenant ID (e.g., 711): ").strip()
+        if not args.tenant:
+            print("  No tenant entered. Exiting.")
+            sys.exit(1)
+    return args
+
+
 def main():
+    args = parse_args()
+    args = prompt_missing_args(args)
+
     print("=" * 70)
     print("  FK DISCOVERY TOOL — Common Settings")
     print("=" * 70)
@@ -88,8 +114,7 @@ def main():
     print()
 
     api = ErpApiClient()
-    token = api.prompt_for_token()
-    api.set_session_from_token(token)
+    api.set_session_from_token(args.token, tenant_id=args.tenant)
 
     # Load existing cache
     cache = {}

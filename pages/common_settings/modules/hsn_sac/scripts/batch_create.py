@@ -8,6 +8,7 @@ Auto-discovers FK IDs at startup.
 
 import sys
 import os
+import argparse
 import time
 
 # ── Path setup ────────────────────────────────────────────────────────
@@ -24,21 +25,52 @@ from pages.common_settings.modules.hsn_sac.data.hsn_sac_data import (
 SCREEN_NAME = "HSN SAC"
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Batch create HSN SAC entries via API")
+    parser.add_argument("--token", default=None, help="ERP Bearer token (omit to prompt)")
+    parser.add_argument("--tenant", default=None, help="Tenant ID (omit to prompt)")
+    parser.add_argument("--count", type=int, default=None, help="Number of entries to create (omit to prompt)")
+    parser.add_argument("--dry-run", action="store_true", help="Print payloads without sending")
+    return parser.parse_args()
+
+
+def prompt_missing_args(args):
+    if not args.token:
+        print("\n  No token provided. Open DevTools -> Network -> any /core/ request -> Authorization header")
+        args.token = input("  Token: ").strip()
+        if not args.token:
+            print("  No token entered. Exiting.")
+            sys.exit(1)
+    if not args.tenant:
+        args.tenant = input("  Tenant ID (e.g., 711): ").strip()
+        if not args.tenant:
+            print("  No tenant entered. Exiting.")
+            sys.exit(1)
+    if not args.count:
+        count_str = input("  Count (default 10): ").strip()
+        args.count = int(count_str) if count_str else 10
+    return args
+
+
 def main():
+    args = parse_args()
+    args = prompt_missing_args(args)
+    count = args.count
+
     print("=" * 70)
-    print(f"  {SCREEN_NAME.upper()} BATCH CREATE")
+    print(f"  {SCREEN_NAME.upper()} BATCH CREATE — {count} entries")
+    if args.dry_run:
+        print("  ** DRY-RUN MODE — no entries will be created **")
     print("=" * 70)
 
     api = ErpApiClient()
-    token = api.prompt_for_token()
-    api.set_session_from_token(token)
+    api.set_session_from_token(args.token, tenant_id=args.tenant)
 
     # ── Resolve FK IDs ────────────────────────────────────────────────
     print()
     print("  Resolving FK IDs...")
     resolver = FkResolver(api)
 
-    # HSN SAC Type — try multiple screen name variations
     hsn_type_ids = {}
     for screen_attempt in ["HSN SAC Type", "HSN Type", "SAC Type", "HSN/SAC Type"]:
         hsn_type_ids = resolver.resolve(screen_attempt)
@@ -47,15 +79,21 @@ def main():
             break
 
     if not hsn_type_ids:
-        print("    hsn_sac_type: NOT FOUND — will use fallback (Goods=1, Services=2)")
+        print("    hsn_sac_type: NOT FOUND — will use fallback")
 
     fk_ids = {"hsn_sac_type": hsn_type_ids}
 
     # ── Generate payloads ─────────────────────────────────────────────
-    count = 10
     print()
     print(f"  Generating {count} payloads...")
     payloads = generate_hsn_sac_api_payloads(count=count, fk_ids=fk_ids)
+
+    if args.dry_run:
+        print(f"  [DRY-RUN] {len(payloads)} payloads generated")
+        for j, p in enumerate(payloads):
+            print(f"    [{j+1}] code={p.get('hsn_sac_no','')} type={p.get('hsn_sac_type')} desc={p.get('hsn_sac_description','')[:30]}")
+        api.close()
+        return
 
     # ── Batch create ──────────────────────────────────────────────────
     print()

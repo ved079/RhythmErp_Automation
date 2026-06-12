@@ -92,30 +92,47 @@ def build_uom_conversion_api_payload(source_uom_code, target_uom_code, conversio
 
 def generate_uom_conversion_api_payloads(count=10, fk_ids=None):
     """
-    Generate N API payloads for UOM Conversion.
+    Generate N API payloads for UOM Conversion using FK-resolved UOM IDs.
     """
     if fk_ids is None:
         fk_ids = {}
 
-    # Merge FK IDs
+    # Merge FK IDs — prefer FK-resolved (tenant-specific) over hardcoded
     uom_ids = {**UOM_IDS, **fk_ids.get("source_uom_code", {}),
                **fk_ids.get("target_uom_code", {})}
 
+    # Determine available UOM codes — use FK-resolved if present, else hardcoded
+    fk_source = fk_ids.get("source_uom_code", {})
+    available_codes = list(fk_source.keys()) if fk_source else list(UOM_IDS.keys())
+    if not available_codes:
+        return []
+
+    # Shuffle for variety, then pair up sequentially
+    codes = list(available_codes)
+    random.shuffle(codes)
+
     payloads = []
+    seen_pairs = set()
 
     for i in range(count):
-        if i < len(VALID_CONVERSIONS):
-            src_name, tgt_name, factor = VALID_CONVERSIONS[i]
-        else:
-            # Generate additional conversions by cycling
-            src_name, tgt_name, factor = VALID_CONVERSIONS[i % len(VALID_CONVERSIONS)]
+        src = codes[i % len(codes)]
+        tgt = codes[(i + 1) % len(codes)]
+        # Avoid self-conversions when enough options exist
+        if src == tgt and len(codes) > 1:
+            tgt = codes[(i + 2) % len(codes)]
 
-        source_id = uom_ids.get(src_name)
-        target_id = uom_ids.get(tgt_name)
+        pair = (src, tgt)
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+
+        source_id = uom_ids.get(src)
+        target_id = uom_ids.get(tgt)
 
         if source_id is None or target_id is None:
-            # Skip conversions where we don't have valid UOM IDs
             continue
+
+        factor = round(random.uniform(0.1, 1000), 4)
 
         payload = build_uom_conversion_api_payload(
             source_uom_code=source_id,
