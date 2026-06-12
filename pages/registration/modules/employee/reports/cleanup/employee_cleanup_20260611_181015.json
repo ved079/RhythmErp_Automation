@@ -1,0 +1,32 @@
+{
+  "generated_at": "2026-06-11T18:10:15.232942",
+  "total_tracked": 3,
+  "accidental_count": 0,
+  "note": "NO-DELETE CONSTRAINT: The ERP has no delete endpoint. These IDs must be manually purged from the database.",
+  "records": [
+    {
+      "id": 247,
+      "employee_name": "ValidName Neha Desai cdlpk",
+      "timestamp": "2026-06-11T18:10:12.875220",
+      "prefix": "ValidName",
+      "payload_summary": "Created via API with prefix=ValidName",
+      "deactivated": false
+    },
+    {
+      "id": 248,
+      "employee_name": "DupEmp Deepak Rao zwcfq",
+      "timestamp": "2026-06-11T18:10:14.308673",
+      "prefix": "DupEmp",
+      "payload_summary": "Created via API with prefix=DupEmp",
+      "deactivated": false
+    },
+    {
+      "id": 249,
+      "employee_name": "EditInvEmail Priya Singh hsbar",
+      "timestamp": "2026-06-11T18:10:14.790062",
+      "prefix": "EditInvEmail",
+      "payload_summary": "Created via API with prefix=EditInvEmail",
+      "deactivated": false
+    }
+  ]
+}

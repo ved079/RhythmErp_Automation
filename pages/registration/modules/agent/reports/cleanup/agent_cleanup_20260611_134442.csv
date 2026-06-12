@@ -1,0 +1,7 @@
+id,agent_name,timestamp,prefix,payload_summary,deactivated
+159,<null>,2026-06-11T13:44:34.200914,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+160,!@#$%^&*()Agent,2026-06-11T13:44:35.348473,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+161,'; DROP TABLE Agent; --,2026-06-11T13:44:36.557258,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+162,<script>alert('xss')</script>,2026-06-11T13:44:37.683426,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+163,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA,2026-06-11T13:44:38.918079,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+164,ValidCtrl_20260611134440_3a1ea288,2026-06-11T13:44:41.025830,ValidCtrl,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False

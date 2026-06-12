@@ -16,7 +16,7 @@ from common.logger import log
 from common.browser_utils import get_driver
 from pages.login_screens.Login_Screens_.login_page import LoginPage
 from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
-from config import RHYTHMERP_LOGIN_URL
+from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
 from pages.common_settings.cs_report_generator import (
     CSReportStore,
     generate_cs_report,
@@ -24,11 +24,11 @@ from pages.common_settings.cs_report_generator import (
 
 
 # ================================================================
-# LOGIN CREDENTIALS — User Creation Screen
+# LOGIN CREDENTIALS (aliased from shared env vars)
 # ================================================================
-UC_LOGIN_EMAIL = "Assistant@mail.com"
-UC_LOGIN_PASSWORD = "Vedant@12345"
-UC_LOGIN_FACILITY_INDEX = 0  # Agdi
+UC_LOGIN_EMAIL = RHYTHMERP_EMAIL
+UC_LOGIN_PASSWORD = RHYTHMERP_PASSWORD
+UC_LOGIN_FACILITY_INDEX = 0  # GS SPACE
 
 
 # ================================================================

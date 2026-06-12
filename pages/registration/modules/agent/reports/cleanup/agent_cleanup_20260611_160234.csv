@@ -1,0 +1,15 @@
+id,agent_name,timestamp,prefix,payload_summary,deactivated
+196,LiveCG_20260611153518_96286e61,2026-06-11T15:35:19.008320,LiveCG,Created via API with prefix=LiveCG,False
+197,LiveCG_20260611153519_70b9152c,2026-06-11T15:35:19.308700,LiveCG,Created via API with prefix=LiveCG,False
+198,LiveSearch_20260611153519_cd7a2830,2026-06-11T15:35:19.735880,LiveSearch,Created via API with prefix=LiveSearch,False
+199,LiveUpdate_20260611153519_7768549a,2026-06-11T15:35:20.133520,LiveUpdate,Created via API with prefix=LiveUpdate,False
+201,MinPayload_20260611153520,2026-06-11T15:35:21.151807,MinPayload,Minimal payload test,False
+202,FullPayload_20260611153521_6367775c,2026-06-11T15:35:21.357491,FullPayload,Created via API with prefix=FullPayload,False
+205,InactiveAGT_20260611153521_e119b579,2026-06-11T15:35:22.194409,InactiveAGT,Created via API with prefix=InactiveAGT,False
+206,Agentéñü,2026-06-11T15:35:22.398519,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+207,ExtraField_20260611153522_8491dfeb,2026-06-11T15:35:22.689159,ExtraField,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+208,MultiAddr_20260611153522_4d17fac0,2026-06-11T15:35:22.913817,MultiAddr,Multiple address rows,False
+209,LongEmail_20260611153522_c9db4e38,2026-06-11T15:35:23.141397,LongEmail,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+210,PerfCreate_20260611153523_3d4f1cde,2026-06-11T15:35:23.406294,PerfCreate,Created via API with prefix=PerfCreate,False
+211,PerfGet_20260611153523_54ddb974,2026-06-11T15:35:23.758926,PerfGet,Created via API with prefix=PerfGet,False
+212,PerfSearch_20260611153524_ebc46729,2026-06-11T15:35:24.636008,PerfSearch,Created via API with prefix=PerfSearch,False

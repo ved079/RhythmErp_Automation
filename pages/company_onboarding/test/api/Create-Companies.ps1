@@ -22,10 +22,10 @@
 # CONFIGURATION
 # ============================================================
 $BaseUrl      = "https://rhythmerp.algorhythms.in"
-$TenantId     = "599"
+$TenantId     = "681"
 
 # Paste your Bearer token here (captured from Chrome DevTools -> Network -> Authorization header)
-$BearerToken  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzgxMDAxODg1LCJpYXQiOjE3ODA5ODc0ODUsImp0aSI6ImIyNWY3YWViMDEzMTRjZmU5NzU3NmVmYTBhOWVmNDQ5IiwidXNlcl9pZCI6IjE0NiJ9.EaRfhPO2P-5Efv1KxX3brGiVyW_Zrv2nCTgIGbomN5o"
+$BearerToken  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzgxMjYwMjk4LCJpYXQiOjE3ODEyNDU4OTgsImp0aSI6Ijg4MTg3YzE5NTQ1YjQzYTM5MmZjMGVkODNjNGQ3ZDQyIiwidXNlcl9pZCI6IjE4MSJ9.Do8Iizl157k2MlgMbujtp5ffdrTSHXtDwFQbH_iQYUc"
 
 # Strip "Bearer " prefix if user pasted the full header
 if ($BearerToken.StartsWith("Bearer ")) {

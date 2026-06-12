@@ -1,0 +1,48 @@
+{
+  "generated_at": "2026-06-11T14:03:52.946993",
+  "total_tracked": 5,
+  "accidental_count": 4,
+  "note": "NO-DELETE CONSTRAINT: The ERP has no delete endpoint. These IDs must be manually purged from the database.",
+  "records": [
+    {
+      "id": 180,
+      "agent_name": "<null>",
+      "timestamp": "2026-06-11T14:03:50.079278",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 181,
+      "agent_name": "!@#$%^&*()Agent",
+      "timestamp": "2026-06-11T14:03:50.659392",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 182,
+      "agent_name": "'; DROP TABLE Agent; --",
+      "timestamp": "2026-06-11T14:03:50.856485",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 183,
+      "agent_name": "<script>alert('xss')</script>",
+      "timestamp": "2026-06-11T14:03:51.106131",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 184,
+      "agent_name": "EditInvEmail_20260611140352_9b4cdc4f",
+      "timestamp": "2026-06-11T14:03:52.537137",
+      "prefix": "EditInvEmail",
+      "payload_summary": "Created via API with prefix=EditInvEmail",
+      "deactivated": false
+    }
+  ]
+}

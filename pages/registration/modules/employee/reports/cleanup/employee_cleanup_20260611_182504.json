@@ -1,0 +1,120 @@
+{
+  "generated_at": "2026-06-11T18:25:04.617876",
+  "total_tracked": 14,
+  "accidental_count": 0,
+  "note": "NO-DELETE CONSTRAINT: The ERP has no delete endpoint. These IDs must be manually purged from the database.",
+  "records": [
+    {
+      "id": 255,
+      "employee_name": "HybridCreate Deepak Naik ptdgc",
+      "timestamp": "2026-06-11T18:20:53.945286",
+      "prefix": "HybridCreate",
+      "payload_summary": "Created via API with prefix=HybridCreate",
+      "deactivated": false
+    },
+    {
+      "id": 256,
+      "employee_name": "RowVerify Neha Desai gpdsl",
+      "timestamp": "2026-06-11T18:21:06.587251",
+      "prefix": "RowVerify",
+      "payload_summary": "Created via API with prefix=RowVerify",
+      "deactivated": false
+    },
+    {
+      "id": 257,
+      "employee_name": "DesigCheck Vikram Rao qmfpo",
+      "timestamp": "2026-06-11T18:21:19.386388",
+      "prefix": "DesigCheck",
+      "payload_summary": "Created via API with prefix=DesigCheck",
+      "deactivated": false
+    },
+    {
+      "id": 258,
+      "employee_name": "Sunil Chavan",
+      "timestamp": "2026-06-11T18:21:31.670245",
+      "prefix": "Sunil",
+      "payload_summary": "Created via API with prefix=Inactive",
+      "deactivated": false
+    },
+    {
+      "id": 259,
+      "employee_name": "SearchExact Priya Sharma rwhtu",
+      "timestamp": "2026-06-11T18:21:43.768879",
+      "prefix": "SearchExact",
+      "payload_summary": "Created via API with prefix=SearchExact",
+      "deactivated": false
+    },
+    {
+      "id": 260,
+      "employee_name": "SearchPartial Meera Gupta hrabb",
+      "timestamp": "2026-06-11T18:21:55.845840",
+      "prefix": "SearchPartial",
+      "payload_summary": "Created via API with prefix=SearchPartial",
+      "deactivated": false
+    },
+    {
+      "id": 261,
+      "employee_name": "CaseSearch Anita Naik ijide",
+      "timestamp": "2026-06-11T18:22:08.035792",
+      "prefix": "CaseSearch",
+      "payload_summary": "Created via API with prefix=CaseSearch",
+      "deactivated": false
+    },
+    {
+      "id": 262,
+      "employee_name": "SearchClear Pooja Sharma vzbir",
+      "timestamp": "2026-06-11T18:22:20.317100",
+      "prefix": "SearchClear",
+      "payload_summary": "Created via API with prefix=SearchClear",
+      "deactivated": false
+    },
+    {
+      "id": 263,
+      "employee_name": "ViewRO Vikram Varma nvbxy",
+      "timestamp": "2026-06-11T18:22:40.181554",
+      "prefix": "ViewRO",
+      "payload_summary": "Created via API with prefix=ViewRO",
+      "deactivated": false
+    },
+    {
+      "id": 264,
+      "employee_name": "ViewFields Kiran Kumar cnilq",
+      "timestamp": "2026-06-11T18:23:08.027995",
+      "prefix": "ViewFields",
+      "payload_summary": "Created via API with prefix=ViewFields",
+      "deactivated": false
+    },
+    {
+      "id": 265,
+      "employee_name": "EditPre Meera Hegde htzrh",
+      "timestamp": "2026-06-11T18:23:26.426146",
+      "prefix": "EditPre",
+      "payload_summary": "Created via API with prefix=EditPre",
+      "deactivated": false
+    },
+    {
+      "id": 266,
+      "employee_name": "EditName Manoj Varma hwyar",
+      "timestamp": "2026-06-11T18:23:48.954234",
+      "prefix": "EditName",
+      "payload_summary": "Created via API with prefix=EditName",
+      "deactivated": false
+    },
+    {
+      "id": 267,
+      "employee_name": "EditInvalid Manoj Shah xfahx",
+      "timestamp": "2026-06-11T18:24:12.748053",
+      "prefix": "EditInvalid",
+      "payload_summary": "Created via API with prefix=EditInvalid",
+      "deactivated": false
+    },
+    {
+      "id": 268,
+      "employee_name": "RefreshPersist Amit Reddy xbpes",
+      "timestamp": "2026-06-11T18:24:36.197294",
+      "prefix": "RefreshPersist",
+      "payload_summary": "Created via API with prefix=RefreshPersist",
+      "deactivated": false
+    }
+  ]
+}

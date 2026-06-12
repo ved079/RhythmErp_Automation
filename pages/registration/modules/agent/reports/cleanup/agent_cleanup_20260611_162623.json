@@ -1,0 +1,16 @@
+{
+  "generated_at": "2026-06-11T16:26:23.675284",
+  "total_tracked": 1,
+  "accidental_count": 0,
+  "note": "NO-DELETE CONSTRAINT: The ERP has no delete endpoint. These IDs must be manually purged from the database.",
+  "records": [
+    {
+      "id": 230,
+      "agent_name": "EditPrevgycrgfmmk",
+      "timestamp": "2026-06-11T16:22:39.275914",
+      "prefix": "",
+      "payload_summary": "Created via API with prefix=EditPre",
+      "deactivated": false
+    }
+  ]
+}

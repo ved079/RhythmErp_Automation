@@ -1,0 +1,16 @@
+{
+  "generated_at": "2026-06-11T18:40:01.190098",
+  "total_tracked": 1,
+  "accidental_count": 0,
+  "note": "NO-DELETE CONSTRAINT: The ERP has no delete endpoint. These IDs must be manually purged from the database.",
+  "records": [
+    {
+      "id": 270,
+      "employee_name": "ViewFields Meera Hegde qagkx",
+      "timestamp": "2026-06-11T18:39:42.531581",
+      "prefix": "ViewFields",
+      "payload_summary": "Created via API with prefix=ViewFields",
+      "deactivated": false
+    }
+  ]
+}

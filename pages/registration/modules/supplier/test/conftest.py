@@ -3,10 +3,8 @@ conftest.py - Supplier Screen (RhythmERP)
 ==========================================
 Session-scoped driver + login fixtures for Supplier Screen tests.
 
-Login credentials:
-  Email:    Gautam@gmail.com
-  Password: TestGS@262726
-  Facility: RuralLife Producer Company (index 0)
+Login credentials loaded from environment variables:
+  RHYTHMERP_EMAIL / RHYTHMERP_PASSWORD
 """
 
 import os
@@ -23,7 +21,7 @@ from common.logger import log
 from common.browser_utils import get_driver
 from pages.login_screens.Login_Screens_.login_page import LoginPage
 from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
-from config import RHYTHMERP_LOGIN_URL
+from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
 from pages.common_settings.cs_report_generator import (
     CSReportStore,
     generate_cs_report,
@@ -31,11 +29,11 @@ from pages.common_settings.cs_report_generator import (
 
 
 # ================================================================
-# LOGIN CREDENTIALS — Supplier Screen (DIFFERENT from other screens!)
+# LOGIN CREDENTIALS (aliased from shared env vars)
 # ================================================================
-SP_LOGIN_EMAIL = "Gautam@gmail.com"
-SP_LOGIN_PASSWORD = "TestGS@262726"
-SP_LOGIN_FACILITY_INDEX = 0  # RuralLife Producer Company
+SP_LOGIN_EMAIL = RHYTHMERP_EMAIL
+SP_LOGIN_PASSWORD = RHYTHMERP_PASSWORD
+SP_LOGIN_FACILITY_INDEX = 0  # GS SPACE
 
 
 # ================================================================
@@ -98,7 +96,7 @@ def driver():
 @pytest.fixture(scope="session")
 def logged_in_driver(driver):
     """Driver with completed RhythmERP login session.
-    Uses Assistant@mail.com / Vedant@12345 / RuralLife Producer Company.
+    Uses RHYTHMERP_EMAIL / RHYTHMERP_PASSWORD from env vars.
     """
     log.separator()
     log.info("LOGGING INTO RHYTHMERP (Supplier Screen)...")

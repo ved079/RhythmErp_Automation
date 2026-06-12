@@ -1,0 +1,13 @@
+id,company_name,timestamp,prefix,payload_summary,deactivated
+21,          ,2026-06-10T16:17:51.073936,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+22,Test@#Traders&Co!,2026-06-10T16:17:51.306059,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+23,'; DROP TABLE suppliers; --,2026-06-10T16:17:51.508937,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+24,<script>alert('xss')</script>,2026-06-10T16:17:51.729567,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+25,255Sup_20260610161751_952,2026-06-10T16:17:51.983872,255Sup,Created via API with prefix=255Sup,False
+26,DupCoSup_20260610161752_684,2026-06-10T16:17:52.687045,DupCoSup,Created via API with prefix=DupCoSup,False
+27,DupCoSup_20260610161752_684,2026-06-10T16:17:52.866413,DupCoSup,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+28,DupEmailSup_20260610161752_509,2026-06-10T16:17:53.068597,DupEmailSup,Created via API with prefix=DupEmailSup,False
+29,DupEmailSup2_20260610161753_926,2026-06-10T16:17:53.247239,DupEmailSup2,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+30,DupPhoneSup_20260610161753_281,2026-06-10T16:17:53.433370,DupPhoneSup,Created via API with prefix=DupPhoneSup,False
+31,DupPhoneSup2_20260610161753_602,2026-06-10T16:17:53.610630,DupPhoneSup2,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
+32,EditEmailSup_20260610161753_880,2026-06-10T16:17:53.793747,EditEmailSup,Created via API with prefix=EditEmailSup,False

@@ -1,0 +1,64 @@
+{
+  "generated_at": "2026-06-11T13:09:59.937072",
+  "total_tracked": 7,
+  "accidental_count": 4,
+  "note": "NO-DELETE CONSTRAINT: The ERP has no delete endpoint. These IDs must be manually purged from the database.",
+  "records": [
+    {
+      "id": 137,
+      "agent_name": "!@#$%^&*()Agent",
+      "timestamp": "2026-06-11T13:09:57.875265",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 138,
+      "agent_name": "'; DROP TABLE Agent; --",
+      "timestamp": "2026-06-11T13:09:58.067274",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 139,
+      "agent_name": "<script>alert('xss')</script>",
+      "timestamp": "2026-06-11T13:09:58.259876",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 140,
+      "agent_name": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "timestamp": "2026-06-11T13:09:58.487529",
+      "prefix": "",
+      "payload_summary": "Created via API with prefix=255AGT",
+      "deactivated": false
+    },
+    {
+      "id": 141,
+      "agent_name": "DupAGT_20260611130959_84c4afa6",
+      "timestamp": "2026-06-11T13:09:59.396697",
+      "prefix": "DupAGT",
+      "payload_summary": "Created via API with prefix=DupAGT",
+      "deactivated": false
+    },
+    {
+      "id": 142,
+      "agent_name": "DupAGT_20260611130959_84c4afa6",
+      "timestamp": "2026-06-11T13:09:59.596248",
+      "prefix": "DupAGT",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 143,
+      "agent_name": "EditInvEmail_20260611130959_dd5c1af1",
+      "timestamp": "2026-06-11T13:09:59.818098",
+      "prefix": "EditInvEmail",
+      "payload_summary": "Created via API with prefix=EditInvEmail",
+      "deactivated": false
+    }
+  ]
+}

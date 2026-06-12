@@ -1,0 +1,120 @@
+{
+  "generated_at": "2026-06-11T16:02:34.553903",
+  "total_tracked": 14,
+  "accidental_count": 3,
+  "note": "NO-DELETE CONSTRAINT: The ERP has no delete endpoint. These IDs must be manually purged from the database.",
+  "records": [
+    {
+      "id": 196,
+      "agent_name": "LiveCG_20260611153518_96286e61",
+      "timestamp": "2026-06-11T15:35:19.008320",
+      "prefix": "LiveCG",
+      "payload_summary": "Created via API with prefix=LiveCG",
+      "deactivated": false
+    },
+    {
+      "id": 197,
+      "agent_name": "LiveCG_20260611153519_70b9152c",
+      "timestamp": "2026-06-11T15:35:19.308700",
+      "prefix": "LiveCG",
+      "payload_summary": "Created via API with prefix=LiveCG",
+      "deactivated": false
+    },
+    {
+      "id": 198,
+      "agent_name": "LiveSearch_20260611153519_cd7a2830",
+      "timestamp": "2026-06-11T15:35:19.735880",
+      "prefix": "LiveSearch",
+      "payload_summary": "Created via API with prefix=LiveSearch",
+      "deactivated": false
+    },
+    {
+      "id": 199,
+      "agent_name": "LiveUpdate_20260611153519_7768549a",
+      "timestamp": "2026-06-11T15:35:20.133520",
+      "prefix": "LiveUpdate",
+      "payload_summary": "Created via API with prefix=LiveUpdate",
+      "deactivated": false
+    },
+    {
+      "id": 201,
+      "agent_name": "MinPayload_20260611153520",
+      "timestamp": "2026-06-11T15:35:21.151807",
+      "prefix": "MinPayload",
+      "payload_summary": "Minimal payload test",
+      "deactivated": false
+    },
+    {
+      "id": 202,
+      "agent_name": "FullPayload_20260611153521_6367775c",
+      "timestamp": "2026-06-11T15:35:21.357491",
+      "prefix": "FullPayload",
+      "payload_summary": "Created via API with prefix=FullPayload",
+      "deactivated": false
+    },
+    {
+      "id": 205,
+      "agent_name": "InactiveAGT_20260611153521_e119b579",
+      "timestamp": "2026-06-11T15:35:22.194409",
+      "prefix": "InactiveAGT",
+      "payload_summary": "Created via API with prefix=InactiveAGT",
+      "deactivated": false
+    },
+    {
+      "id": 206,
+      "agent_name": "Agent\u00e9\u00f1\u00fc",
+      "timestamp": "2026-06-11T15:35:22.398519",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 207,
+      "agent_name": "ExtraField_20260611153522_8491dfeb",
+      "timestamp": "2026-06-11T15:35:22.689159",
+      "prefix": "ExtraField",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 208,
+      "agent_name": "MultiAddr_20260611153522_4d17fac0",
+      "timestamp": "2026-06-11T15:35:22.913817",
+      "prefix": "MultiAddr",
+      "payload_summary": "Multiple address rows",
+      "deactivated": false
+    },
+    {
+      "id": 209,
+      "agent_name": "LongEmail_20260611153522_c9db4e38",
+      "timestamp": "2026-06-11T15:35:23.141397",
+      "prefix": "LongEmail",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 210,
+      "agent_name": "PerfCreate_20260611153523_3d4f1cde",
+      "timestamp": "2026-06-11T15:35:23.406294",
+      "prefix": "PerfCreate",
+      "payload_summary": "Created via API with prefix=PerfCreate",
+      "deactivated": false
+    },
+    {
+      "id": 211,
+      "agent_name": "PerfGet_20260611153523_54ddb974",
+      "timestamp": "2026-06-11T15:35:23.758926",
+      "prefix": "PerfGet",
+      "payload_summary": "Created via API with prefix=PerfGet",
+      "deactivated": false
+    },
+    {
+      "id": 212,
+      "agent_name": "PerfSearch_20260611153524_ebc46729",
+      "timestamp": "2026-06-11T15:35:24.636008",
+      "prefix": "PerfSearch",
+      "payload_summary": "Created via API with prefix=PerfSearch",
+      "deactivated": false
+    }
+  ]
+}

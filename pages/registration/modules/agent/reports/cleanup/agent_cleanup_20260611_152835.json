@@ -1,0 +1,72 @@
+{
+  "generated_at": "2026-06-11T15:28:35.959809",
+  "total_tracked": 8,
+  "accidental_count": 5,
+  "note": "NO-DELETE CONSTRAINT: The ERP has no delete endpoint. These IDs must be manually purged from the database.",
+  "records": [
+    {
+      "id": 188,
+      "agent_name": "<null>",
+      "timestamp": "2026-06-11T15:28:32.784420",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 189,
+      "agent_name": "!@#$%^&*()Agent",
+      "timestamp": "2026-06-11T15:28:33.257043",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 190,
+      "agent_name": "'; DROP TABLE Agent; --",
+      "timestamp": "2026-06-11T15:28:33.452173",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 191,
+      "agent_name": "<script>alert('xss')</script>",
+      "timestamp": "2026-06-11T15:28:33.700885",
+      "prefix": "",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 192,
+      "agent_name": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "timestamp": "2026-06-11T15:28:33.918261",
+      "prefix": "",
+      "payload_summary": "Created via API with prefix=255AGT",
+      "deactivated": false
+    },
+    {
+      "id": 193,
+      "agent_name": "DupAGT_20260611152834_4ad65213",
+      "timestamp": "2026-06-11T15:28:35.143403",
+      "prefix": "DupAGT",
+      "payload_summary": "Created via API with prefix=DupAGT",
+      "deactivated": false
+    },
+    {
+      "id": 194,
+      "agent_name": "DupAGT_20260611152834_4ad65213",
+      "timestamp": "2026-06-11T15:28:35.351759",
+      "prefix": "DupAGT",
+      "payload_summary": "ACCIDENTAL CREATION \u2014 invalid payload was accepted, needs manual purge",
+      "deactivated": false
+    },
+    {
+      "id": 195,
+      "agent_name": "EditInvEmail_20260611152835_35a0616d",
+      "timestamp": "2026-06-11T15:28:35.619153",
+      "prefix": "EditInvEmail",
+      "payload_summary": "Created via API with prefix=EditInvEmail",
+      "deactivated": false
+    }
+  ]
+}
