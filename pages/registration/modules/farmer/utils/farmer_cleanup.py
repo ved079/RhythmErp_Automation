@@ -1,7 +1,7 @@
 """
-employee_cleanup.py
--------------------
-No-delete cleanup strategy for Employee module tests.
+farmer_cleanup.py
+-----------------
+No-delete cleanup strategy for Farmer module tests.
 
 The ERP has NO delete endpoint, no delete button, and no soft-delete
 via status=False. This module provides:
@@ -9,8 +9,10 @@ via status=False. This module provides:
   - CleanupTracker: Tracks all created record IDs + metadata
   - CreatedRecord:  Dataclass for individual records
   - generate_reports(): Exports tracked IDs as JSON + CSV
+  - deactivate_all(): Optionally marks records inactive via PUT
+                     (only if the ERP supports status=False on update)
 
-NEVER implement delete_employee() or cleanup_all() in this module.
+NEVER implement delete_farmer() or cleanup_all() in this module.
 """
 
 import json
@@ -25,9 +27,9 @@ from common.logger import log
 
 @dataclass
 class CreatedRecord:
-    """Represents a single created employee record for tracking."""
+    """Represents a single created farmer record for tracking."""
     id: Optional[int]
-    employee_name: str
+    company_name: str
     timestamp: str = ""
     prefix: str = ""
     payload_summary: str = ""
@@ -36,19 +38,13 @@ class CreatedRecord:
     def __post_init__(self):
         if not self.timestamp:
             self.timestamp = datetime.now().isoformat()
-        # Derive prefix from name (first word before space or the whole name)
-        if not self.prefix and self.employee_name:
-            if " " in self.employee_name:
-                self.prefix = self.employee_name.split(" ")[0]
-            else:
-                self.prefix = self.employee_name[:10]
-        elif not self.employee_name:
-            self.employee_name = "<null>"
+        if not self.prefix and "_" in self.company_name:
+            self.prefix = self.company_name.split("_")[0]
 
 
 class CleanupTracker:
     """
-    Tracks all employee records created during a test session.
+    Tracks all farmer records created during a test session.
 
     Since the ERP has NO delete functionality, this tracker serves as
     the cleanup mechanism by:
@@ -58,10 +54,12 @@ class CleanupTracker:
 
     Usage:
         tracker = CleanupTracker()
-        tracker.track(id=123, employee_name="Rajesh Sharma")
+        tracker.track(id=123, company_name="AutoFarmer_20260609_abc12345")
         ...
         # At session end:
         paths = tracker.generate_reports(output_dir="/tmp/reports/cleanup")
+        # Or optionally:
+        tracker.deactivate_all(api_client)
     """
 
     def __init__(self):
@@ -74,19 +72,29 @@ class CleanupTracker:
     def track(
         self,
         id,
-        employee_name: str,
+        company_name: str,
         payload_summary: str = "",
     ) -> CreatedRecord:
-        """Record a created employee ID for cleanup reporting."""
+        """
+        Record a created farmer ID for cleanup reporting.
+
+        Args:
+            id:               The database ID returned by the API.
+            company_name:     The farmer name (with timestamp+UUID prefix).
+            payload_summary:  Brief description of the payload used.
+
+        Returns:
+            The CreatedRecord that was tracked.
+        """
         record = CreatedRecord(
             id=id,
-            employee_name=employee_name,
+            company_name=company_name,
             payload_summary=payload_summary,
         )
         self._records.append(record)
         log.info(
             f"[CleanupTracker] Tracked: id={id} "
-            f"name='{employee_name}' "
+            f"name='{company_name}' "
             f"total={len(self._records)}"
         )
         return record
@@ -94,18 +102,28 @@ class CleanupTracker:
     def track_accidental(
         self,
         id,
-        employee_name: str,
+        company_name: str,
     ) -> CreatedRecord:
-        """Track an accidentally created record (invalid payload accepted)."""
+        """
+        Track an accidentally created record (from create_and_expect_failure
+        where the ERP unexpectedly accepted invalid data).
+
+        Args:
+            id:           The database ID.
+            company_name: The farmer name.
+
+        Returns:
+            The CreatedRecord marked as requiring manual attention.
+        """
         record = CreatedRecord(
             id=id,
-            employee_name=employee_name,
+            company_name=company_name,
             payload_summary="ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",
         )
         self._records.append(record)
         log.warning(
             f"[CleanupTracker] ACCIDENTAL: id={id} "
-            f"name='{employee_name}' — must be manually purged!"
+            f"name='{company_name}' — must be manually purged!"
         )
         return record
 
@@ -117,7 +135,17 @@ class CleanupTracker:
         self,
         output_dir: str = None,
     ) -> Dict[str, str]:
-        """Generate both JSON and CSV cleanup reports."""
+        """
+        Generate both JSON and CSV cleanup reports.
+
+        Args:
+            output_dir: Directory for report files. If None, auto-generates
+                        a path under the farmer module's reports/cleanup/ dir.
+
+        Returns:
+            Dict with keys "json" and "csv" mapping to the generated file paths.
+            Empty dict if no records to report.
+        """
         if not self._records:
             log.info("[CleanupTracker] No tracked records to report.")
             return {}
@@ -130,8 +158,8 @@ class CleanupTracker:
         os.makedirs(output_dir, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        json_path = os.path.join(output_dir, f"employee_cleanup_{timestamp}.json")
-        csv_path = os.path.join(output_dir, f"employee_cleanup_{timestamp}.csv")
+        json_path = os.path.join(output_dir, f"farmer_cleanup_{timestamp}.json")
+        csv_path = os.path.join(output_dir, f"farmer_cleanup_{timestamp}.csv")
 
         # Generate JSON report
         json_data = {
@@ -152,7 +180,7 @@ class CleanupTracker:
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(
                 f,
-                fieldnames=["id", "employee_name", "timestamp", "prefix",
+                fieldnames=["id", "company_name", "timestamp", "prefix",
                             "payload_summary", "deactivated"],
             )
             writer.writeheader()
@@ -167,8 +195,20 @@ class CleanupTracker:
     # ================================================================
 
     def deactivate_all(self, api_client) -> Dict[str, int]:
-        """Attempt to mark all tracked records as inactive via PUT."""
-        from pages.registration.modules.employee.api.endpoints import SCREEN_NAME
+        """
+        Attempt to mark all tracked records as inactive via PUT.
+
+        This is BEST-EFFORT only — the ERP may not support setting
+        status=False on update. If it does, deactivated records won't
+        appear in active listings but still exist in the database.
+
+        Args:
+            api_client: An authenticated RhythmERPAPIClient instance.
+
+        Returns:
+            Dict with "deactivated" and "failed" counts.
+        """
+        from pages.registration.modules.farmer.api.endpoints import SCREEN_NAME
 
         deactivated = 0
         failed = 0
@@ -178,11 +218,13 @@ class CleanupTracker:
                 continue
 
             try:
+                # Fetch current record to get full payload for PUT
                 detail = api_client.get_entry(SCREEN_NAME, record.id)
                 if detail is None:
                     failed += 1
                     continue
 
+                # Set status to False (inactive)
                 detail["status"] = False
                 result = api_client.update_entry(record.id, detail)
 
@@ -191,13 +233,19 @@ class CleanupTracker:
                     deactivated += 1
                     log.info(
                         f"[CleanupTracker] Deactivated: id={record.id} "
-                        f"name='{record.employee_name}'"
+                        f"name='{record.company_name}'"
                     )
                 else:
                     failed += 1
+                    log.warning(
+                        f"[CleanupTracker] Failed to deactivate: "
+                        f"id={record.id} name='{record.company_name}'"
+                    )
             except Exception as e:
                 failed += 1
-                log.error(f"[CleanupTracker] Error deactivating id={record.id}: {e}")
+                log.error(
+                    f"[CleanupTracker] Error deactivating id={record.id}: {e}"
+                )
 
         log.info(
             f"[CleanupTracker] Deactivation complete: "
