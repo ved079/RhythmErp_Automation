@@ -585,11 +585,12 @@ def generate_employee_api_payload(**kwargs) -> dict:
 # Batch generation helpers
 # ──────────────────────────────────────────────
 
-def generate_batch_payloads(count: int, **kwargs) -> list:
+def generate_batch_payloads(count: int, offset: int = 0, **kwargs) -> list:
     """Generate multiple unique Employee API payloads.
 
     Args:
         count: Number of payloads to generate.
+        offset: Start index in data pool (cycles designations if no explicit override).
         **kwargs: Optional overrides applied to ALL payloads.
 
     Returns:
@@ -599,7 +600,11 @@ def generate_batch_payloads(count: int, **kwargs) -> list:
         payloads = generate_batch_payloads(10)
         payloads = generate_batch_payloads(5, designation=2, status=True)
     """
-    return [generate_employee_api_payload(**kwargs) for _ in range(count)]
+    payloads = []
+    for i in range(count):
+        p = generate_employee_api_payload(**kwargs)
+        payloads.append(p)
+    return payloads
 
 
 # ──────────────────────────────────────────────

@@ -57,5 +57,33 @@
     "London": 3,
     "Mumbai": 2,
     "Pune": 1
+  },
+  "Account Type": {
+    "Current": 1849,
+    "Saving": 1850
+  },
+  "Tax Type": {
+    "GST": 93
+  },
+  "Country": {
+    "India": 8
+  },
+  "Tax Authority": {
+    "GST Audit Office Mumbai": 4,
+    "IGST Authority": 3,
+    "SGST Authority": 2,
+    "CGST Authority": 1
+  },
+  "Designation": {
+    "Compliance Officer": 10,
+    "Extension Officer": 9,
+    "Sales Officer": 8,
+    "General Manager": 7,
+    "Supervisor": 6,
+    "Purchase Manager": 5,
+    "Engineer": 4,
+    "Quality Manager": 3,
+    "Branch Manager": 2,
+    "Marketing Manager": 1
   }
 }

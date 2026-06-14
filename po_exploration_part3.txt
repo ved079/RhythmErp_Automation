@@ -1,0 +1,16 @@
+ERP PO EXPLORATION - PART 3 (ROW ACTION MENU)
+======================================================================
+=== ROW-LEVEL ACTION MENU ===
+Found 0 row trigger buttons
+No row trigger buttons found
+
+
+=== EXPORT BUTTON ON TOOLBAR ===
+Toolbar action buttons: 0
+
+
+=== CHECK FOR INDIVIDUAL ROW ACTION MENU (NOT ADD ROW) ===
+
+--- Checking which column index has the more_vert button ---
+
+Done

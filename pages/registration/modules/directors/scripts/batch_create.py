@@ -1,27 +1,39 @@
-#/usr/bin/env python3
+#!/usr/bin/env python3
 """
-batch_create.py
----------------
-Main runner: create multiple Director entries via API with randomized data.
+Directors — Batch Create via API
+
+Stepper screen (1 child grid: KYC Details) with FK dropdowns
+for prefix, designation, qualification, and KYC document type.
+Auto-discovers FK IDs via FkResolver at runtime.
 
 Usage:
-    python pages/registration/modules/directors/scripts/batch_create.py --token <jwt> --tenant <id> --count <n>
-    python pages/registration/modules/directors/scripts/batch_create.py --token eyJhbGci... --tenant 711 --count 10
+    python batch_create.py              # Creates 10 entries
+    python batch_create.py --count 20   # Creates 20 entries
+    python batch_create.py --dry-run    # Preview payloads without sending
 """
 
 import sys
 import os
 import argparse
-import time
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", ".."))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "..", "..", ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
-from common.erp_api_client import RhythmERPAPIClient
-from pages.registration.modules.directors.data.directors_data import generate_directors_api_payload
-
+from common.erp_api_client import ErpApiClient
+from common.fk_resolver import FkResolver
+from pages.registration.modules.directors.data.directors_data import (
+    generate_batch_payloads,
+)
 
 SCREEN_NAME = "Directors"
+
+FK_SCREEN_MAP = {
+    "prefix_ref_id": "Prefix",
+    "designation": "Designation",
+    "qualification_ref_id": "Qualification",
+    "kyc_doc_id": "KYC Document",
+}
 
 
 def parse_args():
@@ -30,67 +42,27 @@ def parse_args():
     parser.add_argument("--tenant", default=None, help="Tenant ID (omit to prompt)")
     parser.add_argument("--count", type=int, default=None, help="Number of entries to create (omit to prompt)")
     parser.add_argument("--dry-run", action="store_true", help="Print payloads without sending")
+    parser.add_argument("--offset", type=int, default=0, help="Start index in data pool")
     return parser.parse_args()
 
 
-def batch_create(client, count, dry_run=False):
-    success = 0
-    fail = 0
-    prefixes_used = []
-    designations_used = []
-    qualifications_used = []
-    kyc_docs_used = []
-    start = time.time()
-
-    print("=" * 70)
-    print(f"  {SCREEN_NAME.upper()} BATCH CREATE -- {count} entries")
-    print("=" * 70)
-
-    for i in range(count):
-        payload = generate_directors_api_payload()
-        name = payload.get("name", "")
-        prefix = payload.get("prefix")
-        designation = payload.get("designation")
-        qualification = payload.get("qualification")
-        kyc_doc = payload.get("kyc_document_type")
-
-        prefixes_used.append(prefix)
-        designations_used.append(designation)
-        qualifications_used.append(qualification)
-        kyc_docs_used.append(kyc_doc)
-
-        if dry_run:
-            print(f"  [{i+1:2d}] [DRY] {name:40s} | Prefix={prefix} Desig={designation}")
-            success += 1
-            continue
-
-        result = client.create_entry(payload)
-        if result:
-            did = result.get("id", "?")
-            print(f"  [{i+1:2d}] OK  {name:40s} | ID={did} Prefix={prefix} Desig={designation}")
-            success += 1
-        else:
-            print(f"  [{i+1:2d}] FAIL {name:40s}")
-            fail += 1
-
-        time.sleep(0.25)
-
-    elapsed = time.time() - start
-
-    print()
-    print("=" * 70)
-    print("  RESULTS")
-    print("=" * 70)
-    print(f"  Created:       {success}/{count} ({fail} failed)")
-    if not dry_run:
-        print(f"  Time:          {elapsed:.1f}s ({elapsed/count:.2f}s per entry)")
-    print(f"  Prefixes:      {sorted(set(p for p in prefixes_used if p))} ({len(set(p for p in prefixes_used if p))} unique)")
-    print(f"  Designations:  {sorted(set(d for d in designations_used if d))} ({len(set(d for d in designations_used if d))} unique)")
-    print(f"  Qualifications: {sorted(set(q for q in qualifications_used if q))} ({len(set(q for q in qualifications_used if q))} unique)")
-    print(f"  KYC docs:      {sorted(set(k for k in kyc_docs_used if k))} ({len(set(k for k in kyc_docs_used if k))} unique)")
-    print("=" * 70)
-
-    return success, fail
+def resolve_all_fk_ids(resolver):
+    """Resolve all Directors FK IDs from the live ERP."""
+    fk_ids = {}
+    for field, screen in FK_SCREEN_MAP.items():
+        try:
+            resolved = resolver.resolve(screen)
+            if resolved:
+                print(f"    {field}: {len(resolved)} options found from '{screen}'")
+                samples = list(resolved.items())[:3]
+                for name, fid in samples:
+                    print(f"      {name}: {fid}")
+                fk_ids[field] = resolved
+            else:
+                print(f"    {field}: NOT FOUND — will fall back to hardcoded IDs")
+        except Exception as e:
+            print(f"    {field}: ERROR — {e}")
+    return fk_ids
 
 
 def prompt_missing_args(args):
@@ -113,26 +85,100 @@ def prompt_missing_args(args):
 
 def main():
     args = parse_args()
-    args = prompt_missing_args(args)
-    client = RhythmERPAPIClient()
-    client.login_from_browser(token=args.token, tenant_id=args.tenant)
+    count = args.count if args.count else 10
 
-    result = client.list_entries(SCREEN_NAME, page=1, page_size=1)
-    if not result:
-        raw = client._last_raw_response
-        if raw is not None:
-            status = raw.status_code
-            body = raw.text[:300]
-            print()
-            print(f"  API error: {status} -- {body}")
-        else:
-            print()
-            print("  API error: No response received (network issue or ERP unreachable).")
-        client.close()
+    print("=" * 70)
+    print(f"  {SCREEN_NAME.upper()} — BATCH CREATE (API)")
+    print(f"  Screen: {SCREEN_NAME}")
+    print(f"  Entries to create: {count}")
+    print(f"  Data pool offset: {args.offset}")
+    if args.dry_run:
+        print("  ** DRY-RUN MODE — no entries will be created **")
+    print("=" * 70)
+
+    # ── Generate payloads BEFORE token/auth (dry-run works without auth) ─
+    print()
+    print(f"  Generating {count} payloads (offset={args.offset})...")
+    try:
+        payloads = generate_batch_payloads(count=count, offset=args.offset)
+    except Exception as e:
+        print(f"  ERROR generating payloads: {e}")
         return
 
-    batch_create(client, args.count, args.dry_run)
-    client.close()
+    # ── DRY RUN: print & exit (no token needed) ─────────────────────────
+    if args.dry_run:
+        print(f"  [DRY-RUN] {len(payloads)} payloads generated")
+        for j, p in enumerate(payloads):
+            name = p.get("name", "?")[:40]
+            pan = p.get("pan_no", "?")[:15]
+            print(f"    [{j+1}] {name:40s} | PAN={pan}")
+        return
+
+    # ── Only NOW ask for token ──────────────────────────────────────────
+    args = prompt_missing_args(args)
+
+    api = ErpApiClient()
+    api.set_session_from_token(args.token, tenant_id=args.tenant)
+
+    # ── Resolve FK IDs ────────────────────────────────────────────────
+    print()
+    print("  Resolving FK IDs from live ERP...")
+    resolver = FkResolver(api)
+    fk_ids = resolve_all_fk_ids(resolver)
+
+    # ── Convert resolved option dicts into individual random picks ────
+    import random as _random
+    flat_overrides = {}
+    for field, options in fk_ids.items():
+        if options:
+            flat_overrides[field] = _random.choice(list(options.values()))
+
+    # ── Re-generate payloads with resolved FK IDs ─────────────────────
+    print()
+    print(f"  Re-generating {count} payloads with resolved FK IDs...")
+    try:
+        payloads = generate_batch_payloads(count=count, offset=args.offset, **flat_overrides)
+    except Exception as e:
+        print(f"  ERROR generating payloads: {e}")
+        api.close()
+        return
+
+    # ── Validate FK fields before sending ─────────────────────────────
+    for i, p in enumerate(payloads):
+        if p.get("prefix_ref_id") is None:
+            print(f"  WARNING: Payload {i+1} has None prefix_ref_id")
+        if p.get("designation") is None:
+            print(f"  WARNING: Payload {i+1} has None designation")
+        children = p.get("children", [])
+        if children:
+            for j, row in enumerate(children[0].get("details", [])):
+                if row.get("kyc_doc_id") is None:
+                    print(f"  WARNING: Payload {i+1} KYC row {j+1} has None kyc_doc_id")
+
+    # ── Create entries ────────────────────────────────────────────────
+    print()
+    try:
+        results = api.batch_create(SCREEN_NAME, payloads)
+    except Exception as e:
+        print(f"  ERROR: {e}")
+        api.close()
+        return
+
+    # ── Summary ────────────────────────────────────────────────────────
+    created = sum(1 for r in results if r.get("success"))
+    failed = sum(1 for r in results if not r.get("success"))
+
+    print()
+    print("=" * 70)
+    print("  FINAL SUMMARY")
+    print("=" * 70)
+    status_icon = "OK" if failed == 0 else "!!"
+    print(f"  [{status_icon}] {SCREEN_NAME:<35} {created:>3}/{count} created")
+    print("-" * 70)
+    print(f"  Total: {created} created, {failed} failed out of {count}")
+    print("=" * 70)
+
+    api.close()
 
 
 if __name__ == "__main__":

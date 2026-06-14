@@ -743,11 +743,12 @@ def generate_member_api_payload(**kwargs) -> dict:
 # Batch generation helpers
 # ──────────────────────────────────────────────
 
-def generate_batch_payloads(count: int, **kwargs) -> list:
+def generate_batch_payloads(count: int, offset: int = 0, **kwargs) -> list:
     """Generate multiple unique Member API payloads.
 
     Args:
         count: Number of payloads to generate.
+        offset: Start index in data pool (used to seed variety).
         **kwargs: Optional overrides applied to ALL payloads.
 
     Returns:
@@ -757,7 +758,11 @@ def generate_batch_payloads(count: int, **kwargs) -> list:
         payloads = generate_batch_payloads(10)
         payloads = generate_batch_payloads(5, prefix_ref_id=1896, is_member_director=True)
     """
-    return [generate_member_api_payload(**kwargs) for _ in range(count)]
+    payloads = []
+    for i in range(count):
+        p = generate_member_api_payload(**kwargs)
+        payloads.append(p)
+    return payloads
 
 
 # ──────────────────────────────────────────────

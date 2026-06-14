@@ -55,26 +55,26 @@ HSN_SAC_NUMBER_IDS = {
 # ── Realistic GST rate structures ────────────────────────────────────
 
 GST_RATES = [
-    {"name": "GST 0% (Nil)",          "rate": 0.0,    "cgst": 0.0,    "sgst": 0.0,    "igst": 0.0,    "cess": 0.0},
-    {"name": "GST 0.25%",             "rate": 0.25,   "cgst": 0.125,  "sgst": 0.125,  "igst": 0.25,   "cess": 0.0},
-    {"name": "GST 3%",                "rate": 3.0,    "cgst": 1.5,    "sgst": 1.5,    "igst": 3.0,    "cess": 0.0},
-    {"name": "GST 5%",                "rate": 5.0,    "cgst": 2.5,    "sgst": 2.5,    "igst": 5.0,    "cess": 0.0},
-    {"name": "GST 12%",               "rate": 12.0,   "cgst": 6.0,    "sgst": 6.0,    "igst": 12.0,   "cess": 0.0},
-    {"name": "GST 15%",               "rate": 15.0,   "cgst": 7.5,    "sgst": 7.5,    "igst": 15.0,   "cess": 0.0},
-    {"name": "GST 18%",               "rate": 18.0,   "cgst": 9.0,    "sgst": 9.0,    "igst": 18.0,   "cess": 0.0},
-    {"name": "GST 28%",               "rate": 28.0,   "cgst": 14.0,   "sgst": 14.0,   "igst": 28.0,   "cess": 0.0},
-    {"name": "GST 5% + Cess",         "rate": 5.0,    "cgst": 2.5,    "sgst": 2.5,    "igst": 5.0,    "cess": 2.5},
-    {"name": "GST 12% + Cess",        "rate": 12.0,   "cgst": 6.0,    "sgst": 6.0,    "igst": 12.0,   "cess": 5.0},
-    {"name": "GST 18% + Cess",        "rate": 18.0,   "cgst": 9.0,    "sgst": 9.0,    "igst": 18.0,   "cess": 10.0},
-    {"name": "GST 28% + Cess",        "rate": 28.0,   "cgst": 14.0,   "sgst": 14.0,   "igst": 28.0,   "cess": 15.0},
-    {"name": "GST 28% + 12% Cess",    "rate": 28.0,   "cgst": 14.0,   "sgst": 14.0,   "igst": 28.0,   "cess": 12.0},
-    {"name": "GST 28% + 60% Cess",    "rate": 28.0,   "cgst": 14.0,   "sgst": 14.0,   "igst": 28.0,   "cess": 60.0},
-    {"name": "GST 18% + 1% Cess",     "rate": 18.0,   "cgst": 9.0,    "sgst": 9.0,    "igst": 18.0,   "cess": 1.0},
-    {"name": "GST 12% + 2% Cess",     "rate": 12.0,   "cgst": 6.0,    "sgst": 6.0,    "igst": 12.0,   "cess": 2.0},
-    {"name": "GST 5% + 1% Cess",      "rate": 5.0,    "cgst": 2.5,    "sgst": 2.5,    "igst": 5.0,    "cess": 1.0},
-    {"name": "GST 28% + 204% Cess",   "rate": 28.0,   "cgst": 14.0,   "sgst": 14.0,   "igst": 28.0,   "cess": 204.0},
-    {"name": "GST 5% + 5% Cess",      "rate": 5.0,    "cgst": 2.5,    "sgst": 2.5,    "igst": 5.0,    "cess": 5.0},
-    {"name": "GST 28% + 18% Cess",    "rate": 28.0,   "cgst": 14.0,   "sgst": 14.0,   "igst": 28.0,   "cess": 18.0},
+    {"name": "GST Zero Nil",              "rate": 0.0,    "cgst": 0.0,    "sgst": 0.0,    "igst": 0.0,    "cess": 0.0},
+    {"name": "GST Zero Two Five",          "rate": 0.25,   "cgst": 0.125,  "sgst": 0.125,  "igst": 0.25,   "cess": 0.0},
+    {"name": "GST Three",                  "rate": 3.0,    "cgst": 1.5,    "sgst": 1.5,    "igst": 3.0,    "cess": 0.0},
+    {"name": "GST Five",                   "rate": 5.0,    "cgst": 2.5,    "sgst": 2.5,    "igst": 5.0,    "cess": 0.0},
+    {"name": "GST Twelve",                 "rate": 12.0,   "cgst": 6.0,    "sgst": 6.0,    "igst": 12.0,   "cess": 0.0},
+    {"name": "GST Fifteen",                "rate": 15.0,   "cgst": 7.5,    "sgst": 7.5,    "igst": 15.0,   "cess": 0.0},
+    {"name": "GST Eighteen",               "rate": 18.0,   "cgst": 9.0,    "sgst": 9.0,    "igst": 18.0,   "cess": 0.0},
+    {"name": "GST Twenty Eight",           "rate": 28.0,   "cgst": 14.0,   "sgst": 14.0,   "igst": 28.0,   "cess": 0.0},
+    {"name": "GST Five Plus Cess",         "rate": 5.0,    "cgst": 2.5,    "sgst": 2.5,    "igst": 5.0,    "cess": 2.5},
+    {"name": "GST Twelve Plus Cess",       "rate": 12.0,   "cgst": 6.0,    "sgst": 6.0,    "igst": 12.0,   "cess": 5.0},
+    {"name": "GST Eighteen Plus Cess",     "rate": 18.0,   "cgst": 9.0,    "sgst": 9.0,    "igst": 18.0,   "cess": 10.0},
+    {"name": "GST Twenty Eight Plus Cess", "rate": 28.0,   "cgst": 14.0,   "sgst": 14.0,   "igst": 28.0,   "cess": 15.0},
+    {"name": "GST Twenty Eight Twelve Cess","rate": 28.0,  "cgst": 14.0,   "sgst": 14.0,   "igst": 28.0,   "cess": 12.0},
+    {"name": "GST Twenty Eight Sixty Cess", "rate": 28.0,  "cgst": 14.0,   "sgst": 14.0,   "igst": 28.0,   "cess": 60.0},
+    {"name": "GST Eighteen One Cess",       "rate": 18.0,  "cgst": 9.0,    "sgst": 9.0,    "igst": 18.0,   "cess": 1.0},
+    {"name": "GST Twelve Two Cess",         "rate": 12.0,  "cgst": 6.0,    "sgst": 6.0,    "igst": 12.0,   "cess": 2.0},
+    {"name": "GST Five One Cess",           "rate": 5.0,   "cgst": 2.5,    "sgst": 2.5,    "igst": 5.0,    "cess": 1.0},
+    {"name": "GST Twenty Eight Two Zero Four Cess", "rate": 28.0, "cgst": 14.0, "sgst": 14.0, "igst": 28.0, "cess": 204.0},
+    {"name": "GST Five Five Cess",          "rate": 5.0,   "cgst": 2.5,    "sgst": 2.5,    "igst": 5.0,    "cess": 5.0},
+    {"name": "GST Twenty Eight Eighteen Cess","rate": 28.0,"cgst": 14.0,   "sgst": 14.0,   "igst": 28.0,   "cess": 18.0},
 ]
 
 
@@ -136,9 +136,14 @@ def _generate_tax_detail_lines(rate_info, hsn_sac_ids):
     return lines
 
 
-def generate_tax_rate_api_payloads(count=10, fk_ids=None):
+def generate_tax_rate_api_payloads(count=10, offset=0, fk_ids=None):
     """
     Generate N API payloads for Tax Rate.
+
+    Args:
+        count: Number of payloads to generate
+        offset: Start index in data pool
+        fk_ids: dict with resolved FK IDs
     """
     if fk_ids is None:
         fk_ids = {}
@@ -161,11 +166,12 @@ def generate_tax_rate_api_payloads(count=10, fk_ids=None):
     payloads = []
 
     for i in range(count):
-        rate_info = GST_RATES[i % len(GST_RATES)]
-        from_dt, to_dt = date_ranges[i % len(date_ranges)]
+        idx = offset + i
+        rate_info = GST_RATES[idx % len(GST_RATES)]
+        from_dt, to_dt = date_ranges[idx % len(date_ranges)]
 
         # Cycle through tax authorities for variety
-        auth_name = list(tax_auth_ids.keys())[i % len(tax_auth_ids)]
+        auth_name = list(tax_auth_ids.keys())[idx % len(tax_auth_ids)]
         auth_id = tax_auth_ids[auth_name]
 
         # Generate detail lines
@@ -256,6 +262,6 @@ REVISION_STATUS_OPTIONS = ["Active"]
 STEPPER_NAME = "Define Tax Rate Details"
 
 
-def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None) -> list:
+def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None, offset: int = 0) -> list:
     """Generate a batch of unique Tax Rate API payloads."""
-    return generate_tax_rate_api_payloads(count=count, fk_ids=dropdown_ids)
+    return generate_tax_rate_api_payloads(count=count, offset=offset, fk_ids=dropdown_ids)

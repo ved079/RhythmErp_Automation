@@ -154,9 +154,14 @@ def build_tax_authority_api_payload(tax_name, tax_type_ref_id, country_ref_id):
     }
 
 
-def generate_tax_authority_api_payloads(count=10, fk_ids=None):
+def generate_tax_authority_api_payloads(count=10, offset=0, fk_ids=None):
     """
     Generate N API payloads for Tax Authority.
+
+    Args:
+        count: Number of payloads to generate
+        offset: Start index in data pool
+        fk_ids: dict with resolved FK IDs
     """
     if fk_ids is None:
         fk_ids = {}
@@ -171,7 +176,8 @@ def generate_tax_authority_api_payloads(count=10, fk_ids=None):
     payloads = []
 
     for i in range(count):
-        entry = TAX_AUTHORITIES[i % len(TAX_AUTHORITIES)]
+        idx = offset + i
+        entry = TAX_AUTHORITIES[idx % len(TAX_AUTHORITIES)]
 
         tax_type_ref_id = tax_type_ids.get(entry["tax_type"], gst_id)
         country_ref_id = country_ids.get(entry["country"], india_id)
@@ -219,6 +225,6 @@ DEFAULT_TAX_AUTHORITY_FK_IDS = {
 }
 
 
-def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None) -> list:
+def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None, offset: int = 0) -> list:
     """Generate a batch of unique Tax Authority API payloads."""
-    return generate_tax_authority_api_payloads(count=count, fk_ids=dropdown_ids)
+    return generate_tax_authority_api_payloads(count=count, offset=offset, fk_ids=dropdown_ids)

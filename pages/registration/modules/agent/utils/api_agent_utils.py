@@ -111,28 +111,57 @@ PAYMENT_METHOD_RTGS_ID = 143
 # ──────────────────────────────────────────────
 
 _ADDRESS_CHAINS = [
-    # Maharashtra / Akola  (PIN 444001 — verified 2026-06-11)
-    {
-        "state_ref_id_id": 12,
-        "district_ref_id_id": 208,
-        "sub_district_ref_id_id": 13041,
-        "village_ref_id_id": 422660,
-        "pin_code": 444001,
-    },
-    # Punjab  (PIN 141001 — verified 2026-06-11)
+    # Verified on tenant 711 via Supplier entries
+    # Punjab / multiple districts
     {
         "state_ref_id_id": 82,
-        "district_ref_id_id": 764,
-        "sub_district_ref_id_id": 13939,
-        "village_ref_id_id": 775472,
+        "district_ref_id_id": 761,
+        "sub_district_ref_id_id": 14119,
+        "village_ref_id_id": 772475,
         "pin_code": 141001,
     },
-    # State 101 / district 233  (PIN 380001 — verified 2026-06-11)
     {
-        "state_ref_id_id": 101,
-        "district_ref_id_id": 233,
-        "sub_district_ref_id_id": 12979,
-        "village_ref_id_id": None,
+        "state_ref_id_id": 82,
+        "district_ref_id_id": 780,
+        "sub_district_ref_id_id": 13973,
+        "village_ref_id_id": 791665,
+        "pin_code": 141001,
+    },
+    {
+        "state_ref_id_id": 82,
+        "district_ref_id_id": 750,
+        "sub_district_ref_id_id": 14082,
+        "village_ref_id_id": 756839,
+        "pin_code": 141001,
+    },
+    {
+        "state_ref_id_id": 82,
+        "district_ref_id_id": 743,
+        "sub_district_ref_id_id": 13803,
+        "village_ref_id_id": 744396,
+        "pin_code": 141001,
+    },
+    # State 98 / multiple districts
+    {
+        "state_ref_id_id": 98,
+        "district_ref_id_id": 479,
+        "sub_district_ref_id_id": 11462,
+        "village_ref_id_id": 303411,
+        "pin_code": 380001,
+    },
+    {
+        "state_ref_id_id": 98,
+        "district_ref_id_id": 494,
+        "sub_district_ref_id_id": 11279,
+        "village_ref_id_id": 311307,
+        "pin_code": 380001,
+    },
+    # State 107 / multiple districts
+    {
+        "state_ref_id_id": 107,
+        "district_ref_id_id": 811,
+        "sub_district_ref_id_id": 14387,
+        "village_ref_id_id": 503970,
         "pin_code": 380001,
     },
 ]

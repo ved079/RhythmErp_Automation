@@ -865,48 +865,10 @@ DEFAULT_SUPPLIER_FK_IDS = {
 _ADDRESS_CHAINS = [
     # ──────────────────────────────────────────────────
     # VERIFIED chains — harvested from live Supplier entries
-    # on tenant 681 via scripts/full_harvest.py
-    # All chains have been confirmed valid by the API.
+    # on tenant 711 via API query (all confirmed valid).
     # ──────────────────────────────────────────────────
 
-    # ── Maharashtra (state 12) / Akola district ──
-    {
-        "state_ref_id_id": 12,
-        "district_ref_id_id": 208,
-        "sub_district_ref_id_id": 13041,
-        "village_ref_id_id": 422660,
-        "_verified": True,
-    },
-    {
-        "state_ref_id_id": 12,
-        "district_ref_id_id": 208,
-        "sub_district_ref_id_id": 12723,
-        "village_ref_id_id": 422597,
-        "_verified": True,
-    },
-    {
-        "state_ref_id_id": 12,
-        "district_ref_id_id": 208,
-        "sub_district_ref_id_id": 12750,
-        "village_ref_id_id": 422600,
-        "_verified": True,
-    },
-
-    # ── Punjab (state 82) / multiple districts ──
-    {
-        "state_ref_id_id": 82,
-        "district_ref_id_id": 764,
-        "sub_district_ref_id_id": 13939,
-        "village_ref_id_id": 775472,
-        "_verified": True,
-    },
-    {
-        "state_ref_id_id": 82,
-        "district_ref_id_id": 752,
-        "sub_district_ref_id_id": 13865,
-        "village_ref_id_id": 759006,
-        "_verified": True,
-    },
+    # ── State 82 (Punjab) / multiple districts ──
     {
         "state_ref_id_id": 82,
         "district_ref_id_id": 761,
@@ -939,23 +901,9 @@ _ADDRESS_CHAINS = [
     # ── State 98 / multiple districts ──
     {
         "state_ref_id_id": 98,
-        "district_ref_id_id": 505,
-        "sub_district_ref_id_id": 11544,
-        "village_ref_id_id": 317896,
-        "_verified": True,
-    },
-    {
-        "state_ref_id_id": 98,
         "district_ref_id_id": 479,
         "sub_district_ref_id_id": 11462,
         "village_ref_id_id": 303411,
-        "_verified": True,
-    },
-    {
-        "state_ref_id_id": 98,
-        "district_ref_id_id": 480,
-        "sub_district_ref_id_id": 11542,
-        "village_ref_id_id": 304232,
         "_verified": True,
     },
     {
@@ -965,82 +913,8 @@ _ADDRESS_CHAINS = [
         "village_ref_id_id": 311307,
         "_verified": True,
     },
-    {
-        "state_ref_id_id": 98,
-        "district_ref_id_id": 484,
-        "sub_district_ref_id_id": 11418,
-        "village_ref_id_id": 306563,
-        "_verified": True,
-    },
-    {
-        "state_ref_id_id": 98,
-        "district_ref_id_id": 502,
-        "sub_district_ref_id_id": 11472,
-        "village_ref_id_id": 315812,
-        "_verified": True,
-    },
-
-    # ── State 101 / multiple districts ──
-    {
-        "state_ref_id_id": 101,
-        "district_ref_id_id": 233,
-        "sub_district_ref_id_id": 12979,
-        "village_ref_id_id": None,
-        "_verified": True,
-    },
-    {
-        "state_ref_id_id": 101,
-        "district_ref_id_id": 229,
-        "sub_district_ref_id_id": 12726,
-        "village_ref_id_id": 445496,
-        "_verified": True,
-    },
-    {
-        "state_ref_id_id": 101,
-        "district_ref_id_id": 231,
-        "sub_district_ref_id_id": 13060,
-        "village_ref_id_id": 448915,
-        "_verified": True,
-    },
-    {
-        "state_ref_id_id": 101,
-        "district_ref_id_id": 222,
-        "sub_district_ref_id_id": 12729,
-        "village_ref_id_id": 438513,
-        "_verified": True,
-    },
-
-    # ── State 103 / multiple districts ──
-    {
-        "state_ref_id_id": 103,
-        "district_ref_id_id": 569,
-        "sub_district_ref_id_id": 12403,
-        "village_ref_id_id": 392606,
-        "_verified": True,
-    },
-    {
-        "state_ref_id_id": 103,
-        "district_ref_id_id": 575,
-        "sub_district_ref_id_id": 12554,
-        "village_ref_id_id": 398345,
-        "_verified": True,
-    },
-    {
-        "state_ref_id_id": 103,
-        "district_ref_id_id": 585,
-        "sub_district_ref_id_id": 12519,
-        "village_ref_id_id": 407745,
-        "_verified": True,
-    },
 
     # ── State 107 / multiple districts ──
-    {
-        "state_ref_id_id": 107,
-        "district_ref_id_id": 796,
-        "sub_district_ref_id_id": 14523,
-        "village_ref_id_id": 497349,
-        "_verified": True,
-    },
     {
         "state_ref_id_id": 107,
         "district_ref_id_id": 811,

@@ -225,9 +225,14 @@ def build_vehicle_master_api_payload(name, vehicle_price, vehicle_type_id,
     }
 
 
-def generate_vehicle_master_api_payloads(count=10, fk_ids=None):
+def generate_vehicle_master_api_payloads(count=10, offset=0, fk_ids=None):
     """
     Generate N API payloads for Vehicle Master.
+
+    Args:
+        count: Number of payloads to generate
+        offset: Start index in data pool
+        fk_ids: dict with resolved FK IDs
     """
     if fk_ids is None:
         fk_ids = {}
@@ -239,7 +244,8 @@ def generate_vehicle_master_api_payloads(count=10, fk_ids=None):
     payloads = []
 
     for i in range(count):
-        entry = VEHICLES[i % len(VEHICLES)]
+        idx = offset + i
+        entry = VEHICLES[idx % len(VEHICLES)]
 
         vt_id = vehicle_type_ids.get(entry["vehicle_type"], 1)
         ft_id = fuel_type_ids.get(entry["fuel_type"], 1)
@@ -299,6 +305,6 @@ DEFAULT_VEHICLE_MASTER_FK_IDS = {
 }
 
 
-def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None) -> list:
+def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None, offset: int = 0) -> list:
     """Generate a batch of unique Vehicle Master API payloads."""
-    return generate_vehicle_master_api_payloads(count=count, fk_ids=dropdown_ids)
+    return generate_vehicle_master_api_payloads(count=count, offset=offset, fk_ids=dropdown_ids)

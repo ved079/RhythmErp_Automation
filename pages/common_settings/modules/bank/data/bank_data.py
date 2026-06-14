@@ -39,30 +39,30 @@ ACCOUNT_REF_IDS = {
 # ── Realistic data pools ─────────────────────────────────────────────
 
 BANKS = [
-    {"name": "State Bank of India",            "code": "SBI",  "branch": "Fort, Mumbai",      "ifsc": "SBIN0000300"},
-    {"name": "HDFC Bank",                      "code": "HDFC", "branch": "Churchgate, Mumbai", "ifsc": "HDFC0000060"},
-    {"name": "ICICI Bank",                     "code": "ICIC", "branch": "BKC, Mumbai",        "ifsc": "ICIC0000002"},
-    {"name": "Punjab National Bank",           "code": "PUNB", "branch": "Connaught Place",    "ifsc": "PUNB0000500"},
-    {"name": "Bank of Baroda",                 "code": "BARB", "branch": "Alkapuri, Vadodara", "ifsc": "BARB0ALKA01"},
-    {"name": "Canara Bank",                    "code": "CNRB", "branch": "Jayanagar, Bangalore","ifsc": "CNRB0000250"},
-    {"name": "Union Bank of India",            "code": "UBIN", "branch": "Nariman Point",      "ifsc": "UBIN0530000"},
-    {"name": "Axis Bank",                      "code": "UTIB", "branch": "MG Road, Pune",      "ifsc": "UTIB0000100"},
-    {"name": "Bank of India",                  "code": "BKID", "branch": "Star House, Mumbai", "ifsc": "BKID0000001"},
-    {"name": "Central Bank of India",          "code": "CBIN", "branch": "Chanderi, Bhopal",   "ifsc": "CBIN0280001"},
-    {"name": "Indian Bank",                    "code": "IDIB", "branch": "Mount Road, Chennai","ifsc": "IDIB000M001"},
-    {"name": "Kotak Mahindra Bank",            "code": "KKBK", "branch": "BKC, Mumbai",        "ifsc": "KKBK0000100"},
-    {"name": "IndusInd Bank",                  "code": "INDB", "branch": "Elphinstone, Mumbai","ifsc": "INDB0000001"},
-    {"name": "Yes Bank",                       "code": "YESB", "branch": "Nehru Place, Delhi", "ifsc": "YESB0000001"},
-    {"name": "Federal Bank",                   "code": "FDRL", "branch": "Aluva, Kerala",      "ifsc": "FDRL0000001"},
-    {"name": "South Indian Bank",              "code": "SIBL", "branch": "Thrissur, Kerala",   "ifsc": "SIBL0000001"},
-    {"name": "IDFC First Bank",                "code": "IDFB", "branch": "Nungambakkam, Chennai","ifsc":"IDFB0000001"},
-    {"name": "Bandhan Bank",                   "code": "BDBL", "branch": "Salt Lake, Kolkata", "ifsc": "BDBL0000001"},
-    {"name": "RBL Bank",                       "code": "RATN", "branch": "BKC, Mumbai",        "ifsc": "RATN0000001"},
-    {"name": "UCO Bank",                       "code": "UCBA", "branch": "Brabourne, Kolkata", "ifsc": "UCBA0000001"},
+    {"name": "State Bank of India",            "code": "0001",  "branch": "Fort, Mumbai",      "ifsc": "SBIN0000300"},
+    {"name": "HDFC Bank",                      "code": "0002", "branch": "Churchgate, Mumbai", "ifsc": "HDFC0000060"},
+    {"name": "ICICI Bank",                     "code": "0003", "branch": "BKC, Mumbai",        "ifsc": "ICIC0000002"},
+    {"name": "Punjab National Bank",           "code": "0004", "branch": "Connaught Place",    "ifsc": "PUNB0000500"},
+    {"name": "Bank of Baroda",                 "code": "0005", "branch": "Alkapuri, Vadodara", "ifsc": "BARB0ALKA01"},
+    {"name": "Canara Bank",                    "code": "0006", "branch": "Jayanagar, Bangalore","ifsc": "CNRB0000250"},
+    {"name": "Union Bank of India",            "code": "0007", "branch": "Nariman Point",      "ifsc": "UBIN0530000"},
+    {"name": "Axis Bank",                      "code": "0008", "branch": "MG Road, Pune",      "ifsc": "UTIB0000100"},
+    {"name": "Bank of India",                  "code": "0009", "branch": "Star House, Mumbai", "ifsc": "BKID0000001"},
+    {"name": "Central Bank of India",          "code": "0010", "branch": "Chanderi, Bhopal",   "ifsc": "CBIN0280001"},
+    {"name": "Indian Bank",                    "code": "0011", "branch": "Mount Road, Chennai","ifsc": "IDIB000M001"},
+    {"name": "Kotak Mahindra Bank",            "code": "0012", "branch": "BKC, Mumbai",        "ifsc": "KKBK0000100"},
+    {"name": "IndusInd Bank",                  "code": "0013", "branch": "Elphinstone, Mumbai","ifsc": "INDB0000001"},
+    {"name": "Yes Bank",                       "code": "0014", "branch": "Nehru Place, Delhi", "ifsc": "YESB0000001"},
+    {"name": "Federal Bank",                   "code": "0015", "branch": "Aluva, Kerala",      "ifsc": "FDRL0000001"},
+    {"name": "South Indian Bank",              "code": "0016", "branch": "Thrissur, Kerala",   "ifsc": "SIBL0000001"},
+    {"name": "IDFC First Bank",                "code": "0017", "branch": "Nungambakkam, Chennai","ifsc":"IDFB0000001"},
+    {"name": "Bandhan Bank",                   "code": "0018", "branch": "Salt Lake, Kolkata", "ifsc": "BDBL0000001"},
+    {"name": "RBL Bank",                       "code": "0019", "branch": "BKC, Mumbai",        "ifsc": "RATN0000001"},
+    {"name": "UCO Bank",                       "code": "0020", "branch": "Brabourne, Kolkata", "ifsc": "UCBA0000001"},
 ]
 
-BRANCH_CODES = ["BR001", "BR002", "BR003", "BR004", "BR005",
-                "BR006", "BR007", "BR008", "BR009", "BR010"]
+BRANCH_CODES = ["BR0001", "BR0002", "BR0003", "BR0004", "BR0005",
+                "BR0006", "BR0007", "BR0008", "BR0009", "BR0010"]
 
 BANK_ACCOUNT_REFS = ["BANK 1", "BANK 2", "BANK 3", "BANK 4", "BANK 5"]
 
@@ -107,7 +107,7 @@ def build_bank_api_payload(bank_name, bank_code, branch_name, branch_code,
     return payload
 
 
-def generate_bank_api_payloads(count=10, fk_ids=None):
+def generate_bank_api_payloads(count=10, offset=0, fk_ids=None):
     """
     Generate N API payloads for Bank.
     """
@@ -121,7 +121,8 @@ def generate_bank_api_payloads(count=10, fk_ids=None):
     payloads = []
 
     for i in range(count):
-        entry = BANKS[i % len(BANKS)]
+        idx = (offset + i) % len(BANKS)
+        entry = BANKS[idx]
 
         # Alternate between Current and Saving
         acct_type_name = "Current" if i % 2 == 0 else "Saving"
@@ -133,11 +134,8 @@ def generate_bank_api_payloads(count=10, fk_ids=None):
         if acct_ref_id is None and account_ref_ids:
             acct_ref_id = list(account_ref_ids.values())[i % len(account_ref_ids)]
 
-        # Credit limit varies by account type
-        if acct_type_name == "Current":
-            credit_limit = random.choice([500000, 1000000, 2000000, 5000000, 10000000])
-        else:
-            credit_limit = None
+        # Credit limit for all account types
+        credit_limit = random.choice([500000, 1000000, 2000000, 5000000, 10000000])
 
         bank_address = f"{entry['branch']}, {entry['name']}"
 
@@ -268,6 +266,11 @@ ACCOUNT_TYPE_NAMES = dict(ACCOUNT_TYPE_IDS)
 
 # GL Account display names for schema tests
 ACCOUNT_REF_NAMES = dict(ACCOUNT_REF_IDS)
+
+SCREEN_NAME_FIELDS = {
+    "account_type": "Account Type",
+    "account_ref_id": "Account",
+}
 
 # Default FK IDs for Bank (standardized naming pattern)
 DEFAULT_BANK_FK_IDS = {

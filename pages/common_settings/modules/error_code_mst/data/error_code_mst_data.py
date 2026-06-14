@@ -73,13 +73,13 @@ DESCRIPTIONS_BY_TYPE = {
     ],
 }
 
-IS_QTY_AMOUNT_OPTIONS = ["Qty", "Amount"]
+IS_QTY_AMOUNT_OPTIONS = [True, False]
 
 
 # ── Payload builder ──────────────────────────────────────────────────
 
 def build_error_code_mst_api_payload(error_code_type_id, code, description,
-                                      is_qty_amount="Qty"):
+                                      is_qty_amount=True):
     """Build a single API payload for Error Code Mst."""
     return {
         "id": "",
@@ -91,12 +91,13 @@ def build_error_code_mst_api_payload(error_code_type_id, code, description,
     }
 
 
-def generate_error_code_mst_api_payloads(count=10, fk_ids=None):
+def generate_error_code_mst_api_payloads(count=10, offset=0, fk_ids=None):
     """
     Generate N API payloads for Error Code Mst.
 
     Args:
         count: Number of payloads to generate
+        offset: Start index in data pool
         fk_ids: dict with resolved FK IDs, e.g.:
             {"error_code_type": {name: id, ...}}
 
@@ -116,25 +117,26 @@ def generate_error_code_mst_api_payloads(count=10, fk_ids=None):
     used_codes = set()
 
     for i in range(count):
+        idx = offset + i
         # Pick a type (cycle for variety)
-        type_idx = i % len(type_names)
+        type_idx = idx % len(type_names)
         type_name = type_names[type_idx]
         type_id = type_id_list[type_idx]
 
         # Pick a code from that type's pool
         available_codes = CODES_BY_TYPE.get(type_name, list(CODES_BY_TYPE.values())[0])
         # Add index suffix for uniqueness
-        code = available_codes[i % len(available_codes)]
+        code = available_codes[idx % len(available_codes)]
         if code in used_codes:
-            code = f"{code}-{i+1:02d}"
+            code = f"{code}-{idx+1:02d}"
         used_codes.add(code)
 
         # Pick a description
         available_descs = DESCRIPTIONS_BY_TYPE.get(type_name, list(DESCRIPTIONS_BY_TYPE.values())[0])
-        description = available_descs[i % len(available_descs)]
+        description = available_descs[idx % len(available_descs)]
 
         # Pick is_qty_amount
-        is_qty_amount = IS_QTY_AMOUNT_OPTIONS[i % len(IS_QTY_AMOUNT_OPTIONS)]
+        is_qty_amount = IS_QTY_AMOUNT_OPTIONS[idx % len(IS_QTY_AMOUNT_OPTIONS)]
 
         payload = build_error_code_mst_api_payload(
             error_code_type_id=type_id,
@@ -195,9 +197,10 @@ def generate_batch_payloads(
     count: int = 20,
     prefix: str = None,
     dropdown_ids: dict = None,
+    offset: int = 0,
 ) -> list:
     """Generate a batch of unique Error Code Mst API payloads."""
-    return generate_error_code_mst_api_payloads(count=count, fk_ids=dropdown_ids)
+    return generate_error_code_mst_api_payloads(count=count, offset=offset, fk_ids=dropdown_ids)
 
 
 # ── UI Validation Helpers (restored for test compatibility) ──

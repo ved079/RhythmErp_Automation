@@ -603,7 +603,7 @@ GST_REGISTRATION_TYPE_IDS = [49, 50]
 #   49 = Unregistered, 50 = Regular
 
 # Fixed defaults
-DEFAULT_CURRENCY_REF_ID = 1   # INR
+DEFAULT_CURRENCY_REF_ID = 8    # INR (tenant 711) — confirmed from live API
 DEFAULT_COUNTRY_REF_ID = 8    # India
 
 # Backward-compatible default FK IDs dict
@@ -1027,8 +1027,16 @@ def generate_customer_api_payloads(
     count: int = 20,
     prefix: str = None,
     dropdown_ids: dict = None,
+    offset: int = 0,
 ) -> list:
-    """Generate multiple unique Customer API payloads for batch creation."""
+    """Generate multiple unique Customer API payloads for batch creation.
+
+    Args:
+        count: Number of payloads to generate
+        prefix: Name prefix for company names
+        dropdown_ids: Dict of FK IDs
+        offset: Start index (ignored for Customer — each payload is fully random)
+    """
     payloads = []
     for i in range(count):
         payloads.append(
@@ -1037,7 +1045,7 @@ def generate_customer_api_payloads(
     return payloads
 
 
-def generate_batch_payloads(count: int = 10, **kwargs) -> list:
+def generate_batch_payloads(count: int = 10, offset: int = 0, **kwargs) -> list:
     """Generate N unique Customer API payloads.
 
     Alias for generate_customer_api_payloads() — matches the Supplier
@@ -1045,6 +1053,7 @@ def generate_batch_payloads(count: int = 10, **kwargs) -> list:
 
     Args:
         count: Number of payloads to generate.
+        offset: Start index (ignored for Customer).
         **kwargs: Passed to each generate_customer_api_payload() call.
 
     Returns:
