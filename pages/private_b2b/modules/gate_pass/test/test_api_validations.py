@@ -182,3 +182,39 @@ class TestBoundaries:
         payload = build_gp_payload(distance=-50)
         status = gp_api.create_and_expect_failure(payload)
         gp_api.assert_validation_error(accept_statuses=[400, 500])
+
+
+class TestSecurityVulnerabilities:
+    @pytest.mark.api
+    def test_GP_SEC01_debug_mode_leak_on_invalid_item_ref_id(self, gp_api):
+        log.info("GP-SEC01: DEBUG mode leak via invalid item_ref_id")
+        from pages.private_b2b.modules.gate_pass.api.endpoints import build_create_url
+        payload = {
+            "transaction_date": "2026-06-14", "supplier_ref_id": 1,
+            "supplier_ref_type": "Supplier", "item_type_ref_id": 113,
+            "delivery_type": 29, "driver_name": "Leak Test",
+            "in_time": "2026-06-14T09:00:00Z", "distance": 50,
+            "grn_check": False, "qc_check": False, "parameter1": 1,
+            "gate_pass_details": [
+                {"item_ref_id": 999999999, "no_of_bags": 10,
+                 "quantity": 100.0, "base_uom": 4, "hsn_sac_no": 2}
+            ],
+        }
+        url = build_create_url(gp_api.client.BASE_URL)
+        resp = gp_api.client.session.post(url, json=payload, timeout=30)
+        gp_api._last_response = resp
+        gp_api._last_status = resp.status_code
+
+        assert resp.status_code == 500
+        text = resp.text
+        leaks = []
+        for keyword in ["DATABASES", "REDIS", "SECRET_KEY", "192.168",
+                        "erp_procure", "CORE_URL", "envconfig", "Exception Type"]:
+            if keyword in text:
+                idx = text.index(keyword)
+                leaks.append(f"{keyword} at pos {idx}")
+        assert len(leaks) == 0, (
+            f"CRITICAL: Django DEBUG page leaked {len(leaks)} settings!\n"
+            f"Leaks found: {', '.join(leaks)}\n"
+            f"Response size: {len(text)} bytes"
+        )

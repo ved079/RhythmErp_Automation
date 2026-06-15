@@ -1,11 +1,11 @@
 """
-batch_create.py — Gate Pass batch creation script.
+batch_create.py — Quality Check batch creation script.
 
 Usage:
     python batch_create.py --token <jwt> --tenant 711 --count 5
     python batch_create.py --token <jwt> --tenant 711 --supplier 1 --count 3 --dry-run
 
-Uses RhythmERPAPIClient + GPAPIUtils (shared auth pattern).
+Uses RhythmERPAPIClient + QCAPIUtils (shared auth pattern).
 """
 
 import argparse
@@ -21,19 +21,20 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from common.erp_api_client import RhythmERPAPIClient
 from common.logger import log
-from pages.private_b2b.modules.gate_pass.data.gate_pass_data import (
-    generate_gp_payload,
+from pages.private_b2b.modules.quality_check.data.quality_check_data import (
+    generate_qc_payload,
+    compute_expected_results,
 )
-from pages.private_b2b.modules.gate_pass.utils.api_gate_pass_utils import (
-    GPAPIUtils,
+from pages.private_b2b.modules.quality_check.utils.api_quality_check_utils import (
+    QCAPIUtils,
 )
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Batch create Gate Pass entries")
+    parser = argparse.ArgumentParser(description="Batch create QC entries")
     parser.add_argument("--token", default="", help="ERP JWT token")
     parser.add_argument("--tenant", default="711", help="Tenant ID")
-    parser.add_argument("--count", type=int, default=5, help="Number of GPs to create")
+    parser.add_argument("--count", type=int, default=5, help="Number of QCs to create")
     parser.add_argument("--supplier", type=int, default=None, help="Supplier ref ID (random if omitted)")
     parser.add_argument("--dry-run", action="store_true", help="Print payloads without creating")
     parser.add_argument("--delay", type=float, default=0.3, help="Delay between creates (seconds)")
@@ -46,44 +47,52 @@ def main():
 
     client = RhythmERPAPIClient()
     client.login_from_browser(token=token, tenant_id=args.tenant)
-    api = GPAPIUtils(client)
+    api = QCAPIUtils(client)
 
-    fk_overrides = {"supplier_ref_id": 1}
+    fk_overrides = {}
     if args.supplier is not None:
         fk_overrides["supplier_ref_id"] = args.supplier
 
     payloads = []
     for _ in range(args.count):
-        payloads.append(generate_gp_payload(fk_overrides=fk_overrides))
+        payloads.append(generate_qc_payload(fk_overrides=fk_overrides or None))
 
     if args.dry_run:
         print(f"\n{'=' * 60}")
-        print(f"DRY RUN: {args.count} GP payload(s) generated")
+        print(f"DRY RUN: {args.count} QC payload(s) generated")
         print(f"{'=' * 60}")
         for i, p in enumerate(payloads):
-            print(f"\n--- GP [{i + 1}/{args.count}] ---")
+            expected = compute_expected_results(p)
+            print(f"\n--- QC [{i + 1}/{args.count}] ---")
             print(json.dumps(p, indent=2, default=str))
+            print(f"  Expected master total: {expected['master_total']}")
         print(f"\nDry run complete. No entries created.")
         return
 
-    log.info(f"Creating {args.count} Gate Pass entries...")
+    print(f"\n{'=' * 60}")
+    print(f"Creating {args.count} QC(s)...")
+    print(f"{'=' * 60}")
+
     successes = 0
     for i, payload in enumerate(payloads, 1):
-        result = api.create_gp(payload)
-        if result:
-            successes += 1
-            entry_id = result.get("id") or result.get("entry_id")
-            ref_no = result.get("transaction_ref_no", "N/A")
-            log.info(f"  [{i}/{args.count}] Created GP #{entry_id} (ref: {ref_no})")
-        else:
-            log.warning(f"  [{i}/{args.count}] Failed (status {api._last_status})")
-            if api._last_response is not None:
-                log.warning(f"  Body: {api._last_response.text[:300]}")
+        try:
+            data = api.create_qc(payload)
+            if data:
+                successes += 1
+                entry_id = data.get("id") or data.get("entry_id")
+                ref_no = data.get("transaction_ref_no", str(entry_id))
+                print(f"  [{i}/{args.count}] Created QC ID={entry_id}, ref={ref_no}")
+            else:
+                print(f"  [{i}/{args.count}] FAILED (status {api._last_status})")
+        except Exception as e:
+            print(f"  [{i}/{args.count}] ERROR: {e}")
 
         if args.delay and i < args.count:
             time.sleep(args.delay)
 
-    log.info(f"Done: {successes}/{args.count} created")
+    print(f"\n{'=' * 60}")
+    print(f"Batch complete: {successes}/{args.count} succeeded")
+    print(f"{'=' * 60}")
 
 
 if __name__ == "__main__":

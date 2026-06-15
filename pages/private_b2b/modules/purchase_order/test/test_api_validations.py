@@ -12,7 +12,7 @@ from pages.private_b2b.modules.purchase_order.data.purchase_order_data import (
     generate_po_payload,
     build_po_payload,
 )
-from pages.private_b2b.modules.purchase_order.api.endpoints import SCREEN_NAME
+from pages.private_b2b.modules.purchase_order.api.endpoints import SCREEN_NAME, build_create_url
 
 
 class TestCreateValidation:
@@ -312,3 +312,32 @@ class TestTransactionRef:
         num1 = int(ref1.split("/")[-1])
         num2 = int(ref2.split("/")[-1])
         assert num2 > num1, f"Ref should increment: {ref1} -> {ref2}"
+
+
+class TestSecurityVulnerabilities:
+    @pytest.mark.api
+    def test_PO_SEC01_debug_mode_leak_on_invalid_item_ref_id(self, po_api):
+        log.info("PO-SEC01: DEBUG mode leak via invalid item_ref_id")
+        payload = build_po_payload(items=[
+            {"item_ref_id": 999999999, "hsn_sac_no": 2, "uom": 3,
+             "quantity": 10.0, "rate": 100.0, "expected_delivery_date": "2026-06-20"},
+        ])
+        url = build_create_url(po_api.client.BASE_URL)
+        resp = po_api.client.session.post(url, json=payload, timeout=30)
+        po_api._last_response = resp
+        po_api._last_status = resp.status_code
+
+        assert resp.status_code == 500
+        text = resp.text
+        leaks = []
+        for keyword in ["DATABASES", "REDIS", "SECRET_KEY", "192.168", "erp_procure",
+                        "CORE_URL", "envconfig", "Exception Type"]:
+            if keyword in text:
+                idx = text.index(keyword)
+                leaks.append(f"{keyword} at pos {idx}")
+        assert len(leaks) == 0, (
+            f"CRITICAL: Django DEBUG page leaked {len(leaks)} settings!\n"
+            f"Leaks found: {', '.join(leaks)}\n"
+            f"Response size: {len(text)} bytes\n"
+            f"This leaks DB credentials, Redis config, internal IPs, etc."
+        )
