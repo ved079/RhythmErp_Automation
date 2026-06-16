@@ -95,13 +95,13 @@ def build_gp_payload(
     delivery_type: int = 29,
     agent_ref_id: int = None,
     parameter1: int = 1,
-    parameter2: int = None,
-    parameter5: int = None,
-    parameter6: int = None,
+    parameter2: int = 1,
+    parameter5: int = 25,
+    parameter6: int = 1,
     distance: float = 50.0,
-    vehicle_no: str = None,
+    vehicle_no: str = "MH14KK2533",
     driver_name: str = "Test Driver",
-    driver_contact_no: int = None,
+    driver_contact_no: int = 9000000000,
     transaction_date: str = None,
     in_time: str = None,
     out_time: str = None,
@@ -133,27 +133,21 @@ def build_gp_payload(
         "item_type_ref_id": item_type_ref_id,
         "delivery_type": delivery_type,
         "driver_name": driver_name,
+        "driver_contact_no": driver_contact_no,
+        "vehicle_no": vehicle_no,
         "in_time": in_time,
         "distance": distance,
+        "parameter1": parameter1,
+        "parameter2": parameter2,
+        "parameter5": parameter5,
+        "parameter6": parameter6,
         "grn_check": grn_check,
         "qc_check": qc_check,
         "gate_pass_details": items,
     }
 
-    if parameter1 is not None:
-        payload["parameter1"] = parameter1
     if agent_ref_id is not None:
         payload["agent_ref_id"] = agent_ref_id
-    if parameter2 is not None:
-        payload["parameter2"] = parameter2
-    if parameter5 is not None:
-        payload["parameter5"] = parameter5
-    if parameter6 is not None:
-        payload["parameter6"] = parameter6
-    if vehicle_no is not None:
-        payload["vehicle_no"] = vehicle_no
-    if driver_contact_no is not None:
-        payload["driver_contact_no"] = driver_contact_no
     if out_time is not None:
         payload["out_time"] = out_time
     if remark is not None:

@@ -142,6 +142,7 @@ def build_qc_payload(
     item_type_ref_id: int = 113,
     gate_pass_ref_id_id: int = 505,
     grn_ref_id_id: int = 146,
+    po_ref_id_id: int = None,
     base_currency: int = 8,
     txn_currency: int = 1,
     conversion_rate: float = 1.0,
@@ -158,8 +159,8 @@ def build_qc_payload(
 
     if additional_details is None:
         additional_details = {
-            "vehicle_number": None,
-            "driver_name": None,
+            "vehicle_number": "MH14KK2533",
+            "driver_name": "Test Driver",
             "remark": None,
         }
 
@@ -189,6 +190,7 @@ def build_qc_payload(
         "item_type_ref_id": item_type_ref_id,
         "gate_pass_ref_id_id": gate_pass_ref_id_id,
         "grn_ref_id_id": grn_ref_id_id,
+        "po_ref_id_id": po_ref_id_id,
         "base_currency": base_currency,
         "txn_currency": txn_currency,
         "conversion_rate": conversion_rate,
@@ -238,6 +240,7 @@ def generate_qc_payload(fk_overrides: dict = None, item_overrides: List[dict] = 
         item_type_ref_id=fks["item_type_ref_id"],
         gate_pass_ref_id_id=fks["gate_pass_ref_id_id"],
         grn_ref_id_id=fks["grn_ref_id_id"],
+        po_ref_id_id=fks.get("po_ref_id_id"),
         base_currency=fks["base_currency"],
         txn_currency=fks["txn_currency"],
         conversion_rate=1.0,
