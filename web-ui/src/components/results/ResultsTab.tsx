@@ -60,6 +60,7 @@ export function ResultsTab({
   testGroups,
   moduleHealth,
   moduleName,
+  currentModuleId,
   autoReportedTestIds,
 }: {
   tests: TestItem[]
@@ -74,8 +75,19 @@ export function ResultsTab({
   testGroups?: TestClassGroup[]
   moduleHealth?: ModuleHealth[]
   moduleName?: string
+  currentModuleId?: string
   autoReportedTestIds?: Set<string>
 }) {
+  /* ── Filter data to current module only ── */
+  const moduleRuns = useMemo(
+    () => currentModuleId ? runHistory.filter(r => r.moduleId === currentModuleId) : runHistory,
+    [runHistory, currentModuleId]
+  )
+  const moduleHealthData = useMemo(
+    () => currentModuleId ? (moduleHealth || []).filter(m => m.moduleId === currentModuleId) : (moduleHealth || []),
+    [moduleHealth, currentModuleId]
+  )
+
   const passRate = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0
   const [resultFilter, setResultFilter] = useState<'all' | 'passed' | 'failed'>('all')
   const [sortCol, setSortCol] = useState<'status' | 'test' | 'duration'>('status')
@@ -107,8 +119,8 @@ export function ResultsTab({
     return undefined
   }
 
-  const lastRun = runHistory[0]
-  const prevRun = runHistory[1]
+  const lastRun = moduleRuns[0]
+  const prevRun = moduleRuns[1]
 
   const statusCounts = useMemo(() => {
     let p = 0, f = 0
@@ -155,9 +167,9 @@ export function ResultsTab({
           </div>
 
           {/* ── Module health cards (with sparklines) ── */}
-          {moduleHealth && moduleHealth.length > 0 && (
+          {moduleHealthData && moduleHealthData.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {moduleHealth.map(m => {
+              {moduleHealthData.map(m => {
                 const barColor = m.passRate >= 90 ? 'bg-green-500' : m.passRate >= 75 ? 'bg-yellow-500' : 'bg-red-500'
                 return (
                   <div key={m.moduleId} className="flex items-center gap-3 bg-white dark:bg-gray-800/30 rounded-lg px-3.5 py-2 border border-gray-100 dark:border-gray-700/50 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
@@ -200,7 +212,7 @@ export function ResultsTab({
               })}
             </div>
             <div className="flex items-center gap-2">
-              {onCompareRuns && runHistory.length >= 2 && (
+              {onCompareRuns && moduleRuns.length >= 2 && (
                 <Button variant="outline" size="sm" onClick={onCompareRuns}
                   className="h-7 text-[12px] gap-1.5 cursor-pointer border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
@@ -208,7 +220,7 @@ export function ResultsTab({
                   Compare Runs
                 </Button>
               )}
-              <ExportMenu testGroups={testGroups} runHistory={runHistory} moduleHealth={moduleHealth} moduleName={moduleName} />
+              <ExportMenu testGroups={testGroups} runHistory={moduleRuns} moduleHealth={moduleHealthData} moduleName={moduleName} />
             </div>
           </div>
 
@@ -287,11 +299,11 @@ export function ResultsTab({
           </div>
 
           {/* ── Recent Runs ── */}
-          {runHistory.length > 0 && (
+          {moduleRuns.length > 0 && (
             <div>
               <h3 className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 mb-2.5">Recent Runs</h3>
               <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden divide-y divide-gray-100 dark:divide-gray-700/50">
-                {runHistory.slice(0, 5).map(run => (
+                {moduleRuns.slice(0, 5).map(run => (
                   <div key={run.id}
                     onClick={() => onRunDetail?.(run)}
                     className={`flex items-center gap-4 px-4 py-2.5 ${onRunDetail ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors' : ''}`}
