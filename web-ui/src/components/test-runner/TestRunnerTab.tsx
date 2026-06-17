@@ -400,12 +400,10 @@ export function TestRunnerTab({
         totalFailed={visibleTotalFailed}
         onRerunFailed={onRerunFailed}
         tokenBadge={effectiveTab === 'api' ? (
-          <span className={`flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full ${erpToken ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'}`}>
+          <button onClick={onOpenCredentials} className={`flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full cursor-pointer ${erpToken ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'}`}>
             <Key className="size-3" />
-            {erpToken ? 'Token set' : (
-              <button onClick={onOpenCredentials} className="underline font-medium cursor-pointer">Set Token</button>
-            )}
-          </span>
+            {erpToken ? 'Token set' : 'Set Token'}
+          </button>
         ) : undefined}
       />
     </div>
