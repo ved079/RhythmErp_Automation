@@ -2,6 +2,7 @@
 
 import ast
 import os
+import re
 
 from api.models import Module, SubModule, TestFunction, ModuleListResponse
 
@@ -159,11 +160,18 @@ def _smart_display_name(name: str) -> str:
     """Generate a human-readable display name from a function name.
 
     - Uses curated FUNCTION_DISPLAY_NAMES if available.
-    - Otherwise strips ``test_``, replaces underscores, capitalises first letter.
+    - Otherwise strips ``test_``, then strips the code prefix (e.g. ``BNK_C01_``)
+      — the badge already shows the code. Falls back to replacing underscores
+      and capitalising the first letter.
     """
     if name in FUNCTION_DISPLAY_NAMES:
         return FUNCTION_DISPLAY_NAMES[name]
     raw = name[len("test_"):] if name.startswith("test_") else name
+    # Strip code prefix like "BNK_C01_" — the badge already displays this
+    m = re.match(r'^([A-Z]+_[A-Z]+\d+)_(.+)$', raw)
+    if m:
+        desc = m.group(2).replace("_", " ")
+        return desc[0].upper() + desc[1:] if desc else desc
     display = raw.replace("_", " ")
     return display[0].upper() + display[1:] if display else display
 
