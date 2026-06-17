@@ -559,7 +559,7 @@ export default function Home() {
       const specGroups: TestClassGroup[] = [{ className: moduleData.label, tests: moduleData.tests.map((t) => ({ id: t.id, screenName: t.screenName, description: t.description, status: mapTestCaseStatus(t.status), duration: '', steps: t.steps, expected: t.expected, actual: t.actual || '', bugDetails: t.status === 'BUG' ? t.actual : undefined, priority: undefined, date: t.date || undefined })) }]
       setCurrentTestGroups(specGroups)
       const mapToTestItemStatus = (s: string): 'passed' | 'failed' | 'pending' => { const upper = s.toUpperCase().trim(); if (upper === 'PASSED' || upper === 'PASS') return 'passed'; if (upper === 'BUG' || upper === 'FAILED' || upper === 'FAIL') return 'failed'; return 'pending' }
-      setTests(moduleData.tests.map((t) => ({ id: t.id, name: t.description, description: t.description, status: mapToTestItemStatus(t.status), duration: '' })))
+      setTests(moduleData.tests.map((t) => ({ id: t.id, name: t.description, description: t.description, status: 'pending' as const, duration: '' })))
     } else {
       const { groups, items } = getTestsForSidebarModule(id, apiModules)
       if (groups.length > 0) { setCurrentTestGroups(groups); setTests(items) }
@@ -577,8 +577,7 @@ export default function Home() {
       const specGroups: TestClassGroup[] = [{ className: moduleData.label, tests: moduleData.tests.map((t) => ({ id: t.id, screenName: t.screenName, description: t.description, status: mapTestCaseStatus(t.status), duration: '', steps: t.steps, expected: t.expected, actual: t.actual || '', bugDetails: t.status === 'BUG' ? t.actual : undefined, priority: undefined, date: t.date || undefined })) }]
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrentTestGroups(specGroups)
-      const mapToTestItemStatus = (s: string): 'passed' | 'failed' | 'pending' => { const upper = s.toUpperCase().trim(); if (upper === 'PASSED' || upper === 'PASS') return 'passed'; if (upper === 'BUG' || upper === 'FAILED' || upper === 'FAIL') return 'failed'; return 'pending' }
-      setTests(moduleData.tests.map((t) => ({ id: t.id, name: t.description, description: t.description, status: mapToTestItemStatus(t.status), duration: '' })))
+      setTests(moduleData.tests.map((t) => ({ id: t.id, name: t.description, description: t.description, status: 'pending' as const, duration: '' })))
     } else {
       const { groups, items } = getTestsForSidebarModule(selectedModule, apiModules)
       if (groups.length > 0) { setCurrentTestGroups(groups); setTests(items) }
