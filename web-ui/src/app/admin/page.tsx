@@ -25,9 +25,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
+
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog'
@@ -897,7 +895,7 @@ export default function AdminPage() {
             </Select>
           </div>
         </div>
-        {/* Table */}
+        {/* Test Cases */}
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           {!testsLoaded ? (
             <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
@@ -1338,65 +1336,35 @@ export default function AdminPage() {
         <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  <TableHead className="w-10">
-                    <Checkbox
-                      checked={users.length > 0 && selectedUserIds.size === users.length}
-                      onCheckedChange={toggleAllUsers}
-                    />
-                  </TableHead>
-                  <TableHead className="font-['Poppins'] text-xs">User</TableHead>
-                  <TableHead className="font-['Poppins'] text-xs">Role</TableHead>
-                  <TableHead className="font-['Poppins'] text-xs">Status</TableHead>
-                  <TableHead className="font-['Poppins'] text-xs">Module Access</TableHead>
-                  <TableHead className="font-['Poppins'] text-xs">Last Login</TableHead>
-                  <TableHead className="font-['Poppins'] text-xs">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.map(u => (
-                  <TableRow key={u.id} className={selectedUserIds.has(u.id) ? 'bg-[#E8EAF6]/50 dark:bg-[#1A237E]/20' : ''}>
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedUserIds.has(u.id)}
-                        onCheckedChange={() => toggleUserSelection(u.id)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Avatar className="size-7"><AvatarFallback className="bg-[#E8EAF6] dark:bg-[#1A237E]/30 text-[#3F51B5] dark:text-[#7986CB] text-[10px] font-semibold">
-                          {u.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                        </AvatarFallback></Avatar>
-                        <div>
-                          <p className="text-xs font-medium text-[#333] dark:text-gray-100">{u.name}</p>
-                          <p className="text-[10px] text-[#888] dark:text-gray-400">{u.email}</p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell><Badge className={`text-[10px] border-0 ${roleConfig[u.role]?.color || ''}`}>{roleConfig[u.role]?.label || u.role}</Badge></TableCell>
-                    <TableCell>
-                      <Badge className={`text-[10px] border-0 ${u.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>{u.status}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-[10px] font-['Manrope'] text-[#545454] dark:text-gray-300">
-                        {u.moduleAccess.includes('all') ? 'All modules' : `${u.moduleAccess.length} modules`}
-                      </span>
-                    </TableCell>
-                    <TableCell><span className="text-[10px] font-['Manrope'] text-[#888] dark:text-gray-400">{u.lastLogin || '—'}</span></TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => { setEditingUser(u); setUserDialogOpen(true) }}><Pencil className="size-3 text-[#3F51B5]" /></Button>
-                        <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => { setResetPasswordUser(u); setResetPasswordDialogOpen(true) }} title="Reset password"><Key className="size-3 text-[#F57C00]" /></Button>
-                        <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => { setDeleteTarget({ type: 'user', id: u.id, label: u.name }); setDeleteDialogOpen(true) }}><Trash2 className="size-3 text-[#F44336]" /></Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <div className="space-y-1 p-3">
+            {users.map(u => (
+              <div key={u.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors ${selectedUserIds.has(u.id) ? 'bg-[#E8EAF6]/50 dark:bg-[#1A237E]/20 border-[#3F51B5]/30 dark:border-[#7986CB]/30' : 'bg-white dark:bg-gray-800/20 border-gray-100 dark:border-gray-700/40 hover:bg-gray-50/50 dark:hover:bg-gray-800/30'}`}>
+                <Checkbox
+                  checked={selectedUserIds.has(u.id)}
+                  onCheckedChange={() => toggleUserSelection(u.id)}
+                />
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <Avatar className="size-7 shrink-0"><AvatarFallback className="bg-[#E8EAF6] dark:bg-[#1A237E]/30 text-[#3F51B5] dark:text-[#7986CB] text-[10px] font-semibold">
+                    {u.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                  </AvatarFallback></Avatar>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-[#333] dark:text-gray-100 truncate">{u.name}</p>
+                    <p className="text-[10px] text-[#888] dark:text-gray-400 truncate">{u.email}</p>
+                  </div>
+                </div>
+                <Badge className={`text-[10px] border-0 shrink-0 ${roleConfig[u.role]?.color || ''}`}>{roleConfig[u.role]?.label || u.role}</Badge>
+                <Badge className={`text-[10px] border-0 shrink-0 ${u.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>{u.status}</Badge>
+                <span className="text-[10px] font-['Manrope'] text-[#545454] dark:text-gray-300 shrink-0">
+                  {u.moduleAccess.includes('all') ? 'All modules' : `${u.moduleAccess.length} modules`}
+                </span>
+                <span className="text-[10px] font-['Manrope'] text-[#888] dark:text-gray-400 shrink-0">{u.lastLogin || '—'}</span>
+                <div className="flex gap-1 shrink-0">
+                  <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => { setEditingUser(u); setUserDialogOpen(true) }}><Pencil className="size-3 text-[#3F51B5]" /></Button>
+                  <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => { setResetPasswordUser(u); setResetPasswordDialogOpen(true) }} title="Reset password"><Key className="size-3 text-[#F57C00]" /></Button>
+                  <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => { setDeleteTarget({ type: 'user', id: u.id, label: u.name }); setDeleteDialogOpen(true) }}><Trash2 className="size-3 text-[#F44336]" /></Button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -1651,36 +1619,21 @@ export default function AdminPage() {
           </div>
         ) : (
           <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <TableHead className="font-['Poppins'] text-xs">Timestamp</TableHead>
-                    <TableHead className="font-['Poppins'] text-xs">User</TableHead>
-                    <TableHead className="font-['Poppins'] text-xs">Action</TableHead>
-                    <TableHead className="font-['Poppins'] text-xs">Target</TableHead>
-                    <TableHead className="font-['Poppins'] text-xs">Details</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paged.map(a => (
-                    <TableRow key={a.id}>
-                      <TableCell className="text-[10px] font-['Manrope'] text-[#888] dark:text-gray-400 whitespace-nowrap">
-                        {new Date(a.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </TableCell>
-                      <TableCell className="text-xs font-['Manrope'] text-[#333] dark:text-gray-100">{a.userName}</TableCell>
-                      <TableCell><Badge className={`text-[9px] border-0 ${actionColor(a.action)}`}>{a.action.replace('_', ' ')}</Badge></TableCell>
-                      <TableCell>
-                        <div className="text-xs font-['Manrope']">
-                          <span className="text-[#888] dark:text-gray-400">{a.targetType}</span>
-                          <span className="text-[#333] dark:text-gray-100 ml-1">{a.targetLabel}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-[10px] font-['Manrope'] text-[#545454] dark:text-gray-300 max-w-[200px] truncate">{a.details}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <div className="space-y-1 p-3">
+              {paged.map(a => (
+                <div key={a.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white dark:bg-gray-800/20 border border-gray-100 dark:border-gray-700/40 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+                  <span className="text-[10px] font-['Manrope'] text-[#888] dark:text-gray-400 shrink-0 w-32">
+                    {new Date(a.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span className="text-xs font-['Manrope'] text-[#333] dark:text-gray-100 shrink-0 w-28 truncate">{a.userName}</span>
+                  <Badge className={`text-[9px] border-0 shrink-0 ${actionColor(a.action)}`}>{a.action.replace('_', ' ')}</Badge>
+                  <div className="text-xs font-['Manrope'] min-w-0 flex-1">
+                    <span className="text-[#888] dark:text-gray-400">{a.targetType}</span>
+                    <span className="text-[#333] dark:text-gray-100 ml-1">{a.targetLabel}</span>
+                  </div>
+                  <span className="text-[10px] font-['Manrope'] text-[#545454] dark:text-gray-300 max-w-[200px] truncate shrink-0">{a.details}</span>
+                </div>
+              ))}
             </div>
             <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-700">
               <span className="text-xs text-[#888] dark:text-gray-400 font-['Manrope']">
@@ -1907,29 +1860,16 @@ function ResetPasswordDialog({ open, onOpenChange, user, onReset }: {
           {history.length > 0 && (
             <div className="space-y-2">
               <Label className="font-['Manrope'] text-xs text-[#555] dark:text-gray-400">Recent Reset History</Label>
-              <div className="border rounded-lg overflow-hidden dark:border-gray-700">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-gray-50 dark:bg-gray-800">
-                      <TableHead className="text-[10px] h-8 font-['Manrope']">Reset By</TableHead>
-                      <TableHead className="text-[10px] h-8 font-['Manrope']">Date</TableHead>
-                      <TableHead className="text-[10px] h-8 font-['Manrope']">Password Set</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {history.map((entry) => (
-                      <TableRow key={entry.id}>
-                        <TableCell className="text-[11px] font-['Manrope'] py-1.5">{entry.resetBy}</TableCell>
-                        <TableCell className="text-[11px] font-['Manrope'] py-1.5 text-[#888] dark:text-gray-400">
-                          {new Date(entry.date).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </TableCell>
-                        <TableCell className="text-[11px] font-['Manrope'] py-1.5">
-                          <code className="bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">{entry.password}</code>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <div className="space-y-1 border rounded-lg dark:border-gray-700 p-2">
+                {history.map((entry) => (
+                  <div key={entry.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white dark:bg-gray-800/20 border border-gray-100 dark:border-gray-700/40">
+                    <span className="text-[11px] font-['Manrope'] flex-1">{entry.resetBy}</span>
+                    <span className="text-[11px] font-['Manrope'] text-[#888] dark:text-gray-400 shrink-0">
+                      {new Date(entry.date).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <code className="bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-[10px] shrink-0">{entry.password}</code>
+                  </div>
+                ))}
               </div>
             </div>
           )}
