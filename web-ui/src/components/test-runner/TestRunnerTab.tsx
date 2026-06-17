@@ -12,7 +12,7 @@ function parseTestInfo(test: TestItem): { badge: string; description: string } {
   const id = (test.id.split('::').pop() || test.id).replace(/^test_/, '')
   const match = id.match(/^([A-Z]+)_([A-Z]+\d+)_(.+)$/)
   const badge = match ? `${match[1]}-${match[2]}` : ''
-  const description = test.description || (match ? match[3].replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) : id.replace(/_/g, ' '))
+  const description = test.description || (match ? match[3].replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) : test.name || id.replace(/_/g, ' '))
   return { badge, description }
 }
 
