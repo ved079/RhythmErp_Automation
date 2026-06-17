@@ -1,15 +1,13 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { GitCompare, MoreVertical, Eye, MessageSquare, RotateCcw, Bug, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight } from 'lucide-react'
+import { GitCompare, Bug, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { testSpecGroups, type TestClassGroup, type TestItem } from '@/data/testSpecGroups'
+import type { TestClassGroup, TestItem } from '@/data/testSpecGroups'
 import type { RunSnapshot, ModuleHealth } from '@/lib/types'
 import { ExportMenu } from '@/components/export/ExportUtils'
-import { TestStatusIcon } from '@/components/shared/PriorityBadge'
 
 
 /* ── Tiny inline sparkline (7 data points) ── */
@@ -42,7 +40,6 @@ export function ResultsTab({
   failedCount,
   totalCount,
   runHistory,
-  onReportTest,
   bugReportsList,
   onRunDetail,
   onCompareRuns,
@@ -50,14 +47,12 @@ export function ResultsTab({
   moduleHealth,
   moduleName,
   currentModuleId,
-  autoReportedTestIds,
 }: {
   tests: TestItem[]
   passedCount: number
   failedCount: number
   totalCount: number
   runHistory: RunSnapshot[]
-  onReportTest: (test: TestItem) => void
   bugReportsList: { id: string; testId: string; desc: string; status: string }[]
   onRunDetail?: (run: RunSnapshot) => void
   onCompareRuns?: () => void
@@ -65,7 +60,6 @@ export function ResultsTab({
   moduleHealth?: ModuleHealth[]
   moduleName?: string
   currentModuleId?: string
-  autoReportedTestIds?: Set<string>
 }) {
   /* ── Filter data to current module only ── */
   const moduleRuns = useMemo(
@@ -78,32 +72,10 @@ export function ResultsTab({
   )
 
   const passRate = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0
-  const [resultFilter, setResultFilter] = useState<'all' | 'passed' | 'failed'>('all')
   const [bugOpen, setBugOpen] = useState(false)
-
-  const filteredTests = tests
-    .filter(t => resultFilter === 'all' || (resultFilter === 'passed' ? t.status === 'passed' : t.status === 'failed'))
-    .sort((a, b) => a.status.localeCompare(b.status))
-
-  const getTestError = (id: string): string | undefined => {
-    for (const g of testSpecGroups) {
-      const t = g.tests.find(x => x.id === id)
-      if (t) return t.bugDetails || (t.status === 'bug' ? t.actual : undefined)
-    }
-    return undefined
-  }
 
   const lastRun = moduleRuns[0]
   const prevRun = moduleRuns[1]
-
-  const statusCounts = useMemo(() => {
-    let p = 0, f = 0
-    for (const t of tests) {
-      if (t.status === 'passed') p++
-      else if (t.status === 'failed') f++
-    }
-    return { passed: p, failed: f, pending: tests.length - p - f }
-  }, [tests])
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -164,27 +136,7 @@ export function ResultsTab({
           )}
 
           {/* ── Run Results toolbar ── */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              {(['all', 'passed', 'failed'] as const).map(f => {
-                const count = f === 'all' ? totalCount : f === 'passed' ? statusCounts.passed : statusCounts.failed
-                const active = resultFilter === f
-                return (
-                  <button key={f} onClick={() => setResultFilter(f)}
-                    className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-all cursor-pointer ${
-                      active
-                        ? f === 'failed' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 shadow-sm'
-                          : f === 'passed' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 shadow-sm'
-                          : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50'
-                    }`}
-                  >
-                    {f === 'all' ? 'All' : f === 'passed' ? 'Passed' : 'Failed'}
-                    <span className="ml-1.5 opacity-70">({count})</span>
-                  </button>
-                )
-              })}
-            </div>
+          <div className="flex items-center justify-end">
             <div className="flex items-center gap-2">
               {onCompareRuns && moduleRuns.length >= 2 && (
                 <Button variant="outline" size="sm" onClick={onCompareRuns}
@@ -197,60 +149,6 @@ export function ResultsTab({
               <ExportMenu testGroups={testGroups} runHistory={moduleRuns} moduleHealth={moduleHealthData} moduleName={moduleName} />
             </div>
           </div>
-
-          {/* ── Test Results (card rows) ── */}
-          {filteredTests.length === 0 ? (
-            <div className="text-center py-8 text-[13px] text-gray-400 dark:text-gray-500">No {resultFilter} tests</div>
-          ) : (
-            <div className="space-y-1">
-              {filteredTests.map(test => {
-                const error = getTestError(test.id)
-                const displayName = test.description || test.name || test.id
-                const isFail = test.status === 'failed'
-                return (
-                  <div key={test.id}
-                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg border transition-colors ${
-                      isFail
-                        ? 'bg-red-50/40 dark:bg-red-900/8 border-red-100 dark:border-red-900/30'
-                        : 'bg-white dark:bg-gray-800/20 border-gray-100 dark:border-gray-700/40 hover:bg-gray-50/50 dark:hover:bg-gray-800/30'
-                    }`}
-                  >
-                    <TestStatusIcon status={test.status} size={4} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[13px] ${isFail ? 'text-red-700 dark:text-red-400 font-medium' : 'text-gray-700 dark:text-gray-200'}`}>
-                          {displayName}
-                        </span>
-                        {autoReportedTestIds?.has(test.id) && <Bug className="size-3 text-red-500 shrink-0" title="Auto-reported bug" />}
-                      </div>
-                      {error && <div className="text-[11px] text-red-500 dark:text-red-400 mt-0.5 truncate max-w-lg">{error}</div>}
-                    </div>
-                    <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500 shrink-0">{test.duration}</span>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 shrink-0">
-                          <MoreVertical className="size-4 text-gray-400" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer">
-                          <Eye className="size-3.5" /> View Details
-                        </DropdownMenuItem>
-                        {isFail && (
-                          <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer text-orange-600 dark:text-orange-400">
-                            <MessageSquare className="size-3.5" /> Report Bug
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer">
-                          <RotateCcw className="size-3.5" /> Re-run Test
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                )
-              })}
-            </div>
-          )}
 
           {/* ── Recent Runs ── */}
           {moduleRuns.length > 0 && (
