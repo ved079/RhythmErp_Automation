@@ -10,6 +10,7 @@ export interface TestItem {
   status: 'passed' | 'failed' | 'pending' | 'running'
   duration: string
   priority?: TestPriority
+  testType?: 'ui' | 'api'
 }
 
 export interface TestSpecItem {

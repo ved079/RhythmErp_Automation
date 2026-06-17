@@ -74,6 +74,7 @@ export function getTestsForSidebarModule(
     name: t.display_name || t.name.split('::').pop() || t.name,
     status: 'pending' as const,
     duration: '',
+    testType: (t.type === 'api' ? 'api' : 'ui') as 'ui' | 'api',
   }))
 
   return { groups, items }

@@ -77,6 +77,8 @@ def start_run(request: StartRunRequest):
         sub_module=request.sub_module,
         tests=request.tests,
         env_url=request.env_url,
+        erp_token=request.erp_token,
+        erp_tenant_id=request.erp_tenant_id,
     )
 
     return StreamingResponse(

@@ -31,7 +31,7 @@ const FULL_TOUR_STEPS: DriveStep[] = [
     popover: {
       title: 'Tab Navigation',
       description:
-        'Once you select a module, use these tabs to switch between Test Specifications, Test Runner, Live Execution, Results, and Schedule views.',
+         'Once you select a module, use these tabs to switch between Test Runner, Live Execution, Results, and Schedule views.',
       side: 'bottom' as const,
       align: 'center' as const,
     },
@@ -42,16 +42,6 @@ const FULL_TOUR_STEPS: DriveStep[] = [
       title: 'Dashboard Overview',
       description:
         'The Dashboard shows a health overview of all automation modules — total modules, pass rates, and quick navigation to any module.',
-      side: 'bottom' as const,
-      align: 'center' as const,
-    },
-  },
-  {
-    element: '[data-tour="operations"]',
-    popover: {
-      title: 'Test Specifications',
-      description:
-        'View detailed test specifications for the selected module — step-by-step instructions, expected results, and priority levels for each test case.',
       side: 'bottom' as const,
       align: 'center' as const,
     },
@@ -171,35 +161,13 @@ const FULL_TOUR_STEPS: DriveStep[] = [
 // ─── Quick Tour Step Templates (per tab) ─────────────────────
 // Only what's on screen right now — no sidebar, no dark mode, no notifications.
 const QUICK_TOUR_STEPS: Record<string, DriveStep[]> = {
-  operations: [
-    {
-      element: '[data-tour="tab-bar"]',
-      popover: {
-        title: 'Tab Navigation',
-        description:
-          'You\'re on Test Specifications. Use these tabs to switch to Test Runner, Live Execution, Results, or Schedule.',
-        side: 'bottom' as const,
-        align: 'center' as const,
-      },
-    },
-    {
-      element: '[data-tour="operations"]',
-      popover: {
-        title: 'Test Specifications',
-        description:
-          'This shows step-by-step test specifications for the selected module — instructions, expected results, and priority levels for each test case.',
-        side: 'bottom' as const,
-        align: 'center' as const,
-      },
-    },
-  ],
   'test-runner': [
     {
       element: '[data-tour="tab-bar"]',
       popover: {
         title: 'Tab Navigation',
         description:
-          'You\'re on Test Runner. Use these tabs to switch to other views like Test Specs, Live Execution, or Results.',
+          'You\'re on Test Runner. Use these tabs to switch to other views like Live Execution or Results.',
         side: 'bottom' as const,
         align: 'center' as const,
       },

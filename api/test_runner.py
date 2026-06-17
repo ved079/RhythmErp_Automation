@@ -364,6 +364,10 @@ def run_tests_stream(request: CreateRunRequest):
     env = os.environ.copy()
     if request.env_url:
         env["RHYTHMERP_BASE_URL"] = request.env_url
+    if request.erp_token:
+        env["ERP_TOKEN"] = request.erp_token
+    if request.erp_tenant_id:
+        env["ERP_TENANT_ID"] = request.erp_tenant_id
 
     try:
         process = subprocess.Popen(

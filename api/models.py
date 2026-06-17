@@ -30,6 +30,7 @@ class TestFunction(BaseModel):
     name: str                    # e.g. "test_bank_add"
     display_name: str            # e.g. "test_bank_add" (parsed to readable later)
     docstring: Optional[str] = None  # from the test function's docstring
+    type: str = "ui"             # "ui" or "api" — determined by which directory the test lives in
 
 
 class SubModule(BaseModel):
@@ -56,6 +57,8 @@ class CreateRunRequest(BaseModel):
     sub_module: Optional[str] = None     # e.g. "bank" (optional, runs whole module if blank)
     tests: Optional[list[str]] = None    # specific test names (optional, runs all if blank)
     env_url: Optional[str] = None        # override base URL (optional)
+    erp_token: Optional[str] = None      # ERP JWT token for API tests
+    erp_tenant_id: Optional[str] = None  # ERP tenant ID (default "681")
 
 
 class StartRunRequest(BaseModel):
@@ -63,6 +66,8 @@ class StartRunRequest(BaseModel):
     sub_module: Optional[str] = None
     tests: Optional[list[str]] = None
     env_url: Optional[str] = None
+    erp_token: Optional[str] = None
+    erp_tenant_id: Optional[str] = None
 
 
 class TestResult(BaseModel):

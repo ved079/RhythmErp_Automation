@@ -47,8 +47,8 @@ export function RunDetailDialog({
 
   // Build test results from either full API detail or from the run snapshot
   const testResults = runDetail?.results?.map((r) => ({
-    id: r.name,
-    name: r.name.split('::').pop() || r.name,
+    id: r.name || '',
+    name: (r.name || '').split('::').pop() || r.name || '',
     status: r.status,
     duration: r.duration ? `${(r.duration / 1000).toFixed(1)}s` : '—',
     message: r.message,

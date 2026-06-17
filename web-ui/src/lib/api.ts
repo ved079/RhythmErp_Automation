@@ -55,6 +55,7 @@ export interface ApiTest {
   name: string;
   display_name: string;
   docstring: string | null;
+  type?: string;
 }
 
 export interface ApiRunListItem {
@@ -173,7 +174,9 @@ export async function startRun(
   tests: string[] | null = null,
   onEvent: (event: SSEEvent) => void,
   onDone: (summary: RunCompletionSummary) => void,
-  onError: (err: Error) => void
+  onError: (err: Error) => void,
+  erpToken?: string,
+  erpTenantId?: string,
 ) {
   try {
     const res = await fetch(`${PROXY}?path=runs/start`, withCsrf({
@@ -183,6 +186,8 @@ export async function startRun(
         module,
         sub_module: subModule,
         tests,
+        erp_token: erpToken || undefined,
+        erp_tenant_id: erpTenantId || undefined,
       }),
     }));
 
