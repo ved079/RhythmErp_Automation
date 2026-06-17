@@ -1,20 +1,51 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { GitCompare, MoreVertical, Eye, MessageSquare, RotateCcw, Bug } from 'lucide-react'
-// AI icons — temporarily disabled
-// import { Sparkles, Brain } from 'lucide-react'
+import { GitCompare, MoreVertical, Eye, MessageSquare, RotateCcw, Bug, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Progress } from '@/components/ui/progress'
 import { testSpecGroups, type TestClassGroup, type TestItem } from '@/data/testSpecGroups'
 import type { RunSnapshot, ModuleHealth } from '@/lib/types'
 import { ExportMenu } from '@/components/export/ExportUtils'
 import { TestStatusIcon, SortArrow } from '@/components/shared/PriorityBadge'
+
+
+/* ── Tiny inline sparkline (7 data points) ── */
+function Sparkline({ data, className }: { data: number[]; className?: string }) {
+  if (!data || data.length < 2) return null
+  const w = 52, h = 20, pad = 2
+  const min = Math.min(...data), max = Math.max(...data)
+  const range = max - min || 1
+  const pts = data.map((v, i) => `${pad + (i / (data.length - 1)) * (w - 2 * pad)},${h - pad - ((v - min) / range) * (h - 2 * pad)}`).join(' ')
+  return (
+    <svg width={w} height={h} className={className} viewBox={`0 0 ${w} ${h}`}>
+      <polyline fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={pts} />
+    </svg>
+  )
+}
+
+
+/* ── Trend icon ── */
+function TrendIcon({ current, previous }: { current: number; previous?: number }) {
+  if (previous === undefined) return <Minus className="size-3 text-gray-400" />
+  if (current > previous) return <TrendingUp className="size-3 text-green-500" />
+  if (current < previous) return <TrendingDown className="size-3 text-red-500" />
+  return <Minus className="size-3 text-gray-400" />
+}
+
+
+/* ── Helpers ── */
+function parseDuration(d: string) {
+  const p = d.split(':')
+  return p.length === 2 ? parseInt(p[0]) * 60 + parseInt(p[1]) : 0
+}
+function fmtDuration(sec: number) {
+  const m = Math.floor(sec / 60), s = sec % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
 
 export function ResultsTab({
   tests,
@@ -23,8 +54,6 @@ export function ResultsTab({
   totalCount,
   runHistory,
   onReportTest,
-  // onAiTriage,   // AI — temporarily disabled
-  // onAiAnalysis, // AI — temporarily disabled
   bugReportsList,
   onRunDetail,
   onCompareRuns,
@@ -39,8 +68,6 @@ export function ResultsTab({
   totalCount: number
   runHistory: RunSnapshot[]
   onReportTest: (test: TestItem) => void
-  // onAiTriage?: (test: TestItem) => void   // AI — temporarily disabled
-  // onAiAnalysis?: (test: TestItem) => void // AI — temporarily disabled
   bugReportsList: { id: string; testId: string; desc: string; status: string }[]
   onRunDetail?: (run: RunSnapshot) => void
   onCompareRuns?: () => void
@@ -49,453 +76,279 @@ export function ResultsTab({
   moduleName?: string
   autoReportedTestIds?: Set<string>
 }) {
-  const passRate = Math.round((passedCount / totalCount) * 100)
+  const passRate = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0
   const [resultFilter, setResultFilter] = useState<'all' | 'passed' | 'failed'>('all')
-  const [compareRun1, setCompareRun1] = useState<string>('')
-  const [compareRun2, setCompareRun2] = useState<string>('')
-  const [sortCol, setSortCol] = useState<'status' | 'id' | 'test' | 'duration'>('id')
+  const [sortCol, setSortCol] = useState<'status' | 'test' | 'duration'>('status')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [bugOpen, setBugOpen] = useState(false)
 
-  const handleSort = (col: 'status' | 'id' | 'test' | 'duration') => {
-    if (sortCol === col) {
-      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortCol(col)
-      setSortDir('asc')
-    }
+  const handleSort = (col: 'status' | 'test' | 'duration') => {
+    if (sortCol === col) { setSortDir(prev => prev === 'asc' ? 'desc' : 'asc') }
+    else { setSortCol(col); setSortDir('asc') }
   }
 
   const filteredTests = tests
-    .filter((t) => {
-      if (resultFilter === 'all') return true
-      return resultFilter === 'passed' ? t.status === 'passed' : t.status === 'failed'
-    })
+    .filter(t => resultFilter === 'all' || (resultFilter === 'passed' ? t.status === 'passed' : t.status === 'failed'))
     .sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1
       switch (sortCol) {
         case 'status': return dir * a.status.localeCompare(b.status)
-        case 'id': return dir * a.id.localeCompare(b.id)
-        case 'test': return dir * a.name.localeCompare(b.name)
-        case 'duration': {
-          const parseDur = (d: string) => { const p = d.split(':'); return p.length === 2 ? parseInt(p[0]) * 60 + parseInt(p[1]) : 0 }
-          return dir * (parseDur(a.duration) - parseDur(b.duration))
-        }
+        case 'test': return dir * (a.description || a.name || a.id).localeCompare(b.description || b.name || b.id)
+        case 'duration': return dir * (parseDuration(a.duration) - parseDuration(b.duration))
         default: return 0
       }
     })
 
-  // Get error info from testSpecGroups
   const getTestError = (id: string): string | undefined => {
     for (const g of testSpecGroups) {
-      const t = g.tests.find((x) => x.id === id)
+      const t = g.tests.find(x => x.id === id)
       if (t) return t.bugDetails || (t.status === 'bug' ? t.actual : undefined)
     }
     return undefined
   }
 
-  // Comparison logic (Feature 5)
-  const comparisonData = useMemo(() => {
-    if (!compareRun1 || !compareRun2) return null
-    const run1 = runHistory.find((r) => String(r.id) === compareRun1)
-    const run2 = runHistory.find((r) => String(r.id) === compareRun2)
-    if (!run1 || !run2) return null
+  const lastRun = runHistory[0]
+  const prevRun = runHistory[1]
 
-    const allTestIds = new Set([...run1.results.map((r) => r.testId), ...run2.results.map((r) => r.testId)])
-    const rows: {
-      testId: string
-      testName: string
-      run1Status: 'passed' | 'failed' | 'skipped'
-      run2Status: 'passed' | 'failed' | 'skipped'
-      change: 'fixed' | 'regressed' | 'unchanged'
-    }[] = []
-
-    let improved = 0
-    let regressed = 0
-    let unchanged = 0
-
-    for (const id of allTestIds) {
-      const r1 = run1.results.find((r) => r.testId === id)
-      const r2 = run2.results.find((r) => r.testId === id)
-      const s1 = r1?.status || 'skipped' as const
-      const s2 = r2?.status || 'skipped' as const
-      let change: 'fixed' | 'regressed' | 'unchanged' = 'unchanged'
-      if (s1 === 'failed' && s2 === 'passed') { change = 'fixed'; improved++ }
-      else if (s1 === 'passed' && s2 === 'failed') { change = 'regressed'; regressed++ }
-      else { unchanged++ }
-
-      // Find test name
-      let testName = id
-      for (const g of testSpecGroups) {
-        const t = g.tests.find((x) => x.id === id)
-        if (t) { testName = t.description; break }
-      }
-
-      rows.push({ testId: id, testName, run1Status: s1, run2Status: s2, change })
+  const statusCounts = useMemo(() => {
+    let p = 0, f = 0
+    for (const t of tests) {
+      if (t.status === 'passed') p++
+      else if (t.status === 'failed') f++
     }
-
-    return { rows, improved, regressed, unchanged, run1Label: run1.date, run2Label: run2.date }
-  }, [compareRun1, compareRun2, runHistory])
+    return { passed: p, failed: f, pending: tests.length - p - f }
+  }, [tests])
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Summary Cards */}
-      <div className="px-4 pt-4 pb-3 shrink-0">
-        <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mb-3">Test Results Summary</h3>
-        <div className="grid grid-cols-4 gap-3">
-          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-100 dark:border-gray-700">
-            <div className="text-[12px] text-gray-500 dark:text-gray-400 font-medium mb-1">Total Tests</div>
-            <div className="text-2xl font-bold text-gray-800 dark:text-gray-100">{totalCount}</div>
-          </div>
-          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-100 dark:border-green-800/50">
-            <div className="text-[12px] text-green-600 dark:text-green-400 font-medium mb-1">Passed</div>
-            <div className="text-2xl font-bold text-green-700 dark:text-green-400">{passedCount}</div>
-          </div>
-          <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 border border-red-100 dark:border-red-800/50">
-            <div className="text-[12px] text-red-600 dark:text-red-400 font-medium mb-1">Failed</div>
-            <div className="text-2xl font-bold text-red-700 dark:text-red-400">{failedCount}</div>
-          </div>
-          <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4 border border-indigo-100 dark:border-indigo-800/50">
-            <div className="text-[12px] text-indigo-600 dark:text-indigo-400 font-medium mb-1">Pass Rate</div>
-            <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-400">{passRate}%</div>
-            <Progress value={passRate} className="h-1.5 mt-2 bg-indigo-100 dark:bg-indigo-800" />
-          </div>
-        </div>
-      </div>
-
-      <Separator className="mx-4" />
-
-      {/* Run Results Drill-Down */}
       <ScrollArea className="flex-1 min-h-0">
-      <div className="px-4 pt-3 pb-3">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">Run Results</h3>
-          <div className="flex items-center gap-2">
-            {(['all', 'passed', 'failed'] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setResultFilter(f)}
-                className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
-                  resultFilter === f
-                    ? f === 'failed'
-                      ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                      : f === 'passed'
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200'
-                    : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                }`}
-              >
-                {f === 'all' ? `All (${totalCount})` : f === 'passed' ? `Passed (${passedCount})` : `Failed (${failedCount})`}
-              </button>
-            ))}
-            {/* Compare Runs & Export Buttons */}
-            <Separator orientation="vertical" className="h-5 mx-1" />
-            {onCompareRuns && runHistory.length >= 2 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onCompareRuns}
-                className="h-7 text-[12px] gap-1.5 cursor-pointer border-[#3F51B5]/30 text-[#3F51B5] hover:bg-[#3F51B5] hover:text-white dark:border-indigo-500/30 dark:text-indigo-400 dark:hover:bg-indigo-600 dark:hover:text-white"
-              >
-                <GitCompare className="size-3" />
-                Compare
-              </Button>
-            )}
-            <ExportMenu
-              testGroups={testGroups}
-              runHistory={runHistory}
-              moduleHealth={moduleHealth}
-              moduleName={moduleName}
-            />
-          </div>
-        </div>
-        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-12 cursor-pointer select-none" onClick={() => handleSort('status')}>
-                  <span className="inline-flex items-center gap-1">Status <SortArrow col="status" sortCol={sortCol} sortDir={sortDir} /></span>
-                </TableHead>
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-14 cursor-pointer select-none" onClick={() => handleSort('id')}>
-                  <span className="inline-flex items-center gap-1">ID <SortArrow col="id" sortCol={sortCol} sortDir={sortDir} /></span>
-                </TableHead>
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 cursor-pointer select-none" onClick={() => handleSort('test')}>
-                  <span className="inline-flex items-center gap-1">Test <SortArrow col="test" sortCol={sortCol} sortDir={sortDir} /></span>
-                </TableHead>
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-16 text-center cursor-pointer select-none" onClick={() => handleSort('duration')}>
-                  <span className="inline-flex items-center gap-1">Duration <SortArrow col="duration" sortCol={sortCol} sortDir={sortDir} /></span>
-                </TableHead>
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Error</TableHead>
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-24 text-center">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredTests.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-[13px] text-gray-400 dark:text-gray-500 py-6">
-                    No {resultFilter} tests
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredTests.map((test) => {
-                  const error = getTestError(test.id)
-                  return (
-                    <TableRow key={test.id} className={`dark:border-gray-700 ${test.status === 'failed' ? 'bg-red-50/30 dark:bg-red-900/10' : ''}`}>
-                      <TableCell>
-                        <TestStatusIcon status={test.status} size={3.5} />
-                      </TableCell>
-                      <TableCell className="text-[12px] font-mono text-gray-500 dark:text-gray-400">{test.id}</TableCell>
-                      <TableCell className={`text-[13px] ${test.status === 'failed' ? 'text-red-700 dark:text-red-400 font-medium' : 'text-gray-700 dark:text-gray-200'}`}>
-                        <span className="inline-flex items-center gap-1.5">
-                          {test.name}
-                          {autoReportedTestIds?.has(test.id) && (
-                            <Bug className="size-3 text-[#F44336] dark:text-red-400 shrink-0" title="Auto-reported bug" />
-                          )}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center text-[12px] font-mono text-gray-500 dark:text-gray-400">{test.duration}</TableCell>
-                      <TableCell className="text-[12px] text-red-500 dark:text-red-400 max-w-[250px] truncate">
-                        {error || '—'}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
-                              <MoreVertical className="size-4 text-gray-500 dark:text-gray-400" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer">
-                              <Eye className="size-3.5" />
-                              View Details
-                            </DropdownMenuItem>
-                            {test.status === 'failed' && (
-                              <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer text-orange-600 dark:text-orange-400">
-                                <MessageSquare className="size-3.5" />
-                                Report Bug
-                              </DropdownMenuItem>
-                            )}
-                            {/* AI Bug Triage — temporarily disabled */}
-                            {/* test.status === 'failed' && onAiTriage && (
-                              <DropdownMenuItem onClick={() => onAiTriage(test)} className="text-[12px] gap-2 cursor-pointer text-purple-600 dark:text-purple-400">
-                                <Sparkles className="size-3.5" />
-                                AI Bug Triage
-                              </DropdownMenuItem>
-                            ) */}
-                            {/* AI Failure Analysis — temporarily disabled */}
-                            {/* test.status === 'failed' && onAiAnalysis && (
-                              <DropdownMenuItem onClick={() => onAiAnalysis(test)} className="text-[12px] gap-2 cursor-pointer text-violet-600 dark:text-violet-400">
-                                <Brain className="size-3.5" />
-                                AI Failure Analysis
-                              </DropdownMenuItem>
-                            ) */}
-                            <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer">
-                              <RotateCcw className="size-3.5" />
-                              Re-run Test
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })
+        <div className="px-4 pt-4 pb-4 space-y-4">
+
+          {/* ── Summary bar ── */}
+          <div className="flex items-stretch gap-3">
+            <div className="flex items-center gap-5 bg-gray-50 dark:bg-gray-800/50 rounded-lg px-4 py-3 border border-gray-100 dark:border-gray-700 flex-1">
+              <div className="flex items-center gap-4 text-[13px]">
+                <div><span className="text-gray-500 dark:text-gray-400">Total </span><span className="font-semibold text-gray-800 dark:text-gray-100">{totalCount}</span></div>
+                <div className="w-px h-4 bg-gray-200 dark:bg-gray-600" />
+                <div><span className="text-green-600 dark:text-green-400 font-semibold">{passedCount}</span><span className="text-gray-500 dark:text-gray-400 ml-1">passed</span></div>
+                <div className="w-px h-4 bg-gray-200 dark:bg-gray-600" />
+                <div><span className="text-red-500 dark:text-red-400 font-semibold">{failedCount}</span><span className="text-gray-500 dark:text-gray-400 ml-1">failed</span></div>
+              </div>
+              <div className="flex-1 max-w-[180px]">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${passRate}%`, background: passRate >= 90 ? '#22c55e' : passRate >= 75 ? '#eab308' : '#ef4444' }} />
+                  </div>
+                  <span className="text-[13px] font-semibold" style={{ color: passRate >= 90 ? '#22c55e' : passRate >= 75 ? '#ca8a04' : '#ef4444' }}>{passRate}%</span>
+                </div>
+              </div>
+              {lastRun && (
+                <>
+                  <div className="w-px h-4 bg-gray-200 dark:bg-gray-600" />
+                  <div className="flex items-center gap-2 text-[12px] text-gray-500 dark:text-gray-400">
+                    <TrendIcon current={lastRun.rate} previous={prevRun?.rate} />
+                    <span>Last: {lastRun.rate}%</span>
+                  </div>
+                </>
               )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-
-      <Separator className="mx-4" />
-
-      {/* Compare Runs Section (Feature 5) */}
-      <div className="px-4 pt-3 pb-3 shrink-0">
-        <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mb-3 flex items-center gap-2">
-          <GitCompare className="size-4 text-gray-500 dark:text-gray-400" />
-          Compare Runs
-        </h3>
-        <div className="flex items-center gap-3 mb-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] text-gray-500 dark:text-gray-400 font-medium">Run 1:</span>
-            <Select value={compareRun1} onValueChange={setCompareRun1}>
-              <SelectTrigger className="h-8 w-56 text-[12px] bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-                <SelectValue placeholder="Select a run..." />
-              </SelectTrigger>
-              <SelectContent>
-                {runHistory.map((r) => (
-                  <SelectItem key={r.id} value={String(r.id)}>
-                    {r.date} ({r.rate}%)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <span className="text-gray-400 dark:text-gray-500 text-lg">vs</span>
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] text-gray-500 dark:text-gray-400 font-medium">Run 2:</span>
-            <Select value={compareRun2} onValueChange={setCompareRun2}>
-              <SelectTrigger className="h-8 w-56 text-[12px] bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-600">
-                <SelectValue placeholder="Select a run..." />
-              </SelectTrigger>
-              <SelectContent>
-                {runHistory.map((r) => (
-                  <SelectItem key={r.id} value={String(r.id)}>
-                    {r.date} ({r.rate}%)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {comparisonData ? (
-          <>
-            {/* Summary */}
-            <div className="flex items-center gap-4 mb-3">
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-                ✅ {comparisonData.improved} Fixed
-              </span>
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
-                ❌ {comparisonData.regressed} Regressed
-              </span>
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
-                ➡️ {comparisonData.unchanged} Unchanged
-              </span>
             </div>
-
-            {/* Comparison Table */}
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
-                    <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-14">Test ID</TableHead>
-                    <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Test Name</TableHead>
-                    <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 text-center">{comparisonData.run1Label}</TableHead>
-                    <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 text-center">{comparisonData.run2Label}</TableHead>
-                    <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 text-center">Change</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {comparisonData.rows.map((row) => (
-                    <TableRow key={row.testId} className="dark:border-gray-700">
-                      <TableCell className="text-[12px] font-mono text-gray-500 dark:text-gray-400">{row.testId}</TableCell>
-                      <TableCell className="text-[13px] text-gray-700 dark:text-gray-200">{row.testName}</TableCell>
-                      <TableCell className="text-center">
-                        <TestStatusIcon status={row.run1Status} size={3.5} />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <TestStatusIcon status={row.run2Status} size={3.5} />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className={`text-[12px] font-medium ${
-                          row.change === 'fixed' ? 'text-green-600 dark:text-green-400' :
-                          row.change === 'regressed' ? 'text-red-600 dark:text-red-400' :
-                          'text-gray-500 dark:text-gray-400'
-                        }`}>
-                          {row.change === 'fixed' ? '✅ Fixed' : row.change === 'regressed' ? '❌ Regressed' : '➡️ Unchanged'}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </>
-        ) : (
-          <div className="text-center py-6 text-gray-400 dark:text-gray-500">
-            <GitCompare className="size-8 mx-auto mb-2 opacity-50" />
-            <p className="text-[13px]">Select two runs above to compare</p>
           </div>
-        )}
-      </div>
 
-      <Separator className="mx-4" />
+          {/* ── Module health cards (with sparklines) ── */}
+          {moduleHealth && moduleHealth.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {moduleHealth.map(m => {
+                const barColor = m.passRate >= 90 ? 'bg-green-500' : m.passRate >= 75 ? 'bg-yellow-500' : 'bg-red-500'
+                return (
+                  <div key={m.moduleId} className="flex items-center gap-3 bg-white dark:bg-gray-800/30 rounded-lg px-3.5 py-2 border border-gray-100 dark:border-gray-700/50 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                    <div>
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">{m.moduleName}</div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-[13px] font-semibold ${m.passRate >= 90 ? 'text-green-600 dark:text-green-400' : m.passRate >= 75 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>{m.passRate}%</span>
+                        {m.trend && m.trend.length >= 2 && <Sparkline data={m.trend} className="text-gray-400 dark:text-gray-500" />}
+                      </div>
+                    </div>
+                    <div className="w-16 h-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden self-end mb-0.5">
+                      <div className={`h-full rounded-full ${barColor}`} style={{ width: `${m.passRate}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
-      {/* Recent Runs */}
-      <div className="px-4 pt-3 pb-3 shrink-0">
-        <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mb-3">Recent Runs</h3>
-        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Date</TableHead>
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Duration</TableHead>
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 text-center">Passed</TableHead>
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 text-center">Failed</TableHead>
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 text-center">Rate</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {runHistory.slice(0, 5).map((run) => (
-                <TableRow
-                  key={run.id}
-                  className={`dark:border-gray-700 ${onRunDetail ? 'cursor-pointer hover:bg-[#DFE9FB]/30 dark:hover:bg-indigo-900/10 transition-colors' : ''}`}
-                  onClick={() => onRunDetail?.(run)}
+          {/* ── Run Results toolbar ── */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              {(['all', 'passed', 'failed'] as const).map(f => {
+                const count = f === 'all' ? totalCount : f === 'passed' ? statusCounts.passed : statusCounts.failed
+                const active = resultFilter === f
+                return (
+                  <button key={f} onClick={() => setResultFilter(f)}
+                    className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-all cursor-pointer ${
+                      active
+                        ? f === 'failed' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 shadow-sm'
+                          : f === 'passed' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 shadow-sm'
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50'
+                    }`}
+                  >
+                    {f === 'all' ? 'All' : f === 'passed' ? 'Passed' : 'Failed'}
+                    <span className="ml-1.5 opacity-70">({count})</span>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="flex items-center gap-2">
+              {onCompareRuns && runHistory.length >= 2 && (
+                <Button variant="outline" size="sm" onClick={onCompareRuns}
+                  className="h-7 text-[12px] gap-1.5 cursor-pointer border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
-                  <TableCell className="text-[13px] text-gray-700 dark:text-gray-200">{run.date}</TableCell>
-                  <TableCell className="text-[13px] text-gray-600 dark:text-gray-400 font-mono">{run.duration}</TableCell>
-                  <TableCell className="text-center">
-                    <span className="text-green-600 dark:text-green-400 font-medium text-[13px]">{run.passed}</span>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <span className={`font-medium text-[13px] ${run.failed > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`}>
-                      {run.failed}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <span
-                      className={`text-[12px] font-medium px-2 py-0.5 rounded-full ${
-                        run.rate >= 90
-                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                          : run.rate >= 75
-                            ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
-                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                      }`}
-                    >
+                  <GitCompare className="size-3" />
+                  Compare Runs
+                </Button>
+              )}
+              <ExportMenu testGroups={testGroups} runHistory={runHistory} moduleHealth={moduleHealth} moduleName={moduleName} />
+            </div>
+          </div>
+
+          {/* ── Test Results table ── */}
+          <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                  <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 w-10 cursor-pointer select-none uppercase tracking-wider" onClick={() => handleSort('status')}>
+                    <span className="inline-flex items-center gap-1"><SortArrow col="status" sortCol={sortCol} sortDir={sortDir} /></span>
+                  </TableHead>
+                  <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 cursor-pointer select-none uppercase tracking-wider" onClick={() => handleSort('test')}>
+                    <span className="inline-flex items-center gap-1">Test <SortArrow col="test" sortCol={sortCol} sortDir={sortDir} /></span>
+                  </TableHead>
+                  <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 w-16 text-center cursor-pointer select-none uppercase tracking-wider" onClick={() => handleSort('duration')}>
+                    <span className="inline-flex items-center gap-1">Time <SortArrow col="duration" sortCol={sortCol} sortDir={sortDir} /></span>
+                  </TableHead>
+                  <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Error</TableHead>
+                  <TableHead className="w-10" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredTests.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-[13px] text-gray-400 dark:text-gray-500 py-8">
+                      No {resultFilter} tests
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredTests.map(test => {
+                    const error = getTestError(test.id)
+                    const displayName = test.description || test.name || test.id
+                    return (
+                      <TableRow key={test.id}
+                        className={`dark:border-gray-700 transition-colors ${test.status === 'failed' ? 'bg-red-50/40 dark:bg-red-900/8' : 'hover:bg-gray-50/50 dark:hover:bg-gray-800/30'}`}
+                      >
+                        <TableCell><TestStatusIcon status={test.status} size={3.5} /></TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[13px] ${test.status === 'failed' ? 'text-red-700 dark:text-red-400 font-medium' : 'text-gray-700 dark:text-gray-200'}`}>
+                              {displayName}
+                            </span>
+                            {autoReportedTestIds?.has(test.id) && <Bug className="size-3 text-red-500 shrink-0" title="Auto-reported bug" />}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center text-[12px] font-mono text-gray-400 dark:text-gray-500">{test.duration}</TableCell>
+                        <TableCell className="text-[12px] text-red-500 dark:text-red-400 max-w-[240px] truncate">{error || <span className="text-gray-300 dark:text-gray-600">—</span>}</TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <MoreVertical className="size-4 text-gray-400" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                              <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer">
+                                <Eye className="size-3.5" /> View Details
+                              </DropdownMenuItem>
+                              {test.status === 'failed' && (
+                                <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer text-orange-600 dark:text-orange-400">
+                                  <MessageSquare className="size-3.5" /> Report Bug
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer">
+                                <RotateCcw className="size-3.5" /> Re-run Test
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* ── Recent Runs ── */}
+          {runHistory.length > 0 && (
+            <div>
+              <h3 className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 mb-2.5">Recent Runs</h3>
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden divide-y divide-gray-100 dark:divide-gray-700/50">
+                {runHistory.slice(0, 5).map(run => (
+                  <div key={run.id}
+                    onClick={() => onRunDetail?.(run)}
+                    className={`flex items-center gap-4 px-4 py-2.5 ${onRunDetail ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors' : ''}`}
+                  >
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                      <span className={`size-2 rounded-full shrink-0 ${run.rate >= 90 ? 'bg-green-500' : run.rate >= 75 ? 'bg-yellow-500' : 'bg-red-500'}`} />
+                      <span className="text-[13px] text-gray-700 dark:text-gray-200 truncate">{run.date}</span>
+                    </div>
+                    <span className="text-[12px] text-gray-400 dark:text-gray-500 font-mono w-14 text-right">{run.duration}</span>
+                    <span className="text-[12px] text-green-600 dark:text-green-400 font-medium w-12 text-right">{run.passed}</span>
+                    <span className={`text-[12px] font-medium w-10 text-right ${run.failed > 0 ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`}>{run.failed}</span>
+                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full w-14 text-center ${
+                      run.rate >= 90 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                        : run.rate >= 75 ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                    }`}>
                       {run.rate}%
                     </span>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+                    {prevRun && run.trend && run.trend.length >= 2 && <Sparkline data={run.trend} className="text-gray-300 dark:text-gray-600" />}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-      <Separator className="mx-4" />
+          {/* ── Bug Registry (collapsible) ── */}
+          {bugReportsList.length > 0 && (
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+              <button onClick={() => setBugOpen(!bugOpen)}
+                className="w-full flex items-center gap-2 px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800/70 transition-colors cursor-pointer text-left"
+              >
+                {bugOpen ? <ChevronDown className="size-3.5 text-gray-400" /> : <ChevronRight className="size-3.5 text-gray-400" />}
+                <Bug className="size-3.5 text-gray-500" />
+                <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 flex-1">Bug Registry</span>
+                <span className="text-[11px] text-gray-500 dark:text-gray-400">{bugReportsList.length}</span>
+              </button>
+              {bugOpen && (
+                <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
+                  {bugReportsList.map(bug => (
+                    <div key={bug.id} className="flex items-center gap-3 px-4 py-2.5">
+                      <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500 w-16">{bug.id.slice(0, 8).toUpperCase()}</span>
+                      <span className="flex-1 text-[13px] text-gray-700 dark:text-gray-200 truncate">{bug.desc}</span>
+                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
+                        bug.status === 'Open' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                          : bug.status === 'In Progress' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                          : bug.status === 'Resolved' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                      }`}>{bug.status}</span>
+                      <span className="text-[12px] text-gray-400 dark:text-gray-500">{bug.testId}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
-      {/* Bug Registry */}
-      <div className="px-4 pt-3 pb-4">
-        <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mb-3">Bug Registry</h3>
-        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Bug ID</TableHead>
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Description</TableHead>
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 text-center">Status</TableHead>
-                <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Related Tests</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {bugReportsList.map((bug) => (
-                <TableRow key={bug.id} className="dark:border-gray-700">
-                  <TableCell className="text-[13px] font-mono text-gray-600 dark:text-gray-400">{bug.id.slice(0, 8).toUpperCase()}</TableCell>
-                  <TableCell className="text-[13px] text-gray-700 dark:text-gray-200">{bug.desc}</TableCell>
-                  <TableCell className="text-center">
-                    <span
-                      className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                        bug.status === 'Open' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                      }`}
-                    >
-                      {bug.status}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-[13px] text-gray-500 dark:text-gray-400">{bug.testId}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
         </div>
-      </div>
       </ScrollArea>
     </div>
   )
