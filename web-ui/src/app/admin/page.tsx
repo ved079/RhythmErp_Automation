@@ -905,35 +905,21 @@ export default function AdminPage() {
             <div className="text-center py-12 text-[#888] dark:text-gray-400 font-['Manrope'] text-sm">No tests found</div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                      <TableHead className="font-['Poppins'] text-xs">ID</TableHead>
-                      <TableHead className="font-['Poppins'] text-xs">Description</TableHead>
-                      <TableHead className="font-['Poppins'] text-xs">Module</TableHead>
-                      <TableHead className="font-['Poppins'] text-xs">Status</TableHead>
-                      <TableHead className="font-['Poppins'] text-xs">Priority</TableHead>
-                      <TableHead className="font-['Poppins'] text-xs">Last Result</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paged.map(t => (
-                      <TableRow key={t.id} className="cursor-default">
-                        <TableCell className="text-xs font-mono text-[#545454] dark:text-gray-300">{t.id}</TableCell>
-                        <TableCell className="text-xs font-['Manrope'] text-[#333] dark:text-gray-100 max-w-[300px] truncate">{t.description}</TableCell>
-                        <TableCell className="text-xs font-['Manrope'] text-[#545454] dark:text-gray-300">{t.moduleName}</TableCell>
-                        <TableCell><Badge variant="outline" className="text-[10px]">{t.status}</Badge></TableCell>
-                        <TableCell><Badge className={`text-[10px] border-0 ${priorityConfig[t.priority]?.color || ''}`}>{priorityConfig[t.priority]?.label || t.priority}</Badge></TableCell>
-                        <TableCell>
-                          {t.lastResult === 'passed' ? <CheckCircle2 className="size-4 text-[#4CAF50]" />
-                            : t.lastResult === 'failed' ? <XCircle className="size-4 text-[#F44336]" />
-                            : <Circle className="size-4 text-gray-400" />}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <div className="space-y-1 p-3">
+                {paged.map(t => (
+                  <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white dark:bg-gray-800/20 border border-gray-100 dark:border-gray-700/40 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+                    <span className="text-[11px] font-mono text-[#545454] dark:text-gray-400 w-12 shrink-0">{t.id}</span>
+                    <span className="flex-1 text-[13px] font-['Manrope'] text-[#333] dark:text-gray-100 truncate">{t.description}</span>
+                    <span className="text-[11px] font-['Manrope'] text-[#545454] dark:text-gray-400 shrink-0">{t.moduleName}</span>
+                    <Badge variant="outline" className="text-[10px] shrink-0">{t.status}</Badge>
+                    <Badge className={`text-[10px] border-0 shrink-0 ${priorityConfig[t.priority]?.color || ''}`}>{priorityConfig[t.priority]?.label || t.priority}</Badge>
+                    <span className="shrink-0">
+                      {t.lastResult === 'passed' ? <CheckCircle2 className="size-4 text-[#4CAF50]" />
+                        : t.lastResult === 'failed' ? <XCircle className="size-4 text-[#F44336]" />
+                        : <Circle className="size-4 text-gray-400" />}
+                    </span>
+                  </div>
+                ))}
               </div>
               {/* Pagination */}
               <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-700">
