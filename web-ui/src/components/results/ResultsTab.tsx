@@ -4,12 +4,12 @@ import React, { useState, useMemo } from 'react'
 import { GitCompare, MoreVertical, Eye, MessageSquare, RotateCcw, Bug, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { testSpecGroups, type TestClassGroup, type TestItem } from '@/data/testSpecGroups'
 import type { RunSnapshot, ModuleHealth } from '@/lib/types'
 import { ExportMenu } from '@/components/export/ExportUtils'
-import { TestStatusIcon, SortArrow } from '@/components/shared/PriorityBadge'
+import { TestStatusIcon } from '@/components/shared/PriorityBadge'
 
 
 /* ── Tiny inline sparkline (7 data points) ── */
@@ -33,17 +33,6 @@ function TrendIcon({ current, previous }: { current: number; previous?: number }
   if (current > previous) return <TrendingUp className="size-3 text-green-500" />
   if (current < previous) return <TrendingDown className="size-3 text-red-500" />
   return <Minus className="size-3 text-gray-400" />
-}
-
-
-/* ── Helpers ── */
-function parseDuration(d: string) {
-  const p = d.split(':')
-  return p.length === 2 ? parseInt(p[0]) * 60 + parseInt(p[1]) : 0
-}
-function fmtDuration(sec: number) {
-  const m = Math.floor(sec / 60), s = sec % 60
-  return `${m}:${String(s).padStart(2, '0')}`
 }
 
 
@@ -90,26 +79,11 @@ export function ResultsTab({
 
   const passRate = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0
   const [resultFilter, setResultFilter] = useState<'all' | 'passed' | 'failed'>('all')
-  const [sortCol, setSortCol] = useState<'status' | 'test' | 'duration'>('status')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [bugOpen, setBugOpen] = useState(false)
-
-  const handleSort = (col: 'status' | 'test' | 'duration') => {
-    if (sortCol === col) { setSortDir(prev => prev === 'asc' ? 'desc' : 'asc') }
-    else { setSortCol(col); setSortDir('asc') }
-  }
 
   const filteredTests = tests
     .filter(t => resultFilter === 'all' || (resultFilter === 'passed' ? t.status === 'passed' : t.status === 'failed'))
-    .sort((a, b) => {
-      const dir = sortDir === 'asc' ? 1 : -1
-      switch (sortCol) {
-        case 'status': return dir * a.status.localeCompare(b.status)
-        case 'test': return dir * (a.description || a.name || a.id).localeCompare(b.description || b.name || b.id)
-        case 'duration': return dir * (parseDuration(a.duration) - parseDuration(b.duration))
-        default: return 0
-      }
-    })
+    .sort((a, b) => a.status.localeCompare(b.status))
 
   const getTestError = (id: string): string | undefined => {
     for (const g of testSpecGroups) {
@@ -224,79 +198,59 @@ export function ResultsTab({
             </div>
           </div>
 
-          {/* ── Test Results table ── */}
-          <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                  <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 w-10 cursor-pointer select-none uppercase tracking-wider" onClick={() => handleSort('status')}>
-                    <span className="inline-flex items-center gap-1"><SortArrow col="status" sortCol={sortCol} sortDir={sortDir} /></span>
-                  </TableHead>
-                  <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 cursor-pointer select-none uppercase tracking-wider" onClick={() => handleSort('test')}>
-                    <span className="inline-flex items-center gap-1">Test <SortArrow col="test" sortCol={sortCol} sortDir={sortDir} /></span>
-                  </TableHead>
-                  <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 w-16 text-center cursor-pointer select-none uppercase tracking-wider" onClick={() => handleSort('duration')}>
-                    <span className="inline-flex items-center gap-1">Time <SortArrow col="duration" sortCol={sortCol} sortDir={sortDir} /></span>
-                  </TableHead>
-                  <TableHead className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Error</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredTests.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-[13px] text-gray-400 dark:text-gray-500 py-8">
-                      No {resultFilter} tests
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredTests.map(test => {
-                    const error = getTestError(test.id)
-                    const displayName = test.description || test.name || test.id
-                    return (
-                      <TableRow key={test.id}
-                        className={`dark:border-gray-700 transition-colors ${test.status === 'failed' ? 'bg-red-50/40 dark:bg-red-900/8' : 'hover:bg-gray-50/50 dark:hover:bg-gray-800/30'}`}
-                      >
-                        <TableCell><TestStatusIcon status={test.status} size={3.5} /></TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[13px] ${test.status === 'failed' ? 'text-red-700 dark:text-red-400 font-medium' : 'text-gray-700 dark:text-gray-200'}`}>
-                              {displayName}
-                            </span>
-                            {autoReportedTestIds?.has(test.id) && <Bug className="size-3 text-red-500 shrink-0" title="Auto-reported bug" />}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center text-[12px] font-mono text-gray-400 dark:text-gray-500">{test.duration}</TableCell>
-                        <TableCell className="text-[12px] text-red-500 dark:text-red-400 max-w-[240px] truncate">{error || <span className="text-gray-300 dark:text-gray-600">—</span>}</TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">
-                                <MoreVertical className="size-4 text-gray-400" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48">
-                              <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer">
-                                <Eye className="size-3.5" /> View Details
-                              </DropdownMenuItem>
-                              {test.status === 'failed' && (
-                                <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer text-orange-600 dark:text-orange-400">
-                                  <MessageSquare className="size-3.5" /> Report Bug
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer">
-                                <RotateCcw className="size-3.5" /> Re-run Test
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          {/* ── Test Results (card rows) ── */}
+          {filteredTests.length === 0 ? (
+            <div className="text-center py-8 text-[13px] text-gray-400 dark:text-gray-500">No {resultFilter} tests</div>
+          ) : (
+            <div className="space-y-1">
+              {filteredTests.map(test => {
+                const error = getTestError(test.id)
+                const displayName = test.description || test.name || test.id
+                const isFail = test.status === 'failed'
+                return (
+                  <div key={test.id}
+                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg border transition-colors ${
+                      isFail
+                        ? 'bg-red-50/40 dark:bg-red-900/8 border-red-100 dark:border-red-900/30'
+                        : 'bg-white dark:bg-gray-800/20 border-gray-100 dark:border-gray-700/40 hover:bg-gray-50/50 dark:hover:bg-gray-800/30'
+                    }`}
+                  >
+                    <TestStatusIcon status={test.status} size={4} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[13px] ${isFail ? 'text-red-700 dark:text-red-400 font-medium' : 'text-gray-700 dark:text-gray-200'}`}>
+                          {displayName}
+                        </span>
+                        {autoReportedTestIds?.has(test.id) && <Bug className="size-3 text-red-500 shrink-0" title="Auto-reported bug" />}
+                      </div>
+                      {error && <div className="text-[11px] text-red-500 dark:text-red-400 mt-0.5 truncate max-w-lg">{error}</div>}
+                    </div>
+                    <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500 shrink-0">{test.duration}</span>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 shrink-0">
+                          <MoreVertical className="size-4 text-gray-400" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer">
+                          <Eye className="size-3.5" /> View Details
+                        </DropdownMenuItem>
+                        {isFail && (
+                          <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer text-orange-600 dark:text-orange-400">
+                            <MessageSquare className="size-3.5" /> Report Bug
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={() => onReportTest(test)} className="text-[12px] gap-2 cursor-pointer">
+                          <RotateCcw className="size-3.5" /> Re-run Test
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           {/* ── Recent Runs ── */}
           {moduleRuns.length > 0 && (
