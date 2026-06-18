@@ -1,0 +1,16 @@
+{
+  "run_id": "7e5a50cb",
+  "module": "registration",
+  "sub_module": "agent",
+  "total": 1,
+  "created": 1,
+  "failed": 0,
+  "elapsed_seconds": 0.8,
+  "records": [
+    {
+      "name": "AGTjwcrWku",
+      "record_id": 35,
+      "status": "created"
+    }
+  ]
+}

@@ -13,11 +13,11 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
     userIcon: true,
     defaultExpanded: true,
     children: [
-      { id: 'employee', label: 'Employee', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'farmer', label: 'Farmer', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'supplier', label: 'Supplier', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'customer', label: 'Customer', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'agent', label: 'Agent', badge: '📝 No tests', badgeType: 'none' as const },
-      { id: 'farmer', label: 'Farmer', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'employee', label: 'Employee', badge: '📝 No tests', badgeType: 'none' as const },
     ],
   },
   {
@@ -26,12 +26,12 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
     userIcon: true,
     defaultExpanded: true,
     children: [
-      { id: 'directors', label: 'Directors', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'member', label: 'Member', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'directors', label: 'Directors', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'register-charges', label: 'Register Charges', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'register-of-loan', label: 'Register of Loan', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'constituent-documents', label: 'Constituent Documents', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'miscellaneous-documents', label: 'Miscellaneous Documents', badge: '📝 No tests', badgeType: 'none' as const },
-      { id: 'register-of-loan', label: 'Register of Loan', badge: '📝 No tests', badgeType: 'none' as const },
-      { id: 'register-charges', label: 'Register Charges', badge: '📝 No tests', badgeType: 'none' as const },
     ],
   },
   {

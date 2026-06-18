@@ -1,0 +1,16 @@
+{
+  "run_id": "30478473",
+  "module": "registration",
+  "sub_module": "directors",
+  "total": 1,
+  "created": 0,
+  "failed": 1,
+  "elapsed_seconds": 0.9,
+  "records": [
+    {
+      "name": "Shankar Shetty",
+      "record_id": "-",
+      "status": "failed"
+    }
+  ]
+}

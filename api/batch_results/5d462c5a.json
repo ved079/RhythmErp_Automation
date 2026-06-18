@@ -1,0 +1,16 @@
+{
+  "run_id": "5d462c5a",
+  "module": "registration",
+  "sub_module": "farmer",
+  "total": 1,
+  "created": 1,
+  "failed": 1,
+  "elapsed_seconds": 0.7,
+  "records": [
+    {
+      "name": "Sunita Nair",
+      "record_id": "-",
+      "status": "failed"
+    }
+  ]
+}

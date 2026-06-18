@@ -1,0 +1,16 @@
+{
+  "run_id": "e57d90dc",
+  "module": "registration",
+  "sub_module": "supplier",
+  "total": 1,
+  "created": 1,
+  "failed": 0,
+  "elapsed_seconds": 0.9,
+  "records": [
+    {
+      "name": "Balaji Godavari Foods Associates",
+      "record_id": 39,
+      "status": "created"
+    }
+  ]
+}

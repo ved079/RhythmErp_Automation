@@ -1,0 +1,16 @@
+{
+  "run_id": "c56eb05f",
+  "module": "registration",
+  "sub_module": "member",
+  "total": 1,
+  "created": 1,
+  "failed": 0,
+  "elapsed_seconds": 0.8,
+  "records": [
+    {
+      "name": "Vikram Nair",
+      "record_id": 37,
+      "status": "created"
+    }
+  ]
+}

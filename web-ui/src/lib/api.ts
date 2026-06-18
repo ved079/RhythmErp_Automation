@@ -272,6 +272,71 @@ export async function startRun(
   }
 }
 
+/**
+ * Start a batch data creation job and return an SSE stream.
+ * Creates multiple ERP records via the FastAPI batch-create endpoint.
+ * Calls onDone with the run_id for Excel export.
+ */
+export async function startBatchCreate(
+  module: string,
+  subModule: string,
+  count: number,
+  erpToken: string,
+  erpTenantId: string,
+  onEvent: (event: SSEEvent) => void,
+  onDone: (runId: string | null) => void,
+  onError: (err: Error) => void
+) {
+  try {
+    const res = await fetch(`${PROXY}?path=batch-create`, withCsrf({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        module,
+        sub_module: subModule,
+        count,
+        erp_token: erpToken,
+        erp_tenant_id: erpTenantId,
+      }),
+    }));
+
+    if (!res.ok || !res.body) {
+      onError(new Error(`HTTP ${res.status}`));
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let runId: string | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          try {
+            const event: SSEEvent = JSON.parse(line.slice(6));
+            if (event.run_id) runId = event.run_id;
+            onEvent(event);
+          } catch {
+            // skip malformed lines
+          }
+        }
+      }
+    }
+
+    onDone(runId);
+  } catch (err) {
+    onError(err instanceof Error ? err : new Error(String(err)));
+  }
+}
+
 // ─── Run Completion Summary ─────────────────────────────
 // Collected during SSE stream, used to save results to Next.js DB
 
@@ -390,6 +455,26 @@ export async function fetchTestCases(): Promise<TestCasesData> {
   const res = await fetch(`${PROXY}?path=test-cases`)
   if (!res.ok) throw new Error('Failed to fetch test cases')
   return res.json()
+}
+
+/**
+ * Download an Excel file for a completed batch create run.
+ */
+export async function exportBatchExcel(runId: string): Promise<void> {
+  const res = await fetch(`${PROXY}?path=batch-create/${runId}/export`);
+  if (!res.ok) throw new Error(`Export failed: HTTP ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const disposition = res.headers.get('Content-Disposition');
+  const match = disposition?.match(/filename\*?=(?:UTF-8'')?["']?([^"'\s;]+)/i);
+  const filename = match?.[1] ?? `batch-${runId}.xlsx`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ─── Module name mapping ────────────────────────────────

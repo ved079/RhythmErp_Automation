@@ -1,0 +1,21 @@
+{
+  "run_id": "78c2ee36",
+  "module": "registration",
+  "sub_module": "customer",
+  "total": 2,
+  "created": 2,
+  "failed": 0,
+  "elapsed_seconds": 1.0,
+  "records": [
+    {
+      "name": "New Gandhi Nagar Books",
+      "record_id": 357,
+      "status": "created"
+    },
+    {
+      "name": "Optical & Toys Merchants",
+      "record_id": 358,
+      "status": "created"
+    }
+  ]
+}

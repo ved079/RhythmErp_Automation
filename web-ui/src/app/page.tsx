@@ -166,7 +166,9 @@ export default function Home() {
   const [erpToken, setErpToken] = useState('')
   const [erpTenantId, setErpTenantId] = useState('')
   const [credentialsOpen, setCredentialsOpen] = useState(false)
+  const [showTokenHelp, setShowTokenHelp] = useState(false)
   const onOpenCredentials = useCallback(() => setCredentialsOpen(true), [])
+  const onClearToken = useCallback(() => { setErpToken(''); setErpTenantId('') }, [])
 
   // Phase 4: Screenshot Gallery state
   const [screenshotEntries, setScreenshotEntries] = useState<ScreenshotEntry[]>([])
@@ -1019,7 +1021,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="flex-1 overflow-hidden min-h-0">
-                {activeTab === 'test-runner' && <div data-tour="test-runner" className="h-full"><TestRunnerTab tests={tests} testChecks={testChecks} toggleTestCheck={toggleTestCheck} isRunning={isRunning} totalFailed={failedCount} onRun={(selectedOnly, testType) => { runTests(selectedOnly, undefined, testType); setActiveTab('live-execution') }} onRunByPriority={runByPriority} onRerunFailed={() => { const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { rerunTestIds(failedIds); runTests(true, failedIds); setActiveTab('live-execution') } }} erpToken={erpToken} onOpenCredentials={onOpenCredentials} /></div>}
+                {activeTab === 'test-runner' && <div data-tour="test-runner" className="h-full"><TestRunnerTab tests={tests} testChecks={testChecks} toggleTestCheck={toggleTestCheck} isRunning={isRunning} totalFailed={failedCount} onRun={(selectedOnly, testType) => { runTests(selectedOnly, undefined, testType); setActiveTab('live-execution') }} onRunByPriority={runByPriority} onRerunFailed={() => { const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { rerunTestIds(failedIds); runTests(true, failedIds); setActiveTab('live-execution') } }} erpToken={erpToken} erpTenantId={erpTenantId} currentModuleId={selectedModule} onOpenCredentials={onOpenCredentials} onClearToken={onClearToken} /></div>}
                 {activeTab === 'live-execution' && <div data-tour="live-execution" className="h-full"><LiveExecutionTab tests={tests} testGroups={currentTestGroups} isRunning={isRunning} runningProgress={runningProgress} onStop={async () => { const runId = currentRunIdRef.current; if (runId) { try { await stopRun(runId); toast.success('Run stopped') } catch (err) { toast.error('Failed to stop run', { description: err instanceof Error ? err.message : 'Unknown error' }) } } setIsRunning(false) }} onBack={() => setActiveTab('test-runner')} onRerunFailed={() => { const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { rerunTestIds(failedIds); runTests(true, failedIds) } }} onScreenshotCaptured={(entry) => { setScreenshotEntries((prev) => { if (prev.length >= 50) return [entry, ...prev.slice(0, 49)]; return [entry, ...prev] }) }} /></div>}
                 {activeTab === 'results' && <div data-tour="results" className="h-full"><ResultsTab tests={tests} passedCount={passedCount} failedCount={failedCount} totalCount={tests.length} runHistory={runHistory} bugReportsList={bugReportsList} onRunDetail={(run) => { setSelectedRunForDetail(run); setRunDetailDialogOpen(true) }} onCompareRuns={() => setRunComparisonOpen(true)} testGroups={currentTestGroups} moduleHealth={moduleHealth} moduleName={modulePath.name} currentModuleId={selectedModule} /></div>}
                 {activeTab === 'screenshots' && (
@@ -1070,7 +1072,30 @@ export default function Home() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>ERP API Credentials</DialogTitle><DialogDescription>Enter your ERP token and tenant ID for API test execution.</DialogDescription></DialogHeader>
           <div className="space-y-3 py-2">
-            <div><label className="text-[12px] font-medium text-gray-700 dark:text-gray-300">ERP Token</label><input type="password" value={erpToken} onChange={(e) => setErpToken(e.target.value)} className="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-[13px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" placeholder="Paste your ERP JWT token" /></div>
+            <div>
+              <div className="flex items-center gap-1">
+                <label className="text-[12px] font-medium text-gray-700 dark:text-gray-300">ERP Token</label>
+                <button onClick={() => setShowTokenHelp(!showTokenHelp)} className="inline-flex items-center gap-1 text-[11px] text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline transition-colors cursor-pointer">
+                  <HelpCircle className="size-3" />
+                  What is ERP Token, click here ?
+                </button>
+              </div>
+              <input type="password" value={erpToken} onChange={(e) => setErpToken(e.target.value)} className="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-[13px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" placeholder="Paste your ERP JWT token" />
+              {showTokenHelp && (
+                <div className="mt-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 text-[12px] text-gray-700 dark:text-gray-300 space-y-1.5">
+                  <p className="font-semibold text-blue-700 dark:text-blue-400">How to get your ERP token:</p>
+                  <ol className="list-decimal list-inside space-y-1">
+                    <li>Log in to the ERP system in your browser</li>
+                    <li>Open DevTools (F12) → <strong>Network</strong> tab</li>
+                    <li>Click any request to <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">dynamic-screen-wrapper</code> e.g. <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">Employee/</code>, <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">Supplier/</code>, <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">tenants/</code></li>
+                    <li>Go to the <strong>Headers</strong> panel and scroll to <strong>Request Headers</strong></li>
+                    <li>Copy the <strong>Authorization</strong> header value: <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">Bearer &lt;token&gt;</code></li>
+                    <li>The token is the long string after &quot;Bearer &quot; looking like <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">eyJhbGciOiJIUzI1NiIsIn...</code></li>
+                    <li>At the end of the Headers you will find <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">x-tenant-id: 711</code> — that number is the <strong>Tenant ID</strong></li>
+                  </ol>
+                </div>
+              )}
+            </div>
             <div><label className="text-[12px] font-medium text-gray-700 dark:text-gray-300">Tenant ID</label><input type="text" value={erpTenantId} onChange={(e) => setErpTenantId(e.target.value)} className="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-[13px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" placeholder="681 (default)" /></div>
           </div>
           <DialogFooter className="gap-1.5">{erpToken || erpTenantId ? <Button variant="outline" onClick={() => { setErpToken(''); setErpTenantId(''); setCredentialsOpen(false) }} className="cursor-pointer border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">Clear</Button> : null}<Button variant="outline" onClick={() => setCredentialsOpen(false)} className="cursor-pointer">Cancel</Button><Button onClick={() => setCredentialsOpen(false)} className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white cursor-pointer">Save</Button></DialogFooter>

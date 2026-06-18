@@ -1,0 +1,16 @@
+{
+  "run_id": "171111ca",
+  "module": "registration",
+  "sub_module": "supplier",
+  "total": 1,
+  "created": 1,
+  "failed": 0,
+  "elapsed_seconds": 0.9,
+  "records": [
+    {
+      "name": "Sai Tapi Tea Traders & Sons",
+      "record_id": 355,
+      "status": "created"
+    }
+  ]
+}

@@ -15,14 +15,14 @@ FIELD REFERENCE (FLAT FORM — NO STEPPERS):
   4. Phone Number          (integer input, REQUIRED, maxlength=255)
      Validation: ^[6-9]\\d{9}$ — 10-digit Indian mobile starting with 6-9
   5. Designation           (dropdown, REQUIRED) — FK to designation table (56 options)
-  6. Department            (dropdown, optional) — FK to department table (0 options currently)
+  6. Department            (dropdown, optional) — FK to department table (2 options: 1=General, 2=Administration)
   7. Status                (toggle, REQUIRED, default=true) — Active/Inactive
 
 KEY RULES (verified 2026-06-11 on live app):
   - FLAT FORM: No steppers, no children array — all fields at root level
   - Required fields: name, email_id, mobile_no, designation, status
   - party_ref_id auto-fills name, email, mobile via auto_patch_query
-  - Designation has 56 options; Department has 0 options currently
+  - Designation has 14 options (1-14); Department has 2 options (1=General, 2=Administration)
   - Employee Name must match ^[A-Za-z ]+$ (letters + spaces only)
   - Phone must be 10 digits starting with 6-9
   - Email must be valid format
@@ -91,9 +91,7 @@ _generated_names = set()
 # FK ID pools (verified on tenant 681, 2026-06-02)
 # ──────────────────────────────────────────────
 
-DESIGNATION_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-                   21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
-                   41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56]
+DESIGNATION_IDS = list(range(1, 15))
 #   1  = Test Designation
 #   2  = Farm Supervisor
 #   3  = Warehouse Manager
@@ -108,76 +106,20 @@ DESIGNATION_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18
 #   12 = Cashier
 #   13 = Compliance Officer
 #   14 = Data Entry Operator
-#   15 = Transport Supervisor
-#   16 = Loan Recovery Agent
-#   17 = Agricultural Advisor
-#   18 = Store Keeper
-#   19 = Billing Clerk
-#   20 = Internal Auditor
-#   21 = IT Support Executive
-#   22 = Test Designation QA
-#   23 = Finance Manager
-#   24 = Clerk
-#   25 = Engineer
-#   26 = Production Supervisor
-#   27 = Quality Analyst
-#   28 = HR Manager
-#   29 = Warehouse Supervisor
-#   30 = Managing Director
-#   31 = Godown Keeper 343
-#   32 = Divisional Manager0659490
-#   33 = Chief Operating Officer0659491
-#   34 = Warehouse Supervisor0659492
-#   35 = Junior Engineer0659493
-#   36 = Legal Officer0659494
-#   37 = Data Analyst0716230
-#   38 = Junior Engineer0716231
-#   39 = IT Manager0716232
-#   40 = Accounts Officer0716233
-#   41 = Managing Director0716234
-#   42 = Assistant General Manager0721300
-#   43 = Accounts Officer0721301
-#   44 = Agricultural Officer0721302
-#   45 = Junior Accountant0721303
-#   46 = Accounts Officer MTJ0721304
-#   47 = Senior Vice President0723340
-#   48 = Senior Technician0723341
-#   49 = Managing Director0723342
-#   50 = Agricultural Officer0723343
-#   51 = Welfare Officer0723344
-#   52 = Divisional Manager0729430
-#   53 = Assistant General Manager0729431
-#   54 = Senior Vice President0729432
-#   55 = Production Manager0729433
-#   56 = Chief Operating Officer0729434
 
 DESIGNATION_NAMES = {
     1: "Test Designation", 2: "Farm Supervisor", 3: "Warehouse Manager",
     4: "Quality Inspector", 5: "Procurement Officer", 6: "Accounts Executive",
     7: "Field Officer", 8: "Weighbridge Operator", 9: "Dispatch Coordinator",
     10: "Commodity Analyst", 11: "Regional Manager", 12: "Cashier",
-    13: "Compliance Officer", 14: "Data Entry Operator", 15: "Transport Supervisor",
-    16: "Loan Recovery Agent", 17: "Agricultural Advisor", 18: "Store Keeper",
-    19: "Billing Clerk", 20: "Internal Auditor", 21: "IT Support Executive",
-    22: "Test Designation QA", 23: "Finance Manager", 24: "Clerk",
-    25: "Engineer", 26: "Production Supervisor", 27: "Quality Analyst",
-    28: "HR Manager", 29: "Warehouse Supervisor", 30: "Managing Director",
-    31: "Godown Keeper 343", 32: "Divisional Manager0659490",
-    33: "Chief Operating Officer0659491", 34: "Warehouse Supervisor0659492",
-    35: "Junior Engineer0659493", 36: "Legal Officer0659494",
-    37: "Data Analyst0716230", 38: "Junior Engineer0716231",
-    39: "IT Manager0716232", 40: "Accounts Officer0716233",
-    41: "Managing Director0716234", 42: "Assistant General Manager0721300",
-    43: "Accounts Officer0721301", 44: "Agricultural Officer0721302",
-    45: "Junior Accountant0721303", 46: "Accounts Officer MTJ0721304",
-    47: "Senior Vice President0723340", 48: "Senior Technician0723341",
-    49: "Managing Director0723342", 50: "Agricultural Officer0723343",
-    51: "Welfare Officer0723344", 52: "Divisional Manager0729430",
-    53: "Assistant General Manager0729431", 54: "Senior Vice President0729432",
-    55: "Production Manager0729433", 56: "Chief Operating Officer0729434",
+    13: "Compliance Officer", 14: "Data Entry Operator",
 }
 
-DESIGNATION_OPTIONS_COUNT = 56
+DESIGNATION_OPTIONS_COUNT = 14
+
+DEPARTMENT_IDS = [1, 2]
+#   1 = General
+#   2 = Administration
 
 # Party Reference IDs (316 valid options in live ERP — sample pool below)
 # These are FK IDs for party_master entries
@@ -191,13 +133,10 @@ PARTY_REF_IDS = [
     147, 148, 149, 150, 151, 152, 153, 154, 178, 179, 180,
 ]
 
-# Department has 0 options currently
-DEPARTMENT_IDS = []
-
 # Default FK IDs dict (first option from each pool)
 DEFAULT_EMPLOYEE_FK_IDS = {
     "designation": 2,      # Farm Supervisor
-    "department": None,     # No options available
+    "department": 1,       # General
     "party_ref_id": None,   # Skip by default — auto-patches name/email/phone
 }
 
@@ -271,12 +210,27 @@ def generate_phone():
 
 
 def generate_designation_id():
-    """Pick a random designation ID from the verified pool.
+    """Return the first (verified) designation ID.
+
+    Uses the first entry from the pool — ensures the FK resolves to
+    a display name in the ERP UI rather than showing a raw number.
 
     Returns:
         int: A valid designation FK ID.
     """
-    return random.choice(DESIGNATION_IDS)
+    return DESIGNATION_IDS[0]
+
+
+def generate_department_id():
+    """Return the first (verified) department ID.
+
+    Uses the first entry from the pool — ensures the FK resolves to
+    a display name in the ERP UI rather than showing a raw number.
+
+    Returns:
+        int: A valid department FK ID.
+    """
+    return DEPARTMENT_IDS[0]
 
 
 def generate_party_ref_id():
@@ -519,13 +473,14 @@ def build_employee_api_payload(
     if fk_ids is None:
         fk_ids = {}
 
-    # Resolve FK IDs: explicit > data > random pool > None
+    # Resolve FK IDs: explicit via fk_ids > random pool
     designation_id = fk_ids.get("designation")
-    if designation_id is None and employee_data.get("designation") is None:
+    if designation_id is None:
         designation_id = generate_designation_id()
 
     department_id = fk_ids.get("department")
-    # Department has 0 options currently — always null
+    if department_id is None:
+        department_id = generate_department_id()
 
     party_ref_id = fk_ids.get("party_ref_id")
     if party_ref_id is None and employee_data.get("party_reference") is not None:
@@ -657,7 +612,7 @@ FIELD_VALIDATION_RULES = {
         "label": "Department",
         "type": "dropdown",
         "required": False,
-        "fk_options_count": 0,
+        "fk_options_count": 2,
     },
     "status": {
         "field_key": "status",

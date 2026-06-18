@@ -1,0 +1,16 @@
+{
+  "run_id": "586c4a33",
+  "module": "registration",
+  "sub_module": "register_of_loan",
+  "total": 1,
+  "created": 1,
+  "failed": 0,
+  "elapsed_seconds": 0.8,
+  "records": [
+    {
+      "name": "Register of Loan",
+      "record_id": 6,
+      "status": "created"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "run_id": "ecd3a5c0",
+  "module": "registration",
+  "sub_module": "directors",
+  "total": 1,
+  "created": 1,
+  "failed": 1,
+  "elapsed_seconds": 0.9,
+  "records": [
+    {
+      "name": "Kavita Pawar",
+      "record_id": "-",
+      "status": "failed"
+    }
+  ]
+}

@@ -151,9 +151,7 @@ KYC_DOC_NAMES = {
 # Designation dropdown — 56 options (from designation_master)
 # Verified from live ERP schema on 2026-06-04
 DESIGNATION_IDS = [
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-    21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
-    39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56,
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
 ]
 
 DESIGNATION_NAMES = {
@@ -399,13 +397,10 @@ def generate_date_of_cessation():
 def generate_details_of_other_directorships():
     """Generate details about other directorships.
 
-    Returns a string describing other companies where the director serves.
+    Always returns a single valid company name from the pool.
+    Avoids the literal "None" string which the ERP rejects.
     """
-    num_companies = random.randint(0, 3)
-    if num_companies == 0:
-        return "None"
-    companies = random.sample(_DIRECTORSHIP_COMPANIES, min(num_companies, len(_DIRECTORSHIP_COMPANIES)))
-    return ", ".join(companies)
+    return random.choice([c for c in _DIRECTORSHIP_COMPANIES if c != "None"])
 
 
 def generate_kyc_number(kyc_doc_id=65):
@@ -822,6 +817,7 @@ def build_directors_api_payload(
             "kyc_doc_id": row_kyc_doc,
             "kyc_account_no": row.get("kyc_account_no", generate_kyc_number(row_kyc_doc)) if fk_kyc_override is None else generate_kyc_number(row_kyc_doc),
             "attachment_path": row.get("attachment_path", None),
+            "details": [],
         }
         kyc_details.append(kyc_entry)
 
@@ -829,6 +825,7 @@ def build_directors_api_payload(
     payload = {
         "id": "",
         "attribute_name": "Directors",
+        "copy_from_party": None,
         "party_ref_id": party_ref_id,
         "prefix_ref_id": prefix_ref_id,
         "name": directors_data.get("director_name") or generate_director_name(),
@@ -848,7 +845,9 @@ def build_directors_api_payload(
         "children": [
             {
                 "stepper_name": "KYC Details",
+                "is_stepper": True,
                 "details": kyc_details,
+                "children": [],
             }
         ],
     }

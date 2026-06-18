@@ -120,6 +120,17 @@ class LogEvent(BaseModel):
     status: Optional[str] = None         # passed/failed/skipped
     duration: Optional[float] = None
     timestamp: datetime
+    run_id: Optional[str] = None         # batch run ID for Excel export
+
+
+# --- Batch Data Creation ---
+
+class BatchCreateRequest(BaseModel):
+    module: str                        # e.g. "registration"
+    sub_module: str                    # e.g. "supplier"
+    count: int = 10                    # number of records to create (1-500)
+    erp_token: str                     # Bearer token for ERP API
+    erp_tenant_id: str = "681"         # ERP tenant ID
 
 
 # --- Run Completion Callback Payload ---

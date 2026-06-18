@@ -11,6 +11,8 @@ Endpoints:
   - GET  /api/modules       — Discover test modules
   - GET  /api/screenshot    — Get browser screenshot
   - GET  /api/test-cases    — Read test case definitions
+  - POST /api/batch-create  — Batch data creation (SSE stream)
+  - GET  /api/batch-create/{run_id}/export — Download Excel of batch results
   - GET  /api/health        — Health check
 """
 
@@ -20,13 +22,14 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 
 from api.models import (
-    ModuleListResponse, CreateRunRequest, StartRunRequest,
+    ModuleListResponse, CreateRunRequest, StartRunRequest, BatchCreateRequest,
 )
 from api.test_discovery import discover_all_modules
 from api.test_runner import run_tests_stream, stop_run
+from api.batch_create import batch_create_stream, export_batch_excel
 from api.database import init_db
 from api.screenshot_store import take_screenshot
 
@@ -117,6 +120,50 @@ def get_screenshot_endpoint():
     if img is None:
         return JSONResponse({"screenshot": None, "active": False})
     return JSONResponse({"screenshot": img, "active": True})
+
+
+# ================================================================
+# BATCH DATA CREATION ENDPOINT
+# ================================================================
+
+@app.post("/api/batch-create")
+def batch_create_endpoint(request: BatchCreateRequest):
+    """Create test data records via the ERP API (SSE-streamed progress)."""
+    request.count = max(1, min(request.count, 500))
+    return StreamingResponse(
+        batch_create_stream(request),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
+
+
+# ================================================================
+# BATCH CREATE EXPORT ENDPOINT
+# ================================================================
+
+@app.get("/api/batch-create/{run_id}/export")
+def batch_export_endpoint(run_id: str):
+    """Download Excel file of batch creation results."""
+    xlsx_path = export_batch_excel(run_id)
+    if xlsx_path is None:
+        raise HTTPException(status_code=404, detail=f"Batch results not found for run_id: {run_id}")
+    from api.batch_create import RESULTS_DIR
+    import json
+    summary_path = RESULTS_DIR / f"{run_id}.json"
+    module = "unknown"
+    submodule = "unknown"
+    try:
+        with open(summary_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        module = data.get("module", "unknown")
+        submodule = data.get("sub_module", "unknown")
+    except Exception:
+        pass
+    return FileResponse(
+        xlsx_path,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=f"RhythmERP_Batch_{module}_{submodule}_{run_id}.xlsx",
+    )
 
 
 # ================================================================

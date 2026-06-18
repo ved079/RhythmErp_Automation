@@ -1,12 +1,13 @@
 'use client'
 
 import React, { useCallback, useMemo, useState } from 'react'
-import { Play, RotateCcw, CheckCircle2, XCircle, Circle, Key, Monitor, Terminal, Search, ChevronDown, ChevronRight, RefreshCw, SlidersHorizontal } from 'lucide-react'
+import { Play, RotateCcw, CheckCircle2, XCircle, Circle, Key, Monitor, Terminal, Search, ChevronDown, ChevronRight, RefreshCw, SlidersHorizontal, Database } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { type TestPriority, type TestItem } from '@/data/testSpecGroups'
 import { PriorityBadge, TestStatusIcon } from '@/components/shared/PriorityBadge'
+import { BatchCreateSection } from '@/components/dialogs/BatchCreateSection'
 
 function parseTestInfo(test: TestItem): { badge: string; description: string } {
   const id = (test.id.split('::').pop() || test.id).replace(/^test_/, '')
@@ -310,6 +311,8 @@ export function TestRunnerTab({
   totalFailed,
   onRerunFailed,
   erpToken,
+  erpTenantId,
+  currentModuleId,
   onOpenCredentials,
   onRunApi,
 }: {
@@ -322,31 +325,35 @@ export function TestRunnerTab({
   totalFailed: number
   onRerunFailed: () => void
   erpToken?: string
+  erpTenantId?: string
+  currentModuleId?: string
   onOpenCredentials?: () => void
+  onClearToken?: () => void
   onRunApi?: (selectedOnly: boolean) => void
 }) {
-  const [activeTab, setActiveTab] = useState<'ui' | 'api'>('ui')
+  const [activeTab, setActiveTab] = useState<'ui' | 'api' | 'batch'>('ui')
 
   const uiTests = tests.filter((t) => !t.testType || t.testType === 'ui')
   const apiTests = tests.filter((t) => t.testType === 'api')
   const hasApi = apiTests.length > 0
   const hasUi = uiTests.length > 0
 
-  const effectiveTab = hasApi ? activeTab : 'ui'
+  const isBatch = activeTab === 'batch'
+  const effectiveTab = isBatch ? 'batch' : (hasApi ? activeTab : 'ui')
 
-  const visibleTests = effectiveTab === 'ui' ? uiTests : apiTests
+  const visibleTests = !isBatch ? (effectiveTab === 'ui' ? uiTests : apiTests) : []
 
   const handleRun = (selectedOnly: boolean) => {
     if (effectiveTab === 'api' && !erpToken && onOpenCredentials) {
       onOpenCredentials()
       return
     }
-    onRun(selectedOnly, effectiveTab)
+    onRun(selectedOnly, effectiveTab === 'batch' ? undefined : effectiveTab)
   }
 
   const visibleTotalFailed = visibleTests.filter((t) => t.status === 'failed').length
 
-  if (!hasUi && !hasApi) {
+  if (!hasUi && !hasApi && activeTab !== 'batch') {
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-400 dark:text-gray-500 gap-2">
         <Play className="size-8" />
@@ -384,9 +391,37 @@ export function TestRunnerTab({
             <span className="ml-1 text-[10px] opacity-70">({apiTests.length})</span>
           </button>
         )}
+        <button
+          onClick={() => setActiveTab('batch')}
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
+            isBatch
+              ? 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 shadow-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+          }`}
+        >
+          <Database className="size-3.5" />
+          Batch
+        </button>
       </div>
     </div>
   )
+
+  if (isBatch) {
+    return (
+      <div className="flex flex-col h-full min-h-0">
+        {tabSwitcher}
+        <div className="flex-1 overflow-auto p-4">
+          <BatchCreateSection
+            moduleId={currentModuleId || ''}
+            erpToken={erpToken || ''}
+            erpTenantId={erpTenantId || '681'}
+            onNeedsToken={() => onOpenCredentials?.()}
+            onClearToken={() => onClearToken?.()}
+          />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col h-full min-h-0">

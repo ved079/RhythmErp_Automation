@@ -55,7 +55,7 @@ async function proxyRequest(req: NextRequest) {
   }
 
   // Quick-reject if backend is down (skip for SSE streams)
-  const isStreamPath = path.startsWith("runs/start");
+  const isStreamPath = path.startsWith("runs/start") || path.startsWith("batch-create");
   if (!isHealthCheck && !isStreamPath) {
     const alive = await isBackendRunning();
     if (!alive) {
@@ -87,7 +87,7 @@ async function proxyRequest(req: NextRequest) {
     const body = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
 
     // Shorter timeout for regular calls (10s), long for streams (10min)
-    const isStreamRequest = isStreamPath || path.startsWith("screenshot");
+    const isStreamRequest = isStreamPath || path.startsWith("screenshot") || path.startsWith("batch-create")
     const timeoutMs = isStreamRequest ? 600_000 : 10_000;
 
     const controller = new AbortController();
@@ -103,6 +103,9 @@ async function proxyRequest(req: NextRequest) {
     clearTimeout(timeout);
 
     const ct = res.headers.get("content-type") || "";
+    const cd = res.headers.get("content-disposition") || "";
+
+    // Pass through file downloads (Excel etc.) without parsing as JSON
     if (ct.includes("text/event-stream")) {
       return new NextResponse(res.body, {
         status: res.status,
@@ -110,6 +113,16 @@ async function proxyRequest(req: NextRequest) {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
           Connection: "keep-alive",
+        },
+      });
+    }
+
+    if (cd.includes("attachment") || ct.includes("spreadsheetml") || ct.includes("octet-stream")) {
+      return new NextResponse(res.body, {
+        status: res.status,
+        headers: {
+          "Content-Type": ct,
+          "Content-Disposition": cd,
         },
       });
     }

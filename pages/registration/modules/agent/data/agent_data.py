@@ -71,9 +71,34 @@ def _rand_alpha(n):
 # Agent Name Generators
 # --------------------------------------------------
 
-def generate_agent_name(prefix="AGT"):
-    """Generate a valid Agent Name. Only alphabetic characters — server rejects digits/special chars."""
-    return f"{prefix}{_rand_alpha(7)}"
+_AGENT_FIRST_NAMES = [
+    "Rajesh", "Amit", "Suresh", "Mahesh", "Vijay", "Sanjay",
+    "Deepak", "Manoj", "Ravi", "Kiran", "Prakash", "Ajay",
+    "Rahul", "Sachin", "Rohit", "Arun", "Ganesh", "Mohan",
+    "Priya", "Sunita", "Anita", "Meena", "Rekha", "Pooja",
+    "Neha", "Swati", "Kavita", "Suman", "Geeta", "Seema",
+]
+
+_AGENT_LAST_NAMES = [
+    "Sharma", "Patel", "Kumar", "Singh", "Agarwal", "Gupta",
+    "Jain", "Shah", "Mehta", "Reddy", "Nair", "Iyer",
+    "Desai", "Kulkarni", "More", "Chavan", "Pawar", "Jadhav",
+    "Rao", "Hegde", "Shetty", "Bhat", "Pillai", "Varma",
+]
+
+_generated_agent_names = set()
+
+def generate_agent_name():
+    """Generate a realistic Indian agent name (letters and spaces only)."""
+    for _ in range(200):
+        first = random.choice(_AGENT_FIRST_NAMES)
+        last = random.choice(_AGENT_LAST_NAMES)
+        name = f"{first} {last}"
+        if name not in _generated_agent_names:
+            _generated_agent_names.add(name)
+            return name
+    # Fallback — unlikely to reach
+    return f"{random.choice(_AGENT_FIRST_NAMES)} {random.choice(_AGENT_LAST_NAMES)}"
 
 
 def generate_phone_number():
@@ -234,12 +259,12 @@ def generate_numeric_email():
 # Complete Valid Data for Create
 # --------------------------------------------------
 
-def generate_valid_agent_data(prefix="AGT"):
+def generate_valid_agent_data():
     """Generate a complete dict of valid agent data for the Create form."""
     return {
-        "agent_name": generate_agent_name(prefix),
+        "agent_name": generate_agent_name(),
         "phone_number": generate_phone_number(),
-        "email": generate_email(prefix.lower()),
+        "email": generate_email("agent"),
         "address": generate_valid_address_data(),
         "payment": generate_valid_payment_data(),
         "bank": generate_valid_bank_data(),
@@ -284,7 +309,7 @@ def generate_valid_bank_data():
 def generate_valid_edit_data():
     """Generate valid data for Edit form modifications."""
     return {
-        "agent_name": generate_agent_name("EDT"),
+        "agent_name": generate_agent_name(),
         "phone_number": generate_phone_number(),
         "email": generate_email("edit"),
         "address": generate_valid_address_data(),
@@ -371,3 +396,161 @@ VALIDATION_MSG_INVALID_GST = "Invalid GST"
 SWAL_TITLE_VALIDATION_FAILED = "Validation Failed"
 SWAL_TITLE_SUCCESS = "Your record has been added successfully!"
 SWAL_TITLE_UPDATED = "Your record has been updated successfully!"
+
+
+# ──────────────────────────────────────────────
+# FK ID pools
+# ──────────────────────────────────────────────
+
+ADDRESS_TYPE_IDS = [43, 42]
+# 43 = Shipping, 42 = Billing
+
+COUNTRY_REF_ID = 8       # India
+STATE_REF_IDS = [82]      # Maharashtra
+DISTRICT_REF_IDS = [761]  # Pune
+SUB_DISTRICT_REF_IDS = [14119]
+VILLAGE_REF_IDS = [772475]
+
+PAYMENT_TERMS_IDS = [26, 27, 131, 549, 550, 551]
+# 26 = 30 Days, 27 = 60 Days, 131 = Immediate
+
+PREFERRED_PAYMENT_METHOD_IDS = [1, 2, 3]
+# 1 = Cash, 2 = Cheque, 3 = Bank Transfer
+
+ACCOUNT_TYPE_IDS = [1849, 1850]
+# 1849 = Current, 1850 = Saving
+
+BANK_DOC_IDS = [36, 35, 1883]
+# 36 = Cancelled Cheque, 35 = Passbook, 1883 = Bank Statement
+
+DEFAULT_AGENT_FK_IDS = {
+    "shipping_address_type": 43,
+    "billing_address_type": 42,
+    "country_ref_id_id": COUNTRY_REF_ID,
+    "state_ref_id_id": STATE_REF_IDS[0],
+    "district_ref_id_id": DISTRICT_REF_IDS[0],
+    "sub_district_ref_id_id": SUB_DISTRICT_REF_IDS[0],
+    "village_ref_id_id": VILLAGE_REF_IDS[0],
+    "payment_terms_ref_id": PAYMENT_TERMS_IDS[0],
+    "preferred_payment_method_ref_id": PREFERRED_PAYMENT_METHOD_IDS[0],
+    "account_type": ACCOUNT_TYPE_IDS[0],
+    "bank_doc_id": BANK_DOC_IDS[0],
+}
+
+
+# ──────────────────────────────────────────────
+# API Payload Builder
+# ──────────────────────────────────────────────
+
+def _build_address_row(addr_type_fk_key: str, data: dict, ids: dict) -> dict:
+    """Build a single address detail row for the Address Details stepper."""
+    row = {
+        "address_type": ids.get(addr_type_fk_key),
+        "country_ref_id_id": ids.get("country_ref_id_id"),
+        "state_ref_id_id": ids.get("state_ref_id_id"),
+        "district_ref_id_id": ids.get("district_ref_id_id"),
+        "sub_district_ref_id_id": ids.get("sub_district_ref_id_id"),
+        "village_ref_id_id": ids.get("village_ref_id_id"),
+        "address": data.get("address", "") or None,
+        "pin_code": int(data.get("pin_code", "0") or "0") or None,
+        "gstin": None,
+        "address2": None,
+        "details": [],
+    }
+    return row
+
+
+def build_agent_api_payload(data: dict, fk_ids: dict = None) -> dict:
+    """Build the JSON payload for POST /core/dynamic-screen-wrapper/Agent/.
+
+    Args:
+        data: Dict from generate_valid_agent_data().
+        fk_ids: Optional FK ID overrides.
+
+    Returns:
+        Complete JSON payload dict ready for POST.
+    """
+    ids = {**DEFAULT_AGENT_FK_IDS, **(fk_ids or {})}
+
+    # Address Details — always shipping + billing rows
+    shipping = _build_address_row("shipping_address_type", data.get("address", {}), ids)
+    billing = _build_address_row("billing_address_type", data.get("address", {}), ids)
+
+    # Bank Details — one row
+    bank_data = data.get("bank", {})
+    bank_detail = {
+        "bank_name": bank_data.get("bank_name") or None,
+        "bank_branch_code": bank_data.get("branch") or None,
+        "bank_ifsc_code": bank_data.get("ifsc_code") or None,
+        "account_type": ids.get("account_type"),
+        "bank_account_holder_name": bank_data.get("account_holder_name") or None,
+        "bank_account_no": int(bank_data.get("account_number", "0") or "0") or None,
+        "bank_doc_id": ids.get("bank_doc_id"),
+        "bank_attachment_path": None,
+        "details": [],
+    }
+
+    payload = {
+        "id": "",
+        "attribute_name": "Agent",
+        "details": [],
+        "children": [
+            {
+                "stepper_name": "Address Details",
+                "is_stepper": True,
+                "details": [shipping, billing],
+                "children": [],
+            },
+            {
+                "stepper_name": "Payment Details",
+                "is_stepper": True,
+                "details": [],
+                "children": [],
+                "id": "",
+                "display_name_as": None,
+                "office_no": None,
+                "delivery_terms_ref_id": None,
+                "is_tds_applicable": None,
+                "preferred_payment_method_ref_id": ids.get("preferred_payment_method_ref_id"),
+                "deposit": None,
+                "gst_registration_type": None,
+                "mode_of_delivery_ref_id": None,
+                "payment_terms_ref_id": ids.get("payment_terms_ref_id"),
+                "courier_terms_ref_id": None,
+                "quantity_tolerance": None,
+                "gst_registration_status": None,
+                "is_gst_set_off": False,
+                "customer_type_ref_id": None,
+                "customer_status": None,
+                "supply_type_ref_id": None,
+                "sale_type_ref_id": None,
+                "ownership_status_ref_id": None,
+                "packing_material_ref_id": None,
+                "status": None,
+            },
+            {
+                "stepper_name": "Bank Details",
+                "is_stepper": True,
+                "details": [bank_detail],
+                "children": [],
+            },
+        ],
+        "party_ref_id": None,
+        "name": data.get("agent_name", ""),
+        "mobile_no": int(data.get("phone_number", "0") or "0"),
+        "email_id": data.get("email", "") or None,
+        "status": True,
+    }
+
+    return payload
+
+
+def generate_agent_api_payload(fk_ids: dict = None) -> dict:
+    """One-shot: generate a randomized Agent API payload with a real human name."""
+    data = generate_valid_agent_data()
+    return build_agent_api_payload(data, fk_ids)
+
+
+def generate_batch_payloads(count: int = 10, **kwargs) -> list:
+    """Generate multiple unique Agent API payloads."""
+    return [generate_agent_api_payload(**kwargs) for _ in range(count)]
