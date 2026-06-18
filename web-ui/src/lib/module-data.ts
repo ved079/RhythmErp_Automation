@@ -12,7 +12,7 @@ import { type SidebarModule, type TestClassGroup, type TestItem, type TestSpecIt
 // API data enriches these with real test counts.
 
 export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
-  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'dashboard', label: 'Dashboard', homeIcon: true },
   { id: 'company-onboarding', label: 'Company Onboarding', userIcon: true },
   {
     id: 'registration',
@@ -119,5 +119,5 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
       { id: 'screen-api-link', label: 'Screen API Link', badge: '📝 No tests', badgeType: 'none' as const },
     ],
   },
-  { id: 'my-tickets', label: 'My Tickets' },
+  { id: 'my-tickets', label: 'My Tickets', tagIcon: true },
 ]

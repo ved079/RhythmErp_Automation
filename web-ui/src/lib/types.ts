@@ -46,6 +46,8 @@ export interface SidebarModule {
   toolIcon?: boolean
   bookIcon?: boolean
   menuIcon?: boolean
+  homeIcon?: boolean
+  tagIcon?: boolean
 }
 
 // ─── Auth Types ──────────────────────────────────────────

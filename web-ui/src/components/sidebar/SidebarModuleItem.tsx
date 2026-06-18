@@ -16,6 +16,8 @@ interface SidebarModule {
   toolIcon?: boolean
   bookIcon?: boolean
   menuIcon?: boolean
+  homeIcon?: boolean
+  tagIcon?: boolean
 }
 
 // ─── Sidebar Module Item ─────────────────────────────────
@@ -141,6 +143,16 @@ export function SidebarModuleItem({
             <line x1="3" y1="12" x2="21" y2="12" />
             <line x1="3" y1="6" x2="21" y2="6" />
             <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        ) : module.homeIcon ? (
+          <svg className="size-[18px] shrink-0 mr-[10px] text-[#6b7280]" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            <polyline points="9 22 9 12 15 12 15 22" />
+          </svg>
+        ) : module.tagIcon ? (
+          <svg className="size-[18px] shrink-0 mr-[10px] text-[#6b7280]" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20.59 13.41L13.42 20.58a2 2 0 0 1-2.83 0L2.59 12.58a2 2 0 0 1 0-2.83l7.17-7.17a2 2 0 0 1 1.42-.58H19a2 2 0 0 1 2 2v6.59a2 2 0 0 1-.58 1.42z" />
+            <line x1="7" y1="7" x2="7.01" y2="7" />
           </svg>
         ) : hasChildren ? (
           <ChevronDown
