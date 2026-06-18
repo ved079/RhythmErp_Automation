@@ -6,11 +6,12 @@ import type { SidebarModule } from '@/components/sidebar/SidebarModuleItem'
  */
 export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
   { id: 'dashboard', label: 'Dashboard' },
-  { id: 'company-onboarding', label: 'Company Onboarding' },
+  { id: 'company-onboarding', label: 'Company Onboarding', userIcon: true },
   {
     id: 'registration',
     label: 'Registration',
     defaultExpanded: true,
+    userIcon: true,
     children: [
       { id: 'employee', label: 'Employee', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'supplier', label: 'Supplier', badge: '📝 No tests', badgeType: 'none' as const },
@@ -23,6 +24,7 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
     id: 'document',
     label: 'Document',
     defaultExpanded: true,
+    userIcon: true,
     children: [
       { id: 'directors', label: 'Directors', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'member', label: 'Member', badge: '📝 No tests', badgeType: 'none' as const },

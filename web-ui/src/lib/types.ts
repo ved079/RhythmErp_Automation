@@ -42,6 +42,7 @@ export interface SidebarModule {
   children?: SidebarModule[]
   defaultExpanded?: boolean
   cartLink?: boolean
+  userIcon?: boolean
 }
 
 // ─── Auth Types ──────────────────────────────────────────

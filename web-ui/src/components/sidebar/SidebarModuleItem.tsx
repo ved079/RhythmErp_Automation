@@ -12,6 +12,7 @@ interface SidebarModule {
   children?: SidebarModule[]
   defaultExpanded?: boolean
   cartLink?: boolean
+  userIcon?: boolean
 }
 
 // ─── Sidebar Module Item ─────────────────────────────────
@@ -118,6 +119,11 @@ export function SidebarModuleItem({
               <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
             </svg>
           </a>
+        ) : module.userIcon ? (
+          <svg className="size-[18px] shrink-0 mr-[10px] text-[#6b7280]" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
         ) : hasChildren ? (
           <ChevronDown
             className={`size-[18px] shrink-0 transition-transform duration-200 mr-1.5 ${
@@ -134,6 +140,12 @@ export function SidebarModuleItem({
           />
         ) : (
           <span className="w-[18px] shrink-0 mr-1.5" />
+        )}
+        {module.userIcon && hasChildren && (
+          <svg className="size-[18px] shrink-0 mr-[10px] text-[#6b7280]" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
         )}
         <span className="truncate flex-1">{module.label}</span>
         {module.badge && (
