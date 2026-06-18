@@ -106,9 +106,9 @@ export default function Home() {
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('sidebar-width')
-      return saved ? Number(saved) : 240
+      return saved ? Number(saved) : 350
     }
-    return 240
+    return 350
   })
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
