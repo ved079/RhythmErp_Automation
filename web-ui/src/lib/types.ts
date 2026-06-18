@@ -41,6 +41,7 @@ export interface SidebarModule {
   badgeType?: 'success' | 'warning' | 'wip' | 'none'
   children?: SidebarModule[]
   defaultExpanded?: boolean
+  cartLink?: boolean
 }
 
 // ─── Auth Types ──────────────────────────────────────────

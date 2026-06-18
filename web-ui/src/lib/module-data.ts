@@ -43,6 +43,7 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
     id: 'private-b2b',
     label: 'Private (B2B)',
     defaultExpanded: true,
+    cartLink: true,
     children: [
       {
         id: 'purchase-group',
