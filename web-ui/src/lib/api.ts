@@ -430,10 +430,23 @@ const FOLDER_TO_SIDEBAR: Record<string, string> = {
   user_creation: "user-creation",
   // Registration sub-modules
   registration: "registration",
+  employee: "employee",
   farmer: "farmer",
   customer: "customer",
   supplier: "supplier",
   agent: "agent",
+  // Document sub-modules
+  directors: "directors",
+  member: "member",
+  constituent_documents: "constituent-documents",
+  miscellaneous_documents: "miscellaneous-documents",
+  register_of_loan: "register-of-loan",
+  register_charges: "register-charges",
+  // Private (B2B) / Purchase sub-modules
+  purchase_order: "purchase-order",
+  goods_receipt_note: "goods-receipt-note",
+  gate_pass: "gate-pass",
+  quality_check: "quality-check",
 };
 
 export function folderToSidebarId(folderName: string): string {
@@ -462,9 +475,17 @@ export function sidebarToFolderMapping(sidebarId: string): { module: string; sub
       if (accessSubs.includes(folder)) {
         return { module: "access", subModule: folder };
       }
-      const registrationSubs = ["farmer", "customer", "supplier", "agent"];
+      const registrationSubs = ["employee", "farmer", "customer", "supplier", "agent"];
       if (registrationSubs.includes(folder)) {
         return { module: "registration", subModule: folder };
+      }
+      const documentSubs = ["directors", "member", "constituent_documents", "miscellaneous_documents", "register_of_loan", "register_charges"];
+      if (documentSubs.includes(folder)) {
+        return { module: "document", subModule: folder };
+      }
+      const purchaseSubs = ["purchase_order", "goods_receipt_note", "gate_pass", "quality_check"];
+      if (purchaseSubs.includes(folder)) {
+        return { module: "private_b2b", subModule: folder };
       }
       return { module: folder, subModule: null };
     }

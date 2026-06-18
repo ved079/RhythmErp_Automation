@@ -12,6 +12,7 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
     defaultExpanded: true,
     children: [
       { id: 'farmer', label: 'Farmer', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'employee', label: 'Employee', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'supplier', label: 'Supplier', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'customer', label: 'Customer', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'agent', label: 'Agent', badge: '📝 No tests', badgeType: 'none' as const },
@@ -74,6 +75,37 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
       { id: 'role-screen-link', label: 'Role Screen Link', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'user-creation', label: 'User Creation Screen', badge: '📝 No tests', badgeType: 'none' as const },
       { id: 'screen-api-link', label: 'Screen API Link', badge: '📝 No tests', badgeType: 'none' as const },
+    ],
+  },
+  {
+    id: 'document',
+    label: 'Document',
+    defaultExpanded: true,
+    children: [
+      { id: 'directors', label: 'Directors', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'member', label: 'Member', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'constituent-documents', label: 'Constituent Documents', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'miscellaneous-documents', label: 'Miscellaneous Documents', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'register-of-loan', label: 'Register of Loan', badge: '📝 No tests', badgeType: 'none' as const },
+      { id: 'register-charges', label: 'Register Charges', badge: '📝 No tests', badgeType: 'none' as const },
+    ],
+  },
+  {
+    id: 'private-b2b',
+    label: 'Private (B2B)',
+    defaultExpanded: true,
+    children: [
+      {
+        id: 'purchase-group',
+        label: 'Purchase',
+        defaultExpanded: true,
+        children: [
+          { id: 'purchase-order', label: 'Purchase Order', badge: '📝 No tests', badgeType: 'none' as const },
+          { id: 'goods-receipt-note', label: 'Goods Receipt Note', badge: '📝 No tests', badgeType: 'none' as const },
+          { id: 'gate-pass', label: 'Gate Pass', badge: '📝 No tests', badgeType: 'none' as const },
+          { id: 'quality-check', label: 'Quality Check', badge: '📝 No tests', badgeType: 'none' as const },
+        ],
+      },
     ],
   },
   { id: 'my-tickets', label: 'My Tickets' },
