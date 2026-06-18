@@ -61,6 +61,7 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
   {
     id: 'common-settings',
     label: 'Common Settings',
+    toolIcon: true,
     defaultExpanded: true,
     children: [
       { id: 'uom', label: 'UOM', badge: '📝 No tests', badgeType: 'none' as const },
@@ -78,6 +79,7 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
   {
     id: 'commodity-settings',
     label: 'Commodity Settings',
+    bookIcon: true,
     children: [
       {
         id: 'commodity-attributes-group',
@@ -107,6 +109,7 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
   {
     id: 'access',
     label: 'Access',
+    menuIcon: true,
     defaultExpanded: true,
     children: [
       { id: 'entity-group', label: 'Entity Group Definition', badge: '📝 No tests', badgeType: 'none' as const },

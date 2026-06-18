@@ -43,6 +43,9 @@ export interface SidebarModule {
   defaultExpanded?: boolean
   cartLink?: boolean
   userIcon?: boolean
+  toolIcon?: boolean
+  bookIcon?: boolean
+  menuIcon?: boolean
 }
 
 // ─── Auth Types ──────────────────────────────────────────
