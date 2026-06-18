@@ -105,7 +105,20 @@ export function SidebarModuleItem({
           paddingBottom: '7px',
         }}
       >
-        {hasChildren ? (
+        {module.cartLink ? (
+          <a
+            href="/cart"
+            onClick={(e) => e.stopPropagation()}
+            className="size-[18px] shrink-0 mr-1.5 inline-flex items-center justify-center text-[#6b7280] hover:text-[#111827] dark:hover:text-gray-200 transition-colors"
+            aria-label="Shopping Cart"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9" cy="21" r="1" />
+              <circle cx="20" cy="21" r="1" />
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+            </svg>
+          </a>
+        ) : hasChildren ? (
           <ChevronDown
             className={`size-[18px] shrink-0 transition-transform duration-200 mr-1.5 ${
               !isExpanded ? '-rotate-90' : ''
@@ -123,20 +136,6 @@ export function SidebarModuleItem({
           <span className="w-[18px] shrink-0 mr-1.5" />
         )}
         <span className="truncate flex-1">{module.label}</span>
-        {module.cartLink && (
-          <a
-            href="/cart"
-            onClick={(e) => e.stopPropagation()}
-            className="ml-1.5 inline-flex items-center shrink-0 text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-            aria-label="Cart"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="9" cy="21" r="1" />
-              <circle cx="20" cy="21" r="1" />
-              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-            </svg>
-          </a>
-        )}
         {module.badge && (
           <span
             className={`text-[11px] ml-auto shrink-0 ${
