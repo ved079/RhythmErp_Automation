@@ -1,0 +1,16 @@
+{
+  "run_id": "572af93c",
+  "module": "common_settings",
+  "sub_module": "uom",
+  "total": 1,
+  "created": 1,
+  "failed": 0,
+  "elapsed_seconds": 0.9,
+  "records": [
+    {
+      "name": "UOM",
+      "record_id": 11,
+      "status": "created"
+    }
+  ]
+}

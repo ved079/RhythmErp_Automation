@@ -1,0 +1,16 @@
+{
+  "run_id": "01097b25",
+  "module": "common_settings",
+  "sub_module": "tax_rate",
+  "total": 1,
+  "created": 1,
+  "failed": 0,
+  "elapsed_seconds": 0.9,
+  "records": [
+    {
+      "name": "Tax Rate",
+      "record_id": 1,
+      "status": "created"
+    }
+  ]
+}

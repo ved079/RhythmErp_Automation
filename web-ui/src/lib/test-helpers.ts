@@ -1,6 +1,11 @@
 import { sidebarToFolderMapping, type ApiModule, type ApiSubModule } from '@/lib/api'
 import { type TestClassGroup, type TestItem, testSpecGroups } from '@/data/testSpecGroups'
 
+export interface VisibilityData {
+  excludedTestNames: string[]
+  overrides: Record<string, { displayName?: string; disabled: boolean }>
+}
+
 /**
  * Get the step-by-step instructions for a test by its ID.
  * Looks up steps from testSpecGroups and splits on " → ".
@@ -17,10 +22,12 @@ export function getStepsForTest(testId: string): string[] {
  * Given a sidebar module ID (e.g. "seasons") and the API modules data,
  * return { groups: TestClassGroup[], items: TestItem[] } from real test functions.
  * Returns empty arrays for modules without API tests.
+ * Optionally filters by visibility data (hidden tests + overrides).
  */
 export function getTestsForSidebarModule(
   sidebarId: string,
-  apiModules: ApiModule[]
+  apiModules: ApiModule[],
+  visibility?: VisibilityData | null
 ): { groups: TestClassGroup[]; items: TestItem[] } {
   const empty = { groups: [] as TestClassGroup[], items: [] as TestItem[] }
   const mapping = sidebarToFolderMapping(sidebarId)
@@ -38,20 +45,26 @@ export function getTestsForSidebarModule(
 
   // Get tests list
   const allApiTests = subModule ? subModule.tests : apiMod.sub_modules.flatMap((s) => s.tests)
-  const apiTests = [...new Map(allApiTests.map(t => [t.name, t])).values()]
+  let apiTests = [...new Map(allApiTests.map(t => [t.name, t])).values()]
   if (apiTests.length === 0) return empty
 
-  // Group tests by their test file name (extract class name from file)
-  const testFileGroups: Record<string, { file: string; tests: ApiSubModule['tests'] }> = {}
-  for (const test of apiTests) {
-    const parts = test.name.split('::')
-    const fileName = parts[0]?.split('/').pop() || 'tests'
-    const className = parts.length >= 3 ? parts[1] : fileName.replace('.py', '')
+  // Apply visibility filtering (hide disabled tests + user-excluded tests)
+  if (visibility) {
+    const excludedSet = new Set(visibility.excludedTestNames || [])
+    apiTests = apiTests.filter(t => {
+      const ov = visibility.overrides?.[t.name]
+      if (ov?.disabled) return false
+      if (excludedSet.has(t.name)) return false
+      return true
+    })
+  }
 
-    if (!testFileGroups[className]) {
-      testFileGroups[className] = { file: fileName, tests: [] }
+  // Apply display name overrides
+  const getDisplayName = (t: ApiSubModule['tests'][0]): string => {
+    if (visibility?.overrides?.[t.name]?.displayName) {
+      return visibility.overrides[t.name].displayName!
     }
-    testFileGroups[className].tests.push(test)
+    return t.display_name || t.name.split('::').pop() || t.name
   }
 
   // Group all tests under one group (API names don't include file paths)
@@ -59,7 +72,7 @@ export function getTestsForSidebarModule(
     className: 'All Tests',
     tests: apiTests.map((t) => ({
       id: t.name,
-      description: t.display_name || t.name.split('::').pop() || t.name,
+      description: getDisplayName(t),
       status: 'not-run' as const,
       duration: '—',
       steps: t.docstring || '',
@@ -71,8 +84,8 @@ export function getTestsForSidebarModule(
   // Convert to TestItem[]
   const items: TestItem[] = apiTests.map((t) => ({
     id: t.name,
-    name: t.display_name || t.name.split('::').pop() || t.name,
-    description: t.display_name || t.name.split('::').pop() || t.name,
+    name: getDisplayName(t),
+    description: getDisplayName(t),
     status: 'pending' as const,
     duration: '',
     testType: (t.type === 'api' ? 'api' : 'ui') as 'ui' | 'api',

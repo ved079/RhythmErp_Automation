@@ -125,7 +125,7 @@ export function RunDetailDialog({
               No test results available for this run
             </div>
           ) : (
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-72 overflow-y-auto">
+            <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden max-h-72 overflow-y-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">

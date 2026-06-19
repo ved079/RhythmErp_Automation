@@ -160,8 +160,8 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
   const barPercent = running ? Math.min(Math.round(((created + failed) / (count || 1)) * 100), 100) : (created + failed > 0 ? 100 : 0)
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden shadow-sm">
-      <div className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-950/30 dark:to-blue-950/20 border-b border-gray-200 dark:border-gray-700">
+    <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden shadow-sm">
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-950/30 dark:to-blue-950/20 border-b border-gray-300 dark:border-gray-500/70">
         <Database className="size-4 text-indigo-600 dark:text-indigo-400" />
         <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 flex-1">Batch Data Creation</span>
       </div>

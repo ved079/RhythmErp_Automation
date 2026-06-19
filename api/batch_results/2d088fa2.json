@@ -1,0 +1,16 @@
+{
+  "run_id": "2d088fa2",
+  "module": "common_settings",
+  "sub_module": "vehicle_master",
+  "total": 1,
+  "created": 1,
+  "failed": 0,
+  "elapsed_seconds": 0.9,
+  "records": [
+    {
+      "name": "Tata Ace",
+      "record_id": 1,
+      "status": "created"
+    }
+  ]
+}

@@ -9,12 +9,11 @@ import { type TestPriority, type TestItem } from '@/data/testSpecGroups'
 import { PriorityBadge, TestStatusIcon } from '@/components/shared/PriorityBadge'
 import { BatchCreateSection } from '@/components/dialogs/BatchCreateSection'
 
-function parseTestInfo(test: TestItem): { badge: string; description: string } {
+function parseTestInfo(test: TestItem): { description: string } {
   const id = (test.id.split('::').pop() || test.id).replace(/^test_/, '')
   const match = id.match(/^([A-Z]+)_([A-Z]+\d+)_(.+)$/)
-  const badge = match ? `${match[1]}-${match[2]}` : ''
   const description = test.description || (match ? match[3].replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) : test.name || id.replace(/_/g, ' '))
-  return { badge, description }
+  return { description }
 }
 
 const statusConfig = {
@@ -34,6 +33,7 @@ function TestSection({
   onRerunFailed,
   tokenBadge,
   tabSwitcher,
+  showRawNames,
 }: {
   tests: TestItem[]
   testChecks: Set<string>
@@ -44,10 +44,9 @@ function TestSection({
   onRerunFailed: () => void
   tokenBadge?: React.ReactNode
   tabSwitcher?: React.ReactNode
+  showRawNames?: boolean
 }) {
   const [search, setSearch] = useState('')
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
-
   const pendingOrRunning = tests.filter((t) => t.status === 'pending' || t.status === 'running')
   const allSelected = pendingOrRunning.length > 0 && pendingOrRunning.every((t) => testChecks.has(t.id))
   const selectedRunnable = tests.filter((t) => t.status === 'pending' && testChecks.has(t.id)).length
@@ -66,97 +65,57 @@ function TestSection({
     }
   }, [allSelected, pendingOrRunning, testChecks, toggleTestCheck])
 
-  const toggleGroup = useCallback((name: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(name)) next.delete(name); else next.add(name)
-      return next
-    })
-  }, [])
-
-  const testGroups = useMemo(() => {
-    const groups: { name: string; tests: TestItem[] }[] = []
-    let currentGroup: string | null = null
-    for (const t of tests) {
-      const cls = t.id.replace(/\d+$/, '').replace(/T/, 'Test')
-      if (cls !== currentGroup) {
-        currentGroup = cls
-        groups.push({ name: cls, tests: [] })
-      }
-      groups[groups.length - 1].tests.push(t)
-    }
-    return groups
-  }, [tests])
-
-  const filteredGroups = useMemo(() => {
-    if (!search.trim()) return testGroups
+  const filteredTests = useMemo(() => {
+    if (!search.trim()) return tests
     const q = search.toLowerCase()
-    return testGroups
-      .map((g) => ({ ...g, tests: g.tests.filter((t) => t.name.toLowerCase().includes(q) || t.id.toLowerCase().includes(q)) }))
-      .filter((g) => g.tests.length > 0)
-  }, [testGroups, search])
+    return tests.filter((t) => t.name.toLowerCase().includes(q) || t.id.toLowerCase().includes(q))
+  }, [tests, search])
 
   const progressPct = totalTests > 0 ? Math.round((totalComplete / totalTests) * 100) : 0
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Action Bar */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 shrink-0 flex-wrap bg-white dark:bg-gray-900">
-        <Button
-          onClick={() => onRun(false)}
-          disabled={isRunning || pendingCount === 0}
-          className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white h-8 text-[12px] gap-1.5 px-4 cursor-pointer font-medium shadow-sm"
-        >
-          <Play className="size-3.5" />
-          Run All
-          <span className="ml-0.5 opacity-80">({pendingCount})</span>
-        </Button>
-        <Button
-          onClick={() => onRun(true)}
-          disabled={isRunning || selectedRunnable === 0}
-          className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white h-8 text-[12px] gap-1.5 px-4 cursor-pointer font-medium shadow-sm"
-        >
-          <Play className="size-3.5" />
-          Run Selected
-          <span className="ml-0.5 opacity-80">({selectedRunnable})</span>
-        </Button>
-        <Button
-          onClick={handleSelectAll}
-          disabled={isRunning}
-          variant="outline"
-          className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 h-8 text-[12px] gap-1.5 px-3 cursor-pointer"
-        >
-          {allSelected ? '✖ Deselect All' : '☑ Select All'}
-        </Button>
+      <div className="flex items-center gap-1.5 px-4 py-2 border-b border-gray-100 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-900 overflow-x-auto">
+        <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-0.5 shrink-0">
+          <button onClick={() => onRun(false)} disabled={isRunning || pendingCount === 0}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium bg-[#3F51B5] text-white hover:bg-[#2D3FC7] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0">
+            <Play className="size-3" />Run All<span className="text-white/70 ml-0.5">({pendingCount})</span>
+          </button>
+          <button onClick={() => onRun(true)} disabled={isRunning || selectedRunnable === 0}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium text-[#3F51B5] hover:bg-[#E8EAF6] dark:hover:bg-[#1A237E]/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0">
+            <Play className="size-3" />Selected<span className="text-[#3F51B5]/70 ml-0.5">({selectedRunnable})</span>
+          </button>
+        </div>
+        <button onClick={handleSelectAll} disabled={isRunning}
+          className="flex items-center gap-1 px-2 py-1.5 rounded-md text-[12px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0">
+          <CheckCircle2 className="size-3.5" />{allSelected ? 'Deselect All' : 'Select All'}
+        </button>
         {totalFailed > 0 && (
-          <Button
-            onClick={onRerunFailed}
-            disabled={isRunning}
-            variant="outline"
-            className="border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 h-8 text-[12px] gap-1.5 px-3 cursor-pointer"
-          >
-            <RotateCcw className="size-3.5" />
-            Rerun Failed ({totalFailed})
-          </Button>
+          <button onClick={onRerunFailed} disabled={isRunning}
+            className="flex items-center gap-1 px-2 py-1.5 rounded-md text-[12px] font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0">
+            <RotateCcw className="size-3" />Rerun Failed ({totalFailed})
+          </button>
         )}
-        {tokenBadge}
-        <div className="flex-1" />
+        {tokenBadge && <div className="shrink-0">{tokenBadge}</div>}
+        <div className="relative flex-1 min-w-[120px] max-w-[200px] shrink-0">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-gray-400" />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search tests..."
+            className="w-full pl-7 pr-2 py-1.5 text-[12px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+          />
+        </div>
+        <span className="text-[11px] text-gray-400 dark:text-gray-500 shrink-0">{filteredTests.length}/{totalTests}</span>
+        <div className="flex-1 min-w-[4px]" />
         {runningCount > 0 && (
-          <span className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400 font-medium animate-pulse">
-            <RefreshCw className="size-3 animate-spin" />
-            {runningCount} running
+          <span className="flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 font-medium animate-pulse shrink-0">
+            <RefreshCw className="size-3 animate-spin" />{runningCount} running
           </span>
         )}
-        <div className="flex items-center gap-3 text-[12px]">
-          <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400 font-medium">
-            <CheckCircle2 className="size-3.5" /> {passedCount}
-          </span>
-          <span className="flex items-center gap-1.5 text-red-500 dark:text-red-400 font-medium">
-            <XCircle className="size-3.5" /> {failedCount}
-          </span>
-          <span className="flex items-center gap-1.5 text-gray-400">
-            <Circle className="size-3" /> {pendingCount}
-          </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="flex items-center gap-1 text-[12px] font-medium text-green-600 dark:text-green-400"><CheckCircle2 className="size-3.5" />{passedCount}</span>
+          <span className="flex items-center gap-1 text-[12px] font-medium text-red-500 dark:text-red-400"><XCircle className="size-3.5" />{failedCount}</span>
+          <span className="flex items-center gap-1 text-[12px] font-medium text-gray-400"><Circle className="size-3.5" />{pendingCount}</span>
         </div>
       </div>
 
@@ -172,129 +131,53 @@ function TestSection({
 
       {tabSwitcher}
 
-      {/* Search + filter bar */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 dark:border-gray-700 shrink-0 bg-gray-50/50 dark:bg-gray-800/20">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-gray-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search tests by name..."
-            className="w-full pl-8 pr-3 py-1.5 text-[12px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-          />
-        </div>
-        <span className="text-[11px] text-gray-400 dark:text-gray-500">
-          {filteredGroups.reduce((s, g) => s + g.tests.length, 0)} / {totalTests} tests
-        </span>
-      </div>
-
       {/* Test List */}
       <ScrollArea className="flex-1 min-h-0">
-        <div className="px-4 py-3 space-y-3">
-          {filteredGroups.length === 0 && (
-            <div className="text-center py-10">
-              <SlidersHorizontal className="size-8 mx-auto text-gray-300 dark:text-gray-600 mb-2" />
-              <p className="text-[13px] text-gray-400 dark:text-gray-500">{search ? 'No tests match your search' : 'No tests available'}</p>
+        {filteredTests.length === 0 ? (
+          <div className="text-center py-10 px-4">
+            <SlidersHorizontal className="size-8 mx-auto text-gray-300 dark:text-gray-600 mb-2" />
+            <p className="text-[13px] text-gray-400 dark:text-gray-500">{search ? 'No tests match your search' : 'No tests available'}</p>
+          </div>
+        ) : (
+          <div className="mx-4 my-3 bg-white dark:bg-gray-800/50 rounded-xl border border-gray-300 dark:border-gray-500/70 overflow-hidden shadow-sm">
+            <div className="flex items-center gap-3 px-4 py-2.5 bg-[#F1F2F7] dark:bg-gray-800 border-b border-gray-300 dark:border-gray-500/70 text-[11px] font-semibold text-[#3F51B5] dark:text-[#7986CB] tracking-wider">
+              <div className="w-5 shrink-0" />
+              <div className="flex-1">Test Name</div>
+              <div className="w-24 shrink-0 text-center">Status</div>
+              <div className="w-16 shrink-0 text-right">Duration</div>
             </div>
-          )}
-          {filteredGroups.map((group) => {
-            const groupPassed = group.tests.filter((t) => t.status === 'passed').length
-            const groupFailed = group.tests.filter((t) => t.status === 'failed').length
-            const groupPending = group.tests.filter((t) => t.status === 'pending').length
-            const isCollapsed = collapsedGroups.has(group.name)
-
-            return (
-              <div key={group.name} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,0.03)] dark:shadow-none">
-                {/* Group Header */}
-                <button
-                  onClick={() => toggleGroup(group.name)}
-                  className="w-full flex items-center gap-2.5 px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800/70 transition-colors cursor-pointer group"
-                >
-                  {isCollapsed ? <ChevronRight className="size-3.5 text-gray-400" /> : <ChevronDown className="size-3.5 text-gray-400" />}
-                  <span className="text-[13px] font-semibold text-gray-800 dark:text-gray-100 flex-1 text-left">{group.name}</span>
-                  <span className="text-[11px] text-gray-500 dark:text-gray-400 mr-1">{group.tests.length} tests</span>
-                  {groupPassed > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-                      <CheckCircle2 className="size-2.5" /> {groupPassed}
-                    </span>
-                  )}
-                  {groupFailed > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
-                      <XCircle className="size-2.5" /> {groupFailed}
-                    </span>
-                  )}
-                  {groupPending > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
-                      <Circle className="size-2.5" /> {groupPending}
-                    </span>
-                  )}
-                </button>
-
-                {/* Test Rows */}
-                {!isCollapsed && (
-                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {group.tests.map((test) => {
-                      const cfg = test.status === 'passed' ? statusConfig.passed : test.status === 'failed' ? statusConfig.failed : test.status === 'running' ? statusConfig.running : statusConfig.pending
-                      const StatusIcon = cfg.icon
-
-                      return (
-                        <div
-                          key={test.id}
-                          className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${cfg.bg} ${cfg.border} border-l-2 ${test.status === 'running' ? 'border-l-blue-500' : test.status === 'failed' ? 'border-l-red-500' : test.status === 'passed' ? 'border-l-green-500' : 'border-l-transparent'}`}
-                        >
-                          <Checkbox
-                            checked={testChecks.has(test.id) || test.status === 'passed' || test.status === 'failed'}
-                            disabled={isRunning || test.status !== 'pending'}
-                            onCheckedChange={() => { if (test.status === 'pending') toggleTestCheck(test.id) }}
-                            className="size-3.5 data-[state=checked]:bg-[#2D3FC7] data-[state=checked]:border-[#2D3FC7]"
-                          />
-                          <div className="flex-1 min-w-0 flex items-center gap-2.5">
-                            {(() => {
-                              const { badge, description } = parseTestInfo(test)
-                              return (
-                                <>
-                                  {badge && (
-                                    <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shrink-0">
-                                      {badge}
-                                    </span>
-                                  )}
-                                  <span className={`text-[13px] leading-snug truncate ${
-                                    test.status === 'running' ? 'text-indigo-600 dark:text-indigo-400 font-medium' :
-                                    test.status === 'failed' ? 'text-red-700 dark:text-red-300 font-medium' :
-                                    test.status === 'passed' ? 'text-gray-500 dark:text-gray-400' :
-                                    'text-gray-800 dark:text-gray-100'
-                                  }`}>
-                                    {description}
-                                    {test.status === 'running' && (
-                                      <span className="ml-2 inline-flex">
-                                        <span className="animate-ping size-1.5 rounded-full bg-indigo-500 mr-0.5" />
-                                        <span className="animate-ping size-1.5 rounded-full bg-indigo-500 mr-0.5" />
-                                      </span>
-                                    )}
-                                  </span>
-                                </>
-                              )
-                            })()}
-                          </div>
-                          {test.status === 'running' && (
-                            <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full">Running</span>
-                          )}
-                          {test.status !== 'running' && (
-                            <>
-                              <PriorityBadge priority={test.priority} />
-                              <StatusIcon className={`size-3.5 ${cfg.label}`} />
-                            </>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+            <div className="divide-y divide-gray-200 dark:divide-gray-500/40">
+              {filteredTests.map((test) => (
+                <div key={test.id}
+                  onClick={() => { if (test.status === 'pending' && !isRunning) toggleTestCheck(test.id) }}
+                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#E8EAF6]/40 dark:hover:bg-[#1A237E]/10 transition-colors cursor-pointer">
+                  <Checkbox
+                    checked={testChecks.has(test.id) || test.status === 'passed' || test.status === 'failed'}
+                    disabled={isRunning || test.status !== 'pending'}
+                    onCheckedChange={() => { if (test.status === 'pending') toggleTestCheck(test.id) }}
+                    className="size-3.5 shrink-0 data-[state=checked]:bg-[#2D3FC7] data-[state=checked]:border-[#2D3FC7] pointer-events-none"
+                  />
+                  <span className={`flex-1 text-[14px] truncate ${
+                    test.status === 'passed' ? 'text-[#999] dark:text-gray-500' :
+                    test.status === 'failed' ? 'text-[#F44336] dark:text-red-400' :
+                    'text-[#333] dark:text-gray-100'
+                  }`}>
+                    {showRawNames ? test.id : parseTestInfo(test).description}
+                  </span>
+                  <span className="w-24 shrink-0 flex items-center justify-center gap-1.5 text-[12px] font-['Manrope']">
+                    {test.status === 'passed' && <><CheckCircle2 className="size-3 text-[#4CAF50]" /><span className="text-[#4CAF50] dark:text-green-400">Passed</span></>}
+                    {test.status === 'failed' && <><XCircle className="size-3 text-[#F44336]" /><span className="text-[#F44336] dark:text-red-400">Failed</span></>}
+                    {test.status === 'running' && <><RefreshCw className="size-3 animate-spin text-[#3F51B5]" /><span className="text-[#3F51B5] dark:text-[#7986CB]">Running</span></>}
+                    {test.status === 'pending' && <><Circle className="size-3 text-[#ccc] dark:text-gray-600" /><span className="text-[#aaa] dark:text-gray-400">Pending</span></>}
+                  </span>
+                  <span className="w-16 shrink-0 text-right text-[12px] text-[#888] dark:text-gray-400 font-mono">
+                    {test.duration || '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </ScrollArea>
     </div>
   )
@@ -314,7 +197,8 @@ export function TestRunnerTab({
   erpTenantId,
   currentModuleId,
   onOpenCredentials,
-  onRunApi,
+  onClearToken,
+  showRawNames,
 }: {
   tests: TestItem[]
   testChecks: Set<string>
@@ -330,6 +214,7 @@ export function TestRunnerTab({
   onOpenCredentials?: () => void
   onClearToken?: () => void
   onRunApi?: (selectedOnly: boolean) => void
+  showRawNames?: boolean
 }) {
   const [activeTab, setActiveTab] = useState<'ui' | 'api' | 'batch'>('ui')
 
@@ -399,9 +284,10 @@ export function TestRunnerTab({
               : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           }`}
         >
-          <Database className="size-3.5" />
-          Batch
-        </button>
+            <Database className="size-3.5" />
+            Batch
+            <span className="ml-1 text-[11px] text-gray-500 dark:text-gray-400 font-normal">(Multiple Validate Create)</span>
+          </button>
       </div>
     </div>
   )
@@ -434,6 +320,7 @@ export function TestRunnerTab({
         onRun={handleRun}
         totalFailed={visibleTotalFailed}
         onRerunFailed={onRerunFailed}
+        showRawNames={showRawNames}
         tokenBadge={effectiveTab === 'api' ? (
           <button onClick={onOpenCredentials} className={`flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full cursor-pointer ${erpToken ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'}`}>
             <Key className="size-3" />

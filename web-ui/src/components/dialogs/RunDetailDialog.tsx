@@ -13,10 +13,14 @@ export function RunDetailDialog({
   open,
   onClose,
   run,
+  visibilityData,
+  showRawNames,
 }: {
   open: boolean
   onClose: () => void
   run: RunSnapshot | null
+  visibilityData?: { excludedTestNames: string[]; overrides: Record<string, { displayName?: string; disabled: boolean }> } | null
+  showRawNames?: boolean
 }) {
   const [runDetail, setRunDetail] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(false)
@@ -46,7 +50,7 @@ export function RunDetailDialog({
   const passRate = run.total > 0 ? Math.round((run.passed / run.total) * 100) : 0
 
   // Build test results from either full API detail or from the run snapshot
-  const testResults = runDetail?.results?.map((r) => ({
+  const rawResults = runDetail?.results?.map((r) => ({
     id: r.name || '',
     name: (r.name || '').split('::').pop() || r.name || '',
     status: r.status,
@@ -59,6 +63,10 @@ export function RunDetailDialog({
     duration: '—',
     message: null as string | null,
   }))
+
+  // Filter out hidden tests
+  const excludedSet = new Set(visibilityData?.excludedTestNames || [])
+  const testResults = rawResults.filter(t => !excludedSet.has(t.id))
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
@@ -123,7 +131,7 @@ export function RunDetailDialog({
               No test results available for this run
             </div>
           ) : (
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-72 overflow-y-auto">
+            <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden max-h-72 overflow-y-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
@@ -139,7 +147,7 @@ export function RunDetailDialog({
                         <TestStatusIcon status={t.status} size={3.5} />
                       </TableCell>
                       <TableCell className="text-[12px]">
-                        <div className="font-mono text-gray-500 dark:text-gray-400 text-[11px]">{t.id}</div>
+                        {showRawNames && <div className="font-mono text-gray-500 dark:text-gray-400 text-[11px]">{t.id}</div>}
                         {t.name !== t.id && (
                           <div className="text-gray-700 dark:text-gray-200">{t.name}</div>
                         )}

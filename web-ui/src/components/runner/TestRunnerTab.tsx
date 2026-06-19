@@ -158,9 +158,9 @@ export function TestRunnerTab({
             const someSelected = group.tests.some((t) => testChecks.has(t.id))
 
             return (
-              <div key={group.name} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+              <div key={group.name} className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden">
                 {/* Group Header */}
-                <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-300 dark:border-gray-500/70">
                   <Checkbox
                     checked={allSelected}
                     ref={(el) => { if (el) (el as unknown as HTMLInputElement).indeterminate = someSelected && !allSelected }}
@@ -187,7 +187,7 @@ export function TestRunnerTab({
                   )}
                 </div>
                 {/* Test Rows */}
-                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                <div className="divide-y divide-gray-200 dark:divide-gray-600/40">
                   {group.tests.map((test) => (
                     <div
                       key={test.id}

@@ -163,11 +163,15 @@ def generate_tax_rate_api_payloads(count=10, offset=0, fk_ids=None):
         (date(2026, 4, 1), date(2027, 3, 31)),   # FY 2026-27
     ]
 
+    valid_rates = [r for r in GST_RATES if r["rate"] > 0]
+    if not valid_rates:
+        valid_rates = GST_RATES
+
     payloads = []
 
     for i in range(count):
         idx = offset + i
-        rate_info = GST_RATES[idx % len(GST_RATES)]
+        rate_info = valid_rates[idx % len(valid_rates)]
         from_dt, to_dt = date_ranges[idx % len(date_ranges)]
 
         # Cycle through tax authorities for variety

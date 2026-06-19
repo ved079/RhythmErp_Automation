@@ -150,7 +150,7 @@ export async function fetchScreenshot(): Promise<{ screenshot: string | null; ac
 // --- SSE stream helper ---
 
 export interface SSEEvent {
-  type: "log" | "test_end" | "run_end" | "error";
+  type: "log" | "test_end" | "run_end" | "error" | "auth_error";
   message: string;
   test_name: string | null;
   status: string | null;

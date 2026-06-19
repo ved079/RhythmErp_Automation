@@ -266,14 +266,14 @@ export function DashboardTab({
                       )}
                       {/* Feature 3: Run Tests overlay button */}
                       {mod.totalTests > 0 && onRunModule && (
-                        <button
+                        <span
                           onClick={(e) => { e.stopPropagation(); onRunModule(mod.moduleId) }}
                           className="absolute bottom-2.5 right-2.5 flex items-center gap-1 bg-[#2D3FC7] hover:bg-[#3F51B5] text-white text-[10px] font-semibold px-2 py-1 rounded-md shadow-sm transition-all hover:shadow-md cursor-pointer"
                           title="Run all tests for this module"
                         >
                           <Play className="size-2.5" />
                           Run
-                        </button>
+                        </span>
                       )}
                     </button>
                   )

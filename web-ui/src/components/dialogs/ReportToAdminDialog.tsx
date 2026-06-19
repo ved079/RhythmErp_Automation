@@ -62,7 +62,7 @@ export function ReportToAdminDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent className="sm:max-w-[480px] dark:bg-gray-800 dark:border-gray-700">
+      <DialogContent className="sm:max-w-[480px] dark:bg-gray-800 dark:border-gray-600/60">
         <DialogHeader>
           <DialogTitle className="text-[16px] flex items-center gap-2">
             <MessageSquare className="size-5 text-orange-500" />

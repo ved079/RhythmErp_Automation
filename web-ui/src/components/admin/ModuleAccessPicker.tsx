@@ -447,7 +447,7 @@ export function ModuleAccessPicker({
                 <span className="font-['Poppins'] text-[11px] font-semibold uppercase tracking-wider text-[#2E7D32] mb-2 block">
                   All Modules
                 </span>
-                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-[280px] overflow-y-auto">
+                <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden max-h-[280px] overflow-y-auto">
                   <ModuleTreeNode
                     nodes={moduleTree}
                     selectedSet={selectedSet}

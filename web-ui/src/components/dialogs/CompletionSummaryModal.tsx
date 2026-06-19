@@ -31,7 +31,7 @@ export function CompletionSummaryModal({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent className="sm:max-w-[460px] dark:bg-gray-800 dark:border-gray-700">
+      <DialogContent className="sm:max-w-[460px] dark:bg-gray-800 dark:border-gray-600/60">
         <DialogHeader>
           <DialogTitle className="sr-only">Run Complete</DialogTitle>
           <DialogDescription className="sr-only">Test run completion summary</DialogDescription>

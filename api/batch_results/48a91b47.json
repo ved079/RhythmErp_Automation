@@ -1,0 +1,16 @@
+{
+  "run_id": "48a91b47",
+  "module": "common_settings",
+  "sub_module": "tax_authority",
+  "total": 1,
+  "created": 1,
+  "failed": 0,
+  "elapsed_seconds": 0.9,
+  "records": [
+    {
+      "name": "Tax Authority",
+      "record_id": 1,
+      "status": "created"
+    }
+  ]
+}

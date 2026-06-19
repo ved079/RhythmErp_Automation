@@ -10,6 +10,7 @@ import { ALL_SIDEBAR_MODULES } from '@/data/sidebarModules'
 import { testSpecGroups, initialTests, type TestPriority, type TestItem, type TestSpecItem, type TestClassGroup } from '@/data/testSpecGroups'
 import { buildSidebarModules, filterSidebarByAccess } from '@/lib/sidebar-helpers'
 import { getTestsForSidebarModule } from '@/lib/test-helpers'
+import type { VisibilityData } from '@/lib/test-helpers'
 import NavToast from '@/components/nav-toast/NavToast'
 import {
   getBugReports,
@@ -98,6 +99,7 @@ export default function Home() {
   const [tests, setTests] = useState<TestItem[]>(initialTests)
   const [currentTestGroups, setCurrentTestGroups] = useState<TestClassGroup[]>(testSpecGroups)
   const [allTestCases, setAllTestCases] = useState<TestCasesData>({})
+  const [visibilityData, setVisibilityData] = useState<{ excludedTestNames: string[]; overrides: Record<string, { displayName?: string; disabled: boolean }> } | null>(null)
   const [isRunning, setIsRunning] = useState(false)
   const [runningProgress, setRunningProgress] = useState('')
   const [dashboardStats, setDashboardStats] = useState<Record<string, unknown> | null>(null)
@@ -162,6 +164,9 @@ export default function Home() {
   // Phase 4: Run Comparison Dialog
   const [runComparisonOpen, setRunComparisonOpen] = useState(false)
 
+  // Show raw test names toggle (synced from admin)
+  const [showRawNames, setShowRawNames] = useState(() => typeof window !== 'undefined' && localStorage.getItem('showRawNames') === 'true')
+
   // ERP API credential state
   const [erpToken, setErpToken] = useState('')
   const [erpTenantId, setErpTenantId] = useState('')
@@ -201,7 +206,20 @@ export default function Home() {
     fetchModules()
       .then((mods) => {
         setApiModules(mods)
-        setSidebarModules(filterSidebarByAccess(buildSidebarModules(mods), user))
+        let sidebar = filterSidebarByAccess(buildSidebarModules(mods), user)
+        // Filter out modules disabled in DB
+        fetch('/api/admin/modules').then(r => r.ok && r.json()).then(data => {
+          const disabledNames = new Set((data?.modules || []).filter((m: Record<string, unknown>) => m.status === 'disabled').map((m: Record<string, unknown>) => m.name))
+          if (disabledNames.size > 0) {
+            const removeDisabled = (items: SidebarModule[]): SidebarModule[] => items.filter(m => {
+              if (disabledNames.has(m.id.replace(/-/g, '_'))) return false
+              if (m.children) m.children = removeDisabled(m.children)
+              return true
+            })
+            setSidebarModules(removeDisabled(sidebar))
+          }
+        }).catch(() => {})
+        setSidebarModules(sidebar)
         if (mods.length > 0) {
           syncModulesToDB(mods).catch(() => {})
         }
@@ -487,9 +505,23 @@ export default function Home() {
     init()
   }, [])
 
+  const loadVisibility = useCallback(async (): Promise<VisibilityData | null> => {
+    try {
+      const res = await fetch('/api/admin/tests/visibility')
+      if (res.ok) {
+        const data = await res.json()
+        setVisibilityData(data)
+        return data
+      }
+    } catch { /* silent */ }
+    return null
+  }, [])
+
   const handleLogin = useCallback((u: AuthUser) => {
     setUser(u); setSidebarModules(filterSidebarByAccess(ALL_SIDEBAR_MODULES, u)); setSelectedModule('dashboard')
-  }, [])
+    setActiveTab('test-runner'); localStorage.removeItem('ai-nl-run')
+    loadVisibility()
+  }, [loadVisibility])
 
   const handleLogout = useCallback(async () => {
     await fetch('/api/auth/logout', withCsrf({ method: 'POST' })); setUser(null)
@@ -542,7 +574,7 @@ export default function Home() {
     window.location.hash = hash
   }, [selectedModule, activeTab, hashReady])
 
-  const handleSelectModule = useCallback((id: string) => {
+  const handleSelectModule = useCallback(async (id: string) => {
     setSelectedModule(id)
     const found = (() => {
       for (const mod of sidebarModules) {
@@ -554,37 +586,52 @@ export default function Home() {
     setNavToast({ key: Date.now(), label: found.label, parent: found.parent })
     setActiveTab('test-runner')
     setTestChecks(new Set())
+    // Refresh visibility data before processing tests
+    const visData = await loadVisibility() || visibilityData
     const moduleKey = id.toLowerCase().replace(" ", "_").replace("-", "_")
+    const overrides = visData?.overrides || {}
+    const excludedSet = new Set(visData?.excludedTestNames || [])
     if (allTestCases[moduleKey]) {
       const moduleData = allTestCases[moduleKey]
+      const filteredModuleTests = moduleData.tests.filter(t => !excludedSet.has(t.id))
       const mapTestCaseStatus = (s: string): TestSpecItem['status'] => { const upper = s.toUpperCase().trim(); if (upper === 'PASSED' || upper === 'PASS') return 'passed'; if (upper === 'BUG') return 'bug'; if (upper === 'TODO') return 'todo'; if (upper === 'FAILED' || upper === 'FAIL') return 'failed'; return 'not-run' }
-      const specGroups: TestClassGroup[] = [{ className: moduleData.label, tests: moduleData.tests.map((t) => ({ id: t.id, screenName: t.screenName, description: t.description, status: mapTestCaseStatus(t.status), duration: '', steps: t.steps, expected: t.expected, actual: t.actual || '', bugDetails: t.status === 'BUG' ? t.actual : undefined, priority: undefined, date: t.date || undefined })) }]
+      const getDisplayName = (t: { id: string; description: string }): string =>
+        overrides[t.id]?.displayName || t.description
+      const specGroups: TestClassGroup[] = [{ className: moduleData.label, tests: filteredModuleTests.map((t) => ({ id: t.id, screenName: t.screenName, description: getDisplayName(t), status: mapTestCaseStatus(t.status), duration: '', steps: t.steps, expected: t.expected, actual: t.actual || '', bugDetails: t.status === 'BUG' ? t.actual : undefined, priority: undefined, date: t.date || undefined })) }]
       setCurrentTestGroups(specGroups)
-      const mapToTestItemStatus = (s: string): 'passed' | 'failed' | 'pending' => { const upper = s.toUpperCase().trim(); if (upper === 'PASSED' || upper === 'PASS') return 'passed'; if (upper === 'BUG' || upper === 'FAILED' || upper === 'FAIL') return 'failed'; return 'pending' }
-      setTests(moduleData.tests.map((t) => ({ id: t.id, name: t.description, description: t.description, status: 'pending' as const, duration: '' })))
+      const caseItems = filteredModuleTests.map((t) => ({ id: t.id, name: getDisplayName(t), description: getDisplayName(t), status: 'pending' as const, duration: '' }))
+      const { items: apiItems } = getTestsForSidebarModule(id, apiModules, visData)
+      setTests([...caseItems, ...apiItems])
     } else {
-      const { groups, items } = getTestsForSidebarModule(id, apiModules)
+      const { groups, items } = getTestsForSidebarModule(id, apiModules, visData)
       if (groups.length > 0) { setCurrentTestGroups(groups); setTests(items) }
       else { setCurrentTestGroups([]); setTests([]) }
     }
-  }, [apiModules, allTestCases])
+  }, [apiModules, allTestCases, sidebarModules, loadVisibility, visibilityData])
 
   // Re-load current module tests when data changes
   useEffect(() => {
     if (selectedModule === 'dashboard' || selectedModule === 'my-tickets') return
     const moduleKey = selectedModule.toLowerCase().replace(" ", "_").replace("-", "_")
+    const overrides = visibilityData?.overrides || {}
+    const excludedSet = new Set(visibilityData?.excludedTestNames || [])
     if (allTestCases[moduleKey]) {
       const moduleData = allTestCases[moduleKey]
+      const filteredModuleTests = moduleData.tests.filter(t => !excludedSet.has(t.id))
       const mapTestCaseStatus = (s: string): TestSpecItem['status'] => { const upper = s.toUpperCase().trim(); if (upper === 'PASSED' || upper === 'PASS') return 'passed'; if (upper === 'BUG') return 'bug'; if (upper === 'TODO') return 'todo'; if (upper === 'FAILED' || upper === 'FAIL') return 'failed'; return 'not-run' }
-      const specGroups: TestClassGroup[] = [{ className: moduleData.label, tests: moduleData.tests.map((t) => ({ id: t.id, screenName: t.screenName, description: t.description, status: mapTestCaseStatus(t.status), duration: '', steps: t.steps, expected: t.expected, actual: t.actual || '', bugDetails: t.status === 'BUG' ? t.actual : undefined, priority: undefined, date: t.date || undefined })) }]
+      const getDisplayName = (t: { id: string; description: string }): string =>
+        overrides[t.id]?.displayName || t.description
+      const specGroups: TestClassGroup[] = [{ className: moduleData.label, tests: filteredModuleTests.map((t) => ({ id: t.id, screenName: t.screenName, description: getDisplayName(t), status: mapTestCaseStatus(t.status), duration: '', steps: t.steps, expected: t.expected, actual: t.actual || '', bugDetails: t.status === 'BUG' ? t.actual : undefined, priority: undefined, date: t.date || undefined })) }]
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrentTestGroups(specGroups)
-      setTests(moduleData.tests.map((t) => ({ id: t.id, name: t.description, description: t.description, status: 'pending' as const, duration: '' })))
+      const caseItems = filteredModuleTests.map((t) => ({ id: t.id, name: getDisplayName(t), description: getDisplayName(t), status: 'pending' as const, duration: '' }))
+      const { items: apiItems } = getTestsForSidebarModule(selectedModule, apiModules, visibilityData)
+      setTests([...caseItems, ...apiItems])
     } else {
-      const { groups, items } = getTestsForSidebarModule(selectedModule, apiModules)
+      const { groups, items } = getTestsForSidebarModule(selectedModule, apiModules, visibilityData)
       if (groups.length > 0) { setCurrentTestGroups(groups); setTests(items) }
     }
-  }, [allTestCases, apiModules, selectedModule])
+  }, [allTestCases, apiModules, selectedModule, visibilityData])
 
   const handleGoHome = useCallback(() => { setSelectedModule('dashboard'); setActiveTab('test-runner'); setSidebarOpen(true) }, [])
 
@@ -623,7 +670,7 @@ export default function Home() {
       setTests((prev) => prev.map((t) => testsToRun.some((r) => r.id === t.id) ? { ...t, status: (t.id === testsToRun[0].id ? 'running' as const : 'pending' as const), duration: '' } : t))
       setIsRunning(true); setRunningProgress('Starting tests...'); setActiveTab('live-execution'); setConsoleLogs([])
       const testNames = testsToRun.map((t) => t.id)
-      const runOnlyTests = selectedOnly || forceIds ? testNames : null
+      const runOnlyTests = selectedOnly || forceIds || testType ? testNames : null
       startRun(mapping.module, mapping.subModule, runOnlyTests,
         (event) => {
           if (!currentRunIdRef.current && (event as Record<string, unknown>).run_id) currentRunIdRef.current = (event as Record<string, unknown>).run_id as string
@@ -966,8 +1013,8 @@ export default function Home() {
           <div className="relative" data-tour="notifications">
             <Button variant="ghost" size="icon" onClick={() => { setNotifDropdownOpen((prev) => !prev); if (!notifDropdownOpen) handleMarkAllRead() }} className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer relative" title="Notifications"><Bell className="size-4" />{unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#6777EF] text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-pulse">{unreadCount > 9 ? '9+' : unreadCount}</span>}</Button>
             {notifDropdownOpen && (
-              <div className="absolute right-0 top-10 w-96 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50"><div className="flex items-center gap-2"><Bell className="size-4 text-[#3F51B5]" /><span className="text-[13px] font-semibold text-[#333333] dark:text-gray-100">Notifications</span>{unreadCount > 0 && <Badge className="bg-[#6777EF] text-white text-[10px] px-1.5 py-0 h-4">{unreadCount} new</Badge>}</div><button onClick={handleMarkAllRead} className="text-[11px] text-[#3F51B5] hover:text-[#2D3FC7] cursor-pointer font-medium">Mark all read</button></div>
+              <div className="absolute right-0 top-10 w-96 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-300 dark:border-gray-500/70 z-50 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-600/40 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50"><div className="flex items-center gap-2"><Bell className="size-4 text-[#3F51B5]" /><span className="text-[13px] font-semibold text-[#333333] dark:text-gray-100">Notifications</span>{unreadCount > 0 && <Badge className="bg-[#6777EF] text-white text-[10px] px-1.5 py-0 h-4">{unreadCount} new</Badge>}</div><button onClick={handleMarkAllRead} className="text-[11px] text-[#3F51B5] hover:text-[#2D3FC7] cursor-pointer font-medium">Mark all read</button></div>
                 <div className="max-h-72 overflow-y-auto">{notifications.length === 0 ? <div className="p-8 text-center"><Bell className="size-8 text-gray-200 dark:text-gray-600 mx-auto mb-2" /><div className="text-[13px] text-gray-400 dark:text-gray-500">No notifications yet</div><div className="text-[11px] text-gray-300 dark:text-gray-600 mt-1">Notifications will appear here when tests complete or bugs are updated</div></div> : notifications.slice(0, 20).map((n) => { const getCategoryStyle = (type: string) => { switch (type) { case 'run_complete': return { icon: <CheckCircle2 className="size-3.5" />, color: 'text-green-500 bg-green-50 dark:bg-green-900/20' }; case 'status_change': return { icon: <RotateCcw className="size-3.5" />, color: 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' }; case 'reply': return { icon: <MessageSquare className="size-3.5" />, color: 'text-purple-500 bg-purple-50 dark:bg-purple-900/20' }; case 'schedule': return { icon: <CalendarClock className="size-3.5" />, color: 'text-orange-500 bg-orange-50 dark:bg-orange-900/20' }; default: return { icon: <Bell className="size-3.5" />, color: 'text-gray-500 bg-gray-50 dark:bg-gray-700/50' } } }; const catStyle = getCategoryStyle(n.type); return (<div key={n.id} className={`px-4 py-2.5 border-b border-gray-50 dark:border-gray-700/50 flex gap-3 items-start hover:bg-gray-50/50 dark:hover:bg-gray-700/20 transition-colors ${!n.read ? 'bg-[#E8F5E9]/30 dark:bg-green-900/5' : ''}`}><div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${catStyle.color}`}>{catStyle.icon}</div><div className="flex-1 min-w-0"><div className="text-[12px] font-medium text-[#333333] dark:text-gray-200 leading-tight">{n.title}</div><div className="text-[11px] text-[#666666] dark:text-gray-400 mt-0.5 leading-snug">{n.message}</div><div className="text-[10px] text-[#888888] dark:text-gray-500 mt-1">{new Date(n.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div></div>{!n.read && <div className="shrink-0 w-2 h-2 rounded-full bg-[#6777EF] mt-1.5" />}</div>) })}</div>
                 {notifications.length > 0 && <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-center"><span className="text-[11px] text-gray-400 dark:text-gray-500">{notifications.length} notification{notifications.length !== 1 ? 's' : ''}</span></div>}
               </div>
@@ -999,7 +1046,7 @@ export default function Home() {
         <main className="flex-1 flex flex-col overflow-hidden bg-[#F1F2F7] dark:bg-gray-900 relative">
           {navToast && <NavToast key={navToast.key} label={navToast.label} parent={navToast.parent} />}
           {!sidebarOpen && selectedModule !== 'dashboard' && (
-            <div className="flex items-center gap-1.5 px-4 py-2 border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
+            <div className="flex items-center gap-1.5 px-4 py-2 border-b border-gray-200 dark:border-gray-600/40 bg-white dark:bg-gray-900 shrink-0">
               <button onClick={handleGoHome} className="text-[12px] text-[#3F51B5] hover:text-[#2D3FC7] dark:hover:text-indigo-400 font-medium cursor-pointer transition-colors hover:underline">Dashboard</button>
               {modulePath.parent && <><ChevronRight className="size-3 text-gray-400 dark:text-gray-500" /><span className="text-[12px] text-gray-500 dark:text-gray-400">{modulePath.parent}</span></>}
               <ChevronRight className="size-3 text-gray-400 dark:text-gray-500" />
@@ -1013,7 +1060,7 @@ export default function Home() {
           {selectedModule === 'my-tickets' && user && <MyTicketsTab userEmail={user.email} userName={user.name} />}
           {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-              <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 shrink-0" data-tour="tab-bar">
+              <div className="border-b border-gray-300 dark:border-gray-500/70 bg-gray-50/50 dark:bg-gray-800/30 shrink-0" data-tour="tab-bar">
                 <div className="flex items-center h-10 px-4 gap-0">
                   {tabs.map((tab) => (<button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-4 h-full text-[13px] font-medium transition-colors border-b-2 cursor-pointer ${activeTab === tab.id ? 'border-[#3F51B5] text-[#3F51B5] dark:text-indigo-400 bg-white dark:bg-gray-900' : 'border-transparent text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100/50 dark:hover:bg-gray-800/30'}`}>{tab.label}</button>))}
                   <div className="flex-1" />
@@ -1021,8 +1068,8 @@ export default function Home() {
                 </div>
               </div>
               <div className="flex-1 overflow-hidden min-h-0">
-                {activeTab === 'test-runner' && <div data-tour="test-runner" className="h-full"><TestRunnerTab tests={tests} testChecks={testChecks} toggleTestCheck={toggleTestCheck} isRunning={isRunning} totalFailed={failedCount} onRun={(selectedOnly, testType) => { runTests(selectedOnly, undefined, testType); setActiveTab('live-execution') }} onRunByPriority={runByPriority} onRerunFailed={() => { const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { rerunTestIds(failedIds); runTests(true, failedIds); setActiveTab('live-execution') } }} erpToken={erpToken} erpTenantId={erpTenantId} currentModuleId={selectedModule} onOpenCredentials={onOpenCredentials} onClearToken={onClearToken} /></div>}
-                {activeTab === 'live-execution' && <div data-tour="live-execution" className="h-full"><LiveExecutionTab tests={tests} testGroups={currentTestGroups} isRunning={isRunning} runningProgress={runningProgress} onStop={async () => { const runId = currentRunIdRef.current; if (runId) { try { await stopRun(runId); toast.success('Run stopped') } catch (err) { toast.error('Failed to stop run', { description: err instanceof Error ? err.message : 'Unknown error' }) } } setIsRunning(false) }} onBack={() => setActiveTab('test-runner')} onRerunFailed={() => { const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { rerunTestIds(failedIds); runTests(true, failedIds) } }} onScreenshotCaptured={(entry) => { setScreenshotEntries((prev) => { if (prev.length >= 50) return [entry, ...prev.slice(0, 49)]; return [entry, ...prev] }) }} /></div>}
+                {activeTab === 'test-runner' && <div data-tour="test-runner" className="h-full"><TestRunnerTab tests={tests} testChecks={testChecks} toggleTestCheck={toggleTestCheck} isRunning={isRunning} totalFailed={failedCount} onRun={(selectedOnly, testType) => { runTests(selectedOnly, undefined, testType); setActiveTab('live-execution') }} onRunByPriority={runByPriority} onRerunFailed={() => { const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { rerunTestIds(failedIds); runTests(true, failedIds); setActiveTab('live-execution') } }} erpToken={erpToken} erpTenantId={erpTenantId} currentModuleId={selectedModule} onOpenCredentials={onOpenCredentials} onClearToken={onClearToken} showRawNames={showRawNames} /></div>}
+                {activeTab === 'live-execution' && <div data-tour="live-execution" className="h-full"><LiveExecutionTab tests={tests} testGroups={currentTestGroups} isRunning={isRunning} runningProgress={runningProgress} showRawNames={showRawNames} onStop={async () => { const runId = currentRunIdRef.current; if (runId) { try { await stopRun(runId); toast.success('Run stopped') } catch (err) { toast.error('Failed to stop run', { description: err instanceof Error ? err.message : 'Unknown error' }) } } setIsRunning(false) }} onBack={() => setActiveTab('test-runner')} onRerunFailed={() => { const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { rerunTestIds(failedIds); runTests(true, failedIds) } }} onScreenshotCaptured={(entry) => { setScreenshotEntries((prev) => { if (prev.length >= 50) return [entry, ...prev.slice(0, 49)]; return [entry, ...prev] }) }} /></div>}
                 {activeTab === 'results' && <div data-tour="results" className="h-full"><ResultsTab tests={tests} passedCount={passedCount} failedCount={failedCount} totalCount={tests.length} runHistory={runHistory} bugReportsList={bugReportsList} onRunDetail={(run) => { setSelectedRunForDetail(run); setRunDetailDialogOpen(true) }} onCompareRuns={() => setRunComparisonOpen(true)} testGroups={currentTestGroups} moduleHealth={moduleHealth} moduleName={modulePath.name} currentModuleId={selectedModule} /></div>}
                 {activeTab === 'screenshots' && (
                   <div data-tour="screenshots" className="flex flex-col h-full min-h-0">
@@ -1056,7 +1103,7 @@ export default function Home() {
       )}
       {/* Quick Switcher */}
       {quickSwitcherOpen && (
-        <><div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm" onClick={() => setQuickSwitcherOpen(false)} /><div className="fixed top-[20%] left-1/2 -translate-x-1/2 z-[101] w-full max-w-lg"><div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"><div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700"><Search className="size-4 text-gray-400 shrink-0" /><input type="text" value={quickSearch} onChange={(e) => setQuickSearch(e.target.value)} placeholder="Search modules... (e.g. tax, uom, crop)" className="flex-1 text-[14px] text-gray-800 dark:text-gray-100 placeholder:text-gray-400 outline-none bg-transparent" autoFocus onKeyDown={(e) => { if (e.key === 'Escape') setQuickSwitcherOpen(false) }} /><kbd className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-[10px] font-mono text-gray-400 shrink-0">ESC</kbd></div><div className="max-h-[300px] overflow-auto py-2">{(() => { const q = quickSearch.toLowerCase(); const flatModules: { id: string; label: string; parent?: string; badge?: string }[] = []; for (const mod of sidebarModules) { if (mod.children) { for (const child of mod.children) { flatModules.push({ id: child.id, label: child.label, parent: mod.label, badge: child.badge }) } } else { flatModules.push({ id: mod.id, label: mod.label, badge: mod.badge }) } } const filtered = q ? flatModules.filter((m) => m.label.toLowerCase().includes(q) || m.id.toLowerCase().includes(q) || (m.parent && m.parent.toLowerCase().includes(q))) : flatModules; if (filtered.length === 0) return <div className="px-4 py-6 text-center text-[13px] text-gray-400 dark:text-gray-500">No modules found</div>; return filtered.map((mod) => { const isActive = mod.id === selectedModule; return (<button key={mod.id} onClick={() => { setSelectedModule(mod.id); setActiveTab('test-runner'); setQuickSwitcherOpen(false); setSidebarOpen(true) }} className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors cursor-pointer ${isActive ? 'bg-[#E8F5E9] dark:bg-[#1B4332]/20 text-[#1B4332] dark:text-green-400' : 'text-[#333333] dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}>{mod.parent && <span className="text-[11px] text-gray-400 dark:text-gray-500 truncate max-w-[100px]">{mod.parent}</span>}{mod.parent && <ChevronRight className="size-3 text-gray-300 dark:text-gray-600 shrink-0" />}<span className={`text-[13px] flex-1 truncate ${isActive ? 'font-medium' : ''}`}>{mod.label}</span>{mod.badge && <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">{mod.badge}</span>}{isActive && <CheckCircle2 className="size-3.5 text-[#3F51B5] shrink-0" />}</button>) }) })()}</div><div className="flex items-center gap-4 px-4 py-2 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-[11px] text-gray-400"><span><kbd className="px-1 py-0.5 rounded bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-[10px] font-mono">↑↓</kbd> navigate</span><span><kbd className="px-1 py-0.5 rounded bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-[10px] font-mono">Enter</kbd> select</span><span><kbd className="px-1 py-0.5 rounded bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-[10px] font-mono">Esc</kbd> close</span></div></div></div></>
+        <><div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm" onClick={() => setQuickSwitcherOpen(false)} /><div className="fixed top-[20%] left-1/2 -translate-x-1/2 z-[101] w-full max-w-lg"><div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-300 dark:border-gray-500/70 overflow-hidden"><div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-600/40"><Search className="size-4 text-gray-400 shrink-0" /><input type="text" value={quickSearch} onChange={(e) => setQuickSearch(e.target.value)} placeholder="Search modules... (e.g. tax, uom, crop)" className="flex-1 text-[14px] text-gray-800 dark:text-gray-100 placeholder:text-gray-400 outline-none bg-transparent" autoFocus onKeyDown={(e) => { if (e.key === 'Escape') setQuickSwitcherOpen(false) }} /><kbd className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-[10px] font-mono text-gray-400 shrink-0">ESC</kbd></div><div className="max-h-[300px] overflow-auto py-2">{(() => { const q = quickSearch.toLowerCase(); const flatModules: { id: string; label: string; parent?: string; badge?: string }[] = []; for (const mod of sidebarModules) { if (mod.children) { for (const child of mod.children) { flatModules.push({ id: child.id, label: child.label, parent: mod.label, badge: child.badge }) } } else { flatModules.push({ id: mod.id, label: mod.label, badge: mod.badge }) } } const filtered = q ? flatModules.filter((m) => m.label.toLowerCase().includes(q) || m.id.toLowerCase().includes(q) || (m.parent && m.parent.toLowerCase().includes(q))) : flatModules; if (filtered.length === 0) return <div className="px-4 py-6 text-center text-[13px] text-gray-400 dark:text-gray-500">No modules found</div>; return filtered.map((mod) => { const isActive = mod.id === selectedModule; return (<button key={mod.id} onClick={() => { setSelectedModule(mod.id); setActiveTab('test-runner'); setQuickSwitcherOpen(false); setSidebarOpen(true) }} className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors cursor-pointer ${isActive ? 'bg-[#E8F5E9] dark:bg-[#1B4332]/20 text-[#1B4332] dark:text-green-400' : 'text-[#333333] dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}>{mod.parent && <span className="text-[11px] text-gray-400 dark:text-gray-500 truncate max-w-[100px]">{mod.parent}</span>}{mod.parent && <ChevronRight className="size-3 text-gray-300 dark:text-gray-600 shrink-0" />}<span className={`text-[13px] flex-1 truncate ${isActive ? 'font-medium' : ''}`}>{mod.label}</span>{mod.badge && <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">{mod.badge}</span>}{isActive && <CheckCircle2 className="size-3.5 text-[#3F51B5] shrink-0" />}</button>) }) })()}</div><div className="flex items-center gap-4 px-4 py-2 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-[11px] text-gray-400"><span><kbd className="px-1 py-0.5 rounded bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-[10px] font-mono">↑↓</kbd> navigate</span><span><kbd className="px-1 py-0.5 rounded bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-[10px] font-mono">Enter</kbd> select</span><span><kbd className="px-1 py-0.5 rounded bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-[10px] font-mono">Esc</kbd> close</span></div></div></div></>
       )}
       {/* Console toggle buttons */}
       {!consoleOpen && <button onClick={() => setConsoleOpen(true)} className="fixed bottom-4 right-4 z-50 bg-[#1a1a2e] text-green-400 hover:bg-[#252540] transition-colors rounded-lg px-3 py-2 flex items-center gap-2 shadow-lg border border-gray-700 cursor-pointer"><Terminal className="size-3.5" /><span className="text-[12px] font-medium">Console</span><span className="bg-green-500/20 text-green-400 text-[10px] px-1.5 py-0.5 rounded-full">{consoleLogs.length}</span></button>}
@@ -1070,39 +1117,37 @@ export default function Home() {
       {/* ERP Credential Dialog */}
       <Dialog open={credentialsOpen} onOpenChange={setCredentialsOpen}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>ERP API Credentials</DialogTitle><DialogDescription>Enter your ERP token and tenant ID for API test execution.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>ERP API Credentials</DialogTitle><DialogDescription>Token and tenant ID for API test execution.</DialogDescription></DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center justify-between">
                 <label className="text-[12px] font-medium text-gray-700 dark:text-gray-300">ERP Token</label>
                 <button onClick={() => setShowTokenHelp(!showTokenHelp)} className="inline-flex items-center gap-1 text-[11px] text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline transition-colors cursor-pointer">
                   <HelpCircle className="size-3" />
-                  What is ERP Token, click here ?
+                  {showTokenHelp ? 'Hide help' : 'Where to find it?'}
                 </button>
               </div>
-              <input type="password" value={erpToken} onChange={(e) => setErpToken(e.target.value)} className="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-[13px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" placeholder="Paste your ERP JWT token" />
+              <input type="password" value={erpToken} onChange={(e) => setErpToken(e.target.value)} className="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-[13px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" placeholder="Bearer eyJhbGciOiJIUzI1NiI..." />
               {showTokenHelp && (
-                <div className="mt-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 text-[12px] text-gray-700 dark:text-gray-300 space-y-1.5">
-                  <p className="font-semibold text-blue-700 dark:text-blue-400">How to get your ERP token:</p>
-                  <ol className="list-decimal list-inside space-y-1">
-                    <li>Log in to the ERP system in your browser</li>
-                    <li>Open DevTools (F12) → <strong>Network</strong> tab</li>
-                    <li>Click any request to <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">dynamic-screen-wrapper</code> e.g. <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">Employee/</code>, <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">Supplier/</code>, <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">tenants/</code></li>
-                    <li>Go to the <strong>Headers</strong> panel and scroll to <strong>Request Headers</strong></li>
-                    <li>Copy the <strong>Authorization</strong> header value: <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">Bearer &lt;token&gt;</code></li>
-                    <li>The token is the long string after &quot;Bearer &quot; looking like <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">eyJhbGciOiJIUzI1NiIsIn...</code></li>
-                    <li>At the end of the Headers you will find <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">x-tenant-id: 711</code> — that number is the <strong>Tenant ID</strong></li>
+                <div className="mt-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 text-[12px] text-gray-700 dark:text-gray-300 space-y-1">
+                  <p className="font-semibold text-blue-700 dark:text-blue-400">How to find your token</p>
+                  <ol className="list-decimal list-inside space-y-0.5 text-[11.5px] leading-relaxed">
+                    <li>Log into ERP and open <strong>DevTools</strong> (F12) → <strong>Network</strong> tab</li>
+                    <li>Click any <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">dynamic-screen-wrapper</code> request (e.g. <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">Employee/</code>, <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">Supplier/</code>, <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">tenants/</code>)</li>
+                    <li>In <strong>Request Headers</strong>, find <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">Authorization: Bearer &lt;token&gt;</code></li>
+                    <li>The token is the <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">eyJ...</code> string after <strong>Bearer</strong></li>
+                    <li>Below that, copy <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">x-tenant-id: 711</code> — that is your <strong>Tenant ID</strong></li>
                   </ol>
                 </div>
               )}
             </div>
-            <div><label className="text-[12px] font-medium text-gray-700 dark:text-gray-300">Tenant ID</label><input type="text" value={erpTenantId} onChange={(e) => setErpTenantId(e.target.value)} className="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-[13px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" placeholder="681 (default)" /></div>
+            <div><label className="text-[12px] font-medium text-gray-700 dark:text-gray-300">Tenant ID</label><input type="text" value={erpTenantId} onChange={(e) => setErpTenantId(e.target.value)} className="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-[13px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" placeholder="e.g. 681" /></div>
           </div>
           <DialogFooter className="gap-1.5">{erpToken || erpTenantId ? <Button variant="outline" onClick={() => { setErpToken(''); setErpTenantId(''); setCredentialsOpen(false) }} className="cursor-pointer border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">Clear</Button> : null}<Button variant="outline" onClick={() => setCredentialsOpen(false)} className="cursor-pointer">Cancel</Button><Button onClick={() => setCredentialsOpen(false)} className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white cursor-pointer">Save</Button></DialogFooter>
         </DialogContent>
       </Dialog>
       {/* Run Detail Dialog */}
-      <RunDetailDialog open={runDetailDialogOpen} onClose={() => { setRunDetailDialogOpen(false); setSelectedRunForDetail(null) }} run={selectedRunForDetail} />
+      <RunDetailDialog open={runDetailDialogOpen} onClose={() => { setRunDetailDialogOpen(false); setSelectedRunForDetail(null) }} run={selectedRunForDetail} visibilityData={visibilityData} showRawNames={showRawNames} />
 
       {/* AI Features — temporarily disabled (can be re-enabled later) */}
       {/* <AiBugTriage open={aiBugTriageOpen} onClose={() => { setAiBugTriageOpen(false); setAiTriageTest(null) }} testId={aiTriageTest?.id || ''} testDescription={aiTriageTest?.name || ''} error={aiTriageTest?.error} moduleName={modulePath.name} userName={user?.name || ''} />
@@ -1120,7 +1165,7 @@ export default function Home() {
       {/* Screenshot Compare */}
       {screenshotCompareOpen && <ScreenshotCompare left={compareScreenshots[0]} right={compareScreenshots[1]} onClose={() => setScreenshotCompareOpen(false)} />}
       {/* FOOTER */}
-      <footer className="shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-1.5 flex items-center justify-between">
+      <footer className="shrink-0 border-t border-gray-300 dark:border-gray-500/70 bg-white dark:bg-gray-900 px-4 py-1.5 flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500"><Copyright className="size-3" /><span>2026 AgDi Solutions Pvt. Ltd. All rights reserved.</span></div>
         <div className="flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-500"><span className="flex items-center gap-1">Version 1.0.0</span><a href="https://rhythmerp.algorhythms.in" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-[#3F51B5] dark:hover:text-indigo-400 transition-colors cursor-pointer"><HelpCircle className="size-3" />Help<ExternalLink className="size-2.5" /></a></div>
       </footer>

@@ -156,82 +156,140 @@ def _load_test_cases_for_path(test_path: str) -> dict:
 
     # Find matching key by checking path parts
     path_parts = Path(test_path).parts
+    # Also build the full lowercase path for broader matching
+    full_path_str = test_path.lower().replace("\\", "/")
+
     for key in all_tc:
-        # Normalize the key for comparison
         normalized = key.lower().replace("-", "_").replace(" ", "_")
+
+        # 1. Exact part match (original behavior)
         for part in path_parts:
             if normalized == part.lower():
                 return all_tc[key]
+
+        # 2. Key appears as a substring in the path (handles "seasons" → ".../season/...")
+        if normalized in full_path_str:
+            return all_tc[key]
+
+        # 3. Path part starts with key or key starts with path part (handles "season" ≈ "seasons")
+        for part in path_parts:
+            pl = part.lower()
+            if pl.startswith(normalized) or normalized.startswith(pl):
+                return all_tc[key]
+
     return {}
 
 
-def _resolve_tests(test_path: str, requested: list) -> list:
-    """Resolve frontend test IDs to actual pytest node IDs by matching descriptions to docstrings."""
-    # Step 1: Load test_cases.json to get descriptions
+def _resolve_tests(test_path: str, requested: list) -> tuple[list, list]:
+    """Resolve frontend test IDs to actual pytest node IDs.
+
+    Returns (resolved, unmatched) where resolved is a list of pytest node IDs
+    and unmatched is a list of requested IDs that could not be resolved.
+    """
+    all_ids = _collect_test_ids(test_path)
+
+    # Step 1: Direct match — requested ID is already a valid pytest node ID
+    resolved = []
+    unmatched = []
+    id_set = set(all_ids)
+    for t in requested:
+        if t in id_set:
+            resolved.append(t)
+        else:
+            unmatched.append(t)
+
+    if not unmatched:
+        return resolved, unmatched
+
+    # Step 2: Try description-to-docstring fuzzy matching (preferred when test_cases.json data exists)
+    # This correctly maps test_cases.json IDs like "T1", "T2" to their actual tests
     tc_module = _load_test_cases_for_path(test_path)
     tc_tests = tc_module.get("tests", []) if tc_module else []
 
-    if not tc_tests:
-        # No test_cases data — fall back to index-based
-        all_ids = _collect_test_ids(test_path)
-        resolved = []
-        for t in requested:
-            try:
-                idx = int(t) - 1
-                if 0 <= idx < len(all_ids):
-                    resolved.append(all_ids[idx])
-            except ValueError:
-                for nid in all_ids:
-                    if t.lower() in nid.lower():
-                        resolved.append(nid)
-                        break
-        return resolved
+    if tc_tests:
+        id_to_desc = {}
+        for t in tc_tests:
+            id_to_desc[str(t.get("id", ""))] = t.get("description", "")
 
-    # Build ID -> description mapping
-    id_to_desc = {}
-    for t in tc_tests:
-        id_to_desc[str(t.get("id", ""))] = t.get("description", "")
-
-    # Step 2: Collect all pytest node IDs
-    all_ids = _collect_test_ids(test_path)
-
-    # Step 3: Parse docstrings for each test file
-    node_id_to_doc = {}
-    for nid in all_ids:
-        parts = nid.split("::")
-        if len(parts) < 3:
-            node_id_to_doc[nid] = ""
-            continue
-        file_rel = parts[0]
-        file_abs = PROJECT_ROOT / file_rel
-        func_name = parts[-1]
-        doc = _extract_docstring(str(file_abs), func_name)
-        node_id_to_doc[nid] = doc
-
-    # Step 4: Match each requested ID to best matching node ID
-    resolved = []
-    used = set()
-    for t in requested:
-        desc = id_to_desc.get(str(t), "")
-        if not desc:
-            continue
-
-        best_match = None
-        best_score = 0
-
-        for nid, doc in node_id_to_doc.items():
-            if nid in used:
+        node_id_to_doc = {}
+        for nid in all_ids:
+            if nid in resolved:
                 continue
-            score = _match_score(desc, doc, nid)
-            if score > best_score:
-                best_score = score
-                best_match = nid
+            parts = nid.split("::")
+            if len(parts) < 3:
+                node_id_to_doc[nid] = ""
+                continue
+            file_rel = parts[0]
+            file_abs = PROJECT_ROOT / file_rel
+            func_name = parts[-1]
+            doc = _extract_docstring(str(file_abs), func_name)
+            node_id_to_doc[nid] = doc
 
-        if best_match and best_score > 0.3:
-            resolved.append(best_match)
-            used.add(best_match)
+        used = set(resolved)
+        still_unmatched = []
+        for t in unmatched:
+            desc = id_to_desc.get(str(t), "")
+            if not desc:
+                still_unmatched.append(t)
+                continue
 
-    return resolved
+            best_match = None
+            best_score = 0
+            for nid, doc in node_id_to_doc.items():
+                if nid in used:
+                    continue
+                score = _match_score(desc, doc, nid)
+                if score > best_score:
+                    best_score = score
+                    best_match = nid
+
+            if best_match and best_score > 0.3:
+                resolved.append(best_match)
+                used.add(best_match)
+            else:
+                still_unmatched.append(t)
+        unmatched = still_unmatched
+
+        if not unmatched:
+            return resolved, unmatched
+
+    # Step 3: Try index-based match — extract numeric suffix for IDs like "T1", "T01", "TR-T01"
+    import re
+    for t in list(unmatched):
+        m = re.search(r'(\d+)$', t)
+        if m:
+            idx = int(m.group(1)) - 1
+            if 0 <= idx < len(all_ids):
+                resolved.append(all_ids[idx])
+                unmatched.remove(t)
+                continue
+        try:
+            idx = int(t) - 1
+            if 0 <= idx < len(all_ids) and all_ids[idx] not in resolved:
+                resolved.append(all_ids[idx])
+                unmatched.remove(t)
+        except ValueError:
+            pass
+
+    if not unmatched:
+        return resolved, unmatched
+
+    # Step 4: Try substring match for remaining unmatched IDs
+    still_unmatched = []
+    for t in unmatched:
+        found = False
+        for nid in all_ids:
+            if nid in resolved:
+                continue
+            if t.lower() in nid.lower():
+                resolved.append(nid)
+                found = True
+                break
+        if not found:
+            still_unmatched.append(t)
+    unmatched = still_unmatched
+
+    return resolved, unmatched
 
 
 def stop_run(run_id: str) -> bool:
@@ -338,11 +396,23 @@ def run_tests_stream(request: CreateRunRequest):
 
     # Add specific tests if provided - resolve IDs to actual pytest node IDs
     if request.tests:
-        resolved = _resolve_tests(test_path, request.tests)
+        resolved, unmatched = _resolve_tests(test_path, request.tests)
+        if unmatched:
+            for test_id in unmatched:
+                yield _sse_event(LogEvent(
+                    type="error",
+                    message=f"Could not resolve test ID: {test_id}",
+                    timestamp=datetime.now(timezone.utc),
+                ))
         if resolved:
             cmd.extend(resolved)
         else:
-            cmd.append(test_path)
+            yield _sse_event(LogEvent(
+                type="error",
+                message="No tests could be resolved. Aborting run.",
+                timestamp=datetime.now(timezone.utc),
+            ))
+            return
     else:
         cmd.append(test_path)
 

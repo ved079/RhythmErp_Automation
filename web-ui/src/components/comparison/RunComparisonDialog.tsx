@@ -530,7 +530,7 @@ export default function RunComparisonDialog({
             {/* Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {/* Base Run Card */}
-              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4">
+              <div className="rounded-lg border border-gray-300 dark:border-gray-500/70 bg-gray-50 dark:bg-gray-800/50 p-4">
                 <div className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
                   Base Run
                 </div>
@@ -574,7 +574,7 @@ export default function RunComparisonDialog({
               </div>
 
               {/* Compare Run Card */}
-              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4">
+              <div className="rounded-lg border border-gray-300 dark:border-gray-500/70 bg-gray-50 dark:bg-gray-800/50 p-4">
                 <div className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
                   Compare Run
                 </div>
@@ -618,7 +618,7 @@ export default function RunComparisonDialog({
               </div>
 
               {/* Delta Card */}
-              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-[#DFE9FB] dark:bg-indigo-900/20 p-4">
+              <div className="rounded-lg border border-gray-300 dark:border-gray-500/70 bg-[#DFE9FB] dark:bg-indigo-900/20 p-4">
                 <div className="text-[11px] font-semibold text-[#3F51B5] dark:text-indigo-300 uppercase tracking-wide mb-2">
                   Delta (Compare − Base)
                 </div>
@@ -700,7 +700,7 @@ export default function RunComparisonDialog({
             {diffRows.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Donut Chart */}
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                <div className="rounded-lg border border-gray-300 dark:border-gray-500/70 p-4">
                   <div className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide mb-3">
                     Change Distribution
                   </div>
@@ -781,7 +781,7 @@ export default function RunComparisonDialog({
                 </div>
 
                 {/* Summary Progress Bars */}
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                <div className="rounded-lg border border-gray-300 dark:border-gray-500/70 p-4">
                   <div className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide mb-3">
                     Test Outcomes
                   </div>
@@ -911,7 +911,7 @@ export default function RunComparisonDialog({
                 No tests match the current filter
               </div>
             ) : (
-              <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-[400px] overflow-y-auto">
+              <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden max-h-[400px] overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">

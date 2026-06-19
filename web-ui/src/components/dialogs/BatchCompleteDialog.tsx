@@ -27,7 +27,7 @@ export function BatchCompleteDialog({ open, onClose, created, failed, elapsedSec
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent className="sm:max-w-[400px] dark:bg-gray-800 dark:border-gray-700">
+      <DialogContent className="sm:max-w-[400px] dark:bg-gray-800 dark:border-gray-600/60">
         <DialogHeader>
           <DialogTitle className="sr-only">Batch Complete</DialogTitle>
           <DialogDescription className="sr-only">Batch data creation summary</DialogDescription>

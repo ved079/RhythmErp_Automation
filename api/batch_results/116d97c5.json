@@ -1,0 +1,16 @@
+{
+  "run_id": "116d97c5",
+  "module": "registration",
+  "sub_module": "constituent_documents",
+  "total": 1,
+  "created": 1,
+  "failed": 0,
+  "elapsed_seconds": 0.9,
+  "records": [
+    {
+      "name": "Constituent Documents",
+      "record_id": 1,
+      "status": "created"
+    }
+  ]
+}

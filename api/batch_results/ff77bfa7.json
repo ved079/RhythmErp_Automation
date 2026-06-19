@@ -1,0 +1,16 @@
+{
+  "run_id": "ff77bfa7",
+  "module": "registration",
+  "sub_module": "supplier",
+  "total": 1,
+  "created": 1,
+  "failed": 0,
+  "elapsed_seconds": 0.8,
+  "records": [
+    {
+      "name": "Om Durga Trading Co.",
+      "record_id": 7,
+      "status": "created"
+    }
+  ]
+}

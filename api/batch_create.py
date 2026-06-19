@@ -29,6 +29,18 @@ MODULE_IMPORT_PATHS = {
         "register_of_loan": "pages.registration.modules.register_of_loan.data.register_of_loan_data",
         "register_charges": "pages.registration.modules.register_charges.data.register_charges_data",
     },
+    "common_settings": {
+        "bank": "pages.common_settings.modules.bank.data.bank_data",
+        "designation": "pages.common_settings.modules.designation.data.designation_data",
+        "error_code_mst": "pages.common_settings.modules.error_code_mst.data.error_code_mst_data",
+        "hsn_sac": "pages.common_settings.modules.hsn_sac.data.hsn_sac_data",
+        "season": "pages.common_settings.modules.season.data.season_data",
+        "tax_authority": "pages.common_settings.modules.tax_authority.data.tax_authority_data",
+        "tax_rate": "pages.common_settings.modules.tax_rate.data.tax_rate_data",
+        "uom": "pages.common_settings.modules.uom.data.uom_data",
+        "uom_conversion": "pages.common_settings.modules.uom_conversion.data.uom_conversion_data",
+        "vehicle_master": "pages.common_settings.modules.vehicle_master.data.vehicle_master_data",
+    },
 }
 
 

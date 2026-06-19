@@ -160,7 +160,7 @@ export function ScheduleRunsTab({ userName, sidebarModules }: { userName: string
 
         {/* Create Form */}
         {showForm && (
-          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-300 dark:border-gray-500/70 p-4 space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-[12px]">Module</Label>
@@ -260,7 +260,7 @@ export function ScheduleRunsTab({ userName, sidebarModules }: { userName: string
         <div>
           <h4 className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 mb-2">Upcoming Scheduled Runs</h4>
           {runs.length === 0 ? (
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 text-center">
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-500/70 p-6 text-center">
               <CalendarClock className="size-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
               <p className="text-[13px] text-gray-500 dark:text-gray-400">No scheduled runs</p>
               <p className="text-[11px] text-gray-400 mt-1">Create a schedule to automate test runs</p>
@@ -268,7 +268,7 @@ export function ScheduleRunsTab({ userName, sidebarModules }: { userName: string
           ) : (
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {runs.map((run) => (
-                <div key={run.id} className={`bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 flex items-center gap-3 ${!run.enabled ? 'opacity-50' : ''}`}>
+                <div key={run.id} className={`bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-500/70 p-3 flex items-center gap-3 ${!run.enabled ? 'opacity-50' : ''}`}>
                   <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${run.enabled ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
                   <div className="flex-1 min-w-0">
                     <div className="text-[12px] font-medium text-gray-800 dark:text-gray-100 truncate">{run.moduleName}</div>

@@ -154,7 +154,7 @@ export function ResultsTab({
           {moduleRuns.length > 0 && (
             <div>
               <h3 className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 mb-2.5">Recent Runs</h3>
-              <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden divide-y divide-gray-100 dark:divide-gray-700/50">
+              <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden divide-y divide-gray-200 dark:divide-gray-600/40">
                 {moduleRuns.slice(0, 5).map(run => (
                   <div key={run.id}
                     onClick={() => onRunDetail?.(run)}
@@ -183,7 +183,7 @@ export function ResultsTab({
 
           {/* ── Bug Registry (collapsible) ── */}
           {bugReportsList.length > 0 && (
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+            <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden">
               <button onClick={() => setBugOpen(!bugOpen)}
                 className="w-full flex items-center gap-2 px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800/70 transition-colors cursor-pointer text-left"
               >
@@ -193,7 +193,7 @@ export function ResultsTab({
                 <span className="text-[11px] text-gray-500 dark:text-gray-400">{bugReportsList.length}</span>
               </button>
               {bugOpen && (
-                <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
+                <div className="divide-y divide-gray-200 dark:divide-gray-600/40">
                   {bugReportsList.map(bug => (
                     <div key={bug.id} className="flex items-center gap-3 px-4 py-2.5">
                       <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500 w-16">{bug.id.slice(0, 8).toUpperCase()}</span>

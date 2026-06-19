@@ -16,6 +16,7 @@ export function LiveExecutionTab({
   testGroups,
   isRunning,
   runningProgress,
+  showRawNames,
   onStop,
   onBack,
   onRerunFailed,
@@ -25,6 +26,7 @@ export function LiveExecutionTab({
   testGroups: TestClassGroup[]
   isRunning: boolean
   runningProgress: string
+  showRawNames?: boolean
   onStop: () => void
   onBack: () => void
   onRerunFailed: () => void
@@ -372,7 +374,7 @@ export function LiveExecutionTab({
             {isRunning && runningTest && (
               <div className="flex items-center gap-3 mt-2 px-1">
                 <span className="text-[12px] text-slate-500">
-                  Currently: <span className="font-medium text-slate-300">{runningTest.id}</span> — {runningTest.name}
+                  Currently: {showRawNames ? <><span className="font-medium text-slate-300">{runningTest.id}</span><span className="text-gray-500"> — </span></> : ''}{runningTest.name}
                 </span>
                 <div className="w-px h-3 bg-slate-700" />
                 <span className="text-[12px] text-blue-400 flex items-center gap-1.5">
@@ -447,7 +449,7 @@ export function LiveExecutionTab({
               {tvActive && tvImgSrc ? <img src={tvImgSrc} alt="TV view" className="w-full h-full object-contain" /> : <div className="w-full h-full flex flex-col items-center justify-center gap-3"><Loader2 className="size-10 text-green-400 animate-spin" /><p className="text-[14px] text-gray-500">Connecting...</p></div>}
             </div>
             <div className="shrink-0 h-3 bg-gradient-to-t from-gray-800 to-gray-900 border-t border-gray-700 rounded-b-2xl" />
-            {isRunning && runningTest && <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/70 text-white px-5 py-2 rounded-full flex items-center gap-3 text-[12px] border border-white/10"><Loader2 className="size-3.5 animate-spin text-blue-400" /><span className="font-medium">{runningTest.id}</span><span className="text-gray-400">-</span><span className="text-gray-300">{runningTest.name}</span></div>}
+            {isRunning && runningTest && <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/70 text-white px-5 py-2 rounded-full flex items-center gap-3 text-[12px] border border-white/10"><Loader2 className="size-3.5 animate-spin text-blue-400" />{showRawNames ? <><span className="font-medium">{runningTest.id}</span><span className="text-gray-400">-</span></> : ''}<span className="text-gray-300">{runningTest.name}</span></div>}
           </div>
         </div>
       )}
