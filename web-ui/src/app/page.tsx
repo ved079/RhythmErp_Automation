@@ -131,6 +131,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!user) return
+    // TODO Phase 5: migrate to useQuery
     fetchModules()
       .then((mods) => {
         setApiModules(mods)
