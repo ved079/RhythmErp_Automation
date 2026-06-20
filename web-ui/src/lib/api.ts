@@ -566,7 +566,7 @@ export function sidebarToFolderMapping(sidebarId: string): { module: string; sub
       }
       const documentSubs = ["directors", "member", "constituent_documents", "miscellaneous_documents", "register_of_loan", "register_charges"];
       if (documentSubs.includes(folder)) {
-        return { module: "document", subModule: folder };
+        return { module: "registration", subModule: folder };
       }
       const purchaseSubs = ["purchase_order", "goods_receipt_note", "gate_pass", "quality_check"];
       if (purchaseSubs.includes(folder)) {

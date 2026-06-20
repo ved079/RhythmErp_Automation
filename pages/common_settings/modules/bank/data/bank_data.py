@@ -333,7 +333,8 @@ def generate_bank_name(prefix="BANK"):
         suffix = chr(ord('A') + (val % 26)) + suffix
         val //= 26
     # Build alpha-only name
-    base = f"{prefix}{suffix}XXNM"
+    clean_prefix = "".join(c for c in prefix if c.isalpha()) or "BANK"
+    base = f"{clean_prefix}{suffix}XXNM"
     if len(base) < 10:
         base = base + "X" * (10 - len(base))
     return base.upper()

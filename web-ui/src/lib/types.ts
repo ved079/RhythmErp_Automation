@@ -65,7 +65,7 @@ export interface RunSnapshot {
   id: string
   date: string
   moduleId: string
-  results: { testId: string; status: 'passed' | 'failed' }[]
+  results: { testId: string; status: 'passed' | 'failed'; message?: string }[]
   passed: number
   failed: number
   total: number

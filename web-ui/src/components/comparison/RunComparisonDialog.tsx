@@ -38,6 +38,8 @@ import {
   Circle,
   AlertTriangle,
   Loader2,
+  Bookmark,
+  BookmarkCheck,
 } from 'lucide-react'
 import { fetchRunDetail, type RunHistoryItem } from '@/lib/api'
 import type { RunSnapshot } from '@/lib/types'
@@ -49,6 +51,7 @@ interface RunComparisonDialogProps {
   open: boolean
   onClose: () => void
   runHistory: RunSnapshot[]
+  currentModuleId?: string
 }
 
 type ChangeType = 'new-pass' | 'new-fail' | 'new-test' | 'removed' | 'unchanged'
@@ -194,6 +197,7 @@ export default function RunComparisonDialog({
   open,
   onClose,
   runHistory,
+  currentModuleId,
 }: RunComparisonDialogProps) {
   // Selection state
   const [baseRunId, setBaseRunId] = useState<string>('')
@@ -205,11 +209,15 @@ export default function RunComparisonDialog({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Filter
-  const [filter, setFilter] = useState<FilterType>('all')
+  // Filter — default to 'changed' (shows regressions + fixes + new + removed)
+  const [filter, setFilter] = useState<FilterType>('changed')
 
-  // Recent runs (max 20)
-  const recentRuns = useMemo(() => runHistory.slice(0, 20), [runHistory])
+  // Filter runs by current module, then take most recent 20
+  const moduleRuns = useMemo(
+    () => currentModuleId ? runHistory.filter(r => r.moduleId === currentModuleId) : runHistory,
+    [runHistory, currentModuleId]
+  )
+  const recentRuns = useMemo(() => moduleRuns.slice(0, 20), [moduleRuns])
 
   // Fetch details when both selected
   useEffect(() => {
@@ -258,9 +266,42 @@ export default function RunComparisonDialog({
       setBaseDetail(null)
       setCompareDetail(null)
       setError(null)
-      setFilter('all')
+      setFilter('changed')
     }
   }, [open])
+
+  // Smart defaults: auto-select latest 2 runs for this module on open
+  useEffect(() => {
+    if (!open) return
+    if (moduleRuns.length < 2) return
+    // Don't override if user already made a selection
+    if (baseRunId || compareRunId) return
+
+    const savedBaseline = currentModuleId
+      ? localStorage.getItem(`baseline_${currentModuleId}`)
+      : null
+
+    if (savedBaseline && moduleRuns.some(r => r.id === savedBaseline)) {
+      setBaseRunId(savedBaseline)
+      setCompareRunId(moduleRuns[0].id)
+    } else {
+      setBaseRunId(moduleRuns[1].id)
+      setCompareRunId(moduleRuns[0].id)
+    }
+  }, [open, moduleRuns, currentModuleId])
+
+  // Baseline management
+  const handleSetBaseline = useCallback(() => {
+    if (!currentModuleId || !compareRunId) return
+    localStorage.setItem(`baseline_${currentModuleId}`, compareRunId)
+    // Show a brief indicator — the icon in the button will update
+  }, [currentModuleId, compareRunId])
+
+  const savedBaselineId = currentModuleId
+    ? localStorage.getItem(`baseline_${currentModuleId}`)
+    : null
+
+  const isBaseline = savedBaselineId === compareRunId
 
   // Build diff rows
   const diffRows = useMemo<DiffRow[]>(() => {
@@ -414,86 +455,119 @@ export default function RunComparisonDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <GitCompare className="size-5 text-[#3F51B5]" />
-            Run Comparison
+            Regression Check
           </DialogTitle>
           <DialogDescription className="text-[13px] text-gray-500 dark:text-gray-400">
-            Compare two test runs side-by-side to identify regressions and improvements
+            Select a baseline and target run to detect regressions, fixes, and changes
           </DialogDescription>
         </DialogHeader>
 
         {/* Step 1: Select Runs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Base Run Selector */}
-          <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
-              Base Run (Left)
-            </label>
-            <Select value={baseRunId} onValueChange={setBaseRunId}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select base run..." />
-              </SelectTrigger>
-              <SelectContent>
-                {recentRuns.map((run) => (
-                  <SelectItem
-                    key={run.id}
-                    value={run.id}
-                    disabled={run.id === compareRunId}
-                  >
-                    <span className="truncate">{snapshotLabel(run)}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {baseRunId && runMap.get(baseRunId) && (
-              <div className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                <span>{runMap.get(baseRunId)!.total} tests</span>
-                <span>·</span>
-                <span className="text-green-600 dark:text-green-400">
-                  {runMap.get(baseRunId)!.passed} passed
-                </span>
-                <span>·</span>
-                <span className="text-red-600 dark:text-red-400">
-                  {runMap.get(baseRunId)!.failed} failed
-                </span>
-              </div>
-            )}
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Baseline Run Selector */}
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide flex items-center gap-1">
+                <BookmarkCheck className="size-3 text-indigo-400" />
+                Baseline Run
+              </label>
+              <Select value={baseRunId} onValueChange={setBaseRunId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select baseline..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {recentRuns.map((run) => (
+                    <SelectItem
+                      key={run.id}
+                      value={run.id}
+                      disabled={run.id === compareRunId}
+                    >
+                      <span className="truncate">{snapshotLabel(run)}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {baseRunId && runMap.get(baseRunId) && (
+                <div className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                  <span>{runMap.get(baseRunId)!.total} tests</span>
+                  <span>·</span>
+                  <span className="text-green-600 dark:text-green-400">
+                    {runMap.get(baseRunId)!.passed} passed
+                  </span>
+                  <span>·</span>
+                  <span className="text-red-600 dark:text-red-400">
+                    {runMap.get(baseRunId)!.failed} failed
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Target Run Selector */}
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                Target Run
+              </label>
+              <Select value={compareRunId} onValueChange={setCompareRunId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select target..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {recentRuns.map((run) => (
+                    <SelectItem
+                      key={run.id}
+                      value={run.id}
+                      disabled={run.id === baseRunId}
+                    >
+                      <span className="truncate">{snapshotLabel(run)}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {compareRunId && runMap.get(compareRunId) && (
+                <div className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                  <span>{runMap.get(compareRunId)!.total} tests</span>
+                  <span>·</span>
+                  <span className="text-green-600 dark:text-green-400">
+                    {runMap.get(compareRunId)!.passed} passed
+                  </span>
+                  <span>·</span>
+                  <span className="text-red-600 dark:text-red-400">
+                    {runMap.get(compareRunId)!.failed} failed
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Compare Run Selector */}
-          <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
-              Compare Run (Right)
-            </label>
-            <Select value={compareRunId} onValueChange={setCompareRunId}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select compare run..." />
-              </SelectTrigger>
-              <SelectContent>
-                {recentRuns.map((run) => (
-                  <SelectItem
-                    key={run.id}
-                    value={run.id}
-                    disabled={run.id === baseRunId}
-                  >
-                    <span className="truncate">{snapshotLabel(run)}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {compareRunId && runMap.get(compareRunId) && (
-              <div className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                <span>{runMap.get(compareRunId)!.total} tests</span>
-                <span>·</span>
-                <span className="text-green-600 dark:text-green-400">
-                  {runMap.get(compareRunId)!.passed} passed
-                </span>
-                <span>·</span>
-                <span className="text-red-600 dark:text-red-400">
-                  {runMap.get(compareRunId)!.failed} failed
-                </span>
-              </div>
-            )}
-          </div>
+          {/* Quick compare buttons */}
+          {moduleRuns.length >= 2 && (
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-[11px] h-6 text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
+                onClick={() => {
+                  setBaseRunId(moduleRuns[1].id)
+                  setCompareRunId(moduleRuns[0].id)
+                }}
+              >
+                Latest vs Previous
+              </Button>
+              {savedBaselineId && moduleRuns.some(r => r.id === savedBaselineId) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-[11px] h-6 text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
+                  onClick={() => {
+                    setBaseRunId(savedBaselineId)
+                    setCompareRunId(moduleRuns[0].id)
+                  }}
+                >
+                  Latest vs Baseline
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Same run warning */}
@@ -528,11 +602,12 @@ export default function RunComparisonDialog({
             <Separator />
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Base Run Card */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              {/* Baseline Card */}
               <div className="rounded-lg border border-gray-300 dark:border-gray-500/70 bg-gray-50 dark:bg-gray-800/50 p-4">
-                <div className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-                  Base Run
+                <div className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <BookmarkCheck className="size-3" />
+                  Baseline
                 </div>
                 <div className="text-[13px] text-gray-700 dark:text-gray-200 font-medium">
                   {formatDate(baseDetail.startedAt)}
@@ -573,10 +648,10 @@ export default function RunComparisonDialog({
                 </div>
               </div>
 
-              {/* Compare Run Card */}
+              {/* Target Card */}
               <div className="rounded-lg border border-gray-300 dark:border-gray-500/70 bg-gray-50 dark:bg-gray-800/50 p-4">
                 <div className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-                  Compare Run
+                  Target
                 </div>
                 <div className="text-[13px] text-gray-700 dark:text-gray-200 font-medium">
                   {formatDate(compareDetail.startedAt)}
@@ -617,81 +692,31 @@ export default function RunComparisonDialog({
                 </div>
               </div>
 
-              {/* Delta Card */}
-              <div className="rounded-lg border border-gray-300 dark:border-gray-500/70 bg-[#DFE9FB] dark:bg-indigo-900/20 p-4">
-                <div className="text-[11px] font-semibold text-[#3F51B5] dark:text-indigo-300 uppercase tracking-wide mb-2">
-                  Delta (Compare − Base)
+              {/* Regression Card */}
+              <div className="rounded-lg border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/10 p-4">
+                <div className="text-[11px] font-semibold text-red-600 dark:text-red-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                  <ArrowDown className="size-3" />
+                  Regressions
                 </div>
-                <div className="space-y-2">
-                  {/* Delta Passed */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-[12px] text-gray-600 dark:text-gray-300">Passed</span>
-                    <span
-                      className={`text-[13px] font-bold flex items-center gap-1 ${
-                        summaryDelta.deltaPassed > 0
-                          ? 'text-green-600 dark:text-green-400'
-                          : summaryDelta.deltaPassed < 0
-                            ? 'text-red-600 dark:text-red-400'
-                            : 'text-gray-500 dark:text-gray-400'
-                      }`}
-                    >
-                      {summaryDelta.deltaPassed > 0 ? (
-                        <ArrowUp className="size-3.5" />
-                      ) : summaryDelta.deltaPassed < 0 ? (
-                        <ArrowDown className="size-3.5" />
-                      ) : (
-                        <Minus className="size-3.5" />
-                      )}
-                      {summaryDelta.deltaPassed > 0 ? '+' : ''}
-                      {summaryDelta.deltaPassed}
-                    </span>
-                  </div>
-                  {/* Delta Failed */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-[12px] text-gray-600 dark:text-gray-300">Failed</span>
-                    <span
-                      className={`text-[13px] font-bold flex items-center gap-1 ${
-                        summaryDelta.deltaFailed < 0
-                          ? 'text-green-600 dark:text-green-400'
-                          : summaryDelta.deltaFailed > 0
-                            ? 'text-red-600 dark:text-red-400'
-                            : 'text-gray-500 dark:text-gray-400'
-                      }`}
-                    >
-                      {summaryDelta.deltaFailed < 0 ? (
-                        <ArrowDown className="size-3.5" />
-                      ) : summaryDelta.deltaFailed > 0 ? (
-                        <ArrowUp className="size-3.5" />
-                      ) : (
-                        <Minus className="size-3.5" />
-                      )}
-                      {summaryDelta.deltaFailed > 0 ? '+' : ''}
-                      {summaryDelta.deltaFailed}
-                    </span>
-                  </div>
-                  {/* Delta Rate */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-[12px] text-gray-600 dark:text-gray-300">Rate</span>
-                    <span
-                      className={`text-[13px] font-bold flex items-center gap-1 ${
-                        summaryDelta.deltaRate > 0
-                          ? 'text-green-600 dark:text-green-400'
-                          : summaryDelta.deltaRate < 0
-                            ? 'text-red-600 dark:text-red-400'
-                            : 'text-gray-500 dark:text-gray-400'
-                      }`}
-                    >
-                      {summaryDelta.deltaRate > 0 ? (
-                        <ArrowUp className="size-3.5" />
-                      ) : summaryDelta.deltaRate < 0 ? (
-                        <ArrowDown className="size-3.5" />
-                      ) : (
-                        <Minus className="size-3.5" />
-                      )}
-                      {summaryDelta.deltaRate > 0 ? '+' : ''}
-                      {summaryDelta.deltaRate}%
-                    </span>
-                  </div>
+                <div className="text-[28px] font-bold text-red-600 dark:text-red-400">
+                  {chartStats['new-fail']}
+                </div>
+                <div className="text-[11px] text-red-500/70 dark:text-red-400/70 mt-0.5">
+                  previously passed, now failed
+                </div>
+              </div>
+
+              {/* Fix Card */}
+              <div className="rounded-lg border border-green-200 dark:border-green-800/50 bg-green-50 dark:bg-green-900/10 p-4">
+                <div className="text-[11px] font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                  <ArrowUp className="size-3" />
+                  Fixes
+                </div>
+                <div className="text-[28px] font-bold text-green-600 dark:text-green-400">
+                  {chartStats['new-pass']}
+                </div>
+                <div className="text-[11px] text-green-500/70 dark:text-green-400/70 mt-0.5">
+                  previously failed, now passed
                 </div>
               </div>
             </div>
@@ -1006,7 +1031,7 @@ export default function RunComparisonDialog({
           <div className="text-center py-8">
             <GitCompare className="size-8 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
             <p className="text-[13px] text-gray-400 dark:text-gray-500">
-              Select a Base Run and a Compare Run to start comparison
+              Select a Baseline and a Target run to start regression check
             </p>
           </div>
         )}
@@ -1016,12 +1041,33 @@ export default function RunComparisonDialog({
           !loading && (
             <div className="text-center py-4">
               <p className="text-[13px] text-gray-400 dark:text-gray-500">
-                Select {!baseRunId ? 'a Base Run' : 'a Compare Run'} to continue
+                Select {!baseRunId ? 'a Baseline run' : 'a Target run'} to continue
               </p>
             </div>
           )}
 
-        <DialogFooter>
+        <DialogFooter className="flex items-center justify-between sm:justify-between">
+          <div className="flex items-center gap-2">
+            {compareRunId && currentModuleId && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSetBaseline}
+                className={`text-[12px] gap-1.5 cursor-pointer ${
+                  isBaseline
+                    ? 'text-indigo-600 dark:text-indigo-400'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400'
+                }`}
+              >
+                {isBaseline ? (
+                  <BookmarkCheck className="size-3.5" />
+                ) : (
+                  <Bookmark className="size-3.5" />
+                )}
+                {isBaseline ? 'Saved as Baseline' : 'Set as Baseline'}
+              </Button>
+            )}
+          </div>
           <Button variant="outline" onClick={onClose} className="cursor-pointer">
             Close
           </Button>

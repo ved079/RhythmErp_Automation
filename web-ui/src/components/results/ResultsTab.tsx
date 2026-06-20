@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
-import { GitCompare, Bug, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight } from 'lucide-react'
+import React, { useState, useMemo, useCallback } from 'react'
+import { GitCompare, Bug, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, BookmarkCheck, ArrowUp, ArrowDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
@@ -72,10 +72,52 @@ export function ResultsTab({
   )
 
   const passRate = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0
-  const [bugOpen, setBugOpen] = useState(false)
+  const [errorOpen, setErrorOpen] = useState(true)
+
+  // Error history — extract failed test messages from recent runs
+  const errorHistory = useMemo(() => {
+    const map = new Map<string, { message: string; runId: string; date: string; runRate: number }>()
+    for (const run of moduleRuns) {
+      for (const r of run.results) {
+        if (r.status === 'failed' && r.message && !map.has(r.testId)) {
+          map.set(r.testId, { message: r.message, runId: run.id, date: run.date, runRate: run.rate })
+        }
+      }
+    }
+    return Array.from(map.entries())
+      .map(([testId, info]) => ({ testId, ...info }))
+      .sort((a, b) => b.date.localeCompare(a.date))
+  }, [moduleRuns])
 
   const lastRun = moduleRuns[0]
   const prevRun = moduleRuns[1]
+
+  // Baseline-aware regression overview
+  const [savedBaselineId, setSavedBaselineId] = useState<string | null>(() =>
+    currentModuleId ? localStorage.getItem(`baseline_${currentModuleId}`) : null
+  )
+  const baselineRun = savedBaselineId ? moduleRuns.find(r => r.id === savedBaselineId) : null
+  const regressionSummary = useMemo(() => {
+    if (!baselineRun || !lastRun) return null
+    const allTestIds = new Set([
+      ...baselineRun.results.map(r => r.testId),
+      ...lastRun.results.map(r => r.testId),
+    ])
+    let regressed = 0, fixed = 0
+    for (const testId of allTestIds) {
+      const b = baselineRun.results.find(r => r.testId === testId)
+      const l = lastRun.results.find(r => r.testId === testId)
+      if (b && l && b.status === 'passed' && l.status === 'failed') regressed++
+      if (b && l && b.status === 'failed' && l.status === 'passed') fixed++
+    }
+    return { regressed, fixed, deltaRate: lastRun.rate - baselineRun.rate }
+  }, [baselineRun, lastRun])
+
+  const handleClearBaseline = useCallback(() => {
+    if (!currentModuleId) return
+    localStorage.removeItem(`baseline_${currentModuleId}`)
+    setSavedBaselineId(null)
+  }, [currentModuleId])
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -150,6 +192,53 @@ export function ResultsTab({
             </div>
           </div>
 
+          {/* ── Regression Overview ── */}
+          {regressionSummary && (
+            <div className="border border-indigo-200 dark:border-indigo-800/40 bg-indigo-50/60 dark:bg-indigo-900/10 rounded-lg px-4 py-3 flex items-center gap-4">
+              <BookmarkCheck className="size-4 text-indigo-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] text-gray-600 dark:text-gray-300">
+                  <span className="font-medium">Baseline:</span> {baselineRun!.date} ({baselineRun!.rate}%)
+                  <span className="mx-2 text-gray-400">→</span>
+                  <span className="font-medium">Latest:</span> {lastRun!.date} ({lastRun!.rate}%)
+                </div>
+                <div className="flex items-center gap-3 mt-1">
+                  {regressionSummary.regressed > 0 && (
+                    <span className="text-[12px] text-red-600 dark:text-red-400 flex items-center gap-1">
+                      <ArrowDown className="size-3" /> {regressionSummary.regressed} regression{regressionSummary.regressed !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                  {regressionSummary.fixed > 0 && (
+                    <span className="text-[12px] text-green-600 dark:text-green-400 flex items-center gap-1">
+                      <ArrowUp className="size-3" /> {regressionSummary.fixed} fix{regressionSummary.fixed !== 1 ? 'es' : ''}
+                    </span>
+                  )}
+                  <span className={`text-[12px] flex items-center gap-0.5 ${
+                    regressionSummary.deltaRate >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                  }`}>
+                    {regressionSummary.deltaRate >= 0 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />}
+                    {regressionSummary.deltaRate >= 0 ? '+' : ''}{regressionSummary.deltaRate}%
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {onCompareRuns && (
+                  <Button variant="outline" size="sm" onClick={onCompareRuns}
+                    className="h-7 text-[11px] cursor-pointer border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/30"
+                  >
+                    Full Report
+                  </Button>
+                )}
+                <button onClick={handleClearBaseline}
+                  className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors cursor-pointer"
+                  title="Clear baseline"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ── Recent Runs ── */}
           {moduleRuns.length > 0 && (
             <div>
@@ -181,30 +270,37 @@ export function ResultsTab({
             </div>
           )}
 
-          {/* ── Bug Registry (collapsible) ── */}
-          {bugReportsList.length > 0 && (
+          {/* ── Error History (collapsible) ── */}
+          {errorHistory.length > 0 && (
             <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden">
-              <button onClick={() => setBugOpen(!bugOpen)}
+              <button onClick={() => setErrorOpen(!errorOpen)}
                 className="w-full flex items-center gap-2 px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800/70 transition-colors cursor-pointer text-left"
               >
-                {bugOpen ? <ChevronDown className="size-3.5 text-gray-400" /> : <ChevronRight className="size-3.5 text-gray-400" />}
-                <Bug className="size-3.5 text-gray-500" />
-                <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 flex-1">Bug Registry</span>
-                <span className="text-[11px] text-gray-500 dark:text-gray-400">{bugReportsList.length}</span>
+                {errorOpen ? <ChevronDown className="size-3.5 text-gray-400" /> : <ChevronRight className="size-3.5 text-gray-400" />}
+                <Bug className="size-3.5 text-red-500" />
+                <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 flex-1">Error History</span>
+                <span className="text-[11px] text-gray-500 dark:text-gray-400">{errorHistory.length}</span>
               </button>
-              {bugOpen && (
+              {errorOpen && (
                 <div className="divide-y divide-gray-200 dark:divide-gray-600/40">
-                  {bugReportsList.map(bug => (
-                    <div key={bug.id} className="flex items-center gap-3 px-4 py-2.5">
-                      <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500 w-16">{bug.id.slice(0, 8).toUpperCase()}</span>
-                      <span className="flex-1 text-[13px] text-gray-700 dark:text-gray-200 truncate">{bug.desc}</span>
-                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
-                        bug.status === 'Open' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                          : bug.status === 'In Progress' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
-                          : bug.status === 'Resolved' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                          : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                      }`}>{bug.status}</span>
-                      <span className="text-[12px] text-gray-400 dark:text-gray-500">{bug.testId}</span>
+                  {errorHistory.map(err => (
+                    <div key={err.testId}
+                      onClick={() => { const run = moduleRuns.find(r => r.id === err.runId); if (run) onRunDetail?.(run) }}
+                      className="flex items-start gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+                    >
+                      <span className="size-2 rounded-full bg-red-500 shrink-0 mt-1.5" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] font-medium text-gray-700 dark:text-gray-200 truncate">{err.testId}</span>
+                          <span className="text-[11px] text-gray-400 dark:text-gray-500 shrink-0">{err.date}</span>
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${
+                            err.runRate >= 90 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                              : err.runRate >= 75 ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                              : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                          }`}>{err.runRate}%</span>
+                        </div>
+                        <div className="text-[12px] text-red-600 dark:text-red-400 font-mono mt-0.5 truncate">{err.message}</div>
+                      </div>
                     </div>
                   ))}
                 </div>

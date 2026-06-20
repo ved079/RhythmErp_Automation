@@ -316,8 +316,8 @@ export default function Home() {
           id: r.id,
           date: r.startedAt ? new Date(r.startedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—',
           moduleId: r.moduleId,
-          results: Array.isArray(r.results) ? r.results.map((x: { testId: string; status: string }) => ({
-            testId: x.testId, status: x.status === 'passed' ? 'passed' as const : 'failed' as const,
+          results: Array.isArray(r.results) ? r.results.map((x: { testId: string; status: string; message?: string }) => ({
+            testId: x.testId, status: x.status === 'passed' ? 'passed' as const : 'failed' as const, message: x.message,
           })) : [],
           passed: r.passed || 0, failed: r.failed || 0, total: r.total || 0,
           duration: r.duration || '—', rate: r.rate || 0,
@@ -518,6 +518,7 @@ export default function Home() {
   }, [])
 
   const handleLogin = useCallback((u: AuthUser) => {
+    if (u.role === 'admin') { window.location.href = '/admin'; return }
     setUser(u); setSidebarModules(filterSidebarByAccess(ALL_SIDEBAR_MODULES, u)); setSelectedModule('dashboard')
     setActiveTab('test-runner'); localStorage.removeItem('ai-nl-run')
     loadVisibility()
@@ -1159,7 +1160,7 @@ export default function Home() {
         </>
       )} */}
       {/* Run Comparison Dialog */}
-      <RunComparisonDialog open={runComparisonOpen} onClose={() => setRunComparisonOpen(false)} runHistory={runHistory} />
+      <RunComparisonDialog open={runComparisonOpen} onClose={() => setRunComparisonOpen(false)} runHistory={runHistory} currentModuleId={selectedModule} />
       {/* Screenshot Lightbox */}
       {lightboxOpen && <ScreenshotLightbox open={lightboxOpen} onClose={() => setLightboxOpen(false)} screenshots={screenshotEntries} initialIndex={lightboxIndex} />}
       {/* Screenshot Compare */}

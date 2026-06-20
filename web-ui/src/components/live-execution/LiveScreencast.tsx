@@ -33,7 +33,7 @@ export function LiveScreencast({ isRunning, onScreenshotReady }: { isRunning: bo
     }
 
     poll()
-    intervalRef.current = setInterval(poll, 1000)
+    intervalRef.current = setInterval(poll, 3000)
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
