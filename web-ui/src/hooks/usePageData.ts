@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useEffect, useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchTestCases, type TestCasesData } from '@/lib/api'
 import { getBugReports } from '@/lib/bug-reports'
@@ -67,7 +67,6 @@ async function fetchVisibility(): Promise<VisibilityData | null> {
 
 export function usePageData({ user, selectedModule }: UsePageDataInput): UsePageDataReturn {
   const qc = useQueryClient()
-  const [allTestCases, setAllTestCases] = useState<TestCasesData>({})
 
   const runHistoryQuery = useQuery({
     queryKey: ['runs'],
@@ -106,6 +105,12 @@ export function usePageData({ user, selectedModule }: UsePageDataInput): UsePage
     enabled: !!user,
   })
 
+  const testCasesQuery = useQuery({
+    queryKey: ['testCases'],
+    queryFn: fetchTestCases,
+    enabled: !!user,
+  })
+
   const loadRunHistory = useCallback((): Promise<void> => {
     return qc.invalidateQueries({ queryKey: ['runs'] })
   }, [qc])
@@ -125,17 +130,10 @@ export function usePageData({ user, selectedModule }: UsePageDataInput): UsePage
   }, [qc])
 
   useEffect(() => {
-    if (!user) return
-    const timer = setTimeout(() => {
-      fetchTestCases()
-        .then((data) => {
-          setAllTestCases(data)
-          if (typeof window !== 'undefined') { (window as any).__ALL_TEST_CASES__ = data }
-        })
-        .catch(() => {})
-    }, 200)
-    return () => clearTimeout(timer)
-  }, [user])
+    if (typeof window !== 'undefined' && testCasesQuery.data) {
+      (window as any).__ALL_TEST_CASES__ = testCasesQuery.data
+    }
+  }, [testCasesQuery.data])
 
   return {
     dashboardStats: dashboardQuery.data ?? null,
@@ -144,7 +142,7 @@ export function usePageData({ user, selectedModule }: UsePageDataInput): UsePage
     bugReportsList,
     myTicketUnread,
     visibilityData: visibilityQuery.data ?? null,
-    allTestCases,
+    allTestCases: testCasesQuery.data ?? {},
     loadRunHistory,
     loadBugReports,
     loadDashboardStats,
