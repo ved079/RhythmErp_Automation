@@ -69,21 +69,20 @@ export function ReportToAdminDialog({
     }
   }, [open, testId])
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     setSending(true)
-    setTimeout(async () => {
-      try {
-        await addBugReport({
-          testId,
-          testDescription,
-          moduleName,
-          error: error || 'Unknown error',
-          userNote: note,
-          priority,
-          reporterName: userName,
-          reporterEmail: userEmail,
-        })
-        setSending(false)
+    try {
+      await addBugReport({
+        testId,
+        testDescription,
+        moduleName,
+        error: error || 'Unknown error',
+        userNote: note,
+        priority,
+        reporterName: userName,
+        reporterEmail: userEmail,
+      })
+      setSending(false)
         setNote('')
         setPriority('medium')
         onClose()
@@ -115,8 +114,7 @@ export function ReportToAdminDialog({
           duration: 5000,
         })
       }
-    }, 500)
-  }, [testId, testDescription, moduleName, error, note, priority, userName, userEmail, onClose])
+    }, [testId, testDescription, moduleName, error, note, priority, userName, userEmail, onClose])
 
   const handleReplySent = useCallback((updated: BugReport) => {
     setExistingReport(updated)
