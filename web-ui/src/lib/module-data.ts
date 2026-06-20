@@ -2,16 +2,89 @@ const _moduleCache = new Map<string, string>()
 
 const _reverseCache = new Map<string, { module: string; subModule: string | null }>()
 
+// Hardcoded fallback maps — used when DB cache isn't populated yet
+const FOLDER_TO_SIDEBAR_FALLBACK: Record<string, string> = {
+  login_screens: 'login-screens',
+  company_onboarding: 'company-onboarding',
+  common_settings: 'common-settings',
+  commodity_settings: 'commodity-settings',
+  access: 'access',
+  registration: 'registration',
+  bank: 'bank',
+  designation: 'designation',
+  error_code_mst: 'error-code-master',
+  hsn_sac: 'hsn-sac',
+  season: 'seasons',
+  tax_authority: 'tax-authority',
+  tax_rate: 'tax-rate',
+  uom: 'uom',
+  uom_conversion: 'uom-conversion',
+  vehicle_master: 'vehicle-master',
+  crop_master: 'crop-master',
+  item_master: 'item-master',
+  quality_parameter_master: 'quality-parameter-def',
+  services_master: 'services-master',
+  item_category: 'item-category',
+  item_group: 'item-group',
+  commodity_quality_parameter: 'commodity-quality-param',
+  commodity_base_rate: 'commodity-base-rate',
+  item_attribute: 'item-attribute',
+  entity_group_definition: 'entity-group',
+  role_creation_screen: 'role-creation',
+  user_creation: 'user-creation',
+  farmer: 'farmer',
+  customer: 'customer',
+  supplier: 'supplier',
+  agent: 'agent',
+}
+
+const SIDEBAR_TO_FOLDER_FALLBACK: Record<string, { module: string; subModule: string | null }> = {
+  'login-screens': { module: 'login_screens', subModule: null },
+  'company-onboarding': { module: 'company_onboarding', subModule: null },
+  'common-settings': { module: 'common_settings', subModule: null },
+  'commodity-settings': { module: 'commodity_settings', subModule: null },
+  access: { module: 'access', subModule: null },
+  registration: { module: 'registration', subModule: null },
+  bank: { module: 'common_settings', subModule: 'bank' },
+  designation: { module: 'common_settings', subModule: 'designation' },
+  'error-code-master': { module: 'common_settings', subModule: 'error_code_mst' },
+  'hsn-sac': { module: 'common_settings', subModule: 'hsn_sac' },
+  seasons: { module: 'common_settings', subModule: 'season' },
+  'tax-authority': { module: 'common_settings', subModule: 'tax_authority' },
+  'tax-rate': { module: 'common_settings', subModule: 'tax_rate' },
+  uom: { module: 'common_settings', subModule: 'uom' },
+  'uom-conversion': { module: 'common_settings', subModule: 'uom_conversion' },
+  'vehicle-master': { module: 'common_settings', subModule: 'vehicle_master' },
+  'crop-master': { module: 'commodity_settings', subModule: 'crop_master' },
+  'item-master': { module: 'commodity_settings', subModule: 'item_master' },
+  'quality-parameter-def': { module: 'commodity_settings', subModule: 'quality_parameter_master' },
+  'services-master': { module: 'commodity_settings', subModule: 'services_master' },
+  'item-category': { module: 'commodity_settings', subModule: 'item_category' },
+  'item-group': { module: 'commodity_settings', subModule: 'item_group' },
+  'commodity-quality-param': { module: 'commodity_settings', subModule: 'commodity_quality_parameter' },
+  'commodity-base-rate': { module: 'commodity_settings', subModule: 'commodity_base_rate' },
+  'item-attribute': { module: 'commodity_settings', subModule: 'item_attribute' },
+  'entity-group': { module: 'access', subModule: 'entity_group' },
+  'role-creation': { module: 'access', subModule: 'role_creation_screen' },
+  'user-creation': { module: 'access', subModule: 'user_creation' },
+  farmer: { module: 'registration', subModule: 'farmer' },
+  customer: { module: 'registration', subModule: 'customer' },
+  supplier: { module: 'registration', subModule: 'supplier' },
+  agent: { module: 'registration', subModule: 'agent' },
+}
+
 export function getCachedFolderToSidebarId(folderName: string): string {
-  return _moduleCache.get(folderName) ?? folderName.toLowerCase().replace(/_/g, '-')
+  return _moduleCache.get(folderName) ?? FOLDER_TO_SIDEBAR_FALLBACK[folderName] ?? folderName.toLowerCase().replace(/_/g, '-')
 }
 
 export function getCachedSidebarToFolderMapping(sidebarId: string): { module: string; subModule: string | null } | null {
-  return _reverseCache.get(sidebarId) ?? null
+  return _reverseCache.get(sidebarId) ?? SIDEBAR_TO_FOLDER_FALLBACK[sidebarId] ?? null
 }
 
 export async function folderToSidebarIdFromDB(folderName: string): Promise<string | null> {
   if (_moduleCache.has(folderName)) return _moduleCache.get(folderName)!
+  const fallback = FOLDER_TO_SIDEBAR_FALLBACK[folderName]
+  if (fallback) return fallback
   const res = await fetch(`/api/admin/modules?folderName=${encodeURIComponent(folderName)}`)
   if (!res.ok) return null
   const data = await res.json()
@@ -38,14 +111,13 @@ export async function warmModuleCache(): Promise<void> {
 
   for (const mod of allModules) {
     if (!mod.folderName || !mod.name) continue
-    const sidebarId = mod.name.toLowerCase().replace(/_/g, '-')
     if (mod.parentId) {
       const parent = parentById.get(mod.parentId)
       if (parent) {
-        _reverseCache.set(sidebarId, { module: parent.folderName, subModule: mod.folderName })
+        _reverseCache.set(mod.folderName, { module: parent.folderName, subModule: mod.folderName })
       }
     } else {
-      _reverseCache.set(sidebarId, { module: mod.folderName, subModule: null })
+      _reverseCache.set(mod.folderName, { module: mod.folderName, subModule: null })
     }
   }
 }
