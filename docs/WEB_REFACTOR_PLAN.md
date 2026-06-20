@@ -38,10 +38,8 @@ safe to hand to a team.
 > under `pages/`. Every path in this document lives under `web-ui/` or `api/`.
 
 **Pre-flight for the executing agent:**
-- Current branch `rhythmerp_integration` has uncommitted working-tree changes (new
-  ticket-chat feature: `ChatListView.tsx`, `TicketChat.tsx`, `ErrorDetailDialog.tsx`,
-  `RunHistoryDialog.tsx` are untracked). **Commit or stash those first** so this refactor
-  is isolated. Confirm with the user before discarding anything.
+- Phases 1–3 are **already complete** (commits `d33ff36`, `3002f46`, `a2822aa`). Start from Phase 4.
+- Confirm with `git log --oneline -5` before starting — the top commit should be `a2822aa chore: remove unused dependencies`.
 - After **every** phase: `cd web-ui && npx tsc --noEmit && npm run lint && npm run build`
   must pass before moving on. Treat a broken build as a stop-the-line event.
 
