@@ -4,6 +4,7 @@ import { useEffect, useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchTestCases, type TestCasesData } from '@/lib/api'
 import { getBugReports } from '@/lib/bug-reports'
+import { warmModuleCache } from '@/lib/module-data'
 import type { RunSnapshot, AuthUser } from '@/lib/types'
 import type { VisibilityData } from '@/lib/test-helpers'
 
@@ -110,6 +111,11 @@ export function usePageData({ user, selectedModule }: UsePageDataInput): UsePage
     queryFn: fetchTestCases,
     enabled: !!user,
   })
+
+  useEffect(() => {
+    if (!user) return
+    warmModuleCache().catch(() => {})
+  }, [user])
 
   const loadRunHistory = useCallback((): Promise<void> => {
     return qc.invalidateQueries({ queryKey: ['runs'] })
