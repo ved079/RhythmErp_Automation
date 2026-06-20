@@ -1,0 +1,44 @@
+stages:
+  - lint
+  - test
+  - build
+
+variables:
+  NODE_VERSION: "20"
+  PYTHON_VERSION: "3.11"
+
+web:lint:
+  stage: lint
+  image: node:${NODE_VERSION}
+  script:
+    - cd web-ui && npm ci && npm run lint
+  only: [merge_requests, main]
+
+web:typecheck:
+  stage: lint
+  image: node:${NODE_VERSION}
+  script:
+    - cd web-ui && npm ci && npx tsc --noEmit
+  only: [merge_requests, main]
+
+web:test:
+  stage: test
+  image: node:${NODE_VERSION}
+  script:
+    - cd web-ui && npm ci && npm test
+  only: [merge_requests, main]
+
+web:build:
+  stage: build
+  image: node:${NODE_VERSION}
+  script:
+    - cd web-ui && npm ci && npm run build
+  only: [merge_requests, main]
+
+api:test:
+  stage: test
+  image: python:${PYTHON_VERSION}
+  script:
+    - pip install -r requirements.txt
+    - pytest api/tests_engine/ -v
+  only: [merge_requests, main]
