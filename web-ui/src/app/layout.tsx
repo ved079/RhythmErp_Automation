@@ -4,6 +4,7 @@ import { ThemeProvider } from "next-themes";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { QueryProvider } from "@/components/providers/QueryProvider";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const manrope = Manrope({
   variable: "--font-manrope",
@@ -47,7 +48,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <QueryProvider>{children}</QueryProvider>
+          <QueryProvider><ErrorBoundary>{children}</ErrorBoundary></QueryProvider>
           <Toaster position="top-right" richColors />
         </ThemeProvider>
       </body>

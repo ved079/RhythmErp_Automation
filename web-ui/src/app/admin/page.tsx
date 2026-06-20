@@ -19,7 +19,7 @@ import { UserDialog } from '@/components/admin/UserDialog'
 import { ResetPasswordDialog } from '@/components/admin/ResetPasswordDialog'
 import { TestVisibilitySection } from '@/components/admin/sections/TestVisibilitySection'
 import { BugReportsSection } from '@/components/admin/sections/BugReportsSection'
-import { Button } from '@/components/ui/button'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -156,7 +156,8 @@ export default function AdminPage() {
 
         {/* ─── MAIN CONTENT ────────────────────────── */}
         <main className="flex-1 flex flex-col overflow-hidden">
-          {s.activeSection === 'bug-reports' ? (
+          <ErrorBoundary>
+            {s.activeSection === 'bug-reports' ? (
             <BugReportsSection
               bugReports={s.bugReports}
               bugsLoaded={s.bugsLoaded}
@@ -248,6 +249,7 @@ export default function AdminPage() {
               ) : null}
             </div>
           )}
+          </ErrorBoundary>
         </main>
       </div>
 
