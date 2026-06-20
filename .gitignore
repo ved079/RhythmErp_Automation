@@ -82,3 +82,9 @@ uom_cross_verify.py
 
 # Stale download/workspace folder
 download/
+
+# Phase 1 cleanup: generated artifacts no longer tracked
+api/batch_results/
+bug_sheet.csv
+web-ui/erp-*.png
+GP_Bugs_Report.xlsx
