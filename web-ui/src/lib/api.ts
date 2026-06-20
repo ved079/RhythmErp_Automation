@@ -386,11 +386,12 @@ export async function saveRunResults(summary: RunCompletionSummary, userId?: str
       : '—';
     const rate = summary.total > 0 ? Math.round((summary.passed / summary.total) * 10000) / 100 : 0;
 
+    const mappedId = folderToSidebarId(summary.subModule || summary.module)
     const res = await fetch('/api/runs', withCsrf({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        moduleId: summary.subModule || summary.module,
+        moduleId: mappedId,
         moduleName: summary.subModule
           ? summary.subModule.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
           : summary.module.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),

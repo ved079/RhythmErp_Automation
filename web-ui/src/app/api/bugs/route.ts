@@ -73,6 +73,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    // Check for duplicate: same user, same test, open/in-progress
+    const existingForUser = await db.bugReport.findFirst({
+      where: {
+        testId,
+        userId: user.id,
+        status: { in: ['open', 'in_progress'] },
+      },
+    })
+    if (existingForUser) {
+      return NextResponse.json({
+        error: 'A bug report for this test is already open',
+        existingId: existingForUser.id,
+      }, { status: 409 })
+    }
+
     const isAutoReport = userNote?.includes('Auto-reported')
 
     // Check for duplicate: if auto-reported, skip if an open bug already exists for this testId

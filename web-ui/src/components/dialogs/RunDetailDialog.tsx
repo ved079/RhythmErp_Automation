@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { BarChart3, Loader2 } from 'lucide-react'
+import { BarChart3, Loader2, Flag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -15,15 +15,18 @@ export function RunDetailDialog({
   run,
   visibilityData,
   showRawNames,
+  onReportTest,
 }: {
   open: boolean
   onClose: () => void
   run: RunSnapshot | null
   visibilityData?: { excludedTestNames: string[]; overrides: Record<string, { displayName?: string; disabled: boolean }> } | null
   showRawNames?: boolean
+  onReportTest?: (testId: string, testName: string, error: string) => void
 }) {
   const [runDetail, setRunDetail] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(false)
+  const [resultFilter, setResultFilter] = useState<'all' | 'passed' | 'failed'>('failed')
 
   useEffect(() => {
     if (!open || !run) return
@@ -50,23 +53,26 @@ export function RunDetailDialog({
   const passRate = run.total > 0 ? Math.round((run.passed / run.total) * 100) : 0
 
   // Build test results from either full API detail or from the run snapshot
-  const rawResults = runDetail?.results?.map((r) => ({
-    id: r.name || '',
-    name: (r.name || '').split('::').pop() || r.name || '',
-    status: r.status,
-    duration: r.duration ? `${(r.duration / 1000).toFixed(1)}s` : '—',
-    message: r.message,
-  })) ?? run.results.map((r) => ({
-    id: r.testId,
-    name: r.testId,
-    status: r.status === 'passed' ? 'passed' as const : 'failed' as const,
-    duration: '—',
-    message: null as string | null,
-  }))
+  const rawResults = runDetail?.results
+    ? runDetail.results.map((r, i) => ({
+        id: r.name || r.testId || `result-${i}`,
+        name: (r.name || '').split('::').pop() || r.name || r.testId || `result-${i}`,
+        status: r.status === 'passed' ? 'passed' as const : 'failed' as const,
+        duration: r.duration ? `${(r.duration / 1000).toFixed(1)}s` : '—',
+        message: r.message,
+      }))
+    : (run.results || []).map((r, i) => ({
+        id: r.testId || `result-${i}`,
+        name: r.testId || `result-${i}`,
+        status: r.status === 'passed' ? 'passed' as const : 'failed' as const,
+        duration: '—',
+        message: null as string | null,
+      }))
 
   // Filter out hidden tests
   const excludedSet = new Set(visibilityData?.excludedTestNames || [])
-  const testResults = rawResults.filter(t => !excludedSet.has(t.id))
+  let testResults = rawResults.filter(t => !excludedSet.has(t.id))
+  const filteredResults = resultFilter === 'all' ? testResults : testResults.filter(t => t.status === resultFilter)
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
@@ -118,44 +124,76 @@ export function RunDetailDialog({
 
         {/* Full Test Results Table */}
         <div>
-          <h4 className="text-[13px] font-semibold text-gray-800 dark:text-gray-100 mb-2">
-            Test Results ({testResults.length})
-          </h4>
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-[13px] font-semibold text-gray-800 dark:text-gray-100">
+              Test Results ({filteredResults.length})
+            </h4>
+            <div className="flex items-center gap-1">
+              {(['all', 'passed', 'failed'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setResultFilter(f)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+                    resultFilter === f
+                      ? f === 'failed'
+                        ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                        : f === 'passed'
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {f === 'all' ? `All (${testResults.length})` : f === 'passed' ? `Passed (${testResults.filter(t => t.status === 'passed').length})` : `Failed (${testResults.filter(t => t.status === 'failed').length})`}
+                </button>
+              ))}
+            </div>
+          </div>
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="size-5 text-[#3F51B5] animate-spin" />
               <span className="ml-2 text-[13px] text-gray-500 dark:text-gray-400">Loading details...</span>
             </div>
-          ) : testResults.length === 0 ? (
+          ) : filteredResults.length === 0 ? (
             <div className="text-center py-6 text-[12px] text-gray-400 dark:text-gray-500">
-              No test results available for this run
+              No {resultFilter === 'all' ? '' : resultFilter} test results available for this run
             </div>
           ) : (
-            <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden max-h-72 overflow-y-auto">
-              <Table>
+            <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg">
+              <Table className="table-fixed">
                 <TableHeader>
                   <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
                     <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-10">Status</TableHead>
                     <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Test ID / Name</TableHead>
                     <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-20 text-center">Duration</TableHead>
+                    <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-16 text-center">Report</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {testResults.map((t) => (
-                    <TableRow key={t.id} className="dark:border-gray-700">
+                  {filteredResults.map((t) => (
+                    <TableRow key={t.id} className="dark:border-gray-700 group">
                       <TableCell>
                         <TestStatusIcon status={t.status} size={3.5} />
                       </TableCell>
                       <TableCell className="text-[12px]">
                         {showRawNames && <div className="font-mono text-gray-500 dark:text-gray-400 text-[11px]">{t.id}</div>}
                         {t.name !== t.id && (
-                          <div className="text-gray-700 dark:text-gray-200">{t.name}</div>
+                          <div className="text-gray-700 dark:text-gray-200 truncate">{t.name}</div>
                         )}
                         {t.message && (
-                          <div className="text-red-500 dark:text-red-400 text-[11px] mt-0.5 truncate max-w-[350px]">{t.message}</div>
+                          <div className="text-red-500 dark:text-red-400 text-[11px] mt-0.5 truncate">{t.message}</div>
                         )}
                       </TableCell>
                       <TableCell className="text-center text-[12px] font-mono text-gray-500 dark:text-gray-400">{t.duration}</TableCell>
+                      <TableCell className="text-center">
+                        {t.status === 'failed' && (
+                          <button onClick={() => onReportTest?.(t.id, t.name, t.message || '')}
+                            className="size-6 flex items-center justify-center rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer"
+                            title="Report bug"
+                          >
+                            <Flag className="size-3" />
+                          </button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

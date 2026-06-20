@@ -31,6 +31,16 @@ export interface BugReport {
   readByAdmin: boolean
 }
 
+export async function checkDuplicateBugReport(testId: string): Promise<{ exists: true; bugReport: BugReport } | { exists: false }> {
+  try {
+    const res = await fetch(`/api/bugs/check-duplicate?testId=${encodeURIComponent(testId)}`)
+    if (!res.ok) return { exists: false }
+    return res.json()
+  } catch {
+    return { exists: false }
+  }
+}
+
 // ─── Bug Report API Calls ──────────────────────────────
 
 export async function getBugReports(): Promise<BugReport[]> {
@@ -55,7 +65,12 @@ export async function addBugReport(report: Omit<BugReport, 'id' | 'status' | 'cr
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(report),
   }))
-  if (!res.ok) throw new Error('Failed to create bug report')
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    const message = `Failed to create bug report (${res.status}): ${body.slice(0, 200)}`
+    console.error('[addBugReport]', message)
+    throw new Error(message)
+  }
   return res.json()
 }
 

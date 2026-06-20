@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { folderToSidebarId } from '@/lib/api'
 
 // C4: No hardcoded fallback — must be set via environment variable
 const PROXY_API_KEY = process.env.PROXY_API_KEY || ''
@@ -50,8 +51,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields: run_id, module' }, { status: 400 })
     }
 
-    // Build module name for display
-    const moduleId = payload.sub_module || payload.module
+    // Build module name for display — convert folder name to sidebar ID
+    const moduleId = folderToSidebarId(payload.sub_module || payload.module)
     const moduleName = payload.sub_module
       ? payload.sub_module.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
       : payload.module.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())

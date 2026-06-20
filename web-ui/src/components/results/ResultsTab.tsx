@@ -1,14 +1,14 @@
 'use client'
 
 import React, { useState, useMemo, useCallback } from 'react'
-import { GitCompare, Bug, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, BookmarkCheck, ArrowUp, ArrowDown } from 'lucide-react'
+import { GitCompare, Bug, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, BookmarkCheck, ArrowUp, ArrowDown, Flag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 import type { TestClassGroup, TestItem } from '@/data/testSpecGroups'
 import type { RunSnapshot, ModuleHealth } from '@/lib/types'
 import { ExportMenu } from '@/components/export/ExportUtils'
-
+import { ErrorDetailDialog } from '@/components/dialogs/ErrorDetailDialog'
 
 /* ── Tiny inline sparkline (7 data points) ── */
 function Sparkline({ data, className }: { data: number[]; className?: string }) {
@@ -43,6 +43,8 @@ export function ResultsTab({
   bugReportsList,
   onRunDetail,
   onCompareRuns,
+  onViewAllRuns,
+  onReportTest,
   testGroups,
   moduleHealth,
   moduleName,
@@ -56,6 +58,8 @@ export function ResultsTab({
   bugReportsList: { id: string; testId: string; desc: string; status: string }[]
   onRunDetail?: (run: RunSnapshot) => void
   onCompareRuns?: () => void
+  onViewAllRuns?: () => void
+  onReportTest?: (testId: string, testName: string, error: string) => void
   testGroups?: TestClassGroup[]
   moduleHealth?: ModuleHealth[]
   moduleName?: string
@@ -73,6 +77,8 @@ export function ResultsTab({
 
   const passRate = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0
   const [errorOpen, setErrorOpen] = useState(true)
+  const [errorDetailOpen, setErrorDetailOpen] = useState(false)
+  const [selectedError, setSelectedError] = useState<{ testId: string; message: string; date: string; runRate: number } | null>(null)
 
   // Error history — extract failed test messages from recent runs
   const errorHistory = useMemo(() => {
@@ -239,12 +245,19 @@ export function ResultsTab({
             </div>
           )}
 
-          {/* ── Recent Runs ── */}
+          {/* ── Recent Runs (compact + View All) ── */}
           {moduleRuns.length > 0 && (
             <div>
-              <h3 className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 mb-2.5">Recent Runs</h3>
+              <div className="flex items-center justify-between mb-2.5">
+                <h3 className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Recent Runs</h3>
+                <button onClick={onViewAllRuns}
+                  className="text-[12px] text-indigo-500 hover:text-indigo-600 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors cursor-pointer font-medium"
+                >
+                  View All ({moduleRuns.length})
+                </button>
+              </div>
               <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden divide-y divide-gray-200 dark:divide-gray-600/40">
-                {moduleRuns.slice(0, 5).map(run => (
+                {moduleRuns.slice(0, 3).map(run => (
                   <div key={run.id}
                     onClick={() => onRunDetail?.(run)}
                     className={`flex items-center gap-4 px-4 py-2.5 ${onRunDetail ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors' : ''}`}
@@ -272,35 +285,43 @@ export function ResultsTab({
 
           {/* ── Error History (collapsible) ── */}
           {errorHistory.length > 0 && (
-            <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden">
+            <div className="border border-red-200/60 dark:border-red-900/40 rounded-lg overflow-hidden shadow-[0_1px_3px_rgba(239,68,68,0.06)]">
               <button onClick={() => setErrorOpen(!errorOpen)}
-                className="w-full flex items-center gap-2 px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800/70 transition-colors cursor-pointer text-left"
+                className="w-full flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-red-50/80 to-red-50/30 dark:from-red-950/20 dark:to-transparent hover:from-red-100/80 hover:to-red-50/50 dark:hover:from-red-950/30 dark:hover:to-transparent transition-all cursor-pointer text-left"
               >
+                <div className="size-7 rounded-lg bg-red-100 dark:bg-red-900/40 flex items-center justify-center shrink-0">
+                  <Bug className="size-3.5 text-red-600 dark:text-red-400" />
+                </div>
+                <span className="text-[13px] font-semibold text-gray-800 dark:text-gray-100 flex-1">Error History</span>
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-red-100/80 dark:bg-red-900/40 text-red-700 dark:text-red-400">{errorHistory.length}</span>
                 {errorOpen ? <ChevronDown className="size-3.5 text-gray-400" /> : <ChevronRight className="size-3.5 text-gray-400" />}
-                <Bug className="size-3.5 text-red-500" />
-                <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 flex-1">Error History</span>
-                <span className="text-[11px] text-gray-500 dark:text-gray-400">{errorHistory.length}</span>
               </button>
               {errorOpen && (
-                <div className="divide-y divide-gray-200 dark:divide-gray-600/40">
+                <div className="py-1.5 px-1.5 space-y-1">
                   {errorHistory.map(err => (
                     <div key={err.testId}
-                      onClick={() => { const run = moduleRuns.find(r => r.id === err.runId); if (run) onRunDetail?.(run) }}
-                      className="flex items-start gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+                      className="flex items-start gap-3 px-3 py-2.5 rounded-lg border border-transparent hover:border-red-200/40 dark:hover:border-red-800/40 hover:bg-red-50/40 dark:hover:bg-red-950/20 transition-all group cursor-pointer"
+                      onClick={() => { setSelectedError({ testId: err.testId, message: err.message, date: err.date, runRate: err.runRate }); setErrorDetailOpen(true) }}
                     >
-                      <span className="size-2 rounded-full bg-red-500 shrink-0 mt-1.5" />
+                      <div className="size-2 mt-1.5 rounded-full bg-red-500 shrink-0 ring-2 ring-red-200 dark:ring-red-800" />
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-medium text-gray-700 dark:text-gray-200 truncate">{err.testId}</span>
-                          <span className="text-[11px] text-gray-400 dark:text-gray-500 shrink-0">{err.date}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[13px] font-medium text-gray-800 dark:text-gray-100 truncate">{err.testId}</span>
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{err.date}</span>
                           <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${
                             err.runRate >= 90 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
                               : err.runRate >= 75 ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
                               : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
                           }`}>{err.runRate}%</span>
                         </div>
-                        <div className="text-[12px] text-red-600 dark:text-red-400 font-mono mt-0.5 truncate">{err.message}</div>
+                        <div className="text-[11px] text-red-600 dark:text-red-400 font-mono mt-1 leading-snug line-clamp-2">{err.message}</div>
                       </div>
+                      <button onClick={(e) => { e.stopPropagation(); onReportTest?.(err.testId, err.testId, err.message) }}
+                        className="shrink-0 size-7 flex items-center justify-center rounded-md text-gray-600 dark:text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer"
+                        title="Report bug"
+                      >
+                        <Flag className="size-3.5" />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -310,6 +331,13 @@ export function ResultsTab({
 
         </div>
       </ScrollArea>
+
+      <ErrorDetailDialog
+        open={errorDetailOpen}
+        onClose={() => { setErrorDetailOpen(false); setSelectedError(null) }}
+        error={selectedError}
+        onReportTest={onReportTest}
+      />
     </div>
   )
 }

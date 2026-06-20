@@ -6,13 +6,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import {
   getBugReports, addReplyToReport, markReportReadByUser, updateBugReportStatus,
   getSLAStatus, getSLADeadline, type BugReport,
 } from '@/lib/bug-reports'
+import { ChatListView } from './ChatListView'
 
 export function MyTicketsTab({
   userEmail,
@@ -21,6 +22,7 @@ export function MyTicketsTab({
   userEmail: string
   userName: string
 }) {
+  const [subTab, setSubTab] = useState<'tickets' | 'chats'>('tickets')
   const [allReports, setAllReports] = useState<BugReport[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'in-progress' | 'fixed'>('all')
@@ -65,6 +67,10 @@ export function MyTicketsTab({
       return true
     })
   }, [allReports, statusFilter, priorityFilter])
+
+  const unreadChatCount = useMemo(() =>
+    allReports.filter(r => !r.readByUser && (r.replies.length > 0 || r.status === 'open' || r.status === 'in-progress')).length,
+  [allReports])
 
   const handleSendReply = useCallback(async () => {
     if (!selectedTicket || !replyText.trim()) return
@@ -137,136 +143,175 @@ export function MyTicketsTab({
   }
 
   return (
-    <div className="flex flex-col h-full overflow-auto">
-      <div className="p-5 space-y-4">
-        {/* Page Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-[18px] font-semibold text-[#333333] dark:text-gray-100">My Tickets</h2>
-            <p className="text-[13px] text-[#666666] dark:text-gray-400 mt-0.5">
-              Track and manage your bug reports • {allReports.length} ticket{allReports.length !== 1 ? 's' : ''}
-            </p>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Sub-tab bar */}
+      <div className="flex items-center gap-0 px-5 pt-4 pb-0 shrink-0 border-b border-gray-200 dark:border-gray-700">
+        <button
+          onClick={() => setSubTab('tickets')}
+          className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${
+            subTab === 'tickets'
+              ? 'border-[#3F51B5] text-[#3F51B5] dark:text-indigo-400'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+          }`}
+        >
+          All Tickets
+        </button>
+        <button
+          onClick={() => setSubTab('chats')}
+          className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+            subTab === 'chats'
+              ? 'border-[#3F51B5] text-[#3F51B5] dark:text-indigo-400'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+          }`}
+        >
+          Chats
+          {unreadChatCount > 0 && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#3F51B5] text-white leading-none">
+              {unreadChatCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {subTab === 'chats' ? (
+        <div className="flex-1 min-h-0 p-4">
+          <ChatListView
+            reports={allReports}
+            userName={userName}
+            userRole="user"
+            onReportsChange={setAllReports}
+          />
+        </div>
+      ) : (
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="p-5 pb-1 shrink-0">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-[18px] font-semibold text-[#333333] dark:text-gray-100">My Tickets</h2>
+              <p className="text-[13px] text-[#666666] dark:text-gray-400 mt-0.5">
+                Track and manage your bug reports • {allReports.length} ticket{allReports.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadReports}
+              className="text-[12px] gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className="size-3.5" />
+              Refresh
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadReports}
-            className="text-[12px] gap-1.5 cursor-pointer"
-          >
-            <RefreshCw className="size-3.5" />
-            Refresh
-          </Button>
+
+          <div className="flex items-center gap-3 flex-wrap mt-3">
+            <div className="flex items-center gap-1">
+              <Filter className="size-3.5 text-[#888888] dark:text-gray-400" />
+              <span className="text-[12px] text-[#888888] dark:text-gray-400 font-medium mr-1">Status:</span>
+              {(['all', 'open', 'in-progress', 'fixed'] as const).map((s) => {
+                const labels: Record<string, string> = { all: 'All', open: 'Open', 'in-progress': 'In Progress', fixed: 'Fixed' }
+                const count = s === 'all' ? allReports.length : allReports.filter((r) => r.status === s).length
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setStatusFilter(s)}
+                    className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
+                      statusFilter === s
+                        ? 'bg-[#DFE9FB] dark:bg-indigo-900/30 text-[#3F51B5] dark:text-indigo-400'
+                        : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    {labels[s]} ({count})
+                  </button>
+                )
+              })}
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-[12px] text-[#888888] dark:text-gray-400 font-medium mr-1">Priority:</span>
+              {(['all', 'high', 'medium', 'low'] as const).map((p) => {
+                const labels: Record<string, string> = { all: 'All', high: 'High', medium: 'Medium', low: 'Low' }
+                const count = p === 'all' ? allReports.length : allReports.filter((r) => r.priority === p).length
+                return (
+                  <button
+                    key={p}
+                    onClick={() => setPriorityFilter(p)}
+                    className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
+                      priorityFilter === p
+                        ? 'bg-[#DFE9FB] dark:bg-indigo-900/30 text-[#3F51B5] dark:text-indigo-400'
+                        : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    {labels[p]} ({count})
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
 
-        {/* Filters */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-1">
-            <Filter className="size-3.5 text-[#888888] dark:text-gray-400" />
-            <span className="text-[12px] text-[#888888] dark:text-gray-400 font-medium mr-1">Status:</span>
-            {(['all', 'open', 'in-progress', 'fixed'] as const).map((s) => {
-              const labels: Record<string, string> = { all: 'All', open: 'Open', 'in-progress': 'In Progress', fixed: 'Fixed' }
-              const count = s === 'all' ? allReports.length : allReports.filter((r) => r.status === s).length
-              return (
-                <button
-                  key={s}
-                  onClick={() => setStatusFilter(s)}
-                  className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
-                    statusFilter === s
-                      ? 'bg-[#DFE9FB] dark:bg-indigo-900/30 text-[#3F51B5] dark:text-indigo-400'
-                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {labels[s]} ({count})
-                </button>
-              )
-            })}
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[12px] text-[#888888] dark:text-gray-400 font-medium mr-1">Priority:</span>
-            {(['all', 'high', 'medium', 'low'] as const).map((p) => {
-              const labels: Record<string, string> = { all: 'All', high: 'High', medium: 'Medium', low: 'Low' }
-              const count = p === 'all' ? allReports.length : allReports.filter((r) => r.priority === p).length
-              return (
-                <button
-                  key={p}
-                  onClick={() => setPriorityFilter(p)}
-                  className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
-                    priorityFilter === p
-                      ? 'bg-[#DFE9FB] dark:bg-indigo-900/30 text-[#3F51B5] dark:text-indigo-400'
-                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {labels[p]} ({count})
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Tickets List */}
         {filteredReports.length === 0 ? (
-          <div className="text-center py-16">
-            <Ticket className="size-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-            <p className="text-[14px] text-gray-500 dark:text-gray-400 font-medium">No tickets found</p>
-            <p className="text-[12px] text-gray-400 dark:text-gray-500 mt-1">
-              {allReports.length === 0
-                ? 'You haven\'t reported any bugs yet'
-                : 'Try adjusting your filters'}
-            </p>
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <Ticket className="size-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
+              <p className="text-[14px] text-gray-500 dark:text-gray-400 font-medium">No tickets found</p>
+              <p className="text-[12px] text-gray-400 dark:text-gray-500 mt-1">
+                {allReports.length === 0
+                  ? 'You haven\'t reported any bugs yet'
+                  : 'Try adjusting your filters'}
+              </p>
+            </div>
           </div>
         ) : (
-          <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-[#DFE9FB] dark:bg-indigo-900/30 hover:bg-[#DFE9FB] dark:hover:bg-indigo-900/30">
-                  <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-24">Ticket ID</TableHead>
-                  <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300">Description</TableHead>
-                  <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-28">Module</TableHead>
-                  <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-20 text-center">Priority</TableHead>
-                  <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-24 text-center">Status</TableHead>
-                  <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-32 text-center">SLA</TableHead>
-                  <TableHead className="text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 w-28">Created</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+          <div className="flex-1 flex flex-col min-h-0 px-5 pb-5">
+            {/* Static header */}
+            <div className="flex items-center bg-[#DFE9FB] dark:bg-indigo-900/30 rounded-t-lg border border-gray-300 dark:border-gray-500/70 border-b-0 text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 shrink-0">
+              <span className="w-24 px-2 py-2.5">Ticket ID</span>
+              <span className="flex-1 px-2 py-2.5">Description</span>
+              <span className="w-28 px-2 py-2.5">Module</span>
+              <span className="w-20 px-2 py-2.5 text-center">Priority</span>
+              <span className="w-24 px-2 py-2.5 text-center">Status</span>
+              <span className="w-32 px-2 py-2.5 text-center">SLA</span>
+              <span className="w-28 px-2 py-2.5">Created</span>
+            </div>
+            {/* Scrollable rows */}
+            <div className="flex-1 min-h-0 overflow-auto border border-gray-300 dark:border-gray-500/70 border-t-0 rounded-b-lg">
+              <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {filteredReports.map((report) => {
                   const sla = getSLAStatus(report.priority, report.createdAt, report.status)
                   const isUnread = !report.readByUser
                   return (
-                    <TableRow
+                    <div
                       key={report.id}
-                      className={`cursor-pointer hover:bg-[#DFE9FB]/30 dark:hover:bg-indigo-900/10 transition-colors ${isUnread ? 'bg-blue-50/50 dark:bg-indigo-900/10' : ''}`}
                       onClick={() => setSelectedTicket(report)}
+                      className={`flex items-center cursor-pointer hover:bg-[#DFE9FB]/30 dark:hover:bg-indigo-900/10 transition-colors text-[12px] ${isUnread ? 'bg-blue-50/50 dark:bg-indigo-900/10' : ''}`}
                     >
-                      <TableCell className="text-[12px] font-mono font-semibold text-[#3F51B5] dark:text-indigo-400">
+                      <span className="w-24 px-2 py-2.5 font-mono font-semibold text-[#3F51B5] dark:text-indigo-400">
                         {report.id.slice(0, 8).toUpperCase()}
                         {isUnread && <span className="ml-1.5 inline-block size-1.5 rounded-full bg-blue-500" />}
-                      </TableCell>
-                      <TableCell className="text-[13px] text-gray-700 dark:text-gray-200 max-w-[250px] truncate">
+                      </span>
+                      <span className="flex-1 px-2 py-2.5 text-[13px] text-gray-700 dark:text-gray-200 truncate">
                         {report.testDescription}
-                      </TableCell>
-                      <TableCell className="text-[12px] text-gray-500 dark:text-gray-400">
+                      </span>
+                      <span className="w-28 px-2 py-2.5 text-gray-500 dark:text-gray-400 truncate">
                         {report.moduleName}
-                      </TableCell>
-                      <TableCell className="text-center">{priorityBadge(report.priority)}</TableCell>
-                      <TableCell className="text-center">{statusBadge(report.status)}</TableCell>
-                      <TableCell className="text-center">
+                      </span>
+                      <span className="w-20 px-2 py-2.5 text-center">{priorityBadge(report.priority)}</span>
+                      <span className="w-24 px-2 py-2.5 text-center">{statusBadge(report.status)}</span>
+                      <span className="w-32 px-2 py-2.5 text-center">
                         <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${sla.color}`}>
                           {sla.label}
                         </span>
                         <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{sla.remaining}</div>
-                      </TableCell>
-                      <TableCell className="text-[12px] text-gray-500 dark:text-gray-400">
+                      </span>
+                      <span className="w-28 px-2 py-2.5 text-gray-500 dark:text-gray-400">
                         {new Date(report.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                      </TableCell>
-                    </TableRow>
+                      </span>
+                    </div>
                   )
                 })}
-              </TableBody>
-            </Table>
+              </div>
+            </div>
           </div>
         )}
-      </div>
 
       {/* Ticket Detail Dialog */}
       <Dialog open={!!selectedTicket} onOpenChange={(open) => { if (!open) setSelectedTicket(null) }}>
@@ -454,6 +499,8 @@ export function MyTicketsTab({
           )}
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    )}
+  </div>
   )
 }

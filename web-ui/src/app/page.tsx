@@ -73,6 +73,7 @@ const ScreenshotGallery = dynamic(() => import('@/components/screenshot/Screensh
 const ScreenshotLightbox = dynamic(() => import('@/components/screenshot/ScreenshotGallery').then(m => ({ default: m.ScreenshotLightbox })), { ssr: false })
 const ScreenshotCompare = dynamic(() => import('@/components/screenshot/ScreenshotGallery').then(m => ({ default: m.ScreenshotCompare })), { ssr: false })
 const RunComparisonDialog = dynamic(() => import('@/components/comparison/RunComparisonDialog'), { ssr: false })
+const RunHistoryDialog = dynamic(() => import('@/components/dialogs/RunHistoryDialog').then(m => ({ default: m.RunHistoryDialog })), { ssr: false })
 const ExportMenu = dynamic(() => import('@/components/export/ExportUtils').then(m => ({ default: m.ExportMenu })), { ssr: false })
 // AI Features — temporarily disabled (can be re-enabled later)
 // import { AiBugTriage } from '@/components/ai/AiBugTriage'
@@ -134,7 +135,7 @@ export default function Home() {
   // Feature 1: Completion modal
   const [completionModalOpen, setCompletionModalOpen] = useState(false)
   const prevIsRunningRef = useRef(false)
-  const [completionStats, setCompletionStats] = useState({ passed: 0, failed: 0, duration: '' })
+  const [completionStats, setCompletionStats] = useState({ passed: 0, failed: 0, duration: '', failedTests: [] as { testId: string; message: string }[], moduleName: '', subModuleName: '' })
 
   // Bug report dialog
   const [reportDialogOpen, setReportDialogOpen] = useState(false)
@@ -163,6 +164,7 @@ export default function Home() {
 
   // Phase 4: Run Comparison Dialog
   const [runComparisonOpen, setRunComparisonOpen] = useState(false)
+  const [runHistoryOpen, setRunHistoryOpen] = useState(false)
 
   // Show raw test names toggle (synced from admin)
   const [showRawNames, setShowRawNames] = useState(() => typeof window !== 'undefined' && localStorage.getItem('showRawNames') === 'true')
@@ -300,6 +302,7 @@ export default function Home() {
   const [consoleLogs, setConsoleLogs] = useState<string[]>(['> Waiting for tests to start...', '> Select tests in Test Runner and click Run.'])
   const [bugReportsList, setBugReportsList] = useState<{ id: string; testId: string; desc: string; status: string }[]>([])
   const [autoReportedTestIds, setAutoReportedTestIds] = useState<Set<string>>(new Set())
+  const [myTicketUnread, setMyTicketUnread] = useState(0)
 
   // Load run history from Prisma
   const loadRunHistory = useCallback(async () => {
@@ -335,6 +338,8 @@ export default function Home() {
         id: r.id, testId: r.testId, desc: r.error || r.testDescription,
         status: r.status === 'open' ? 'Open' : r.status === 'in_progress' ? 'In Progress' : 'Fixed',
       })))
+      const unread = reports.filter(r => !r.readByUser && (r.replies.length > 0 || r.status === 'open' || r.status === 'in-progress')).length
+      setMyTicketUnread(unread)
     } catch {}
   }, [])
 
@@ -362,6 +367,13 @@ export default function Home() {
     return () => clearTimeout(timer)
   }, [user, loadRunHistory, loadBugReports])
 
+  // Update sidebar badge for My Tickets when unread count changes
+  useEffect(() => {
+    setSidebarModules(prev => prev.map(m =>
+      m.id === 'my-tickets' ? { ...m, badge: myTicketUnread > 0 ? `${myTicketUnread}` : undefined, badgeType: myTicketUnread > 0 ? 'warning' as const : 'none' as const } : m
+    ))
+  }, [myTicketUnread])
+
   // ─── WebSocket event handlers (after loadRunHistory/loadDashboardStats) ──
   useEffect(() => {
     const unsubRunComplete = wsOn('run_complete', (data) => {
@@ -374,11 +386,13 @@ export default function Home() {
     const unsubBugReply = wsOn('bug_reply', (data) => {
       toast.info(`Reply on bug #${data.bugReportId}`, { description: `${data.replyAuthor}: ${data.message}` })
       refreshNotifications()
+      loadBugReports()
     })
 
     const unsubBugStatus = wsOn('bug_status_change', (data) => {
       toast.info(`Bug #${data.bugReportId} updated`, { description: `Status changed to ${data.newStatus} by ${data.changedBy}` })
       refreshNotifications()
+      loadBugReports()
     })
 
     const unsubNotif = wsOn('notification', (data) => {
@@ -392,7 +406,7 @@ export default function Home() {
       unsubBugStatus()
       unsubNotif()
     }
-  }, [wsOn, refreshNotifications, loadRunHistory, loadDashboardStats, selectedModule])
+  }, [wsOn, refreshNotifications, loadRunHistory, loadDashboardStats, loadBugReports, selectedModule])
 
   // Compute module health
   const moduleHealth = useMemo(() => {
@@ -445,36 +459,18 @@ export default function Home() {
     else setSidebarOpen(true)
   }, [activeTab])
 
-  // Feature 1: Detect run completion
+  // Fallback: save run results via the API route when isRunning transitions out
   useEffect(() => {
     if (prevIsRunningRef.current && !isRunning) {
       const passed = tests.filter((t) => t.status === 'passed').length
       const failed = tests.filter((t) => t.status === 'failed').length
       const total = passed + failed
       if (total > 0) {
-        const durations = tests.filter((t) => t.duration && t.duration !== '—' && t.duration !== '...' && t.duration !== '').map((t) => { const parts = t.duration.split(':'); return parseInt(parts[0]) * 60 + parseInt(parts[1]) })
-        const totalSecs = durations.reduce((a, b) => a + b, 0)
-        const mins = Math.floor(totalSecs / 60); const secs = totalSecs % 60
-        const durationStr = `${mins}:${String(secs).padStart(2, '0')}`
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setCompletionStats({ passed, failed, duration: durationStr })
-        setCompletionModalOpen(true)
-        const moduleName = (() => {
-          for (const mod of sidebarModules) {
-            if (mod.id === selectedModule) return mod.label
-            if (mod.children) { const child = mod.children.find(c => c.id === selectedModule); if (child) return child.label }
-          }
-          return selectedModule
-        })()
-        fetch('/api/runs', withCsrf({
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ moduleId: selectedModule, moduleName, passed, failed, total, duration: durationStr, rate: total > 0 ? Math.round((passed / total) * 100) : 0, results: tests.filter(t => t.status === 'passed' || t.status === 'failed').map(t => ({ testId: t.id, status: t.status })), status: 'completed', startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), createdBy: user?.id, userId: user?.id }),
-        })).then(() => { loadRunHistory() }).catch(() => {})
         currentRunIdRef.current = null
       }
     }
     prevIsRunningRef.current = isRunning
-  }, [isRunning, tests, selectedModule, sidebarModules, loadRunHistory])
+  }, [isRunning, tests])
 
     // Check session on mount
   useEffect(() => {
@@ -728,6 +724,23 @@ export default function Home() {
         },
         (summary: RunCompletionSummary) => {
           setIsRunning(false); setRunningProgress(''); toast.success('Test run finished!')
+          const svTotal = summary.total
+          if (svTotal > 0) {
+            const { subModuleName, moduleName } = (() => {
+              for (const mod of sidebarModules) {
+                if (mod.id === selectedModule) return { subModuleName: '', moduleName: mod.label }
+                if (mod.children) { const child = mod.children.find(c => c.id === selectedModule); if (child) return { subModuleName: mod.label, moduleName: child.label } }
+              }
+              return { subModuleName: '', moduleName: selectedModule }
+            })()
+            const start = new Date(summary.startedAt).getTime()
+            const end = summary.completedAt ? new Date(summary.completedAt).getTime() : Date.now()
+            const svSecs = Math.round((end - start) / 1000)
+            const svDuration = `${Math.floor(svSecs / 60)}:${String(svSecs % 60).padStart(2, '0')}`
+            const ft = summary.results.filter(r => r.status === 'failed' && r.message).map(r => ({ testId: r.testId, message: r.message || '' }))
+            setCompletionStats({ passed: summary.passed, failed: summary.failed, duration: svDuration, failedTests: ft, moduleName, subModuleName })
+            setCompletionModalOpen(true)
+          }
           if (summary.total > 0) {
             saveRunResults(summary, user?.id).then((saved) => { if (saved) { loadRunHistory(); if (selectedModule === 'dashboard') loadDashboardStats(); addNotification({ type: 'run_complete', title: `Run complete: ${summary.passed}/${summary.total} passed`, message: `${summary.module}${summary.subModule ? ' → ' + summary.subModule : ''} — ${summary.failed} failed, ${summary.passed} passed` }).catch(() => {}) } })
           }
@@ -786,6 +799,10 @@ export default function Home() {
   }, [tests, rerunTestIds, runTests])
   const handleNewRun = useCallback(() => { setCompletionModalOpen(false); setTests(initialTests); setTestChecks(new Set()); setActiveTab('test-runner') }, [])
   const handleReportTest = useCallback((test: TestItem) => { const error = getTestError(test.id); setReportingTest({ id: test.id, name: test.name, error }); setReportDialogOpen(true) }, [getTestError])
+  const handleQuickReport = useCallback((testId: string, name: string, error: string) => {
+    setReportingTest({ id: testId, name, error })
+    setReportDialogOpen(true)
+  }, [])
 
   // AI Feature handlers — temporarily disabled
   // const handleAiTriage = useCallback((test: TestItem) => { const error = getTestError(test.id); setAiTriageTest({ id: test.id, name: test.name, error }); setAiBugTriageOpen(true) }, [getTestError])
@@ -1071,7 +1088,7 @@ export default function Home() {
               <div className="flex-1 overflow-hidden min-h-0">
                 {activeTab === 'test-runner' && <div data-tour="test-runner" className="h-full"><TestRunnerTab tests={tests} testChecks={testChecks} toggleTestCheck={toggleTestCheck} isRunning={isRunning} totalFailed={failedCount} onRun={(selectedOnly, testType) => { runTests(selectedOnly, undefined, testType); setActiveTab('live-execution') }} onRunByPriority={runByPriority} onRerunFailed={() => { const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { rerunTestIds(failedIds); runTests(true, failedIds); setActiveTab('live-execution') } }} erpToken={erpToken} erpTenantId={erpTenantId} currentModuleId={selectedModule} onOpenCredentials={onOpenCredentials} onClearToken={onClearToken} showRawNames={showRawNames} /></div>}
                 {activeTab === 'live-execution' && <div data-tour="live-execution" className="h-full"><LiveExecutionTab tests={tests} testGroups={currentTestGroups} isRunning={isRunning} runningProgress={runningProgress} showRawNames={showRawNames} onStop={async () => { const runId = currentRunIdRef.current; if (runId) { try { await stopRun(runId); toast.success('Run stopped') } catch (err) { toast.error('Failed to stop run', { description: err instanceof Error ? err.message : 'Unknown error' }) } } setIsRunning(false) }} onBack={() => setActiveTab('test-runner')} onRerunFailed={() => { const failedIds = tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { rerunTestIds(failedIds); runTests(true, failedIds) } }} onScreenshotCaptured={(entry) => { setScreenshotEntries((prev) => { if (prev.length >= 50) return [entry, ...prev.slice(0, 49)]; return [entry, ...prev] }) }} /></div>}
-                {activeTab === 'results' && <div data-tour="results" className="h-full"><ResultsTab tests={tests} passedCount={passedCount} failedCount={failedCount} totalCount={tests.length} runHistory={runHistory} bugReportsList={bugReportsList} onRunDetail={(run) => { setSelectedRunForDetail(run); setRunDetailDialogOpen(true) }} onCompareRuns={() => setRunComparisonOpen(true)} testGroups={currentTestGroups} moduleHealth={moduleHealth} moduleName={modulePath.name} currentModuleId={selectedModule} /></div>}
+                {activeTab === 'results' && <div data-tour="results" className="h-full"><ResultsTab tests={tests} passedCount={passedCount} failedCount={failedCount} totalCount={tests.length} runHistory={runHistory} bugReportsList={bugReportsList} onRunDetail={(run) => { setSelectedRunForDetail(run); setRunDetailDialogOpen(true) }} onCompareRuns={() => setRunComparisonOpen(true)} onViewAllRuns={() => setRunHistoryOpen(true)} onReportTest={handleQuickReport} testGroups={currentTestGroups} moduleHealth={moduleHealth} moduleName={modulePath.name} currentModuleId={selectedModule} /></div>}
                 {activeTab === 'screenshots' && (
                   <div data-tour="screenshots" className="flex flex-col h-full min-h-0">
                     <div className="p-4 shrink-0">
@@ -1110,7 +1127,7 @@ export default function Home() {
       {!consoleOpen && <button onClick={() => setConsoleOpen(true)} className="fixed bottom-4 right-4 z-50 bg-[#1a1a2e] text-green-400 hover:bg-[#252540] transition-colors rounded-lg px-3 py-2 flex items-center gap-2 shadow-lg border border-gray-700 cursor-pointer"><Terminal className="size-3.5" /><span className="text-[12px] font-medium">Console</span><span className="bg-green-500/20 text-green-400 text-[10px] px-1.5 py-0.5 rounded-full">{consoleLogs.length}</span></button>}
       {consoleOpen && <button onClick={() => setConsoleOpen(false)} className="fixed bottom-[208px] right-4 z-50 bg-[#1a1a2e] text-gray-400 hover:text-gray-200 transition-colors rounded-t-lg px-3 py-1 flex items-center gap-1.5 shadow-lg border border-b-0 border-gray-700 cursor-pointer"><Minimize2 className="size-3" /><span className="text-[11px]">Hide</span></button>}
       {/* Completion Summary Modal */}
-      <CompletionSummaryModal open={completionModalOpen} onClose={() => setCompletionModalOpen(false)} passedCount={completionStats.passed} failedCount={completionStats.failed} totalDuration={completionStats.duration} onViewResults={handleViewResults} onRerunFailed={handleCompletionRerunFailed} onNewRun={handleNewRun} />
+      <CompletionSummaryModal open={completionModalOpen} onClose={() => setCompletionModalOpen(false)} passedCount={completionStats.passed} failedCount={completionStats.failed} totalDuration={completionStats.duration} moduleName={completionStats.moduleName} subModuleName={completionStats.subModuleName} failedTests={completionStats.failedTests} onViewResults={handleViewResults} onRerunFailed={handleCompletionRerunFailed} onNewRun={handleNewRun} onReportTest={handleQuickReport} />
       {/* Bug Report Dialog */}
       <ReportToAdminDialog open={reportDialogOpen} onClose={() => setReportDialogOpen(false)} testId={reportingTest?.id || ''} testDescription={reportingTest?.name || ''} error={reportingTest?.error} moduleName={modulePath.name} userName={user?.name || ''} userEmail={user?.email || ''} />
       {/* User Profile Dialog */}
@@ -1148,7 +1165,7 @@ export default function Home() {
         </DialogContent>
       </Dialog>
       {/* Run Detail Dialog */}
-      <RunDetailDialog open={runDetailDialogOpen} onClose={() => { setRunDetailDialogOpen(false); setSelectedRunForDetail(null) }} run={selectedRunForDetail} visibilityData={visibilityData} showRawNames={showRawNames} />
+      <RunDetailDialog open={runDetailDialogOpen} onClose={() => { setRunDetailDialogOpen(false); setSelectedRunForDetail(null) }} run={selectedRunForDetail} visibilityData={visibilityData} showRawNames={showRawNames} onReportTest={handleQuickReport} />
 
       {/* AI Features — temporarily disabled (can be re-enabled later) */}
       {/* <AiBugTriage open={aiBugTriageOpen} onClose={() => { setAiBugTriageOpen(false); setAiTriageTest(null) }} testId={aiTriageTest?.id || ''} testDescription={aiTriageTest?.name || ''} error={aiTriageTest?.error} moduleName={modulePath.name} userName={user?.name || ''} />
@@ -1161,6 +1178,8 @@ export default function Home() {
       )} */}
       {/* Run Comparison Dialog */}
       <RunComparisonDialog open={runComparisonOpen} onClose={() => setRunComparisonOpen(false)} runHistory={runHistory} currentModuleId={selectedModule} />
+      {/* Run History Dialog */}
+      <RunHistoryDialog open={runHistoryOpen} onClose={() => setRunHistoryOpen(false)} runHistory={runHistory} sidebarModules={sidebarModules} currentModuleId={selectedModule} onRunDetail={(run) => { setSelectedRunForDetail(run); setRunDetailDialogOpen(true) }} />
       {/* Screenshot Lightbox */}
       {lightboxOpen && <ScreenshotLightbox open={lightboxOpen} onClose={() => setLightboxOpen(false)} screenshots={screenshotEntries} initialIndex={lightboxIndex} />}
       {/* Screenshot Compare */}

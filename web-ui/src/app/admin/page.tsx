@@ -8,6 +8,7 @@ import {
   getBugReports, updateBugReportStatus, addReplyToReport,
   markReportReadByAdmin, getSLAStatus, type BugReport,
 } from '@/lib/bug-reports'
+import { ChatListView } from '@/components/tickets/ChatListView'
 import { fetchTestCases } from '@/lib/api'
 import { withCsrf } from '@/lib/csrf-client'
 import { ALL_SIDEBAR_MODULES } from '@/data/sidebarModules'
@@ -40,7 +41,7 @@ import {
   XCircle, Circle, Sun, Moon, Home, FolderTree, Inbox,
   Send, Timer, Database, Cpu, Zap, BarChart3, FileText,
   RotateCcw, Save, Monitor, Key, Bell, ChevronRight,
-  Menu, HardDrive, EyeOff, Check, X,
+  Menu, HardDrive, EyeOff, Check, X, MessageSquare,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────
@@ -126,6 +127,7 @@ export default function AdminPage() {
   const [testPage, setTestPage] = useState(1)
 
   // Bug filters
+  const [bugSubTab, setBugSubTab] = useState<'reports' | 'chats'>('reports')
   const [bugStatusFilter, setBugStatusFilter] = useState('all')
   const [bugSearch, setBugSearch] = useState('')
   const [bugModuleFilter, setBugModuleFilter] = useState('all')
@@ -133,6 +135,10 @@ export default function AdminPage() {
   const [expandedBug, setExpandedBug] = useState<string | null>(null)
   const [bugReplyText, setBugReplyText] = useState<Record<string, string>>({})
   const [pendingBugStatus, setPendingBugStatus] = useState<Record<string, string>>({})
+
+  const adminUnreadChats = useMemo(() =>
+    bugReports.filter(r => !r.readByAdmin && (r.replies.length > 0 || r.status === 'open' || r.status === 'in-progress')).length,
+  [bugReports])
 
   // Audit pagination & filters
   const [auditPage, setAuditPage] = useState(1)
@@ -1997,101 +2003,166 @@ export default function AdminPage() {
     }
 
     return (
-      <>
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Bug Reports</h2>
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-[#888]" />
-              <Input placeholder="Search bugs..." value={bugSearch} onChange={e => setBugSearch(e.target.value)}
-                className="h-8 pl-8 pr-3 text-xs font-['Manrope'] w-48" />
-            </div>
-            <Select value={bugModuleFilter} onValueChange={setBugModuleFilter}>
-              <SelectTrigger className="h-8 text-xs w-32"><SelectValue placeholder="Module" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-xs">All Modules</SelectItem>
-                {uniqueBugModules.map(m => <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={bugPriorityFilter} onValueChange={setBugPriorityFilter}>
-              <SelectTrigger className="h-8 text-xs w-28"><SelectValue placeholder="Priority" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-xs">All</SelectItem>
-                <SelectItem value="high" className="text-xs">High</SelectItem>
-                <SelectItem value="medium" className="text-xs">Medium</SelectItem>
-                <SelectItem value="low" className="text-xs">Low</SelectItem>
-              </SelectContent>
-            </Select>
-            {(bugSearch || bugModuleFilter !== 'all' || bugPriorityFilter !== 'all') && (
-              <Button variant="ghost" size="sm" className="h-8 text-xs text-[#888]" onClick={() => { setBugSearch(''); setBugModuleFilter('all'); setBugPriorityFilter('all') }}>
-                <RotateCcw className="size-3 mr-1" /> Clear
-              </Button>
-            )}
-          </div>
-        </div>
+      <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center gap-0 px-5 pt-4 pb-0 shrink-0 border-b border-gray-200 dark:border-gray-700">
+        <button
+          onClick={() => setBugSubTab('reports')}
+          className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${
+            bugSubTab === 'reports'
+              ? 'border-[#3F51B5] text-[#3F51B5] dark:text-indigo-400'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+          }`}
+        >
+          Reports
+        </button>
+        <button
+          onClick={() => setBugSubTab('chats')}
+          className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+            bugSubTab === 'chats'
+              ? 'border-[#3F51B5] text-[#3F51B5] dark:text-indigo-400'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+          }`}
+        >
+          Chats
+          {adminUnreadChats > 0 && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#3F51B5] text-white leading-none">
+              {adminUnreadChats}
+            </span>
+          )}
+        </button>
+      </div>
 
-        {/* Status tabs */}
-        <div className="flex gap-1.5 flex-wrap bg-gray-50 dark:bg-gray-800/50 rounded-xl p-1 border border-gray-100 dark:border-gray-700/50">
-          {tabs.map(tab => (
-            <button key={tab.id} onClick={() => setBugStatusFilter(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-['Manrope'] font-medium transition-all cursor-pointer ${
-                bugStatusFilter === tab.id
-                  ? 'bg-white dark:bg-gray-700 text-[#3F51B5] dark:text-[#7986CB] shadow-sm'
-                  : 'text-[#888] dark:text-gray-400 hover:text-[#333] dark:hover:text-gray-100'
-              }`}>
-              {tab.label}
-              <span className={`ml-1.5 ${bugStatusFilter === tab.id ? 'text-[#3F51B5] dark:text-[#7986CB]' : 'text-[#aaa]'}`}>({tab.count})</span>
-            </button>
-          ))}
+      {bugSubTab === 'chats' ? (
+        <div className="flex-1 min-h-0 p-4">
+          <ChatListView
+            reports={bugReports}
+            userName={user?.name || 'Admin'}
+            userRole="admin"
+            onReportsChange={setBugReports}
+          />
+        </div>
+      ) : (
+      <>
+      <div className="flex flex-col flex-1 min-h-0 gap-3 p-4">
+        <div className="shrink-0 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Bug Reports</h2>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-[#888]" />
+                <Input placeholder="Search bugs..." value={bugSearch} onChange={e => setBugSearch(e.target.value)}
+                  className="h-8 pl-8 pr-3 text-xs font-['Manrope'] w-48" />
+              </div>
+              <Select value={bugModuleFilter} onValueChange={setBugModuleFilter}>
+                <SelectTrigger className="h-8 text-xs w-32"><SelectValue placeholder="Module" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="text-xs">All Modules</SelectItem>
+                  {uniqueBugModules.map(m => <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={bugPriorityFilter} onValueChange={setBugPriorityFilter}>
+                <SelectTrigger className="h-8 text-xs w-28"><SelectValue placeholder="Priority" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="text-xs">All</SelectItem>
+                  <SelectItem value="high" className="text-xs">High</SelectItem>
+                  <SelectItem value="medium" className="text-xs">Medium</SelectItem>
+                  <SelectItem value="low" className="text-xs">Low</SelectItem>
+                </SelectContent>
+              </Select>
+              {(bugSearch || bugModuleFilter !== 'all' || bugPriorityFilter !== 'all') && (
+                <Button variant="ghost" size="sm" className="h-8 text-xs text-[#888]" onClick={() => { setBugSearch(''); setBugModuleFilter('all'); setBugPriorityFilter('all') }}>
+                  <RotateCcw className="size-3 mr-1" /> Clear
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-1.5 flex-wrap bg-gray-50 dark:bg-gray-800/50 rounded-xl p-1 border border-gray-100 dark:border-gray-700/50">
+            {tabs.map(tab => (
+              <button key={tab.id} onClick={() => setBugStatusFilter(tab.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-['Manrope'] font-medium transition-all cursor-pointer ${
+                  bugStatusFilter === tab.id
+                    ? 'bg-white dark:bg-gray-700 text-[#3F51B5] dark:text-[#7986CB] shadow-sm'
+                    : 'text-[#888] dark:text-gray-400 hover:text-[#333] dark:hover:text-gray-100'
+                }`}>
+                {tab.label}
+                <span className={`ml-1.5 ${bugStatusFilter === tab.id ? 'text-[#3F51B5] dark:text-[#7986CB]' : 'text-[#aaa]'}`}>({tab.count})</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {!bugsLoaded ? (
-          <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
+          <div className="flex-1 flex items-center justify-center"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-12 border border-gray-100 dark:border-gray-700 text-center">
-            <Inbox className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
-            <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No bug reports found</p>
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <Inbox className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
+              <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No bug reports found</p>
+            </div>
           </div>
         ) : (
-          <div className="space-y-2.5">
-            {filtered.map(bug => {
-              const sla = getSLAStatus(bug.priority, bug.createdAt, bug.status)
-              const sc = statusConfig[bug.status] || statusConfig.open
-              return (
-                <div key={bug.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                  <button onClick={() => { setExpandedBug(bug.id); if (!bug.readByAdmin) handleMarkBugRead(bug.id) }}
-                    className="w-full flex items-start gap-3 p-4 text-left cursor-pointer transition-colors hover:bg-gray-50/50 dark:hover:bg-gray-700/30">
-                    <div className={`w-1 self-stretch rounded-full shrink-0 ${priorityStyles[bug.priority] || 'border-l-gray-300 border-l-2'}`} />
-                    {!bug.readByAdmin && <span className="w-2 h-2 rounded-full bg-[#3F51B5] shrink-0 mt-1.5" />}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <span className="text-[11px] font-mono font-semibold text-[#3F51B5] dark:text-[#7986CB]">#{bug.id.slice(0, 8).toUpperCase()}</span>
-                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${sc.bg} ${sc.text}`}>{bug.status}</span>
-                        <span className={`text-[10px] font-medium ${bug.priority === 'high' ? 'text-red-600' : bug.priority === 'medium' ? 'text-yellow-600' : 'text-blue-600'}`}>{bug.priority}</span>
-                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${sla.color || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>{sla.label}</span>
-                      </div>
-                      <p className="text-sm font-['Manrope'] font-medium text-[#333] dark:text-gray-100 mt-1.5 leading-snug line-clamp-2">{bug.testDescription}</p>
-                      <div className="flex items-center gap-3 mt-1.5 text-[11px] text-[#888] font-['Manrope']">
-                        <span className="flex items-center gap-1"><FolderTree className="size-3" />{bug.moduleName}</span>
-                        <span>·</span>
-                        <span className="flex items-center gap-1"><UsersIcon className="size-3" />{bug.reporterName}</span>
-                        <span>·</span>
-                        <span className="flex items-center gap-1"><Clock className="size-3" />{sla.remaining}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      {bug.replies.length > 0 && (
-                        <span className="text-[10px] text-[#888] font-['Manrope'] flex items-center gap-1">
-                          <Send className="size-3" />{bug.replies.length}
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex items-center bg-[#DFE9FB] dark:bg-indigo-900/30 rounded-t-lg border border-gray-300 dark:border-gray-500/70 border-b-0 text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 shrink-0">
+              <span className="w-24 px-2 py-2.5">Ticket ID</span>
+              <span className="flex-1 px-2 py-2.5">Description</span>
+              <span className="w-28 px-2 py-2.5">Module</span>
+              <span className="w-20 px-2 py-2.5 text-center">Priority</span>
+              <span className="w-24 px-2 py-2.5 text-center">Status</span>
+              <span className="w-32 px-2 py-2.5 text-center">SLA</span>
+              <span className="w-20 px-2 py-2.5 text-center"><MessageSquare className="size-3 mx-auto" /></span>
+              <span className="w-28 px-2 py-2.5">Created</span>
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto border border-gray-300 dark:border-gray-500/70 border-t-0 rounded-b-lg">
+              <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                {filtered.map(bug => {
+                  const sla = getSLAStatus(bug.priority, bug.createdAt, bug.status)
+                  const isUnread = !bug.readByAdmin
+                  return (
+                    <div
+                      key={bug.id}
+                      onClick={() => { setExpandedBug(bug.id); if (!bug.readByAdmin) handleMarkBugRead(bug.id) }}
+                      className={`flex items-center cursor-pointer hover:bg-[#DFE9FB]/30 dark:hover:bg-indigo-900/10 transition-colors text-[12px] ${isUnread ? 'bg-blue-50/50 dark:bg-indigo-900/10' : ''}`}
+                    >
+                      <span className="w-24 px-2 py-2.5 font-mono font-semibold text-[#3F51B5] dark:text-indigo-400 flex items-center gap-1">
+                        {isUnread && <span className="size-1.5 rounded-full bg-blue-500 shrink-0" />}
+                        #{bug.id.slice(0, 8).toUpperCase()}
+                      </span>
+                      <span className="flex-1 px-2 py-2.5 text-[13px] text-gray-700 dark:text-gray-200 truncate">
+                        {bug.testDescription}
+                      </span>
+                      <span className="w-28 px-2 py-2.5 text-gray-500 dark:text-gray-400 truncate">
+                        {bug.moduleName}
+                      </span>
+                      <span className="w-20 px-2 py-2.5 text-center">
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                          bug.priority === 'high' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' :
+                          bug.priority === 'medium' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400' :
+                          'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                        }`}>
+                          {bug.priority}
                         </span>
-                      )}
-                      <ChevronRight className="size-4 text-[#aaa]" />
+                      </span>
+                      <span className="w-24 px-2 py-2.5 text-center">
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusConfig[bug.status]?.bg || ''} ${statusConfig[bug.status]?.text || ''}`}>
+                          {bug.status}
+                        </span>
+                      </span>
+                      <span className="w-32 px-2 py-2.5 text-center">
+                        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${sla.color}`}>{sla.label}</span>
+                        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{sla.remaining}</div>
+                      </span>
+                      <span className="w-20 px-2 py-2.5 text-center text-gray-400 dark:text-gray-500">
+                        {bug.replies.length > 0 ? bug.replies.length : ''}
+                      </span>
+                      <span className="w-28 px-2 py-2.5 text-gray-500 dark:text-gray-400">
+                        {new Date(bug.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                      </span>
                     </div>
-                  </button>
-                </div>
-              )
-            })}
+                  )
+                })}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -2099,6 +2170,7 @@ export default function AdminPage() {
       {/* Bug detail dialog */}
       <Dialog open={expandedBug !== null} onOpenChange={(open) => { if (!open) { setExpandedBug(null); setPendingBugStatus(prev => { const n = { ...prev }; if (expandedBug) delete n[expandedBug]; return n }) }}}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogTitle className="sr-only">Bug Report Detail</DialogTitle>
           {(() => {
             const bug = bugReports.find(b => b.id === expandedBug)
             if (!bug) return null
@@ -2240,6 +2312,8 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
       </>
+      )}
+      </div>
     )
   }
 
@@ -2708,9 +2782,10 @@ export default function AdminPage() {
             </div>
             <ScrollArea className="flex-1">
               <div className="py-2 px-2">
-                {sidebarItems.map(item => {
+                 {sidebarItems.map(item => {
                   const Icon = item.icon
                   const isActive = activeSection === item.id
+                  const badgeCount = item.id === 'bug-reports' ? adminUnreadChats : 0
                   return (
                     <button key={item.id} onClick={() => setActiveSection(item.id)}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-['Poppins'] transition-all duration-150 cursor-pointer mb-0.5 ${
@@ -2719,7 +2794,12 @@ export default function AdminPage() {
                           : 'text-[#545454] dark:text-gray-300 font-medium hover:text-[#6777EF] dark:hover:text-indigo-400 hover:bg-[rgba(82,183,136,0.08)] hover:shadow-[rgba(82,183,136,0.5)_2px_0px_inset] hover:rounded-[5px]'
                       }`}>
                       <Icon className="size-4 shrink-0" />
-                      <span>{item.label}</span>
+                      <span className="flex-1 text-left">{item.label}</span>
+                      {badgeCount > 0 && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#3F51B5] text-white leading-none">
+                          {badgeCount}
+                        </span>
+                      )}
                     </button>
                   )
                 })}
@@ -2732,17 +2812,20 @@ export default function AdminPage() {
         </div>
 
         {/* ─── MAIN CONTENT ────────────────────────── */}
-        <main className="flex-1 overflow-y-auto p-6">
-          {activeSection === 'overview' ? renderOverview() :
-            activeSection === 'tests' ? renderTests() :
-            activeSection === 'test-visibility' ? renderTestVisibility() :
-            activeSection === 'modules' ? renderModules() :
-            activeSection === 'bug-reports' ? renderBugReports() :
-            activeSection === 'environments' ? renderEnvironments() :
-            activeSection === 'users' ? renderUsers() :
-            activeSection === 'settings' ? renderSettings() :
-            activeSection === 'system-health' ? renderSystemHealth() :
-            activeSection === 'audit-log' ? renderAuditLog() : null}
+        <main className="flex-1 flex flex-col overflow-hidden">
+          {activeSection === 'bug-reports' ? renderBugReports() : (
+            <div className="flex-1 overflow-y-auto min-h-0 p-6">
+              {activeSection === 'overview' ? renderOverview() :
+                activeSection === 'tests' ? renderTests() :
+                activeSection === 'test-visibility' ? renderTestVisibility() :
+                activeSection === 'modules' ? renderModules() :
+                activeSection === 'environments' ? renderEnvironments() :
+                activeSection === 'users' ? renderUsers() :
+                activeSection === 'settings' ? renderSettings() :
+                activeSection === 'system-health' ? renderSystemHealth() :
+                activeSection === 'audit-log' ? renderAuditLog() : null}
+            </div>
+          )}
         </main>
       </div>
 
