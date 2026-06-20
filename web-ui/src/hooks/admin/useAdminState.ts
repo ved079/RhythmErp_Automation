@@ -175,7 +175,7 @@ export function useAdminState(): AdminState {
   const [pendingBugStatus, setPendingBugStatus] = useState<Record<string, string>>({})
 
   const adminUnreadChats = useMemo(() =>
-    bugReports.filter(r => !r.readByAdmin && (r.replies.length > 0 || r.status === 'open' || r.status === 'in-progress')).length,
+    bugReports.filter(r => (r.status === 'open' || r.status === 'in-progress') && r.replies?.length > 0).length,
   [bugReports])
 
   // Dialogs
