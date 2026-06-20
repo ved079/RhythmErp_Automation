@@ -1,6 +1,7 @@
 import type { SidebarModule } from '@/components/sidebar/SidebarModuleItem'
 import type { AuthUser } from '@/components/auth/LoginPage'
-import { type ApiModule, folderToSidebarId } from '@/lib/api'
+import { type ApiModule } from '@/lib/api'
+import { getCachedFolderToSidebarId } from '@/lib/module-data'
 import { ALL_SIDEBAR_MODULES } from '@/data/sidebarModules'
 
 /**
@@ -15,12 +16,12 @@ export function buildSidebarModules(apiModules: ApiModule[]): SidebarModule[] {
   const testCounts: Record<string, number> = {}
   for (const apiMod of apiModules) {
     for (const sub of apiMod.sub_modules) {
-      const sid = folderToSidebarId(sub.name)
+      const sid = getCachedFolderToSidebarId(sub.name)
       testCounts[sid] = sub.tests.length
     }
     // Standalone modules
     if (apiMod.sub_modules.length === 0) {
-      const sid = folderToSidebarId(apiMod.name)
+      const sid = getCachedFolderToSidebarId(apiMod.name)
       testCounts[sid] = 0
     }
   }

@@ -1,4 +1,5 @@
-import { sidebarToFolderMapping, type ApiModule, type ApiSubModule } from '@/lib/api'
+import { type ApiModule, type ApiSubModule } from '@/lib/api'
+import { getCachedSidebarToFolderMapping } from '@/lib/module-data'
 import { type TestClassGroup, type TestItem, testSpecGroups } from '@/data/testSpecGroups'
 
 export interface VisibilityData {
@@ -30,7 +31,7 @@ export function getTestsForSidebarModule(
   visibility?: VisibilityData | null
 ): { groups: TestClassGroup[]; items: TestItem[] } {
   const empty = { groups: [] as TestClassGroup[], items: [] as TestItem[] }
-  const mapping = sidebarToFolderMapping(sidebarId)
+  const mapping = getCachedSidebarToFolderMapping(sidebarId)
   if (!mapping) return empty
 
   // Find the API module

@@ -4,7 +4,8 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
 import { initialTests, testSpecGroups, type TestItem, type TestSpecItem, type TestClassGroup, type TestPriority } from '@/data/testSpecGroups'
 import type { ApiModule, TestCasesData, RunCompletionSummary } from '@/lib/api'
-import { startRun, stopRun, saveRunResults, sidebarToFolderMapping } from '@/lib/api'
+import { startRun, stopRun, saveRunResults } from '@/lib/api'
+import { getCachedSidebarToFolderMapping } from '@/lib/module-data'
 import type { ScreenshotEntry } from '@/components/screenshot/ScreenshotGallery'
 import { getTestsForSidebarModule } from '@/lib/test-helpers'
 import type { VisibilityData } from '@/lib/test-helpers'
@@ -76,7 +77,7 @@ export function useTestRun(params: UseTestRunParams) {
       else testsToRun = tests.filter((t) => t.status === 'pending' || t.status === 'failed')
       if (testType) testsToRun = testsToRun.filter((t) => (testType === 'ui' ? (!t.testType || t.testType === 'ui') : t.testType === 'api'))
       if (testsToRun.length === 0) { toast.info('No tests to run'); return }
-      const mapping = sidebarToFolderMapping(selectedModule)
+      const mapping = getCachedSidebarToFolderMapping(selectedModule)
       if (!mapping) { toast.error('Cannot determine module path for: ' + selectedModule); return }
       setTests((prev) => prev.map((t) => testsToRun.some((r) => r.id === t.id) ? { ...t, status: (t.id === testsToRun[0].id ? 'running' as const : 'pending' as const), duration: '' } : t))
       setIsRunning(true); setRunningProgress('Starting tests...'); setConsoleLogs([])

@@ -389,14 +389,8 @@ export async function saveRunResults(summary: RunCompletionSummary, userId?: str
     const rate = summary.total > 0 ? Math.round((summary.passed / summary.total) * 10000) / 100 : 0;
 
     const folderName = summary.subModule || summary.module
-    // Pilot: try DB lookup for entity_group only
-    let mappedId: string
-    if (folderName === 'entity_group') {
-      const dbId = await folderToSidebarIdFromDB(folderName)
-      mappedId = dbId ?? folderToSidebarId(folderName)
-    } else {
-      mappedId = folderToSidebarId(folderName)
-    }
+    const sidebarId = await folderToSidebarIdFromDB(folderName)
+    const mappedId = sidebarId ?? folderName.toLowerCase().replace(/_/g, '-')
     const res = await fetch('/api/runs', withCsrf({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -488,103 +482,4 @@ export async function exportBatchExcel(runId: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-// ─── Module name mapping ────────────────────────────────
 
-/**
- * Map sub-module folder names to sidebar module IDs.
- * e.g. "season" → "seasons", "error_code_mst" → "error-code-master"
- */
-const FOLDER_TO_SIDEBAR: Record<string, string> = {
-  login_screens: "login",
-  access_screen: "access",
-  company_onboarding: "company-onboarding",
-  common_settings: "common-settings",
-  commodity_settings: "commodity-settings",
-  bank: "bank",
-  designation: "designation",
-  error_code_mst: "error-code-master",
-  hsn_sac: "hsn-sac",
-  season: "seasons",
-  tax_authority: "tax-authority",
-  tax_rate: "tax-rate",
-  uom: "uom",
-  uom_conversion: "uom-conversion",
-  vehicle_master: "vehicle-master",
-  crop_master: "crop-master",
-  item_master: "item-master",
-  quality_parameter_master: "quality-parameter-def",
-  services_master: "services-master",
-  item_category: "item-category",
-  item_group: "item-group",
-  commodity_quality_parameter: "commodity-quality-param",
-  item_attribute: "item-attribute",
-  commodity_base_rate: "commodity-base-rate",
-  entity_group_definition: "entity-group",
-  entity_group: "entity-group",
-  role_creation_screen: "role-creation",
-  role_creation: "role-creation",
-  user_creation: "user-creation",
-  // Registration sub-modules
-  registration: "registration",
-  employee: "employee",
-  farmer: "farmer",
-  customer: "customer",
-  supplier: "supplier",
-  agent: "agent",
-  // Document sub-modules
-  directors: "directors",
-  member: "member",
-  constituent_documents: "constituent-documents",
-  miscellaneous_documents: "miscellaneous-documents",
-  register_of_loan: "register-of-loan",
-  register_charges: "register-charges",
-  // Private (B2B) / Purchase sub-modules
-  purchase_order: "purchase-order",
-  goods_receipt_note: "goods-receipt-note",
-  gate_pass: "gate-pass",
-  quality_check: "quality-check",
-};
-
-export function folderToSidebarId(folderName: string): string {
-  return FOLDER_TO_SIDEBAR[folderName] || folderName;
-}
-
-export function sidebarToFolderMapping(sidebarId: string): { module: string; subModule: string | null } | null {
-  // Reverse lookup
-  for (const [folder, id] of Object.entries(FOLDER_TO_SIDEBAR)) {
-    if (id === sidebarId) {
-      // Determine if it's a top-level module or sub-module
-      const topModules = ["login_screens", "company_onboarding", "common_settings", "commodity_settings", "registration"];
-      if (topModules.includes(folder)) {
-        return { module: folder, subModule: null };
-      }
-      // It's a sub-module — figure out parent
-      const commonSubs = ["bank", "designation", "error_code_mst", "hsn_sac", "season", "tax_authority", "tax_rate", "uom", "uom_conversion", "vehicle_master"];
-      if (commonSubs.includes(folder)) {
-        return { module: "common_settings", subModule: folder };
-      }
-      const commoditySubs = ["crop_master", "item_master", "quality_parameter_master", "services_master", "item_category", "item_group", "commodity_quality_parameter", "commodity_base_rate", "item_attribute"];
-      if (commoditySubs.includes(folder)) {
-        return { module: "commodity_settings", subModule: folder };
-      }
-      const accessSubs = ["entity_group", "entity_group_definition", "role_creation", "role_creation_screen", "user_creation"];
-      if (accessSubs.includes(folder)) {
-        return { module: "access", subModule: folder };
-      }
-      const registrationSubs = ["employee", "farmer", "customer", "supplier", "agent"];
-      if (registrationSubs.includes(folder)) {
-        return { module: "registration", subModule: folder };
-      }
-      const documentSubs = ["directors", "member", "constituent_documents", "miscellaneous_documents", "register_of_loan", "register_charges"];
-      if (documentSubs.includes(folder)) {
-        return { module: "registration", subModule: folder };
-      }
-      const purchaseSubs = ["purchase_order", "goods_receipt_note", "gate_pass", "quality_check"];
-      if (purchaseSubs.includes(folder)) {
-        return { module: "private_b2b", subModule: folder };
-      }
-      return { module: folder, subModule: null };
-    }
-  }
-  return null;
-}
