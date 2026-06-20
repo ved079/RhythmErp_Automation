@@ -103,7 +103,7 @@ export async function warmModuleCache(): Promise<void> {
 
   for (const mod of allModules) {
     if (mod.folderName && mod.name) {
-      const sidebarId = mod.name.toLowerCase().replace(/_/g, '-')
+      const sidebarId = FOLDER_TO_SIDEBAR_FALLBACK[mod.folderName] ?? mod.folderName.toLowerCase().replace(/_/g, '-')
       _moduleCache.set(mod.folderName, sidebarId)
       parentById.set(mod.id, { folderName: mod.folderName, name: mod.name })
     }
@@ -111,13 +111,14 @@ export async function warmModuleCache(): Promise<void> {
 
   for (const mod of allModules) {
     if (!mod.folderName || !mod.name) continue
+    const sidebarId = FOLDER_TO_SIDEBAR_FALLBACK[mod.folderName] ?? mod.folderName.toLowerCase().replace(/_/g, '-')
     if (mod.parentId) {
       const parent = parentById.get(mod.parentId)
       if (parent) {
-        _reverseCache.set(mod.folderName, { module: parent.folderName, subModule: mod.folderName })
+        _reverseCache.set(sidebarId, { module: parent.folderName, subModule: mod.folderName })
       }
     } else {
-      _reverseCache.set(mod.folderName, { module: mod.folderName, subModule: null })
+      _reverseCache.set(sidebarId, { module: mod.folderName, subModule: null })
     }
   }
 }
