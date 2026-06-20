@@ -17,10 +17,12 @@ import { EnvironmentsSection } from '@/components/admin/sections/EnvironmentsSec
 import { EnvDialog } from '@/components/admin/EnvDialog'
 import { ModulesSection } from '@/components/admin/sections/ModulesSection'
 import { ModuleDialog } from '@/components/admin/ModuleDialog'
+import { UsersSection } from '@/components/admin/sections/UsersSection'
+import { UserDialog } from '@/components/admin/UserDialog'
+import { ResetPasswordDialog } from '@/components/admin/ResetPasswordDialog'
 import { fetchTestCases } from '@/lib/api'
 import { withCsrf } from '@/lib/csrf-client'
 import { ALL_SIDEBAR_MODULES } from '@/data/sidebarModules'
-import { ModuleAccessPicker, type ModuleItem } from '@/components/admin/ModuleAccessPicker'
 import { TestUserVisibilityDialog } from '@/components/admin/TestUserVisibilityDialog'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -78,13 +80,6 @@ interface AuditEntry {
   id: string; userId: string; userName: string; action: string
   targetType: string; targetId: string; targetLabel: string
   details: string; createdAt: string
-}
-
-const roleConfig: Record<string, { label: string; color: string }> = {
-  admin: { label: 'Admin', color: 'text-[#3F51B5] bg-[#E8EAF6] dark:text-[#7986CB] dark:bg-[#1A237E]/30' },
-  tester: { label: 'Tester', color: 'text-[#2E7D32] bg-[#E8F5E9] dark:text-[#66BB6A] dark:bg-[#1B5E20]/40' },
-  viewer: { label: 'Viewer', color: 'text-[#616161] bg-[#F5F5F5] dark:text-[#9E9E9E] dark:bg-[#424242]/40' },
-  client: { label: 'Client', color: 'text-[#E65100] bg-[#FFF3E0] dark:text-[#FFB74D] dark:bg-[#BF360C]/40' },
 }
 
 // ─── ADMIN PAGE COMPONENT ────────────────────────────────
@@ -1991,95 +1986,23 @@ export default function AdminPage() {
 
   // 6. Users
   const renderUsers = () => (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Users</h2>
-        <Button onClick={() => { setEditingUser(null); setUserDialogOpen(true) }}
-          className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto'] text-xs h-8">
-          <Plus className="size-3.5 mr-1" /> Add User
-        </Button>
-      </div>
-      {/* Bulk action bar */}
-      {selectedUserIds.size > 0 && (
-        <div className="bg-[#E8EAF6] dark:bg-[#1A237E]/30 rounded-[14px] shadow-sm p-3 flex items-center gap-3 flex-wrap">
-          <span className="text-xs font-semibold font-['Poppins'] text-[#3F51B5] dark:text-[#7986CB]">
-            {selectedUserIds.size} selected
-          </span>
-          <Button size="sm" className="h-7 text-[10px] bg-green-600 hover:bg-green-700 text-white font-['Roboto']"
-            onClick={() => { setBulkActionType('activate'); setBulkActionConfirmOpen(true) }}>
-            <CheckCircle2 className="size-3 mr-1" /> Activate
-          </Button>
-          <Button size="sm" className="h-7 text-[10px] bg-orange-500 hover:bg-orange-600 text-white font-['Roboto']"
-            onClick={() => { setBulkActionType('deactivate'); setBulkActionConfirmOpen(true) }}>
-            <XCircle className="size-3 mr-1" /> Deactivate
-          </Button>
-          <Button size="sm" className="h-7 text-[10px] bg-[#F44336] hover:bg-[#D32F2F] text-white font-['Roboto']"
-            onClick={() => { setBulkActionType('delete'); setBulkActionConfirmOpen(true) }}>
-            <Trash2 className="size-3 mr-1" /> Delete
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-[10px] font-['Roboto'] text-[#888]"
-            onClick={() => setSelectedUserIds(new Set())}>
-            Clear
-          </Button>
-        </div>
-      )}
-      {!usersLoaded ? (
-        <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
-      ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-          <div className="space-y-1 p-3">
-            {users.map(u => (
-              <div key={u.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors ${selectedUserIds.has(u.id) ? 'bg-[#E8EAF6]/50 dark:bg-[#1A237E]/20 border-[#3F51B5]/30 dark:border-[#7986CB]/30' : 'bg-white dark:bg-gray-800/20 border-gray-100 dark:border-gray-700/40 hover:bg-gray-50/50 dark:hover:bg-gray-800/30'}`}>
-                <Checkbox
-                  checked={selectedUserIds.has(u.id)}
-                  onCheckedChange={() => toggleUserSelection(u.id)}
-                />
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <Avatar className="size-7 shrink-0"><AvatarFallback className="bg-[#E8EAF6] dark:bg-[#1A237E]/30 text-[#3F51B5] dark:text-[#7986CB] text-[10px] font-semibold">
-                    {u.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                  </AvatarFallback></Avatar>
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-[#333] dark:text-gray-100 truncate">{u.name}</p>
-                    <p className="text-[10px] text-[#888] dark:text-gray-400 truncate">{u.email}</p>
-                  </div>
-                </div>
-                <Badge className={`text-[10px] border-0 shrink-0 ${roleConfig[u.role]?.color || ''}`}>{roleConfig[u.role]?.label || u.role}</Badge>
-                <Badge className={`text-[10px] border-0 shrink-0 ${u.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>{u.status}</Badge>
-                <span className="text-[10px] font-['Manrope'] text-[#545454] dark:text-gray-300 shrink-0">
-                  {u.moduleAccess.includes('all') ? 'All modules' : `${u.moduleAccess.length} modules`}
-                </span>
-                <span className="text-[10px] font-['Manrope'] text-[#888] dark:text-gray-400 shrink-0">{u.lastLogin || '—'}</span>
-                <div className="flex gap-1 shrink-0">
-                  <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => { setEditingUser(u); setUserDialogOpen(true) }}><Pencil className="size-3 text-[#3F51B5]" /></Button>
-                  <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => { setResetPasswordUser(u); setResetPasswordDialogOpen(true) }} title="Reset password"><Key className="size-3 text-[#F57C00]" /></Button>
-                  <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => { setDeleteTarget({ type: 'user', id: u.id, label: u.name }); setDeleteDialogOpen(true) }}><Trash2 className="size-3 text-[#F44336]" /></Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Action Confirmation Dialog */}
-      <Dialog open={bulkActionConfirmOpen} onOpenChange={setBulkActionConfirmOpen}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100">Confirm Bulk Action</DialogTitle>
-            <DialogDescription className="font-['Manrope'] text-[#888]">
-              Are you sure you want to {bulkActionType === 'activate' ? 'activate' : bulkActionType === 'deactivate' ? 'deactivate' : 'delete'} <strong>{selectedUserIds.size} user(s)</strong>?
-              {bulkActionType === 'delete' && ' This action cannot be undone.'}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkActionConfirmOpen(false)} className="font-['Roboto']">Cancel</Button>
-            <Button onClick={handleBulkAction}
-              className={`text-white font-['Roboto'] ${bulkActionType === 'delete' ? 'bg-[#F44336] hover:bg-[#D32F2F]' : bulkActionType === 'deactivate' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}>
-              {bulkActionType === 'activate' ? 'Activate' : bulkActionType === 'deactivate' ? 'Deactivate' : 'Delete'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+    <UsersSection
+      users={users}
+      usersLoaded={usersLoaded}
+      selectedUserIds={selectedUserIds}
+      bulkActionConfirmOpen={bulkActionConfirmOpen}
+      setBulkActionConfirmOpen={setBulkActionConfirmOpen}
+      bulkActionType={bulkActionType}
+      setBulkActionType={setBulkActionType}
+      onAdd={() => { setEditingUser(null); setUserDialogOpen(true) }}
+      onEdit={(u) => { setEditingUser(u); setUserDialogOpen(true) }}
+      onResetPassword={(u) => { setResetPasswordUser(u); setResetPasswordDialogOpen(true) }}
+      onDelete={(target) => { setDeleteTarget(target); setDeleteDialogOpen(true) }}
+      onBulkAction={handleBulkAction}
+      onToggleSelection={toggleUserSelection}
+      onToggleAll={toggleAllUsers}
+      onClearSelection={() => setSelectedUserIds(new Set())}
+    />
   )
 
   // 7. Settings
@@ -2223,254 +2146,6 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
     </div>
-  )
-}
-
-// ─── Reset Password Dialog Component ──────────────────────────
-function ResetPasswordDialog({ open, onOpenChange, user, onReset }: {
-  open: boolean; onOpenChange: (v: boolean) => void
-  user: AdminUser | null; onReset: (userId: string, password: string) => void
-}) {
-  const [password, setPassword] = useState('changeme')
-  const [loading, setLoading] = useState(false)
-  const [history, setHistory] = useState<{ id: string; resetBy: string; date: string; password: string }[]>([])
-
-  // Fetch reset history when dialog opens
-  const [historyLoading, setHistoryLoading] = useState(false)
-  const [fetchedUserId, setFetchedUserId] = useState<string | null>(null)
-
-  if (open && user && user.id !== fetchedUserId) {
-    setFetchedUserId(user.id)
-    setHistoryLoading(true)
-    setHistory([])
-    fetch(`/api/admin/users/${user.id}/reset-password`)
-      .then(res => res.ok ? res.json() : { history: [] })
-      .then(data => {
-        setHistory(data.history || [])
-        setHistoryLoading(false)
-      })
-      .catch(() => { setHistory([]); setHistoryLoading(false) })
-  }
-  if (!open && fetchedUserId) {
-    setFetchedUserId(null)
-    setPassword('changeme')
-    setHistory([])
-  }
-
-  if (!user) return null
-
-  const handleReset = async () => {
-    setLoading(true)
-    await onReset(user.id, password)
-    setLoading(false)
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
-        <DialogHeader>
-          <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100 flex items-center gap-2">
-            <Key className="size-4 text-[#F57C00]" />
-            Reset Password
-          </DialogTitle>
-          <DialogDescription className="font-['Manrope'] text-[#888] dark:text-gray-400">
-            Set a new password for <strong className="text-[#333] dark:text-gray-200">{user.name}</strong> ({user.email})
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 mt-2">
-          {/* Password input */}
-          <div className="space-y-2">
-            <Label className="font-['Manrope'] text-xs text-[#555] dark:text-gray-400">New Password</Label>
-            <Input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter new password"
-              className="font-['Manrope'] h-9"
-            />
-            <p className="text-[10px] text-[#999] dark:text-gray-500">
-              Default: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded text-[10px]">changeme</code> — min 6 characters
-            </p>
-          </div>
-
-          {/* Warning */}
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-            <p className="text-[11px] text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
-              <AlertTriangle className="size-3 shrink-0" />
-              This will invalidate all active sessions for this user. They will need to log in again.
-            </p>
-          </div>
-
-          {/* Reset History */}
-          {history.length > 0 && (
-            <div className="space-y-2">
-              <Label className="font-['Manrope'] text-xs text-[#555] dark:text-gray-400">Recent Reset History</Label>
-              <div className="space-y-1 border rounded-lg dark:border-gray-700 p-2">
-                {history.map((entry) => (
-                  <div key={entry.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white dark:bg-gray-800/20 border border-gray-100 dark:border-gray-700/40">
-                    <span className="text-[11px] font-['Manrope'] flex-1">{entry.resetBy}</span>
-                    <span className="text-[11px] font-['Manrope'] text-[#888] dark:text-gray-400 shrink-0">
-                      {new Date(entry.date).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    <code className="bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-[10px] shrink-0">{entry.password}</code>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {historyLoading && (
-            <div className="flex justify-center py-2"><Loader2 className="size-4 animate-spin text-[#3F51B5]" /></div>
-          )}
-        </div>
-
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="font-['Roboto']">Cancel</Button>
-          <Button onClick={handleReset} disabled={loading || password.length < 6} className="bg-[#F57C00] hover:bg-[#E65100] text-white font-['Roboto']">
-            {loading ? <Loader2 className="size-4 animate-spin mr-1" /> : <Key className="size-3.5 mr-1" />}
-            Reset Password
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-// ─── User Dialog Component ─────────────────────────────────
-function UserDialog({ open, onOpenChange, editingUser, onSave, allModules }: {
-  open: boolean; onOpenChange: (v: boolean) => void
-  editingUser: AdminUser | null; onSave: (data: Partial<AdminUser> & { password?: string }) => void
-  allModules: AdminModule[]
-}) {
-  const [name, setName] = useState(editingUser?.name || '')
-  const [email, setEmail] = useState(editingUser?.email || '')
-  const [password, setPassword] = useState('')
-  const [role, setRole] = useState<string>(editingUser?.role || 'tester')
-  const [status, setStatus] = useState<string>(editingUser?.status || 'active')
-  const [moduleAccess, setModuleAccess] = useState<string[]>(editingUser?.moduleAccess || [])
-  const [modulePickerOpen, setModulePickerOpen] = useState(false)
-
-  // Build ModuleItem[] for the ModuleAccessPicker — ALWAYS use sidebar structure
-  // so that preset slugs ('registration', 'common-settings', etc.) match module IDs.
-  // DB modules use UUIDs which break the preset resolution logic.
-  const pickerModules: ModuleItem[] = useMemo(() => {
-    const result: ModuleItem[] = []
-    for (const sm of ALL_SIDEBAR_MODULES) {
-      if (sm.id === 'dashboard' || sm.id === 'my-tickets') continue
-      result.push({
-        id: sm.id, name: sm.id, label: sm.label,
-        parentId: undefined, parentLabel: undefined,
-      })
-      if (sm.children) {
-        for (const child of sm.children) {
-          if (child.children) {
-            for (const grandChild of child.children) {
-              result.push({
-                id: grandChild.id, name: grandChild.id, label: grandChild.label,
-                parentId: child.id, parentLabel: child.label,
-              })
-            }
-            result.push({
-              id: child.id, name: child.id, label: child.label,
-              parentId: sm.id, parentLabel: sm.label,
-            })
-          } else {
-            result.push({
-              id: child.id, name: child.id, label: child.label,
-              parentId: sm.id, parentLabel: sm.label,
-            })
-          }
-        }
-      }
-    }
-    return result
-  }, [])
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px]">
-        <DialogHeader>
-          <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100">{editingUser ? 'Edit User' : 'Add User'}</DialogTitle>
-          <DialogDescription className="font-['Manrope'] text-[#888]">
-            {editingUser ? 'Update user details and permissions.' : 'Create a new user account.'}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Name</Label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="Full Name" className="h-9 text-sm font-['Manrope']" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Email</Label>
-              <Input value={email} onChange={e => setEmail(e.target.value)} placeholder="email@example.com" type="email" className="h-9 text-sm font-['Manrope']" />
-            </div>
-          </div>
-          {!editingUser && (
-            <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Password</Label>
-              <Input value={password} onChange={e => setPassword(e.target.value)} placeholder="changeme" type="password" className="h-9 text-sm font-['Manrope']" />
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Role</Label>
-              <Select value={role} onValueChange={setRole}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="tester">Tester</SelectItem>
-                  <SelectItem value="viewer">Viewer</SelectItem>
-                  <SelectItem value="client">Client</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Status</Label>
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          {/* Module Access */}
-          <div className="space-y-2">
-            <Label className="text-xs font-['Manrope']">Module Access</Label>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full justify-start text-left h-auto min-h-[36px] py-2 px-3 font-['Manrope'] text-xs"
-              onClick={() => setModulePickerOpen(true)}
-            >
-              <Shield className="size-4 mr-2 shrink-0 text-[#2E7D32]" />
-              {moduleAccess.includes('all')
-                ? 'Full Access (all modules)'
-                : moduleAccess.length === 0
-                  ? 'No modules selected — click to assign'
-                  : `${moduleAccess.length} module${moduleAccess.length !== 1 ? 's' : ''} selected`}
-            </Button>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="font-['Roboto']">Cancel</Button>
-          <Button onClick={() => onSave({ name, email, password: password || undefined, role: role as AdminUser['role'], status: status as AdminUser['status'], moduleAccess })}
-            disabled={!name || !email}
-            className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto']">
-            {editingUser ? 'Update' : 'Create'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-      <ModuleAccessPicker
-        open={modulePickerOpen}
-        onOpenChange={setModulePickerOpen}
-        value={moduleAccess}
-        onChange={setModuleAccess}
-        allModules={pickerModules}
-        userName={name || undefined}
-      />
-    </Dialog>
   )
 }
 
