@@ -13,6 +13,8 @@ import { SystemHealthSection } from '@/components/admin/sections/SystemHealthSec
 import { AuditLogSection } from '@/components/admin/sections/AuditLogSection'
 import { TestsSection } from '@/components/admin/sections/TestsSection'
 import { SettingsSection } from '@/components/admin/sections/SettingsSection'
+import { EnvironmentsSection } from '@/components/admin/sections/EnvironmentsSection'
+import { EnvDialog } from '@/components/admin/EnvDialog'
 import { fetchTestCases } from '@/lib/api'
 import { withCsrf } from '@/lib/csrf-client'
 import { ALL_SIDEBAR_MODULES } from '@/data/sidebarModules'
@@ -2126,52 +2128,14 @@ export default function AdminPage() {
 
   // 5. Environments
   const renderEnvironments = () => (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Environments</h2>
-        <Button onClick={() => { setEditingEnv(null); setEnvDialogOpen(true) }}
-          className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto'] text-xs h-8">
-          <Plus className="size-3.5 mr-1" /> Add Environment
-        </Button>
-      </div>
-      {!envLoaded ? (
-        <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
-      ) : environments.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 border border-gray-100 dark:border-gray-700 text-center">
-          <Globe className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
-          <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No environments configured</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {environments.map(env => (
-            <div key={env.id} className={`bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700 border-l-4 ${env.status === 'active' ? 'border-l-[#4CAF50]' : 'border-l-gray-400 dark:border-l-gray-600'}`}>
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className={`w-3 h-3 rounded-full ${env.color || 'bg-green-500'}`} />
-                  <h3 className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">{env.name}</h3>
-                </div>
-                <Badge className={`text-[9px] border-0 ${env.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
-                  {env.status}
-                </Badge>
-              </div>
-              <div className="space-y-1 text-xs font-['Manrope']">
-                <p className="text-[#545454] dark:text-gray-300"><span className="text-[#888] dark:text-gray-400">URL:</span> {env.baseUrl}</p>
-                <p className="text-[#545454] dark:text-gray-300"><span className="text-[#888] dark:text-gray-400">Browser:</span> {env.browser}</p>
-                {env.lastUsed && <p className="text-[#545454] dark:text-gray-300"><span className="text-[#888] dark:text-gray-400">Last used:</span> {env.lastUsed}</p>}
-              </div>
-              <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-                <Button size="sm" variant="outline" className="h-7 text-[10px] font-['Roboto']"
-                  onClick={() => { setEditingEnv(env); setEnvDialogOpen(true) }}><Pencil className="size-3 mr-1" /> Edit</Button>
-                <Button size="sm" variant="outline" className="h-7 text-[10px] font-['Roboto']"
-                  onClick={() => handleToggleEnv(env)}>{env.status === 'active' ? 'Deactivate' : 'Activate'}</Button>
-                <Button size="sm" variant="ghost" className="h-7 text-[10px] text-[#F44336] hover:text-[#D32F2F] hover:bg-red-50 dark:hover:bg-red-900/20 font-['Roboto']"
-                  onClick={() => { setDeleteTarget({ type: 'environment', id: env.id, label: env.name }); setDeleteDialogOpen(true) }}><Trash2 className="size-3" /></Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <EnvironmentsSection
+      environments={environments}
+      envLoaded={envLoaded}
+      onAdd={() => { setEditingEnv(null); setEnvDialogOpen(true) }}
+      onEdit={(env) => { setEditingEnv(env); setEnvDialogOpen(true) }}
+      onToggle={handleToggleEnv}
+      onDelete={(target) => { setDeleteTarget(target); setDeleteDialogOpen(true) }}
+    />
   )
 
   // 6. Users
@@ -2513,68 +2477,6 @@ function ResetPasswordDialog({ open, onOpenChange, user, onReset }: {
           <Button onClick={handleReset} disabled={loading || password.length < 6} className="bg-[#F57C00] hover:bg-[#E65100] text-white font-['Roboto']">
             {loading ? <Loader2 className="size-4 animate-spin mr-1" /> : <Key className="size-3.5 mr-1" />}
             Reset Password
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-// ─── Environment Dialog Component ──────────────────────────
-function EnvDialog({ open, onOpenChange, editingEnv, onSave }: {
-  open: boolean; onOpenChange: (v: boolean) => void
-  editingEnv: Environment | null; onSave: (data: Partial<Environment>) => void
-}) {
-  const [name, setName] = useState(editingEnv?.name || '')
-  const [baseUrl, setBaseUrl] = useState(editingEnv?.baseUrl || '')
-  const [browser, setBrowser] = useState(editingEnv?.browser || 'Chrome')
-  const [color, setColor] = useState(editingEnv?.color || 'bg-green-500')
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
-        <DialogHeader>
-          <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100">{editingEnv ? 'Edit Environment' : 'Add Environment'}</DialogTitle>
-          <DialogDescription className="font-['Manrope'] text-[#888]">
-            {editingEnv ? 'Update environment configuration.' : 'Configure a new test environment.'}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-['Manrope']">Name</Label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Staging" className="h-9 text-sm font-['Manrope']" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-['Manrope']">Base URL</Label>
-            <Input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="https://staging.rhythmerp.com" className="h-9 text-sm font-['Manrope']" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-['Manrope']">Browser</Label>
-            <Select value={browser} onValueChange={setBrowser}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Chrome">Chrome</SelectItem>
-                <SelectItem value="Firefox">Firefox</SelectItem>
-                <SelectItem value="Edge">Edge</SelectItem>
-                <SelectItem value="Safari">Safari</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-['Manrope']">Color</Label>
-            <div className="flex gap-2">
-              {['bg-green-500', 'bg-blue-500', 'bg-orange-500', 'bg-red-500', 'bg-purple-500', 'bg-teal-500'].map(c => (
-                <button key={c} onClick={() => setColor(c)}
-                  className={`w-7 h-7 rounded-full ${c} cursor-pointer transition-transform ${color === c ? 'ring-2 ring-[#3F51B5] ring-offset-2 scale-110' : 'hover:scale-110'}`} />
-              ))}
-            </div>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="font-['Roboto']">Cancel</Button>
-          <Button onClick={() => onSave({ name, baseUrl, browser, color })} disabled={!name || !baseUrl}
-            className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto']">
-            {editingEnv ? 'Update' : 'Create'}
           </Button>
         </DialogFooter>
       </DialogContent>
