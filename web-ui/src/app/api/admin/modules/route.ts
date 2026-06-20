@@ -11,7 +11,12 @@ export async function GET(req: NextRequest) {
   if ('error' in auth) return auth.error
 
   try {
+    const { searchParams } = new URL(req.url)
+    const folderName = searchParams.get('folderName')
+
+    const where = folderName ? { folderName } : {}
     const modules = await db.testModule.findMany({
+      where,
       orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
     })
 
@@ -19,6 +24,7 @@ export async function GET(req: NextRequest) {
       id: m.id,
       name: m.name,
       label: m.label,
+      folderName: m.folderName,
       parentId: m.parentId,
       parentLabel: m.parentLabel,
       description: m.description,

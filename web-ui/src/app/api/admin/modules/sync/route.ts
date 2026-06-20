@@ -109,6 +109,7 @@ export async function POST(req: NextRequest) {
           data: {
             name: topName,
             label: DISPLAY_NAMES[topName] || topName,
+            folderName: topName,
             status: 'active',
             testCount: 0,
             sortOrder: TOP_MODULES.indexOf(topName),
@@ -132,6 +133,7 @@ export async function POST(req: NextRequest) {
               where: { name: sub.name },
               data: {
                 label: sub.display || DISPLAY_NAMES[sub.name] || sub.name,
+                folderName: sub.name,
                 testCount,
                 parentLabel: parent.label,
                 status: 'active',
@@ -145,6 +147,7 @@ export async function POST(req: NextRequest) {
               data: {
                 name: sub.name,
                 label: sub.display || DISPLAY_NAMES[sub.name] || sub.name,
+                folderName: sub.name,
                 parentId: parentModule?.id || null,
                 parentLabel: parent.label,
                 testCount,
@@ -164,6 +167,7 @@ export async function POST(req: NextRequest) {
             where: { name: mod.name },
             data: {
               label: mod.display || DISPLAY_NAMES[mod.name] || mod.name,
+              folderName: mod.name,
               testCount,
               status: 'active',
             },
@@ -174,6 +178,7 @@ export async function POST(req: NextRequest) {
             data: {
               name: mod.name,
               label: mod.display || DISPLAY_NAMES[mod.name] || mod.name,
+              folderName: mod.name,
               testCount,
               status: 'active',
             },

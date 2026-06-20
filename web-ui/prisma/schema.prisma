@@ -243,6 +243,7 @@ model TestModule {
   id          String       @id @default(cuid())
   name        String       @unique
   label       String
+  folderName  String?      // e.g. "entity_group" — the pages/ directory name
   parentId    String?
   parentLabel String?
   description String       @default("")

@@ -11,6 +11,8 @@
  * C6: All state-changing requests include CSRF token from cookie.
  */
 
+import { folderToSidebarIdFromDB } from '@/lib/module-data'
+
 const PROXY = "/api/proxy";
 
 /**
@@ -386,7 +388,15 @@ export async function saveRunResults(summary: RunCompletionSummary, userId?: str
       : '—';
     const rate = summary.total > 0 ? Math.round((summary.passed / summary.total) * 10000) / 100 : 0;
 
-    const mappedId = folderToSidebarId(summary.subModule || summary.module)
+    const folderName = summary.subModule || summary.module
+    // Pilot: try DB lookup for entity_group only
+    let mappedId: string
+    if (folderName === 'entity_group') {
+      const dbId = await folderToSidebarIdFromDB(folderName)
+      mappedId = dbId ?? folderToSidebarId(folderName)
+    } else {
+      mappedId = folderToSidebarId(folderName)
+    }
     const res = await fetch('/api/runs', withCsrf({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
