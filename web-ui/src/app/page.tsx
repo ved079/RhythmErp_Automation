@@ -75,12 +75,6 @@ const ScreenshotCompare = dynamic(() => import('@/components/screenshot/Screensh
 const RunComparisonDialog = dynamic(() => import('@/components/comparison/RunComparisonDialog'), { ssr: false })
 const RunHistoryDialog = dynamic(() => import('@/components/dialogs/RunHistoryDialog').then(m => ({ default: m.RunHistoryDialog })), { ssr: false })
 const ExportMenu = dynamic(() => import('@/components/export/ExportUtils').then(m => ({ default: m.ExportMenu })), { ssr: false })
-// AI Features — temporarily disabled (can be re-enabled later)
-// import { AiBugTriage } from '@/components/ai/AiBugTriage'
-// import { AiTestSuggestions } from '@/components/ai/AiTestSuggestions'
-// import { AiNlRunBar } from '@/components/ai/AiNlRunBar'
-// import { AiFailureAnalysis } from '@/components/ai/AiFailureAnalysis'
-
 // Types — imported from shared types
 import type { RunSnapshot, ModuleHealth } from '@/lib/types'
 
@@ -155,12 +149,6 @@ export default function Home() {
   // Feature 4: Run Detail Dialog
   const [runDetailDialogOpen, setRunDetailDialogOpen] = useState(false)
   const [selectedRunForDetail, setSelectedRunForDetail] = useState<RunSnapshot | null>(null)
-
-  // AI Features state — temporarily disabled
-  // const [aiBugTriageOpen, setAiBugTriageOpen] = useState(false)
-  // const [aiTriageTest, setAiTriageTest] = useState<{ id: string; name: string; error?: string } | null>(null)
-  // const [aiFailureAnalysisOpen, setAiFailureAnalysisOpen] = useState(false)
-  // const [aiAnalysisTest, setAiAnalysisTest] = useState<{ id: string; name: string; error?: string } | null>(null)
 
   // Phase 4: Run Comparison Dialog
   const [runComparisonOpen, setRunComparisonOpen] = useState(false)
@@ -804,11 +792,6 @@ export default function Home() {
     setReportDialogOpen(true)
   }, [])
 
-  // AI Feature handlers — temporarily disabled
-  // const handleAiTriage = useCallback((test: TestItem) => { const error = getTestError(test.id); setAiTriageTest({ id: test.id, name: test.name, error }); setAiBugTriageOpen(true) }, [getTestError])
-  // const handleAiFailureAnalysis = useCallback((test: TestItem) => { const error = getTestError(test.id); setAiAnalysisTest({ id: test.id, name: test.name, error }); setAiFailureAnalysisOpen(true) }, [getTestError])
-  // const handleAiNlApply = useCallback((testIds: string[], _runType: string) => { setTestChecks(new Set(testIds)); setActiveTab('test-runner'); toast.success(`${testIds.length} tests selected by AI`) }, [])
-
   // ─── Dashboard Render Function ────────────────────────────
   const renderDashboard = () => {
     const stats = dashboardStats as Record<string, any> | null
@@ -1167,15 +1150,6 @@ export default function Home() {
       {/* Run Detail Dialog */}
       <RunDetailDialog open={runDetailDialogOpen} onClose={() => { setRunDetailDialogOpen(false); setSelectedRunForDetail(null) }} run={selectedRunForDetail} visibilityData={visibilityData} showRawNames={showRawNames} onReportTest={handleQuickReport} />
 
-      {/* AI Features — temporarily disabled (can be re-enabled later) */}
-      {/* <AiBugTriage open={aiBugTriageOpen} onClose={() => { setAiBugTriageOpen(false); setAiTriageTest(null) }} testId={aiTriageTest?.id || ''} testDescription={aiTriageTest?.name || ''} error={aiTriageTest?.error} moduleName={modulePath.name} userName={user?.name || ''} />
-      <AiFailureAnalysis open={aiFailureAnalysisOpen} onClose={() => { setAiFailureAnalysisOpen(false); setAiAnalysisTest(null) }} testId={aiAnalysisTest?.id || ''} testName={aiAnalysisTest?.name || ''} error={aiAnalysisTest?.error} moduleName={modulePath.name} />
-      {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && (
-        <>
-          <AiNlRunBar availableModules={sidebarModules.filter(m => m.id !== 'dashboard' && m.id !== 'my-tickets').map(m => m.label)} availableTests={tests.map(t => ({ id: t.id, name: t.name, module: modulePath.name }))} onApplySelection={handleAiNlApply} />
-          <AiTestSuggestions failedTests={tests.filter(t => t.status === 'failed').map(t => ({ id: t.id, name: t.name, error: getTestError(t.id), module: modulePath.name }))} currentModule={modulePath.name} />
-        </>
-      )} */}
       {/* Run Comparison Dialog */}
       <RunComparisonDialog open={runComparisonOpen} onClose={() => setRunComparisonOpen(false)} runHistory={runHistory} currentModuleId={selectedModule} />
       {/* Run History Dialog */}

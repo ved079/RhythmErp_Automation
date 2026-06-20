@@ -101,19 +101,13 @@ delete and rebuild.
 > there's no string-built dynamic import, then delete both. If one IS wired in via a path
 > this grep missed, keep that one and delete the other.
 
-### 2.2 The disabled "AI Features" set
+### 2.2 The disabled "AI Features" set — **REMOVE** (decided)
 The AI feature is fully commented out in `app/page.tsx` (lines ~78–82, ~159–162, ~795–797,
-~1158–1164) and the only consumer of the `z-ai-web-dev-sdk` dependency. Two options —
-**ask the user which**:
-- **(A) Remove** (recommended if no near-term plan): delete `components/ai/*` (4 files,
-  ~1000 lines), `app/api/ai/*` (4 routes), the commented blocks in `page.tsx`, and the
-  `z-ai-web-dev-sdk` dependency from `package.json`.
-- **(B) Re-enable**: uncomment, wire handlers, and move the model calls to the Claude API
-  (the SDK in use is a generic provider shim). If chosen, that's its own scoped task — do
-  not attempt inside this refactor.
-
-**Default to (A)** unless the user says otherwise. Keeping ~2000 lines of dead feature code
-in a multi-year product is a maintenance tax.
+~1158–1164). **Delete all of it:**
+- `web-ui/src/components/ai/` — all 4 files (~1000 lines)
+- `web-ui/src/app/api/ai/` — all 4 routes (`bug-triage`, `failure-analysis`, `nl-run`, `test-suggestions`)
+- All commented-out AI blocks in `app/page.tsx` (imports, state, handlers, JSX)
+- `z-ai-web-dev-sdk` from `package.json` (only used by the deleted routes)
 
 ### 2.3 Dead legacy Python server
 - `web-ui/api/server.py` (614 lines) is **not referenced** by any script, import, or the
@@ -348,9 +342,10 @@ Plus a manual smoke test of: login → run a module → completion modal → res
 admin tabs load → bug report create/reply. Backend: `uvicorn api.server:app --reload` and
 hit `/api/health`.
 
-## Open decisions for the user / executing agent to confirm first
-1. **AI feature (Phase 2.2):** remove (recommended) or re-enable on Claude API?
-2. **react-query (Phase 3/5):** adopt across the app (recommended) or remove the dep?
-3. **Git history:** leave artifacts in history (recommended, low effort) or scrub with BFG?
-4. **CI platform:** GitLab CI (origin is GitLab) vs GitHub Actions?
-5. **`GP_Bugs_Report.xlsx` / `bug_sheet.csv` / `erp-*.png`:** keep (move to docs) or drop?
+## Decisions — all resolved
+
+1. ~~**AI feature (Phase 2.2):**~~ **DECIDED — remove.**
+2. ~~**react-query:**~~ **DECIDED — adopt.** Wire up `QueryClientProvider`, migrate all data fetches to `useQuery`/`useMutation`.
+3. ~~**Git history:**~~ **DECIDED — leave history, stop tracking going forward.** `git rm --cached` + `.gitignore` only. Do not run BFG.
+4. ~~**CI platform:**~~ **DECIDED — GitLab CI.** Add `.gitlab-ci.yml` at repo root. Repo origin is the internal GitLab server (`172.16.16.147`).
+5. ~~**Data files:**~~ **DECIDED — keep in place, just add to `.gitignore`.** Do not move or delete `GP_Bugs_Report.xlsx`, `bug_sheet.csv`, or `erp-*.png`.
