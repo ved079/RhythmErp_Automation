@@ -3,6 +3,7 @@ import { Manrope, Poppins, Roboto } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
 import { Toaster } from "sonner";
+import { QueryProvider } from "@/components/providers/QueryProvider";
 
 const manrope = Manrope({
   variable: "--font-manrope",
@@ -46,7 +47,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <QueryProvider>{children}</QueryProvider>
           <Toaster position="top-right" richColors />
         </ThemeProvider>
       </body>
