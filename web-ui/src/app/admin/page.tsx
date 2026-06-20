@@ -1,14 +1,10 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import {
-  getBugReports, updateBugReportStatus, addReplyToReport,
-  markReportReadByAdmin, getSLAStatus, type BugReport,
-} from '@/lib/bug-reports'
-import { ChatListView } from '@/components/tickets/ChatListView'
+import { useAdminState } from '@/hooks/admin/useAdminState'
 import { SystemHealthSection } from '@/components/admin/sections/SystemHealthSection'
 import { OverviewSection } from '@/components/admin/sections/OverviewSection'
 import { AuditLogSection } from '@/components/admin/sections/AuditLogSection'
@@ -21,636 +17,43 @@ import { ModuleDialog } from '@/components/admin/ModuleDialog'
 import { UsersSection } from '@/components/admin/sections/UsersSection'
 import { UserDialog } from '@/components/admin/UserDialog'
 import { ResetPasswordDialog } from '@/components/admin/ResetPasswordDialog'
-import { fetchTestCases } from '@/lib/api'
-import { withCsrf } from '@/lib/csrf-client'
-import { ALL_SIDEBAR_MODULES } from '@/data/sidebarModules'
-import { TestUserVisibilityDialog } from '@/components/admin/TestUserVisibilityDialog'
-import { toast } from 'sonner'
+import { TestVisibilitySection } from '@/components/admin/sections/TestVisibilitySection'
+import { BugReportsSection } from '@/components/admin/sections/BugReportsSection'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-
-import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog'
-import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
 import {
-  Search, Plus, Eye, Pencil, Trash2, ClipboardList, Clock, List,
-  ChevronLeft, ChevronDown, Loader2, Lock, LogOut,
-  Globe, Settings, LayoutDashboard, Users as UsersIcon,
-  Shield, Server, Activity, AlertTriangle, CheckCircle2,
-  XCircle, Circle, Sun, Moon, Home, FolderTree, Inbox,
-  Send, Timer, Database, Cpu, Zap, BarChart3, FileText,
-  RotateCcw, Save, Monitor, Key, Bell, ChevronRight,
-  Menu, HardDrive, EyeOff, Check, X, MessageSquare,
+  LayoutDashboard, ClipboardList, FolderTree, EyeOff, Inbox,
+  Globe, Settings, Users as UsersIcon, Activity, FileText,
+  ChevronLeft, Loader2, LogOut, Menu, Sun, Moon, Home, Shield,
 } from 'lucide-react'
 
-// ─── Types ───────────────────────────────────────────────
-interface AuthUser { id: string; email: string; name: string; role: string }
-interface AdminTest {
-  id: string; description: string; className: string
-  status: 'active' | 'draft' | 'disabled'; priority: 'smoke' | 'regression' | 'sanity'
-  steps: string; expected: string; moduleId: string; moduleName: string
-  error?: string; lastResult?: 'passed' | 'failed' | 'not-run'; lastRun?: string
-}
-interface AdminModule {
-  id: string; name: string; label: string; parentId?: string; parentLabel?: string
-  badge?: string; testCount: number; sortOrder: number; status: 'active' | 'draft' | 'disabled'
-  description?: string
-}
-interface Environment {
-  id: string; name: string; baseUrl: string; browser: string
-  status: 'active' | 'inactive'; lastUsed?: string; color: string
-}
-interface AdminUser {
-  id: string; email: string; name: string
-  role: 'admin' | 'tester' | 'viewer' | 'client'
-  status: 'active' | 'inactive'; lastLogin?: string; moduleAccess: string[]
-}
-interface AuditEntry {
-  id: string; userId: string; userName: string; action: string
-  targetType: string; targetId: string; targetLabel: string
-  details: string; createdAt: string
-}
-
-// ─── ADMIN PAGE COMPONENT ────────────────────────────────
 export default function AdminPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
   const isDark = theme === 'dark'
 
-  const [user, setUser] = useState<AuthUser | null>(null)
-  const [authLoading, setAuthLoading] = useState(true)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [activeSection, setActiveSection] = useState('overview')
+  const s = useAdminState()
 
-  // Data state
-  const [tests, setTests] = useState<AdminTest[]>([])
-  const [modules, setModules] = useState<AdminModule[]>([])
-  const [environments, setEnvironments] = useState<Environment[]>([])
-  const [users, setUsers] = useState<AdminUser[]>([])
-  const [bugReports, setBugReports] = useState<BugReport[]>([])
-  const [auditLog, setAuditLog] = useState<AuditEntry[]>([])
+  if (s.authLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-[#F1F2F7] dark:bg-gray-900">
+        <div className="flex flex-col items-center gap-3">
+          <Image src="/agdi-logo-new.webp" width={40} height={40} className="object-contain animate-pulse" alt="agDi Logo" />
+          <Loader2 className="size-5 text-[#6777EF] animate-spin" />
+        </div>
+      </div>
+    )
+  }
+  if (!s.user) return null
 
-  // Loading flags
-  const [testsLoaded, setTestsLoaded] = useState(false)
-  const [modulesLoaded, setModulesLoaded] = useState(false)
-  const [usersLoaded, setUsersLoaded] = useState(false)
-  const [envLoaded, setEnvLoaded] = useState(false)
-  const [bugsLoaded, setBugsLoaded] = useState(false)
-  const [auditLoaded, setAuditLoaded] = useState(false)
+  const userInitials = s.user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 
-  // Bug filters
-  const [bugSubTab, setBugSubTab] = useState<'reports' | 'chats'>('reports')
-  const [bugStatusFilter, setBugStatusFilter] = useState('all')
-  const [bugSearch, setBugSearch] = useState('')
-  const [bugModuleFilter, setBugModuleFilter] = useState('all')
-  const [bugPriorityFilter, setBugPriorityFilter] = useState('all')
-  const [expandedBug, setExpandedBug] = useState<string | null>(null)
-  const [bugReplyText, setBugReplyText] = useState<Record<string, string>>({})
-  const [pendingBugStatus, setPendingBugStatus] = useState<Record<string, string>>({})
-
-  const adminUnreadChats = useMemo(() =>
-    bugReports.filter(r => !r.readByAdmin && (r.replies.length > 0 || r.status === 'open' || r.status === 'in-progress')).length,
-  [bugReports])
-
-  // Dialogs
-  const [envDialogOpen, setEnvDialogOpen] = useState(false)
-  const [editingEnv, setEditingEnv] = useState<Environment | null>(null)
-  const [userDialogOpen, setUserDialogOpen] = useState(false)
-  const [editingUser, setEditingUser] = useState<AdminUser | null>(null)
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; label: string } | null>(null)
-  const [moduleDialogOpen, setModuleDialogOpen] = useState(false)
-  const [editingModule, setEditingModule] = useState<AdminModule | null>(null)
-
-  // Reset password dialog
-  const [resetPasswordDialogOpen, setResetPasswordDialogOpen] = useState(false)
-  const [resetPasswordUser, setResetPasswordUser] = useState<AdminUser | null>(null)
-
-  // Bulk user actions
-  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set())
-  const [bulkActionConfirmOpen, setBulkActionConfirmOpen] = useState(false)
-  const [bulkActionType, setBulkActionType] = useState<string>('')
-
-  // Test Visibility
-  const [overrides, setOverrides] = useState<Record<string, { displayName?: string; disabled: boolean }>>({})
-  const [syncingTests, setSyncingTests] = useState(false)
-  const [exclusionCounts, setExclusionCounts] = useState<Record<string, number>>({})
-  const [modulesTree, setModulesTree] = useState<{ name: string; display: string; sub_modules: { name: string; display: string; tests: { name: string; display_name: string; type?: string }[] }[] }[]>([])
-  const [testVisibilitySearch, setTestVisibilitySearch] = useState('')
-  const [selectedVisModule, setSelectedVisModule] = useState<string>('')
-  const [selectedVisSubModule, setSelectedVisSubModule] = useState<string>('')
-  const [visSelectedTests, setVisSelectedTests] = useState<Set<string>>(new Set())
-  const [visCollapsedSubs, setVisCollapsedSubs] = useState<Set<string>>(new Set())
-  const [batchActionLoading, setBatchActionLoading] = useState(false)
-  const [visSelectedType, setVisSelectedType] = useState<'all' | 'ui' | 'api' | null>(null)
-  const [visActionMode, setVisActionMode] = useState<'name' | 'visibility' | null>(null)
-  const [showRawNames, setShowRawNames] = useState(() => typeof window !== 'undefined' && localStorage.getItem('showRawNames') === 'true')
-  const loadOverrides = useCallback(async () => {
-    try {
-      const [ovRes, exRes] = await Promise.all([
-        fetch('/api/admin/tests/overrides'),
-        fetch('/api/admin/tests/exclusions'),
-      ])
-      if (ovRes.ok) {
-        const ovData = await ovRes.json()
-        const map: Record<string, { displayName?: string; disabled: boolean }> = {}
-        for (const o of ovData.overrides || []) {
-          map[o.testName] = { displayName: o.displayName, disabled: o.disabled }
-        }
-        setOverrides(map)
-      }
-      if (exRes.ok) {
-        const exData = await exRes.json()
-        const counts: Record<string, number> = {}
-        for (const e of exData.exclusions || []) {
-          counts[e.testName] = (counts[e.testName] || 0) + 1
-        }
-        setExclusionCounts(counts)
-      }
-    } catch { /* silent */ }
-  }, [])
-  const syncTestsFromBackend = useCallback(async () => {
-    setSyncingTests(true)
-    try {
-      const res = await fetch('/api/proxy?path=modules')
-      if (!res.ok) { toast.error('Failed to fetch modules from backend'); return }
-      const data = await res.json()
-      const modules: { name: string; sub_modules: { name: string; tests: { name: string; display_name?: string }[] }[] }[] = data.modules || []
-      const testNames: { name: string; displayName: string }[] = []
-      for (const mod of modules) {
-        for (const sub of mod.sub_modules) {
-          for (const t of sub.tests) {
-            testNames.push({ name: t.name, displayName: t.display_name || t.name.split('::').pop() || t.name })
-          }
-        }
-      }
-      if (testNames.length === 0) { toast.error('No tests found in backend'); return }
-      setModulesTree(modules)
-      let upserted = 0
-      for (const t of testNames) {
-        const r = await fetch('/api/admin/tests/overrides', withCsrf({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ testName: t.name, displayName: t.displayName }),
-        }))
-        if (r.ok) upserted++
-      }
-      toast.success(`Synced ${upserted} tests from backend`)
-      loadOverrides()
-    } catch (e) {
-      toast.error('Sync failed: ' + (e instanceof Error ? e.message : 'Unknown error'))
-    } finally {
-      setSyncingTests(false)
-    }
-  }, [loadOverrides])
-  const [visibilityDialogOpen, setVisibilityDialogOpen] = useState(false)
-  const [visibilityDialogTest, setVisibilityDialogTest] = useState<{ testName: string; displayName: string } | null>(null)
-  const [editingOverrideName, setEditingOverrideName] = useState<string | null>(null)
-  const [editingNameValue, setEditingNameValue] = useState('')
-  const [visDetailOpen, setVisDetailOpen] = useState(false)
-  const [visDetailTest, setVisDetailTest] = useState<{ testName: string; displayName: string; testType: string; disabled: boolean; excluded: number } | null>(null)
-
-  // Dashboard widget customization
-  const [hiddenWidgets, setHiddenWidgets] = useState<Set<string>>(() => {
-    if (typeof window === 'undefined') return new Set()
-    try {
-      const saved = localStorage.getItem('admin-overview-widgets')
-      if (saved) { const arr: string[] = JSON.parse(saved); const allDefaults = ['stat-cards', 'pass-rate', 'environments', 'recent-failures', 'recent-activity']; return new Set(allDefaults.filter(w => !arr.includes(w))) }
-    } catch { /* empty */ }
-    return new Set()
-  })
-  const [widgetDialogOpen, setWidgetDialogOpen] = useState(false)
-
-  // System health
-  // ─── Auth check ──────────────────────────────────────
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/auth/me')
-        if (!res.ok) { router.push('/'); return }
-        const data = await res.json()
-        if (data.user.role !== 'admin') {
-          router.push('/'); return
-        }
-        setUser(data.user)
-      } catch { router.push('/') } finally { setAuthLoading(false) }
-    })()
-  }, [router])
-
-  // ─── Data loading effects ─────────────────────────────
-  // Tests
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await fetchTestCases()
-        const mapped: AdminTest[] = []
-        for (const [, mod] of Object.entries(data)) {
-          for (const t of mod.tests) {
-            mapped.push({
-              id: t.id, description: t.description || t.screenName, className: t.screenName,
-              status: (t.status === 'Passed' || t.status === 'Failed') ? 'active' : 'draft',
-              priority: 'regression', steps: t.steps || '', expected: t.expected || '',
-              moduleId: mod.label.toLowerCase().replace(/\s+/g, '-'), moduleName: mod.label,
-              lastResult: t.status === 'Passed' ? 'passed' : t.status === 'Failed' ? 'failed' : 'not-run',
-              lastRun: t.date || '—', error: t.actual && t.actual !== t.expected ? t.actual : undefined,
-            })
-          }
-        }
-        setTests(mapped)
-      } catch { /* empty on failure */ } finally { setTestsLoaded(true) }
-    })()
-  }, [])
-
-  const loadModulesTree = useCallback(async () => {
-    try {
-      const res = await fetch('/api/proxy?path=modules')
-      if (res.ok) {
-        const data = await res.json()
-        setModulesTree(data.modules || [])
-      }
-    } catch { /* silent */ }
-  }, [])
-
-  useEffect(() => {
-    if (activeSection === 'test-visibility') {
-      loadOverrides()
-      loadModulesTree()
-    }
-  }, [activeSection, loadOverrides, loadModulesTree])
-
-  // Modules — load from native Prisma API
-  const loadModules = useCallback(async () => {
-    setModulesLoaded(false)
-    try {
-      const res = await fetch('/api/admin/modules')
-      if (res.ok) {
-        const data = await res.json()
-        const arr = data.modules || []
-        setModules(arr.map((m: Record<string, unknown>) => ({
-          id: String(m.id || ''),
-          name: String(m.name || ''),
-          label: String(m.label || ''),
-          parentId: m.parentId ? String(m.parentId) : undefined,
-          parentLabel: m.parentLabel ? String(m.parentLabel) : undefined,
-          testCount: Number(m.testCount || 0),
-          sortOrder: Number(m.sortOrder || 0),
-          status: String(m.status || 'active') as AdminModule['status'],
-          description: m.description ? String(m.description) : undefined,
-        })))
-      }
-    } catch { /* empty */ } finally { setModulesLoaded(true) }
-  }, [])
-
-  // Initial load
-  useEffect(() => {
-    (async () => { await loadModules() })()
-  }, [])
-
-  // Refresh modules when switching to modules section
-  useEffect(() => {
-    if (activeSection === 'modules') {
-      (async () => { await loadModules() })()
-    }
-  }, [activeSection, loadModules])
-
-  // Users
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/admin/users')
-        if (res.ok) {
-          const data = await res.json()
-          const arr = data.users || []
-          setUsers(arr.map((u: Record<string, unknown>) => ({
-            id: String(u.id || ''), email: String(u.email || ''), name: String(u.name || ''),
-            role: String(u.role || 'tester') as AdminUser['role'],
-            status: String(u.status || 'active') as AdminUser['status'],
-            lastLogin: u.lastLogin ? String(u.lastLogin) : undefined,
-            moduleAccess: Array.isArray(u.moduleAccess) ? u.moduleAccess.map(String) : ['all'],
-          })))
-        }
-      } catch { /* empty */ } finally { setUsersLoaded(true) }
-    })()
-  }, [])
-
-  // Environments
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/admin/environments')
-        if (res.ok) {
-          const data = await res.json()
-          setEnvironments(data.environments || [])
-        }
-      } catch { /* empty */ } finally { setEnvLoaded(true) }
-    })()
-  }, [])
-
-  // Bug reports
-  useEffect(() => {
-    (async () => {
-      try { setBugReports(await getBugReports()) } catch { /* empty */ }
-      finally { setBugsLoaded(true) }
-    })()
-  }, [])
-
-  // Refresh bugs when switching to bug tab
-  useEffect(() => {
-    if (activeSection === 'bug-reports') {
-      getBugReports().then(setBugReports).catch(() => {})
-    }
-  }, [activeSection])
-
-  // Audit log — load on initial page load (for overview) and refresh when visiting audit-log section
-  const loadAuditLog = useCallback(async () => {
-    setAuditLoaded(false)
-    try {
-      const res = await fetch('/api/admin/audit-log')
-      if (res.ok) {
-        const data = await res.json()
-        setAuditLog(data.entries || [])
-      }
-    } catch { /* empty */ } finally { setAuditLoaded(true) }
-  }, [])
-
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { loadAuditLog() }, [loadAuditLog])
-
-  // Refresh when switching to audit-log section
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (activeSection === 'audit-log') { loadAuditLog() }
-  }, [activeSection, loadAuditLog])
-
-  // Widget toggle helper
-  const toggleWidgetVisibility = useCallback((widgetId: string) => {
-    setHiddenWidgets(prev => {
-      const next = new Set(prev)
-      if (next.has(widgetId)) next.delete(widgetId)
-      else next.add(widgetId)
-      const visible = ['stat-cards', 'pass-rate', 'environments', 'recent-failures', 'recent-activity'].filter(w => !next.has(w))
-      localStorage.setItem('admin-overview-widgets', JSON.stringify(visible))
-      return next
-    })
-  }, [])
-
-  // ─── Handlers ──────────────────────────────────────────
-  const handleLogout = useCallback(async () => {
-    await fetch('/api/auth/logout', withCsrf({ method: 'POST' }))
-    router.push('/')
-  }, [router])
-
-  // Stats
-  const stats = useMemo(() => {
-    const activeTests = tests.filter(t => t.status === 'active').length
-    const totalModules = modules.filter(m => !m.parentId).length
-    const activeEnvs = environments.filter(e => e.status === 'active').length
-    const activeUsers = users.filter(u => u.status === 'active').length
-    const ran = tests.filter(t => t.lastResult !== 'not-run')
-    const passRate = ran.length ? Math.round((tests.filter(t => t.lastResult === 'passed').length / ran.length) * 100) : 0
-    const failedTests = tests.filter(t => t.lastResult === 'failed')
-    return { activeTests, totalModules, activeEnvs, activeUsers, passRate, failedTests, totalTests: tests.length }
-  }, [tests, modules, environments, users])
-
-  // Environment CRUD
-  const handleSaveEnv = useCallback(async (envData: Partial<Environment>) => {
-    try {
-      if (editingEnv) {
-        const res = await fetch(`/api/admin/environments/${editingEnv.id}`, withCsrf({
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(envData),
-        }))
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to update') }
-        const updated = await res.json()
-        setEnvironments(prev => prev.map(e => e.id === editingEnv.id ? { ...e, ...updated } : e))
-        toast.success('Environment updated')
-      } else {
-        const res = await fetch('/api/admin/environments', withCsrf({
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...envData, status: 'active', color: envData.color || 'bg-green-500' }),
-        }))
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to create') }
-        const created = await res.json()
-        setEnvironments(prev => [...prev, { ...envData, id: created.id, name: created.name, baseUrl: created.baseUrl, browser: created.browser, status: created.status, color: created.color, lastUsed: created.lastUsed } as Environment])
-        toast.success('Environment created')
-      }
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Operation failed') }
-    finally { setEnvDialogOpen(false); setEditingEnv(null) }
-  }, [editingEnv])
-
-  const handleToggleEnv = useCallback(async (env: Environment) => {
-    const newStatus = env.status === 'active' ? 'inactive' : 'active'
-    try {
-      const res = await fetch(`/api/admin/environments/${env.id}`, withCsrf({
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      }))
-      if (!res.ok) throw new Error('Failed to toggle')
-      setEnvironments(prev => prev.map(e => e.id === env.id ? { ...e, status: newStatus } : e))
-      toast.success(`Environment ${newStatus}`)
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
-  }, [])
-
-  // User CRUD
-  const handleSaveUser = useCallback(async (userData: Partial<AdminUser> & { password?: string }) => {
-    try {
-      if (editingUser) {
-        const res = await fetch(`/api/admin/users/${editingUser.id}`, withCsrf({
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: userData.name, email: userData.email, role: userData.role, status: userData.status, module_access: userData.moduleAccess }),
-        }))
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed') }
-        const updated = await res.json()
-        setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, name: updated.name, email: updated.email, role: updated.role, status: updated.status, moduleAccess: updated.moduleAccess } : u))
-        toast.success('User updated')
-      } else {
-        const res = await fetch('/api/admin/users', withCsrf({
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: userData.name, email: userData.email, password: userData.password || 'changeme', role: userData.role, module_access: userData.moduleAccess || [] }),
-        }))
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed') }
-        const created = await res.json()
-        setUsers(prev => [...prev, { id: created.id, email: created.email, name: created.name, role: created.role, status: created.status || 'active', moduleAccess: created.moduleAccess || userData.moduleAccess || [] } as AdminUser])
-        toast.success('User created')
-      }
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
-    finally { setUserDialogOpen(false); setEditingUser(null) }
-  }, [editingUser])
-
-  const handleResetPassword = useCallback(async (userId: string, password: string) => {
-    try {
-      const res = await fetch(`/api/admin/users/${userId}/reset-password`, withCsrf({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) }))
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to reset password') }
-      toast.success(`Password reset to: ${password}`)
-      setResetPasswordDialogOpen(false)
-      setResetPasswordUser(null)
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
-  }, [])
-
-  const handleDelete = useCallback(async () => {
-    if (!deleteTarget) return
-    try {
-      if (deleteTarget.type === 'user') {
-        const res = await fetch(`/api/admin/users/${deleteTarget.id}`, withCsrf({ method: 'DELETE' }))
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
-        setUsers(prev => prev.filter(u => u.id !== deleteTarget.id))
-        toast.success('User deleted')
-      } else if (deleteTarget.type === 'environment') {
-        const res = await fetch(`/api/admin/environments/${deleteTarget.id}`, withCsrf({ method: 'DELETE' }))
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
-        setEnvironments(prev => prev.filter(e => e.id !== deleteTarget.id))
-        toast.success('Environment deleted')
-      } else if (deleteTarget.type === 'module') {
-        const res = await fetch(`/api/admin/modules/${deleteTarget.id}`, withCsrf({ method: 'DELETE' }))
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
-        setModules(prev => prev.filter(m => m.id !== deleteTarget.id))
-        toast.success('Module deleted')
-      }
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
-    finally { setDeleteDialogOpen(false); setDeleteTarget(null) }
-  }, [deleteTarget])
-
-  const handleBugStatusChange = useCallback(async (id: string, status: BugReport['status']) => {
-    const result = await updateBugReportStatus(id, status)
-    if (result) { setBugReports(prev => prev.map(b => b.id === id ? result : b)); toast.success(`Status changed to ${status}`) }
-    else toast.error('Failed to update status')
-  }, [])
-
-  const handleBugReply = useCallback(async (reportId: string) => {
-    const message = bugReplyText[reportId]?.trim()
-    if (!message || !user) return
-    const result = await addReplyToReport(reportId, { authorName: user.name, authorRole: 'admin', message })
-    if (result) {
-      setBugReports(prev => prev.map(b => b.id === reportId ? result : b))
-      setBugReplyText(prev => ({ ...prev, [reportId]: '' }))
-      toast.success('Reply added')
-    } else toast.error('Failed to add reply')
-  }, [bugReplyText, user])
-
-  const handleMarkBugRead = useCallback(async (id: string) => {
-    await markReportReadByAdmin(id)
-    setBugReports(prev => prev.map(b => b.id === id ? { ...b, readByAdmin: true } : b))
-  }, [])
-
-  // Module CRUD
-  const handleSaveModule = useCallback(async (moduleData: Partial<AdminModule> & { name: string; label: string }) => {
-    try {
-      if (editingModule) {
-        const res = await fetch(`/api/admin/modules/${editingModule.id}`, withCsrf({
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: moduleData.name, label: moduleData.label,
-            parentId: moduleData.parentId || null, parentLabel: moduleData.parentLabel || null,
-            description: moduleData.description || '', sortOrder: moduleData.sortOrder ?? 0,
-            status: moduleData.status || 'active',
-          }),
-        }))
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to update') }
-        toast.success('Module updated')
-        loadModules()
-      } else {
-        const res = await fetch('/api/admin/modules', withCsrf({
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: moduleData.name, label: moduleData.label,
-            parentId: moduleData.parentId || null, parentLabel: moduleData.parentLabel || null,
-            description: moduleData.description || '', sortOrder: moduleData.sortOrder ?? 0,
-            status: moduleData.status || 'active',
-          }),
-        }))
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to create') }
-        toast.success('Module created')
-        loadModules()
-      }
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Operation failed') }
-    finally { setModuleDialogOpen(false); setEditingModule(null) }
-  }, [editingModule, loadModules])
-
-  const handleDeleteModule = useCallback(async (moduleId: string) => {
-    try {
-      const res = await fetch(`/api/admin/modules/${moduleId}`, withCsrf({ method: 'DELETE' }))
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
-      setModules(prev => prev.filter(m => m.id !== moduleId))
-      toast.success('Module deleted')
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
-  }, [])
-
-  const handleSeedModules = useCallback(async () => {
-    try {
-      const res = await fetch('/api/admin/modules/seed', withCsrf({ method: 'POST' }))
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to seed') }
-      const data = await res.json()
-      toast.success(`Modules seeded: ${data.created || 0} created, ${data.updated || 0} updated`)
-      loadModules()
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
-  }, [loadModules])
-
-  const handleToggleModuleStatus = useCallback(async (mod: AdminModule) => {
-    const statusCycle: Record<string, AdminModule['status']> = { active: 'draft', draft: 'disabled', disabled: 'active' }
-    const newStatus = statusCycle[mod.status] || 'active'
-    try {
-      const res = await fetch(`/api/admin/modules/${mod.id}`, withCsrf({
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      }))
-      if (!res.ok) throw new Error('Failed to toggle status')
-      setModules(prev => prev.map(m => m.id === mod.id ? { ...m, status: newStatus } : m))
-      toast.success(`Module status changed to ${newStatus}`)
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
-  }, [])
-
-  // Bulk user action handlers
-  const handleBulkAction = useCallback(async () => {
-    const ids = Array.from(selectedUserIds)
-    if (ids.length === 0) return
-    try {
-      if (bulkActionType === 'activate') {
-        await Promise.all(ids.map(id => fetch(`/api/admin/users/${id}`, withCsrf({ method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'active' }) }))))
-        setUsers(prev => prev.map(u => ids.includes(u.id) ? { ...u, status: 'active' as const } : u))
-        toast.success(`${ids.length} user(s) activated`)
-      } else if (bulkActionType === 'deactivate') {
-        await Promise.all(ids.map(id => fetch(`/api/admin/users/${id}`, withCsrf({ method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'inactive' }) }))))
-        setUsers(prev => prev.map(u => ids.includes(u.id) ? { ...u, status: 'inactive' as const } : u))
-        toast.success(`${ids.length} user(s) deactivated`)
-      } else if (bulkActionType === 'delete') {
-        await Promise.all(ids.map(id => fetch(`/api/admin/users/${id}`, withCsrf({ method: 'DELETE' }))))
-        setUsers(prev => prev.filter(u => !ids.includes(u.id)))
-        toast.success(`${ids.length} user(s) deleted`)
-      }
-      setSelectedUserIds(new Set())
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Bulk action failed') }
-    finally { setBulkActionConfirmOpen(false); setBulkActionType('') }
-  }, [selectedUserIds, bulkActionType])
-
-  const toggleUserSelection = useCallback((id: string) => {
-    setSelectedUserIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
-
-  const toggleAllUsers = useCallback(() => {
-    if (selectedUserIds.size === users.length && users.length > 0) {
-      setSelectedUserIds(new Set())
-    } else {
-      setSelectedUserIds(new Set(users.map(u => u.id)))
-    }
-  }, [selectedUserIds.size, users])
-
-  // ─── Sidebar items ──────────────────────────────────
   const sidebarItems = [
     { id: 'overview', icon: LayoutDashboard, label: 'Overview' },
     { id: 'tests', icon: ClipboardList, label: 'Test Management' },
@@ -664,1219 +67,21 @@ export default function AdminPage() {
     { id: 'audit-log', icon: FileText, label: 'Audit Log' },
   ]
 
-  // ─── Loading screen ──────────────────────────────────
-  if (authLoading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-[#F1F2F7] dark:bg-gray-900">
-        <div className="flex flex-col items-center gap-3">
-          <Image src="/agdi-logo-new.webp" width={40} height={40} className="object-contain animate-pulse" alt="agDi Logo" />
-          <Loader2 className="size-5 text-[#6777EF] animate-spin" />
-        </div>
-      </div>
-    )
-  }
-  if (!user) return null
-  const userInitials = user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-
-  // ─── SECTION RENDERERS ────────────────────────────────
-
-  // 1. Overview
-  const renderOverview = () => (
-    <OverviewSection
-      stats={stats}
-      tests={tests}
-      testsLoaded={testsLoaded}
-      environments={environments}
-      envLoaded={envLoaded}
-      auditLog={auditLog}
-      hiddenWidgets={hiddenWidgets}
-      widgetDialogOpen={widgetDialogOpen}
-      setWidgetDialogOpen={setWidgetDialogOpen}
-      toggleWidgetVisibility={toggleWidgetVisibility}
-    />
-  )
-
-  // 2. Test Management
-  const renderTests = () => <TestsSection tests={tests} testsLoaded={testsLoaded} />
-
-  const renderTestVisibility = () => {
-    const hasOverrides = Object.keys(overrides).length > 0
-    const searchLower = testVisibilitySearch.toLowerCase()
-
-    const testMatches = (t: { name: string; display_name: string; type?: string }) =>
-      (visSelectedType === 'all' || (t.type || 'ui') === visSelectedType) &&
-      (!searchLower || t.name.toLowerCase().includes(searchLower) || t.display_name.toLowerCase().includes(searchLower))
-
-    const saveOverride = async (tName: string, data: { displayName?: string | null; disabled?: boolean }) => {
-      try {
-        const res = await fetch('/api/admin/tests/overrides', withCsrf({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ testName: tName, ...data }),
-        }))
-        if (res.ok) loadOverrides()
-      } catch { /* silent */ }
-    }
-
-    const batchUpdate = async (updates: { testName: string; disabled?: boolean; displayName?: string | null }[]) => {
-      if (updates.length === 0) return
-      setBatchActionLoading(true)
-      try {
-        const res = await fetch('/api/admin/tests/overrides/batch', withCsrf({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ updates }),
-        }))
-        if (res.ok) {
-          setVisSelectedTests(new Set())
-          loadOverrides()
-          toast.success(`Updated ${updates.length} test${updates.length !== 1 ? 's' : ''}`)
-        } else {
-          toast.error('Batch update failed')
-        }
-      } catch {
-        toast.error('Batch update failed')
-      } finally {
-        setBatchActionLoading(false)
-      }
-    }
-
-    const saveExclusions = async (tName: string, userIds: string[]) => {
-      try {
-        const exRes = await fetch(`/api/admin/tests/exclusions?testName=${encodeURIComponent(tName)}`)
-        if (!exRes.ok) return
-        const exData = await exRes.json()
-        const currentIds = new Set(exData.exclusions?.map((e: { userId: string }) => e.userId) || [])
-        const toRemove = (exData.exclusions || []).filter((e: { userId: string }) => !userIds.includes(e.userId))
-        for (const e of toRemove) {
-          await fetch(`/api/admin/tests/exclusions/${e.id}`, withCsrf({ method: 'DELETE' }))
-        }
-        const toAdd = userIds.filter(id => !currentIds.has(id))
-        if (toAdd.length > 0) {
-          await fetch('/api/admin/tests/exclusions', withCsrf({
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ testName: tName, userIds: toAdd }),
-          }))
-        }
-        loadOverrides()
-      } catch { /* silent */ }
-    }
-
-    const commitRename = async () => {
-      if (!editingOverrideName) return
-      await saveOverride(editingOverrideName, { displayName: editingNameValue || null })
-      setEditingOverrideName(null)
-      setEditingNameValue('')
-    }
-
-    const handleDetailRename = async () => {
-      if (!visDetailTest) return
-      await saveOverride(visDetailTest.testName, { displayName: editingNameValue || null })
-      setEditingNameValue('')
-      setVisDetailOpen(false)
-    }
-
-    const toggleTestSelection = (testName: string) => {
-      setVisSelectedTests(prev => {
-        const next = new Set(prev)
-        if (next.has(testName)) next.delete(testName); else next.add(testName)
-        return next
-      })
-    }
-
-    // Empty state
-    if (!hasOverrides) {
-      return (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Test Visibility</h2>
-            <Button onClick={syncTestsFromBackend} disabled={syncingTests} className="h-8 text-xs bg-[#2D3FC7] hover:bg-[#3F51B5] cursor-pointer gap-1.5">
-              {syncingTests ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
-              {syncingTests ? 'Syncing...' : 'Sync from Backend'}
-            </Button>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-6 border border-gray-100 dark:border-gray-700 text-center">
-            <EyeOff className="size-8 mx-auto mb-2 text-[#888]" />
-            <p className="text-sm text-[#888] font-['Manrope']">No test overrides yet. Click &quot;Sync from Backend&quot; to discover tests, then hide or rename them.</p>
-          </div>
-        </div>
-      )
-    }
-
-    // Compute totals from overrides (not just modulesTree)
-    const totalDisabled = Object.values(overrides).filter(o => o.disabled).length
-    const totalHidden = Object.values(exclusionCounts).reduce((a, c) => a + c, 0)
-
-    // Module options for the select
-    const moduleOptions = modulesTree.length > 0
-      ? modulesTree.map(m => ({ value: m.name, label: m.display }))
-      : []
-
-    // Selected module data
-    const selectedMod = selectedVisModule ? modulesTree.find(m => m.name === selectedVisModule) : null
-
-    // Sub-module filtering: if a specific sub-module is selected, only show that one
-    const activeSubModules = selectedMod && selectedVisSubModule && selectedVisSubModule !== '__all__'
-      ? selectedMod.sub_modules.filter(s => s.name === selectedVisSubModule)
-      : selectedMod?.sub_modules || []
-
-    // All tests for the selected view (with overrides info)
-    const selectedModTests = activeSubModules.flatMap(s => s.tests.map(t => ({
-        ...t,
-        modName: selectedMod!.name,
-        modDisplay: selectedMod!.display,
-        subName: s.name,
-        subDisplay: s.display,
-      })))
-
-    const selectedModTestNames = new Set(selectedModTests.map(t => t.name))
-
-    // Toggle all in current view
-    const allSelectedDisabled = selectedModTests.length > 0 && selectedModTests.every(t => overrides[t.name]?.disabled)
-
-    return (
-      <div className="space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 whitespace-nowrap">Test Visibility</h2>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs font-['Manrope'] shrink-0">{Object.keys(overrides).length} overrides</Badge>
-              {totalDisabled > 0 && <Badge variant="outline" className="text-xs text-red-600 border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 shrink-0">{totalDisabled} disabled</Badge>}
-              {totalHidden > 0 && <Badge variant="outline" className="text-xs text-orange-600 border-orange-200 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-800 shrink-0">{totalHidden} hidden</Badge>}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {visActionMode !== null && (
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-[#888]" />
-                <Input
-                  value={testVisibilitySearch}
-                  onChange={e => setTestVisibilitySearch(e.target.value)}
-                  placeholder="Search tests..."
-                  className="h-8 pl-8 pr-3 text-[12px] font-['Manrope'] w-48"
-                />
-              </div>
-            )}
-            <Button onClick={syncTestsFromBackend} disabled={syncingTests} className="h-8 text-xs bg-[#2D3FC7] hover:bg-[#3F51B5] cursor-pointer gap-1.5">
-              {syncingTests ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
-              {syncingTests ? 'Syncing...' : 'Sync'}
-            </Button>
-          </div>
-        </div>
-
-        {/* Breadcrumb — directory-style path */}
-        {selectedVisModule && (
-          <div className="flex items-center flex-wrap gap-0.5 text-[12px] font-['Manrope'] bg-gray-50 dark:bg-gray-800/50 rounded-lg px-2.5 py-1.5 border border-gray-100 dark:border-gray-700/50">
-            <button onClick={() => { setSelectedVisModule(''); setSelectedVisSubModule(''); setVisSelectedTests(new Set()); setTestVisibilitySearch(''); setVisSelectedType(null); setVisActionMode(null) }}
-              className="flex items-center gap-1 px-2 py-1 rounded-md text-[#888] hover:text-white hover:bg-[#3F51B5] transition-all">
-              <FolderTree className="size-3.5" />
-              <span>Modules</span>
-            </button>
-            <ChevronRight className="size-3 text-[#ccc] shrink-0" />
-            <button onClick={() => { setSelectedVisSubModule(''); setVisSelectedTests(new Set()); setTestVisibilitySearch(''); setVisSelectedType(null); setVisActionMode(null) }}
-              className={`px-2 py-1 rounded-md transition-all flex items-center gap-1.5 ${
-                !selectedVisSubModule && visSelectedType === null
-                  ? 'bg-[#3F51B5] text-white font-semibold'
-                  : 'text-[#888] hover:text-white hover:bg-[#3F51B5]'
-              }`}>
-              <FolderTree className="size-3.5" />
-              <span>{selectedMod?.display}</span>
-            </button>
-            {selectedVisSubModule && (
-              <>
-                <ChevronRight className="size-3 text-[#ccc] shrink-0" />
-                <button onClick={() => { setVisSelectedType(null); setVisActionMode(null); setVisSelectedTests(new Set()) }}
-                  className={`px-2 py-1 rounded-md transition-all flex items-center gap-1.5 ${
-                    visSelectedType === null
-                      ? 'bg-[#3F51B5] text-white font-semibold'
-                      : 'text-[#888] hover:text-white hover:bg-[#3F51B5]'
-                  }`}>
-                  <FolderTree className="size-3.5" />
-                  <span>{selectedVisSubModule === '__all__' ? 'All sub-modules' : selectedMod?.sub_modules.find(s => s.name === selectedVisSubModule)?.display || selectedVisSubModule}</span>
-                </button>
-              </>
-            )}
-            {visSelectedType !== null && (
-              <>
-                <ChevronRight className="size-3 text-[#ccc] shrink-0" />
-                <button onClick={() => { setVisActionMode(null) }}
-                  className={`px-2 py-1 rounded-md transition-all flex items-center gap-1.5 ${
-                    visActionMode === null
-                      ? 'bg-[#3F51B5] text-white font-semibold'
-                      : 'text-[#888] hover:text-white hover:bg-[#3F51B5]'
-                  }`}>
-                  {visSelectedType === 'all' ? <List className="size-3.5" /> : visSelectedType === 'ui' ? <Monitor className="size-3.5" /> : <Server className="size-3.5" />}
-                  <span>{visSelectedType === 'all' ? 'All' : visSelectedType.toUpperCase()}</span>
-                </button>
-              </>
-            )}
-            {visActionMode !== null && (
-              <>
-                <ChevronRight className="size-3 text-[#ccc] shrink-0" />
-                <span className="px-2 py-1 rounded-md bg-[#3F51B5] text-white font-semibold flex items-center gap-1.5">
-                  {visActionMode === 'name' ? <Pencil className="size-3.5" /> : <Eye className="size-3.5" />}
-                  <span>{visActionMode === 'name' ? 'Rename' : 'Visibility'}</span>
-                </span>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Module content */}
-
-        {/* Step 1: Module cards */}
-        {!selectedVisModule ? (
-          <>
-            <p className="text-[13px] text-[#888] font-['Manrope']">Select a module to manage test visibility</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {moduleOptions.map(mo => {
-                const mod = modulesTree.find(x => x.name === mo.value)
-                if (!mod) return null
-                const modTotal = mod.sub_modules.reduce((a, s) => a + s.tests.length, 0)
-                const modDisabled = mod.sub_modules.reduce((a, s) => a + s.tests.filter(t => overrides[t.name]?.disabled).length, 0)
-                const modHidden = mod.sub_modules.reduce((a, s) => a + s.tests.filter(t => (exclusionCounts[t.name] || 0) > 0).length, 0)
-                return (
-                  <button
-                    key={mo.value}
-                    onClick={() => { setSelectedVisModule(mo.value); setSelectedVisSubModule(''); setVisSelectedTests(new Set()); setTestVisibilitySearch(''); setVisSelectedType(null); setVisActionMode(null) }}
-                    className="text-left bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 hover:shadow-md hover:border-[#3F51B5]/40 dark:hover:border-[#7986CB]/40 transition-all cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2.5 mb-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-[#E8EAF6] dark:bg-[#1A237E]/30 flex items-center justify-center group-hover:bg-[#C5CAE9] dark:group-hover:bg-[#1A237E]/50 transition-colors">
-                        <FolderTree className="size-4 text-[#3F51B5]" />
-                      </div>
-                      <span className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 group-hover:text-[#3F51B5] transition-colors">{mod.display}</span>
-                    </div>
-                    <div className="flex items-center gap-2.5 text-[11px] font-['Manrope']">
-                      <span className="text-[#888]">{modTotal} test{modTotal !== 1 ? 's' : ''}</span>
-                      {modDisabled > 0 && <span className="text-red-500 font-medium">{modDisabled} off</span>}
-                      {modHidden > 0 && <span className="text-orange-500 font-medium">{modHidden} hid</span>}
-                    </div>
-                    <div className="mt-1.5 text-[10px] text-[#999] font-['Manrope']">{mod.sub_modules.length} sub-module{mod.sub_modules.length !== 1 ? 's' : ''}</div>
-                  </button>
-                )
-              })}
-            </div>
-          </>
-
-        /* Step 2: Sub-module cards */
-        ) : !selectedVisSubModule ? (
-          <>
-            <p className="text-[13px] text-[#888] font-['Manrope']">Select a sub-module in <span className="font-semibold text-[#333] dark:text-gray-100">{selectedMod?.display}</span></p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {activeSubModules.map(sm => {
-                const smDisabled = sm.tests.filter(t => overrides[t.name]?.disabled).length
-                const smHidden = sm.tests.filter(t => (exclusionCounts[t.name] || 0) > 0).length
-                return (
-                  <button
-                    key={sm.name}
-                    onClick={() => { setSelectedVisSubModule(sm.name); setVisSelectedTests(new Set()); setVisSelectedType(null); setVisActionMode(null) }}
-                    className="text-left bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 hover:shadow-md hover:border-[#3F51B5]/40 dark:hover:border-[#7986CB]/40 transition-all cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2.5 mb-2">
-                      <div className="w-8 h-8 rounded-lg bg-[#E8EAF6] dark:bg-[#1A237E]/30 flex items-center justify-center group-hover:bg-[#C5CAE9] dark:group-hover:bg-[#1A237E]/50 transition-colors">
-                        <FolderTree className="size-4 text-[#3F51B5]" />
-                      </div>
-                      <span className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 group-hover:text-[#3F51B5] transition-colors">{sm.display}</span>
-                    </div>
-                    <div className="flex items-center gap-2.5 text-[11px] font-['Manrope']">
-                      <span className="text-[#888]">{sm.tests.length} test{sm.tests.length !== 1 ? 's' : ''}</span>
-                      {smDisabled > 0 && <span className="text-red-500 font-medium">{smDisabled} off</span>}
-                      {smHidden > 0 && <span className="text-orange-500 font-medium">{smHidden} hid</span>}
-                    </div>
-                  </button>
-                )
-              })}
-              <button
-                onClick={() => { setSelectedVisSubModule('__all__'); setVisSelectedTests(new Set()); setVisSelectedType(null); setVisActionMode(null) }}
-                className="col-span-full text-center bg-gradient-to-r from-[#2D3FC7]/5 via-transparent to-[#2D3FC7]/5 dark:from-[#1A237E]/20 dark:to-[#1A237E]/20 rounded-xl border-2 border-dashed border-[#3F51B5]/30 dark:border-[#7986CB]/30 p-4 hover:border-[#3F51B5]/60 dark:hover:border-[#7986CB]/60 hover:from-[#2D3FC7]/10 hover:to-[#2D3FC7]/10 dark:hover:from-[#1A237E]/30 dark:hover:to-[#1A237E]/30 transition-all cursor-pointer"
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <List className="size-4 text-[#3F51B5] dark:text-[#7986CB]" />
-                  <span className="text-sm font-semibold font-['Poppins'] text-[#3F51B5] dark:text-[#7986CB]">Load All Sub-modules</span>
-                </div>
-                <p className="text-[11px] text-[#888] font-['Manrope'] mt-1">{selectedModTests.length} tests total</p>
-              </button>
-            </div>
-          </>
-
-        /* Step 3: Type selection */
-        ) : visSelectedType === null ? (
-          <div className="space-y-3">
-            <p className="text-[13px] text-[#888] font-['Manrope']">Select test type to view in <span className="font-semibold text-[#333] dark:text-gray-100">{selectedMod?.display} &rsaquo; {selectedVisSubModule === '__all__' ? 'All sub-modules' : selectedMod?.sub_modules.find(s => s.name === selectedVisSubModule)?.display}</span></p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {(['all', 'ui', 'api'] as const).filter(type => {
-                if (type === 'all') return true
-                const allTypes = new Set(selectedMod!.sub_modules.flatMap(s => s.tests.map(t => t.type || 'ui')))
-                return allTypes.has(type)
-              }).map(type => (
-                <button
-                  key={type}
-                  onClick={() => { setVisSelectedType(type); setVisActionMode(null) }}
-                  className="text-left bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 hover:shadow-md hover:border-[#3F51B5]/40 dark:hover:border-[#7986CB]/40 transition-all cursor-pointer group"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-[#E8EAF6] dark:bg-[#1A237E]/30 flex items-center justify-center mb-3 group-hover:bg-[#C5CAE9] dark:group-hover:bg-[#1A237E]/50 transition-colors">
-                    {type === 'all' ? <List className="size-5 text-[#3F51B5]" /> : type === 'ui' ? <Monitor className="size-5 text-[#3F51B5]" /> : <Server className="size-5 text-[#3F51B5]" />}
-                  </div>
-                  <div className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 group-hover:text-[#3F51B5] transition-colors">
-                    {type === 'all' ? 'All Tests' : type === 'ui' ? 'UI Tests' : 'API Tests'}
-                  </div>
-                  <div className="text-[11px] text-[#888] font-['Manrope'] mt-1.5">
-                    {type === 'all'
-                      ? `${selectedModTests.length} tests total`
-                      : `${selectedModTests.filter(t => (t.type || 'ui') === type).length} ${type.toUpperCase()} tests`
-                    }
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : !selectedMod ? (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 border border-gray-100 dark:border-gray-700 text-center">
-            <AlertTriangle className="size-10 text-orange-500 mx-auto mb-2" />
-            <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">Module data not loaded. Sync from backend first.</p>
-          </div>
-        /* Step 4: Action mode selection */
-        ) : visActionMode === null ? (
-          <div className="space-y-3">
-            <p className="text-[13px] text-[#888] font-['Manrope']">What would you like to do with <span className="font-semibold text-[#333] dark:text-gray-100">{selectedMod?.display} &rsaquo; {selectedVisSubModule === '__all__' ? 'All sub-modules' : selectedMod?.sub_modules.find(s => s.name === selectedVisSubModule)?.display} &rsaquo; {visSelectedType === 'all' ? 'All' : visSelectedType?.toUpperCase()} tests</span></p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <button
-                onClick={() => setVisActionMode('name')}
-                className="text-left bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 hover:shadow-md hover:border-[#3F51B5]/40 dark:hover:border-[#7986CB]/40 transition-all cursor-pointer group"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-[#E8EAF6] dark:bg-[#1A237E]/30 flex items-center justify-center shrink-0 group-hover:bg-[#C5CAE9] dark:group-hover:bg-[#1A237E]/50 transition-colors">
-                    <Pencil className="size-5 text-[#3F51B5]" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 group-hover:text-[#3F51B5] transition-colors">Change Name</div>
-                    <p className="text-[12px] text-[#888] font-['Manrope'] mt-1 leading-relaxed">Rename display names of tests. Click any test card to edit.</p>
-                    <div className="flex items-center gap-3 mt-2 text-[11px] font-['Manrope']">
-                      <span className="text-[#888]">{selectedModTests.length} tests</span>
-                      <span className="text-[#3F51B5] font-medium">{Object.keys(overrides).length} renamed</span>
-                    </div>
-                  </div>
-                </div>
-              </button>
-              <button
-                onClick={() => setVisActionMode('visibility')}
-                className="text-left bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 hover:shadow-md hover:border-[#3F51B5]/40 dark:hover:border-[#7986CB]/40 transition-all cursor-pointer group"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-[#E8EAF6] dark:bg-[#1A237E]/30 flex items-center justify-center shrink-0 group-hover:bg-[#C5CAE9] dark:group-hover:bg-[#1A237E]/50 transition-colors">
-                    <Eye className="size-5 text-[#3F51B5]" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 group-hover:text-[#3F51B5] transition-colors">Change Visibility</div>
-                    <p className="text-[12px] text-[#888] font-['Manrope'] mt-1 leading-relaxed">Enable or disable tests and control per-user visibility.</p>
-                    <div className="flex items-center gap-3 mt-2 text-[11px] font-['Manrope']">
-                      <span className="text-[#888]">{selectedModTests.length} tests</span>
-                      {totalDisabled > 0 && <span className="text-red-500 font-medium">{totalDisabled} disabled</span>}
-                      {totalHidden > 0 && <span className="text-orange-500 font-medium">{totalHidden} hidden</span>}
-                    </div>
-                  </div>
-                </div>
-              </button>
-            </div>
-          </div>
-        ) : !selectedMod ? (
-          <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-8 border border-gray-100 dark:border-gray-700 text-center">
-            <AlertTriangle className="size-10 text-orange-500 mx-auto mb-2" />
-            <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">Module data not loaded. Sync from backend first.</p>
-          </div>
-        ) : visActionMode === 'name' ? (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-[#E8EAF6] to-transparent dark:from-[#1A237E]/20 dark:to-transparent rounded-xl border border-gray-100 dark:border-gray-700">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold font-['Poppins'] text-[#3F51B5] dark:text-[#7986CB]">Rename Tests</span>
-                <span className="text-[11px] text-[#888] font-['Manrope']">{selectedMod.display} &rsaquo; {visSelectedType === 'all' ? 'All' : visSelectedType?.toUpperCase()}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-[#888] font-['Manrope']">raw</span>
-                <Switch checked={showRawNames} onCheckedChange={(val) => { setShowRawNames(val); localStorage.setItem('showRawNames', String(val)) }} className="shrink-0 scale-75" />
-              </div>
-            </div>
-
-            {/* Sub-module sections — Name mode */}
-            {activeSubModules.map(sub => {
-              const filteredTests = sub.tests.filter(testMatches)
-              if (filteredTests.length === 0) return null
-              const subKey = `${selectedMod.name}::${sub.name}`
-
-              return (
-                <div key={subKey} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-50 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/50">
-                    <Pencil className="size-3.5 text-[#888]" />
-                    <span className="text-xs font-semibold font-['Manrope'] text-[#555] dark:text-gray-300">{sub.display}</span>
-                    <span className="text-[11px] text-[#888] font-['Manrope']">— {filteredTests.length} test{filteredTests.length !== 1 ? 's' : ''}</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 p-3">
-                    {filteredTests.map(t => {
-                      const ov = overrides[t.name]
-                      const displayName = ov?.displayName || t.display_name || t.name.split('::').pop() || t.name
-                      const testType = t.type || 'ui'
-                      const cardKey = `${selectedMod.name}::${sub.name}::${t.name}`
-                      const hasCustomName = ov?.displayName != null && ov.displayName !== t.display_name
-
-                      return (
-                        <button
-                          key={cardKey}
-                          onClick={() => { setVisDetailTest({ testName: t.name, displayName, testType, disabled: false, excluded: 0 }); setEditingNameValue(displayName); setVisDetailOpen(true) }}
-                          className="text-left bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-[#3F51B5]/40 dark:hover:border-[#7986CB]/40 hover:shadow-sm transition-all cursor-pointer group w-full"
-                        >
-                          <div className="flex items-start gap-2 px-3 pt-3 pb-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className={`text-[13px] font-['Manrope'] leading-tight block truncate text-[#333] dark:text-gray-100 group-hover:text-[#3F51B5] transition-colors ${hasCustomName ? 'font-semibold' : ''}`}>
-                                  {displayName}
-                                </span>
-                                {hasCustomName && (
-                                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-[#3F51B5]/30 text-[#3F51B5] dark:text-[#7986CB] shrink-0 font-['Manrope']">edited</Badge>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1.5 mt-1.5">
-                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                                  testType === 'api'
-                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
-                                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                                }`}>{testType.toUpperCase()}</span>
-                              </div>
-                            </div>
-                          </div>
-                          {showRawNames && (
-                            <div className="px-3 pb-2.5">
-                              <div className="text-[10px] font-mono text-[#999] dark:text-gray-500 truncate leading-relaxed" title={t.name}>{t.name}</div>
-                            </div>
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-[#E8EAF6] to-transparent dark:from-[#1A237E]/20 dark:to-transparent rounded-xl border border-gray-100 dark:border-gray-700">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold font-['Poppins'] text-[#3F51B5] dark:text-[#7986CB]">{selectedMod.display}</span>
-                <span className="text-[11px] text-[#888] font-['Manrope']">{selectedModTests.length} test{selectedModTests.length !== 1 ? 's' : ''}</span>
-                {selectedModTests.filter(t => overrides[t.name]?.disabled).length > 0 && (
-                  <span className="text-[11px] text-red-500 font-medium font-['Manrope']">{selectedModTests.filter(t => overrides[t.name]?.disabled).length} disabled</span>
-                )}
-                {selectedModTests.filter(t => (exclusionCounts[t.name] || 0) > 0).length > 0 && (
-                  <span className="text-[11px] text-orange-500 font-medium font-['Manrope']">{selectedModTests.filter(t => (exclusionCounts[t.name] || 0) > 0).length} hidden</span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-[#888] font-['Manrope']">Toggle all</span>
-                <Switch
-                  checked={!allSelectedDisabled}
-                  onCheckedChange={() => {
-                    batchUpdate(selectedModTests.map(t => ({ testName: t.name, disabled: !allSelectedDisabled })))
-                  }}
-                  disabled={batchActionLoading}
-                  className="shrink-0 scale-75"
-                />
-              </div>
-            </div>
-
-            {/* Sub-module sections — Visibility mode */}
-            {activeSubModules.map(sub => {
-              const filteredTests = sub.tests.filter(testMatches)
-              if (filteredTests.length === 0) return null
-              const subKey = `${selectedMod.name}::${sub.name}`
-              const subDisabled = filteredTests.filter(t => overrides[t.name]?.disabled).length
-              const subHidden = filteredTests.filter(t => (exclusionCounts[t.name] || 0) > 0).length
-              const subAllSelected = filteredTests.every(t => visSelectedTests.has(t.name))
-              const subSomeSelected = filteredTests.some(t => visSelectedTests.has(t.name))
-
-              return (
-                <div key={subKey} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-50 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/50">
-                    <button
-                      onClick={() => setVisCollapsedSubs(prev => { const n = new Set(prev); if (n.has(subKey)) n.delete(subKey); else n.add(subKey); return n })}
-                      className="p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-                    >
-                      <ChevronRight className={`size-3.5 text-[#888] dark:text-gray-400 transition-transform ${visCollapsedSubs.has(subKey) ? '' : 'rotate-90'}`} />
-                    </button>
-                    <Checkbox
-                      checked={subAllSelected}
-                      indeterminate={subSomeSelected && !subAllSelected ? true : undefined}
-                      onCheckedChange={() => {
-                        if (subAllSelected) {
-                          setVisSelectedTests(prev => { const n = new Set(prev); filteredTests.forEach(t => n.delete(t.name)); return n })
-                        } else {
-                          setVisSelectedTests(prev => { const n = new Set(prev); filteredTests.forEach(t => n.add(t.name)); return n })
-                        }
-                      }}
-                      className="shrink-0"
-                    />
-                    <span className="text-xs font-semibold font-['Manrope'] text-[#555] dark:text-gray-300">{sub.display}</span>
-                    <span className="text-[11px] text-[#888] font-['Manrope']">— {filteredTests.length} test{filteredTests.length !== 1 ? 's' : ''}</span>
-                    {subDisabled > 0 && <span className="text-[11px] text-red-500 font-medium font-['Manrope']">{subDisabled} off</span>}
-                    {subHidden > 0 && <span className="text-[11px] text-orange-500 font-medium font-['Manrope']">{subHidden} hid</span>}
-                  </div>
-
-                  {/* Visibility cards */}
-                  {!visCollapsedSubs.has(subKey) && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 p-3">
-                      {filteredTests.map(t => {
-                        const ov = overrides[t.name]
-                        const displayName = ov?.displayName || t.display_name || t.name.split('::').pop() || t.name
-                        const disabled = ov?.disabled ?? false
-                        const excluded = exclusionCounts[t.name] || 0
-                        const testType = t.type || 'ui'
-                        const cardKey = `${selectedMod.name}::${sub.name}::${t.name}`
-
-                        return (
-                          <div
-                            key={cardKey}
-                            className={`relative bg-white dark:bg-gray-800 rounded-xl border transition-all cursor-pointer ${
-                              visSelectedTests.has(t.name)
-                                ? 'border-[#3F51B5]/50 dark:border-[#7986CB]/50 shadow-sm ring-1 ring-[#3F51B5]/20 dark:ring-[#7986CB]/20'
-                                : 'border-gray-100 dark:border-gray-700 hover:border-[#3F51B5]/40 dark:hover:border-[#7986CB]/40 hover:shadow-sm'
-                            } ${disabled ? 'opacity-60' : ''}`}
-                            onClick={() => { setVisDetailTest({ testName: t.name, displayName, testType, disabled, excluded }); setVisDetailOpen(true) }}
-                          >
-                            <div className="flex items-start gap-2 px-3 pt-3 pb-2">
-                              <Checkbox
-                                checked={visSelectedTests.has(t.name)}
-                                onCheckedChange={() => toggleTestSelection(t.name)}
-                                onClick={e => e.stopPropagation()}
-                                className="mt-0.5 shrink-0"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <span className="text-[13px] font-['Manrope'] leading-tight block truncate text-[#333] dark:text-gray-100">{displayName}</span>
-                                <div className="flex items-center gap-1.5 mt-1.5">
-                                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                                    testType === 'api'
-                                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
-                                      : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                                  }`}>{testType.toUpperCase()}</span>
-                                  {disabled && (
-                                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-300">Off</span>
-                                  )}
-                                  {excluded > 0 && (
-                                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300 flex items-center gap-1"><EyeOff className="size-3" />{excluded}</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="px-3 pb-2.5">
-                              <div className="text-[10px] font-mono text-[#999] dark:text-gray-500 truncate leading-relaxed" title={t.name}>{t.name}</div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Batch action bar — visibility mode only */}
-        {visSelectedTests.size > 0 && selectedVisModule && selectedMod && visActionMode === 'visibility' && (
-          <div className="sticky bottom-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-300 dark:border-gray-500/70 px-4 py-3 flex items-center justify-between z-10 backdrop-blur-sm bg-white/95 dark:bg-gray-800/95">
-            <span className="text-sm font-semibold font-['Manrope'] text-[#333] dark:text-gray-100">{visSelectedTests.size} test{visSelectedTests.size !== 1 ? 's' : ''} selected</span>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={batchActionLoading}
-                onClick={() => batchUpdate(Array.from(visSelectedTests).map(n => ({ testName: n, disabled: true })))}
-                className="h-8 text-xs font-['Roboto']"
-              >
-                {batchActionLoading ? <Loader2 className="size-3 animate-spin mr-1" /> : <XCircle className="size-3 mr-1" />}
-                Disable
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={batchActionLoading}
-                onClick={() => batchUpdate(Array.from(visSelectedTests).map(n => ({ testName: n, disabled: false })))}
-                className="h-8 text-xs font-['Roboto']"
-              >
-                {batchActionLoading ? <Loader2 className="size-3 animate-spin mr-1" /> : <CheckCircle2 className="size-3 mr-1" />}
-                Enable
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={batchActionLoading}
-                onClick={() => batchUpdate(Array.from(visSelectedTests).map(n => ({ testName: n, displayName: null, disabled: false })))}
-                className="h-8 text-xs text-red-600 font-['Roboto']"
-              >
-                <RotateCcw className="size-3 mr-1" />
-                Reset
-              </Button>
-              <Button
-                size="sm"
-                variant="default"
-                className="h-8 text-xs bg-[#2D3FC7] hover:bg-[#3F51B5] font-['Roboto']"
-                onClick={() => {
-                  const first = selectedModTests.find(t => t.name === Array.from(visSelectedTests)[0])
-                  setVisibilityDialogTest({ testName: Array.from(visSelectedTests)[0], displayName: first ? (overrides[first.name]?.displayName || first.display_name) : '' })
-                  setVisibilityDialogOpen(true)
-                }}
-              >
-                <EyeOff className="size-3 mr-1" />
-                Hide for Users
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setVisSelectedTests(new Set())}
-                className="h-8 text-xs font-['Roboto'] text-[#888]"
-              >
-                Clear
-              </Button>
-            </div>
-          </div>
-        )}
-
-        <TestUserVisibilityDialog
-          open={visibilityDialogOpen}
-          onOpenChange={setVisibilityDialogOpen}
-          testName={visibilityDialogTest?.testName || ''}
-          testDisplayName={visibilityDialogTest?.displayName || ''}
-          onSave={(userIds) => {
-            if (visibilityDialogTest) saveExclusions(visibilityDialogTest.testName, userIds)
-          }}
-        />
-
-        {/* Detail dialog */}
-        <Dialog open={visDetailOpen} onOpenChange={setVisDetailOpen}>
-          <DialogContent className="sm:max-w-[440px]">
-            <DialogHeader>
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-[#E8EAF6] dark:bg-[#1A237E]/30 flex items-center justify-center">
-                  {visActionMode === 'name' ? <Pencil className="size-4 text-[#3F51B5]" /> : <Eye className="size-4 text-[#3F51B5]" />}
-                </div>
-                <div>
-                  <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100 text-base">
-                    {visActionMode === 'name' ? 'Rename Test' : 'Test Visibility'}
-                  </DialogTitle>
-                  <p className="text-[11px] font-['Manrope'] text-[#888] mt-0.5 font-mono truncate max-w-[360px]">{visDetailTest?.testName || ''}</p>
-                </div>
-              </div>
-            </DialogHeader>
-
-            {visActionMode === 'name' && visDetailTest && (
-              <div className="space-y-4 py-1">
-                <div>
-                  <label className="text-xs font-medium font-['Manrope'] text-[#555] dark:text-gray-300 mb-1.5 block">Display Name</label>
-                  <div className="relative">
-                    <Input
-                      value={editingNameValue}
-                      onChange={e => setEditingNameValue(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') handleDetailRename(); if (e.key === 'Escape') setVisDetailOpen(false) }}
-                      className="h-10 text-[13px] font-['Manrope'] pr-20"
-                      autoFocus
-                      placeholder="Enter display name..."
-                    />
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                        visDetailTest.testType === 'api'
-                          ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
-                          : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                      }`}>{visDetailTest.testType.toUpperCase()}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 pt-1">
-                  <Button
-                    onClick={handleDetailRename}
-                    className="h-9 text-xs bg-[#2D3FC7] hover:bg-[#3F51B5] font-['Roboto'] flex-1"
-                  >
-                    <Save className="size-3.5 mr-1.5" />
-                    Save Name
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => { saveOverride(visDetailTest.testName, { displayName: null }); setVisDetailOpen(false) }}
-                    className="h-9 text-xs font-['Roboto'] text-red-600 flex-1"
-                  >
-                    <RotateCcw className="size-3 mr-1.5" />
-                    Revert
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {visActionMode === 'visibility' && visDetailTest && (
-              <div className="space-y-3 py-1">
-                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-2 h-2 rounded-full ${visDetailTest.disabled ? 'bg-red-400' : 'bg-green-400'}`} />
-                    <span className="text-sm font-['Manrope'] text-[#333] dark:text-gray-100">Test Status</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <Switch
-                      checked={!visDetailTest.disabled}
-                      onCheckedChange={v => { saveOverride(visDetailTest.testName, { disabled: !v }); setVisDetailTest(prev => prev ? { ...prev, disabled: !v } : null) }}
-                    />
-                    <span className={`text-xs font-medium font-['Manrope'] ${visDetailTest.disabled ? 'text-red-500' : 'text-green-600'}`}>
-                      {visDetailTest.disabled ? 'Disabled' : 'Enabled'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <EyeOff className="size-3.5 text-[#888]" />
-                      <span className="text-xs font-['Manrope'] text-[#555] dark:text-gray-300">Hidden from users</span>
-                    </div>
-                    <span className="text-xs font-semibold font-['Manrope'] text-orange-600">{visDetailTest.excluded} user{visDetailTest.excluded !== 1 ? 's' : ''}</span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    onClick={() => { setVisibilityDialogTest({ testName: visDetailTest.testName, displayName: visDetailTest.displayName }); setVisibilityDialogOpen(true) }}
-                    className="w-full h-8 text-xs font-['Roboto'] justify-center"
-                  >
-                    <EyeOff className="size-3 mr-1.5" />
-                    {visDetailTest.excluded > 0 ? 'Manage Hidden Users' : 'Hide from Users'}
-                  </Button>
-                </div>
-
-                <Button
-                  variant="outline"
-                  onClick={() => { saveOverride(visDetailTest.testName, { displayName: null, disabled: false }); setVisDetailOpen(false) }}
-                  className="w-full h-9 text-xs font-['Roboto'] text-red-600 justify-center"
-                >
-                  <RotateCcw className="size-3.5 mr-1.5" />
-                  Revert to Defaults
-                </Button>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-      </div>
-    )
-  }
-
-  // 3. Modules
-  const renderModules = () => (
-    <ModulesSection
-      modules={modules}
-      modulesLoaded={modulesLoaded}
-      onAdd={() => { setEditingModule(null); setModuleDialogOpen(true) }}
-      onEdit={(mod) => { setEditingModule(mod); setModuleDialogOpen(true) }}
-      onToggleStatus={handleToggleModuleStatus}
-      onDelete={(target) => { setDeleteTarget(target); setDeleteDialogOpen(true) }}
-      onSeed={handleSeedModules}
-    />
-  )
-
-  // 4. Bug Reports
-  const renderBugReports = () => {
-    const filteredByStatus = bugStatusFilter === 'all' ? bugReports : bugReports.filter(b => b.status === bugStatusFilter)
-    const filtered = filteredByStatus.filter(b => {
-      const ms = !bugSearch || b.testDescription.toLowerCase().includes(bugSearch.toLowerCase()) || b.error.toLowerCase().includes(bugSearch.toLowerCase()) || b.id.toLowerCase().includes(bugSearch.toLowerCase()) || b.reporterName.toLowerCase().includes(bugSearch.toLowerCase())
-      const mm = bugModuleFilter === 'all' || b.moduleName.toLowerCase().replace(/\s+/g, '-') === bugModuleFilter || b.moduleName === bugModuleFilter
-      const mp = bugPriorityFilter === 'all' || b.priority === bugPriorityFilter
-      return ms && mm && mp
-    })
-    const uniqueBugModules = [...new Set(bugReports.map(b => b.moduleName))].sort()
-    const tabs = [
-      { id: 'all', label: 'All', count: bugReports.length },
-      { id: 'open', label: 'Open', count: bugReports.filter(b => b.status === 'open').length },
-      { id: 'in-progress', label: 'In Progress', count: bugReports.filter(b => b.status === 'in-progress').length },
-      { id: 'fixed', label: 'Fixed', count: bugReports.filter(b => b.status === 'fixed').length },
-      { id: 'closed', label: 'Closed', count: bugReports.filter(b => b.status === 'closed').length },
-      { id: 'rejected', label: 'Rejected', count: bugReports.filter(b => b.status === 'rejected').length },
-    ]
-
-    const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {
-      open: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-300', dot: 'bg-red-500' },
-      'in-progress': { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-300', dot: 'bg-yellow-500' },
-      fixed: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-300', dot: 'bg-green-500' },
-      closed: { bg: 'bg-gray-100 dark:bg-gray-700', text: 'text-gray-600 dark:text-gray-400', dot: 'bg-gray-400' },
-      rejected: { bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-700 dark:text-orange-300', dot: 'bg-orange-500' },
-    }
-
-    const priorityStyles: Record<string, string> = {
-      high: 'border-l-red-400',
-      medium: 'border-l-yellow-400',
-      low: 'border-l-blue-400',
-    }
-
-    return (
-      <div className="flex flex-col flex-1 min-h-0">
-      <div className="flex items-center gap-0 px-5 pt-4 pb-0 shrink-0 border-b border-gray-200 dark:border-gray-700">
-        <button
-          onClick={() => setBugSubTab('reports')}
-          className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${
-            bugSubTab === 'reports'
-              ? 'border-[#3F51B5] text-[#3F51B5] dark:text-indigo-400'
-              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-          }`}
-        >
-          Reports
-        </button>
-        <button
-          onClick={() => setBugSubTab('chats')}
-          className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
-            bugSubTab === 'chats'
-              ? 'border-[#3F51B5] text-[#3F51B5] dark:text-indigo-400'
-              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-          }`}
-        >
-          Chats
-          {adminUnreadChats > 0 && (
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#3F51B5] text-white leading-none">
-              {adminUnreadChats}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {bugSubTab === 'chats' ? (
-        <div className="flex-1 min-h-0 p-4">
-          <ChatListView
-            reports={bugReports}
-            userName={user?.name || 'Admin'}
-            userRole="admin"
-            onReportsChange={setBugReports}
-          />
-        </div>
-      ) : (
-      <>
-      <div className="flex flex-col flex-1 min-h-0 gap-3 p-4">
-        <div className="shrink-0 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Bug Reports</h2>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-[#888]" />
-                <Input placeholder="Search bugs..." value={bugSearch} onChange={e => setBugSearch(e.target.value)}
-                  className="h-8 pl-8 pr-3 text-xs font-['Manrope'] w-48" />
-              </div>
-              <Select value={bugModuleFilter} onValueChange={setBugModuleFilter}>
-                <SelectTrigger className="h-8 text-xs w-32"><SelectValue placeholder="Module" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-xs">All Modules</SelectItem>
-                  {uniqueBugModules.map(m => <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={bugPriorityFilter} onValueChange={setBugPriorityFilter}>
-                <SelectTrigger className="h-8 text-xs w-28"><SelectValue placeholder="Priority" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-xs">All</SelectItem>
-                  <SelectItem value="high" className="text-xs">High</SelectItem>
-                  <SelectItem value="medium" className="text-xs">Medium</SelectItem>
-                  <SelectItem value="low" className="text-xs">Low</SelectItem>
-                </SelectContent>
-              </Select>
-              {(bugSearch || bugModuleFilter !== 'all' || bugPriorityFilter !== 'all') && (
-                <Button variant="ghost" size="sm" className="h-8 text-xs text-[#888]" onClick={() => { setBugSearch(''); setBugModuleFilter('all'); setBugPriorityFilter('all') }}>
-                  <RotateCcw className="size-3 mr-1" /> Clear
-                </Button>
-              )}
-            </div>
-          </div>
-
-          <div className="flex gap-1.5 flex-wrap bg-gray-50 dark:bg-gray-800/50 rounded-xl p-1 border border-gray-100 dark:border-gray-700/50">
-            {tabs.map(tab => (
-              <button key={tab.id} onClick={() => setBugStatusFilter(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-['Manrope'] font-medium transition-all cursor-pointer ${
-                  bugStatusFilter === tab.id
-                    ? 'bg-white dark:bg-gray-700 text-[#3F51B5] dark:text-[#7986CB] shadow-sm'
-                    : 'text-[#888] dark:text-gray-400 hover:text-[#333] dark:hover:text-gray-100'
-                }`}>
-                {tab.label}
-                <span className={`ml-1.5 ${bugStatusFilter === tab.id ? 'text-[#3F51B5] dark:text-[#7986CB]' : 'text-[#aaa]'}`}>({tab.count})</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {!bugsLoaded ? (
-          <div className="flex-1 flex items-center justify-center"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
-        ) : filtered.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <Inbox className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
-              <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No bug reports found</p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1 flex flex-col min-h-0">
-            <div className="flex items-center bg-[#DFE9FB] dark:bg-indigo-900/30 rounded-t-lg border border-gray-300 dark:border-gray-500/70 border-b-0 text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 shrink-0">
-              <span className="w-24 px-2 py-2.5">Ticket ID</span>
-              <span className="flex-1 px-2 py-2.5">Description</span>
-              <span className="w-28 px-2 py-2.5">Module</span>
-              <span className="w-20 px-2 py-2.5 text-center">Priority</span>
-              <span className="w-24 px-2 py-2.5 text-center">Status</span>
-              <span className="w-32 px-2 py-2.5 text-center">SLA</span>
-              <span className="w-20 px-2 py-2.5 text-center"><MessageSquare className="size-3 mx-auto" /></span>
-              <span className="w-28 px-2 py-2.5">Created</span>
-            </div>
-            <div className="flex-1 min-h-0 overflow-auto border border-gray-300 dark:border-gray-500/70 border-t-0 rounded-b-lg">
-              <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {filtered.map(bug => {
-                  const sla = getSLAStatus(bug.priority, bug.createdAt, bug.status)
-                  const isUnread = !bug.readByAdmin
-                  return (
-                    <div
-                      key={bug.id}
-                      onClick={() => { setExpandedBug(bug.id); if (!bug.readByAdmin) handleMarkBugRead(bug.id) }}
-                      className={`flex items-center cursor-pointer hover:bg-[#DFE9FB]/30 dark:hover:bg-indigo-900/10 transition-colors text-[12px] ${isUnread ? 'bg-blue-50/50 dark:bg-indigo-900/10' : ''}`}
-                    >
-                      <span className="w-24 px-2 py-2.5 font-mono font-semibold text-[#3F51B5] dark:text-indigo-400 flex items-center gap-1">
-                        {isUnread && <span className="size-1.5 rounded-full bg-blue-500 shrink-0" />}
-                        #{bug.id.slice(0, 8).toUpperCase()}
-                      </span>
-                      <span className="flex-1 px-2 py-2.5 text-[13px] text-gray-700 dark:text-gray-200 truncate">
-                        {bug.testDescription}
-                      </span>
-                      <span className="w-28 px-2 py-2.5 text-gray-500 dark:text-gray-400 truncate">
-                        {bug.moduleName}
-                      </span>
-                      <span className="w-20 px-2 py-2.5 text-center">
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                          bug.priority === 'high' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' :
-                          bug.priority === 'medium' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400' :
-                          'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                        }`}>
-                          {bug.priority}
-                        </span>
-                      </span>
-                      <span className="w-24 px-2 py-2.5 text-center">
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusConfig[bug.status]?.bg || ''} ${statusConfig[bug.status]?.text || ''}`}>
-                          {bug.status}
-                        </span>
-                      </span>
-                      <span className="w-32 px-2 py-2.5 text-center">
-                        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${sla.color}`}>{sla.label}</span>
-                        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{sla.remaining}</div>
-                      </span>
-                      <span className="w-20 px-2 py-2.5 text-center text-gray-400 dark:text-gray-500">
-                        {bug.replies.length > 0 ? bug.replies.length : ''}
-                      </span>
-                      <span className="w-28 px-2 py-2.5 text-gray-500 dark:text-gray-400">
-                        {new Date(bug.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Bug detail dialog */}
-      <Dialog open={expandedBug !== null} onOpenChange={(open) => { if (!open) { setExpandedBug(null); setPendingBugStatus(prev => { const n = { ...prev }; if (expandedBug) delete n[expandedBug]; return n }) }}}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogTitle className="sr-only">Bug Report Detail</DialogTitle>
-          {(() => {
-            const bug = bugReports.find(b => b.id === expandedBug)
-            if (!bug) return null
-            const sla = getSLAStatus(bug.priority, bug.createdAt, bug.status)
-            const sc = statusConfig[bug.status] || statusConfig.open
-            return (
-              <div className="font-['Manrope']">
-                {/* Header */}
-                <div className="flex items-start justify-between gap-4 mb-5">
-                  <div>
-                    <div className="flex items-center gap-2.5 mb-1">
-                      <span className="text-lg font-mono font-bold text-[#3F51B5] dark:text-[#7986CB]">#{bug.id.slice(0, 8).toUpperCase()}</span>
-                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${sc.bg} ${sc.text}`}>{bug.status}</span>
-                      <span className={`text-[11px] font-medium ${bug.priority === 'high' ? 'text-red-600' : bug.priority === 'medium' ? 'text-yellow-600' : 'text-blue-600'}`}>{bug.priority}</span>
-                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${sla.color || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>{sla.label}</span>
-                    </div>
-                    <p className="text-sm font-semibold text-[#333] dark:text-gray-100">{bug.testDescription}</p>
-                    <div className="flex items-center gap-3 mt-1.5 text-xs text-[#888]">
-                      <span className="flex items-center gap-1"><FolderTree className="size-3.5" />{bug.moduleName}</span>
-                      <span>·</span>
-                      <span className="flex items-center gap-1"><UsersIcon className="size-3.5" />{bug.reporterName}</span>
-                      <span>·</span>
-                      <span className="flex items-center gap-1"><Clock className="size-3.5" />{sla.remaining}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Detail grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden mb-5">
-                  <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-3">
-                    <span className="text-[10px] text-[#888] uppercase tracking-wider font-medium">Test ID</span>
-                    <p className="text-xs text-[#333] dark:text-gray-100 mt-0.5 font-mono">{bug.testId}</p>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-3">
-                    <span className="text-[10px] text-[#888] uppercase tracking-wider font-medium">Reported by</span>
-                    <p className="text-xs text-[#333] dark:text-gray-100 mt-0.5">{bug.reporterName}</p>
-                  </div>
-                  <div className="sm:col-span-2 bg-gray-50 dark:bg-gray-800/50 px-4 py-3">
-                    <span className="text-[10px] text-[#888] uppercase tracking-wider font-medium">Error Message</span>
-                    <p className="text-xs text-red-600 dark:text-red-400 mt-0.5 font-mono leading-relaxed">{bug.error}</p>
-                  </div>
-                  {bug.userNote && (
-                    <div className="sm:col-span-2 bg-gray-50 dark:bg-gray-800/50 px-4 py-3">
-                      <span className="text-[10px] text-[#888] uppercase tracking-wider font-medium">User Note</span>
-                      <p className="text-xs text-[#333] dark:text-gray-100 mt-0.5">{bug.userNote}</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Status change */}
-                <div className="mb-5">
-                  <span className="text-xs text-[#888] font-semibold uppercase tracking-wider block mb-2">Change Status</span>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {(['open', 'in-progress', 'fixed', 'closed', 'rejected'] as const).map(s => {
-                      const isCurrent = bug.status === s
-                      const isPending = pendingBugStatus[bug.id] === s
-                      const colors = statusConfig[s]
-                      return (
-                        <button key={s} onClick={() => { if (s !== bug.status) setPendingBugStatus(prev => ({ ...prev, [bug.id]: s })) }}
-                          className={`text-xs font-['Manrope'] px-3 py-1.5 rounded-lg border transition-all cursor-pointer ${
-                            isCurrent
-                              ? `${colors.bg} ${colors.text} border-transparent font-semibold`
-                              : isPending
-                                ? 'border-[#3F51B5] ring-1 ring-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB] font-semibold'
-                                : 'border-gray-200 dark:border-gray-600 text-[#888] dark:text-gray-400 hover:border-[#3F51B5]/40 hover:text-[#3F51B5]'
-                          }`}>
-                          {s.charAt(0).toUpperCase() + s.slice(1).replace('-', ' ')}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {pendingBugStatus[bug.id] && pendingBugStatus[bug.id] !== bug.status && (
-                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/50">
-                      <button onClick={() => {
-                        handleBugStatusChange(bug.id, pendingBugStatus[bug.id] as BugReport['status'])
-                        setPendingBugStatus(prev => { const n = { ...prev }; delete n[bug.id]; return n })
-                      }}
-                        className="text-xs font-['Manrope'] px-4 py-1.5 rounded-lg bg-[#3F51B5] text-white hover:bg-[#2D3FC7] font-medium transition-colors">
-                        <Check className="size-3.5 inline mr-1.5" />Confirm & Update
-                      </button>
-                      <button onClick={() => setPendingBugStatus(prev => { const n = { ...prev }; delete n[bug.id]; return n })}
-                        className="text-xs font-['Manrope'] px-3 py-1.5 rounded-lg text-[#888] hover:text-[#555] hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                        Cancel
-                      </button>
-                      <span className="text-[10px] text-[#aaa]">Status will change from <strong>{bug.status}</strong> to <strong>{pendingBugStatus[bug.id]}</strong></span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Discussion */}
-                <div>
-                  <span className="text-xs text-[#888] font-semibold uppercase tracking-wider block mb-3">Discussion ({bug.replies.length})</span>
-                  {bug.replies.length > 0 && (
-                    <div className="space-y-3 max-h-60 overflow-y-auto mb-3 pr-1">
-                      {bug.replies.map(r => (
-                        <div key={r.id} className={`flex gap-3 ${r.authorRole === 'admin' ? 'justify-end' : 'justify-start'}`}>
-                          {r.authorRole !== 'admin' && (
-                            <div className="w-8 h-8 rounded-full bg-[#E8EAF6] dark:bg-[#1A237E]/30 flex items-center justify-center shrink-0">
-                              <span className="text-xs font-semibold text-[#3F51B5]">{r.authorName.charAt(0).toUpperCase()}</span>
-                            </div>
-                          )}
-                          <div className={`max-w-[75%] rounded-xl px-3.5 py-2.5 text-sm font-['Manrope'] ${
-                            r.authorRole === 'admin'
-                              ? 'bg-[#3F51B5] text-white rounded-br-sm'
-                              : 'bg-gray-100 dark:bg-gray-700 text-[#333] dark:text-gray-100 rounded-bl-sm'
-                          }`}>
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <span className={`text-xs font-semibold ${r.authorRole === 'admin' ? 'text-white/80' : 'text-[#555] dark:text-gray-300'}`}>{r.authorName}</span>
-                              <span className={`text-[10px] ${r.authorRole === 'admin' ? 'text-white/60' : 'text-[#888]'}`}>{r.authorRole}</span>
-                            </div>
-                            <p className={r.authorRole === 'admin' ? 'text-white/90 leading-relaxed' : 'leading-relaxed'}>{r.message}</p>
-                            <p className={`text-[10px] mt-1 ${r.authorRole === 'admin' ? 'text-white/50' : 'text-[#aaa]'}`}>
-                              {new Date(r.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                          </div>
-                          {r.authorRole === 'admin' && (
-                            <div className="w-8 h-8 rounded-full bg-[#3F51B5] flex items-center justify-center shrink-0">
-                              <span className="text-xs font-semibold text-white">{r.authorName.charAt(0).toUpperCase()}</span>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex gap-2">
-                    <Input placeholder="Type a reply..." value={bugReplyText[bug.id] || ''}
-                      onChange={e => setBugReplyText(prev => ({ ...prev, [bug.id]: e.target.value }))}
-                      onKeyDown={e => { if (e.key === 'Enter') handleBugReply(bug.id) }}
-                      className="h-10 text-sm font-['Manrope']" />
-                    <Button size="sm" onClick={() => handleBugReply(bug.id)}
-                      className="h-10 w-10 p-0 bg-[#3F51B5] hover:bg-[#2D3FC7] text-white shrink-0">
-                      <Send className="size-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )
-          })()}
-        </DialogContent>
-      </Dialog>
-      </>
-      )}
-      </div>
-    )
-  }
-
-  // 5. Environments
-  const renderEnvironments = () => (
-    <EnvironmentsSection
-      environments={environments}
-      envLoaded={envLoaded}
-      onAdd={() => { setEditingEnv(null); setEnvDialogOpen(true) }}
-      onEdit={(env) => { setEditingEnv(env); setEnvDialogOpen(true) }}
-      onToggle={handleToggleEnv}
-      onDelete={(target) => { setDeleteTarget(target); setDeleteDialogOpen(true) }}
-    />
-  )
-
-  // 6. Users
-  const renderUsers = () => (
-    <UsersSection
-      users={users}
-      usersLoaded={usersLoaded}
-      selectedUserIds={selectedUserIds}
-      bulkActionConfirmOpen={bulkActionConfirmOpen}
-      setBulkActionConfirmOpen={setBulkActionConfirmOpen}
-      bulkActionType={bulkActionType}
-      setBulkActionType={setBulkActionType}
-      onAdd={() => { setEditingUser(null); setUserDialogOpen(true) }}
-      onEdit={(u) => { setEditingUser(u); setUserDialogOpen(true) }}
-      onResetPassword={(u) => { setResetPasswordUser(u); setResetPasswordDialogOpen(true) }}
-      onDelete={(target) => { setDeleteTarget(target); setDeleteDialogOpen(true) }}
-      onBulkAction={handleBulkAction}
-      onToggleSelection={toggleUserSelection}
-      onToggleAll={toggleAllUsers}
-      onClearSelection={() => setSelectedUserIds(new Set())}
-    />
-  )
-
-  // 7. Settings
-  const renderSettings = () => <SettingsSection />
-
-  // 8. System Health
   return (
     <div className="h-screen flex flex-col bg-[#F1F2F7] dark:bg-gray-900 overflow-hidden">
       {/* ─── HEADER ─────────────────────────────────── */}
       <header className="h-[60px] bg-white dark:bg-gray-900 shrink-0 z-10 flex items-center px-4 border-b border-[#e0e0e0] dark:border-gray-700 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
         <div className="flex items-center gap-3 flex-1">
-          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)}
+          <Button variant="ghost" size="icon" onClick={() => s.setSidebarOpen(!s.sidebarOpen)}
             className="size-8 cursor-pointer shrink-0 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">
-            <Menu className={`size-[18px] transition-transform duration-200 ${sidebarOpen ? '' : 'rotate-90'}`} />
+            <Menu className={`size-[18px] transition-transform duration-200 ${s.sidebarOpen ? '' : 'rotate-90'}`} />
           </Button>
           <Separator orientation="vertical" className="h-5" />
           <div className="flex items-center gap-2">
             <Image src="/agdi-logo-new.webp" width={70} height={28} className="object-contain" alt="agDi Logo" />
             <span className="text-[#888888] dark:text-gray-500 text-[13px] font-['Manrope'] ml-1">Admin Panel</span>
           </div>
-          <Badge className="bg-[#6777EF] text-white text-[10px] font-semibold px-1.5 py-0 ml-1 border-0">
-            ADMIN
-          </Badge>
+          <Badge className="bg-[#6777EF] text-white text-[10px] font-semibold px-1.5 py-0 ml-1 border-0">ADMIN</Badge>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => setTheme(isDark ? 'light' : 'dark')}
@@ -1896,10 +101,10 @@ export default function AdminPage() {
               </AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
-              <span className="text-[12px] text-[#333333] dark:text-gray-200 font-medium max-w-[120px] truncate leading-tight">{user.name}</span>
+              <span className="text-[12px] text-[#333333] dark:text-gray-200 font-medium max-w-[120px] truncate leading-tight">{s.user.name}</span>
               <span className="text-[10px] text-[#888888] dark:text-gray-500 leading-tight">Admin</span>
             </div>
-            <Button variant="ghost" size="icon" onClick={handleLogout} className="size-7 text-[#888888] hover:text-red-500 cursor-pointer">
+            <Button variant="ghost" size="icon" onClick={s.handleLogout} className="size-7 text-[#888888] hover:text-red-500 cursor-pointer">
               <LogOut className="size-4" />
             </Button>
           </div>
@@ -1909,25 +114,25 @@ export default function AdminPage() {
       {/* ─── BODY ──────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
         {/* ─── SIDEBAR ────────────────────────────── */}
-        <div className={`shrink-0 transition-all duration-200 ease-in-out overflow-hidden ${sidebarOpen ? 'w-60' : 'w-0'}`}>
+        <div className={`shrink-0 transition-all duration-200 ease-in-out overflow-hidden ${s.sidebarOpen ? 'w-60' : 'w-0'}`}>
           <aside className="w-60 bg-gradient-to-b from-[#F7FBF8] via-[#EAF5EC] to-[#D6EDDC] dark:from-[#1e293b] dark:via-[#1e293b] dark:to-[#1e293b] h-full flex flex-col font-['Poppins'] shadow-[-1px_0px_0px_#D4E3D9] dark:shadow-[-1px_0px_0px_#334155]">
             <div className="px-3 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Shield className="size-3.5 text-[#1B4332] dark:text-green-300" />
                 <span className="text-[13px] font-medium text-[#1B4332] dark:text-green-300 font-['Poppins']">Admin Controls</span>
               </div>
-              <button onClick={() => setSidebarOpen(false)} className="text-[#495584] dark:text-gray-400 hover:text-[#1B4332] dark:hover:text-green-300 transition-colors cursor-pointer p-0.5 rounded hover:bg-[rgba(82,183,136,0.08)]">
+              <button onClick={() => s.setSidebarOpen(false)} className="text-[#495584] dark:text-gray-400 hover:text-[#1B4332] dark:hover:text-green-300 transition-colors cursor-pointer p-0.5 rounded hover:bg-[rgba(82,183,136,0.08)]">
                 <ChevronLeft className="size-4" />
               </button>
             </div>
             <ScrollArea className="flex-1">
               <div className="py-2 px-2">
-                 {sidebarItems.map(item => {
+                {sidebarItems.map(item => {
                   const Icon = item.icon
-                  const isActive = activeSection === item.id
-                  const badgeCount = item.id === 'bug-reports' ? adminUnreadChats : 0
+                  const isActive = s.activeSection === item.id
+                  const badgeCount = item.id === 'bug-reports' ? s.adminUnreadChats : 0
                   return (
-                    <button key={item.id} onClick={() => setActiveSection(item.id)}
+                    <button key={item.id} onClick={() => s.setActiveSection(item.id)}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-['Poppins'] transition-all duration-150 cursor-pointer mb-0.5 ${
                         isActive
                           ? 'bg-gradient-to-r from-[#DFF3E3] via-[#C8E6C9] to-[#B7E4C7] dark:bg-[#1B4332]/25 text-[#1B4332] dark:text-green-300 font-semibold shadow-[rgba(34,197,94,0.25)_2px_0px_4px_inset,rgba(34,197,94,0.15)_0px_2px_6px] rounded-[5px]'
@@ -1936,9 +141,7 @@ export default function AdminPage() {
                       <Icon className="size-4 shrink-0" />
                       <span className="flex-1 text-left">{item.label}</span>
                       {badgeCount > 0 && (
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#3F51B5] text-white leading-none">
-                          {badgeCount}
-                        </span>
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#3F51B5] text-white leading-none">{badgeCount}</span>
                       )}
                     </button>
                   )
@@ -1953,50 +156,120 @@ export default function AdminPage() {
 
         {/* ─── MAIN CONTENT ────────────────────────── */}
         <main className="flex-1 flex flex-col overflow-hidden">
-          {activeSection === 'bug-reports' ? renderBugReports() : (
+          {s.activeSection === 'bug-reports' ? (
+            <BugReportsSection
+              bugReports={s.bugReports}
+              bugsLoaded={s.bugsLoaded}
+              onBugReportsChange={s.setBugReports}
+              adminUnreadChats={s.adminUnreadChats}
+              userName={s.user?.name || 'Admin'}
+              bugSubTab={s.bugSubTab}
+              setBugSubTab={s.setBugSubTab}
+              bugStatusFilter={s.bugStatusFilter}
+              setBugStatusFilter={s.setBugStatusFilter}
+              bugSearch={s.bugSearch}
+              setBugSearch={s.setBugSearch}
+              bugModuleFilter={s.bugModuleFilter}
+              setBugModuleFilter={s.setBugModuleFilter}
+              bugPriorityFilter={s.bugPriorityFilter}
+              setBugPriorityFilter={s.setBugPriorityFilter}
+              expandedBug={s.expandedBug}
+              setExpandedBug={s.setExpandedBug}
+              bugReplyText={s.bugReplyText}
+              setBugReplyText={s.setBugReplyText}
+              pendingBugStatus={s.pendingBugStatus}
+              setPendingBugStatus={s.setPendingBugStatus}
+              handleBugStatusChange={s.handleBugStatusChange}
+              handleBugReply={s.handleBugReply}
+              handleMarkBugRead={s.handleMarkBugRead}
+            />
+          ) : (
             <div className="flex-1 overflow-y-auto min-h-0 p-6">
-              {activeSection === 'overview' ? renderOverview() :
-                activeSection === 'tests' ? renderTests() :
-                activeSection === 'test-visibility' ? renderTestVisibility() :
-                activeSection === 'modules' ? renderModules() :
-                activeSection === 'environments' ? renderEnvironments() :
-                activeSection === 'users' ? renderUsers() :
-                activeSection === 'settings' ? renderSettings() :
-                activeSection === 'system-health' ? <SystemHealthSection modulesLoaded={modulesLoaded} /> :
-                activeSection === 'audit-log' ? <AuditLogSection auditLog={auditLog} auditLoaded={auditLoaded} /> : null}
+              {s.activeSection === 'overview' ? (
+                <OverviewSection
+                  stats={s.stats}
+                  tests={s.tests}
+                  testsLoaded={s.testsLoaded}
+                  environments={s.environments}
+                  envLoaded={s.envLoaded}
+                  auditLog={s.auditLog}
+                  hiddenWidgets={s.hiddenWidgets}
+                  widgetDialogOpen={s.widgetDialogOpen}
+                  setWidgetDialogOpen={s.setWidgetDialogOpen}
+                  toggleWidgetVisibility={s.toggleWidgetVisibility}
+                />
+              ) : s.activeSection === 'tests' ? (
+                <TestsSection tests={s.tests} testsLoaded={s.testsLoaded} />
+              ) : s.activeSection === 'test-visibility' ? (
+                <TestVisibilitySection />
+              ) : s.activeSection === 'modules' ? (
+                <ModulesSection
+                  modules={s.modules}
+                  modulesLoaded={s.modulesLoaded}
+                  onAdd={() => { s.setEditingModule(null); s.setModuleDialogOpen(true) }}
+                  onEdit={(mod) => { s.setEditingModule(mod); s.setModuleDialogOpen(true) }}
+                  onToggleStatus={s.handleToggleModuleStatus}
+                  onDelete={(target) => { s.setDeleteTarget(target); s.setDeleteDialogOpen(true) }}
+                  onSeed={s.handleSeedModules}
+                />
+              ) : s.activeSection === 'environments' ? (
+                <EnvironmentsSection
+                  environments={s.environments}
+                  envLoaded={s.envLoaded}
+                  onAdd={() => { s.setEditingEnv(null); s.setEnvDialogOpen(true) }}
+                  onEdit={(env) => { s.setEditingEnv(env); s.setEnvDialogOpen(true) }}
+                  onToggle={s.handleToggleEnv}
+                  onDelete={(target) => { s.setDeleteTarget(target); s.setDeleteDialogOpen(true) }}
+                />
+              ) : s.activeSection === 'users' ? (
+                <UsersSection
+                  users={s.users}
+                  usersLoaded={s.usersLoaded}
+                  selectedUserIds={s.selectedUserIds}
+                  bulkActionConfirmOpen={s.bulkActionConfirmOpen}
+                  setBulkActionConfirmOpen={s.setBulkActionConfirmOpen}
+                  bulkActionType={s.bulkActionType}
+                  setBulkActionType={s.setBulkActionType}
+                  onAdd={() => { s.setEditingUser(null); s.setUserDialogOpen(true) }}
+                  onEdit={(u) => { s.setEditingUser(u); s.setUserDialogOpen(true) }}
+                  onResetPassword={(u) => { s.setResetPasswordUser(u); s.setResetPasswordDialogOpen(true) }}
+                  onDelete={(target) => { s.setDeleteTarget(target); s.setDeleteDialogOpen(true) }}
+                  onBulkAction={s.handleBulkAction}
+                  onToggleSelection={s.toggleUserSelection}
+                  onToggleAll={s.toggleAllUsers}
+                  onClearSelection={() => s.setSelectedUserIds(new Set())}
+                />
+              ) : s.activeSection === 'settings' ? (
+                <SettingsSection />
+              ) : s.activeSection === 'system-health' ? (
+                <SystemHealthSection modulesLoaded={s.modulesLoaded} />
+              ) : s.activeSection === 'audit-log' ? (
+                <AuditLogSection auditLog={s.auditLog} auditLoaded={s.auditLoaded} />
+              ) : null}
             </div>
           )}
         </main>
       </div>
 
-      {/* ─── ENVIRONMENT DIALOG ────────────────────── */}
-      <EnvDialog key={editingEnv?.id || 'new'} open={envDialogOpen} onOpenChange={setEnvDialogOpen} editingEnv={editingEnv} onSave={handleSaveEnv} />
-
-      {/* ─── USER DIALOG ────────────────────────────── */}
-      <UserDialog key={editingUser?.id || 'user-new'} open={userDialogOpen} onOpenChange={setUserDialogOpen} editingUser={editingUser} onSave={handleSaveUser} allModules={modules} />
-
-      {/* ─── RESET PASSWORD DIALOG ───────────────────── */}
-      <ResetPasswordDialog open={resetPasswordDialogOpen} onOpenChange={setResetPasswordDialogOpen} user={resetPasswordUser} onReset={handleResetPassword} />
-
-      {/* ─── MODULE DIALOG ──────────────────────────── */}
-      <ModuleDialog key={editingModule?.id || 'module-new'} open={moduleDialogOpen} onOpenChange={setModuleDialogOpen} editingModule={editingModule} onSave={handleSaveModule} allModules={modules} />
-
-      {/* ─── DELETE CONFIRM DIALOG ──────────────────── */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      {/* ─── DIALOGS ───────────────────────────────── */}
+      <EnvDialog key={s.editingEnv?.id || 'new'} open={s.envDialogOpen} onOpenChange={s.setEnvDialogOpen} editingEnv={s.editingEnv} onSave={s.handleSaveEnv} />
+      <UserDialog key={s.editingUser?.id || 'user-new'} open={s.userDialogOpen} onOpenChange={s.setUserDialogOpen} editingUser={s.editingUser} onSave={s.handleSaveUser} allModules={s.modules} />
+      <ResetPasswordDialog open={s.resetPasswordDialogOpen} onOpenChange={s.setResetPasswordDialogOpen} user={s.resetPasswordUser} onReset={s.handleResetPassword} />
+      <ModuleDialog key={s.editingModule?.id || 'module-new'} open={s.moduleDialogOpen} onOpenChange={s.setModuleDialogOpen} editingModule={s.editingModule} onSave={s.handleSaveModule} allModules={s.modules} />
+      <Dialog open={s.deleteDialogOpen} onOpenChange={s.setDeleteDialogOpen}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100">Confirm Delete</DialogTitle>
             <DialogDescription className="font-['Manrope'] text-[#888]">
-              Are you sure you want to delete <strong>{deleteTarget?.label}</strong>? This action cannot be undone.
+              Are you sure you want to delete <strong>{s.deleteTarget?.label}</strong>? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} className="font-['Roboto']">Cancel</Button>
-            <Button onClick={handleDelete} className="bg-[#F44336] hover:bg-[#D32F2F] text-white font-['Roboto']">Delete</Button>
+            <Button variant="outline" onClick={() => s.setDeleteDialogOpen(false)} className="font-['Roboto']">Cancel</Button>
+            <Button onClick={s.handleDelete} className="bg-[#F44336] hover:bg-[#D32F2F] text-white font-['Roboto']">Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   )
 }
-
