@@ -140,10 +140,10 @@ export function PassRateTrendChart({ runHistory }: { runHistory: RunSnapshot[] }
     }))
   }, [runHistory])
 
-  if (!data.length) return <NoData height={220} />
+  if (!data.length) return <NoData height={260} />
 
   return (
-    <ResponsiveContainer width="100%" height={220}>
+    <ResponsiveContainer width="100%" height={260}>
       <AreaChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
         <defs>
           <linearGradient id="passRateGradient" x1="0" y1="0" x2="0" y2="1">
@@ -239,10 +239,10 @@ export function ModuleHealthBarChart({ moduleHealth }: { moduleHealth: ModuleHea
       }))
   }, [moduleHealth])
 
-  if (!data.length) return <NoData height={280} />
+  if (!data.length) return <NoData height={320} />
 
   return (
-    <ResponsiveContainer width="100%" height={280}>
+    <ResponsiveContainer width="100%" height={320}>
       <BarChart
         data={data}
         layout="vertical"
@@ -327,7 +327,7 @@ export function BugDistributionPie({ moduleHealth }: { moduleHealth: ModuleHealt
     }
   }, [moduleHealth])
 
-  if (!data.length) return <NoData height={220} />
+  if (!data.length) return <NoData height={260} />
 
   // Custom label renderer
   const renderCustomLabel = ({
@@ -366,7 +366,7 @@ export function BugDistributionPie({ moduleHealth }: { moduleHealth: ModuleHealt
   }
 
   return (
-    <div style={{ position: 'relative', height: 220 }}>
+    <div style={{ position: 'relative', height: 260 }}>
       {/* Center label */}
       <div
         style={{
@@ -384,14 +384,14 @@ export function BugDistributionPie({ moduleHealth }: { moduleHealth: ModuleHealt
         </div>
         <div style={{ fontSize: 10, color: colors.axisText }}>Bugs</div>
       </div>
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={260}>
         <PieChart>
           <Pie
             data={data}
             cx="50%"
             cy="50%"
-            innerRadius={50}
-            outerRadius={80}
+            innerRadius={60}
+            outerRadius={95}
             dataKey="value"
             labelLine={false}
             label={renderCustomLabel}
@@ -446,10 +446,10 @@ export function TestExecutionTimeline({ runHistory }: { runHistory: RunSnapshot[
     }))
   }, [runHistory])
 
-  if (!data.length) return <NoData height={220} />
+  if (!data.length) return <NoData height={260} />
 
   return (
-    <ResponsiveContainer width="100%" height={220}>
+    <ResponsiveContainer width="100%" height={260}>
       <ComposedChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
         <CartesianGrid
           strokeDasharray="3 3"

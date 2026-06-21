@@ -342,7 +342,7 @@ def generate_password():
     """
     upper = random.choices(string.ascii_uppercase, k=2)
     lower = random.choices(string.ascii_lowercase, k=4)
-    digits = random.choices(string.digits, k=3)
+    digits = random.choices(string.digits, k=8)
     special = random.choice("!@#$")
     pool = upper + lower + digits + [special]
     random.shuffle(pool)
@@ -837,6 +837,13 @@ def _load_address_chains():
                 "village_ref_id_id": 392606,
                 "_verified": True,
             },
+            {
+                "state_ref_id_id": 86,
+                "district_ref_id_id": 303,
+                "sub_district_ref_id_id": 10065,
+                "village_ref_id_id": 273753,
+                "_verified": True,
+            },
         ]
 
 
@@ -906,20 +913,31 @@ def generate_valid_farmer_step0():
         "mobile_no": generate_phone(),      # REQUIRED — 10-digit integer
         "farmer_category": [1594],          # REQUIRED — multiselect, default Borrower Farmer
         "land_classification": None,        # READONLY — set by ERP
-        "password": generate_password(),    # REQUIRED
         "is_member_this_fpc": False,        # Default: off
         "other_fpc_name": None,             # Conditional on is_member_this_fpc
         "member_id": None,                  # Conditional on is_member_this_fpc
     }
 
 
-def generate_valid_address_details():
+def generate_valid_address_details(chain: dict | None = None):
     """Generate valid data for Stepper Tab 1: Address Details.
 
     IMPORTANT: Farmer role REQUIRES both Permanent AND Current address types.
     Returns a list of TWO address dicts.
+
+    Args:
+        chain: Optional address cascade FK chain. If None (default), uses a
+               known-good chain for Tenant 708 (state=86) or falls back to
+               random chain from the harvested pool.
     """
-    chain = get_random_address_chain()
+    if chain is None:
+        # Default to known-good chain for Tenant 708
+        chain = {
+            "state_ref_id_id": 86,
+            "district_ref_id_id": 303,
+            "sub_district_ref_id_id": 10065,
+            "village_ref_id_id": 273753,
+        }
     base_address = generate_address()
     pin = generate_pin_code()
 
@@ -931,22 +949,21 @@ def generate_valid_address_details():
         "district_ref_id_id": chain["district_ref_id_id"],
         "sub_district_ref_id_id": chain["sub_district_ref_id_id"],
         "village_ref_id_id": chain.get("village_ref_id_id"),
-        "pin_code": int(pin) if pin.isdigit() else pin,
+        "pin_code": str(pin),
         "address": base_address,
         "address2": None,
     }
 
-    # Current address is same as permanent with same_as_above=True
-    # (or a different address if preferred — we default to same_as_above)
+    # Current address is same as permanent with explicit data (same_as_above not sent to API)
     current_address = {
-        "same_as_above": True,
+        "same_as_above": None,
         "address_type": 1876,                              # Current Address
         "country_ref_id_id": DEFAULT_COUNTRY_REF_ID,       # India
         "state_ref_id_id": chain["state_ref_id_id"],
         "district_ref_id_id": chain["district_ref_id_id"],
         "sub_district_ref_id_id": chain["sub_district_ref_id_id"],
         "village_ref_id_id": chain.get("village_ref_id_id"),
-        "pin_code": int(pin) if pin.isdigit() else pin,
+        "pin_code": str(pin),
         "address": base_address,
         "address2": None,
     }
@@ -971,7 +988,7 @@ def generate_valid_family_details():
     return [{
         "member_name": member_name,
         "phone_number": str(generate_phone()),
-        "member_dob": f"{random.randint(1, 28):02d}/{random.randint(1, 12):02d}/{random.randint(1960, 2000)}",
+        "member_dob": f"{random.randint(1960, 2000)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}",
         "member_age": random.randint(25, 60),
         "member_gender": random.choice(GENDER_IDS),
         "education_of_farmer_family": random.choice(EDUCATION_IDS),
@@ -994,7 +1011,7 @@ def generate_valid_additional_details():
     dob_year = random.randint(1960, 2000)
     dob_month = random.randint(1, 12)
     dob_day = random.randint(1, 28)
-    dob_str = f"{dob_day:02d}/{dob_month:02d}/{dob_year}"
+    dob_str = f"{dob_year}-{dob_month:02d}-{dob_day:02d}"
     age = date.today().year - dob_year
 
     return {
@@ -1004,6 +1021,8 @@ def generate_valid_additional_details():
         "religion_ref_id": random.choice(RELIGION_IDS),
         "category_ref_id": random.choice(SOCIAL_CATEGORY_IDS),
         "profile_photo": None,              # File upload — skip in data gen
+        "land_classification": None,        # READONLY — set by ERP on save
+        "password": "Test@123456789",       # REQUIRED
     }
 
 
@@ -1120,7 +1139,7 @@ def generate_valid_loan_details():
         "loan_name": random.choice(_LOAN_NAMES),
         "type_of_loan": random.choice(LOAN_TYPE_IDS),
         "loan_purpose": random.choice(_PURPOSES_OF_LOAN),
-        "availed_from": f"{random.randint(1, 28):02d}/{random.randint(1, 12):02d}/{random.randint(2020, 2025)}",
+        "availed_from": f"{random.randint(2020, 2025)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}",
         "sanctioned_amount": random.randint(50000, 5000000),
         "present_outstanding_amount": random.randint(10000, 3000000),
     }]
@@ -1180,8 +1199,9 @@ def generate_valid_edit_data():
         "name": generate_farmer_name(),
         "email_id": generate_email(),
         "mobile_no": generate_phone(),
-        "password": generate_password(),
+        "password": "Test@123456789",
     }
+
 
 
 # ──────────────────────────────────────────────
@@ -1686,7 +1706,12 @@ def build_farmer_api_payload(
 
     # ── Generate defaults for any missing stepper data ──
     if address_details is None:
-        address_details = generate_valid_address_details()
+        address_details = generate_valid_address_details({
+            "state_ref_id_id": 86,
+            "district_ref_id_id": 303,
+            "sub_district_ref_id_id": 10065,
+            "village_ref_id_id": 273753,
+        })
     if other_details is None:
         other_details = generate_valid_other_details()
     if family_details is None:
@@ -1733,15 +1758,15 @@ def build_farmer_api_payload(
         row["pin_code"] = addr.get("pin_code")
         row["address"] = addr.get("address", "")
         row["address2"] = addr.get("address2")
+        row["gstin"] = None
         row["details"] = []
         address_detail_rows.append(row)
 
-    # ── Build Other Details stepper ──
-    other_detail_row = {}
-    if other_details.get("education_ref_id") is not None:
-        other_detail_row["education_ref_id"] = other_details["education_ref_id"]
-    if other_details.get("electricity_ref_id") is not None:
-        other_detail_row["electricity_ref_id"] = other_details["electricity_ref_id"]
+    # same_as_above is a UI-only flag — ERP API expects explicit data with null
+    for addr_row in address_detail_rows:
+        addr_row["same_as_above"] = None
+
+    # ── Build Other Details stepper (layout stepper — fields at stepper level, not in details[]) ──
 
     # ── Build Family Details stepper details ──
     family_detail_rows = []
@@ -1769,17 +1794,7 @@ def build_farmer_api_payload(
         row["details"] = []
         family_detail_rows.append(row)
 
-    # ── Build Additional Details stepper ──
-    additional_detail_row = {}
-    additional_detail_row["dob"] = additional_details.get("dob") or None
-    additional_detail_row["age"] = additional_details.get("age")
-    if additional_details.get("gender") is not None:
-        additional_detail_row["gender"] = additional_details["gender"]
-    if additional_details.get("religion_ref_id") is not None:
-        additional_detail_row["religion_ref_id"] = additional_details["religion_ref_id"]
-    if additional_details.get("category_ref_id") is not None:
-        additional_detail_row["category_ref_id"] = additional_details["category_ref_id"]
-    additional_detail_row["profile_photo"] = None
+    # ── Build Additional Details stepper (layout stepper — fields at stepper level) ──
 
     # ── Build Land Details stepper details ──
     land_detail_rows = []
@@ -1928,7 +1943,6 @@ def build_farmer_api_payload(
         "mobile_no": step0_data.get("mobile_no"),
         "farmer_category": farmer_category,
         "land_classification": step0_data.get("land_classification"),  # READONLY
-        "password": step0_data.get("password", ""),
         "is_member_this_fpc": step0_data.get("is_member_this_fpc", False),
         "other_fpc_name": step0_data.get("other_fpc_name") or None,
         "member_id": step0_data.get("member_id") or None,
@@ -1945,7 +1959,7 @@ def build_farmer_api_payload(
         # Children array with stepper objects (verified against live API)
         "children": [
             {
-                "stepper_name": "Address Details",
+                "stepper_name": "Address Details ",
                 "is_stepper": True,
                 "details": address_detail_rows,
                 "children": [],
@@ -1953,8 +1967,10 @@ def build_farmer_api_payload(
             {
                 "stepper_name": "Other Details",
                 "is_stepper": True,
-                "details": [other_detail_row] if other_detail_row else [],
+                "details": [],
                 "children": [],
+                "education_ref_id": other_details.get("education_ref_id"),
+                "electricity_ref_id": other_details.get("electricity_ref_id"),
             },
             {
                 "stepper_name": "Family Details",
@@ -1965,8 +1981,16 @@ def build_farmer_api_payload(
             {
                 "stepper_name": "Additional Details",
                 "is_stepper": True,
-                "details": [additional_detail_row],
+                "details": [],
                 "children": [],
+                "land_classification": additional_details.get("land_classification"),
+                "password": additional_details.get("password", "Test@123456789"),
+                "dob": additional_details.get("dob") or None,
+                "age": additional_details.get("age"),
+                "gender": additional_details.get("gender"),
+                "religion_ref_id": additional_details.get("religion_ref_id"),
+                "category_ref_id": additional_details.get("category_ref_id"),
+                "profile_photo": None,
             },
             {
                 "stepper_name": "Land Details",

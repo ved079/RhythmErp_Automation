@@ -88,24 +88,52 @@ export function DashboardTab({
           />
         </div>
 
+        {/* KPI Banner — most recent run at a glance */}
+        {(() => {
+          const lastRun = runHistory?.[0]
+          return (
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-[#F0F4FF] dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-800/50 text-[12px]">
+              <div className={`w-2 h-2 rounded-full ${lastRun ? 'bg-green-500' : 'bg-gray-300'} shrink-0`} />
+              {lastRun ? (
+                <>
+                  <span className="text-[#555] dark:text-gray-300">Last run:</span>
+                  <span className="font-semibold text-[#333] dark:text-gray-100">{lastRun.date}</span>
+                  <span className="text-[#555] dark:text-gray-300">·</span>
+                  <span className="text-green-600 dark:text-green-400 font-medium">{lastRun.passed} passed</span>
+                  {lastRun.failed > 0 && <><span className="text-[#555]">·</span><span className="text-red-500 font-medium">{lastRun.failed} failed</span></>}
+                  <span className="text-[#555] dark:text-gray-300">·</span>
+                  <span className="font-semibold text-indigo-600 dark:text-indigo-400">{Math.round(lastRun.rate)}% pass rate</span>
+                </>
+              ) : (
+                <span className="text-[#888]">No runs yet — select a module and run tests to populate this dashboard</span>
+              )}
+            </div>
+          )
+        })()}
+
         {/* Quick Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-3.5 border border-gray-100 dark:border-gray-700 shadow-sm">
-            <div className="text-[11px] text-[#888888] dark:text-gray-400 font-medium uppercase tracking-wider">Total Modules</div>
-            <div className="text-xl font-bold text-[#333333] dark:text-gray-100 mt-1">{quickStats.total}</div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-100 dark:border-gray-700 border-l-4 border-l-indigo-500 shadow-sm">
+            <div className="text-[11px] text-[#888888] dark:text-gray-400 font-medium uppercase tracking-wider">Test Cases Automated</div>
+            <div className="text-2xl font-bold text-[#333333] dark:text-gray-100 mt-1">{quickStats.totalTests}</div>
+            <div className="text-[11px] text-[#888] dark:text-gray-400 mt-0.5">across {quickStats.total} modules</div>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-3.5 border border-green-100 dark:border-green-800/50 shadow-sm">
-            <div className="text-[11px] text-[#4CAF50] dark:text-green-400 font-medium uppercase tracking-wider">Fully Passing</div>
-            <div className="text-xl font-bold text-[#2E7D32] dark:text-green-400 mt-1">{quickStats.fullyPassing}</div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-100 dark:border-gray-700 border-l-4 border-l-green-500 shadow-sm">
+            <div className="text-[11px] text-[#4CAF50] dark:text-green-400 font-medium uppercase tracking-wider">Modules Healthy</div>
+            <div className="text-2xl font-bold text-[#2E7D32] dark:text-green-400 mt-1">{quickStats.fullyPassing}</div>
+            <div className="text-[11px] text-[#888] dark:text-gray-400 mt-0.5">{Math.round((quickStats.fullyPassing / quickStats.total) * 100)}% of all modules</div>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-3.5 border border-orange-100 dark:border-orange-800/50 shadow-sm">
-            <div className="text-[11px] text-[#FF9800] dark:text-orange-400 font-medium uppercase tracking-wider">Partial / Critical</div>
-            <div className="text-xl font-bold text-[#E65100] dark:text-orange-400 mt-1">{quickStats.partiallyPassing}</div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-100 dark:border-gray-700 border-l-4 border-l-orange-500 shadow-sm">
+            <div className="text-[11px] text-[#FF9800] dark:text-orange-400 font-medium uppercase tracking-wider">Modules at Risk</div>
+            <div className="text-2xl font-bold text-[#E65100] dark:text-orange-400 mt-1">{quickStats.partiallyPassing}</div>
+            <div className="text-[11px] text-[#888] dark:text-gray-400 mt-0.5">
+              {moduleHealth.filter(m => m.passRate < 50 && m.totalTests > 0).length} critical, {moduleHealth.filter(m => m.passRate >= 50 && m.passRate < 100 && m.totalTests > 0).length} partial
+            </div>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-3.5 border border-indigo-100 dark:border-indigo-800/50 shadow-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-100 dark:border-gray-700 border-l-4 border-l-indigo-500 shadow-sm">
             <div className="text-[11px] text-[#3F51B5] dark:text-indigo-400 font-medium uppercase tracking-wider">Overall Pass Rate</div>
             <div className="flex items-center gap-2 mt-1">
-              <div className="text-xl font-bold text-[#3F51B5] dark:text-indigo-400">
+              <div className="text-2xl font-bold text-[#3F51B5] dark:text-indigo-400">
                 {quickStats.totalTests > 0 ? Math.round((quickStats.totalPassed / quickStats.totalTests) * 100) : 0}%
               </div>
               <Sparkline
@@ -117,8 +145,8 @@ export function DashboardTab({
                 strokeWidth={1.5}
               />
             </div>
-            <div className="text-[11px] text-[#888888] dark:text-gray-400 mt-0.5">
-              {quickStats.totalPassed} / {quickStats.totalTests} tests passed
+            <div className="text-[11px] text-[#888] dark:text-gray-400 mt-0.5">
+              {quickStats.totalPassed} / {quickStats.totalTests} tests passing
             </div>
           </div>
         </div>
@@ -131,6 +159,15 @@ export function DashboardTab({
               <TrendingUp className="size-4 text-[#3F51B5]" />
               Pass Rate Trend
             </h3>
+            {(() => {
+              const recentRuns = runHistory?.slice(-5) || []
+              const trendUp = recentRuns.length >= 2 && recentRuns[recentRuns.length-1].rate >= recentRuns[0].rate
+              const avgRate = recentRuns.length ? Math.round(recentRuns.reduce((s,r) => s + r.rate, 0) / recentRuns.length) : 0
+              const subtitle = recentRuns.length
+                ? `Avg ${avgRate}% over last ${recentRuns.length} runs · ${trendUp ? '↑ improving' : '↓ declining'}`
+                : 'Run tests to see trend'
+              return <p className="text-[11px] text-[#888] dark:text-gray-400 mt-0.5 mb-3">{subtitle}</p>
+            })()}
             <PassRateTrendChart runHistory={runHistory || []} />
           </div>
           {/* Module Health Bar Chart */}
@@ -139,6 +176,13 @@ export function DashboardTab({
               <BarChart3 className="size-4 text-[#3F51B5]" />
               Module Health Overview
             </h3>
+            {(() => {
+              const topModule = [...moduleHealth].sort((a,b) => b.passRate - a.passRate)[0]
+              const subtitle = topModule?.totalTests > 0
+                ? `Top: ${topModule.moduleName} at ${topModule.passRate}%`
+                : 'No runs yet'
+              return <p className="text-[11px] text-[#888] dark:text-gray-400 mt-0.5 mb-3">{subtitle}</p>
+            })()}
             <ModuleHealthBarChart moduleHealth={moduleHealth} />
           </div>
         </div>
@@ -149,6 +193,13 @@ export function DashboardTab({
               <AlertTriangle className="size-4 text-[#F44336]" />
               Bug Distribution
             </h3>
+            {(() => {
+              const worstModule = [...moduleHealth].sort((a,b) => b.failedTests - a.failedTests)[0]
+              const subtitle = worstModule?.failedTests > 0
+                ? `${quickStats.totalFailed} open failures · most in ${worstModule.moduleName}`
+                : 'No failures recorded'
+              return <p className="text-[11px] text-[#888] dark:text-gray-400 mt-0.5 mb-3">{subtitle}</p>
+            })()}
             <BugDistributionPie moduleHealth={moduleHealth} />
           </div>
           {/* Test Execution Timeline */}
@@ -157,6 +208,12 @@ export function DashboardTab({
               <Activity className="size-4 text-[#3F51B5]" />
               Execution Timeline
             </h3>
+            {(() => {
+              const subtitle = runHistory?.length
+                ? `${runHistory.length} total runs recorded`
+                : 'No runs yet'
+              return <p className="text-[11px] text-[#888] dark:text-gray-400 mt-0.5 mb-3">{subtitle}</p>
+            })()}
             <TestExecutionTimeline runHistory={runHistory || []} />
           </div>
         </div>
@@ -185,32 +242,21 @@ export function DashboardTab({
           return (
             <div key={group.name}>
               {/* Group Header */}
-              <div className="flex items-center gap-2 mb-2.5">
-                <span className="text-[14px]">{group.icon}</span>
-                <h3 className="text-[14px] font-semibold text-[#333333] dark:text-gray-100">{group.name}</h3>
-                <span className="text-[12px] text-[#888888] dark:text-gray-400 ml-1">
-                  {group.modules.length} modules
-                </span>
+              <div className="flex items-center gap-3 mb-3 mt-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px]">{group.icon}</span>
+                  <h3 className="text-[13px] font-semibold text-[#444] dark:text-gray-200 uppercase tracking-wide">{group.name}</h3>
+                  <span className="text-[11px] text-[#aaa] dark:text-gray-500">{group.modules.length} modules</span>
+                </div>
+                <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700" />
                 {groupTotal > 0 && (
-                  <>
-                    <div className="flex-1" />
-                    {groupTrend && groupTrend.length >= 2 && (
-                      <Sparkline
-                        data={groupTrend}
-                        width={56}
-                        height={16}
-                        strokeColor={groupTrend[groupTrend.length - 1] >= groupTrend[groupTrend.length - 2] ? '#22c55e' : '#ef4444'}
-                        fillColor={groupTrend[groupTrend.length - 1] >= groupTrend[groupTrend.length - 2] ? '#22c55e' : '#ef4444'}
-                        strokeWidth={1.5}
-                      />
-                    )}
-                    <span className={`text-[12px] font-medium ${groupHealth.text}`}>
-                      {groupRate}%
-                    </span>
-                    <span className="text-[11px] text-gray-400 dark:text-gray-500">
-                      ({groupPassed}/{groupTotal})
-                    </span>
-                  </>
+                  <span className={`text-[12px] font-semibold px-2 py-0.5 rounded-full ${
+                    groupRate === 100 ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                    groupRate >= 75 ? 'bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                    'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                  }`}>
+                    {groupRate}%
+                  </span>
                 )}
               </div>
 
@@ -223,16 +269,17 @@ export function DashboardTab({
                     <button
                       key={mod.moduleId}
                       onClick={() => onSelectModule(mod.moduleId)}
-                      className={`relative text-left p-3.5 rounded-[14px] border transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-[#3F51B5]/30 dark:hover:border-indigo-600/30 shadow-[0_8px_22px_rgba(0,0,0,0.05)]`}
+                      title={`${mod.moduleName} — ${mod.passRate}% pass rate (${mod.passedTests}/${mod.totalTests} tests)`}
+                      className={`relative text-left p-4 rounded-[14px] border transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-[#3F51B5]/30 dark:hover:border-indigo-600/30 shadow-[0_8px_22px_rgba(0,0,0,0.05)]`}
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${health.indicator}`} />
-                        <span className="text-[13px] font-medium text-gray-800 dark:text-gray-100 truncate">{mod.moduleName}</span>
+                        <span className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 truncate">{mod.moduleName}</span>
                       </div>
                       <div className="flex items-center gap-3 text-[11px]">
                         {mod.totalTests > 0 ? (
                           <>
-                            <span className={`font-medium ${health.text}`}>{mod.passRate}%</span>
+                            <span className={`text-[16px] font-bold ${health.text}`}>{mod.passRate}%</span>
                             <span className="text-gray-400 dark:text-gray-500">
                               {mod.passedTests}/{mod.totalTests}
                             </span>
@@ -256,7 +303,7 @@ export function DashboardTab({
                         )}
                       </div>
                       {mod.totalTests > 0 && (
-                        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 flex items-center justify-between">
+                        <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1.5 flex items-center justify-between">
                           <div className="flex items-center gap-1">
                             <Clock className="size-2.5" />
                             {mod.lastRun}

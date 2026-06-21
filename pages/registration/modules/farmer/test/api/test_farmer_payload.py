@@ -65,7 +65,7 @@ class TestFarmerAPIPayload:
         payload = generate_farmer_api_payload()
         children = payload["children"]
         assert len(children) == 13
-        assert children[0]["stepper_name"] == "Address Details"
+        assert children[0]["stepper_name"] == "Address Details "
         assert children[1]["stepper_name"] == "Other Details"
         assert children[2]["stepper_name"] == "Family Details"
         assert children[3]["stepper_name"] == "Additional Details"
@@ -129,14 +129,13 @@ class TestFarmerAPIPayload:
                 f"Country must always be India (8), got {addr['country_ref_id_id']}"
             )
 
-    def test_payload_other_details_in_details_array(self):
-        """Other Details fields must be in children[1].details[] array."""
+    def test_payload_other_details_at_stepper_level(self):
+        """Other Details fields must be at stepper level (layout stepper)."""
         payload = generate_farmer_api_payload()
         other_stepper = payload["children"][1]
-        assert len(other_stepper["details"]) >= 1
-        other = other_stepper["details"][0]
-        assert "education_ref_id" in other
-        assert "electricity_ref_id" in other
+        assert other_stepper["details"] == []
+        assert "education_ref_id" in other_stepper
+        assert "electricity_ref_id" in other_stepper
 
     def test_payload_family_details_in_details_array(self):
         """Family Details rows must be in children[2].details[] array."""
@@ -148,16 +147,15 @@ class TestFarmerAPIPayload:
         assert "relationship" in family
         assert "member_gender" in family
 
-    def test_payload_additional_details_in_details_array(self):
-        """Additional Details fields must be in children[3].details[] array."""
+    def test_payload_additional_details_at_stepper_level(self):
+        """Additional Details fields must be at stepper level (layout stepper)."""
         payload = generate_farmer_api_payload()
         additional_stepper = payload["children"][3]
-        assert len(additional_stepper["details"]) >= 1
-        additional = additional_stepper["details"][0]
-        assert "dob" in additional
-        assert "gender" in additional
-        assert "religion_ref_id" in additional
-        assert "category_ref_id" in additional
+        assert additional_stepper["details"] == []
+        assert "dob" in additional_stepper
+        assert "gender" in additional_stepper
+        assert "religion_ref_id" in additional_stepper
+        assert "category_ref_id" in additional_stepper
 
     def test_payload_land_details_in_details_array(self):
         """Land Details rows must be in children[4].details[] array."""
@@ -287,10 +285,11 @@ class TestFarmerAPIPayload:
             )
 
     def test_payload_password_is_string(self):
-        """Password must be a non-empty string."""
+        """Password must be a non-empty string in Additional Details stepper."""
         payload = generate_farmer_api_payload()
-        assert isinstance(payload["password"], str)
-        assert len(payload["password"]) > 0
+        additional_stepper = [c for c in payload["children"] if c["stepper_name"] == "Additional Details"][0]
+        assert isinstance(additional_stepper["password"], str)
+        assert len(additional_stepper["password"]) > 0
 
     def test_payload_fk_ids_in_valid_pools(self):
         """All dropdown FK IDs must be from valid pools."""
