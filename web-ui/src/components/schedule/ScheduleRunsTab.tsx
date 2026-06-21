@@ -144,7 +144,7 @@ export function ScheduleRunsTab({ userName, sidebarModules }: { userName: string
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 flex items-center gap-2">
-              <CalendarClock className="size-4 text-green-600" />
+              <CalendarClock className="size-4 text-[#3F51B5]" />
               Run Scheduling
             </h3>
             <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">Schedule future test runs</p>
