@@ -25,7 +25,7 @@ import {
   XCircle, AlertTriangle, Loader2, Menu, Sun, Moon,
   Zap, Shield, MessageSquare, Bell, CalendarClock,
   Terminal, Monitor, HelpCircle, Copyright, ExternalLink,
-  ChevronRight, LogOut, GitCompare,
+  ChevronRight, LogOut, GitCompare, FlaskConical, BarChart2, Camera,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { startAppTour } from '@/components/tour/AppTour'
@@ -435,11 +435,11 @@ export default function Home() {
   const isReadOnly = user?.role === 'viewer' || user?.role === 'client'
   const canRunTests = !isReadOnly
   const tabs = [
-    ...(canRunTests ? [{ id: 'test-runner', label: '🧪 Test Runner' }] : []),
-    ...(canRunTests ? [{ id: 'live-execution', label: '📺 Live Execution' }] : []),
-    { id: 'results', label: '📈 Results' },
-    { id: 'screenshots', label: '📸 Screenshots' },
-    ...(canRunTests ? [{ id: 'schedule', label: '🗓️ Schedule' }] : []),
+    ...(canRunTests ? [{ id: 'test-runner',    label: 'Test Runner',    icon: FlaskConical }] : []),
+    ...(canRunTests ? [{ id: 'live-execution', label: 'Live Execution', icon: Monitor }] : []),
+    {                   id: 'results',         label: 'Results',        icon: BarChart2 },
+    {                   id: 'screenshots',     label: 'Screenshots',    icon: Camera },
+    ...(canRunTests ? [{ id: 'schedule',       label: 'Schedule',       icon: CalendarClock }] : []),
   ]
 
   return (
@@ -460,24 +460,24 @@ export default function Home() {
       {/* HEADER */}
       <header className="h-[60px] bg-white dark:bg-gray-900 border-b border-[#e0e0e0] dark:border-gray-700 flex items-center px-4 shrink-0 z-10 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
         <div className="flex items-center gap-3 flex-1">
-          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)} data-tour="sidebar-toggle" className={`size-8 cursor-pointer shrink-0 transition-all duration-200 ${sidebarOpen ? 'text-[#888888] hover:text-[#333333] hover:bg-gray-100 dark:hover:bg-gray-800' : 'text-[#3F51B5] hover:text-[#2D3FC7] hover:bg-[#E8F5E9] dark:hover:bg-indigo-900/20'}`} title="Toggle sidebar (Ctrl+B)"><Menu className={`size-[18px] transition-transform duration-200 ${sidebarOpen ? '' : 'rotate-90'}`} /></Button>
+          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)} data-tour="sidebar-toggle" className={`size-8 cursor-pointer shrink-0 transition-all duration-200 ${sidebarOpen ? 'text-[#888888] hover:text-[#333333] hover:bg-gray-100 dark:hover:bg-gray-800' : 'text-[#3F51B5] hover:text-[#3949AB] hover:bg-[#3F51B5]/10 dark:hover:bg-[#3F51B5]/20'}`} title="Toggle sidebar (Ctrl+B)"><Menu className={`size-[18px] transition-transform duration-200 ${sidebarOpen ? '' : 'rotate-90'}`} /></Button>
           <Separator orientation="vertical" className="h-5" />
           <div className="flex items-center gap-2"><Image src="/agdi-logo-new.webp" alt="AgDi Automation" width={70} height={28} className="object-contain" /><span className="text-[#888888] dark:text-gray-500 text-[13px]">Automation Runner</span></div>
           <div className="hidden md:flex items-center ml-4 bg-[#F5F5F5] dark:bg-gray-800 rounded-md px-3 py-1.5 gap-2 w-64"><Search className="size-3.5 text-[#888888] dark:text-gray-400" /><input type="text" placeholder="Search modules..." className="bg-transparent text-[13px] text-[#333333] dark:text-gray-200 placeholder:text-[#888888] dark:placeholder:text-gray-500 outline-none flex-1" onFocus={() => d.setQuickSwitcherOpen(true)} readOnly /></div>
         </div>
         <div className="flex items-center gap-1.5">
           <Button variant="ghost" size="icon" onClick={toggleDarkMode} data-tour="dark-mode" className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer" title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}>{darkMode ? <Sun className="size-4" /> : <Moon className="size-4" />}</Button>
-          <Button variant="ghost" size="icon" onClick={startAppTour} data-tour="help-btn" className="size-8 text-[#3F51B5] hover:text-[#2D3FC7] hover:bg-[#E8F5E9] dark:hover:bg-indigo-900/20 cursor-pointer" title="Take a tour of the app"><HelpCircle className="size-4" /></Button>
+          <Button variant="ghost" size="icon" onClick={startAppTour} data-tour="help-btn" className="size-8 text-[#3F51B5] hover:text-[#3949AB] hover:bg-[#3F51B5]/10 dark:hover:bg-[#3F51B5]/20 cursor-pointer" title="Take a tour of the app"><HelpCircle className="size-4" /></Button>
           <Button variant="ghost" size="icon" onClick={() => d.setShowShortcuts(true)} data-tour="keyboard-shortcuts" className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer" title="Keyboard shortcuts (Ctrl+/)"><Zap className="size-4" /></Button>
           <div className="flex items-center" title={wsConnected ? 'Real-time connected' : 'Real-time disconnected — using polling'}>
             <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-yellow-400 animate-pulse'}`} />
           </div>
           <div className="relative" data-tour="notifications">
-            <Button variant="ghost" size="icon" onClick={() => { d.setNotifDropdownOpen((prev) => !prev); if (!d.notifDropdownOpen) handleMarkAllRead() }} className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer relative" title="Notifications"><Bell className="size-4" />{unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#6777EF] text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-pulse">{unreadCount > 9 ? '9+' : unreadCount}</span>}</Button>
+            <Button variant="ghost" size="icon" onClick={() => { d.setNotifDropdownOpen((prev) => !prev); if (!d.notifDropdownOpen) handleMarkAllRead() }} className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer relative" title="Notifications"><Bell className="size-4" />{unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#3F51B5] text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-pulse">{unreadCount > 9 ? '9+' : unreadCount}</span>}</Button>
             {d.notifDropdownOpen && (
               <div className="absolute right-0 top-10 w-96 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-300 dark:border-gray-500/70 z-50 overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-600/40 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50"><div className="flex items-center gap-2"><Bell className="size-4 text-[#3F51B5]" /><span className="text-[13px] font-semibold text-[#333333] dark:text-gray-100">Notifications</span>{unreadCount > 0 && <Badge className="bg-[#6777EF] text-white text-[10px] px-1.5 py-0 h-4">{unreadCount} new</Badge>}</div><button onClick={handleMarkAllRead} className="text-[11px] text-[#3F51B5] hover:text-[#2D3FC7] cursor-pointer font-medium">Mark all read</button></div>
-                <div className="max-h-72 overflow-y-auto">{notifications.length === 0 ? <div className="p-8 text-center"><Bell className="size-8 text-gray-200 dark:text-gray-600 mx-auto mb-2" /><div className="text-[13px] text-gray-400 dark:text-gray-500">No notifications yet</div><div className="text-[11px] text-gray-300 dark:text-gray-600 mt-1">Notifications will appear here when tests complete or bugs are updated</div></div> : notifications.slice(0, 20).map((n) => { const getCategoryStyle = (type: string) => { switch (type) { case 'run_complete': return { icon: <CheckCircle2 className="size-3.5" />, color: 'text-green-500 bg-green-50 dark:bg-green-900/20' }; case 'status_change': return { icon: <RotateCcw className="size-3.5" />, color: 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' }; case 'reply': return { icon: <MessageSquare className="size-3.5" />, color: 'text-purple-500 bg-purple-50 dark:bg-purple-900/20' }; case 'schedule': return { icon: <CalendarClock className="size-3.5" />, color: 'text-orange-500 bg-orange-50 dark:bg-orange-900/20' }; default: return { icon: <Bell className="size-3.5" />, color: 'text-gray-500 bg-gray-50 dark:bg-gray-700/50' } } }; const catStyle = getCategoryStyle(n.type); return (<div key={n.id} className={`px-4 py-2.5 border-b border-gray-50 dark:border-gray-700/50 flex gap-3 items-start hover:bg-gray-50/50 dark:hover:bg-gray-700/20 transition-colors ${!n.read ? 'bg-[#E8F5E9]/30 dark:bg-green-900/5' : ''}`}><div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${catStyle.color}`}>{catStyle.icon}</div><div className="flex-1 min-w-0"><div className="text-[12px] font-medium text-[#333333] dark:text-gray-200 leading-tight">{n.title}</div><div className="text-[11px] text-[#666666] dark:text-gray-400 mt-0.5 leading-snug">{n.message}</div><div className="text-[10px] text-[#888888] dark:text-gray-500 mt-1">{new Date(n.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div></div></div>) })}</div>
+                <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-600/40 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50"><div className="flex items-center gap-2"><Bell className="size-4 text-[#3F51B5]" /><span className="text-[13px] font-semibold text-[#333333] dark:text-gray-100">Notifications</span>{unreadCount > 0 && <Badge className="bg-[#3F51B5] text-white text-[10px] px-1.5 py-0 h-4">{unreadCount} new</Badge>}</div><button onClick={handleMarkAllRead} className="text-[11px] text-[#3F51B5] hover:text-[#3949AB] cursor-pointer font-medium">Mark all read</button></div>
+                <div className="max-h-72 overflow-y-auto">{notifications.length === 0 ? <div className="p-8 text-center"><Bell className="size-8 text-gray-200 dark:text-gray-600 mx-auto mb-2" /><div className="text-[13px] text-gray-400 dark:text-gray-500">No notifications yet</div><div className="text-[11px] text-gray-300 dark:text-gray-600 mt-1">Notifications will appear here when tests complete or bugs are updated</div></div> : notifications.slice(0, 20).map((n) => { const getCategoryStyle = (type: string) => { switch (type) { case 'run_complete': return { icon: <CheckCircle2 className="size-3.5" />, color: 'text-green-500 bg-green-50 dark:bg-green-900/20' }; case 'status_change': return { icon: <RotateCcw className="size-3.5" />, color: 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' }; case 'reply': return { icon: <MessageSquare className="size-3.5" />, color: 'text-purple-500 bg-purple-50 dark:bg-purple-900/20' }; case 'schedule': return { icon: <CalendarClock className="size-3.5" />, color: 'text-orange-500 bg-orange-50 dark:bg-orange-900/20' }; default: return { icon: <Bell className="size-3.5" />, color: 'text-gray-500 bg-gray-50 dark:bg-gray-700/50' } } }; const catStyle = getCategoryStyle(n.type); return (<div key={n.id} className={`px-4 py-2.5 border-b border-gray-50 dark:border-gray-700/50 flex gap-3 items-start hover:bg-gray-50/50 dark:hover:bg-gray-700/20 transition-colors ${!n.read ? 'bg-[#3F51B5]/[0.03] dark:bg-[#3F51B5]/10' : ''}`}><div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${catStyle.color}`}>{catStyle.icon}</div><div className="flex-1 min-w-0"><div className="text-[12px] font-medium text-[#333333] dark:text-gray-200 leading-tight">{n.title}</div><div className="text-[11px] text-[#666666] dark:text-gray-400 mt-0.5 leading-snug">{n.message}</div><div className="text-[10px] text-[#888888] dark:text-gray-500 mt-1">{new Date(n.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div></div></div>) })}</div>
                 {notifications.length > 0 && <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-center"><span className="text-[11px] text-gray-400 dark:text-gray-500">{notifications.length} notification{notifications.length !== 1 ? 's' : ''}</span></div>}
               </div>
             )}
@@ -485,7 +485,7 @@ export default function Home() {
           {(user.role === 'admin' || user.role === 'qa_lead') && <Link href="/admin" className="flex items-center gap-1.5 px-2.5 h-8 text-[12px] text-[#888888] dark:text-gray-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors" title="Admin Panel"><Shield className="size-3.5" /><span className="hidden sm:inline">Admin</span></Link>}
           <Separator orientation="vertical" className="h-5 mx-0.5" />
           <div className="flex items-center gap-2" data-tour="user-menu">
-            <button onClick={() => d.setProfileDialogOpen(true)} className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"><Avatar className="size-7"><AvatarFallback className="bg-[#6777EF] text-white text-xs font-semibold">{userInitials}</AvatarFallback></Avatar><div className="hidden sm:flex flex-col"><span className="text-[12px] text-[#333333] dark:text-gray-200 font-medium max-w-[120px] truncate leading-tight">{user.name}</span><span className="text-[10px] text-[#888888] dark:text-gray-500 leading-tight">{user.role}</span></div></button>
+            <button onClick={() => d.setProfileDialogOpen(true)} className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"><Avatar className="size-7"><AvatarFallback className="bg-[#3F51B5] text-white text-xs font-semibold">{userInitials}</AvatarFallback></Avatar><div className="hidden sm:flex flex-col"><span className="text-[12px] text-[#333333] dark:text-gray-200 font-medium max-w-[120px] truncate leading-tight">{user.name}</span><span className="text-[10px] text-[#888888] dark:text-gray-500 leading-tight">{user.role}</span></div></button>
             <Button variant="ghost" size="icon" onClick={handleLogout} data-tour="logout-btn" className="size-7 text-[#888888] hover:text-red-500 cursor-pointer" title="Sign out"><LogOut className="size-3.5" /></Button>
           </div>
         </div>
@@ -505,7 +505,7 @@ export default function Home() {
           {navToast && <NavToast key={navToast.key} label={navToast.label} parent={navToast.parent} />}
           {!sidebarOpen && selectedModule !== 'dashboard' && (
             <div className="flex items-center gap-1.5 px-4 py-2 border-b border-gray-200 dark:border-gray-600/40 bg-white dark:bg-gray-900 shrink-0">
-              <button onClick={handleGoHome} className="text-[12px] text-[#3F51B5] hover:text-[#2D3FC7] dark:hover:text-indigo-400 font-medium cursor-pointer transition-colors hover:underline">Dashboard</button>
+              <button onClick={handleGoHome} className="text-[12px] text-[#3F51B5] hover:text-[#3949AB] dark:text-[#7986CB] font-medium cursor-pointer transition-colors hover:underline">Dashboard</button>
               {modulePath.parent && <><ChevronRight className="size-3 text-gray-400 dark:text-gray-500" /><span className="text-[12px] text-gray-500 dark:text-gray-400">{modulePath.parent}</span></>}
               <ChevronRight className="size-3 text-gray-400 dark:text-gray-500" />
               <span className="text-[12px] text-gray-800 dark:text-gray-100 font-medium">{modulePath.name}</span>
@@ -539,7 +539,7 @@ export default function Home() {
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="border-b border-gray-300 dark:border-gray-500/70 bg-gray-50/50 dark:bg-gray-800/30 shrink-0" data-tour="tab-bar">
                 <div className="flex items-center h-10 px-4 gap-0">
-                  {tabs.map((tab) => (<button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-4 h-full text-[13px] font-medium transition-colors border-b-2 cursor-pointer ${activeTab === tab.id ? 'border-[#3F51B5] text-[#3F51B5] dark:text-indigo-400 bg-white dark:bg-gray-900' : 'border-transparent text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100/50 dark:hover:bg-gray-800/30'}`}>{tab.label}</button>))}
+                  {tabs.map((tab) => { const Icon = tab.icon; return (<button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-1.5 px-4 h-full text-[12px] font-medium transition-colors border-b-2 cursor-pointer ${activeTab === tab.id ? 'border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB] bg-white dark:bg-gray-900' : 'border-transparent text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100/50 dark:hover:bg-gray-800/30'}`}><Icon className="size-3.5 shrink-0" />{tab.label}</button>) })}
                   <div className="flex-1" />
                   <span className="text-[12px] text-gray-400 dark:text-gray-500">Module: <span className="text-gray-600 dark:text-gray-300 font-medium">{modulePath.name}</span>{modulePath.badge && <span className="ml-2 text-orange-600 dark:text-orange-400">{modulePath.badge}</span>}</span>
                 </div>
@@ -576,7 +576,7 @@ export default function Home() {
         </div>
       )}
       {activeTab === 'live-execution' && !tr.isRunning && passedCount + failedCount > 0 && (
-        <button onClick={() => setActiveTab('test-runner')} className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-[#3F51B5] hover:bg-[#2D3FC7] text-white transition-all duration-200 rounded-xl px-5 py-2.5 flex items-center gap-2 cursor-pointer hover:-translate-y-0.5"><RotateCcw className="size-4" /><span className="text-[13px] font-medium">New Test Run</span></button>
+        <button onClick={() => setActiveTab('test-runner')} className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-[#3F51B5] hover:bg-[#3949AB] text-white transition-all duration-200 rounded-xl px-5 py-2.5 flex items-center gap-2 cursor-pointer hover:-translate-y-0.5"><RotateCcw className="size-4" /><span className="text-[13px] font-medium">New Test Run</span></button>
       )}
       {/* Quick Switcher */}
       {d.quickSwitcherOpen && (
@@ -613,14 +613,14 @@ export default function Home() {
                   const isActive = mod.id === selectedModule
                   return (
                     <button key={mod.id} onClick={() => { setSelectedModule(mod.id); setActiveTab('test-runner'); d.setQuickSwitcherOpen(false) }}
-                      className={`w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left ${isActive ? 'bg-[#E8F5E9] dark:bg-green-900/20' : ''}`}
+                      className={`w-full flex items-center gap-3 px-4 py-2 hover:bg-[#3F51B5]/[0.04] dark:hover:bg-[#3F51B5]/10 transition-colors text-left ${isActive ? 'bg-[#3F51B5]/[0.06] dark:bg-[#3F51B5]/15' : ''}`}
                     >
-                      <div className={`w-2 h-2 rounded-full shrink-0 ${isActive ? 'bg-[#4CAF50]' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${isActive ? 'bg-[#3F51B5]' : 'bg-gray-300 dark:bg-gray-600'}`} />
                       <div className="flex-1 min-w-0">
                         <div className="text-[13px] text-gray-800 dark:text-gray-200 font-medium truncate">{mod.label}</div>
                         {mod.parent && <div className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{mod.parent}</div>}
                       </div>
-                      {mod.badge && <Badge className="text-[10px] h-4 px-1.5 bg-[#E8F5E9] text-[#2E7D32] dark:bg-green-900/30 dark:text-green-400 border-0 shrink-0">{mod.badge}</Badge>}
+                      {mod.badge && <Badge className="text-[10px] h-4 px-1.5 bg-[#3F51B5]/10 text-[#3F51B5] dark:bg-[#3F51B5]/20 dark:text-[#7986CB] border-0 shrink-0">{mod.badge}</Badge>}
                     </button>
                   )
                 })
@@ -641,11 +641,11 @@ export default function Home() {
             <div>
               <div className="flex items-center justify-between">
                 <label className="text-[12px] font-medium text-gray-700 dark:text-gray-300">ERP Token</label>
-                <button onClick={() => d.setShowTokenHelp(!d.showTokenHelp)} className="inline-flex items-center gap-1 text-[11px] text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline transition-colors cursor-pointer"><HelpCircle className="size-3" />{d.showTokenHelp ? 'Hide help' : 'Where to find it?'}</button>
+                <button onClick={() => d.setShowTokenHelp(!d.showTokenHelp)} className="inline-flex items-center gap-1 text-[11px] text-[#3F51B5] hover:text-[#3949AB] dark:text-[#7986CB] dark:hover:text-[#9FA8DA] hover:underline transition-colors cursor-pointer"><HelpCircle className="size-3" />{d.showTokenHelp ? 'Hide help' : 'Where to find it?'}</button>
               </div>
               <input type="password" value={erpToken} onChange={(e) => setErpToken(e.target.value)} className="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-[13px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" placeholder="Bearer eyJhbGciOiJIUzI1NiI..." />
               {d.showTokenHelp && (
-                <div className="mt-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 text-[12px] text-gray-700 dark:text-gray-300 space-y-1">
+                <div className="mt-2 p-3 rounded-lg bg-[#3F51B5]/[0.05] dark:bg-[#3F51B5]/10 border border-[#3F51B5]/20 dark:border-[#3F51B5]/30 text-[12px] text-gray-700 dark:text-gray-300 space-y-1">
                   <p className="font-semibold text-blue-700 dark:text-blue-400">How to find your token</p>
                   <ol className="list-decimal list-inside space-y-0.5 text-[11.5px] leading-relaxed">
                     <li>Log into ERP and open <strong>DevTools</strong> (F12) → <strong>Network</strong> tab</li>
@@ -659,7 +659,7 @@ export default function Home() {
             </div>
             <div><label className="text-[12px] font-medium text-gray-700 dark:text-gray-300">Tenant ID</label><input type="text" value={erpTenantId} onChange={(e) => setErpTenantId(e.target.value)} className="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-[13px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" placeholder="e.g. 681" /></div>
           </div>
-          <DialogFooter className="gap-1.5">{erpToken || erpTenantId ? <Button variant="outline" onClick={() => { setErpToken(''); setErpTenantId(''); d.setCredentialsOpen(false) }} className="cursor-pointer border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">Clear</Button> : null}<Button variant="outline" onClick={() => d.setCredentialsOpen(false)} className="cursor-pointer">Cancel</Button><Button onClick={() => d.setCredentialsOpen(false)} className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white cursor-pointer">Save</Button></DialogFooter>
+          <DialogFooter className="gap-1.5">{erpToken || erpTenantId ? <Button variant="outline" onClick={() => { setErpToken(''); setErpTenantId(''); d.setCredentialsOpen(false) }} className="cursor-pointer border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">Clear</Button> : null}<Button variant="outline" onClick={() => d.setCredentialsOpen(false)} className="cursor-pointer">Cancel</Button><Button onClick={() => d.setCredentialsOpen(false)} className="bg-[#3F51B5] hover:bg-[#3949AB] text-white cursor-pointer">Save</Button></DialogFooter>
         </DialogContent>
       </Dialog>
       <RunDetailDialog open={d.runDetailDialogOpen} onClose={() => { d.setRunDetailDialogOpen(false); d.setSelectedRunForDetail(null) }} run={d.selectedRunForDetail} visibilityData={pd.visibilityData} showRawNames={showRawNames} onReportTest={handleQuickReport} />
@@ -669,7 +669,7 @@ export default function Home() {
       {d.screenshotCompareOpen && <ScreenshotCompare left={d.compareScreenshots[0]} right={d.compareScreenshots[1]} onClose={() => d.setScreenshotCompareOpen(false)} />}
       <footer className="shrink-0 border-t border-gray-300 dark:border-gray-500/70 bg-white dark:bg-gray-900 px-4 py-1.5 flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500"><Copyright className="size-3" /><span>2026 AgDi Solutions Pvt. Ltd. All rights reserved.</span></div>
-        <div className="flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-500"><span className="flex items-center gap-1">Version 1.0.0</span><a href="https://rhythmerp.algorhythms.in" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-[#3F51B5] dark:hover:text-indigo-400 transition-colors cursor-pointer"><HelpCircle className="size-3" />Help<ExternalLink className="size-2.5" /></a></div>
+        <div className="flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-500"><span className="flex items-center gap-1">Version 1.0.0</span><a href="https://rhythmerp.algorhythms.in" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-[#3F51B5] dark:hover:text-[#7986CB] transition-colors cursor-pointer"><HelpCircle className="size-3" />Help<ExternalLink className="size-2.5" /></a></div>
       </footer>
     </div>
   )
