@@ -262,6 +262,11 @@ export default function Home() {
     await fetch('/api/auth/logout', withCsrf({ method: 'POST' })); setUser(null)
   }, [])
 
+  const handleMarkAllRead = useCallback(async () => {
+    await markAllNotificationsRead()
+    await refreshNotifications()
+  }, [refreshNotifications])
+
   const toggleExpand = useCallback((id: string) => {
     setExpandedIds((prev) => {
       const next = new Set(prev)
@@ -473,13 +478,84 @@ export default function Home() {
             <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-yellow-400 animate-pulse'}`} />
           </div>
           <div className="relative" data-tour="notifications">
-            <Button variant="ghost" size="icon" onClick={() => { d.setNotifDropdownOpen((prev) => !prev); if (!d.notifDropdownOpen) handleMarkAllRead() }} className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer relative" title="Notifications"><Bell className="size-4" />{unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#3F51B5] text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-pulse">{unreadCount > 9 ? '9+' : unreadCount}</span>}</Button>
+            <Button
+              variant="ghost" size="icon"
+              onClick={() => { d.setNotifDropdownOpen((prev) => !prev) }}
+              className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer relative"
+              title="Notifications"
+            >
+              <Bell className="size-4" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-[18px] h-[18px] bg-[#3F51B5] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </Button>
             {d.notifDropdownOpen && (
-              <div className="absolute right-0 top-10 w-96 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-300 dark:border-gray-500/70 z-50 overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-600/40 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50"><div className="flex items-center gap-2"><Bell className="size-4 text-[#3F51B5]" /><span className="text-[13px] font-semibold text-[#333333] dark:text-gray-100">Notifications</span>{unreadCount > 0 && <Badge className="bg-[#3F51B5] text-white text-[10px] px-1.5 py-0 h-4">{unreadCount} new</Badge>}</div><button onClick={handleMarkAllRead} className="text-[11px] text-[#3F51B5] hover:text-[#3949AB] cursor-pointer font-medium">Mark all read</button></div>
-                <div className="max-h-72 overflow-y-auto">{notifications.length === 0 ? <div className="p-8 text-center"><Bell className="size-8 text-gray-200 dark:text-gray-600 mx-auto mb-2" /><div className="text-[13px] text-gray-400 dark:text-gray-500">No notifications yet</div><div className="text-[11px] text-gray-300 dark:text-gray-600 mt-1">Notifications will appear here when tests complete or bugs are updated</div></div> : notifications.slice(0, 20).map((n) => { const getCategoryStyle = (type: string) => { switch (type) { case 'run_complete': return { icon: <CheckCircle2 className="size-3.5" />, color: 'text-green-500 bg-green-50 dark:bg-green-900/20' }; case 'status_change': return { icon: <RotateCcw className="size-3.5" />, color: 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' }; case 'reply': return { icon: <MessageSquare className="size-3.5" />, color: 'text-purple-500 bg-purple-50 dark:bg-purple-900/20' }; case 'schedule': return { icon: <CalendarClock className="size-3.5" />, color: 'text-orange-500 bg-orange-50 dark:bg-orange-900/20' }; default: return { icon: <Bell className="size-3.5" />, color: 'text-gray-500 bg-gray-50 dark:bg-gray-700/50' } } }; const catStyle = getCategoryStyle(n.type); return (<div key={n.id} className={`px-4 py-2.5 border-b border-gray-50 dark:border-gray-700/50 flex gap-3 items-start hover:bg-gray-50/50 dark:hover:bg-gray-700/20 transition-colors ${!n.read ? 'bg-[#3F51B5]/[0.03] dark:bg-[#3F51B5]/10' : ''}`}><div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${catStyle.color}`}>{catStyle.icon}</div><div className="flex-1 min-w-0"><div className="text-[12px] font-medium text-[#333333] dark:text-gray-200 leading-tight">{n.title}</div><div className="text-[11px] text-[#666666] dark:text-gray-400 mt-0.5 leading-snug">{n.message}</div><div className="text-[10px] text-[#888888] dark:text-gray-500 mt-1">{new Date(n.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div></div></div>) })}</div>
-                {notifications.length > 0 && <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-center"><span className="text-[11px] text-gray-400 dark:text-gray-500">{notifications.length} notification{notifications.length !== 1 ? 's' : ''}</span></div>}
-              </div>
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => d.setNotifDropdownOpen(false)} />
+                <div className="absolute right-0 top-10 w-[380px] bg-white dark:bg-[#1e2132] rounded-xl shadow-2xl border border-gray-200 dark:border-gray-600/50 z-50 overflow-hidden flex flex-col" style={{ maxHeight: '480px' }}>
+                  {/* Header */}
+                  <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700/60 flex items-center justify-between bg-gradient-to-r from-[#3F51B5]/[0.06] to-[#3F51B5]/[0.02] shrink-0">
+                    <div className="flex items-center gap-2">
+                      <Bell className="size-3.5 text-[#3F51B5]" />
+                      <span className="text-[13px] font-semibold text-[#333333] dark:text-gray-100">Notifications</span>
+                      {unreadCount > 0 && (
+                        <span className="bg-[#3F51B5] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none">{unreadCount} new</span>
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button onClick={handleMarkAllRead} className="text-[11px] text-[#3F51B5] hover:text-[#3949AB] dark:text-[#7986CB] dark:hover:text-[#9FA8DA] cursor-pointer font-medium transition-colors">
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+                  {/* List */}
+                  <div className="overflow-y-auto flex-1">
+                    {notifications.length === 0 ? (
+                      <div className="py-12 px-6 text-center">
+                        <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700/50 flex items-center justify-center mx-auto mb-3">
+                          <Bell className="size-5 text-gray-300 dark:text-gray-500" />
+                        </div>
+                        <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400">All caught up</p>
+                        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">Notifications appear here when tests complete or bugs are updated</p>
+                      </div>
+                    ) : (
+                      notifications.slice(0, 25).map((n) => {
+                        const typeMap: Record<string, { icon: React.ReactNode; accent: string; bg: string }> = {
+                          run_complete: { icon: <CheckCircle2 className="size-3.5" />, accent: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
+                          status_change: { icon: <RotateCcw className="size-3.5" />, accent: 'text-[#3F51B5] dark:text-[#7986CB]', bg: 'bg-[#3F51B5]/10 dark:bg-[#3F51B5]/15' },
+                          reply: { icon: <MessageSquare className="size-3.5" />, accent: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50 dark:bg-violet-900/20' },
+                          schedule: { icon: <CalendarClock className="size-3.5" />, accent: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20' },
+                        }
+                        const style = typeMap[n.type] ?? { icon: <Bell className="size-3.5" />, accent: 'text-gray-500 dark:text-gray-400', bg: 'bg-gray-100 dark:bg-gray-700/50' }
+                        return (
+                          <div key={n.id} className={`relative px-4 py-3 border-b border-gray-50 dark:border-gray-700/30 flex gap-3 items-start hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors cursor-default ${!n.read ? 'bg-[#3F51B5]/[0.04] dark:bg-[#3F51B5]/[0.08]' : ''}`}>
+                            {!n.read && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-[#3F51B5]" />}
+                            <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${style.accent} ${style.bg}`}>
+                              {style.icon}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[12px] font-semibold text-[#333333] dark:text-gray-100 leading-snug">{n.title}</p>
+                              <p className="text-[11px] text-[#666666] dark:text-gray-400 mt-0.5 leading-snug line-clamp-2">{n.message}</p>
+                              <p className="text-[10px] text-[#999] dark:text-gray-500 mt-1.5">
+                                {new Date(n.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                  {/* Footer */}
+                  {notifications.length > 0 && (
+                    <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/60 dark:bg-gray-800/40 shrink-0 flex items-center justify-between">
+                      <span className="text-[11px] text-gray-400 dark:text-gray-500">{notifications.length} total</span>
+                      <button onClick={() => d.setNotifDropdownOpen(false)} className="text-[11px] text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 cursor-pointer transition-colors">Close</button>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
           {(user.role === 'admin' || user.role === 'qa_lead') && <Link href="/admin" className="flex items-center gap-1.5 px-2.5 h-8 text-[12px] text-[#888888] dark:text-gray-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors" title="Admin Panel"><Shield className="size-3.5" /><span className="hidden sm:inline">Admin</span></Link>}
