@@ -287,7 +287,8 @@ export async function startBatchCreate(
   erpTenantId: string,
   onEvent: (event: SSEEvent) => void,
   onDone: (runId: string | null) => void,
-  onError: (err: Error) => void
+  onError: (err: Error) => void,
+  config?: unknown
 ) {
   try {
     const res = await fetch(`${PROXY}?path=batch-create`, withCsrf({
@@ -299,6 +300,7 @@ export async function startBatchCreate(
         count,
         erp_token: erpToken,
         erp_tenant_id: erpTenantId,
+        ...(config ? { config } : {}),
       }),
     }));
 
@@ -459,6 +461,30 @@ export type TestCasesData = Record<string, TestCaseModule>
 export async function fetchTestCases(): Promise<TestCasesData> {
   const res = await fetch(`${PROXY}?path=test-cases`)
   if (!res.ok) throw new Error('Failed to fetch test cases')
+  return res.json()
+}
+
+export interface BatchRecord {
+  name: string
+  record_id: number | string
+  status: 'created' | 'verified' | 'approved' | 'failed'
+}
+
+export interface BatchRunSummary {
+  run_id: string
+  module: string
+  sub_module: string
+  total: number
+  created: number
+  failed: number
+  elapsed_seconds: number
+  timestamp: number // unix epoch (seconds)
+  records: BatchRecord[]
+}
+
+export async function fetchBatchHistory(): Promise<BatchRunSummary[]> {
+  const res = await fetch(`${PROXY}?path=batch-results`)
+  if (!res.ok) throw new Error(`Failed to load batch history: HTTP ${res.status}`)
   return res.json()
 }
 

@@ -48,6 +48,61 @@ def _sse_event(event: LogEvent) -> str:
     return f"data: {event.model_dump_json()}\n\n"
 
 
+# Map sub_module keys → ERP screen attribute_name
+_SCREEN_NAME_MAP: dict[str, str] = {
+    "farmer": "Farmer",
+    "supplier": "Supplier",
+    "customer": "Customer",
+    "employee": "Employee",
+    "agent": "Agent",
+    "directors": "Directors",
+    "member": "Member",
+}
+
+
+def _screen_name(sub_module: str) -> str:
+    return _SCREEN_NAME_MAP.get(sub_module.lower(), sub_module.capitalize())
+
+
+def _compute_land_classification(payload: dict) -> int | None:
+    """Return the land_classification ID based on individual_land_holding in the payload.
+
+    Mirrors the ERP UI's JS calculation on Edit form load:
+      644 = Marginal Farmer  (individual holding < 1 ha)
+      645 = Small Farmer     (1 <= holding <= 2 ha)
+      646 = Other Farmer     (holding > 2 ha)
+
+    Returns None if no land details are present (e.g. walk-in).
+    """
+    for child in payload.get("children", []):
+        if child.get("stepper_name") == "Land Details":
+            rows = child.get("details", [])
+            if rows:
+                holding = rows[0].get("individual_land_holding") or 0
+                try:
+                    holding = float(holding)
+                except (TypeError, ValueError):
+                    holding = 0
+                if holding < 1:
+                    return 644  # Marginal
+                elif holding <= 2:
+                    return 645  # Small
+                else:
+                    return 646  # Other
+    return None
+
+
+def _extract_wf_error(client) -> str:
+    last = getattr(client, "_last_raw_response", None)
+    if last is None:
+        return "unknown"
+    try:
+        body = last.json()
+        return body.get("error") or body.get("message") or last.text[:200]
+    except Exception:
+        return last.text[:200]
+
+
 def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, None]:
     """Generate batch create progress as SSE events."""
     run_id = str(uuid.uuid4())[:8]
@@ -115,7 +170,7 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
         run_id=run_id,
     ))
 
-    payloads = generate_fn(count=total)
+    payloads = generate_fn(count=total, config=request.config)
     batch_size = len(payloads)
 
     yield _sse_event(LogEvent(
@@ -124,6 +179,11 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
         timestamp=datetime.now(timezone.utc),
         run_id=run_id,
     ))
+
+    # Check if workflow transitions are requested
+    workflow_cfg = (request.config or {}).get("workflow", {})
+    do_verify = workflow_cfg.get("verify", False)
+    do_approve = workflow_cfg.get("approve", False)
 
     for i, payload in enumerate(payloads):
         record_name = payload.get("name") or str(payload.get("attribute_name", ""))
@@ -138,6 +198,28 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
                 timestamp=datetime.now(timezone.utc),
                 run_id=run_id,
             ))
+
+            if do_verify or do_approve:
+                try:
+                    screen = _screen_name(request.sub_module)
+                    verified = False
+                    if do_verify:
+                        v_result = client.workflow_action_from_entry(screen, record_id, "Verify")
+                        if v_result is not None:
+                            verified = True
+                            records[-1]["status"] = "verified"
+                            yield _sse_event(LogEvent(type="log", message=f"    -> #{record_id} verified", timestamp=datetime.now(timezone.utc), run_id=run_id))
+                        else:
+                            yield _sse_event(LogEvent(type="log", message=f"    -> #{record_id} verify FAILED ({_extract_wf_error(client)})", timestamp=datetime.now(timezone.utc), run_id=run_id))
+                    if do_approve and (verified or not do_verify):
+                        a_result = client.workflow_action_from_entry(screen, record_id, "Approve")
+                        if a_result is not None:
+                            records[-1]["status"] = "approved"
+                            yield _sse_event(LogEvent(type="log", message=f"    -> #{record_id} approved", timestamp=datetime.now(timezone.utc), run_id=run_id))
+                        else:
+                            yield _sse_event(LogEvent(type="log", message=f"    -> #{record_id} approve FAILED ({_extract_wf_error(client)})", timestamp=datetime.now(timezone.utc), run_id=run_id))
+                except Exception as wf_err:
+                    yield _sse_event(LogEvent(type="log", message=f"    -> #{record_id} workflow error: {wf_err}", timestamp=datetime.now(timezone.utc), run_id=run_id))
         else:
             failed += 1
             error_detail = getattr(client, '_last_raw_response', None)

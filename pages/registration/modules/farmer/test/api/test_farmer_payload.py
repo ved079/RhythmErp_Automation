@@ -405,10 +405,26 @@ class TestFarmerBatchGeneration:
         phones = [p.get("mobile_no") for p in payloads if p.get("mobile_no")]
         assert len(phones) == len(set(phones)), "Duplicate phones found in batch"
 
-    def test_batch_all_have_13_children(self):
-        """Every batch payload must have 13 stepper children."""
-        payloads = generate_batch_payloads(10)
+    def test_batch_borrower_has_13_children(self):
+        """Borrower type includes all 13 stepper children."""
+        payloads = generate_batch_payloads(10, config={"farmer_type": "borrower"})
         for i, p in enumerate(payloads):
             assert len(p["children"]) == 13, (
                 f"Batch payload #{i} has {len(p['children'])} children, expected 13"
+            )
+
+    def test_batch_walkin_has_3_children(self):
+        """Walk-in type includes 3 stepper children (Address, Additional, Bank)."""
+        payloads = generate_batch_payloads(10, config={"farmer_type": "walkin"})
+        for i, p in enumerate(payloads):
+            assert len(p["children"]) == 3, (
+                f"Batch payload #{i} has {len(p['children'])} children, expected 3"
+            )
+
+    def test_batch_fpc_member_has_6_children(self):
+        """FPC Member type includes 6 stepper children."""
+        payloads = generate_batch_payloads(10, config={"farmer_type": "fpc_member"})
+        for i, p in enumerate(payloads):
+            assert len(p["children"]) == 6, (
+                f"Batch payload #{i} has {len(p['children'])} children, expected 6"
             )

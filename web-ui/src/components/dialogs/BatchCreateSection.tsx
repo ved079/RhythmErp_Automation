@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Loader2, Database, CheckCircle2, XCircle, Play, Info } from 'lucide-react'
-import { startBatchCreate, exportBatchExcel, type SSEEvent } from '@/lib/api'
+import { Loader2, Database, CheckCircle2, XCircle, Play, Info, ShieldCheck, BadgeCheck, ChevronRight, ChevronDown, History, Download, RefreshCw } from 'lucide-react'
+import { startBatchCreate, exportBatchExcel, fetchBatchHistory, type SSEEvent, type BatchRunSummary } from '@/lib/api'
 import { BatchCompleteDialog } from './BatchCompleteDialog'
+import { FarmerBatchConfig, type FarmerConfig } from './FarmerBatchConfig'
 
 interface BatchTarget {
   module: string
@@ -65,7 +66,17 @@ function formatTime(d: Date): string {
   return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 }
 
+function formatDateTime(epochSecs: number): string {
+  const d = new Date(epochSecs * 1000)
+  return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true })
+}
+
+function labelForModule(module: string, subModule: string): string {
+  return `${subModule.replace(/_/g, ' ')}`.replace(/\b\w/g, c => c.toUpperCase())
+}
+
 export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsToken, onClearToken }: Props) {
+  const [tab, setTab] = useState<'create' | 'history'>('create')
   const [count, setCount] = useState(10)
   const [running, setRunning] = useState(false)
   const [logs, setLogs] = useState<{ text: string; ts: Date; isErr: boolean; isDone: boolean }[]>([])
@@ -75,9 +86,35 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
   const [batchRunId, setBatchRunId] = useState<string | null>(null)
   const [showCompleteDialog, setShowCompleteDialog] = useState(false)
   const [authError, setAuthError] = useState(false)
+  const [farmerConfig, setFarmerConfig] = useState<FarmerConfig>({
+    farmer_type: 'fpc_member',
+    overrides: {},
+  })
+  const [history, setHistory] = useState<BatchRunSummary[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const startTimeRef = useRef<number>(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true)
+    try {
+      const data = await fetchBatchHistory()
+      // Filter to runs for this module
+      const target = MODULE_TO_BATCH[moduleId]
+      setHistory(target ? data.filter(r => r.sub_module === target.subModule) : data)
+    } catch {
+      setHistory([])
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [moduleId])
+
+  useEffect(() => {
+    if (tab === 'history') loadHistory()
+  }, [tab, loadHistory])
 
   const target = MODULE_TO_BATCH[moduleId]
 
@@ -112,6 +149,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
     setShowCompleteDialog(false)
     setAuthError(false)
 
+    const batchConfig = target.subModule === 'farmer' ? farmerConfig : undefined
     startBatchCreate(
       target.module,
       target.subModule,
@@ -143,8 +181,9 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
         setLogs((prev) => [...prev, { text: `ERROR: ${err.message}`, ts: new Date(), isErr: true, isDone: false }])
         setRunning(false)
       },
+      batchConfig,
     )
-  }, [target, erpToken, erpTenantId, count, onNeedsToken])
+  }, [target, erpToken, erpTenantId, count, farmerConfig, onNeedsToken])
 
   const handleDownload = useCallback(async () => {
     if (!batchRunId) return
@@ -155,19 +194,194 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
     }
   }, [batchRunId])
 
+  const handleHistoryDownload = useCallback(async (runId: string) => {
+    setDownloadingId(runId)
+    try {
+      await exportBatchExcel(runId)
+    } catch {
+      // silent
+    } finally {
+      setDownloadingId(null)
+    }
+  }, [])
+
   const total = created + failed
   const progress = running && total > 0 ? Math.round((total / Math.max(total, 1)) * 100) : (created + failed > 0 ? 100 : 0)
   const barPercent = running ? Math.min(Math.round(((created + failed) / (count || 1)) * 100), 100) : (created + failed > 0 ? 100 : 0)
 
   return (
     <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden shadow-sm">
-      <div className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-950/30 dark:to-blue-950/20 border-b border-gray-300 dark:border-gray-500/70">
-        <Database className="size-4 text-indigo-600 dark:text-indigo-400" />
-        <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 flex-1">Batch Data Creation</span>
+      {/* Header + tabs */}
+      <div className="bg-gradient-to-r from-[#3F51B5]/[0.07] to-[#3F51B5]/[0.03] dark:from-[#3F51B5]/20 dark:to-[#3F51B5]/10 border-b border-gray-300 dark:border-gray-500/70">
+        <div className="flex items-center gap-2 px-4 pt-2.5 pb-0">
+          <Database className="size-4 text-[#3F51B5] dark:text-[#7986CB] shrink-0" />
+          <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 flex-1">Batch Data Creation</span>
+        </div>
+        <div className="flex gap-0 px-4 mt-2">
+          {(['create', 'history'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer ${
+                tab === t
+                  ? 'border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB]'
+                  : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+              }`}
+            >
+              {t === 'create' ? <Play className="size-3" /> : <History className="size-3" />}
+              {t === 'create' ? 'Create' : 'History'}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="p-4 space-y-4">
-        {!target ? (
+        {/* History tab */}
+        {tab === 'history' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                {history.length > 0 ? `${history.length} run${history.length !== 1 ? 's' : ''}` : 'No runs yet'}
+              </span>
+              <button
+                type="button"
+                onClick={loadHistory}
+                disabled={historyLoading}
+                className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-[#3F51B5] cursor-pointer disabled:opacity-40"
+              >
+                <RefreshCw className={`size-3 ${historyLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
+
+            {historyLoading ? (
+              <div className="flex items-center justify-center py-8 text-gray-400">
+                <Loader2 className="size-4 animate-spin mr-2" />
+                <span className="text-[12px]">Loading...</span>
+              </div>
+            ) : history.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-8 text-gray-400 dark:text-gray-500">
+                <History className="size-7" />
+                <span className="text-[12px]">No batch runs yet for this module</span>
+              </div>
+            ) : (
+              <ScrollArea className="h-72">
+                <div className="space-y-1.5">
+                  {history.map((run) => {
+                    const isExpanded = expandedRunId === run.run_id
+                    const isFarmer = run.sub_module === 'farmer'
+                    return (
+                      <div key={run.run_id} className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        {/* Run row */}
+                        <div className="flex items-center gap-3 px-3 py-2.5 bg-white dark:bg-gray-800/50">
+                          <div className={`size-2 rounded-full shrink-0 ${run.failed === 0 ? 'bg-emerald-500' : run.created === 0 ? 'bg-red-500' : 'bg-yellow-500'}`} />
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[12px] font-medium text-gray-800 dark:text-gray-100">
+                                {labelForModule(run.module, run.sub_module)}
+                              </span>
+                              <span className="text-[10px] text-gray-400 dark:text-gray-500">{formatDateTime(run.timestamp)}</span>
+                            </div>
+                            <div className="flex items-center gap-3 mt-0.5">
+                              <span className="flex items-center gap-1 text-[11px]">
+                                <CheckCircle2 className="size-3 text-emerald-500" />
+                                <span className="text-emerald-600 dark:text-emerald-400 font-medium">{run.created}</span>
+                                <span className="text-gray-400">created</span>
+                              </span>
+                              {run.failed > 0 && (
+                                <span className="flex items-center gap-1 text-[11px]">
+                                  <XCircle className="size-3 text-red-500" />
+                                  <span className="text-red-500 font-medium">{run.failed}</span>
+                                  <span className="text-gray-400">failed</span>
+                                </span>
+                              )}
+                              <span className="text-[10px] text-gray-400">{run.elapsed_seconds}s</span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleHistoryDownload(run.run_id)}
+                            disabled={downloadingId === run.run_id}
+                            className="flex items-center gap-1 px-2 py-1 rounded text-[11px] border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-[#3F51B5]/50 hover:text-[#3F51B5] dark:hover:text-[#7986CB] transition-colors cursor-pointer disabled:opacity-40 shrink-0"
+                          >
+                            {downloadingId === run.run_id ? <Loader2 className="size-3 animate-spin" /> : <Download className="size-3" />}
+                            Excel
+                          </button>
+
+                          {isFarmer && (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedRunId(isExpanded ? null : run.run_id)}
+                              className="p-1 text-gray-400 hover:text-[#3F51B5] cursor-pointer transition-colors shrink-0"
+                            >
+                              {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Farmer records table */}
+                        {isFarmer && isExpanded && run.records.length > 0 && (
+                          <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
+                            <table className="w-full text-[11px]">
+                              <thead>
+                                <tr className="border-b border-gray-200 dark:border-gray-700">
+                                  <th className="text-left px-3 py-1.5 text-[10px] text-gray-400 uppercase tracking-wider font-medium w-6">#</th>
+                                  <th className="text-left px-2 py-1.5 text-[10px] text-gray-400 uppercase tracking-wider font-medium">Name</th>
+                                  <th className="text-center px-2 py-1.5 text-[10px] text-gray-400 uppercase tracking-wider font-medium">Verified</th>
+                                  <th className="text-center px-2 py-1.5 text-[10px] text-gray-400 uppercase tracking-wider font-medium">Approved</th>
+                                  <th className="text-center px-2 py-1.5 text-[10px] text-gray-400 uppercase tracking-wider font-medium">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {run.records.map((rec, idx) => {
+                                  const verified = rec.status === 'verified' || rec.status === 'approved'
+                                  const approved = rec.status === 'approved'
+                                  return (
+                                    <tr key={idx} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
+                                      <td className="px-3 py-1.5 text-gray-400">{idx + 1}</td>
+                                      <td className="px-2 py-1.5 text-gray-700 dark:text-gray-200 font-medium max-w-[120px] truncate">{rec.name}</td>
+                                      <td className="px-2 py-1.5 text-center">
+                                        {verified
+                                          ? <CheckCircle2 className="size-3.5 text-emerald-500 inline" />
+                                          : <XCircle className="size-3.5 text-gray-300 dark:text-gray-600 inline" />}
+                                      </td>
+                                      <td className="px-2 py-1.5 text-center">
+                                        {approved
+                                          ? <CheckCircle2 className="size-3.5 text-emerald-500 inline" />
+                                          : <XCircle className="size-3.5 text-gray-300 dark:text-gray-600 inline" />}
+                                      </td>
+                                      <td className="px-2 py-1.5 text-center">
+                                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                          rec.status === 'approved' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' :
+                                          rec.status === 'verified' ? 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400' :
+                                          rec.status === 'failed'   ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' :
+                                                                       'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                                        }`}>
+                                          {rec.status}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
+        )}
+
+        {tab === 'create' && (
+          <>
+          {!target ? (
           <div className="flex flex-col items-center gap-3 py-8 text-gray-400 dark:text-gray-500">
             <Info className="size-8" />
             <span className="text-[13px]">Batch creation not available for this module</span>
@@ -175,8 +389,8 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
         ) : (
           <>
             {/* Module label */}
-            <div className="flex items-center gap-2 bg-indigo-50/60 dark:bg-indigo-950/20 rounded-md px-3 py-2">
-              <span className="text-[11px] font-medium text-indigo-500 dark:text-indigo-400 uppercase tracking-wider">Creating</span>
+            <div className="flex items-center gap-2 bg-[#3F51B5]/[0.08] dark:bg-[#3F51B5]/10 rounded-md px-3 py-2">
+              <span className="text-[11px] font-medium text-[#3F51B5] dark:text-[#7986CB] uppercase tracking-wider">Creating</span>
               <span className="text-[13px] font-semibold text-gray-800 dark:text-gray-100">{target.label}</span>
             </div>
 
@@ -197,12 +411,19 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
               <Button
                 onClick={handleRun}
                 disabled={running}
-                className="h-8 text-[12px] bg-indigo-600 hover:bg-indigo-700 cursor-pointer gap-1.5"
+                className="h-8 text-[12px] bg-[#3F51B5] hover:bg-[#3949AB] cursor-pointer gap-1.5"
               >
                 {running ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
                 {running ? 'Creating...' : 'Create'}
               </Button>
             </div>
+
+            {/* Module-specific config */}
+            {target.subModule === 'farmer' && (
+              <div className="border-t border-gray-100 dark:border-gray-700 pt-3">
+                <FarmerBatchConfig value={farmerConfig} onChange={setFarmerConfig} />
+              </div>
+            )}
 
             {/* Progress bar + counters */}
             {(running || created + failed > 0) && (
@@ -222,7 +443,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
                         ? 'linear-gradient(90deg, #22c55e 0%, #ef4444 100%)'
                         : barPercent === 100
                         ? '#22c55e'
-                        : 'linear-gradient(90deg, #6366f1, #8b5cf6)',
+                        : 'linear-gradient(90deg, #3F51B5, #5C6BC0)',
                     }}
                   />
                 </div>
@@ -251,25 +472,57 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
 
             {/* Log output */}
             {logs.length > 0 && (
-              <ScrollArea className="h-36 rounded-lg bg-gray-950 p-3 border border-gray-800">
-                <div className="space-y-1">
-                  {logs.map((line, i) => (
-                    <div
-                      key={i}
-                      className={`text-[11px] font-mono leading-5 ${line.isErr ? 'text-red-400' : line.isDone ? 'text-emerald-400' : 'text-gray-300'}`}
-                    >
-                      <span className="text-gray-600 mr-2 select-none">{formatTime(line.ts)}</span>
-                      {line.isErr ? (
-                        <XCircle className="size-2.5 inline mr-1 -mt-0.5 text-red-400" />
-                      ) : line.isDone ? (
-                        <CheckCircle2 className="size-2.5 inline mr-1 -mt-0.5 text-emerald-400" />
-                      ) : null}
-                      {line.text}
-                    </div>
-                  ))}
-                  <div ref={logsEndRef} />
+              <div className="rounded-xl overflow-hidden border border-gray-800 dark:border-gray-700 bg-[#0d1117]">
+                {/* Terminal header */}
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-[#161b22] border-b border-gray-800">
+                  <span className="size-2.5 rounded-full bg-red-500/70" />
+                  <span className="size-2.5 rounded-full bg-yellow-500/70" />
+                  <span className="size-2.5 rounded-full bg-green-500/70" />
+                  <span className="ml-2 text-[10px] text-gray-500 font-mono">batch output</span>
+                  {running && <Loader2 className="size-3 text-[#7986CB] animate-spin ml-auto" />}
                 </div>
-              </ScrollArea>
+                <ScrollArea className="h-44">
+                  <div className="p-3 space-y-0.5">
+                    {logs.map((line, i) => {
+                      const t = line.text.trim()
+                      const isRecord = /^\[\d+\/\d+\]/.test(t)
+                      const isVerified = t.includes('verified') && !t.includes('FAILED')
+                      const isApproved = t.includes('approved') && !t.includes('FAILED')
+                      const isWorkflowOk = isVerified || isApproved
+                      const isWorkflowFail = t.includes('FAILED') || t.includes('ERROR')
+                      const isSummary = t.startsWith('Batch create complete')
+                      const isMeta = !isRecord && !isWorkflowOk && !isWorkflowFail && !isSummary
+
+                      return (
+                        <div key={i} className="flex items-start gap-2 group">
+                          <span className="text-[10px] font-mono text-gray-600 select-none shrink-0 pt-0.5 w-16 text-right">
+                            {formatTime(line.ts)}
+                          </span>
+                          <span className="shrink-0 pt-0.5">
+                            {isWorkflowFail ? <XCircle className="size-3 text-red-400" /> :
+                             isApproved     ? <BadgeCheck className="size-3 text-emerald-400" /> :
+                             isVerified     ? <ShieldCheck className="size-3 text-sky-400" /> :
+                             isSummary      ? <CheckCircle2 className="size-3 text-emerald-400" /> :
+                             isRecord       ? <ChevronRight className="size-3 text-[#7986CB]" /> :
+                                              <span className="size-3 inline-block" />}
+                          </span>
+                          <span className={`text-[11px] font-mono leading-5 break-all ${
+                            isWorkflowFail ? 'text-red-400' :
+                            isApproved     ? 'text-emerald-400' :
+                            isVerified     ? 'text-sky-400' :
+                            isSummary      ? 'text-emerald-300 font-medium' :
+                            isRecord       ? 'text-gray-100' :
+                                             'text-gray-500'
+                          }`}>
+                            {t}
+                          </span>
+                        </div>
+                      )
+                    })}
+                    <div ref={logsEndRef} />
+                  </div>
+                </ScrollArea>
+              </div>
             )}
 
             {/* Auth error banner */}
@@ -296,6 +549,8 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
               elapsedSeconds={elapsed}
               onDownload={handleDownload}
             />
+          </>
+        )}
           </>
         )}
       </div>

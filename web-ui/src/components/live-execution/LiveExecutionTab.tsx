@@ -198,7 +198,7 @@ export function LiveExecutionTab({
     <>
     <div className="flex flex-col h-full min-h-0">
       {/* ── Top Bar ── */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 bg-slate-900/80 backdrop-blur-sm shrink-0">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-white/10 bg-[#151929] shrink-0">
         <Button variant="ghost" onClick={onBack} className="h-8 text-[13px] gap-1.5 text-slate-400 hover:text-white hover:bg-white/5 cursor-pointer px-2.5 rounded-lg">
           <ArrowLeft className="size-4" />
           Test Runner
@@ -237,7 +237,7 @@ export function LiveExecutionTab({
                 Rerun Failed ({failedCount})
               </Button>
             )}
-            <Button onClick={onBack} className="bg-blue-500/90 hover:bg-blue-500 text-white h-8 text-[13px] gap-1.5 cursor-pointer rounded-lg shadow-lg shadow-blue-500/20">
+            <Button onClick={onBack} className="bg-[#3F51B5]/90 hover:bg-[#3F51B5] text-white h-8 text-[13px] gap-1.5 cursor-pointer rounded-lg">
               <RotateCcw className="size-3.5" />
               New Run
             </Button>
@@ -271,7 +271,7 @@ export function LiveExecutionTab({
                   </div>
                   <span className="text-[13px] font-semibold text-slate-200">Tests</span>
                 </div>
-                <span className="text-[11px] text-blue-400 font-semibold tabular-nums px-2 py-0.5 rounded-full bg-blue-500/10">
+                <span className="text-[11px] text-[#7986CB] font-semibold tabular-nums px-2 py-0.5 rounded-full bg-[#3F51B5]/10">
                   {completedCount}/{tests.length}
                 </span>
               </div>
@@ -309,7 +309,7 @@ export function LiveExecutionTab({
                     <span>Overall Progress</span>
                     <span className="font-semibold text-slate-300 tabular-nums">{progressPercent}%</span>
                   </div>
-                  <Progress value={progressPercent} className="h-2 bg-slate-800 [&>div]:bg-gradient-to-r [&>div]:from-blue-500 [&>div]:to-cyan-400" />
+                  <Progress value={progressPercent} className="h-2 bg-slate-800 [&>div]:bg-gradient-to-r [&>div]:from-[#3F51B5] [&>div]:to-[#5C6BC0]" />
                 </div>
               )}
             </div>
@@ -462,7 +462,7 @@ export function LiveExecutionTab({
               <span className="text-[10px] text-slate-600 mx-1">|</span>
               <button
                 onClick={() => setAutoScroll(!autoScroll)}
-                className={`text-[10px] font-mono px-1.5 py-0.5 rounded transition-colors cursor-pointer ${autoScroll ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-500'}`}
+                className={`text-[10px] font-mono px-1.5 py-0.5 rounded transition-colors cursor-pointer ${autoScroll ? 'bg-[#3F51B5]/20 text-[#7986CB]' : 'bg-slate-800 text-slate-500'}`}
                 title={autoScroll ? 'Auto-scroll ON — click to pause' : 'Auto-scroll OFF — click to enable'}
               >
                 ↕ {autoScroll ? 'ON' : 'OFF'}

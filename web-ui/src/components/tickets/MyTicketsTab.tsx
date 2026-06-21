@@ -150,7 +150,7 @@ export function MyTicketsTab({
           onClick={() => setSubTab('tickets')}
           className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors cursor-pointer ${
             subTab === 'tickets'
-              ? 'border-[#3F51B5] text-[#3F51B5] dark:text-indigo-400'
+              ? 'border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB]'
               : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           }`}
         >
@@ -160,7 +160,7 @@ export function MyTicketsTab({
           onClick={() => setSubTab('chats')}
           className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
             subTab === 'chats'
-              ? 'border-[#3F51B5] text-[#3F51B5] dark:text-indigo-400'
+              ? 'border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB]'
               : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           }`}
         >
@@ -216,7 +216,7 @@ export function MyTicketsTab({
                     onClick={() => setStatusFilter(s)}
                     className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
                       statusFilter === s
-                        ? 'bg-[#DFE9FB] dark:bg-indigo-900/30 text-[#3F51B5] dark:text-indigo-400'
+                        ? 'bg-[#DFE9FB] dark:bg-[#3F51B5]/20 text-[#3F51B5] dark:text-[#7986CB]'
                         : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}
                   >
@@ -236,7 +236,7 @@ export function MyTicketsTab({
                     onClick={() => setPriorityFilter(p)}
                     className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
                       priorityFilter === p
-                        ? 'bg-[#DFE9FB] dark:bg-indigo-900/30 text-[#3F51B5] dark:text-indigo-400'
+                        ? 'bg-[#DFE9FB] dark:bg-[#3F51B5]/20 text-[#3F51B5] dark:text-[#7986CB]'
                         : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}
                   >
@@ -263,7 +263,7 @@ export function MyTicketsTab({
         ) : (
           <div className="flex-1 flex flex-col min-h-0 px-5 pb-5">
             {/* Static header */}
-            <div className="flex items-center bg-[#DFE9FB] dark:bg-indigo-900/30 rounded-t-lg border border-gray-300 dark:border-gray-500/70 border-b-0 text-[12px] font-semibold text-[#3F51B5] dark:text-indigo-300 shrink-0">
+            <div className="flex items-center bg-[#DFE9FB] dark:bg-[#3F51B5]/20 rounded-t-lg border border-gray-300 dark:border-gray-500/70 border-b-0 text-[12px] font-semibold text-[#3F51B5] dark:text-[#7986CB] shrink-0">
               <span className="w-24 px-2 py-2.5">Ticket ID</span>
               <span className="flex-1 px-2 py-2.5">Description</span>
               <span className="w-28 px-2 py-2.5">Module</span>
@@ -282,9 +282,9 @@ export function MyTicketsTab({
                     <div
                       key={report.id}
                       onClick={() => setSelectedTicket(report)}
-                      className={`flex items-center cursor-pointer hover:bg-[#DFE9FB]/30 dark:hover:bg-indigo-900/10 transition-colors text-[12px] ${isUnread ? 'bg-blue-50/50 dark:bg-indigo-900/10' : ''}`}
+                      className={`flex items-center cursor-pointer hover:bg-[#DFE9FB]/30 dark:hover:bg-indigo-900/10 transition-colors text-[12px] ${isUnread ? 'bg-[#3F51B5]/[0.04] dark:bg-[#3F51B5]/10' : ''}`}
                     >
-                      <span className="w-24 px-2 py-2.5 font-mono font-semibold text-[#3F51B5] dark:text-indigo-400">
+                      <span className="w-24 px-2 py-2.5 font-mono font-semibold text-[#3F51B5] dark:text-[#7986CB]">
                         {report.id.slice(0, 8).toUpperCase()}
                         {isUnread && <span className="ml-1.5 inline-block size-1.5 rounded-full bg-blue-500" />}
                       </span>
