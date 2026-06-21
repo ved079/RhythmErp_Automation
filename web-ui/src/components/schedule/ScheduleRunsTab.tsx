@@ -152,7 +152,7 @@ export function ScheduleRunsTab({ userName, sidebarModules }: { userName: string
           <Button
             size="sm"
             onClick={() => setShowForm(!showForm)}
-            className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white text-[12px] cursor-pointer rounded-lg font-semibold"
+            className="bg-[#3F51B5] hover:bg-[#3949AB] text-white text-[12px] cursor-pointer rounded-lg font-semibold"
           >
             <Plus className="size-3.5 mr-1" /> New Schedule
           </Button>
@@ -243,7 +243,7 @@ export function ScheduleRunsTab({ userName, sidebarModules }: { userName: string
             </div>
 
             <div className="flex items-center gap-2 pt-1">
-              <Button size="sm" onClick={handleAddRun} className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white text-[12px] cursor-pointer rounded-lg font-semibold">
+              <Button size="sm" onClick={handleAddRun} className="bg-[#3F51B5] hover:bg-[#3949AB] text-white text-[12px] cursor-pointer rounded-lg font-semibold">
                 <CalendarClock className="size-3.5 mr-1" /> Create Schedule
               </Button>
               <Button size="sm" onClick={() => { setShowForm(false); setFrequency('one-time'); setScheduledDate(''); setScheduledTime('') }} className="text-[12px] cursor-pointer bg-transparent text-[#F44336] hover:bg-red-50">

@@ -1926,7 +1926,8 @@ def build_farmer_api_payload(
 
     # ── Assemble payload ──
     # farmer_category is multiselect (array of IDs)
-    farmer_category = step0_data.get("farmer_category", [1594])
+    # Allow dropdown_ids to override step0_data default
+    farmer_category = ids.get("farmer_category") or step0_data.get("farmer_category", [1594])
     if isinstance(farmer_category, int):
         farmer_category = [farmer_category]
 
@@ -2168,17 +2169,100 @@ def generate_farmer_api_payloads(
     return generate_batch_payloads(count=count, dropdown_ids=dropdown_ids)
 
 
-def generate_batch_payloads(count: int = 10, **kwargs) -> list:
+# ── Farmer Type Presets for Batch Creation ─────────────
+# Maps farmer_type keys to category IDs + allowed steppers.
+
+FARMER_TYPE_CONFIG = {
+    "fpc_member": {
+        "farmer_category": [1593],
+        "steppers": [
+            "address", "additional_details",
+            "land", "crop", "kyc", "bank",
+        ],
+    },
+    "borrower": {
+        # Borrower Farmer requires BOTH categories to unlock all 13 tabs:
+        # [1594] alone = 9 tabs; [1593] alone = 6 tabs; union = 13 tabs.
+        "farmer_category": [1593, 1594],
+        "steppers": [
+            "address", "other_details", "additional_details",
+            "family", "land", "crop", "kyc", "vehicle",
+            "income", "bank", "irrigation", "award", "loan",
+        ],
+    },
+    "walkin": {
+        "farmer_category": [1592],
+        "steppers": [
+            "address", "additional_details", "bank",
+        ],
+    },
+}
+
+STEPPER_KEY_TO_NAME = {
+    "address": "Address Details ",
+    "other_details": "Other Details",
+    "family": "Family Details",
+    "additional_details": "Additional Details",
+    "land": "Land Details",
+    "crop": "Crop Details",
+    "kyc": "KYC Details",
+    "vehicle": "Vehicle Details",
+    "income": "Income Details",
+    "bank": "Bank Details",
+    "irrigation": "Irrigation Details",
+    "award": "Award Details",
+    "loan": "Loan Details",
+}
+
+
+def generate_batch_payloads(count: int = 10, config: dict = None) -> list:
     """Generate N unique Farmer API payloads.
 
     Args:
         count: Number of payloads to generate.
-        **kwargs: Passed to each generate_farmer_api_payload() call.
+        config: Optional dict with keys:
+            - farmer_type (str): One of 'fpc_member', 'borrower', 'walkin', 'custom'.
+            - overrides (dict): Optional overrides:
+                - farmer_category (list): e.g. [1593]
+                - steppers (list): e.g. ['address', 'land']
+                - address_chain (dict): e.g. {state_ref_id_id: 98, ...}
+                - field_defaults (dict): e.g. {land_ownership: 1930}
+            - workflow (dict): Optional workflow config:
+                - verify (bool): Whether to verify after creation
+                - approve (bool): Whether to approve after verification
 
     Returns:
         List of payload dicts.
     """
-    return [generate_farmer_api_payload(**kwargs) for _ in range(count)]
+    cfg = config or {}
+    farmer_type = cfg.get("farmer_type", "fpc_member")
+    overrides = cfg.get("overrides", {})
+    workflow = cfg.get("workflow", {})
+
+    # Resolve farmer type config
+    type_cfg = FARMER_TYPE_CONFIG.get(farmer_type, FARMER_TYPE_CONFIG["fpc_member"])
+    stepper_keys = overrides.get("steppers", type_cfg["steppers"])
+    farmer_category = overrides.get("farmer_category", type_cfg["farmer_category"])
+
+
+    # Build dropdown overrides
+    dropdown_ids = {}
+    if overrides.get("address_chain"):
+        dropdown_ids.update(overrides["address_chain"])
+    if overrides.get("field_defaults"):
+        dropdown_ids.update(overrides["field_defaults"])
+    if farmer_category:
+        dropdown_ids["farmer_category"] = farmer_category
+
+    allowed_names = {STEPPER_KEY_TO_NAME[k] for k in stepper_keys if k in STEPPER_KEY_TO_NAME}
+
+    payloads = []
+    for _ in range(count):
+        payload = generate_farmer_api_payload(dropdown_ids=dropdown_ids or None)
+        payload["children"] = [c for c in payload["children"] if c["stepper_name"] in allowed_names]
+        payloads.append(payload)
+
+    return payloads
 
 
 # ──────────────────────────────────────────────

@@ -131,6 +131,7 @@ class BatchCreateRequest(BaseModel):
     count: int = 10                    # number of records to create (1-500)
     erp_token: str                     # Bearer token for ERP API
     erp_tenant_id: str = "681"         # ERP tenant ID
+    config: Optional[dict] = None      # Module-specific config (e.g. farmer_type)
 
 
 # --- Run Completion Callback Payload ---

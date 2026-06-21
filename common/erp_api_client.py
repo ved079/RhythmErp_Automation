@@ -720,6 +720,137 @@ class RhythmERPAPIClient:
         return False
 
     # ================================================================
+    # Workflow actions
+    # ================================================================
+
+    def workflow_action(
+        self,
+        screen_name: str,
+        entry_id: int,
+        workflow_id: str,
+        conditions: list,
+        execution_reference: str,
+        node_id: int = None,
+        label: str = "",
+        workflow_data: dict = None,
+    ) -> Optional[Dict]:
+        """
+        Perform a workflow transition on an entry.
+
+        Sends the full workflow_data so the server can validate field-level
+        conditions (e.g. land_classification check on Farmer Verify).
+
+        Args:
+            screen_name: Screen name (e.g., "Farmer")
+            entry_id: Entry ID
+            workflow_id: Workflow UUID from the entry GET response
+            conditions: List of condition dicts from workflow_action.rawConditions.paths[].conditions
+            execution_reference: Base64-encoded execution reference string
+            node_id: nodeId from the workflow path
+            label: Action label e.g. "Verify", "Approve"
+            workflow_data: Full entry record from get_entry() — required for Farmer
+
+        Returns:
+            Response JSON dict on success (200/201), None on failure.
+        """
+        self._ensure_auth()
+
+        body = {
+            "attribute_name": screen_name,
+            "executionReference": execution_reference,
+            "nodeId": node_id,
+            "label": label,
+            "conditions": conditions,
+            "id": entry_id,
+            "workflow_id": workflow_id,
+            "workflow_remark": "",
+            "workflow_error_codes": [],
+        }
+        if workflow_data is not None:
+            body["workflow_data"] = workflow_data
+
+        try:
+            resp = self.session.post(
+                f"{self.BASE_URL}/core/dynamic-screen-workflow-action/",
+                json=body,
+                timeout=30,
+            )
+        except requests.ConnectionError:
+            log.error(f"[API] Connection error on workflow action for {screen_name}#{entry_id}")
+            self._last_raw_response = None
+            return None
+
+        self._last_raw_response = resp
+
+        if resp.status_code in (200, 201):
+            log.info(f"[API] Workflow action succeeded for {screen_name}#{entry_id}")
+            return resp.json()
+        else:
+            error_msg = f"Status {resp.status_code}"
+            try:
+                error_data = resp.json()
+                if "error" in error_data:
+                    error_msg = error_data["error"]
+                elif "message" in error_data:
+                    error_msg = error_data["message"]
+            except Exception:
+                error_msg = resp.text[:200]
+            log.error(
+                f"[API] Workflow action failed for {screen_name}#{entry_id}: {error_msg}"
+            )
+            return None
+
+    def workflow_action_from_entry(
+        self,
+        screen_name: str,
+        entry_id: int,
+        label: str,
+    ) -> Optional[Dict]:
+        """
+        High-level helper: GET the entry, find the matching workflow path by label,
+        and POST the workflow action with the full entry as workflow_data.
+
+        This is the correct way to do Verify/Approve — mirrors exactly what the
+        browser does when the Edit form is open and you click Verify/Approve.
+
+        Returns the response dict on success, or None with the error logged.
+        """
+        entry = self.get_entry(screen_name, entry_id)
+        if not entry:
+            log.error(f"[API] workflow_action_from_entry: could not GET {screen_name}#{entry_id}")
+            return None
+
+        wf = entry.get("workflow_action", {})
+        paths = wf.get("rawConditions", {}).get("paths", [])
+        path = next((p for p in paths if p.get("label") == label), None)
+        if not path:
+            available = [p.get("label") for p in paths]
+            log.error(
+                f"[API] workflow_action_from_entry: label '{label}' not available for "
+                f"{screen_name}#{entry_id}. Available: {available}"
+            )
+            return None
+
+        workflow_id = entry.get("workflow_id", "")
+        # Build workflow_data: the entry record without the workflow meta fields
+        workflow_data = {k: v for k, v in entry.items()
+                         if k not in ("workflow_action", "workflow_id",
+                                      "workflow_error_codes", "workflow_remark",
+                                      "attribute_name")}
+        workflow_data.setdefault("create_version", False)
+
+        return self.workflow_action(
+            screen_name=screen_name,
+            entry_id=entry_id,
+            workflow_id=workflow_id,
+            conditions=path.get("conditions", []),
+            execution_reference=path.get("executionReference", ""),
+            node_id=path.get("nodeId"),
+            label=label,
+            workflow_data=workflow_data,
+        )
+
+    # ================================================================
     # Cleanup
     # ================================================================
 

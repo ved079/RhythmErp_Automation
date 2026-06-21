@@ -200,8 +200,8 @@ export function ResultsTab({
 
           {/* ── Regression Overview ── */}
           {regressionSummary && (
-            <div className="border border-indigo-200 dark:border-indigo-800/40 bg-indigo-50/60 dark:bg-indigo-900/10 rounded-lg px-4 py-3 flex items-center gap-4">
-              <BookmarkCheck className="size-4 text-indigo-500 shrink-0" />
+            <div className="border border-[#3F51B5]/30 bg-[#3F51B5]/[0.04] dark:bg-[#3F51B5]/10 rounded-lg px-4 py-3 flex items-center gap-4">
+              <BookmarkCheck className="size-4 text-[#3F51B5] dark:text-[#7986CB] shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="text-[12px] text-gray-600 dark:text-gray-300">
                   <span className="font-medium">Baseline:</span> {baselineRun!.date} ({baselineRun!.rate}%)
@@ -230,7 +230,7 @@ export function ResultsTab({
               <div className="flex items-center gap-1.5 shrink-0">
                 {onCompareRuns && (
                   <Button variant="outline" size="sm" onClick={onCompareRuns}
-                    className="h-7 text-[11px] cursor-pointer border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/30"
+                    className="h-7 text-[11px] cursor-pointer border-[#3F51B5]/40 text-[#3F51B5] dark:text-[#7986CB] hover:bg-[#3F51B5]/10"
                   >
                     Full Report
                   </Button>
@@ -251,7 +251,7 @@ export function ResultsTab({
               <div className="flex items-center justify-between mb-2.5">
                 <h3 className="text-[13px] font-semibold text-gray-700 dark:text-gray-200">Recent Runs</h3>
                 <button onClick={onViewAllRuns}
-                  className="text-[12px] text-indigo-500 hover:text-indigo-600 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors cursor-pointer font-medium"
+                  className="text-[12px] text-[#3F51B5] hover:text-[#3949AB] dark:text-[#7986CB] transition-colors cursor-pointer font-medium"
                 >
                   View All ({moduleRuns.length})
                 </button>

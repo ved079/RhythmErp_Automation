@@ -141,6 +141,32 @@ def batch_create_endpoint(request: BatchCreateRequest):
 # BATCH CREATE EXPORT ENDPOINT
 # ================================================================
 
+@app.get("/api/batch-results")
+def batch_results_list():
+    """List all past batch run summaries, newest first."""
+    from api.batch_create import RESULTS_DIR
+    import json as _json
+    rows = []
+    for path in sorted(RESULTS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = _json.load(f)
+            rows.append({
+                "run_id":         data.get("run_id", path.stem),
+                "module":         data.get("module", ""),
+                "sub_module":     data.get("sub_module", ""),
+                "total":          data.get("total", 0),
+                "created":        data.get("created", 0),
+                "failed":         data.get("failed", 0),
+                "elapsed_seconds": data.get("elapsed_seconds", 0),
+                "timestamp":      path.stat().st_mtime,
+                "records":        data.get("records", []),
+            })
+        except Exception:
+            continue
+    return rows
+
+
 @app.get("/api/batch-create/{run_id}/export")
 def batch_export_endpoint(run_id: str):
     """Download Excel file of batch creation results."""
