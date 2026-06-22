@@ -12,7 +12,8 @@ import { getTestsForSidebarModule } from '@/lib/test-helpers'
 import NavToast from '@/components/nav-toast/NavToast'
 import {
   getNotifications, markAllNotificationsRead, getUnreadNotificationCount,
-  type Notification as NotifType,
+  updateBugReportStatus, addNotification,
+  type Notification as NotifType, type BugReport,
 } from '@/lib/bug-reports'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -26,6 +27,7 @@ import {
   Zap, Shield, MessageSquare, Bell, CalendarClock,
   Terminal, Monitor, HelpCircle, Copyright, ExternalLink,
   ChevronRight, LogOut, GitCompare, FlaskConical, BarChart2, Camera,
+  Copy, Check,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { startAppTour } from '@/components/tour/AppTour'
@@ -47,6 +49,7 @@ import { PersonalDashboardRenderer } from '@/components/dashboard/PersonalDashbo
 const TestRunnerTab = dynamic(() => import('@/components/test-runner/TestRunnerTab').then(m => ({ default: m.TestRunnerTab })), { ssr: false })
 const LiveExecutionTab = dynamic(() => import('@/components/live-execution/LiveExecutionTab').then(m => ({ default: m.LiveExecutionTab })), { ssr: false })
 const ScheduleRunsTab = dynamic(() => import('@/components/schedule/ScheduleRunsTab').then(m => ({ default: m.ScheduleRunsTab })), { ssr: false })
+const PurchaseChainSection = dynamic(() => import('@/components/dialogs/PurchaseChainSection').then(m => ({ default: m.PurchaseChainSection })), { ssr: false })
 const ResultsTab = dynamic(() => import('@/components/results/ResultsTab').then(m => ({ default: m.ResultsTab })), { ssr: false })
 const MyTicketsTab = dynamic(() => import('@/components/tickets/MyTicketsTab').then(m => ({ default: m.MyTicketsTab })), { ssr: false })
 const ReportToAdminDialog = dynamic(() => import('@/components/dialogs/ReportToAdminDialog').then(m => ({ default: m.ReportToAdminDialog })), { ssr: false })
@@ -71,6 +74,7 @@ export default function Home() {
   const [justExpandedId, setJustExpandedId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('test-runner')
   const [consoleOpen, setConsoleOpen] = useState(false)
+  const [consoleCopied, setConsoleCopied] = useState(false)
   const [hashReady, setHashReady] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -103,6 +107,8 @@ export default function Home() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [notifications, setNotifications] = useState<NotifType[]>([])
   const [navToast, setNavToast] = useState<{ key: number; label: string; parent?: string | null } | null>(null)
+  const [verifyingTicket, setVerifyingTicket] = useState<BugReport | null>(null)
+  const [verifyResult, setVerifyResult] = useState<{ ticketId: string; passed: boolean } | null>(null)
 
   const { connected: wsConnected, on: wsOn } = useNotificationsSocket(user?.id)
   const { theme, setTheme } = useTheme()
@@ -404,7 +410,16 @@ export default function Home() {
   const getModulePath = useCallback(() => {
     for (const mod of sidebarModules) {
       if (mod.id === selectedModule) return { parent: null, name: mod.label, badge: mod.badge }
-      if (mod.children) { for (const child of mod.children) { if (child.id === selectedModule) return { parent: mod.label, name: child.label, badge: child.badge } } }
+      if (mod.children) {
+        for (const child of mod.children) {
+          if (child.id === selectedModule) return { parent: mod.label, name: child.label, badge: child.badge }
+          if (child.children) {
+            for (const grand of child.children) {
+              if (grand.id === selectedModule) return { parent: child.label, name: grand.label, badge: grand.badge }
+            }
+          }
+        }
+      }
     }
     return { parent: null, name: selectedModule, badge: undefined }
   }, [selectedModule])
@@ -422,6 +437,42 @@ export default function Home() {
     d.setReportingTest({ id: testId, name, error })
     d.setReportDialogOpen(true)
   }, [])
+
+  const handleVerifyFix = useCallback((ticket: BugReport) => {
+    setVerifyResult(null)
+    setVerifyingTicket(ticket)
+    // Find the test in the current module, or switch to its module
+    const testInCurrentModule = tr.tests.find(t => t.id === ticket.testId || t.id.endsWith('::' + ticket.testId) || t.name === ticket.testDescription)
+    if (testInCurrentModule) {
+      tr.rerunTestIds([testInCurrentModule.id])
+      tr.runTests(true, [testInCurrentModule.id])
+      setActiveTab('live-execution')
+    } else {
+      // Test is in a different module — just run by ID directly if possible
+      setVerifyingTicket(ticket)
+      setActiveTab('live-execution')
+    }
+  }, [tr.tests, tr.rerunTestIds, tr.runTests])
+
+  // After a verify-fix run completes, check if the watched test passed
+  useEffect(() => {
+    if (!verifyingTicket || tr.isRunning) return
+    const test = tr.tests.find(t =>
+      t.id === verifyingTicket.testId ||
+      t.id.endsWith('::' + verifyingTicket.testId) ||
+      t.name === verifyingTicket.testDescription
+    )
+    if (!test || test.status === 'pending') return
+    const passed = test.status === 'passed'
+    setVerifyResult({ ticketId: verifyingTicket.id, passed })
+    if (passed) {
+      updateBugReportStatus(verifyingTicket.id, 'closed').then(() => {
+        addNotification({ type: 'status_change', title: 'Ticket closed', message: `"${verifyingTicket.testDescription}" verified and closed` }).catch(() => {})
+      })
+    }
+    setVerifyingTicket(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tr.isRunning])
 
   if (loading) {
     return (
@@ -610,8 +661,29 @@ export default function Home() {
               setActiveTab={setActiveTab}
             />
           ))}
-          {selectedModule === 'my-tickets' && user && <MyTicketsTab userEmail={user.email} userName={user.name} />}
-          {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && (
+          {selectedModule === 'my-tickets' && user && <MyTicketsTab userEmail={user.email} userName={user.name} onVerifyFix={handleVerifyFix} verifyingTicketId={verifyingTicket?.id} verifyResult={verifyResult} />}
+          {selectedModule === 'full-purchase-flow' && (
+            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="border-b border-gray-300 dark:border-gray-500/70 bg-gray-50/50 dark:bg-gray-800/30 shrink-0">
+                <div className="flex items-center h-10 px-4 gap-0">
+                  <div className="flex items-center gap-1.5 px-4 h-full text-[12px] font-medium border-b-2 border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB] bg-white dark:bg-gray-900">
+                    <span>Full Purchase Flow</span>
+                  </div>
+                  <div className="flex-1" />
+                  <span className="text-[12px] text-gray-400 dark:text-gray-500">Module: <span className="text-gray-600 dark:text-gray-300 font-medium">Full Purchase Flow</span></span>
+                </div>
+              </div>
+              <div className="flex-1 overflow-hidden min-h-0 p-4">
+                <PurchaseChainSection
+                  erpToken={erpToken}
+                  erpTenantId={erpTenantId || '681'}
+                  onNeedsToken={onOpenCredentials}
+                  onClearToken={onClearToken}
+                />
+              </div>
+            </div>
+          )}
+          {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && selectedModule !== 'full-purchase-flow' && (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="border-b border-gray-300 dark:border-gray-500/70 bg-gray-50/50 dark:bg-gray-800/30 shrink-0" data-tour="tab-bar">
                 <div className="flex items-center h-10 px-4 gap-0">
@@ -622,8 +694,8 @@ export default function Home() {
               </div>
               <div className="flex-1 overflow-hidden min-h-0">
                 {activeTab === 'test-runner' && <div data-tour="test-runner" className="h-full"><TestRunnerTab tests={tr.tests} testChecks={tr.testChecks} toggleTestCheck={toggleTestCheck} isRunning={tr.isRunning} totalFailed={failedCount} onRun={(selectedOnly, testType) => { tr.runTests(selectedOnly, undefined, testType); setActiveTab('live-execution') }} onRunByPriority={tr.runByPriority} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds); setActiveTab('live-execution') } }} erpToken={erpToken} erpTenantId={erpTenantId} currentModuleId={selectedModule} onOpenCredentials={onOpenCredentials} onClearToken={onClearToken} showRawNames={showRawNames} /></div>}
-                {activeTab === 'live-execution' && <div data-tour="live-execution" className="h-full"><LiveExecutionTab tests={tr.tests} testGroups={tr.currentTestGroups} isRunning={tr.isRunning} runningProgress={tr.runningProgress} showRawNames={showRawNames} onStop={tr.handleStopRun} onBack={() => setActiveTab('test-runner')} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds) } }} onScreenshotCaptured={(entry) => { tr.setScreenshotEntries((prev) => { if (prev.length >= 50) return [entry, ...prev.slice(0, 49)]; return [entry, ...prev] }) }} /></div>}
-                {activeTab === 'results' && <div data-tour="results" className="h-full"><ResultsTab tests={tr.tests} passedCount={passedCount} failedCount={failedCount} totalCount={tr.tests.length} runHistory={pd.runHistory} bugReportsList={pd.bugReportsList} onRunDetail={(run) => { d.setSelectedRunForDetail(run); d.setRunDetailDialogOpen(true) }} onCompareRuns={() => d.setRunComparisonOpen(true)} onViewAllRuns={() => d.setRunHistoryOpen(true)} onReportTest={handleQuickReport} testGroups={tr.currentTestGroups} moduleHealth={moduleHealth} moduleName={modulePath.name} currentModuleId={selectedModule} /></div>}
+                {activeTab === 'live-execution' && <div data-tour="live-execution" className="h-full"><LiveExecutionTab tests={tr.tests} testGroups={tr.currentTestGroups} isRunning={tr.isRunning} runningProgress={tr.runningProgress} consoleLogs={tr.consoleLogs} showRawNames={showRawNames} onStop={tr.handleStopRun} onBack={() => setActiveTab('test-runner')} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds) } }} onScreenshotCaptured={(entry) => { tr.setScreenshotEntries((prev) => { if (prev.length >= 50) return [entry, ...prev.slice(0, 49)]; return [entry, ...prev] }) }} /></div>}
+                {activeTab === 'results' && <div data-tour="results" className="h-full"><ResultsTab tests={tr.tests} passedCount={passedCount} failedCount={failedCount} totalCount={tr.tests.length} runHistory={pd.runHistory} bugReportsList={pd.bugReportsList} onRunDetail={(run) => { d.setSelectedRunForDetail(run); d.setRunDetailDialogOpen(true) }} onCompareRuns={() => d.setRunComparisonOpen(true)} onViewAllRuns={() => d.setRunHistoryOpen(true)} onReportTest={handleQuickReport} testGroups={tr.currentTestGroups} moduleHealth={moduleHealth} moduleName={modulePath.name} currentModuleId={selectedModule} isRunning={tr.isRunning} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds); setActiveTab('live-execution') } }} /></div>}
                 {activeTab === 'screenshots' && (
                   <div data-tour="screenshots" className="flex flex-col h-full min-h-0">
                     <div className="p-4 shrink-0">
@@ -644,11 +716,62 @@ export default function Home() {
           )}
         </main>
       </div>
-      {/* Console Panel */}
+      {/* Console Popup */}
       {consoleOpen && (
-        <div className="shrink-0 border-t border-gray-700 bg-[#1a1a2e] flex flex-col" style={{ height: '200px' }}>
-          <div className="flex items-center justify-between px-4 py-1.5 bg-[#16162a] border-b border-gray-700"><div className="flex items-center gap-2"><Terminal className="size-3.5 text-green-400" /><span className="text-[12px] text-gray-300 font-medium">Console Output</span></div><div className="flex items-center gap-2"><span className="text-[11px] text-gray-500">{tr.consoleLogs.length} entries</span><Button variant="ghost" size="icon" className="size-5 text-gray-400 hover:text-gray-200" onClick={() => setConsoleOpen(false)}><X className="size-3" /></Button></div></div>
-          <ScrollArea className="flex-1 px-4 py-2"><div className="space-y-0.5">{tr.consoleLogs.map((log, i) => (<div key={i} className={`text-[12px] font-mono leading-5 ${log.includes('PASSED') ? 'text-green-400' : log.includes('FAILED') ? 'text-red-400' : log.includes('Navigating') || log.includes('Clicking') || log.includes('Filling') || log.includes('Selecting') || log.includes('Setting') ? 'text-yellow-300' : 'text-gray-300'}`}>{log}</div>))}</div></ScrollArea>
+        <div className="fixed inset-0 z-[9998] flex items-end justify-center pb-6 px-6 pointer-events-none">
+          <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => setConsoleOpen(false)} />
+          <div className="relative pointer-events-auto w-full max-w-4xl h-[60vh] min-h-[340px] flex flex-col rounded-2xl overflow-hidden border border-white/[0.1] shadow-2xl shadow-black/60" style={{ background: '#0d1117' }}>
+            {/* Header */}
+            <div className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.07] shrink-0" style={{ background: '#10151c' }}>
+              <Terminal className="size-4 text-[#7986CB] shrink-0" />
+              <span className="text-[13px] font-semibold text-slate-200">Console</span>
+              <span className="text-[11px] font-mono tabular-nums text-slate-600 bg-slate-800/80 px-1.5 py-0.5 rounded">{tr.consoleLogs.length} lines</span>
+              <span className="text-[11px] font-mono text-slate-700 bg-slate-800/60 border border-white/[0.04] px-2 py-0.5 rounded-md ml-1">pytest</span>
+              <div className="flex-1" />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(tr.consoleLogs.join('\n')).then(() => {
+                    setConsoleCopied(true)
+                    setTimeout(() => setConsoleCopied(false), 2000)
+                  })
+                }}
+                title="Copy all lines"
+                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${consoleCopied ? 'text-emerald-400 bg-emerald-500/10' : 'text-slate-500 hover:text-slate-200 hover:bg-white/[0.06]'}`}
+              >
+                {consoleCopied ? <Check className="size-4" /> : <Copy className="size-4" />}
+              </button>
+              <button onClick={() => setConsoleOpen(false)} className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/[0.06] transition-colors cursor-pointer ml-1"><X className="size-4" /></button>
+            </div>
+            {/* Output */}
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden font-mono text-[12.5px] leading-[1.7]" style={{ background: '#090c11' }}>
+              {tr.consoleLogs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-3">
+                  <Terminal className="size-8 text-slate-800" />
+                  <p className="text-slate-600">No output yet — waiting for tests to run…</p>
+                </div>
+              ) : (
+                <table className="w-full border-collapse">
+                  <tbody>
+                    {tr.consoleLogs.map((log, i) => {
+                      const isPassed = /PASSED|\bpassed\b/.test(log)
+                      const isFailed = /FAILED|ERROR|\bfailed\b/.test(log)
+                      const isAction = !isPassed && !isFailed && /Navigating|Clicking|Filling|Selecting|Setting/.test(log)
+                      return (
+                        <tr key={i} className={`group border-b border-white/[0.02] ${isFailed ? 'bg-red-950/25 hover:bg-red-950/35' : isPassed ? 'bg-emerald-950/15 hover:bg-emerald-950/25' : 'hover:bg-white/[0.025]'}`}>
+                          <td className="select-none text-right px-3 py-0 w-10 text-[11px] text-slate-700 group-hover:text-slate-500 tabular-nums align-top pt-[2px]">{i + 1}</td>
+                          <td className={`px-3 py-0 select-text whitespace-pre-wrap break-all ${isPassed ? 'text-emerald-400' : isFailed ? 'text-red-300' : isAction ? 'text-amber-200' : 'text-slate-200'}`}>
+                            {isPassed && <span className="text-emerald-500 mr-2 select-none">✓</span>}
+                            {isFailed && <span className="text-red-400 mr-2 select-none">✗</span>}
+                            {log}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
         </div>
       )}
       {activeTab === 'live-execution' && !tr.isRunning && passedCount + failedCount > 0 && (
@@ -705,8 +828,7 @@ export default function Home() {
           </div>
         </>
       )}
-      {!consoleOpen && <button onClick={() => setConsoleOpen(true)} className="fixed bottom-4 right-4 z-50 bg-[#1a1a2e] text-green-400 hover:bg-[#252540] transition-colors rounded-lg px-3 py-2 flex items-center gap-2 shadow-lg border border-gray-700 cursor-pointer"><Terminal className="size-3.5" /><span className="text-[12px] font-medium">Console</span><span className="bg-green-500/20 text-green-400 text-[10px] px-1.5 py-0.5 rounded-full">{tr.consoleLogs.length}</span></button>}
-      {consoleOpen && <button onClick={() => setConsoleOpen(false)} className="fixed bottom-[208px] right-4 z-50 bg-[#1a1a2e] text-gray-400 hover:text-gray-200 transition-colors rounded-t-lg px-3 py-1 flex items-center gap-1.5 shadow-lg border border-b-0 border-gray-700 cursor-pointer"><Minimize2 className="size-3" /><span className="text-[11px]">Hide</span></button>}
+      <button onClick={() => setConsoleOpen(o => !o)} className="fixed bottom-4 right-4 z-50 bg-[#1a1a2e] text-green-400 hover:bg-[#252540] transition-colors rounded-lg px-3 py-2 flex items-center gap-2 shadow-lg border border-gray-700 cursor-pointer"><Terminal className="size-3.5" /><span className="text-[12px] font-medium">Console</span><span className="bg-green-500/20 text-green-400 text-[10px] px-1.5 py-0.5 rounded-full">{tr.consoleLogs.length}</span></button>
       <CompletionSummaryModal open={tr.completionModalOpen} onClose={() => tr.setCompletionModalOpen(false)} passedCount={tr.completionStats.passed} failedCount={tr.completionStats.failed} totalDuration={tr.completionStats.duration} moduleName={tr.completionStats.moduleName} subModuleName={tr.completionStats.subModuleName} failedTests={tr.completionStats.failedTests} onViewResults={handleViewResults} onRerunFailed={handleCompletionRerunFailed} onNewRun={handleNewRun} onReportTest={handleQuickReport} />
       <ReportToAdminDialog open={d.reportDialogOpen} onClose={() => d.setReportDialogOpen(false)} testId={d.reportingTest?.id || ''} testDescription={d.reportingTest?.name || ''} error={d.reportingTest?.error} moduleName={modulePath.name} userName={user?.name || ''} userEmail={user?.email || ''} />
       {user && <UserProfileDialog open={d.profileDialogOpen} onClose={() => d.setProfileDialogOpen(false)} user={user} />}
