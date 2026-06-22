@@ -341,6 +341,73 @@ export async function startBatchCreate(
   }
 }
 
+/**
+ * Start a purchase chain creation job and return an SSE stream.
+ * Creates linked PO->GP->GRN->QC chain(s) via the FastAPI purchase-chain endpoint.
+ */
+export async function startPurchaseChain(
+  count: number,
+  supplierRefId: number,
+  numItems: number,
+  itemRefIds: number[],
+  erpToken: string,
+  erpTenantId: string,
+  onEvent: (event: SSEEvent) => void,
+  onDone: () => void,
+  onError: (err: Error) => void,
+  documents?: string[],
+) {
+  try {
+    const res = await fetch(`${PROXY}?path=purchase-chain`, withCsrf({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        count,
+        supplier_ref_id: supplierRefId,
+        num_items: numItems,
+        item_ref_ids: itemRefIds,
+        delay: 0.3,
+        erp_token: erpToken,
+        erp_tenant_id: erpTenantId,
+        documents: documents ?? ["PO", "GP", "GRN", "QC"],
+      }),
+    }));
+
+    if (!res.ok || !res.body) {
+      onError(new Error(`HTTP ${res.status}`));
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          try {
+            const event: SSEEvent = JSON.parse(line.slice(6));
+            onEvent(event);
+          } catch {
+            // skip malformed lines
+          }
+        }
+      }
+    }
+
+    onDone();
+  } catch (err) {
+    onError(err instanceof Error ? err : new Error(String(err)));
+  }
+}
+
 // ─── Run Completion Summary ─────────────────────────────
 // Collected during SSE stream, used to save results to Next.js DB
 
@@ -506,6 +573,33 @@ export async function exportBatchExcel(runId: string): Promise<void> {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+export interface MasterDataItem {
+  id: number
+  name: string
+}
+
+/**
+ * Fetch master data entries from the ERP (Supplier, Item Master, etc.).
+ */
+export async function fetchMasterData(
+  screen: string,
+  erpToken: string,
+  erpTenantId: string,
+): Promise<MasterDataItem[]> {
+  const res = await fetch(`${PROXY}?path=master-data`, withCsrf({
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      screen,
+      erp_token: erpToken,
+      erp_tenant_id: erpTenantId,
+    }),
+  }));
+  if (!res.ok) throw new Error(`Master data fetch failed: HTTP ${res.status}`);
+  const data = await res.json();
+  return data.items || [];
 }
 
 

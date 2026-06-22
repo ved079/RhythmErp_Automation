@@ -151,3 +151,17 @@ class RunCompletionPayload(BaseModel):
     results: list[dict] = []
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
+
+
+# --- Purchase Chain ---
+
+class PurchaseChainRequest(BaseModel):
+    count: int = 1                       # number of chains to create
+    supplier_ref_id: int = 1             # supplier ref ID
+    num_items: int = 2                   # items per document
+    item_ref_id: int = 5                 # item ref ID (fallback if item_ref_ids not set)
+    item_ref_ids: Optional[list[int]] = None  # per-row item IDs (overrides item_ref_id)
+    delay: float = 0.3                   # delay between API calls
+    erp_token: str                       # Bearer token for ERP API
+    erp_tenant_id: str = "681"           # ERP tenant ID
+    documents: list[str] = ["PO", "GP", "GRN", "QC"]  # which documents to create

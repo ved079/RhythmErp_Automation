@@ -63,6 +63,7 @@ from pages.private_b2b.modules.goods_receipt_note.utils.api_goods_receipt_note_u
 from pages.private_b2b.modules.quality_check.utils.api_quality_check_utils import (
     QCAPIUtils,
 )
+from pages.private_b2b.scripts.chain_context import ChainContext, ChainContextDiscoverer
 
 
 # ---------------------------------------------------------------------------
@@ -92,22 +93,25 @@ def _supplier_name(sid: int) -> str:
 def _generate_chain_items(
     num_items: int = 2,
     item_ref_id: int = 5,
+    item_ref_ids: Optional[List[int]] = None,
     hsn_sac_no: int = 2,
     uom: int = 3,
     base_uom: int = 4,
     alternate_uom: int = 4,
 ) -> List[dict]:
     today = date.today().isoformat()
+    ids = item_ref_ids if item_ref_ids else [item_ref_id]
     items = []
     for i in range(num_items):
         qty = 10.0 * (i + 1)
         rate = 100.0 * (i + 1)
         items.append({
-            "item_ref_id": item_ref_id,
+            "item_ref_id": ids[i % len(ids)],
             "hsn_sac_no": hsn_sac_no,
             "uom": uom,
             "base_uom": base_uom,
             "alternate_uom": alternate_uom,
+            "alternate_quantity": "1",
             "quantity": qty,
             "rate": rate,
             "no_of_bags": int(qty),
@@ -125,6 +129,8 @@ def _po_items_from(items: List[dict]) -> List[dict]:
             "item_ref_id": it["item_ref_id"],
             "hsn_sac_no": it["hsn_sac_no"],
             "uom": it["uom"],
+            "alternate_uom": it.get("alternate_uom"),
+            "alternate_quantity": it.get("alternate_quantity", "1"),
             "quantity": it["quantity"],
             "rate": it["rate"],
             "expected_delivery_date": it["expected_delivery_date"],
@@ -138,8 +144,10 @@ def _gp_items_from(items: List[dict]) -> List[dict]:
         {
             "item_ref_id": it["item_ref_id"],
             "no_of_bags": it["no_of_bags"],
-            "quantity": it["quantity"],
+            "alternate_quantity": it["quantity"],
+            "alternate_uom": it.get("alternate_uom", it.get("uom")),
             "base_uom": it["base_uom"],
+            "uom_conversion": 1.0,
             "hsn_sac_no": it["hsn_sac_no"],
         }
         for it in items
@@ -151,40 +159,47 @@ def _grn_items_from(items: List[dict]) -> List[dict]:
         {
             "item_ref_id": it["item_ref_id"],
             "hsn_sac_no": it["hsn_sac_no"],
-            "uom": it["uom"],
-            "received_qty": it["received_qty"],
+            "uom": it.get("base_uom", it["uom"]),
+            "alternate_uom": it.get("alternate_uom", it["uom"]),
+            "uom_conversion": 1.0,
+            "alternate_received_qty": it["quantity"],
+            "alternate_accepted_qty": it["accepted_qty"],
+            "alternate_rejected_qty": it["rejected_qty"],
             "rate": it["rate"],
             "no_of_bags": it["no_of_bags"],
-            "alternate_uom": it["alternate_uom"],
-            "accepted_qty": it["accepted_qty"],
-            "rejected_qty": it["rejected_qty"],
-            "po_quantity": it["quantity"],
             "gate_pass_quantity": it["quantity"],
+            "po_quantity": None,
         }
         for it in items
     ]
 
 
-def _qc_items_from(items: List[dict]) -> List[dict]:
+def _qc_items_from(items: List[dict], ctx=None) -> List[dict]:
+    quality_details = (
+        ctx.quality_parameters if ctx and ctx.quality_parameters
+        else [
+            {"item_quality_parameter_ref_id": 1, "actual_value": 1},
+            {"item_quality_parameter_ref_id": 2, "actual_value": 1},
+            {"item_quality_parameter_ref_id": 3, "actual_value": 1},
+        ]
+    )
     return [
         {
             "item_ref_id": it["item_ref_id"],
             "no_of_bags": it["no_of_bags"],
             "grn_qty": it["accepted_qty"],
-            "accepted_qty": it["accepted_qty"],
-            "rejected_qty": it["rejected_qty"],
+            "alternate_accepted_qty": it["accepted_qty"],
+            "alternate_rejected_qty": it["rejected_qty"],
             "base_rate": it["rate"],
-            "deduction_percent": None,
+            "deduction_percent": 0.0,
             "deduction_rate": None,
-            "qc_rate": None,
+            "rate": it["rate"],
             "net_rate": it["rate"],
-            "uom": it.get("uom", 4),
+            "alternate_uom": it.get("uom", ctx.alternate_uom if ctx else 3),
+            "uom": it.get("base_uom", ctx.base_uom if ctx else 4),
             "hsn_sac_no": it["hsn_sac_no"],
-            "details": [
-                {"item_quality_parameter_ref_id": 1, "actual_value": 1},
-                {"item_quality_parameter_ref_id": 2, "actual_value": 1},
-                {"item_quality_parameter_ref_id": 3, "actual_value": 1},
-            ],
+            "uom_conversion": 1.0,
+            "details": quality_details,
         }
         for it in items
     ]
@@ -227,127 +242,164 @@ class PurchaseChain:
         self.qc_api = QCAPIUtils(self.client)
 
         self.results: List[dict] = []
+        self._context: Optional[ChainContext] = None  # discovered lazily
+
+    def get_context(self) -> ChainContext:
+        """Return the tenant context, discovering it on first call."""
+        if self._context is None:
+            self._context = ChainContextDiscoverer(self.client).discover()
+        return self._context
 
     def run(
         self,
-        supplier_ref_id: int = 1,
-        num_items: int = 2,
-        item_ref_id: int = 5,
-        hsn_sac_no: int = 2,
+        supplier_ref_id: int = None,
+        num_items: int = 1,
+        item_ref_id: int = None,
+        item_ref_ids: Optional[List[int]] = None,
+        hsn_sac_no: int = None,
         po_overrides: dict = None,
         gp_overrides: dict = None,
         grn_overrides: dict = None,
         qc_overrides: dict = None,
+        ctx: Optional[ChainContext] = None,
+        documents: Optional[List[str]] = None,
     ) -> dict:
         """Execute one full PO -> GP -> GRN -> QC chain.
+
+        If *ctx* is not given, the context is discovered automatically from
+        the ERP API (tenant-safe). Explicit arguments take precedence over
+        the discovered context so existing callers are not broken.
 
         Returns:
             dict with keys ``po``, ``gp``, ``grn``, ``qc`` containing API response data.
         """
+        # Resolve context — discover once per PurchaseChain instance
+        if ctx is None:
+            ctx = self.get_context()
+
+        # Which documents to create — default to full chain
+        docs = set(d.upper() for d in documents) if documents else {"PO", "GP", "GRN", "QC"}
+
+        # Explicit args override discovered values
+        eff_supplier  = supplier_ref_id if supplier_ref_id is not None else ctx.supplier_ref_id
+        eff_item      = item_ref_id     if item_ref_id     is not None else ctx.item_ref_id
+        eff_hsn       = hsn_sac_no      if hsn_sac_no      is not None else ctx.hsn_sac_no
+
         items = _generate_chain_items(
             num_items=num_items,
-            item_ref_id=item_ref_id,
-            hsn_sac_no=hsn_sac_no,
+            item_ref_id=eff_item,
+            item_ref_ids=item_ref_ids,
+            hsn_sac_no=eff_hsn,
+            uom=ctx.alternate_uom,
+            base_uom=ctx.base_uom,
+            alternate_uom=ctx.alternate_uom,
         )
+
+        po_id = po_ref = po_data = po_payload = po_entry = None
+        gp_id = gp_ref = gp_data = gp_payload = None
+        grn_id = grn_ref = grn_data = grn_payload = None
+        qc_id = qc_ref = qc_data = qc_payload = None
 
         # ---------------------------------------------------------------
         # 1. Purchase Order
         # ---------------------------------------------------------------
-        po_payload = self._build_po_payload(supplier_ref_id, items, po_overrides)
-        po_data = self.po_api.create_po(po_payload)
-        po_id = po_data.get("id") or po_data.get("entry_id") if po_data else None
-        if not po_data or not po_id:
-            raise RuntimeError(
-                f"PO creation failed (HTTP {self.po_api._last_status}); "
-                f"response: {po_data}"
-            )
-        po_ref = po_data.get("transaction_ref_no", str(po_id))
-        log.info(f"  PO created: ID={po_id}, ref={po_ref}")
+        if "PO" in docs:
+            po_payload = self._build_po_payload(eff_supplier, items, po_overrides, ctx=ctx)
+            po_data = self.po_api.create_po(po_payload)
+            po_id = po_data.get("id") or po_data.get("entry_id") if po_data else None
+            if not po_data or not po_id:
+                raise RuntimeError(
+                    f"PO creation failed (HTTP {self.po_api._last_status}); "
+                    f"response: {po_data}"
+                )
+            po_ref = po_data.get("transaction_ref_no", str(po_id))
+            log.info(f"  PO created: ID={po_id}, ref={po_ref}")
 
-        # -- Fetch PO back to confirm rates -----------------------------------
-        po_entry = self.po_api.get_po(po_id)
-        if po_entry:
-            po_items_resp = po_entry.get("purchasing_order_items_details") or []
-            sent_items = po_payload.get("purchasing_order_items_details") or []
-            rate_ok = True
-            for ji, sent in enumerate(sent_items):
-                got = po_items_resp[ji] if ji < len(po_items_resp) else {}
-                sr = float(sent.get("rate", 0) or 0)
-                gr = float(got.get("rate", 0) or 0)
-                if abs(sr - gr) > 0.01:
-                    log.warning(f"  PO rate mismatch item[{ji}]: sent={sr}, backend={gr}")
-                    rate_ok = False
-                else:
-                    log.info(f"  PO rate OK item[{ji}]: rate={gr}")
-            if rate_ok and po_items_resp:
-                # Update items with backend-confirmed rates
-                for ji, item in enumerate(items):
-                    if ji < len(po_items_resp):
-                        confirmed = float(po_items_resp[ji].get("rate", 0) or 0)
-                        if confirmed > 0:
-                            items[ji]["rate"] = confirmed
-        else:
-            log.warning(f"  Could not fetch PO #{po_id} back — using sent rates")
+            po_entry = self.po_api.get_po(po_id)
+            if po_entry:
+                po_items_resp = po_entry.get("purchasing_order_items_details") or []
+                sent_items = po_payload.get("purchasing_order_items_details") or []
+                rate_ok = True
+                for ji, sent in enumerate(sent_items):
+                    got = po_items_resp[ji] if ji < len(po_items_resp) else {}
+                    sr = float(sent.get("rate", 0) or 0)
+                    gr = float(got.get("rate", 0) or 0)
+                    if abs(sr - gr) > 0.01:
+                        log.warning(f"  PO rate mismatch item[{ji}]: sent={sr}, backend={gr}")
+                        rate_ok = False
+                    else:
+                        log.info(f"  PO rate OK item[{ji}]: rate={gr}")
+                if rate_ok and po_items_resp:
+                    for ji, item in enumerate(items):
+                        if ji < len(po_items_resp):
+                            confirmed = float(po_items_resp[ji].get("rate", 0) or 0)
+                            if confirmed > 0:
+                                items[ji]["rate"] = confirmed
+            else:
+                log.warning(f"  Could not fetch PO #{po_id} back — using sent rates")
 
-        if self.delay:
-            time.sleep(self.delay)
+            if self.delay:
+                time.sleep(self.delay)
 
         # ---------------------------------------------------------------
         # 2. Gate Pass
         # ---------------------------------------------------------------
-        gp_payload = self._build_gp_payload(supplier_ref_id, items, gp_overrides)
-        gp_data = self.gp_api.create_gp(gp_payload)
-        gp_id = gp_data.get("id") or gp_data.get("entry_id") if gp_data else None
-        if not gp_data or not gp_id:
-            raise RuntimeError(
-                f"GP creation failed (HTTP {self.gp_api._last_status}); "
-                f"response: {gp_data}"
-            )
-        gp_ref = gp_data.get("transaction_ref_no", str(gp_id))
-        log.info(f"  GP created: ID={gp_id}, ref={gp_ref}")
-        if self.delay:
-            time.sleep(self.delay)
+        if "GP" in docs:
+            gp_payload = self._build_gp_payload(eff_supplier, items, gp_overrides, ctx=ctx)
+            gp_data = self.gp_api.create_gp(gp_payload)
+            gp_id = gp_data.get("id") or gp_data.get("entry_id") if gp_data else None
+            if not gp_data or not gp_id:
+                raise RuntimeError(
+                    f"GP creation failed (HTTP {self.gp_api._last_status}); "
+                    f"response: {gp_data}"
+                )
+            gp_ref = gp_data.get("transaction_ref_no", str(gp_id))
+            log.info(f"  GP created: ID={gp_id}, ref={gp_ref}")
+            if self.delay:
+                time.sleep(self.delay)
 
         # ---------------------------------------------------------------
         # 3. GRN
         # ---------------------------------------------------------------
-        grn_payload = self._build_grn_payload(
-            supplier_ref_id, po_id, gp_id, items, grn_overrides
-        )
-        grn_data = self.grn_api.create_grn(grn_payload)
-        grn_id = grn_data.get("id") or grn_data.get("entry_id") if grn_data else None
-        if not grn_data or not grn_id:
-            raise RuntimeError(
-                f"GRN creation failed (HTTP {self.grn_api._last_status}); "
-                f"response: {grn_data}"
+        if "GRN" in docs:
+            grn_payload = self._build_grn_payload(
+                eff_supplier, po_id, gp_id, items, grn_overrides, ctx=ctx
             )
-        grn_ref = grn_data.get("transaction_ref_no", str(grn_id))
-        log.info(f"  GRN created: ID={grn_id}, ref={grn_ref}")
-        if self.delay:
-            time.sleep(self.delay)
+            grn_data = self.grn_api.create_grn(grn_payload)
+            grn_id = grn_data.get("id") or grn_data.get("entry_id") if grn_data else None
+            if not grn_data or not grn_id:
+                raise RuntimeError(
+                    f"GRN creation failed (HTTP {self.grn_api._last_status}); "
+                    f"response: {grn_data}"
+                )
+            grn_ref = grn_data.get("transaction_ref_no", str(grn_id))
+            log.info(f"  GRN created: ID={grn_id}, ref={grn_ref}")
+            if self.delay:
+                time.sleep(self.delay)
 
         # ---------------------------------------------------------------
         # 4. Quality Check
         # ---------------------------------------------------------------
-        qc_payload = self._build_qc_payload(
-            supplier_ref_id, po_id, gp_id, grn_id, items, qc_overrides
-        )
-        qc_data = self.qc_api.create_qc(qc_payload)
-        qc_id = qc_data.get("id") or qc_data.get("entry_id") if qc_data else None
-        if not qc_data or not qc_id:
-            raise RuntimeError(
-                f"QC creation failed (HTTP {self.qc_api._last_status}); "
-                f"response: {qc_data}"
+        if "QC" in docs:
+            qc_payload = self._build_qc_payload(
+                eff_supplier, po_id, gp_id, grn_id, items, qc_overrides, ctx=ctx
             )
-        qc_ref = qc_data.get("transaction_ref_no", str(qc_id))
-        log.info(f"  QC created: ID={qc_id}, ref={qc_ref}")
+            qc_data = self.qc_api.create_qc(qc_payload)
+            qc_id = qc_data.get("id") or qc_data.get("entry_id") if qc_data else None
+            if not qc_data or not qc_id:
+                raise RuntimeError(
+                    f"QC creation failed (HTTP {self.qc_api._last_status}); "
+                    f"response: {qc_data}"
+                )
+            qc_ref = qc_data.get("transaction_ref_no", str(qc_id))
+            log.info(f"  QC created: ID={qc_id}, ref={qc_ref}")
 
         result = {
             "po": {"id": po_id, "ref": po_ref, "data": po_data, "payload": po_payload,
-                   "fetched": po_entry},
-            "gp": {"id": gp_id, "ref": gp_ref, "data": gp_data, "payload": gp_payload},
-            "grn": {"id": grn_id, "ref": grn_ref, "data": grn_data, "payload": grn_payload},
-            "qc": {"id": qc_id, "ref": qc_ref, "data": qc_data, "payload": qc_payload},
+                   "fetched": po_entry} if po_id else None,
+            "gp": {"id": gp_id, "ref": gp_ref, "data": gp_data, "payload": gp_payload} if gp_id else None,
+            "grn": {"id": grn_id, "ref": grn_ref, "data": grn_data, "payload": grn_payload} if grn_id else None,
+            "qc": {"id": qc_id, "ref": qc_ref, "data": qc_data, "payload": qc_payload} if qc_id else None,
         }
         self.results.append(result)
         return result
@@ -374,15 +426,58 @@ class PurchaseChain:
         supplier_ref_id: int,
         items: List[dict],
         overrides: dict = None,
+        ctx: Optional[ChainContext] = None,
     ) -> dict:
-        from pages.private_b2b.modules.purchase_order.data.purchase_order_data import (
-            build_po_payload,
-        )
+        from pages.private_b2b.modules.purchase_order.data.purchase_order_data import build_po_payload
         po_items = _po_items_from(items)
         overrides = overrides or {}
+        if ctx:
+            return build_po_payload(
+                supplier_ref_id=supplier_ref_id,
+                items=po_items,
+                po_item_type=ctx.item_type_ref_id,
+                po_type=ctx.po_type,
+                txn_currency=ctx.txn_currency,
+                base_currency=ctx.base_currency,
+                parameter1=ctx.parameter1,
+                parameter2=ctx.parameter2,
+                parameter5=ctx.parameter5,
+                parameter6=ctx.parameter6,
+                supplier_details={
+                    "supplier_payment_terms": ctx.payment_terms,
+                    "supplier_delivery_terms": ctx.delivery_terms,
+                    "packing_forwarding_ref_id": ctx.packing_forwarding,
+                    "supplier_ship_from": ctx.supplier_ship_from,
+                    "supplier_bill_from": ctx.supplier_bill_from,
+                },
+                **overrides,
+            )
+        # Legacy path — no context (uses data-file defaults)
+        import random
+        from pages.private_b2b.modules.purchase_order.data.purchase_order_data import (
+            PO_TYPE_IDS, CURRENCY_IDS, DIVISION_IDS, DEPARTMENT_IDS,
+            TYPE_OF_SALE_IDS, LOCATION_IDS,
+            PAYMENT_TERMS_IDS, DELIVERY_TERMS_IDS, PACKING_FORWARDING_IDS,
+            SUPPLIER_SHIP_FROM_IDS, SUPPLIER_BILL_FROM_IDS,
+        )
         return build_po_payload(
             supplier_ref_id=supplier_ref_id,
             items=po_items,
+            po_item_type=113,
+            po_type=random.choice(PO_TYPE_IDS),
+            txn_currency=random.choice(CURRENCY_IDS),
+            base_currency=random.choice(CURRENCY_IDS),
+            parameter1=random.choice(DIVISION_IDS),
+            parameter2=random.choice(DEPARTMENT_IDS),
+            parameter5=2,
+            parameter6=1,
+            supplier_details={
+                "supplier_payment_terms": random.choice(PAYMENT_TERMS_IDS),
+                "supplier_delivery_terms": random.choice(DELIVERY_TERMS_IDS),
+                "packing_forwarding_ref_id": random.choice(PACKING_FORWARDING_IDS),
+                "supplier_ship_from": random.choice(SUPPLIER_SHIP_FROM_IDS),
+                "supplier_bill_from": random.choice(SUPPLIER_BILL_FROM_IDS),
+            },
             **overrides,
         )
 
@@ -391,15 +486,78 @@ class PurchaseChain:
         supplier_ref_id: int,
         items: List[dict],
         overrides: dict = None,
+        ctx: Optional[ChainContext] = None,
     ) -> dict:
-        from pages.private_b2b.modules.gate_pass.data.gate_pass_data import (
-            build_gp_payload,
-        )
+        from pages.private_b2b.modules.gate_pass.data.gate_pass_data import build_gp_payload
         gp_items = _gp_items_from(items)
         overrides = overrides or {}
+        if ctx:
+            return build_gp_payload(
+                supplier_ref_id=supplier_ref_id,
+                items=gp_items,
+                item_type_ref_id=ctx.item_type_ref_id,
+                delivery_type=ctx.delivery_type,
+                parameter1=ctx.parameter1,
+                parameter2=ctx.parameter2,
+                parameter5=ctx.parameter5,
+                parameter6=ctx.parameter6,
+                grn_check=True,
+                qc_check=True,
+                **overrides,
+            )
+        import random
+        from pages.private_b2b.modules.gate_pass.data.gate_pass_data import (
+            ITEM_TYPE_IDS, DIVISION_IDS, DEPARTMENT_IDS, DELIVERY_TYPE_IDS,
+        )
         return build_gp_payload(
             supplier_ref_id=supplier_ref_id,
             items=gp_items,
+            item_type_ref_id=random.choice(ITEM_TYPE_IDS),
+            delivery_type=random.choice(DELIVERY_TYPE_IDS),
+            parameter1=random.choice(DIVISION_IDS),
+            parameter2=random.choice(DEPARTMENT_IDS),
+            grn_check=True,
+            qc_check=True,
+            **overrides,
+        )
+
+    @staticmethod
+    def _build_grn_payload(
+        supplier_ref_id: int,
+        po_id: int,
+        gp_id: int,
+        items: List[dict],
+        overrides: dict = None,
+        ctx: Optional[ChainContext] = None,
+    ) -> dict:
+        from pages.private_b2b.modules.goods_receipt_note.data.goods_receipt_note_data import build_grn_payload
+        grn_items = _grn_items_from(items)
+        overrides = overrides or {}
+        if ctx:
+            return build_grn_payload(
+                supplier_ref_id=supplier_ref_id,
+                gate_pass_ref_id_id=gp_id,
+                po_ref_id_id=None,
+                items=grn_items,
+                parameter1=ctx.parameter1,
+                parameter2=ctx.parameter2,
+                parameter5=ctx.parameter5,
+                parameter6=ctx.parameter6,
+                **overrides,
+            )
+        import random
+        from pages.private_b2b.modules.goods_receipt_note.data.goods_receipt_note_data import (
+            DIVISION_IDS, DEPARTMENT_IDS, LOCATION_IDS, TYPE_OF_SALE_IDS,
+        )
+        return build_grn_payload(
+            supplier_ref_id=supplier_ref_id,
+            gate_pass_ref_id_id=gp_id,
+            po_ref_id_id=None,
+            items=grn_items,
+            parameter1=random.choice(DIVISION_IDS),
+            parameter2=random.choice(DEPARTMENT_IDS),
+            parameter5=random.choice(TYPE_OF_SALE_IDS),
+            parameter6=random.choice(LOCATION_IDS),
             **overrides,
         )
 
@@ -411,39 +569,33 @@ class PurchaseChain:
         grn_id: int,
         items: List[dict],
         overrides: dict = None,
+        ctx: Optional[ChainContext] = None,
     ) -> dict:
-        from pages.private_b2b.modules.quality_check.data.quality_check_data import (
-            build_qc_payload,
-        )
-        qc_items = _qc_items_from(items)
+        from pages.private_b2b.modules.quality_check.data.quality_check_data import build_qc_payload
+        qc_items = _qc_items_from(items, ctx=ctx)
         overrides = overrides or {}
+        if ctx:
+            return build_qc_payload(
+                supplier_ref_id=supplier_ref_id,
+                gate_pass_ref_id_id=gp_id,
+                grn_ref_id_id=grn_id,
+                po_ref_id_id=po_id,
+                items=qc_items,
+                item_type_ref_id=ctx.item_type_ref_id,
+                base_currency=ctx.base_currency,
+                txn_currency=ctx.txn_currency,
+                parameter1=ctx.parameter1,
+                parameter2=ctx.parameter2,
+                parameter5=ctx.parameter5,
+                parameter6=ctx.parameter6,
+                **overrides,
+            )
         return build_qc_payload(
             supplier_ref_id=supplier_ref_id,
             gate_pass_ref_id_id=gp_id,
             grn_ref_id_id=grn_id,
             po_ref_id_id=po_id,
             items=qc_items,
-            **overrides,
-        )
-
-    @staticmethod
-    def _build_grn_payload(
-        supplier_ref_id: int,
-        po_id: int,
-        gp_id: int,
-        items: List[dict],
-        overrides: dict = None,
-    ) -> dict:
-        from pages.private_b2b.modules.goods_receipt_note.data.goods_receipt_note_data import (
-            build_grn_payload,
-        )
-        grn_items = _grn_items_from(items)
-        overrides = overrides or {}
-        return build_grn_payload(
-            supplier_ref_id=supplier_ref_id,
-            gate_pass_ref_id_id=gp_id,
-            po_ref_id_id=po_id,
-            items=grn_items,
             **overrides,
         )
 
