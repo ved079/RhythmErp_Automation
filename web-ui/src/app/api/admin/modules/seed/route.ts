@@ -58,6 +58,17 @@ const DEFAULT_MODULES: Omit<SeedModule, 'parentId'>[] = [
   { name: 'access-role-screen-link', label: 'Role Screen Link', parentLabel: 'Access', description: 'Role screen link configuration', sortOrder: 3, status: 'active' },
   { name: 'access-user-creation-screen', label: 'User Creation Screen', parentLabel: 'Access', description: 'User creation screen', sortOrder: 4, status: 'active' },
   { name: 'access-screen-api-link', label: 'Screen API Link', parentLabel: 'Access', description: 'Screen API link configuration', sortOrder: 5, status: 'active' },
+
+  // ── Document (parent) ───────────────────────────────
+  { name: 'document', label: 'Document', parentLabel: undefined, description: 'Document module group', sortOrder: 6, status: 'active' },
+  { name: 'member', label: 'Member', parentLabel: 'Document', description: 'Member registration documents', sortOrder: 1, status: 'active' },
+
+  // ── Private (B2B) parent ────────────────────────────
+  { name: 'private-b2b', label: 'Private (B2B)', parentLabel: undefined, description: 'Private B2B module group', sortOrder: 7, status: 'active' },
+  { name: 'private-b2b-purchase-order', label: 'Purchase Order', parentLabel: 'Private (B2B)', description: 'Purchase order management', sortOrder: 1, status: 'active' },
+  { name: 'private-b2b-goods-receipt-note', label: 'Goods Receipt Note', parentLabel: 'Private (B2B)', description: 'Goods receipt note management', sortOrder: 2, status: 'active' },
+  { name: 'private-b2b-gate-pass', label: 'Gate Pass', parentLabel: 'Private (B2B)', description: 'Gate pass management', sortOrder: 3, status: 'active' },
+  { name: 'private-b2b-quality-check', label: 'Quality Check', parentLabel: 'Private (B2B)', description: 'Quality check management', sortOrder: 4, status: 'active' },
 ]
 
 export async function POST(req: NextRequest) {

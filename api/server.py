@@ -12,6 +12,8 @@ Endpoints:
   - GET  /api/screenshot    — Get browser screenshot
   - GET  /api/test-cases    — Read test case definitions
   - POST /api/batch-create  — Batch data creation (SSE stream)
+  - POST /api/purchase-chain — Create linked PO->GP->GRN->QC chain (SSE stream)
+  - GET  /api/master-data — List master data entries (Supplier, Item Master, etc.)
   - GET  /api/batch-create/{run_id}/export — Download Excel of batch results
   - GET  /api/health        — Health check
 """
@@ -21,15 +23,18 @@ import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 
 from api.models import (
     ModuleListResponse, CreateRunRequest, StartRunRequest, BatchCreateRequest,
+    PurchaseChainRequest,
 )
 from api.test_discovery import discover_all_modules
 from api.test_runner import run_tests_stream, stop_run
 from api.batch_create import batch_create_stream, export_batch_excel
+from api.purchase_chain_endpoint import purchase_chain_stream
 from api.database import init_db
 from api.screenshot_store import take_screenshot
 
@@ -193,6 +198,21 @@ def batch_export_endpoint(run_id: str):
 
 
 # ================================================================
+# PURCHASE CHAIN ENDPOINT
+# ================================================================
+
+@app.post("/api/purchase-chain")
+def purchase_chain_endpoint(request: PurchaseChainRequest):
+    """Create linked PO->GP->GRN->QC chain(s) via the ERP API (SSE-streamed)."""
+    request.count = max(1, min(request.count, 50))
+    return StreamingResponse(
+        purchase_chain_stream(request),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
+
+
+# ================================================================
 # TEST CASES ENDPOINT
 # ================================================================
 
@@ -218,6 +238,40 @@ async def get_test_cases(module: str = None):
         return {"error": f"Module '{module}' not found", "available_modules": list(data.keys())}
 
     return data
+
+
+# ================================================================
+# MASTER DATA ENDPOINT
+# ================================================================
+
+class MasterDataRequest(BaseModel):
+    screen: str
+    erp_token: str
+    erp_tenant_id: str = "681"
+
+
+@app.post("/api/master-data")
+def master_data_endpoint(request: MasterDataRequest):
+    """List entries from any ERP master-data screen."""
+    import sys as _sys
+    _sys.path.insert(0, str(PROJECT_ROOT))
+    from common.erp_api_client import RhythmERPAPIClient
+
+    client = RhythmERPAPIClient()
+    try:
+        client.login_from_browser(token=request.erp_token, tenant_id=request.erp_tenant_id)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"ERP auth failed: {e}")
+
+    try:
+        result = client.list_entries(request.screen, page_size=500)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"ERP request failed: {e}")
+
+    if result is None:
+        raise HTTPException(status_code=502, detail=f"ERP returned no data for '{request.screen}' — check token/tenant")
+    items = result.get("screenmatlistingdata_set") or result.get("results") or []
+    return {"items": items, "total": len(items)}
 
 
 # ================================================================

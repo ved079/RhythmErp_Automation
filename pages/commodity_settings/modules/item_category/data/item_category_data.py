@@ -477,6 +477,8 @@ def generate_batch_payloads(
     count: int = 20,
     prefix: str = None,
     dropdown_ids: dict = None,
+    config: dict = None,
+    **kwargs,
 ) -> list:
     """Generate a batch of unique Item Category API payloads.
 

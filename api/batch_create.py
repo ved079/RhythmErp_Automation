@@ -1,6 +1,7 @@
 """Batch data creation via the ERP API — SSE-streamed progress."""
 
 import importlib
+import inspect
 import json
 import logging
 import time
@@ -40,6 +41,17 @@ MODULE_IMPORT_PATHS = {
         "uom": "pages.common_settings.modules.uom.data.uom_data",
         "uom_conversion": "pages.common_settings.modules.uom_conversion.data.uom_conversion_data",
         "vehicle_master": "pages.common_settings.modules.vehicle_master.data.vehicle_master_data",
+    },
+    "commodity_settings": {
+        "item_category": "pages.commodity_settings.modules.item_category.data.item_category_data",
+        "item_group": "pages.commodity_settings.modules.item_group.data.item_group_data",
+        "item_master": "pages.commodity_settings.modules.item_master.data.item_master_data",
+        "item_attribute": "pages.commodity_settings.modules.item_attribute.data.item_attribute_data",
+        "crop_master": "pages.commodity_settings.modules.crop_master.data.crop_master_data",
+        "services_master": "pages.commodity_settings.modules.services_master.data.services_master_data",
+        "quality_parameter_master": "pages.commodity_settings.modules.quality_parameter_master.data.quality_parameter_master_data",
+        "commodity_quality_parameter": "pages.commodity_settings.modules.commodity_quality_parameter.data.commodity_quality_parameter_data",
+        "commodity_base_rate": "pages.commodity_settings.modules.commodity_base_rate.data.cbr_data",
     },
 }
 
@@ -170,7 +182,10 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
         run_id=run_id,
     ))
 
-    payloads = generate_fn(count=total, config=request.config)
+    kwargs = {"count": total}
+    if "config" in inspect.signature(generate_fn).parameters:
+        kwargs["config"] = request.config
+    payloads = generate_fn(**kwargs)
     batch_size = len(payloads)
 
     yield _sse_event(LogEvent(
