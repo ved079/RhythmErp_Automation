@@ -51,6 +51,16 @@ DISPLAY_NAMES = {
     "supplier": "Supplier",
     "customer": "Customer",
     "farmer": "Farmer",
+    "member": "Member",
+
+    # Document sub-modules
+
+    # Private (B2B) modules
+    "private_b2b": "Private (B2B)",
+    "purchase_order": "Purchase Order",
+    "goods_receipt_note": "Goods Receipt Note",
+    "gate_pass": "Gate Pass",
+    "quality_check": "Quality Check",
 }
 
 # Curated display names per test function for BA/QA readability.

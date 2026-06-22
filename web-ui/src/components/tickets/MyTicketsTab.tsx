@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { RefreshCw, Filter, Ticket, Play, CheckCircle2, RotateCcw, Loader2, MessageSquare, Send, Timer } from 'lucide-react'
+import { RefreshCw, Filter, Ticket, Play, CheckCircle2, RotateCcw, Loader2, MessageSquare, Send, Timer, FlaskConical, XCircle, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
@@ -18,9 +18,15 @@ import { ChatListView } from './ChatListView'
 export function MyTicketsTab({
   userEmail,
   userName,
+  onVerifyFix,
+  verifyingTicketId,
+  verifyResult,
 }: {
   userEmail: string
   userName: string
+  onVerifyFix?: (ticket: BugReport) => void
+  verifyingTicketId?: string | null
+  verifyResult?: { ticketId: string; passed: boolean } | null
 }) {
   const [subTab, setSubTab] = useState<'tickets' | 'chats'>('tickets')
   const [allReports, setAllReports] = useState<BugReport[]>([])
@@ -121,15 +127,17 @@ export function MyTicketsTab({
   }
 
   const statusBadge = (s: BugReport['status']) => {
-    const colors = {
+    const styles: Record<string, string> = {
       open: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400',
       'in-progress': 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
       fixed: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+      closed: 'bg-gray-100 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400',
+      rejected: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
     }
-    const labels = { open: 'Open', 'in-progress': 'In Progress', fixed: 'Fixed' }
+    const labels: Record<string, string> = { open: 'Open', 'in-progress': 'In Progress', fixed: 'Fixed by Admin', closed: 'Closed', rejected: 'Rejected' }
     return (
-      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${colors[s]}`}>
-        {labels[s]}
+      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${styles[s] ?? styles.open}`}>
+        {labels[s] ?? s}
       </span>
     )
   }
@@ -391,41 +399,87 @@ export function MyTicketsTab({
                   </div>
                 )}
 
-                {/* Status Change Buttons */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[12px] text-gray-500 dark:text-gray-400 font-medium">Change Status:</span>
-                  {selectedTicket.status === 'open' && (
-                    <Button
-                      size="sm"
-                      onClick={() => handleStatusChange('in-progress')}
-                      className="text-[12px] bg-[#2D3FC7] hover:bg-[#3F51B5] text-white gap-1 cursor-pointer"
-                    >
-                      <Play className="size-3" />
-                      Mark In Progress
-                    </Button>
-                  )}
-                  {selectedTicket.status === 'in-progress' && (
-                    <Button
-                      size="sm"
-                      onClick={() => handleStatusChange('fixed')}
-                      className="text-[12px] bg-green-600 hover:bg-green-700 text-white gap-1 cursor-pointer"
-                    >
-                      <CheckCircle2 className="size-3" />
-                      Mark Fixed
-                    </Button>
-                  )}
-                  {selectedTicket.status === 'fixed' && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleStatusChange('open')}
-                      className="text-[12px] gap-1 cursor-pointer"
-                    >
-                      <RotateCcw className="size-3" />
-                      Reopen
-                    </Button>
-                  )}
-                </div>
+                {/* Verify Fix banner — shown when admin marked fixed */}
+                {selectedTicket.status === 'fixed' && onVerifyFix && (() => {
+                  const isVerifying = verifyingTicketId === selectedTicket.id
+                  const result = verifyResult?.ticketId === selectedTicket.id ? verifyResult : null
+                  return (
+                    <div className={`rounded-lg border p-3.5 flex flex-col gap-3 ${
+                      result?.passed
+                        ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/40'
+                        : result?.passed === false
+                          ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/40'
+                          : 'bg-[#3F51B5]/[0.05] dark:bg-[#3F51B5]/10 border-[#3F51B5]/30 dark:border-[#3F51B5]/40'
+                    }`}>
+                      <div className="flex items-start gap-2.5">
+                        <FlaskConical className={`size-4 shrink-0 mt-0.5 ${result?.passed ? 'text-green-600' : result?.passed === false ? 'text-red-500' : 'text-[#3F51B5] dark:text-[#7986CB]'}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-semibold text-gray-800 dark:text-gray-100">
+                            {result?.passed ? 'Fix Verified ✓' : result?.passed === false ? 'Verification Failed' : 'Admin marked this as fixed'}
+                          </p>
+                          <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">
+                            {result?.passed
+                              ? 'The test passed. This ticket has been closed.'
+                              : result?.passed === false
+                                ? 'The test still fails. You can reopen the ticket.'
+                                : 'Run the test to confirm the fix before closing this ticket.'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {!result && (
+                          <Button size="sm" disabled={isVerifying}
+                            onClick={() => onVerifyFix(selectedTicket)}
+                            className="text-[12px] bg-[#3F51B5] hover:bg-[#3949AB] text-white gap-1.5 cursor-pointer"
+                          >
+                            {isVerifying ? <Loader2 className="size-3 animate-spin" /> : <ShieldCheck className="size-3" />}
+                            {isVerifying ? 'Running test…' : 'Verify Fix'}
+                          </Button>
+                        )}
+                        {result?.passed && (
+                          <span className="flex items-center gap-1.5 text-[12px] font-medium text-green-700 dark:text-green-400">
+                            <CheckCircle2 className="size-3.5" /> Closed automatically
+                          </span>
+                        )}
+                        {result?.passed === false && (
+                          <Button size="sm"
+                            onClick={() => onVerifyFix(selectedTicket)}
+                            className="text-[12px] bg-[#3F51B5] hover:bg-[#3949AB] text-white gap-1.5 cursor-pointer"
+                          >
+                            <RefreshCw className="size-3" /> Retry
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline"
+                          onClick={() => handleStatusChange('open')}
+                          className="text-[12px] gap-1 cursor-pointer text-gray-500"
+                        >
+                          <RotateCcw className="size-3" /> Reopen
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* Status Change Buttons — for non-fixed statuses */}
+                {selectedTicket.status !== 'fixed' && selectedTicket.status !== 'closed' && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] text-gray-500 dark:text-gray-400 font-medium">Change Status:</span>
+                    {selectedTicket.status === 'open' && (
+                      <Button size="sm" onClick={() => handleStatusChange('in-progress')}
+                        className="text-[12px] bg-[#2D3FC7] hover:bg-[#3F51B5] text-white gap-1 cursor-pointer"
+                      >
+                        <Play className="size-3" /> Mark In Progress
+                      </Button>
+                    )}
+                    {selectedTicket.status === 'in-progress' && (
+                      <Button size="sm" onClick={() => handleStatusChange('fixed')}
+                        className="text-[12px] bg-green-600 hover:bg-green-700 text-white gap-1 cursor-pointer"
+                      >
+                        <CheckCircle2 className="size-3" /> Mark Fixed
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
 
               <Separator />

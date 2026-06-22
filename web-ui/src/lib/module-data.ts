@@ -36,6 +36,12 @@ const FOLDER_TO_SIDEBAR_FALLBACK: Record<string, string> = {
   customer: 'customer',
   supplier: 'supplier',
   agent: 'agent',
+  member: 'member',
+  private_b2b: 'private-b2b',
+  purchase_order: 'purchase-order',
+  goods_receipt_note: 'goods-receipt-note',
+  gate_pass: 'gate-pass',
+  quality_check: 'quality-check',
 }
 
 const SIDEBAR_TO_FOLDER_FALLBACK: Record<string, { module: string; subModule: string | null }> = {
@@ -71,6 +77,12 @@ const SIDEBAR_TO_FOLDER_FALLBACK: Record<string, { module: string; subModule: st
   customer: { module: 'registration', subModule: 'customer' },
   supplier: { module: 'registration', subModule: 'supplier' },
   agent: { module: 'registration', subModule: 'agent' },
+  member: { module: 'registration', subModule: 'member' },
+  'private-b2b': { module: 'private_b2b', subModule: null },
+  'purchase-order': { module: 'private_b2b', subModule: 'purchase_order' },
+  'goods-receipt-note': { module: 'private_b2b', subModule: 'goods_receipt_note' },
+  'gate-pass': { module: 'private_b2b', subModule: 'gate_pass' },
+  'quality-check': { module: 'private_b2b', subModule: 'quality_check' },
 }
 
 export function getCachedFolderToSidebarId(folderName: string): string {
@@ -78,7 +90,7 @@ export function getCachedFolderToSidebarId(folderName: string): string {
 }
 
 export function getCachedSidebarToFolderMapping(sidebarId: string): { module: string; subModule: string | null } | null {
-  return _reverseCache.get(sidebarId) ?? SIDEBAR_TO_FOLDER_FALLBACK[sidebarId] ?? null
+  return SIDEBAR_TO_FOLDER_FALLBACK[sidebarId] ?? _reverseCache.get(sidebarId) ?? null
 }
 
 export async function folderToSidebarIdFromDB(folderName: string): Promise<string | null> {

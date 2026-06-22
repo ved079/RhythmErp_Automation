@@ -41,6 +41,12 @@ const DISPLAY_NAMES: Record<string, string> = {
   customer: 'Customer',
   supplier: 'Supplier',
   agent: 'Agent',
+  member: 'Member',
+  private_b2b: 'Private (B2B)',
+  purchase_order: 'Purchase Order',
+  goods_receipt_note: 'Goods Receipt Note',
+  gate_pass: 'Gate Pass',
+  quality_check: 'Quality Check',
 }
 
 // Parent mappings for sub-modules
@@ -71,10 +77,15 @@ const PARENT_MAP: Record<string, { name: string; label: string }> = {
   customer: { name: 'registration', label: 'Registration' },
   supplier: { name: 'registration', label: 'Registration' },
   agent: { name: 'registration', label: 'Registration' },
+  member: { name: 'document', label: 'Document' },
+  purchase_order: { name: 'private_b2b', label: 'Private (B2B)' },
+  goods_receipt_note: { name: 'private_b2b', label: 'Private (B2B)' },
+  gate_pass: { name: 'private_b2b', label: 'Private (B2B)' },
+  quality_check: { name: 'private_b2b', label: 'Private (B2B)' },
 }
 
 // Top-level modules
-const TOP_MODULES = ['login_screens', 'company_onboarding', 'common_settings', 'commodity_settings', 'access', 'registration']
+const TOP_MODULES = ['login_screens', 'company_onboarding', 'common_settings', 'commodity_settings', 'access', 'registration', 'document', 'private_b2b']
 
 export async function POST(req: NextRequest) {
   const user = await validateAdminSession(req)
@@ -128,6 +139,9 @@ export async function POST(req: NextRequest) {
           const parent = PARENT_MAP[sub.name] || { name: mod.name, label: mod.display }
           const existing = await db.testModule.findUnique({ where: { name: sub.name } })
 
+          // Find parent ID
+          const parentModule = await db.testModule.findUnique({ where: { name: parent.name } })
+
           if (existing) {
             await db.testModule.update({
               where: { name: sub.name },
@@ -135,14 +149,13 @@ export async function POST(req: NextRequest) {
                 label: sub.display || DISPLAY_NAMES[sub.name] || sub.name,
                 folderName: sub.name,
                 testCount,
+                parentId: parentModule?.id || null,
                 parentLabel: parent.label,
                 status: 'active',
               },
             })
             updated++
           } else {
-            // Find parent ID
-            const parentModule = await db.testModule.findUnique({ where: { name: parent.name } })
             await db.testModule.create({
               data: {
                 name: sub.name,
