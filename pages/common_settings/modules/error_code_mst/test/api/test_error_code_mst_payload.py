@@ -15,8 +15,6 @@ from pages.common_settings.modules.error_code_mst.data.error_code_mst_data impor
     generate_error_code_mst_api_payloads,
     generate_batch_payloads,
     ERROR_CODE_TYPE_IDS,
-    DEFAULT_ERROR_CODE_MST_FK_IDS,
-    FIELD_VALIDATION_RULES,
 )
 
 

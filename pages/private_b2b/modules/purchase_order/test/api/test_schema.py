@@ -9,6 +9,11 @@ sys.path.insert(0, PROJECT_ROOT)
 import pytest
 from common.logger import log
 
+pytestmark = pytest.mark.skip(
+    reason="Purchase Order is a /procure-to-pay/ module, not a dynamic screen. "
+           "The /core/dynamic-screen/ schema endpoint is not available for PO."
+)
+
 
 class TestSchemaStructure:
     @pytest.mark.schema

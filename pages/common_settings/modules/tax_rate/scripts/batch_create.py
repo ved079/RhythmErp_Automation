@@ -23,18 +23,11 @@ from common.erp_api_client import ErpApiClient
 from common.fk_resolver import FkResolver
 from pages.common_settings.modules.tax_rate.data.tax_rate_data import (
     generate_tax_rate_api_payloads,
-    TAX_TYPE_IDS,
-    TAX_AUTHORITY_IDS,
-    HSN_SAC_NUMBER_IDS,
+    get_fk_screen_mapping,
+    HSN_SAC_CODES,
 )
 
 SCREEN_NAME = "Tax Rate"
-
-FK_SCREEN_MAP = {
-    "tax_type_ref_id": "Tax Type",
-    "tax_authority_ref_id": "Tax Authority",
-    "hsn_sac_number": "HSN SAC",
-}
 
 
 def parse_args():
@@ -47,10 +40,15 @@ def parse_args():
     return parser.parse_args()
 
 
+def get_fk_map():
+    """Convert get_fk_screen_mapping() output to {field: screen_name} dict."""
+    return {m["fk_field"]: m["screen_name"] for m in get_fk_screen_mapping()}
+
 def resolve_all_fk_ids(resolver):
     """Resolve all Tax Rate FK IDs from the live ERP."""
+    fk_map = get_fk_map()
     fk_ids = {}
-    for field, screen in FK_SCREEN_MAP.items():
+    for field, screen in fk_map.items():
         try:
             resolved = resolver.resolve(screen)
             if resolved:
@@ -60,9 +58,17 @@ def resolve_all_fk_ids(resolver):
                     print(f"      {name}: {fid}")
                 fk_ids[field] = resolved
             else:
-                print(f"    {field}: NOT FOUND — will fall back to hardcoded IDs")
+                print(f"    {field}: NOT FOUND")
         except Exception as e:
             print(f"    {field}: ERROR — {e}")
+    # Try extra screen name variations for hsn_sac_number if needed
+    if "hsn_sac_number" not in fk_ids or not fk_ids["hsn_sac_number"]:
+        for attempt in ["HSN SAC Number", "HSN/SAC Number", "HSN SAC"]:
+            resolved = resolver.resolve(attempt)
+            if resolved:
+                print(f"    hsn_sac_number: Found {len(resolved)} values from '{attempt}'")
+                fk_ids["hsn_sac_number"] = resolved
+                break
     return fk_ids
 
 
@@ -97,24 +103,14 @@ def main():
         print("  ** DRY-RUN MODE — no entries will be created **")
     print("=" * 70)
 
-    # ── Generate payloads BEFORE token/auth (dry-run works without auth) ─
-    print()
-    print(f"  Generating {count} payloads (offset={args.offset})...")
-    try:
-        payloads = generate_tax_rate_api_payloads(count=count, offset=args.offset, fk_ids={})
-    except Exception as e:
-        print(f"  ERROR generating payloads: {e}")
-        return
-
-    # ── DRY RUN: print & exit (no token needed) ─────────────────────────
+    # ── DRY RUN: just show what would be created (no auth needed) ────────
     if args.dry_run:
-        print(f"  [DRY-RUN] {len(payloads)} payloads generated")
-        for j, p in enumerate(payloads):
-            name = f"name={p.get('tax_rate_name','')[:30]} auth={p.get('tax_authority_ref_id','')}"
-            print(f"    [{j+1}] {name}")
+        print(f"  [DRY-RUN] Would create {count} Tax Rate entries (offset={args.offset})")
+        print("  Skipping payload generation (requires resolved FK IDs).")
+        print("  Run without --dry-run to resolve FK IDs and create entries.")
         return
 
-    # ── Only NOW ask for token ──────────────────────────────────────────
+    # ── Prompt for auth ────────────────────────────────────────────────
     args = prompt_missing_args(args)
 
     api = ErpApiClient()
@@ -126,18 +122,14 @@ def main():
     resolver = FkResolver(api)
     fk_ids = resolve_all_fk_ids(resolver)
 
-    # Try extra screen name variations for hsn_sac_number if needed
-    if "hsn_sac_number" not in fk_ids or not fk_ids["hsn_sac_number"]:
-        for attempt in ["HSN SAC Number", "HSN/SAC Number", "HSN SAC"]:
-            resolved = resolver.resolve(attempt)
-            if resolved:
-                print(f"    hsn_sac_number: Found {len(resolved)} values from '{attempt}'")
-                fk_ids["hsn_sac_number"] = resolved
-                break
+    if not fk_ids or not any(fk_ids.values()):
+        print("  ERROR: Could not resolve any FK IDs. Cannot generate payloads.")
+        api.close()
+        return
 
-    # ── Re-generate payloads with resolved FK IDs ─────────────────────
+    # ── Generate payloads with resolved FK IDs ────────────────────────
     print()
-    print(f"  Re-generating {count} payloads with resolved FK IDs...")
+    print(f"  Generating {count} payloads with resolved FK IDs...")
     try:
         payloads = generate_tax_rate_api_payloads(count=count, offset=args.offset, fk_ids=fk_ids)
     except Exception as e:

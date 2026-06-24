@@ -195,40 +195,46 @@ def generate_hsn_sac_api_payloads(count=10, fk_ids=None):
 # HSN SAC is a flat screen — no children, no steppers.
 # 2 standard fields + 1 FK dropdown = 3 fields.
 
-FIELD_VALIDATION_RULES = {
-    "hsn_sac_no": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "HSN code (4+ digits) or SAC code (6 digits). Alphanumeric.",
-    },
-    "hsn_sac_type": {
-        "type": "dropdown",
-        "required": True,
-        "fk_options_count": len(HSN_SAC_TYPE_IDS),
-        "note": "FK to HSN/SAC Type. 4 options: Services, Transportation, Commission, Commodity.",
-    },
-    "hsn_sac_description": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "Human-readable description of the HSN/SAC code.",
-    },
-}
+def get_field_validation_rules(fk_ids=None):
+    """Return validation rules dict with dynamic fk_options_count from FK-resolved data."""
+    type_count = len(fk_ids.get("hsn_sac_type", {})) if fk_ids else len(HSN_SAC_TYPE_IDS)
+    return {
+        "hsn_sac_no": {
+            "type": "character",
+            "required": True,
+            "max_length": 255,
+            "note": "HSN code (4+ digits) or SAC code (6 digits). Alphanumeric.",
+        },
+        "hsn_sac_type": {
+            "type": "dropdown",
+            "required": True,
+            "fk_options_count": type_count,
+            "note": "FK to HSN/SAC Type.",
+        },
+        "hsn_sac_description": {
+            "type": "character",
+            "required": True,
+            "max_length": 255,
+            "note": "Human-readable description of the HSN/SAC code.",
+        },
+    }
 
-# HSN SAC Type display names for schema tests
-HSN_SAC_TYPE_NAMES = dict(HSN_SAC_TYPE_IDS)
 
-# Default FK IDs for HSN SAC
-DEFAULT_HSN_SAC_FK_IDS = {
-    "hsn_sac_type": HSN_SAC_TYPE_IDS,
-}
+# Backward-compat constant
+FIELD_VALIDATION_RULES = get_field_validation_rules()
+
+
+def get_fk_screen_mapping():
+    """Declare which FK dropdown fields need live resolution from which ERP screen."""
+    return {"hsn_sac_type": "HSN SAC Type"}
 
 
 def generate_batch_payloads(
     count: int = 20,
     prefix: str = None,
     dropdown_ids: dict = None,
+    offset: int = 0,
+    existing_entries: list = None,
 ) -> list:
     """Generate a batch of unique HSN SAC API payloads."""
     return generate_hsn_sac_api_payloads(count=count, fk_ids=dropdown_ids)

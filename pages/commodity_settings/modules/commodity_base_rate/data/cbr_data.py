@@ -231,8 +231,19 @@ COMMODITY_BASE_RATE_API_DATA = [
 
 def build_cbr_api_payload(pricing_type_ref_id, location_ref_id,
                           from_date="2026-06-02T00:00:00Z",
-                          to_date="2099-12-30T18:30:00Z"):
-    """Build a single API payload for CBR (header-only)."""
+                          to_date="2099-12-30T18:30:00Z",
+                          detail_rows=None):
+    """Build a single CBR API payload with header + item detail rows."""
+    if detail_rows is None:
+        # Default: one row using first item and UOM from the pool
+        item_name, uom_name = CBR_GRID_DATA[0]
+        detail_rows = [
+            {
+                "item_ref_id": ITEM_ID_MAP[item_name],
+                "uom": UOM_ID_MAP[uom_name],
+                "item_rate": str(random.randint(1000, 5000)),
+            }
+        ]
     return {
         "id": "",
         "attribute_name": "Commodity Base Rate",
@@ -240,6 +251,15 @@ def build_cbr_api_payload(pricing_type_ref_id, location_ref_id,
         "from_date": from_date,
         "to_date": to_date,
         "location_ref_id": location_ref_id,
+        "details": [],
+        "children": [
+            {
+                "stepper_name": "Define Item Rate Commision Details",
+                "is_stepper": True,
+                "details": detail_rows,
+                "children": [],
+            }
+        ],
     }
 
 
@@ -326,6 +346,155 @@ DEFAULT_COMMODITY_BASE_RATE_FK_IDS = {
 }
 
 
-def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None):
-    """Generate a batch of unique CBR API payloads."""
-    return generate_cbr_payloads(count=count)
+def get_fk_screen_mapping():
+    """Return FK field → screen name mapping for live FkResolver resolution."""
+    return {
+        "location_ref_id": "Location",
+        "item_ref_id":     "Item Master",
+        "uom":             "UOM",
+    }
+
+
+def enrich_existing_entries(client, entries):
+    """Fetch full detail for each CBR listing row.
+
+    Returns enriched entries with:
+      - _detail: full raw detail response
+      - _existing_item_ids: set of item_ref_ids already in the detail grid
+      - location_ref_id: resolved to integer ID
+    """
+    enriched = []
+    for entry in entries:
+        try:
+            detail = client.get_entry("Commodity Base Rate", entry["id"])
+            existing_item_ids = set()
+            for child in detail.get("children", []):
+                for row in child.get("details", []):
+                    iid = row.get("item_ref_id")
+                    if iid is not None:
+                        existing_item_ids.add(int(iid))
+            enriched.append({
+                **entry,
+                "_detail": detail,
+                "_existing_item_ids": existing_item_ids,
+            })
+        except Exception:
+            enriched.append({**entry, "_detail": None, "_existing_item_ids": set()})
+    return enriched
+
+
+def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None, offset=0, existing_entries=None):
+    """Generate CBR UPDATE payloads: add missing items to each location's detail grid.
+
+    CBR unique constraint is (to_date, location_ref_id) — one header per location.
+    Items go in the detail grid rows. This function updates existing records to
+    add all items not yet present in their grid.
+
+    Requires dropdown_ids:
+      - location_ref_id: {name: id}
+      - item_ref_id:     {name: id}
+      - item_uom_map:    {item_id: uom_name_or_id}
+      - uom:             {name: id}
+
+    existing_entries must be enriched via enrich_existing_entries().
+    """
+    fk_ids = dropdown_ids or {}
+    loc_map = fk_ids.get("location_ref_id", {})
+    item_map = fk_ids.get("item_ref_id", {})
+    item_uom_map = fk_ids.get("item_uom_map", {})
+    uom_map = fk_ids.get("uom", {})
+    pt_id = PRICING_TYPE_ID_MAP["Common"]
+
+    def _to_id(val, name_map):
+        if val is None:
+            return None
+        if isinstance(val, (int, float)):
+            return int(val)
+        v = name_map.get(val)
+        if v is not None:
+            return int(v)
+        for k, vid in name_map.items():
+            if k.lower().strip() == val.lower().strip():
+                return int(vid)
+        return None
+
+    def _resolve_uom(val):
+        if val is None:
+            return None
+        if isinstance(val, (int, float)):
+            return int(val)
+        return int(uom_map[val]) if val in uom_map else None
+
+    all_item_ids = [int(v) for v in item_map.values()]
+
+    # Build map of location_id → enriched existing entry (if any)
+    existing_by_loc = {}
+    for entry in (existing_entries or []):
+        loc_id = _to_id(entry.get("location_ref_id"), loc_map)
+        if loc_id is not None:
+            existing_by_loc[loc_id] = entry
+
+    payloads = []
+    for loc_id in loc_map.values():
+        if len(payloads) >= count:
+            break
+
+        loc_id = int(loc_id)
+        existing = existing_by_loc.get(loc_id)
+
+        if existing and existing.get("_detail"):
+            # Location already has a record — UPDATE with any missing items
+            detail = existing["_detail"]
+            already_have = existing.get("_existing_item_ids", set())
+            missing_items = [iid for iid in all_item_ids if iid not in already_have]
+            if not missing_items:
+                continue  # all items already present, nothing to do
+
+            existing_rows = []
+            for child in detail.get("children", []):
+                existing_rows = child.get("details", [])
+                break
+
+            new_rows = list(existing_rows)
+            for item_id in missing_items:
+                uom_id = _resolve_uom(item_uom_map.get(item_id))
+                if uom_id is None:
+                    continue
+                new_rows.append({
+                    "item_ref_id": item_id,
+                    "uom": uom_id,
+                    "item_rate": str(random.randint(1000, 5000)),
+                })
+
+            payloads.append({
+                **detail,
+                "id": existing["id"],
+                "children": [{
+                    "stepper_name": "Define Item Rate Commision Details",
+                    "is_stepper": True,
+                    "details": new_rows,
+                    "children": [],
+                }],
+            })
+
+        else:
+            # No record for this location yet — CREATE with all items
+            detail_rows = []
+            for item_id in all_item_ids:
+                uom_id = _resolve_uom(item_uom_map.get(item_id))
+                if uom_id is None:
+                    continue
+                detail_rows.append({
+                    "item_ref_id": item_id,
+                    "uom": uom_id,
+                    "item_rate": str(random.randint(1000, 5000)),
+                })
+
+            if not detail_rows:
+                continue
+
+            payloads.append(build_cbr_api_payload(pt_id, loc_id, detail_rows=detail_rows))
+
+    return payloads
+
+

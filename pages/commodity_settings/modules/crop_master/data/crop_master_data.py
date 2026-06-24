@@ -418,5 +418,10 @@ STATUS_OPTIONS = {"Active": True, "Inactive": False}
 DEFAULT_CROP_MASTER_FK_IDS = {}  # No FK dropdowns
 
 
+def get_fk_screen_mapping():
+    """Return FK field → screen name mapping. Crop Master has no FK dropdowns."""
+    return {}
+
+
 def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None):
     return generate_crop_master_payloads(count=count)

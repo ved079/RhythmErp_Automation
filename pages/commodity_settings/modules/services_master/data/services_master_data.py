@@ -391,14 +391,14 @@ FIELD_VALIDATION_RULES = {
     "uom": {
         "type": "dropdown",
         "required": True,
-        "fk_options_count": 9,
+        "fk_options_count": 11,
         "fk_source": "UOM",
         "note": "FK dropdown → UOM table. Same pool as base_uom but independent.",
     },
     "base_uom": {
         "type": "dropdown",
         "required": True,
-        "fk_options_count": 9,
+        "fk_options_count": 11,
         "fk_source": "UOM",
         "note": "FK dropdown → UOM table. Same pool as uom but independent.",
     },
@@ -412,10 +412,9 @@ FIELD_VALIDATION_RULES = {
     "hsn_code": {
         "type": "dropdown",
         "required": True,
-        "fk_options_count": 6,
+        "fk_options_count": 7,
         "fk_source": "HSN SAC (Services type only)",
-        "note": "FK dropdown → HSN SAC table, filtered to 'Services' type. "
-                 "6 options: 995411, 995413, 995414, 995415, 996311, 996312.",
+        "note": "FK dropdown → HSN SAC table, filtered to 'Services' type.",
     },
     "status": {
         "type": "toggle",
@@ -443,25 +442,23 @@ DEFAULT_SERVICES_MASTER_FK_IDS = {
 }
 
 
+def get_fk_screen_mapping():
+    """Return FK field → screen name mapping for live FkResolver resolution."""
+    return {
+        "uom":      "UOM",
+        "hsn_code": "HSN SAC",
+    }
+
+
 def generate_batch_payloads(
     count: int = 20,
     prefix: str = None,
     dropdown_ids: dict = None,
+    offset: int = 0,
+    existing_entries: list = None,
 ) -> list:
-    """Generate a batch of unique Services Master API payloads.
-
-    Standardized batch generator matching the pattern used across all
-    RhythmERP modules (UOM, Customer, Supplier, etc.).
-
-    Args:
-        count: Number of payloads to generate.
-        prefix: Optional prefix for service names.
-        dropdown_ids: Not used (FK IDs are resolved from data pool).
-
-    Returns:
-        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
-    """
-    return generate_services_master_payloads(count=count)
+    """Generate a batch of unique Services Master API payloads."""
+    return generate_services_master_payloads(count=count, offset=offset, fk_ids=dropdown_ids)
 
 
 def generate_services_master_payloads(count: int = 10, offset: int = 0, fk_ids: dict = None) -> list:

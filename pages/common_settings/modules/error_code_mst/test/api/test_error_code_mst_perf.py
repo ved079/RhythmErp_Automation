@@ -14,8 +14,9 @@ PROJECT_ROOT = os.path.abspath(
 )
 sys.path.insert(0, PROJECT_ROOT)
 
+from common.fk_resolver import FkResolver
 from pages.common_settings.modules.error_code_mst.data.error_code_mst_data import (
-    generate_error_code_mst_api_payloads, generate_batch_payloads,
+    generate_error_code_mst_api_payloads, generate_batch_payloads, get_fk_screen_mapping,
 )
 
 SCREEN_NAME = "Error Code Mst"
@@ -44,8 +45,14 @@ class TestErrorCodeMstPerformance:
     @pytest.mark.live_api
     def test_batch_create_5_error_codes(self, api_client):
         """Create, Read, and Update 5 Error Code Mst entries via live API."""
-        
-        payloads = generate_batch_payloads(count=5)
+        resolver = FkResolver(api_client)
+        fk_ids = {}
+        for field_key, screen_name in get_fk_screen_mapping().items():
+            resolved = resolver.resolve(screen_name)
+            if resolved:
+                fk_ids[field_key] = resolved
+
+        payloads = generate_batch_payloads(count=5, dropdown_ids=fk_ids or None)
         ts = datetime.datetime.now().strftime("%H%M%S")
         for i, p in enumerate(payloads):
             # API expects: code (integer), is_qty_amount (boolean)

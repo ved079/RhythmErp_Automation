@@ -166,94 +166,71 @@ def generate_bank_api_payloads(count=10, offset=0, fk_ids=None):
 # Bank is a flat screen — no children, no steppers.
 # 12 text/number fields + 2 FK dropdowns + 2 toggles = 14 fields total.
 
-FIELD_VALIDATION_RULES = {
-    # Text fields
-    "bank_name": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "Uppercase alpha only, >= 10 chars. Frontend rejects special chars.",
-    },
-    "bank_code": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "ONLY 4-digit integer accepted (e.g., 1234). No letters, no special chars.",
-    },
-    "branch_name": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-    },
-    "branch_code": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-    },
-    "account_number": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "Numeric input (type='character' but accepts digits).",
-    },
-    "swift_number": {
-        "type": "character",
-        "required": False,
-        "max_length": 255,
-        "note": "Optional. Letters-only format (e.g., MXBZNYSHTDI). No digits or special chars.",
-    },
-    "iban_number": {
-        "type": "character",
-        "required": False,
-        "max_length": 255,
-        "note": "Optional. IBAN format.",
-    },
-    "ifsc_code": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "Exactly 11 chars in standard IFSC format.",
-    },
-    "cash_credit_limit": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "Numeric value. Required for Current accounts, can be None for Saving.",
-    },
-    "bank_address": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-    },
+def get_field_validation_rules(fk_ids=None):
+    """Return validation rules dict with dynamic fk_options_count from FK-resolved data."""
+    acct_type_count = len(fk_ids.get("account_type", {})) if fk_ids else len(ACCOUNT_TYPE_IDS)
+    acct_ref_count = len(fk_ids.get("account_ref_id", {})) if fk_ids else len(ACCOUNT_REF_IDS)
+    return {
+        "bank_name": {
+            "type": "character", "required": True, "max_length": 255,
+            "note": "Uppercase alpha only, >= 10 chars. Frontend rejects special chars.",
+        },
+        "bank_code": {
+            "type": "character", "required": True, "max_length": 255,
+            "note": "ONLY 4-digit integer accepted (e.g., 1234). No letters, no special chars.",
+        },
+        "branch_name": {
+            "type": "character", "required": True, "max_length": 255,
+        },
+        "branch_code": {
+            "type": "character", "required": True, "max_length": 255,
+        },
+        "account_number": {
+            "type": "character", "required": True, "max_length": 255,
+            "note": "Numeric input (type='character' but accepts digits).",
+        },
+        "swift_number": {
+            "type": "character", "required": False, "max_length": 255,
+            "note": "Optional. Letters-only format (e.g., MXBZNYSHTDI). No digits or special chars.",
+        },
+        "iban_number": {
+            "type": "character", "required": False, "max_length": 255,
+            "note": "Optional. IBAN format.",
+        },
+        "ifsc_code": {
+            "type": "character", "required": True, "max_length": 255,
+            "note": "Exactly 11 chars in standard IFSC format.",
+        },
+        "cash_credit_limit": {
+            "type": "character", "required": True, "max_length": 255,
+            "note": "Numeric value. Required for Current accounts, can be None for Saving.",
+        },
+        "bank_address": {
+            "type": "character", "required": True, "max_length": 255,
+        },
+        "account_type": {
+            "type": "dropdown", "required": True,
+            "fk_options_count": acct_type_count,
+            "note": "2 options: Current (1849), Saving (1850).",
+        },
+        "account_ref_id": {
+            "type": "dropdown", "required": True,
+            "fk_options_count": acct_ref_count,
+            "note": "GL Account / Chart of Accounts.",
+        },
+        "is_default_bank": {
+            "type": "toggle", "required": False, "default": False,
+            "note": "Default: No (OFF).",
+        },
+        "status": {
+            "type": "toggle", "required": False, "default": True,
+            "note": "Default: Active (ON). Boolean in API payload.",
+        },
+    }
 
-    # FK Dropdowns
-    "account_type": {
-        "type": "dropdown",
-        "required": True,
-        "fk_options_count": len(ACCOUNT_TYPE_IDS),
-        "note": "2 options: Current (1849), Saving (1850).",
-    },
-    "account_ref_id": {
-        "type": "dropdown",
-        "required": True,
-        "fk_options_count": len(ACCOUNT_REF_IDS),
-        "note": "GL Account / Chart of Accounts. ~10 bank-related options in our pool.",
-    },
 
-    # Toggles
-    "is_default_bank": {
-        "type": "toggle",
-        "required": False,
-        "default": False,
-        "note": "Default: No (OFF).",
-    },
-    "status": {
-        "type": "toggle",
-        "required": False,
-        "default": True,
-        "note": "Default: Active (ON). Boolean in API payload.",
-    },
-}
+# Backward-compat constant
+FIELD_VALIDATION_RULES = get_field_validation_rules()
 
 # Status toggle options (display name -> API boolean value)
 STATUS_OPTIONS = {
@@ -261,28 +238,23 @@ STATUS_OPTIONS = {
     "Inactive": False,
 }
 
-# Account Type display names for schema tests
-ACCOUNT_TYPE_NAMES = dict(ACCOUNT_TYPE_IDS)
-
-# GL Account display names for schema tests
-ACCOUNT_REF_NAMES = dict(ACCOUNT_REF_IDS)
-
 SCREEN_NAME_FIELDS = {
     "account_type": "Account Type",
     "account_ref_id": "Account",
 }
 
-# Default FK IDs for Bank (standardized naming pattern)
-DEFAULT_BANK_FK_IDS = {
-    "account_type": ACCOUNT_TYPE_IDS,
-    "account_ref_id": ACCOUNT_REF_IDS,
-}
+
+def get_fk_screen_mapping():
+    """Declare which FK dropdown fields need live resolution from which ERP screen."""
+    return dict(SCREEN_NAME_FIELDS)
 
 
 def generate_batch_payloads(
     count: int = 20,
     prefix: str = None,
     dropdown_ids: dict = None,
+    offset: int = 0,
+    existing_entries: list = None,
 ) -> list:
     """Generate a batch of unique Bank API payloads.
 

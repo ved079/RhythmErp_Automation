@@ -14,8 +14,9 @@ PROJECT_ROOT = os.path.abspath(
 )
 sys.path.insert(0, PROJECT_ROOT)
 
+from common.fk_resolver import FkResolver
 from pages.common_settings.modules.hsn_sac.data.hsn_sac_data import (
-    generate_hsn_sac_api_payloads, generate_batch_payloads,
+    generate_hsn_sac_api_payloads, generate_batch_payloads, get_fk_screen_mapping,
 )
 
 SCREEN_NAME = "HSN SAC"
@@ -45,7 +46,14 @@ class TestHsnSacPerformance:
     def test_batch_create_5_hsn_sacs(self, api_client):
         """Create, Read, and Update 5 HSN SAC entries via live API."""
         
-        payloads = generate_batch_payloads(count=5)
+        resolver = FkResolver(api_client)
+        fk_ids = {}
+        for field_key, screen_name in get_fk_screen_mapping().items():
+            resolved = resolver.resolve(screen_name)
+            if resolved:
+                fk_ids[field_key] = resolved
+
+        payloads = generate_batch_payloads(count=5, dropdown_ids=fk_ids or None)
         ts = datetime.datetime.now().strftime("%H%M%S")
         for i, p in enumerate(payloads):
             p["hsn_sac_no"] = f"{p['hsn_sac_no']}{ts}{i}"

@@ -35,32 +35,20 @@ from pages.commodity_settings.modules.item_master.data.item_master_data import (
 
 SCREEN_NAME = "Item Master"
 
-# All FK fields that Item Master needs resolved
-FK_FIELDS = [
-    "item_category",
-    "item_group",
-    "item_attribute1",
-    "item_attribute2",
-    "item_attribute3",
-    "item_attribute4",
-    "item_attribute5",
-    "uom",
-    "base_uom",
-    "hsn_sac_code",
-]
-
 # Map FK field to the screen name used in FkResolver
 FK_SCREEN_MAP = {
-    "item_category": "Item Category",
-    "item_group": "Item Group",
+    "item_category":   "Item Category",
+    "item_group":      "Item Group",
+    "item_type":       "Item Type",
     "item_attribute1": "Item Attribute1",
     "item_attribute2": "Item Attribute2",
     "item_attribute3": "Item Attribute3",
     "item_attribute4": "Item Attribute4",
     "item_attribute5": "Item Attribute5",
-    "uom": "UOM",
-    "base_uom": "UOM",
-    "hsn_sac_code": "HSN SAC",
+    "uom":             "UOM",
+    "base_uom":        "UOM",
+    "hsn_sac_code":    "HSN SAC",
+    "sourcing_type":   "Item Sourcing",
 }
 
 
@@ -121,7 +109,8 @@ def resolve_all_fk_ids(resolver):
 def main():
     args = parse_args()
 
-    args = prompt_missing_args(args)
+    if not args.dry_run:
+        args = prompt_missing_args(args)
     count = args.count if args.count else 10
     offset = args.offset
 
@@ -135,17 +124,18 @@ def main():
         print("  ** DRY-RUN MODE — no entries will be created **")
     print("=" * 70)
 
-    api = None
+    api = ErpApiClient()
     fk_ids = {}
 
-    api = ErpApiClient()
-    api.set_session_from_token(args.token, tenant_id=args.tenant)
+    if not args.dry_run:
+        api.set_session_from_token(args.token, tenant_id=args.tenant)
 
-    # ── Resolve FK IDs ────────────────────────────────────────────
-    print()
-    print("  Resolving FK IDs from live ERP...")
-    resolver = FkResolver(api)
-    fk_ids = resolve_all_fk_ids(resolver)
+    if not args.dry_run:
+        # ── Resolve FK IDs ────────────────────────────────────────────
+        print()
+        print("  Resolving FK IDs from live ERP...")
+        resolver = FkResolver(api)
+        fk_ids = resolve_all_fk_ids(resolver)
 
     # ── Generate payloads ─────────────────────────────────────────────
     print()
@@ -164,15 +154,6 @@ def main():
             print(f"    [{j+1}] name={p.get('name','')[:60]} cat={p.get('item_category')} type={p.get('item_type')} uom={p.get('uom')} base_uom={p.get('base_uom')} hsn={p.get('hsn_sac_code')} src={p.get('sourcing_type')} desc={p.get('description','')[:30]}")
         api.close()
         return
-
-    # Validate payloads before sending
-    for i, p in enumerate(payloads):
-        missing = []
-        for fk_field in ["item_category", "item_type", "item_attribute1", "uom", "hsn_sac_code", "base_uom"]:
-            if p.get(fk_field) is None:
-                missing.append(fk_field)
-        if missing:
-            print(f"  WARNING: Payload {i+1} has None FK fields: {missing}")
 
     # ── Create entries ────────────────────────────────────────────────
     print()

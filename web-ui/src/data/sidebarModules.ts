@@ -47,9 +47,10 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
         children: [
           { id: 'full-purchase-flow', label: 'Full Purchase Flow' },
           { id: 'purchase-order', label: 'Purchase Order', badge: '98 tests', badgeType: 'success' as const },
-          { id: 'goods-receipt-note', label: 'Goods Receipt Note', badge: '51 tests', badgeType: 'success' as const },
           { id: 'gate-pass', label: 'Gate Pass', badge: '56 tests', badgeType: 'success' as const },
+          { id: 'goods-receipt-note', label: 'Goods Receipt Note', badge: '51 tests', badgeType: 'success' as const },
           { id: 'quality-check', label: 'Quality Check', badge: '45 tests', badgeType: 'success' as const },
+          { id: 'purchase-booking', label: 'Purchase Booking', badge: '61 tests', badgeType: 'success' as const },
         ],
       },
     ],

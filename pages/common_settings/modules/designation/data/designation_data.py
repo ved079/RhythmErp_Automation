@@ -278,27 +278,33 @@ def generate_designation_api_payloads(count=20, prefix=None, dropdown_ids=None):
 # Designation is a flat screen — no children, no steppers, no FK dropdowns.
 # 3 fields: name (required), description (optional), status (toggle).
 
-FIELD_VALIDATION_RULES = {
-    "name": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "Letters and spaces only. Frontend rejects digits, underscores, "
-                 "special chars with 'Invalid Name' mat-error.",
-    },
-    "description": {
-        "type": "character",
-        "required": False,
-        "max_length": 255,
-        "note": "Optional field. Can be empty/null.",
-    },
-    "status": {
-        "type": "toggle",
-        "required": False,
-        "default": True,
-        "note": "Boolean toggle. True=Active, False=Inactive.",
-    },
-}
+def get_field_validation_rules(fk_ids=None):
+    """Return validation rules dict. Designation has no FK fields, so fk_ids is unused."""
+    return {
+        "name": {
+            "type": "character",
+            "required": True,
+            "max_length": 255,
+            "note": "Letters and spaces only. Frontend rejects digits, underscores, "
+                     "special chars with 'Invalid Name' mat-error.",
+        },
+        "description": {
+            "type": "character",
+            "required": False,
+            "max_length": 255,
+            "note": "Optional field. Can be empty/null.",
+        },
+        "status": {
+            "type": "toggle",
+            "required": False,
+            "default": True,
+            "note": "Boolean toggle. True=Active, False=Inactive.",
+        },
+    }
+
+
+# Backward-compat constant
+FIELD_VALIDATION_RULES = get_field_validation_rules()
 
 # Status toggle options (display name -> API boolean value)
 STATUS_OPTIONS = {
@@ -306,14 +312,18 @@ STATUS_OPTIONS = {
     "Inactive": False,
 }
 
-# No FK dropdown pools — Designation has zero FK fields
-DEFAULT_DESIGNATION_FK_IDS = {}
+
+def get_fk_screen_mapping():
+    """Designation has no FK dropdown fields — return empty mapping."""
+    return {}
 
 
 def generate_batch_payloads(
     count: int = 20,
     prefix: str = None,
     dropdown_ids: dict = None,
+    offset: int = 0,
+    existing_entries: list = None,
 ) -> list:
     """Generate a batch of unique Designation API payloads.
 

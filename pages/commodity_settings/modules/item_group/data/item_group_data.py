@@ -230,5 +230,10 @@ FIELD_VALIDATION_RULES = {
 DEFAULT_ITEM_GROUP_FK_IDS = {}
 
 
+def get_fk_screen_mapping():
+    """Return FK field → screen name mapping. Item Group has no FK dropdowns."""
+    return {}
+
+
 def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None):
     return generate_item_group_payloads(count=count)

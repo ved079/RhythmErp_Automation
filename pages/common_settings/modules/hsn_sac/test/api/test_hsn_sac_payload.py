@@ -15,7 +15,6 @@ from pages.common_settings.modules.hsn_sac.data.hsn_sac_data import (
     generate_hsn_sac_api_payloads,
     generate_batch_payloads,
     HSN_SAC_TYPE_IDS,
-    DEFAULT_HSN_SAC_FK_IDS,
 )
 
 

@@ -14,23 +14,6 @@ import random
 import time
 from datetime import datetime
 
-# ── Real FK IDs from live ERP ────────────────────────────────────────
-TAX_TYPE_IDS = {"GST": 93}
-
-COUNTRY_IDS = {
-    "India": 1, "Dubai": 2, "Afghanistan": 3, "Algeria": 4, "Angola": 5,
-    "Argentina": 6, "Australia": 8, "Bahrain": 10, "Bhutan": 13, "Brazil": 16,
-    "Canada": 20, "China (offshore)": 25, "Colombia": 26, "Denmark": 32,
-    "Egypt": 34, "European Union": 38, "Hong Kong": 46, "Indonesia": 49,
-    "Israel": 52, "Kenya": 55, "Kuwait": 56, "Malaysia": 64, "Maldives": 65,
-    "Mexico": 67, "Myanmar": 70, "Nepal": 72, "New Zealand": 73, "Nigeria": 74,
-    "Oman": 77, "Pakistan": 78, "Philippines": 82, "Qatar": 84, "Russia": 86,
-    "Saudi Arabia": 89, "Singapore": 0, "South Africa": 94, "South Korea": 95,
-    "Sri Lanka": 96, "Sweden": 98, "Switzerland": 99, "Taiwan": 101,
-    "Thailand": 0, "Turkey": 105, "Ukraine": 106, "United Kingdom": 107,
-    "United States": 108, "Vietnam": 112,
-}
-
 # ── Page constants (used by tax_authority_page.py) ──────────────────
 TAX_AUTHORITY_PAGE_URL = "https://rhythmerp.algorhythms.in/#/dynamic-screens/Tax%20Authority"
 FIELD_TAX_NAME = "tax_name"
@@ -161,17 +144,16 @@ def generate_tax_authority_api_payloads(count=10, offset=0, fk_ids=None):
     Args:
         count: Number of payloads to generate
         offset: Start index in data pool
-        fk_ids: dict with resolved FK IDs
+        fk_ids: dict with resolved FK IDs (must include tax_type_ref_id, country_ref_id)
     """
-    if fk_ids is None:
-        fk_ids = {}
+    if not fk_ids:
+        raise ValueError(
+            "fk_ids is required. Resolve FK IDs via FkResolver first: "
+            "from common.fk_resolver import FkResolver"
+        )
 
-    # Merge FK IDs
-    tax_type_ids = {**TAX_TYPE_IDS, **fk_ids.get("tax_type_ref_id", {})}
-    country_ids = {**COUNTRY_IDS, **fk_ids.get("country_ref_id", {})}
-
-    gst_id = tax_type_ids.get("GST", 93)
-    india_id = country_ids.get("India", 1)
+    tax_type_ids = fk_ids.get("tax_type_ref_id", {})
+    country_ids = fk_ids.get("country_ref_id", {})
 
     payloads = []
 
@@ -179,8 +161,8 @@ def generate_tax_authority_api_payloads(count=10, offset=0, fk_ids=None):
         idx = offset + i
         entry = TAX_AUTHORITIES[idx % len(TAX_AUTHORITIES)]
 
-        tax_type_ref_id = tax_type_ids.get(entry["tax_type"], gst_id)
-        country_ref_id = country_ids.get(entry["country"], india_id)
+        tax_type_ref_id = tax_type_ids.get(entry["tax_type"])
+        country_ref_id = country_ids.get(entry["country"])
 
         payload = build_tax_authority_api_payload(
             tax_name=entry["tax_name"],
@@ -195,36 +177,68 @@ def generate_tax_authority_api_payloads(count=10, offset=0, fk_ids=None):
 # ──────────────────────────────────────────────
 # FIELD VALIDATION RULES (from live ERP schema)
 # ──────────────────────────────────────────────
-FIELD_VALIDATION_RULES = {
-    "tax_name": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "Tax authority name (e.g. 'CGST Authority').",
-    },
-    "tax_type_ref_id": {
-        "type": "dropdown",
-        "required": True,
-        "fk_options_count": len(TAX_TYPE_IDS),
-        "note": "FK to Tax Type. Currently only GST=93.",
-    },
-    "country_ref_id": {
-        "type": "dropdown",
-        "required": True,
-        "fk_options_count": len(COUNTRY_IDS),
-        "note": "FK to Country. 45+ countries, India=1.",
-    },
-}
 
-TAX_TYPE_NAMES = dict(TAX_TYPE_IDS)
-COUNTRY_NAMES = dict(COUNTRY_IDS)
-
-DEFAULT_TAX_AUTHORITY_FK_IDS = {
-    "tax_type_ref_id": TAX_TYPE_IDS,
-    "country_ref_id": COUNTRY_IDS,
-}
+def get_field_validation_rules():
+    """Return field validation rules (FK counts resolved at runtime)."""
+    return {
+        "tax_name": {
+            "type": "character",
+            "required": True,
+            "max_length": 255,
+            "note": "Tax authority name (e.g. 'CGST Authority').",
+        },
+        "tax_type_ref_id": {
+            "type": "dropdown",
+            "required": True,
+            "fk_options_count": 0,
+            "note": "FK to Tax Type. Resolved at runtime via FkResolver.",
+        },
+        "country_ref_id": {
+            "type": "dropdown",
+            "required": True,
+            "fk_options_count": 0,
+            "note": "FK to Country. Resolved at runtime via FkResolver.",
+        },
+    }
 
 
-def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None, offset: int = 0) -> list:
-    """Generate a batch of unique Tax Authority API payloads."""
-    return generate_tax_authority_api_payloads(count=count, offset=offset, fk_ids=dropdown_ids)
+FIELD_VALIDATION_RULES = get_field_validation_rules()
+
+
+def get_fk_screen_mapping():
+    """Return FK field → screen name mapping for live FkResolver resolution."""
+    return {
+        "tax_type_ref_id": "Tax Type",
+        "country_ref_id":  "Country",
+    }
+
+
+def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None, offset: int = 0, existing_entries: list = None) -> list:
+    """Generate a batch of unique Tax Authority API payloads, deduping against existing_entries.
+
+    Args:
+        dropdown_ids: Must contain resolved FK IDs (tax_type_ref_id, country_ref_id).
+                      Resolve via FkResolver before calling.
+    """
+    if not dropdown_ids:
+        raise ValueError("dropdown_ids is required. Resolve FK IDs via FkResolver first.")
+    fk_ids = dropdown_ids
+    if existing_entries:
+        used_names = {e.get("tax_name", "").lower().strip() for e in existing_entries if e.get("tax_name")}
+        tax_type_ids = fk_ids.get("tax_type_ref_id", {})
+        country_ids = fk_ids.get("country_ref_id", {})
+        unique_payloads = []
+        pool_idx = 0
+        while len(unique_payloads) < count:
+            entry = TAX_AUTHORITIES[(offset + pool_idx) % len(TAX_AUTHORITIES)]
+            name = entry["tax_name"]
+            if name.lower().strip() not in used_names:
+                used_names.add(name.lower().strip())
+                unique_payloads.append(build_tax_authority_api_payload(
+                    tax_name=name,
+                    tax_type_ref_id=tax_type_ids.get(entry["tax_type"]),
+                    country_ref_id=country_ids.get(entry["country"]),
+                ))
+            pool_idx += 1
+        return unique_payloads
+    return generate_tax_authority_api_payloads(count=count, offset=offset, fk_ids=fk_ids)

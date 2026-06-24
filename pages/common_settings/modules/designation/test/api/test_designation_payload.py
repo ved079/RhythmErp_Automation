@@ -17,9 +17,6 @@ from pages.common_settings.modules.designation.data.designation_data import (
     generate_designation_api_payload,
     generate_valid_designation_data,
     generate_batch_payloads,
-    FIELD_VALIDATION_RULES,
-    STATUS_OPTIONS,
-    DEFAULT_DESIGNATION_FK_IDS,
 )
 
 
@@ -92,10 +89,6 @@ class TestDesignationAPIPayload:
     def test_build_with_no_data_generates_random(self):
         payload = build_designation_api_payload()
         assert payload["name"] != ""
-
-    def test_payload_no_fk_ids_needed(self):
-        assert DEFAULT_DESIGNATION_FK_IDS == {}
-
 
 @pytest.mark.api
 class TestDesignationBatchGeneration:

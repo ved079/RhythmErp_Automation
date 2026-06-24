@@ -16,9 +16,6 @@ from pages.common_settings.modules.season.data.season_data import (
     build_season_api_payload,
     generate_season_api_payload,
     generate_batch_payloads,
-    FIELD_VALIDATION_RULES,
-    STATUS_OPTIONS,
-    DEFAULT_SEASON_FK_IDS,
 )
 
 
@@ -86,10 +83,6 @@ class TestSeasonAPIPayload:
     def test_build_with_no_data_generates_random(self):
         payload = build_season_api_payload()
         assert payload["name"] != ""
-
-    def test_payload_no_fk_ids_needed(self):
-        assert DEFAULT_SEASON_FK_IDS == {}
-
 
 @pytest.mark.api
 class TestSeasonBatchGeneration:

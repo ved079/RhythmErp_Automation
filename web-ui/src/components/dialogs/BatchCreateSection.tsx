@@ -48,6 +48,7 @@ const MODULE_TO_BATCH: Record<string, BatchTarget | null> = {
   'services-master': { module: 'commodity_settings', subModule: 'services_master', label: 'Commodity Settings → Services Master' },
   'item-category':  { module: 'commodity_settings', subModule: 'item_category', label: 'Commodity Settings → Item Category' },
   'item-group':     { module: 'commodity_settings', subModule: 'item_group', label: 'Commodity Settings → Item Group' },
+  'purchase-booking':  { module: 'private_b2b', subModule: 'purchase_booking', label: 'Purchase → Purchase Booking' },
   'purchase-order':    { module: 'private_b2b', subModule: 'purchase_order', label: 'Purchase → Purchase Order' },
   'goods-receipt-note': { module: 'private_b2b', subModule: 'goods_receipt_note', label: 'Purchase → Goods Receipt Note' },
   'gate-pass':         { module: 'private_b2b', subModule: 'gate_pass', label: 'Purchase → Gate Pass' },
@@ -86,6 +87,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
   const [batchRunId, setBatchRunId] = useState<string | null>(null)
   const [showCompleteDialog, setShowCompleteDialog] = useState(false)
   const [authError, setAuthError] = useState(false)
+  const [attrNumber, setAttrNumber] = useState(1)
   const [farmerConfig, setFarmerConfig] = useState<FarmerConfig>({
     farmer_type: 'fpc_member',
     overrides: {},
@@ -149,7 +151,12 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
     setShowCompleteDialog(false)
     setAuthError(false)
 
-    const batchConfig = target.subModule === 'farmer' ? farmerConfig : undefined
+    let batchConfig: Record<string, unknown> | undefined
+    if (target.subModule === 'farmer') {
+      batchConfig = farmerConfig
+    } else if (target.subModule === 'item_attribute') {
+      batchConfig = { attr_number: attrNumber }
+    }
     startBatchCreate(
       target.module,
       target.subModule,
@@ -424,6 +431,27 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
                 <FarmerBatchConfig value={farmerConfig} onChange={setFarmerConfig} />
               </div>
             )}
+            {target.subModule === 'item_attribute' && (
+              <div className="border-t border-gray-100 dark:border-gray-700 pt-3">
+                <Label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Attribute Number</Label>
+                <div className="flex gap-1.5 mt-1.5">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setAttrNumber(n)}
+                      className={`px-3 py-1.5 rounded text-[12px] font-medium border transition-colors cursor-pointer ${
+                        attrNumber === n
+                          ? 'bg-[#3F51B5] text-white border-[#3F51B5]'
+                          : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-[#3F51B5]/50'
+                      }`}
+                    >
+                      IA{n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Progress bar + counters */}
             {(running || created + failed > 0) && (
@@ -491,7 +519,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
                       const isWorkflowOk = isVerified || isApproved
                       const isWorkflowFail = t.includes('FAILED') || t.includes('ERROR')
                       const isSummary = t.startsWith('Batch create complete')
-                      const isMeta = !isRecord && !isWorkflowOk && !isWorkflowFail && !isSummary
+                      const isUpToDate = t.startsWith('Created 0 payloads')
 
                       return (
                         <div key={i} className="flex items-start gap-2 group">
@@ -515,6 +543,11 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
                                              'text-gray-500'
                           }`}>
                             {t}
+                            {isUpToDate && (
+                              <span className="ml-2 text-blue-400 not-italic">
+                                — all records already exist in ERP. Try adding new locations to create more.
+                              </span>
+                            )}
                           </span>
                         </div>
                       )

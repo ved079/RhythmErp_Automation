@@ -22,7 +22,7 @@ function formatTime(d: Date): string {
 
 export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onClearToken }: Props) {
   const [count, setCount] = useState(1)
-  const [enabledDocs, setEnabledDocs] = useState<Set<string>>(new Set(['PO', 'GP', 'GRN', 'QC']))
+  const [enabledDocs, setEnabledDocs] = useState<Set<string>>(new Set(['PO', 'GP', 'GRN', 'QC', 'PB']))
   const [supplier, setSupplier] = useState<number | null>(null)
   const [numItems, setNumItems] = useState(2)
   const [itemIds, setItemIds] = useState<number[]>([])
@@ -181,7 +181,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         {/* Document selector */}
         <div className="flex items-center gap-2 mb-4">
           <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">Create:</span>
-          {(['PO', 'GP', 'GRN', 'QC'] as const).map((doc, idx, arr) => {
+          {(['PO', 'GP', 'GRN', 'QC', 'PB'] as const).map((doc, idx, arr) => {
             const on = enabledDocs.has(doc)
             const toggle = () => {
               setEnabledDocs(prev => {

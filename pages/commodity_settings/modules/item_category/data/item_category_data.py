@@ -473,6 +473,11 @@ STATUS_OPTIONS = {"Active": True, "Inactive": False}
 DEFAULT_ITEM_CATEGORY_FK_IDS = {}
 
 
+def get_fk_screen_mapping():
+    """Return FK field → screen name mapping. Item Category has no FK dropdowns."""
+    return {}
+
+
 def generate_batch_payloads(
     count: int = 20,
     prefix: str = None,

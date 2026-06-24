@@ -66,9 +66,10 @@ const DEFAULT_MODULES: Omit<SeedModule, 'parentId'>[] = [
   // ── Private (B2B) parent ────────────────────────────
   { name: 'private-b2b', label: 'Private (B2B)', parentLabel: undefined, description: 'Private B2B module group', sortOrder: 7, status: 'active' },
   { name: 'private-b2b-purchase-order', label: 'Purchase Order', parentLabel: 'Private (B2B)', description: 'Purchase order management', sortOrder: 1, status: 'active' },
-  { name: 'private-b2b-goods-receipt-note', label: 'Goods Receipt Note', parentLabel: 'Private (B2B)', description: 'Goods receipt note management', sortOrder: 2, status: 'active' },
-  { name: 'private-b2b-gate-pass', label: 'Gate Pass', parentLabel: 'Private (B2B)', description: 'Gate pass management', sortOrder: 3, status: 'active' },
+  { name: 'private-b2b-gate-pass', label: 'Gate Pass', parentLabel: 'Private (B2B)', description: 'Gate pass management', sortOrder: 2, status: 'active' },
+  { name: 'private-b2b-goods-receipt-note', label: 'Goods Receipt Note', parentLabel: 'Private (B2B)', description: 'Goods receipt note management', sortOrder: 3, status: 'active' },
   { name: 'private-b2b-quality-check', label: 'Quality Check', parentLabel: 'Private (B2B)', description: 'Quality check management', sortOrder: 4, status: 'active' },
+  { name: 'private-b2b-purchase-booking', label: 'Purchase Booking', parentLabel: 'Private (B2B)', description: 'Purchase booking management', sortOrder: 5, status: 'active' },
 ]
 
 export async function POST(req: NextRequest) {

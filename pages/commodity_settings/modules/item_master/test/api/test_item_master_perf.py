@@ -14,8 +14,9 @@ PROJECT_ROOT = os.path.abspath(
 )
 sys.path.insert(0, PROJECT_ROOT)
 
+from common.fk_resolver import FkResolver
 from pages.commodity_settings.modules.item_master.data.item_master_data import (
-    generate_item_master_payloads, generate_batch_payloads,
+    generate_item_master_payloads, generate_batch_payloads, get_fk_screen_mapping,
 )
 
 SCREEN_NAME = "Item Master"
@@ -44,8 +45,16 @@ class TestItemMasterPerformance:
     @pytest.mark.live_api
     def test_batch_create_5_item_masters(self, api_client):
         """Create, Read, and Update 5 Item Master entries via live API."""
-        
-        payloads = generate_batch_payloads(count=5)
+
+        # Resolve FK IDs from the live ERP so payloads use this tenant's actual IDs
+        resolver = FkResolver(api_client)
+        fk_ids = {}
+        for field_key, screen_name in get_fk_screen_mapping().items():
+            resolved = resolver.resolve(screen_name)
+            if resolved:
+                fk_ids[field_key] = resolved
+
+        payloads = generate_batch_payloads(count=5, dropdown_ids=fk_ids or None)
         ts = datetime.datetime.now().strftime("%H%M%S")
         for i, p in enumerate(payloads):
             p["code"] = f"{p.get('code', '')}{ts}{i}"

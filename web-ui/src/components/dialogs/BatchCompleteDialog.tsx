@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { CheckCircle2, AlertTriangle, Download } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, Download, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 
@@ -22,7 +22,8 @@ interface Props {
 }
 
 export function BatchCompleteDialog({ open, onClose, created, failed, elapsedSeconds, onDownload }: Props) {
-  const allPassed = failed === 0
+  const nothingToDo = created === 0 && failed === 0
+  const allPassed = !nothingToDo && failed === 0
   const total = created + failed
 
   return (
@@ -33,9 +34,17 @@ export function BatchCompleteDialog({ open, onClose, created, failed, elapsedSec
           <DialogDescription className="sr-only">Batch data creation summary</DialogDescription>
         </DialogHeader>
 
-        <div className={`rounded-lg p-4 text-center ${allPassed ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-amber-50 dark:bg-amber-900/20'}`}>
+        <div className={`rounded-lg p-4 text-center ${
+          nothingToDo ? 'bg-blue-50 dark:bg-blue-900/20' :
+          allPassed   ? 'bg-emerald-50 dark:bg-emerald-900/20' :
+                        'bg-amber-50 dark:bg-amber-900/20'
+        }`}>
           <div className="flex justify-center mb-2">
-            {allPassed ? (
+            {nothingToDo ? (
+              <div className="w-14 h-14 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                <Info className="size-8 text-blue-600 dark:text-blue-400" />
+              </div>
+            ) : allPassed ? (
               <div className="w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
                 <CheckCircle2 className="size-8 text-emerald-600 dark:text-emerald-400" />
               </div>
@@ -45,14 +54,27 @@ export function BatchCompleteDialog({ open, onClose, created, failed, elapsedSec
               </div>
             )}
           </div>
-          <h3 className={`text-[17px] font-bold ${allPassed ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
-            {allPassed ? `${total} Record${total !== 1 ? 's' : ''} Created` : 'Completed with Failures'}
+          <h3 className={`text-[17px] font-bold ${
+            nothingToDo ? 'text-blue-700 dark:text-blue-400' :
+            allPassed   ? 'text-emerald-700 dark:text-emerald-400' :
+                          'text-amber-700 dark:text-amber-400'
+          }`}>
+            {nothingToDo ? 'Already Up to Date' :
+             allPassed   ? `${total} Record${total !== 1 ? 's' : ''} Created` :
+                           'Completed with Failures'}
           </h3>
           <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">
-            {allPassed
+            {nothingToDo
+              ? 'All records already exist in the ERP with the latest data. Nothing new to create.'
+              : allPassed
               ? 'All records were created successfully in the ERP.'
               : `${failed} record${failed !== 1 ? 's' : ''} failed out of ${total}.`}
           </p>
+          {nothingToDo && (
+            <p className="text-[12px] text-blue-500 dark:text-blue-400 mt-2">
+              💡 Tip: Try adding new locations in the ERP to create more records.
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-3 gap-3">

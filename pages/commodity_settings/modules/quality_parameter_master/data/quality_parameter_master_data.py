@@ -450,6 +450,11 @@ FIELD_VALIDATION_RULES = {
 DEFAULT_QUALITY_PARAMETER_MASTER_FK_IDS = {}
 
 
+def get_fk_screen_mapping():
+    """Return FK field → screen name mapping. Quality Parameter Master has no FK dropdowns."""
+    return {}
+
+
 def generate_batch_payloads(
     count: int = 20,
     prefix: str = None,
