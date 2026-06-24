@@ -38,12 +38,19 @@ class TestCBRAPIPayload:
         assert required_keys.issubset(set(payload.keys())), \
             f"Missing keys: {required_keys - set(payload.keys())}"
 
-    def test_payload_is_flat_no_children(self):
-        """CBR is a header-only screen — payload must NOT have children or details."""
+    def test_payload_has_children_with_detail_rows(self):
+        """CBR payload must include a children stepper with at least one detail row."""
         payloads = generate_cbr_payloads(count=1)
         payload = payloads[0]
-        assert "children" not in payload
-        assert "details" not in payload
+        assert "children" in payload
+        assert len(payload["children"]) == 1
+        stepper = payload["children"][0]
+        assert stepper["is_stepper"] is True
+        assert len(stepper["details"]) >= 1
+        row = stepper["details"][0]
+        assert isinstance(row["item_ref_id"], int)
+        assert isinstance(row["uom"], int)
+        assert row["item_rate"]
 
     def test_payload_attribute_name(self):
         """attribute_name must be exactly 'Commodity Base Rate'."""
@@ -118,44 +125,116 @@ class TestCBRAPIPayload:
                 f"to_date should end with Z, got: {p['to_date']}"
 
 
+from pages.commodity_settings.modules.commodity_base_rate.data.cbr_data import (
+    ITEM_ID_MAP, UOM_ID_MAP,
+)
+
+_ITEM_UOM_MAP = {int(v): list(UOM_ID_MAP.values())[i % len(UOM_ID_MAP)] for i, v in enumerate(ITEM_ID_MAP.values())}
+_MOCK_DROPDOWN_IDS = {
+    "location_ref_id": LOCATION_ID_MAP,
+    "item_ref_id": ITEM_ID_MAP,
+    "uom": UOM_ID_MAP,
+    "item_uom_map": _ITEM_UOM_MAP,
+}
+
+# Mock existing entries: 2 locations, each with 1 item already in grid
+_LOC_IDS = list(LOCATION_ID_MAP.values())
+_ITEM_IDS = list(ITEM_ID_MAP.values())
+_MOCK_EXISTING = [
+    {
+        "id": 1,
+        "location_ref_id": _LOC_IDS[0],
+        "pricing_type_ref_id": 118,
+        "from_date": "2026-06-02T00:00:00Z",
+        "to_date": "2099-12-31T18:30:00Z",
+        "_existing_item_ids": {_ITEM_IDS[0]},
+        "_detail": {
+            "id": 1,
+            "attribute_name": "Commodity Base Rate",
+            "pricing_type_ref_id": 118,
+            "location_ref_id": _LOC_IDS[0],
+            "from_date": "2026-06-02T00:00:00Z",
+            "to_date": "2099-12-31T18:30:00Z",
+            "details": [],
+            "children": [{
+                "stepper_name": "Define Item Rate Commision Details",
+                "is_stepper": True,
+                "details": [{"item_ref_id": _ITEM_IDS[0], "uom": 2, "item_rate": "1000"}],
+                "children": [],
+            }],
+        },
+    },
+    {
+        "id": 2,
+        "location_ref_id": _LOC_IDS[1],
+        "pricing_type_ref_id": 118,
+        "from_date": "2026-06-02T00:00:00Z",
+        "to_date": "2099-12-31T18:30:00Z",
+        "_existing_item_ids": {_ITEM_IDS[0]},
+        "_detail": {
+            "id": 2,
+            "attribute_name": "Commodity Base Rate",
+            "pricing_type_ref_id": 118,
+            "location_ref_id": _LOC_IDS[1],
+            "from_date": "2026-06-02T00:00:00Z",
+            "to_date": "2099-12-31T18:30:00Z",
+            "details": [],
+            "children": [{
+                "stepper_name": "Define Item Rate Commision Details",
+                "is_stepper": True,
+                "details": [{"item_ref_id": _ITEM_IDS[0], "uom": 2, "item_rate": "1000"}],
+                "children": [],
+            }],
+        },
+    },
+]
+
+
 @pytest.mark.api
 class TestCBRBatchGeneration:
     """Verify batch payload generation for Commodity Base Rate."""
 
-    def test_batch_generates_correct_count(self):
-        """generate_batch_payloads should return the requested number of payloads."""
-        payloads = generate_batch_payloads(count=5)
-        assert len(payloads) == 5
+    def test_batch_creates_for_all_locations(self):
+        """With no existing entries, generates one CREATE payload per location."""
+        payloads = generate_batch_payloads(count=100, dropdown_ids=_MOCK_DROPDOWN_IDS,
+                                           existing_entries=[])
+        assert len(payloads) == len(LOCATION_ID_MAP)
 
-    def test_batch_default_count_is_20(self):
-        """Default batch size should be 20."""
-        payloads = generate_batch_payloads()
-        assert len(payloads) == 20
+    def test_batch_updates_existing_and_creates_new(self):
+        """With 2 existing locations, updates those + creates for remaining locations."""
+        total_locs = len(LOCATION_ID_MAP)
+        payloads = generate_batch_payloads(count=100, dropdown_ids=_MOCK_DROPDOWN_IDS,
+                                           existing_entries=_MOCK_EXISTING)
+        assert len(payloads) == total_locs  # all locations covered
 
     def test_batch_all_have_attribute_name(self):
-        """Every payload in batch must have attribute_name='Commodity Base Rate'."""
-        payloads = generate_batch_payloads(count=10)
+        """Every payload must have attribute_name='Commodity Base Rate'."""
+        payloads = generate_batch_payloads(count=5, dropdown_ids=_MOCK_DROPDOWN_IDS,
+                                           existing_entries=[])
         for p in payloads:
             assert p["attribute_name"] == "Commodity Base Rate"
 
-    def test_batch_all_are_flat(self):
-        """Every payload in batch must be flat (no children/details)."""
-        payloads = generate_batch_payloads(count=10)
+    def test_batch_all_have_detail_rows(self):
+        """Every payload must have all items in the detail grid."""
+        payloads = generate_batch_payloads(count=5, dropdown_ids=_MOCK_DROPDOWN_IDS,
+                                           existing_entries=[])
         for p in payloads:
-            assert "children" not in p
-            assert "details" not in p
+            assert "children" in p
+            rows = p["children"][0]["details"]
+            assert len(rows) == len(ITEM_ID_MAP)
 
-    def test_batch_all_fk_valid(self):
-        """All FK values in batch must be from valid pools."""
-        payloads = generate_batch_payloads(count=10)
-        valid_pt = set(PRICING_TYPE_ID_MAP.values())
-        valid_loc = set(LOCATION_ID_MAP.values())
+    def test_batch_update_has_entry_id(self):
+        """Update payloads (existing locations) must have a non-empty id."""
+        payloads = generate_batch_payloads(count=100, dropdown_ids=_MOCK_DROPDOWN_IDS,
+                                           existing_entries=_MOCK_EXISTING)
+        existing_loc_ids = {int(list(LOCATION_ID_MAP.values())[0]), int(list(LOCATION_ID_MAP.values())[1])}
         for p in payloads:
-            assert p["pricing_type_ref_id"] in valid_pt
-            assert p["location_ref_id"] in valid_loc
+            if p.get("location_ref_id") in existing_loc_ids:
+                assert p["id"] not in ("", None, 0)
 
     def test_batch_no_status_field(self):
         """No payload in batch should have a status field."""
-        payloads = generate_batch_payloads(count=10)
+        payloads = generate_batch_payloads(count=5, dropdown_ids=_MOCK_DROPDOWN_IDS,
+                                           existing_entries=[])
         for p in payloads:
             assert "status" not in p

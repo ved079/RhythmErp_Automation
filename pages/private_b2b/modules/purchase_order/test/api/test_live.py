@@ -71,9 +71,11 @@ class TestLiveCRUD:
             },
             items=[
                 {"item_ref_id": 5, "hsn_sac_no": 2, "uom": 3,
+                 "alternate_uom": 3, "alternate_quantity": "25.0",
                  "quantity": 25.0, "rate": 150.0,
                  "expected_delivery_date": "2026-07-01"},
                 {"item_ref_id": 6, "hsn_sac_no": 2, "uom": 3,
+                 "alternate_uom": 3, "alternate_quantity": "10.0",
                  "quantity": 10.0, "rate": 300.0,
                  "expected_delivery_date": "2026-07-15"},
             ],

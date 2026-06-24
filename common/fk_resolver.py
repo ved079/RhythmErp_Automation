@@ -16,21 +16,13 @@ Usage:
 """
 
 import sys
-import os
-import json
-import time
 from pathlib import Path
-
-# ── Cache file path (persists between runs so we don't hammer the API) ──
-CACHE_DIR = Path(__file__).resolve().parent.parent / "pages" / "common_settings" / "data" / "discovered"
-CACHE_FILE = CACHE_DIR / "fk_cache.json"
 
 
 class FkResolver:
     """Resolves FK dropdown IDs from the live RhythmERP instance."""
 
     # Known screens and the field to use as the display name
-    # (some screens use 'name', others use 'uom_code', 'tax_name', etc.)
     SCREEN_NAME_FIELDS = {
         "UOM":              "uom_code",
         "UOM Code":         "uom_code",
@@ -51,13 +43,18 @@ class FkResolver:
         "Item Group":       "code",
         "HSN SAC Code":     "code",
         "HSN SAC":          "hsn_sac_no",
-    }
-
-    # Known hardcoded IDs (verified, stable across sessions)
-    KNOWN_IDS = {
-        "Tax Type":   {"GST": 93},
-        "Country":    {"India": 8},
-        "Account Type": {"Current": 1849, "Saving": 1850},
+        # Item Master FK screens
+        "Item Type":          "name",
+        "Item Attribute1":    "name",
+        "Item Attribute2":    "name",
+        "Item Attribute3":    "name",
+        "Item Attribute4":    "name",
+        "Item Attribute5":    "name",
+        "Item Sourcing":      "name",
+        # Commodity screens
+        "Location":           "name",
+        "Item Master":        "name",
+        "Quality Parameter":  "name",
     }
 
     def __init__(self, api_client):
@@ -66,55 +63,32 @@ class FkResolver:
             api_client: ErpApiClient instance with an active session.
         """
         self.api = api_client
-        self._cache = self._load_cache()
 
-    # ── Public API ──────────────────────────────────────────────────────
-
-    def resolve(self, screen_name, force_refresh=False):
+    def resolve(self, screen_name, parent_screen=None, field_key=None):
         """
-        Resolve all entries for a given screen, returning {display_name: id}.
+        Resolve all entries for a given screen from the live API, returning {display_name: id}.
 
         Args:
             screen_name: The ERP screen/attribute_name (e.g. "UOM", "Tax Type")
-            force_refresh: If True, always re-query the API even if cached.
+            parent_screen: The module's own screen name, for fallback via get_dropdown_options
+            field_key: The FK field key on the parent screen, for fallback
 
         Returns:
             dict: {display_name_str: integer_id, ...}
                   e.g. {"Kilogram": 501, "Metric Ton": 502, ...}
         """
-        if not force_refresh and screen_name in self._cache:
-            return self._cache[screen_name]
-
-        # Try known hardcoded IDs first
-        if screen_name in self.KNOWN_IDS and not force_refresh:
-            merged = dict(self.KNOWN_IDS[screen_name])
-            # Also try to get live data to supplement
-            live = self._fetch_from_api(screen_name)
-            if live:
-                merged.update(live)
-            self._cache[screen_name] = merged
-            self._save_cache()
-            return merged
-
-        # Fetch from live API
         live = self._fetch_from_api(screen_name)
-        if live:
-            # Merge with known IDs
-            if screen_name in self.KNOWN_IDS:
-                merged = dict(self.KNOWN_IDS[screen_name])
-                merged.update(live)
-                live = merged
-            self._cache[screen_name] = live
-            self._save_cache()
+        if live is not None:
             return live
-
-        # Fall back to known IDs only
-        if screen_name in self.KNOWN_IDS:
-            return self.KNOWN_IDS[screen_name]
-
+        # Fallback: some screens don't expose list_entries but embed FK
+        # options in the parent screen's schema (filter_dropdown_raw_query).
+        if parent_screen and field_key:
+            options = self.api.get_dropdown_options(parent_screen, field_key)
+            if options:
+                return {str(opt.get("key", "")): int(opt["id"]) for opt in options if opt.get("id") is not None}
         return {}
 
-    def resolve_one(self, screen_name, display_name, force_refresh=False):
+    def resolve_one(self, screen_name, display_name):
         """
         Resolve a single FK ID by display name.
 
@@ -125,22 +99,22 @@ class FkResolver:
         Returns:
             int or None: The ID if found, else None
         """
-        ids = self.resolve(screen_name, force_refresh=force_refresh)
+        ids = self.resolve(screen_name)
         return ids.get(display_name)
 
-    def resolve_any_id(self, screen_name, force_refresh=False):
+    def resolve_any_id(self, screen_name):
         """
         Get ANY valid ID from the given screen (useful for picking random FK values).
 
         Returns:
             int or None: A valid ID, or None if screen is empty
         """
-        ids = self.resolve(screen_name, force_refresh=force_refresh)
+        ids = self.resolve(screen_name)
         if ids:
             return list(ids.values())[0]
         return None
 
-    def resolve_random_ids(self, screen_name, count=3, force_refresh=False):
+    def resolve_random_ids(self, screen_name, count=3):
         """
         Get multiple random valid IDs from a screen (for variety in batch creation).
 
@@ -148,7 +122,7 @@ class FkResolver:
             list[int]: List of valid IDs (may be fewer than count if screen has fewer entries)
         """
         import random
-        ids = self.resolve(screen_name, force_refresh=force_refresh)
+        ids = self.resolve(screen_name)
         values = list(ids.values())
         if len(values) <= count:
             return values
@@ -187,23 +161,6 @@ class FkResolver:
             print(f"  [FK] Warning: Could not resolve '{screen_name}': {e}")
             return None
 
-    def _load_cache(self):
-        """Load FK cache from disk."""
-        if CACHE_FILE.exists():
-            try:
-                return json.loads(CACHE_FILE.read_text())
-            except (json.JSONDecodeError, OSError):
-                pass
-        return {}
-
-    def _save_cache(self):
-        """Persist FK cache to disk."""
-        try:
-            CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            CACHE_FILE.write_text(json.dumps(self._cache, indent=2))
-        except OSError as e:
-            print(f"  [FK] Warning: Could not save cache: {e}")
-
 
 # ── Standalone discovery utility ─────────────────────────────────────
 
@@ -230,7 +187,7 @@ def discover_all_fk_ids(api_client, screens=None):
     results = {}
     for screen in screens:
         print(f"  [FK] Resolving '{screen}'...", end=" ", flush=True)
-        ids = resolver.resolve(screen, force_refresh=True)
+        ids = resolver.resolve(screen)
         count = len(ids)
         print(f"{count} entries found")
         if ids:
@@ -277,4 +234,4 @@ if __name__ == "__main__":
     for screen, ids in results.items():
         print(f"  {screen}: {len(ids)} IDs resolved")
     print()
-    print(f"  Cache saved to: {CACHE_FILE}")
+    print(f"  All FK IDs resolved from live API (no cache used).")

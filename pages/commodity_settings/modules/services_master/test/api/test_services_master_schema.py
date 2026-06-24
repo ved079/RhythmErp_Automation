@@ -76,17 +76,17 @@ class TestServicesMasterSchema:
 
     # ── FK options counts ──
 
-    def test_uom_has_9_options(self):
-        """uom should have 9 options (UOM_ID_MAP size)."""
-        assert FIELD_VALIDATION_RULES["uom"]["fk_options_count"] == 9
+    def test_uom_has_11_options(self):
+        """uom should have 11 options (UOM_ID_MAP size)."""
+        assert FIELD_VALIDATION_RULES["uom"]["fk_options_count"] == 11
 
-    def test_base_uom_has_9_options(self):
-        """base_uom should have 9 options (same pool as uom)."""
-        assert FIELD_VALIDATION_RULES["base_uom"]["fk_options_count"] == 9
+    def test_base_uom_has_11_options(self):
+        """base_uom should have 11 options (same pool as uom)."""
+        assert FIELD_VALIDATION_RULES["base_uom"]["fk_options_count"] == 11
 
-    def test_hsn_code_has_6_options(self):
-        """hsn_code should have 6 options (HSN_SAC_SERVICES_ID_MAP size)."""
-        assert FIELD_VALIDATION_RULES["hsn_code"]["fk_options_count"] == 6
+    def test_hsn_code_has_7_options(self):
+        """hsn_code should have 7 options (HSN_SAC_SERVICES_ID_MAP size)."""
+        assert FIELD_VALIDATION_RULES["hsn_code"]["fk_options_count"] == 7
 
     # ── Toggle fields ──
 

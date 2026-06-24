@@ -17,8 +17,6 @@ from pages.common_settings.modules.uom_conversion.data.uom_conversion_data impor
     generate_uom_conversion_api_payloads,
     generate_batch_payloads,
     UOM_IDS,
-    FIELD_VALIDATION_RULES,
-    DEFAULT_UOM_CONVERSION_FK_IDS,
 )
 
 

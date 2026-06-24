@@ -129,11 +129,13 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
             gp = result.get("gp") or {}
             grn = result.get("grn") or {}
             qc = result.get("qc") or {}
+            pb = result.get("pb") or {}
             parts = []
             if po.get("id"): parts.append(f"PO {po['id']}")
             if gp.get("id"): parts.append(f"GP {gp['id']}")
             if grn.get("id"): parts.append(f"GRN {grn['id']}")
             if qc.get("id"): parts.append(f"QC {qc['id']}")
+            if pb.get("id"): parts.append(f"PB {pb['id']}")
             yield _sse_event(LogEvent(
                 type="log",
                 message=f"Chain [{i + 1}] OK — {' → '.join(parts)} ({elapsed:.1f}s)",

@@ -13,9 +13,8 @@ PROJECT_ROOT = os.path.abspath(
 sys.path.insert(0, PROJECT_ROOT)
 
 from pages.common_settings.modules.designation.data.designation_data import (
-    FIELD_VALIDATION_RULES,
+    get_field_validation_rules,
     STATUS_OPTIONS,
-    DEFAULT_DESIGNATION_FK_IDS,
 )
 
 
@@ -23,42 +22,46 @@ from pages.common_settings.modules.designation.data.designation_data import (
 class TestDesignationSchema:
     """Verify the Designation screen schema matches our code expectations."""
 
+    def _rules(self):
+        return get_field_validation_rules()
+
     def test_field_validation_rules_has_name(self):
-        assert "name" in FIELD_VALIDATION_RULES
+        assert "name" in self._rules()
 
     def test_field_validation_rules_has_description(self):
-        assert "description" in FIELD_VALIDATION_RULES
+        assert "description" in self._rules()
 
     def test_field_validation_rules_has_status(self):
-        assert "status" in FIELD_VALIDATION_RULES
+        assert "status" in self._rules()
 
     def test_field_validation_rules_has_3_fields(self):
-        assert len(FIELD_VALIDATION_RULES) == 3
-        assert set(FIELD_VALIDATION_RULES.keys()) == {"name", "description", "status"}
+        rules = self._rules()
+        assert len(rules) == 3
+        assert set(rules.keys()) == {"name", "description", "status"}
 
     def test_name_is_required(self):
-        assert FIELD_VALIDATION_RULES["name"]["required"] is True
+        assert self._rules()["name"]["required"] is True
 
     def test_description_is_optional(self):
-        assert FIELD_VALIDATION_RULES["description"]["required"] is False
+        assert self._rules()["description"]["required"] is False
 
     def test_name_max_length_is_255(self):
-        assert FIELD_VALIDATION_RULES["name"]["max_length"] == 255
+        assert self._rules()["name"]["max_length"] == 255
 
     def test_description_max_length_is_255(self):
-        assert FIELD_VALIDATION_RULES["description"]["max_length"] == 255
+        assert self._rules()["description"]["max_length"] == 255
 
     def test_name_type_is_character(self):
-        assert FIELD_VALIDATION_RULES["name"]["type"] == "character"
+        assert self._rules()["name"]["type"] == "character"
 
     def test_description_type_is_character(self):
-        assert FIELD_VALIDATION_RULES["description"]["type"] == "character"
+        assert self._rules()["description"]["type"] == "character"
 
     def test_status_type_is_toggle(self):
-        assert FIELD_VALIDATION_RULES["status"]["type"] == "toggle"
+        assert self._rules()["status"]["type"] == "toggle"
 
     def test_status_default_is_true(self):
-        assert FIELD_VALIDATION_RULES["status"]["default"] is True
+        assert self._rules()["status"]["default"] is True
 
     def test_status_options_has_2_entries(self):
         assert len(STATUS_OPTIONS) == 2
@@ -69,8 +72,5 @@ class TestDesignationSchema:
     def test_status_options_inactive_is_false(self):
         assert STATUS_OPTIONS["Inactive"] is False
 
-    def test_default_fk_ids_is_empty(self):
-        assert DEFAULT_DESIGNATION_FK_IDS == {}
-
     def test_status_is_not_required(self):
-        assert FIELD_VALIDATION_RULES["status"]["required"] is False
+        assert self._rules()["status"]["required"] is False

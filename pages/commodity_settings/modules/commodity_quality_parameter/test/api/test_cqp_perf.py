@@ -14,8 +14,9 @@ PROJECT_ROOT = os.path.abspath(
 )
 sys.path.insert(0, PROJECT_ROOT)
 
+from common.fk_resolver import FkResolver
 from pages.commodity_settings.modules.commodity_quality_parameter.data.commodity_quality_parameter_data import (
-    generate_cqp_payloads, generate_batch_payloads,
+    generate_cqp_payloads, generate_batch_payloads, get_fk_screen_mapping,
 )
 
 SCREEN_NAME = "Commodity Quality Parameter"
@@ -44,8 +45,15 @@ class TestCQPPerformance:
     @pytest.mark.live_api
     def test_batch_create_5_cqp(self, api_client):
         """Create, Read, and Update 5 Commodity Quality Parameter entries via live API."""
-        
-        payloads = generate_batch_payloads(count=5)
+
+        resolver = FkResolver(api_client)
+        fk_ids = {}
+        for field_key, screen_name in get_fk_screen_mapping().items():
+            resolved = resolver.resolve(screen_name)
+            if resolved:
+                fk_ids[field_key] = resolved
+
+        payloads = generate_batch_payloads(count=5, dropdown_ids=fk_ids or None)
         ts = datetime.datetime.now().strftime("%H%M%S")
         for i, p in enumerate(payloads):
             # Unique constraint is (item_ref_id, to_date);

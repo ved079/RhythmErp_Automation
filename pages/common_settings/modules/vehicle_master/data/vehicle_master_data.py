@@ -5,33 +5,14 @@ Vehicle Master — Data pool + API payload builder + test data generators.
 Screen: "Vehicle Master" (flat, 2 FK dropdowns: vehicle_type_id, fuel_type_ref_id)
 Fields: name, vehicle_price, vehicle_type_id, fuel_type_ref_id, description
 
-Discovered FK IDs (2026-06-02):
-  vehicle_type_id:   Truck=1, Trailer=2, Tanker=3, Mini Truck=4, Pickup=5
-  fuel_type_ref_id:  Diesel=1, Petrol=2, CNG=3, Electric=4, LPG=5
+FK IDs are resolved at runtime via FkResolver. No hardcoded IDs.
 """
 
 import random
 import string
 from datetime import datetime
 
-# ── Real FK IDs from live ERP ────────────────────────────────────────
-VEHICLE_TYPE_IDS = {
-    "Truck":      1,
-    "Trailer":    2,
-    "Tanker":     3,
-    "Mini Truck": 4,
-    "Pickup":     5,
-}
-
-FUEL_TYPE_IDS = {
-    "Diesel":   1,
-    "Petrol":   2,
-    "CNG":      3,
-    "Electric": 4,
-    "LPG":      5,
-}
-
-# ── Realistic data pools ─────────────────────────────────────────────
+# ── Tenant-agnostic data pools (display names only) ──────────────────
 
 VEHICLES = [
     {"name": "Tata Ace",               "price": 500000,  "vehicle_type": "Mini Truck", "fuel_type": "Diesel",   "desc": "Mini truck for intra-city goods transport"},
@@ -232,14 +213,16 @@ def generate_vehicle_master_api_payloads(count=10, offset=0, fk_ids=None):
     Args:
         count: Number of payloads to generate
         offset: Start index in data pool
-        fk_ids: dict with resolved FK IDs
+        fk_ids: dict with resolved FK IDs (must include vehicle_type_id, fuel_type_ref_id)
     """
-    if fk_ids is None:
-        fk_ids = {}
+    if not fk_ids:
+        raise ValueError(
+            "fk_ids is required. Resolve FK IDs via FkResolver first: "
+            "from common.fk_resolver import FkResolver"
+        )
 
-    # Merge FK IDs
-    vehicle_type_ids = {**VEHICLE_TYPE_IDS, **fk_ids.get("vehicle_type_id", {})}
-    fuel_type_ids = {**FUEL_TYPE_IDS, **fk_ids.get("fuel_type_ref_id", {})}
+    vehicle_type_ids = fk_ids.get("vehicle_type_id", {})
+    fuel_type_ids = fk_ids.get("fuel_type_ref_id", {})
 
     payloads = []
 
@@ -247,8 +230,8 @@ def generate_vehicle_master_api_payloads(count=10, offset=0, fk_ids=None):
         idx = offset + i
         entry = VEHICLES[idx % len(VEHICLES)]
 
-        vt_id = vehicle_type_ids.get(entry["vehicle_type"], 1)
-        ft_id = fuel_type_ids.get(entry["fuel_type"], 1)
+        vt_id = vehicle_type_ids.get(entry["vehicle_type"])
+        ft_id = fuel_type_ids.get(entry["fuel_type"])
 
         payload = build_vehicle_master_api_payload(
             name=entry["name"],
@@ -265,46 +248,80 @@ def generate_vehicle_master_api_payloads(count=10, offset=0, fk_ids=None):
 # ──────────────────────────────────────────────
 # FIELD VALIDATION RULES (from live ERP schema)
 # ──────────────────────────────────────────────
-FIELD_VALIDATION_RULES = {
-    "name": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-    },
-    "vehicle_price": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "Numeric value as string. Input type='character' in UI.",
-    },
-    "vehicle_type_id": {
-        "type": "dropdown",
-        "required": True,
-        "fk_options_count": len(VEHICLE_TYPE_IDS),
-        "note": "FK to Vehicle Type. 5 options: Truck, Trailer, Tanker, Mini Truck, Pickup.",
-    },
-    "fuel_type_ref_id": {
-        "type": "dropdown",
-        "required": True,
-        "fk_options_count": len(FUEL_TYPE_IDS),
-        "note": "FK to Fuel Type. 5 options: Diesel, Petrol, CNG, Electric, LPG.",
-    },
-    "description": {
-        "type": "character",
-        "required": False,
-        "max_length": 255,
-    },
-}
 
-VEHICLE_TYPE_NAMES = dict(VEHICLE_TYPE_IDS)
-FUEL_TYPE_NAMES = dict(FUEL_TYPE_IDS)
-
-DEFAULT_VEHICLE_MASTER_FK_IDS = {
-    "vehicle_type_id": VEHICLE_TYPE_IDS,
-    "fuel_type_ref_id": FUEL_TYPE_IDS,
-}
+def get_field_validation_rules():
+    """Return field validation rules (FK counts resolved at runtime)."""
+    return {
+        "name": {
+            "type": "character",
+            "required": True,
+            "max_length": 255,
+        },
+        "vehicle_price": {
+            "type": "character",
+            "required": True,
+            "max_length": 255,
+            "note": "Numeric value as string. Input type='character' in UI.",
+        },
+        "vehicle_type_id": {
+            "type": "dropdown",
+            "required": True,
+            "fk_options_count": 0,
+            "note": "FK to Vehicle Type. Resolved at runtime via FkResolver.",
+        },
+        "fuel_type_ref_id": {
+            "type": "dropdown",
+            "required": True,
+            "fk_options_count": 0,
+            "note": "FK to Fuel Type. Resolved at runtime via FkResolver.",
+        },
+        "description": {
+            "type": "character",
+            "required": False,
+            "max_length": 255,
+        },
+    }
 
 
-def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None, offset: int = 0) -> list:
-    """Generate a batch of unique Vehicle Master API payloads."""
-    return generate_vehicle_master_api_payloads(count=count, offset=offset, fk_ids=dropdown_ids)
+FIELD_VALIDATION_RULES = get_field_validation_rules()
+
+
+def get_fk_screen_mapping():
+    """Return FK field → screen name mapping for live FkResolver resolution."""
+    return {
+        "vehicle_type_id":  "Vehicle Type",
+        "fuel_type_ref_id": "Fuel Type",
+    }
+
+
+def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None, offset: int = 0, existing_entries: list = None) -> list:
+    """Generate a batch of unique Vehicle Master API payloads, deduping against existing_entries.
+
+    Args:
+        dropdown_ids: Must contain resolved FK IDs (vehicle_type_id, fuel_type_ref_id).
+                      Resolve via FkResolver before calling.
+    """
+    if not dropdown_ids:
+        raise ValueError("dropdown_ids is required. Resolve FK IDs via FkResolver first.")
+    fk_ids = dropdown_ids
+    if existing_entries:
+        used_names = {e.get("name", "").lower().strip() for e in existing_entries if e.get("name")}
+        vehicle_type_ids = fk_ids.get("vehicle_type_id", {})
+        fuel_type_ids = fk_ids.get("fuel_type_ref_id", {})
+        unique_payloads = []
+        pool_idx = 0
+        while len(unique_payloads) < count:
+            entry = VEHICLES[(offset + pool_idx) % len(VEHICLES)]
+            name = entry["name"]
+            if name.lower().strip() not in used_names:
+                used_names.add(name.lower().strip())
+                unique_payloads.append(build_vehicle_master_api_payload(
+                    name=name,
+                    vehicle_price=entry["price"],
+                    vehicle_type_id=vehicle_type_ids.get(entry["vehicle_type"]),
+                    fuel_type_ref_id=fuel_type_ids.get(entry["fuel_type"]),
+                    description=entry["desc"],
+                ))
+            pool_idx += 1
+        return unique_payloads
+    return generate_vehicle_master_api_payloads(count=count, offset=offset, fk_ids=fk_ids)

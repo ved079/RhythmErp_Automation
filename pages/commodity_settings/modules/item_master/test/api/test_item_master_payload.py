@@ -9,6 +9,7 @@ from pages.commodity_settings.modules.item_master.data.item_master_data import (
     ITEM_ATTRIBUTE1_OPTIONS, ITEM_ATTRIBUTE2_OPTIONS, ITEM_ATTRIBUTE3_OPTIONS,
     ITEM_ATTRIBUTE4_OPTIONS, ITEM_ATTRIBUTE5_OPTIONS,
     UOM_OPTIONS, HSN_SAC_CODE_OPTIONS, BASE_UOM_OPTIONS,
+    ITEM_SOURCING_OPTIONS,
     DEFAULT_ITEM_MASTER_FK_IDS, STEPPER_NAMES,
 )
 
@@ -19,7 +20,8 @@ class TestItemMasterAPIPayload:
         p = generate_item_master_payloads(count=1)[0]
         for k in ["id", "attribute_name", "name", "code", "description",
                    "item_category", "item_type", "uom", "hsn_sac_code",
-                   "base_uom", "base_uom_conversion", "status", "children"]:
+                   "base_uom", "base_uom_conversion", "status", "children",
+                   "sourcing_type"]:
             assert k in p, f"Missing key: {k}"
 
     def test_payload_has_children_with_steppers(self):
@@ -60,6 +62,9 @@ class TestItemMasterAPIPayload:
 
     def test_payload_base_uom_is_integer(self):
         assert isinstance(generate_item_master_payloads(count=1)[0]["base_uom"], int)
+
+    def test_payload_sourcing_type_is_integer(self):
+        assert isinstance(generate_item_master_payloads(count=1)[0]["sourcing_type"], int)
 
     def test_payload_base_uom_conversion_is_string(self):
         assert isinstance(generate_item_master_payloads(count=1)[0]["base_uom_conversion"], str)
@@ -123,15 +128,18 @@ class TestItemMasterAPIPayload:
             attr4="Multi Layered", attr5="Organic Certified",
             uom="KG", base_uom="KG", hsn="1001",
             description="Explicit build test",
+            item_sourcing="In-House",
             base_uom_conversion="5",
             is_critical=True, include_wip=True, is_packing_material=True,
             status=False,
+            fk_ids=DEFAULT_ITEM_MASTER_FK_IDS,
         )
         assert p["description"] == "Explicit build test"
         assert p["item_category"] == ITEM_CATEGORY_OPTIONS["Food Grains"]
         assert p["item_group"] == ITEM_GROUP_OPTIONS["GRN001"]
         assert p["item_type"] == ITEM_TYPE_OPTIONS["Farm"]
         assert p["item_attribute1"] == ITEM_ATTRIBUTE1_OPTIONS["Wheat"]
+        assert p["sourcing_type"] == ITEM_SOURCING_OPTIONS["In-House"]
         assert p["base_uom_conversion"] == "5"
         assert p["status"] is False
         assert p["children"][0]["is_critical"] is True
@@ -162,6 +170,7 @@ class TestItemMasterBatchGeneration:
         vu = set(UOM_OPTIONS.values())
         vh = set(HSN_SAC_CODE_OPTIONS.values())
         vb = set(BASE_UOM_OPTIONS.values())
+        vs = set(ITEM_SOURCING_OPTIONS.values())
         for p in generate_batch_payloads(count=10):
             assert p["item_category"] in vc
             assert p["item_type"] in vt
@@ -170,6 +179,7 @@ class TestItemMasterBatchGeneration:
             if p["hsn_sac_code"] is not None:
                 assert p["hsn_sac_code"] in vh
             assert p["base_uom"] in vb
+            assert p["sourcing_type"] in vs
 
     def test_batch_all_status_true(self):
         for p in generate_batch_payloads(count=10):

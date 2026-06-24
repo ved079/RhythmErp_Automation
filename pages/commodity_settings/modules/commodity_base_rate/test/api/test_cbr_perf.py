@@ -14,8 +14,9 @@ PROJECT_ROOT = os.path.abspath(
 )
 sys.path.insert(0, PROJECT_ROOT)
 
+from common.fk_resolver import FkResolver
 from pages.commodity_settings.modules.commodity_base_rate.data.cbr_data import (
-    generate_cbr_payloads, generate_batch_payloads,
+    generate_cbr_payloads, generate_batch_payloads, get_fk_screen_mapping,
 )
 
 SCREEN_NAME = "Commodity Base Rate"
@@ -45,26 +46,19 @@ class TestCBRPerformance:
     def test_batch_create_5_cbr(self, api_client):
         """Create, Read, and Update 5 Commodity Base Rate entries via live API."""
 
-        from pages.commodity_settings.modules.commodity_base_rate.data.cbr_data import DEFAULT_COMMODITY_BASE_RATE_FK_IDS
+        resolver = FkResolver(api_client)
+        fk_ids = {}
+        for field_key, screen_name in get_fk_screen_mapping().items():
+            resolved = resolver.resolve(screen_name)
+            if resolved:
+                fk_ids[field_key] = resolved
 
-        # Get available location IDs from FK pool
-        location_ids = list(DEFAULT_COMMODITY_BASE_RATE_FK_IDS.get("location_ref_id", {}).values())
-
-        # Use a unique year based on current timestamp to guarantee no collisions
         ts = datetime.datetime.now().strftime("%H%M%S")
-        base_year = 2050 + (int(ts) % 30)  # 2050-2079, different each run
+        base_year = 2050 + (int(ts) % 30)
 
-        payloads = []
-        for i in range(min(5, len(location_ids))):
-            payload = {
-                "id": "",
-                "attribute_name": SCREEN_NAME,
-                "pricing_type_ref_id": list(DEFAULT_COMMODITY_BASE_RATE_FK_IDS.get("pricing_type_ref_id", {}).values())[0],
-                "from_date": "2026-06-02T00:00:00Z",
-                "to_date": f"{base_year + i}-12-31T18:30:00Z",
-                "location_ref_id": location_ids[i],
-            }
-            payloads.append(payload)
+        payloads = generate_batch_payloads(count=5, dropdown_ids=fk_ids or None)
+        for i, p in enumerate(payloads):
+            p["to_date"] = f"{base_year + i}-12-31T18:30:00Z"
 
         assert len(payloads) >= 1, "Need at least 1 payload to test"
         

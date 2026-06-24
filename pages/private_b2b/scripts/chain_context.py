@@ -55,6 +55,10 @@ class ChainContext:
     # ── GP-specific ───────────────────────────────────────────────────────
     delivery_type:     int
 
+    # ── PB-specific ───────────────────────────────────────────────────────
+    supplier_ref_type: str = "Supplier"   # Role Type name string expected by PB ERP field
+    pb_payment_terms: Optional[int] = None  # Payment terms from PB dropdown (may differ from PO)
+
     # ── QC-specific ───────────────────────────────────────────────────────
     quality_parameters: List[dict] = field(default_factory=list)
     # [{item_quality_parameter_ref_id: int, actual_value: 1}, ...]
@@ -96,6 +100,7 @@ class ChainContextDiscoverer:
         "supplier_ship_from": 17,
         "supplier_bill_from": 18,
         "delivery_type":      29,
+        "supplier_ref_type":  "Supplier",   # default role type name
     }
 
     def __init__(self, client: RhythmERPAPIClient):
@@ -128,6 +133,8 @@ class ChainContextDiscoverer:
             supplier_ship_from = self._dropdown(_PO_SCREEN,  "supplier_ship_from",        "supplier_ship_from"),
             supplier_bill_from = self._dropdown(_PO_SCREEN,  "supplier_bill_from",        "supplier_bill_from"),
             delivery_type      = self._dropdown(_GP_SCREEN,  "delivery_type",    "delivery_type"),
+            supplier_ref_type  = self._discover_supplier_ref_type(),
+            pb_payment_terms   = self._dropdown_or_none("Purchase Booking", "supplier_payment_terms_ref_id"),
             quality_parameters = self._discover_quality_params(),
         )
 
@@ -214,6 +221,55 @@ class ChainContextDiscoverer:
             pass
         # Fall back to listing the dedicated screen
         return self._list_first_id(list_screen, field_key)
+
+    def _dropdown_or_none(self, screen_name: str, field_key: str) -> Optional[int]:
+        """Return the first dropdown option ID, or None if unavailable."""
+        try:
+            opts = self.client.get_dropdown_options(screen_name, field_key)
+            if opts:
+                first_id = opts[0].get("id")
+                if first_id is not None:
+                    log.info(f"[Discovery] {screen_name}.{field_key} → {first_id} ({opts[0].get('key', '')})")
+                    return int(first_id)
+        except Exception as e:
+            log.warning(f"[Discovery] {screen_name}.{field_key}: {e}")
+        return None
+
+    def _discover_supplier_ref_type(self) -> str:
+        """
+        Return the role type NAME (string) for the first supplier in the list.
+        The PB ERP field expects a string like "Supplier" or "Farmer", not an ID.
+        We look at the supplier listing for a role_type/supplier_type field;
+        if we can't find it we default to "Supplier".
+        """
+        _ROLE_TYPE_NAMES = {
+            1769: "Farmer",
+            1771: "Supplier",
+            1770: "Customer",
+            1814: "Operator",
+            1855: "Agent",
+        }
+        try:
+            resp = self.client.list_entries("Supplier", page=1, page_size=5)
+            if resp:
+                items = resp.get("screenmatlistingdata_set") or []
+                if items:
+                    first = items[0]
+                    # Try common field names for role type
+                    for field in ("role_type", "supplier_type", "type", "party_type"):
+                        val = first.get(field)
+                        if val is not None:
+                            if isinstance(val, int) and val in _ROLE_TYPE_NAMES:
+                                name = _ROLE_TYPE_NAMES[val]
+                                log.info(f"[Discovery] supplier_ref_type from listing.{field}={val} → '{name}'")
+                                return name
+                            if isinstance(val, str) and val:
+                                log.info(f"[Discovery] supplier_ref_type from listing.{field} → '{val}'")
+                                return val
+        except Exception as e:
+            log.warning(f"[Discovery] Could not discover supplier_ref_type: {e}")
+        log.info("[Discovery] supplier_ref_type → 'Supplier' (default)")
+        return "Supplier"
 
     def _discover_quality_params(self) -> List[dict]:
         """

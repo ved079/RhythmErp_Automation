@@ -69,6 +69,25 @@ _SCREEN_NAME_MAP: dict[str, str] = {
     "agent": "Agent",
     "directors": "Directors",
     "member": "Member",
+    "bank": "Bank",
+    "designation": "Designation",
+    "error_code_mst": "Error Code Mst",
+    "hsn_sac": "HSN SAC",
+    "season": "Season",
+    "tax_authority": "Tax Authority",
+    "tax_rate": "Tax Rate",
+    "vehicle_master": "Vehicle Master",
+    "uom": "UOM",
+    "uom_conversion": "UOM Conversion",
+    "item_category": "Item Category",
+    "item_group": "Item Group",
+    "item_master": "Item Master",
+    "item_attribute": "Item Attribute",
+    "crop_master": "Crop Master",
+    "services_master": "Services Master",
+    "quality_parameter_master": "Quality Parameter Master",
+    "commodity_quality_parameter": "Commodity Quality Parameter",
+    "commodity_base_rate": "Commodity Base Rate",
 }
 
 
@@ -168,7 +187,58 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
         ))
         return
 
-    # 3. Generate payloads and create
+    # 3. Resolve FK IDs if the module exposes a mapping
+    raw_fk_map = getattr(data_mod, "get_fk_screen_mapping", lambda: [])()
+    # Normalise: list of dicts → {fk_field: screen_name}
+    if isinstance(raw_fk_map, list):
+        fk_map = {item["fk_field"]: item["screen_name"] for item in raw_fk_map}
+    elif isinstance(raw_fk_map, dict):
+        fk_map = raw_fk_map
+    else:
+        fk_map = {}
+    dropdown_ids = None
+    if fk_map:
+        from common.fk_resolver import FkResolver
+        try:
+            resolver = FkResolver(client)
+            parent_screen = _screen_name(request.sub_module)
+            dropdown_ids = {}
+            for field, screen in fk_map.items():
+                resolved = resolver.resolve(screen, parent_screen=parent_screen, field_key=field)
+                if resolved:
+                    dropdown_ids[field] = resolved
+            # If item_ref_id was resolved, also fetch item→uom mapping from
+            # Item Master so modules like CBR can use the correct UOM per item.
+            if "item_ref_id" in dropdown_ids:
+                try:
+                    im_resp = client.list_entries("Item Master", page_size=500)
+                    im_rows = im_resp.get("screenmatlistingdata_set", im_resp.get("results", im_resp.get("data", [])))
+                    item_uom_map = {}
+                    for row in (im_rows or []):
+                        iid = row.get("id")
+                        uom = row.get("uom") or row.get("base_uom")
+                        if iid is not None and uom is not None:
+                            item_uom_map[int(iid)] = uom
+                    if item_uom_map:
+                        dropdown_ids["item_uom_map"] = item_uom_map
+                except Exception:
+                    pass
+
+            yield _sse_event(LogEvent(
+                type="log",
+                message=f"Resolved {len(dropdown_ids)} FK field(s) from ERP",
+                timestamp=datetime.now(timezone.utc),
+                run_id=run_id,
+            ))
+        except Exception as e:
+            yield _sse_event(LogEvent(
+                type="warning",
+                message=f"FK resolution failed: {e}",
+                timestamp=datetime.now(timezone.utc),
+                run_id=run_id,
+            ))
+
+    # 4. Generate payloads and create
     start = time.time()
     created = 0
     failed = 0
@@ -182,15 +252,46 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
         run_id=run_id,
     ))
 
+    # Query existing entries to avoid duplicates
+    try:
+        screen = _screen_name(request.sub_module)
+        existing = client.list_entries(screen, page_size=500)
+        existing_items = existing.get("screenmatlistingdata_set", existing.get("results", existing.get("data", [])))
+        if isinstance(existing_items, list) and existing_items:
+            yield _sse_event(LogEvent(
+                type="log",
+                message=f"Found {len(existing_items)} existing entries — will skip duplicates",
+                timestamp=datetime.now(timezone.utc),
+                run_id=run_id,
+            ))
+    except Exception:
+        existing_items = []
+
+    # If module needs item-level dedup, enrich listing rows with detail data
+    enrich_fn = getattr(data_mod, "enrich_existing_entries", None)
+    if enrich_fn and existing_items:
+        try:
+            existing_items = enrich_fn(client, existing_items)
+        except Exception:
+            pass
+
+    sig = inspect.signature(generate_fn)
     kwargs = {"count": total}
-    if "config" in inspect.signature(generate_fn).parameters:
+    if dropdown_ids and "dropdown_ids" in sig.parameters:
+        kwargs["dropdown_ids"] = dropdown_ids
+    if existing_items and "existing_entries" in sig.parameters:
+        kwargs["existing_entries"] = existing_items
+    if "config" in sig.parameters:
         kwargs["config"] = request.config
+    attr_number = (request.config or {}).get("attr_number", 1)
+    if attr_number and "attr_number" in sig.parameters:
+        kwargs["attr_number"] = attr_number
     payloads = generate_fn(**kwargs)
     batch_size = len(payloads)
 
     yield _sse_event(LogEvent(
         type="log",
-        message=f"Created {batch_size} payloads. Starting ERP API creation...",
+        message=f"Created {batch_size} payloads (after dedup). Starting ERP API creation...",
         timestamp=datetime.now(timezone.utc),
         run_id=run_id,
     ))
@@ -202,14 +303,16 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
 
     for i, payload in enumerate(payloads):
         record_name = payload.get("name") or str(payload.get("attribute_name", ""))
-        result = client.create_entry(payload)
+        is_update = payload.get("id") and str(payload.get("id", "")).strip() not in ("", "0")
+        result = client.update_entry(payload["id"], payload) if is_update else client.create_entry(payload)
         if result is not None:
             created += 1
             record_id = result.get("id", result.get("data", {}).get("id", "N/A"))
-            records.append({"name": record_name, "record_id": record_id, "status": "created"})
+            action = "updated" if is_update else "created"
+            records.append({"name": record_name, "record_id": record_id, "status": action})
             yield _sse_event(LogEvent(
                 type="log",
-                message=f"  [{i+1}/{total}]  #{record_id}  -  {record_name}",
+                message=f"  [{i+1}/{total}] {action.upper()} #{record_id}  -  {record_name}",
                 timestamp=datetime.now(timezone.utc),
                 run_id=run_id,
             ))

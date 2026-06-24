@@ -1,11 +1,12 @@
 """
-Item Attribute — Test Data Generators
+Item Attribute — API Payload Generators
 
-All data is dynamic (timestamp + random). No hardcoded values.
 Item Attribute has 2-4 fields depending on attr_num:
-  IA1: Name (required), Base UOM (required dropdown), Description (optional), Status (toggle)
+  IA1: Name (required), Base UOM (required FK → UOM), Description (optional), Status (toggle)
   IA2-5: Name (required), Description (optional), Status (toggle)
-No file upload.
+
+Resolve base_uom FK IDs via FkResolver before calling generators.
+No hardcoded FK IDs in production — only MOCK_FK_IDS for tests.
 """
 
 import random
@@ -17,20 +18,20 @@ import time
 #  Bug IDs — referenced by test markers
 # ═══════════════════════════════════════════
 
-BUG_IA01 = 'BUG-IA01'  # Duplicate Name allowed
-BUG_IA02 = 'BUG-IA02'  # mat-select browser click doesn't register in Angular form
-BUG_IA03 = 'BUG-IA03'  # History popup "No data available" for existing records
-BUG_IA04 = 'BUG-IA04'  # No maxlength on Name/Description — server rejects 256+ with generic error
-BUG_IA05 = 'BUG-IA05'  # Generic "Failed to save record" instead of specific field error
-BUG_IA06 = 'BUG-IA06'  # Spaces-only Name accepted (should validate)
-BUG_IA07 = 'BUG-IA07'  # Special chars in Name accepted (should sanitize)
-BUG_IA08 = 'BUG-IA08'  # No history entry on creation
+BUG_IA01 = 'BUG-IA01'
+BUG_IA02 = 'BUG-IA02'
+BUG_IA03 = 'BUG-IA03'
+BUG_IA04 = 'BUG-IA04'
+BUG_IA05 = 'BUG-IA05'
+BUG_IA06 = 'BUG-IA06'
+BUG_IA07 = 'BUG-IA07'
+BUG_IA08 = 'BUG-IA08'
 
 ALL_BUGS = [BUG_IA01, BUG_IA02, BUG_IA03, BUG_IA04, BUG_IA05,
             BUG_IA06, BUG_IA07, BUG_IA08]
 
 # ═══════════════════════════════════════════
-#  Attribute Pools (for batch_create)
+#  Attribute Pools
 # ═══════════════════════════════════════════
 
 ATTRIBUTE_POOLS = {
@@ -42,44 +43,188 @@ ATTRIBUTE_POOLS = {
 }
 
 # ═══════════════════════════════════════════
-#  Batch Create Payload Generator
+#  Mock FK IDs — for tests only
 # ═══════════════════════════════════════════
 
-def generate_item_attribute_payloads(attr_number: int = 1, count: int = 10, fk_ids: dict = None) -> list:
-    """Generate N API payloads for a specific Item Attribute screen.
+MOCK_FK_IDS = {
+    "base_uom": {"NOS": 1, "KGS": 2, "QTL": 3, "MTR": 4, "LTR": 5, "PCS": 6},
+}
+
+# ═══════════════════════════════════════════
+#  Payload builders
+# ═══════════════════════════════════════════
+
+def build_item_attribute_payload(attr_number, name, description="", base_uom_id=None, status=True):
+    """
+    Build a single API payload for Item Attribute.
 
     Args:
-        attr_number: Attribute number (1-5). IA1 needs base_uom FK.
-        count: Number of payloads to generate.
-        fk_ids: Dict with resolved FK IDs, e.g. {"base_uom": {id: name, ...}}
+        attr_number: 1-5
+        name: Attribute name (required)
+        description: Optional description
+        base_uom_id: FK ID for base_uom (required for IA1)
+        status: Boolean toggle
 
     Returns:
-        list[dict]: List of API payloads ready for batch_create
+        dict: API payload
     """
-    fk_ids = fk_ids or {}
-    payloads = []
-
-    screen_name = f"Item Attribute{attr_number}"
-
+    payload = {
+        "id": "",
+        "attribute_name": f"Item Attribute{attr_number}",
+        "name": name,
+        "description": description or "",
+        "status": status,
+    }
     if attr_number == 1:
+        payload["base_uom"] = base_uom_id
+    return payload
+
+
+def generate_item_attribute_payloads(count=10, offset=0, attr_number=1, fk_ids=None):
+    """
+    Generate N API payloads for a specific Item Attribute screen.
+
+    Args:
+        count: Number of payloads to generate
+        offset: Start index in data pool
+        attr_number: Attribute number (1-5). IA1 requires fk_ids["base_uom"]
+        fk_ids: Dict with resolved FK IDs, e.g. {"base_uom": {name: id, ...}}
+
+    Returns:
+        list[dict]: List of API payloads
+    """
+    if attr_number == 1:
+        if not fk_ids:
+            raise ValueError(
+                "fk_ids is required for Item Attribute1. "
+                "Resolve base_uom FK IDs via FkResolver first."
+            )
         uom_ids = fk_ids.get("base_uom", {})
         uom_values = list(uom_ids.values()) if uom_ids else []
-        random.shuffle(uom_values)
+        if not uom_values:
+            raise ValueError("fk_ids['base_uom'] is empty. Resolve UOM IDs via FkResolver first.")
     else:
         uom_values = []
 
+    payloads = []
     for i in range(count):
-        payload = {
-            "attribute_name": screen_name,
-            "name": generate_ia_name(attr_number),
-            "description": generate_ia_description(),
-            "status": True,
-        }
-        if attr_number == 1 and uom_values:
-            payload["base_uom"] = uom_values[i % len(uom_values)]
-        payloads.append(payload)
-
+        idx = offset + i
+        uom_id = uom_values[idx % len(uom_values)] if uom_values else None
+        payloads.append(build_item_attribute_payload(
+            attr_number=attr_number,
+            name=generate_ia_name(attr_number),
+            description=generate_ia_description(),
+            base_uom_id=uom_id,
+            status=True,
+        ))
     return payloads
+
+
+def generate_all_attribute_payloads(count=3, fk_ids=None):
+    """
+    Generate payloads for all 5 Item Attribute screens.
+
+    Returns:
+        dict: {attr_num: [payloads, ...], ...}
+    """
+    return {
+        n: generate_item_attribute_payloads(count=count, attr_number=n, fk_ids=fk_ids)
+        for n in range(1, 6)
+    }
+
+
+# ═══════════════════════════════════════════
+#  STATUS OPTIONS
+# ═══════════════════════════════════════════
+
+STATUS_OPTIONS = ["Active", "Inactive"]
+
+# ═══════════════════════════════════════════
+#  FIELD VALIDATION RULES (from live ERP schema)
+# ═══════════════════════════════════════════
+
+def get_field_validation_rules():
+    """Return field validation rules (FK counts resolved at runtime)."""
+    return {
+        "name": {
+            "type": "character",
+            "required": True,
+            "max_length": 255,
+            "note": "Item Attribute name.",
+        },
+        "base_uom": {
+            "type": "dropdown",
+            "required": True,
+            "fk_options_count": 0,
+            "note": "Base UOM dropdown — only on Item Attribute 1. Resolved at runtime via FkResolver.",
+        },
+        "description": {
+            "type": "character",
+            "required": False,
+            "max_length": 255,
+            "note": "Optional description text.",
+        },
+        "status": {
+            "type": "toggle",
+            "required": False,
+            "default": True,
+            "note": "Status toggle — Active/Inactive. Default is Active.",
+        },
+    }
+
+
+FIELD_VALIDATION_RULES = get_field_validation_rules()
+
+
+# ═══════════════════════════════════════════
+#  FK Screen Mapping
+# ═══════════════════════════════════════════
+
+def get_fk_screen_mapping():
+    """Return FK field → screen name mapping for live FkResolver resolution."""
+    return {
+        "base_uom": "UOM",
+    }
+
+
+# ═══════════════════════════════════════════
+#  Batch Payload Generator (with dedup)
+# ═══════════════════════════════════════════
+
+def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None, offset: int = 0, existing_entries: list = None, attr_number: int = 1) -> list:
+    """Generate a batch of unique Item Attribute API payloads.
+
+    Args:
+        dropdown_ids: Must contain resolved FK IDs (base_uom) for IA1.
+                      Resolve via FkResolver before calling.
+        attr_number: Attribute screen number (1-5). Defaults to 1.
+    """
+    if attr_number == 1 and not dropdown_ids:
+        raise ValueError("dropdown_ids is required for Item Attribute1. Resolve FK IDs via FkResolver first.")
+
+    fk_ids = dropdown_ids or {}
+    if existing_entries:
+        used_names = {e.get("name", "").lower().strip() for e in existing_entries if e}
+        uom_ids = fk_ids.get("base_uom", {})
+        uom_values = list(uom_ids.values()) if uom_ids else []
+        unique_payloads = []
+        pool_idx = 0
+        while len(unique_payloads) < count:
+            name = generate_ia_name(attr_number)
+            if name.lower().strip() not in used_names:
+                used_names.add(name.lower().strip())
+                uom_id = uom_values[(offset + pool_idx) % len(uom_values)] if uom_values else None
+                unique_payloads.append(build_item_attribute_payload(
+                    attr_number=attr_number,
+                    name=name,
+                    description=generate_ia_description(),
+                    base_uom_id=uom_id,
+                    status=True,
+                ))
+            pool_idx += 1
+        return unique_payloads
+    return generate_item_attribute_payloads(count=count, offset=offset, attr_number=attr_number, fk_ids=fk_ids)
+
 
 # ═══════════════════════════════════════════
 #  Validation Messages
@@ -89,7 +234,6 @@ VALIDATION_FAILED_TITLE = 'Validation Failed'
 VALIDATION_FAILED_CONTENT = 'Please correct the highlighted fields'
 SUCCESS_CREATE_MSG = 'Your record has been added successfully!'
 SUCCESS_UPDATE_MSG = 'Your record has been updated successfully!'
-
 
 # ═══════════════════════════════════════════
 #  Name/Description Generators
@@ -259,32 +403,4 @@ def generate_long_name(length=300):
     return (base * repeats) + base[:remainder]
 
 
-# ═══════════════════════════════════════════
-#  FIELD VALIDATION RULES (from live ERP schema)
-# ═══════════════════════════════════════════
 
-FIELD_VALIDATION_RULES = {
-    "name": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "Item Attribute name. BUG-IA01: duplicates currently allowed.",
-    },
-    "base_uom": {
-        "type": "dropdown",
-        "required": True,
-        "note": "Base UOM dropdown — only on Item Attribute 1. BUG-IA02: browser click doesn't register.",
-    },
-    "description": {
-        "type": "character",
-        "required": False,
-        "max_length": 255,
-        "note": "Optional description text.",
-    },
-    "status": {
-        "type": "toggle",
-        "required": False,
-        "default": True,
-        "note": "Status toggle — Active/Inactive. Default is Active.",
-    },
-}

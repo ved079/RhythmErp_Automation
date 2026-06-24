@@ -63,6 +63,9 @@ from pages.private_b2b.modules.goods_receipt_note.utils.api_goods_receipt_note_u
 from pages.private_b2b.modules.quality_check.utils.api_quality_check_utils import (
     QCAPIUtils,
 )
+from pages.private_b2b.modules.purchase_booking.utils.api_purchase_booking_utils import (
+    PBAPIUtils,
+)
 from pages.private_b2b.scripts.chain_context import ChainContext, ChainContextDiscoverer
 
 
@@ -205,6 +208,23 @@ def _qc_items_from(items: List[dict], ctx=None) -> List[dict]:
     ]
 
 
+def _pb_items_from(items: List[dict], ctx=None) -> List[dict]:
+    from pages.private_b2b.modules.purchase_booking.data.purchase_booking_data import build_pb_item
+    alt_uom  = ctx.alternate_uom if ctx else 3
+    base_uom = ctx.base_uom      if ctx else 4
+    return [
+        build_pb_item(
+            item_ref_id=it["item_ref_id"],
+            hsn_sac_no=it["hsn_sac_no"],
+            alternate_uom=alt_uom,
+            uom=base_uom,
+            rate=it["rate"],
+            no_of_bags=it["no_of_bags"],
+        )
+        for it in items
+    ]
+
+
 # ---------------------------------------------------------------------------
 # PurchaseChain class
 # ---------------------------------------------------------------------------
@@ -240,6 +260,7 @@ class PurchaseChain:
         self.gp_api = GPAPIUtils(self.client)
         self.grn_api = GRNAPIUtils(self.client)
         self.qc_api = QCAPIUtils(self.client)
+        self.pb_api = PBAPIUtils(self.client)
 
         self.results: List[dict] = []
         self._context: Optional[ChainContext] = None  # discovered lazily
@@ -261,6 +282,7 @@ class PurchaseChain:
         gp_overrides: dict = None,
         grn_overrides: dict = None,
         qc_overrides: dict = None,
+        pb_overrides: dict = None,
         ctx: Optional[ChainContext] = None,
         documents: Optional[List[str]] = None,
     ) -> dict:
@@ -299,6 +321,7 @@ class PurchaseChain:
         gp_id = gp_ref = gp_data = gp_payload = None
         grn_id = grn_ref = grn_data = grn_payload = None
         qc_id = qc_ref = qc_data = qc_payload = None
+        pb_id = pb_ref = pb_data = pb_payload = None
 
         # ---------------------------------------------------------------
         # 1. Purchase Order
@@ -393,6 +416,29 @@ class PurchaseChain:
                 )
             qc_ref = qc_data.get("transaction_ref_no", str(qc_id))
             log.info(f"  QC created: ID={qc_id}, ref={qc_ref}")
+            if self.delay:
+                time.sleep(self.delay)
+
+        # ---------------------------------------------------------------
+        # 5. Purchase Booking
+        # ---------------------------------------------------------------
+        if "PB" in docs:
+            pb_payload = self._build_pb_payload(
+                eff_supplier, qc_id, grn_id, po_id, items, pb_overrides, ctx=ctx
+            )
+            log.info(f"  PB payload (first 800 chars): {json.dumps(pb_payload, default=str)[:800]}")
+            pb_data = self.pb_api.create_pb(pb_payload)
+            pb_id = pb_data.get("id") or pb_data.get("entry_id") if pb_data else None
+            if not pb_data or not pb_id:
+                _pb_resp = self.pb_api._last_response
+                _pb_body = _pb_resp.text[:400] if _pb_resp is not None else "no response"
+                _sent = json.dumps(pb_payload, default=str)[:600]
+                raise RuntimeError(
+                    f"PB creation failed (HTTP {self.pb_api._last_status}); "
+                    f"body: {_pb_body} | sent: {_sent}"
+                )
+            pb_ref = pb_data.get("transaction_ref_no", str(pb_id))
+            log.info(f"  PB created: ID={pb_id}, ref={pb_ref}")
 
         result = {
             "po": {"id": po_id, "ref": po_ref, "data": po_data, "payload": po_payload,
@@ -400,6 +446,7 @@ class PurchaseChain:
             "gp": {"id": gp_id, "ref": gp_ref, "data": gp_data, "payload": gp_payload} if gp_id else None,
             "grn": {"id": grn_id, "ref": grn_ref, "data": grn_data, "payload": grn_payload} if grn_id else None,
             "qc": {"id": qc_id, "ref": qc_ref, "data": qc_data, "payload": qc_payload} if qc_id else None,
+            "pb": {"id": pb_id, "ref": pb_ref, "data": pb_data, "payload": pb_payload} if pb_id else None,
         }
         self.results.append(result)
         return result
@@ -596,6 +643,47 @@ class PurchaseChain:
             grn_ref_id_id=grn_id,
             po_ref_id_id=po_id,
             items=qc_items,
+            **overrides,
+        )
+
+    @staticmethod
+    def _build_pb_payload(
+        supplier_ref_id: int,
+        qc_id: Optional[int],
+        grn_id: Optional[int],
+        po_id: Optional[int],
+        items: List[dict],
+        overrides: dict = None,
+        ctx: Optional[ChainContext] = None,
+    ) -> dict:
+        from pages.private_b2b.modules.purchase_booking.data.purchase_booking_data import build_pb_payload
+        pb_items = _pb_items_from(items, ctx=ctx)
+        overrides = overrides or {}
+        supplier_ref_type = ctx.supplier_ref_type if ctx else "Supplier"
+        if ctx:
+            return build_pb_payload(
+                supplier_ref_id=supplier_ref_id,
+                supplier_ref_type=supplier_ref_type,
+                parameter1=ctx.parameter1,
+                parameter2=ctx.parameter2,
+                parameter5=ctx.parameter5,
+                parameter6=ctx.parameter6,
+                base_currency=ctx.base_currency,
+                txn_currency=ctx.txn_currency,
+                supplier_payment_terms_ref_id=ctx.pb_payment_terms,
+                items=pb_items,
+                qc_ref_id=qc_id,
+                grn_ref_id=grn_id,
+                po_ref_id=po_id,
+                **overrides,
+            )
+        return build_pb_payload(
+            supplier_ref_id=supplier_ref_id,
+            supplier_ref_type=supplier_ref_type,
+            items=pb_items,
+            qc_ref_id=qc_id,
+            grn_ref_id=grn_id,
+            po_ref_id=po_id,
             **overrides,
         )
 

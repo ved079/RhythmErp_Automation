@@ -13,3 +13,5 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "schema: Schema and structure verification")
     config.addinivalue_line("markers", "calculation: Computed field verification")
     config.addinivalue_line("markers", "performance: Speed and benchmark tests")
+    config.addinivalue_line("markers", "live: Tests that require a live ERP token (ERP_TOKEN env var)")
+    config.addinivalue_line("markers", "integrity: Data consistency and mutation tests")

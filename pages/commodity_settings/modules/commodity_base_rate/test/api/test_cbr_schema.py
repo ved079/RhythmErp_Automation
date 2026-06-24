@@ -69,9 +69,9 @@ class TestCBRSchema:
         """Pricing Type should have 2 options (Common, Supplier)."""
         assert FIELD_VALIDATION_RULES["pricing_type_ref_id"]["fk_options_count"] == 2
 
-    def test_location_has_10_options(self):
-        """Location should have 10 options."""
-        assert FIELD_VALIDATION_RULES["location_ref_id"]["fk_options_count"] == 10
+    def test_location_has_9_options(self):
+        """Location should have 9 options."""
+        assert FIELD_VALIDATION_RULES["location_ref_id"]["fk_options_count"] == 9
 
     # ── No status field in schema ──
 

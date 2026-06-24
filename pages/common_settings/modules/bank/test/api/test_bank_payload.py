@@ -18,8 +18,6 @@ from pages.common_settings.modules.bank.data.bank_data import (
     generate_batch_payloads,
     ACCOUNT_TYPE_IDS,
     ACCOUNT_REF_IDS,
-    DEFAULT_BANK_FK_IDS,
-    FIELD_VALIDATION_RULES,
 )
 
 

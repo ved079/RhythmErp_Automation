@@ -90,10 +90,27 @@ def build_uom_conversion_api_payload(source_uom_code, target_uom_code, conversio
     }
 
 
-def generate_uom_conversion_api_payloads(count=10, fk_ids=None):
+def get_fk_screen_mapping():
+    """Declare which FK dropdown fields need live resolution from which ERP screen."""
+    return {
+        "source_uom_code": "UOM",
+        "target_uom_code": "UOM",
+    }
+
+
+def generate_uom_conversion_api_payloads(count=10, fk_ids=None, offset=0, existing_pairs=None):
     """
     Generate N API payloads for UOM Conversion using FK-resolved UOM IDs.
+
+    Args:
+        count: Number of payloads to generate.
+        fk_ids: Dict with ``source_uom_code`` / ``target_uom_code`` keys
+                mapping UOM code → ERP ID (live-resolved).
+        offset: Skip this many pairs from the realistic CONVERSIONS pool.
+        existing_pairs: Set of ``{src_id}:{tgt_id}`` strings to skip (avoid duplicates).
     """
+    if existing_pairs is None:
+        existing_pairs = set()
     if fk_ids is None:
         fk_ids = {}
 
@@ -107,41 +124,95 @@ def generate_uom_conversion_api_payloads(count=10, fk_ids=None):
     if not available_codes:
         return []
 
-    # Shuffle for variety, then pair up sequentially
-    codes = list(available_codes)
-    random.shuffle(codes)
-
     payloads = []
     seen_pairs = set()
 
-    for i in range(count):
-        src = codes[i % len(codes)]
-        tgt = codes[(i + 1) % len(codes)]
-        # Avoid self-conversions when enough options exist
-        if src == tgt and len(codes) > 1:
-            tgt = codes[(i + 2) % len(codes)]
-
-        pair = (src, tgt)
-        if pair in seen_pairs:
+    # Build a realistic conversion pool — only using codes that exist in the FK-resolved pool
+    allowed_codes = set(available_codes)
+    conv_pool = []
+    for src_name, tgt_name, factor in VALID_CONVERSIONS:
+        if src_name not in allowed_codes or tgt_name not in allowed_codes:
             continue
-        seen_pairs.add(pair)
+        src_id = uom_ids.get(src_name)
+        tgt_id = uom_ids.get(tgt_name)
+        if src_id is not None and tgt_id is not None:
+            conv_pool.append((src_id, tgt_id, factor, src_name, tgt_name))
 
-        source_id = uom_ids.get(src)
-        target_id = uom_ids.get(tgt)
+    # If no valid conversions exist, fall back to random pairs
+    if not conv_pool:
+        codes = list(available_codes)
+        random.shuffle(codes)
+        for i in range(count):
+            src = codes[i % len(codes)]
+            tgt = codes[(i + 1) % len(codes)]
+            if src == tgt and len(codes) > 1:
+                tgt = codes[(i + 2) % len(codes)]
+            source_id = uom_ids.get(src)
+            target_id = uom_ids.get(tgt)
+            if source_id is None or target_id is None:
+                continue
+            pair_key = f"{source_id}:{target_id}"
+            if pair_key in seen_pairs or pair_key in existing_pairs:
+                continue
+            seen_pairs.add(pair_key)
+            factor = round(random.uniform(0.1, 1000), 4)
+            payload = build_uom_conversion_api_payload(
+                source_uom_code=source_id,
+                target_uom_code=target_id,
+                conversion_factor=factor,
+            )
+            payloads.append(payload)
+        return payloads[:count]
 
-        if source_id is None or target_id is None:
+    # Use realistic conversions cyclically with offset, skip existing pairs
+    for i in range(count * 3):
+        if len(payloads) >= count:
+            break
+        idx = (offset + i) % len(conv_pool)
+        src_id, tgt_id, factor, src_name, tgt_name = conv_pool[idx]
+
+        pair_key = f"{src_id}:{tgt_id}"
+        if pair_key in seen_pairs or pair_key in existing_pairs:
             continue
-
-        factor = round(random.uniform(0.1, 1000), 4)
+        seen_pairs.add(pair_key)
 
         payload = build_uom_conversion_api_payload(
-            source_uom_code=source_id,
-            target_uom_code=target_id,
+            source_uom_code=src_id,
+            target_uom_code=tgt_id,
             conversion_factor=factor,
         )
         payloads.append(payload)
 
     return payloads[:count]
+
+
+def generate_batch_payloads(
+    count: int = 20,
+    prefix: str = None,
+    dropdown_ids: dict = None,
+    offset: int = 0,
+    existing_entries: list = None,
+) -> list:
+    """Standardized batch generator with optional FK ID override, offset, and duplicate avoidance.
+
+    Args:
+        existing_entries: List of existing entry dicts from ERP (each contains
+                         source_uom_code and target_uom_code). Pairs already
+                         present are skipped.
+    """
+    # Build set of existing (source_uom_code, target_uom_code) pairs
+    existing_pairs = set()
+    if existing_entries:
+        for entry in existing_entries:
+            src = entry.get("source_uom_code")
+            tgt = entry.get("target_uom_code")
+            if src is not None and tgt is not None:
+                existing_pairs.add(f"{src}:{tgt}")
+
+    return generate_uom_conversion_api_payloads(
+        count=count, fk_ids=dropdown_ids, offset=offset,
+        existing_pairs=existing_pairs,
+    )
 
 
 # ──────────────────────────────────────────────
@@ -150,58 +221,36 @@ def generate_uom_conversion_api_payloads(count=10, fk_ids=None):
 # UOM Conversion is a flat screen — no children, no steppers.
 # 2 FK dropdowns (source_uom_code, target_uom_code) + 1 number field (conversion_factor).
 
-FIELD_VALIDATION_RULES = {
-    "source_uom_code": {
-        "type": "dropdown",
-        "required": True,
-        "fk_options_count": len(UOM_IDS),
-        "note": "FK to UOM screen. API sends integer ID, not string code.",
-    },
-    "target_uom_code": {
-        "type": "dropdown",
-        "required": True,
-        "fk_options_count": len(UOM_IDS),
-        "note": "FK to UOM screen. API sends integer ID, not string code. "
-                "Can be same as source (self-conversion allowed).",
-    },
-    "conversion_factor": {
-        "type": "number",
-        "required": True,
-        "note": "Decimal number. 21-digit values OK, 22+ digits cause "
-                "scientific notation display bug (record becomes uneditable). "
-                "Input type='character' in UI (no native number validation).",
-    },
-}
-
-# Default FK IDs for UOM Conversion (standardized naming pattern)
-DEFAULT_UOM_CONVERSION_FK_IDS = {
-    "source_uom_code": UOM_IDS,
-    "target_uom_code": UOM_IDS,
-}
-
-# UOM display names for schema tests (same dict, exposed for name verification)
-UOM_NAMES = dict(UOM_IDS)
+def get_field_validation_rules(fk_ids=None):
+    """Return validation rules dict with dynamic fk_options_count from FK-resolved data."""
+    source_count = len(fk_ids.get("source_uom_code", {})) if fk_ids else len(UOM_IDS)
+    target_count = len(fk_ids.get("target_uom_code", {})) if fk_ids else len(UOM_IDS)
+    return {
+        "source_uom_code": {
+            "type": "dropdown",
+            "required": True,
+            "fk_options_count": source_count,
+            "note": "FK to UOM screen. API sends integer ID, not string code.",
+        },
+        "target_uom_code": {
+            "type": "dropdown",
+            "required": True,
+            "fk_options_count": target_count,
+            "note": "FK to UOM screen. API sends integer ID, not string code. "
+                    "Can be same as source (self-conversion allowed).",
+        },
+        "conversion_factor": {
+            "type": "number",
+            "required": True,
+            "note": "Decimal number. 21-digit values OK, 22+ digits cause "
+                    "scientific notation display bug (record becomes uneditable). "
+                    "Input type='character' in UI (no native number validation).",
+        },
+    }
 
 
-def generate_batch_payloads(
-    count: int = 20,
-    prefix: str = None,
-    dropdown_ids: dict = None,
-) -> list:
-    """Generate a batch of unique UOM Conversion API payloads.
-
-    Standardized batch generator matching the pattern used across all
-    RhythmERP modules (Customer, Supplier, Company Onboarding, etc.).
-
-    Args:
-        count: Number of payloads to generate.
-        prefix: Ignored for UOM Conversion (conversions are deterministic).
-        dropdown_ids: Override specific FK ID pools.
-
-    Returns:
-        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
-    """
-    return generate_uom_conversion_api_payloads(count=count, fk_ids=dropdown_ids)
+# Backward-compat constant (uses hardcoded fallback counts)
+FIELD_VALIDATION_RULES = get_field_validation_rules()
 
 
 # ── UI Validation Helpers (restored for test compatibility) ──

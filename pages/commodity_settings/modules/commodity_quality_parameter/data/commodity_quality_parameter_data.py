@@ -717,11 +717,16 @@ DEFAULT_COMMODITY_QUALITY_PARAMETER_FK_IDS = {
 STEPPER_NAME = "Define Item Quality Parameter Details"
 
 
-def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None) -> list:
-    """Generate a batch of unique Commodity Quality Parameter API payloads.
+def get_fk_screen_mapping():
+    """Return FK field → screen name mapping for live FkResolver resolution."""
+    return {
+        "item_ref_id": "Item Master",
+        "quality_type": "Quality Parameter",
+    }
 
-    Standardized batch generator matching the pattern used across all
-    RhythmERP modules.
+
+def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None, offset: int = 0, existing_entries: list = None) -> list:
+    """Generate a batch of unique Commodity Quality Parameter API payloads.
 
     Args:
         count: Number of payloads to generate.
@@ -731,4 +736,4 @@ def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: d
     Returns:
         List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
     """
-    return generate_cqp_payloads(count=count)
+    return generate_cqp_payloads(count=count, offset=offset, fk_ids=dropdown_ids)

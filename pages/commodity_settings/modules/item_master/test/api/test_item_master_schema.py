@@ -8,10 +8,12 @@ from pages.commodity_settings.modules.item_master.data.item_master_data import (
     ITEM_ATTRIBUTE1_OPTIONS, ITEM_ATTRIBUTE2_OPTIONS, ITEM_ATTRIBUTE3_OPTIONS,
     ITEM_ATTRIBUTE4_OPTIONS, ITEM_ATTRIBUTE5_OPTIONS,
     UOM_OPTIONS, HSN_SAC_CODE_OPTIONS, BASE_UOM_OPTIONS,
+    ITEM_SOURCING_OPTIONS,
     ITEM_CATEGORY_NAMES, ITEM_GROUP_NAMES, ITEM_TYPE_NAMES,
     ITEM_ATTRIBUTE1_NAMES, ITEM_ATTRIBUTE2_NAMES, ITEM_ATTRIBUTE3_NAMES,
     ITEM_ATTRIBUTE4_NAMES, ITEM_ATTRIBUTE5_NAMES,
     UOM_NAMES, HSN_SAC_CODE_NAMES, BASE_UOM_NAMES,
+    ITEM_SOURCING_NAMES,
     DEFAULT_ITEM_MASTER_FK_IDS, STATUS_OPTIONS, STEPPER_NAMES,
 )
 
@@ -20,8 +22,8 @@ from pages.commodity_settings.modules.item_master.data.item_master_data import (
 class TestItemMasterSchema:
     # ── Field count ────────────────────────────────────────────────────
     def test_has_20_fields(self):
-        """16 root fields + 3 stepper toggles = 19."""
-        assert len(FIELD_VALIDATION_RULES) == 19
+        """17 root fields (incl. item_sourcing) + 3 stepper toggles = 20."""
+        assert len(FIELD_VALIDATION_RULES) == 20
 
     def test_has_root_fields(self):
         root = {"name", "code", "description", "base_uom_conversion",
@@ -31,9 +33,9 @@ class TestItemMasterSchema:
         assert root.issubset(set(FIELD_VALIDATION_RULES.keys()))
 
     def test_has_fk_dropdown_fields(self):
-        """All 10 FK dropdown fields must be present."""
+        """All 11 FK dropdown fields must be present (incl. item_sourcing)."""
         fk_fields = {"item_category", "item_type", "uom", "hsn_sac_code",
-                     "base_uom", "item_group",
+                     "base_uom", "item_group", "item_sourcing",
                      "item_attribute1", "item_attribute2", "item_attribute3",
                      "item_attribute4", "item_attribute5"}
         assert fk_fields.issubset(set(FIELD_VALIDATION_RULES.keys()))
@@ -61,6 +63,9 @@ class TestItemMasterSchema:
     def test_base_uom_conversion_required(self):
         assert FIELD_VALIDATION_RULES["base_uom_conversion"]["required"] is True
 
+    def test_item_sourcing_required(self):
+        assert FIELD_VALIDATION_RULES["item_sourcing"]["required"] is True
+
     # ── Not-required fields ────────────────────────────────────────────
     def test_name_not_required(self):
         assert FIELD_VALIDATION_RULES["name"]["required"] is False
@@ -74,8 +79,8 @@ class TestItemMasterSchema:
     def test_item_group_not_required(self):
         assert FIELD_VALIDATION_RULES["item_group"]["required"] is False
 
-    def test_item_attribute1_not_required(self):
-        assert FIELD_VALIDATION_RULES["item_attribute1"]["required"] is False
+    def test_item_attribute1_required(self):
+        assert FIELD_VALIDATION_RULES["item_attribute1"]["required"] is True
 
     def test_status_not_required(self):
         assert FIELD_VALIDATION_RULES["status"]["required"] is False
@@ -102,6 +107,9 @@ class TestItemMasterSchema:
     def test_item_attribute1_is_dropdown(self):
         assert FIELD_VALIDATION_RULES["item_attribute1"]["type"] == "dropdown"
 
+    def test_item_sourcing_is_dropdown(self):
+        assert FIELD_VALIDATION_RULES["item_sourcing"]["type"] == "dropdown"
+
     def test_status_is_toggle(self):
         assert FIELD_VALIDATION_RULES["status"]["type"] == "toggle"
 
@@ -122,9 +130,9 @@ class TestItemMasterSchema:
         assert FIELD_VALIDATION_RULES["is_critical"]["default"] is False
 
     # ── FK pool checks ─────────────────────────────────────────────────
-    def test_default_fk_ids_has_11_pools(self):
-        """11 FK pools: 10 FK dropdowns + base_uom (same pool as uom)."""
-        assert len(DEFAULT_ITEM_MASTER_FK_IDS) == 11
+    def test_default_fk_ids_has_13_pools(self):
+        """13 FK pools: 10 FK dropdowns + base_uom (same pool as uom) + item_sourcing + sourcing_type."""
+        assert len(DEFAULT_ITEM_MASTER_FK_IDS) == 13
 
     def test_fk_pool_lengths_match_rules(self):
         for fn, r in FIELD_VALIDATION_RULES.items():

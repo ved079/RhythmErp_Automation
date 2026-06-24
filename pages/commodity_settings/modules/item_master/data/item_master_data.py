@@ -522,55 +522,56 @@ PACKAGING_OPTIONS = {
 
 ITEM_MASTER_DATA_POOL = [
     # ── Food Grains ──────────────────────────────────────────────────
-    ("Food Grains", "GRN001", "Farm", "Wheat", "Premium Grade", "Product Grade", "Multi Layered", "Organic Certified", "KG", "KG", "1001", "Premium quality wheat grain for flour milling"),
-    ("Food Grains", "GRN001", "Farm", "Rice", "Standard Grade", "Moisture Content", "Recyclable", "Standard Grade", "KG", "KG", "1001", "Standard rice variety for daily consumption"),
-    ("Food Grains", "GRN001", "Farm", "Maize", "A Grade", "Lot Number", "Biodegradable", "Economy Grade", "MT", "MT", "1001", "Yellow maize corn for animal feed processing"),
-    ("Food Grains", "RICE007", "Farm", "Rice", "Farm Fresh", "Organic Certified", "Foil Lined", "Export Quality", "KG", "KG", "1001", "Freshly harvested basmati rice for export"),
-    ("Food Grains", "WHEAT008", "Farm", "Wheat", "Machine Cleaned", "Conventional", "Coated", "Local Variety", "QT", "QT", "1001", "Machine cleaned wheat for industrial milling"),
+    # (category, group, type, attr1, attr2, attr3, attr4, attr5, uom, base_uom, hsn, description, sourcing)
+    ("Food Grains", "GRN001", "Farm", "Wheat", "Premium Grade", "Product Grade", "Multi Layered", "Organic Certified", "KG", "KG", "1001", "Premium quality wheat grain for flour milling", "In-House"),
+    ("Food Grains", "GRN001", "Farm", "Rice", "Standard Grade", "Moisture Content", "Recyclable", "Standard Grade", "KG", "KG", "1001", "Standard rice variety for daily consumption", "In-House"),
+    ("Food Grains", "GRN001", "Farm", "Maize", "A Grade", "Lot Number", "Biodegradable", "Economy Grade", "MT", "MT", "1001", "Yellow maize corn for animal feed processing", "In-House"),
+    ("Food Grains", "RICE007", "Farm", "Rice", "Farm Fresh", "Organic Certified", "Foil Lined", "Export Quality", "KG", "KG", "1001", "Freshly harvested basmati rice for export", "In-House"),
+    ("Food Grains", "WHEAT008", "Farm", "Wheat", "Machine Cleaned", "Conventional", "Coated", "Local Variety", "QT", "QT", "1001", "Machine cleaned wheat for industrial milling", "In-House"),
 
     # ── Pulses & Legumes ─────────────────────────────────────────────
-    ("Pulses & Legumes", "PULSE002", "Farm", "channa", "Premium Grade", "Product Grade", "Multi Layered", "FSSAI Approved", "KG", "KG", "0713", "Premium chickpea for dal and flour production"),
-    ("Pulses & Legumes", "PULSE002", "Farm", "Tur Dal", "Standard Grade", "Lot Number", "Recyclable", "ISO 22000", "KG", "KG", "0713", "Pigeon pea for dal processing and packaging"),
-    ("Pulses & Legumes", "PULSE002", "Farm", "Soybean", "Organic Certified", "Moisture Content", "Biodegradable", "Organic Certified", "KG", "KG", "1201", "Organic soybean for oil extraction and protein"),
-    ("Pulses & Legumes", "PULSE002", "Farm", "Harbara", "B Grade", "Conventional", "Heavy Duty", "Conventional", "QT", "QT", "0713", "Kabuli chickpea variety for food processing"),
+    ("Pulses & Legumes", "PULSE002", "Farm", "channa", "Premium Grade", "Product Grade", "Multi Layered", "FSSAI Approved", "KG", "KG", "0713", "Premium chickpea for dal and flour production", "In-House"),
+    ("Pulses & Legumes", "PULSE002", "Farm", "Tur Dal", "Standard Grade", "Lot Number", "Recyclable", "ISO 22000", "KG", "KG", "0713", "Pigeon pea for dal processing and packaging", "In-House"),
+    ("Pulses & Legumes", "PULSE002", "Farm", "Soybean", "Organic Certified", "Moisture Content", "Biodegradable", "Organic Certified", "KG", "KG", "1201", "Organic soybean for oil extraction and protein", "In-House"),
+    ("Pulses & Legumes", "PULSE002", "Farm", "Harbara", "B Grade", "Conventional", "Heavy Duty", "Conventional", "QT", "QT", "0713", "Kabuli chickpea variety for food processing", "In-House"),
 
     # ── Spices & Condiments ──────────────────────────────────────────
-    ("Spices & Condiments", "SPICE003", "Farm", "Chilli", "Extra Large", "Premium Grade", "Laminated", "Premium Grade", "KG", "KG", "0904", "Red chilli for spice and oleoresin extraction"),
-    ("Spices & Condiments", "SPICE003", "Farm", "Turmeric", "Premium Grade", "Organic Certified", "Multi Layered", "FSSAI Approved", "KG", "KG", "0910", "Organic turmeric rhizomes for spice and dye"),
-    ("Spices & Condiments", "SPICE003", "Farm", "Coriander", "Medium Sized", "Standard Grade", "Recyclable", "Standard Grade", "KG", "KG", "0909", "Coriander seeds for spice blending and grinding"),
-    ("Spices & Condiments", "SPICE003", "Farm", "Cumin", "Farm Fresh", "Product Grade", "Biodegradable", "Export Quality", "KG", "KG", "0909", "Farm fresh cumin seeds for premium spice market"),
-    ("Spices & Condiments", "SPICE003", "Farm", "Ginger", "Sun Dried", "Moisture Content", "Foil Lined", "HACCP Certified", "KG", "KG", "0910", "Sun dried ginger rhizome for spice and medicinal use"),
+    ("Spices & Condiments", "SPICE003", "Farm", "Chilli", "Extra Large", "Premium Grade", "Laminated", "Premium Grade", "KG", "KG", "0904", "Red chilli for spice and oleoresin extraction", "In-House"),
+    ("Spices & Condiments", "SPICE003", "Farm", "Turmeric", "Premium Grade", "Organic Certified", "Multi Layered", "FSSAI Approved", "KG", "KG", "0910", "Organic turmeric rhizomes for spice and dye", "In-House"),
+    ("Spices & Condiments", "SPICE003", "Farm", "Coriander", "Medium Sized", "Standard Grade", "Recyclable", "Standard Grade", "KG", "KG", "0909", "Coriander seeds for spice blending and grinding", "In-House"),
+    ("Spices & Condiments", "SPICE003", "Farm", "Cumin", "Farm Fresh", "Product Grade", "Biodegradable", "Export Quality", "KG", "KG", "0909", "Farm fresh cumin seeds for premium spice market", "In-House"),
+    ("Spices & Condiments", "SPICE003", "Farm", "Ginger", "Sun Dried", "Moisture Content", "Foil Lined", "HACCP Certified", "KG", "KG", "0910", "Sun dried ginger rhizome for spice and medicinal use", "In-House"),
 
     # ── Oilseeds ─────────────────────────────────────────────────────
-    ("Oilseeds", "OILS004", "Farm", "Mustard", "Premium Grade", "Product Grade", "Laminated", "Organic Certified", "KG", "KG", "1207", "Mustard oilseeds for cold-pressed oil extraction"),
-    ("Oilseeds", "OILS004", "Farm", "Groundnut", "A Grade", "Lot Number", "Coated", "Standard Grade", "KG", "KG", "1202", "Groundnut for oil extraction and confectionery"),
+    ("Oilseeds", "OILS004", "Farm", "Mustard", "Premium Grade", "Product Grade", "Laminated", "Organic Certified", "KG", "KG", "1207", "Mustard oilseeds for cold-pressed oil extraction", "In-House"),
+    ("Oilseeds", "OILS004", "Farm", "Groundnut", "A Grade", "Lot Number", "Coated", "Standard Grade", "KG", "KG", "1202", "Groundnut for oil extraction and confectionery", "In-House"),
 
     # ── Fresh Produce ────────────────────────────────────────────────
-    ("Fresh Produce", "FRESH010", "Farm", "Onion", "Farm Fresh", "Product Grade", "Perforated", "Farm Fresh", "QT", "QT", "0703", "Fresh red onion for wholesale and retail market"),
-    ("Fresh Produce", "FRESH010", "Farm", "Potato", "Medium Sized", "Moisture Content", "Uncoated", "Local Variety", "QT", "QT", "0701", "Medium potato for fresh market and processing"),
-    ("Fresh Produce", "FRESH010", "Farm", "Tomato", "Premium Grade", "Organic Certified", "Food Safe", "Fresh Harvest", "KG", "KG", "0702", "Premium tomatoes for paste and fresh market"),
-    ("Fresh Produce", "FRESH010", "Farm", "Mango", "Extra Large", "Export Quality", "Stackable", "Export Quality", "KG", "KG", "0805", "Alphonso mango for pulp and export market"),
-    ("Fresh Produce", "FRESH010", "Farm", "Apple", "Premium Grade", "Cold Stored", "Transparent", "Premium Grade", "KG", "KG", "0808", "Cold stored apple for juice and fresh market"),
+    ("Fresh Produce", "FRESH010", "Farm", "Onion", "Farm Fresh", "Product Grade", "Perforated", "Farm Fresh", "QT", "QT", "0703", "Fresh red onion for wholesale and retail market", "In-House"),
+    ("Fresh Produce", "FRESH010", "Farm", "Potato", "Medium Sized", "Moisture Content", "Uncoated", "Local Variety", "QT", "QT", "0701", "Medium potato for fresh market and processing", "In-House"),
+    ("Fresh Produce", "FRESH010", "Farm", "Tomato", "Premium Grade", "Organic Certified", "Food Safe", "Fresh Harvest", "KG", "KG", "0702", "Premium tomatoes for paste and fresh market", "In-House"),
+    ("Fresh Produce", "FRESH010", "Farm", "Mango", "Extra Large", "Export Quality", "Stackable", "Export Quality", "KG", "KG", "0805", "Alphonso mango for pulp and export market", "In-House"),
+    ("Fresh Produce", "FRESH010", "Farm", "Apple", "Premium Grade", "Cold Stored", "Transparent", "Premium Grade", "KG", "KG", "0808", "Cold stored apple for juice and fresh market", "In-House"),
 
     # ── Dairy Products ───────────────────────────────────────────────
-    ("Dairy Products", "DAIRY005", "Farm", "organic", "Organic Certified", "Moisture Content", "Tamper Proof", "FSSAI Approved", "Litre", "Litre", "0401", "Organic milk product for dairy processing"),
-    ("Dairy Products", "DAIRY005", "Non Farm", "organic", "Premium Grade", "Product Grade", "Aroma Retentive", "ISO 22000", "KG", "KG", "0406", "Premium ghee for retail packaging and export"),
+    ("Dairy Products", "DAIRY005", "Farm", "organic", "Organic Certified", "Moisture Content", "Tamper Proof", "FSSAI Approved", "Litre", "Litre", "0401", "Organic milk product for dairy processing", "In-House"),
+    ("Dairy Products", "DAIRY005", "Non Farm", "organic", "Premium Grade", "Product Grade", "Aroma Retentive", "ISO 22000", "KG", "KG", "0406", "Premium ghee for retail packaging and export", "Outsourced"),
 
     # ── Office & Stationery ──────────────────────────────────────────
-    ("Office & Stationery Items", "TOOLGRP01", "Non Farm", "organic", "Standard Grade", "Color", "Light Weight", "Conventional", "NOS", "NOS", "995411", "Office stationery item for workplace supply"),
-    ("Office & Stationery Items", "TOOLGRP01", "Non Farm", "organic", "Standard Grade", "Brand", "Recyclable", "Standard Grade", "NOS", "NOS", "995412", "Standard office supply item for procurement"),
+    ("Office & Stationery Items", "TOOLGRP01", "Non Farm", "organic", "Standard Grade", "Color", "Light Weight", "Conventional", "NOS", "NOS", "995411", "Office stationery item for workplace supply", "Outsourced"),
+    ("Office & Stationery Items", "TOOLGRP01", "Non Farm", "organic", "Standard Grade", "Brand", "Recyclable", "Standard Grade", "NOS", "NOS", "995412", "Standard office supply item for procurement", "Outsourced"),
 
     # ── Cotton & Textile ─────────────────────────────────────────────
-    ("Cotton Raw", "AGRGRP01", "Farm", "Cotton", "A Grade", "Staple Length", "Weather Proof", "Export Quality", "QT", "QT", "5208", "Raw cotton with long staple for textile industry"),
-    ("Cotton Raw", "AGRGRP01", "Farm", "Cotton", "B Grade", "Micronaire", "Reinforced Base", "Local Variety", "QT", "QT", "5208", "Medium grade cotton for domestic textile use"),
+    ("Cotton Raw", "AGRGRP01", "Farm", "Cotton", "A Grade", "Staple Length", "Weather Proof", "Export Quality", "QT", "QT", "5208", "Raw cotton with long staple for textile industry", "In-House"),
+    ("Cotton Raw", "AGRGRP01", "Farm", "Cotton", "B Grade", "Micronaire", "Reinforced Base", "Local Variety", "QT", "QT", "5208", "Medium grade cotton for domestic textile use", "In-House"),
 
     # ── Chemical Products ────────────────────────────────────────────
-    ("Chemical Products", "CHEM013", "Non Farm", "organic", "Standard Grade", "Material Type", "Heavy Duty", "Conventional", "KG", "KG", "3003", "Industrial chemical product for processing"),
-    ("Chemical Products", "FERT014", "Non Farm", "organic", "Standard Grade", "Weight", "Tamper Proof", "Conventional", "KG", "KG", "3105", "Agricultural fertilizer for crop nutrition"),
+    ("Chemical Products", "CHEM013", "Non Farm", "organic", "Standard Grade", "Material Type", "Heavy Duty", "Conventional", "KG", "KG", "3003", "Industrial chemical product for processing", "Outsourced"),
+    ("Chemical Products", "FERT014", "Non Farm", "organic", "Standard Grade", "Weight", "Tamper Proof", "Conventional", "KG", "KG", "3105", "Agricultural fertilizer for crop nutrition", "Outsourced"),
 
     # ── Packaged Foods ───────────────────────────────────────────────
-    ("Packaged Foods", "PACK011", "Non Farm", "Rice", "Machine Cleaned", "Product Grade", "Foil Lined", "FSSAI Approved", "KG", "KG", "1006", "Packaged rice for retail and distribution"),
-    ("Packaged Foods", "PACK011", "Non Farm", "Wheat", "Premium Grade", "Moisture Content", "Multi Layered", "ISO 22000", "KG", "KG", "1101", "Premium packaged wheat flour for retail"),
+    ("Packaged Foods", "PACK011", "Non Farm", "Rice", "Machine Cleaned", "Product Grade", "Foil Lined", "FSSAI Approved", "KG", "KG", "1006", "Packaged rice for retail and distribution", "Outsourced"),
+    ("Packaged Foods", "PACK011", "Non Farm", "Wheat", "Premium Grade", "Moisture Content", "Multi Layered", "ISO 22000", "KG", "KG", "1101", "Premium packaged wheat flour for retail", "Outsourced"),
 ]
 
 
@@ -584,6 +585,7 @@ def _resolve_fk(name, options_dict):
 def build_item_master_api_payload(
     category, group, item_type, attr1, attr2, attr3, attr4, attr5,
     uom, base_uom, hsn, description,
+    item_sourcing=None,
     base_uom_conversion="1",
     is_critical=False,
     include_wip=False,
@@ -595,7 +597,7 @@ def build_item_master_api_payload(
     Build a complete API payload for Item Master (3-step stepper).
 
     name and code are auto-computed from attr1-5 (matching frontend behavior).
-    item_type and item_source are hardcoded (screen not resolvable in this tenant).
+    All FK fields are resolved from fk_ids — no hardcoded IDs.
     """
     fk_ids = fk_ids or {}
 
@@ -646,15 +648,12 @@ def build_item_master_api_payload(
         ],
     }
 
-    # Hardcoded fields (screens don't exist or aren't resolvable in this tenant)
-    payload["item_type"] = 113       # Farm
-    payload["item_source"] = 1       # In-House
-    payload["sourcing_type"] = 1     # In-House
-
-    # Add resolved FK fields only (skip unresolved ones)
+    # Resolve all FK fields from live fk_ids — no hardcoded IDs
+    sourcing_id = _fk(item_sourcing, "sourcing_type")
     fk_fields = {
         "item_category":     _fk(category, "item_category"),
         "item_group":        _fk(group, "item_group"),
+        "item_type":         _fk(item_type, "item_type"),
         "item_attribute1":   _fk(attr1, "item_attribute1"),
         "item_attribute2":   _fk(attr2, "item_attribute2"),
         "item_attribute3":   _fk(attr3, "item_attribute3"),
@@ -663,6 +662,8 @@ def build_item_master_api_payload(
         "uom":               _fk(uom, "uom"),
         "hsn_sac_code":      _fk(hsn, "hsn_sac_code"),
         "base_uom":          _fk(base_uom, "base_uom"),
+        "sourcing_type":     sourcing_id,
+        "item_source":       sourcing_id,  # alias used by some ERP versions
     }
     for key, val in fk_fields.items():
         if val is not None:
@@ -675,9 +676,8 @@ def generate_item_master_payloads(count=10, offset=0, fk_ids=None):
     """
     Generate N API payloads for Item Master.
 
-    When fk_ids provided, picks random FK display names from the resolved
-    dicts to ensure tenant-specific IDs. Falls back to data pool + hardcoded
-    dicts when fk_ids is empty.
+    When fk_ids provided, uses live-resolved tenant-specific IDs.
+    Falls back to DEFAULT_ITEM_MASTER_FK_IDS (hardcoded) for offline/test use.
 
     Args:
         count: Number of payloads to generate.
@@ -687,7 +687,7 @@ def generate_item_master_payloads(count=10, offset=0, fk_ids=None):
     Returns:
         list[dict]: List of complete API payloads.
     """
-    fk_ids = fk_ids or {}
+    fk_ids = fk_ids if fk_ids else DEFAULT_ITEM_MASTER_FK_IDS
     pool = ITEM_MASTER_DATA_POOL
     payloads = []
 
@@ -723,6 +723,7 @@ def generate_item_master_payloads(count=10, offset=0, fk_ids=None):
             base_uom=pick("base_uom", 9),
             hsn=pick("hsn_sac_code", 10),
             description=entry[11],
+            item_sourcing=pick("sourcing_type", 12),
             fk_ids=fk_ids,
         )
         payloads.append(payload)
@@ -883,6 +884,7 @@ ITEM_ATTRIBUTE5_NAMES = dict(ITEM_ATTRIBUTE5_OPTIONS)
 UOM_NAMES = dict(UOM_OPTIONS)
 HSN_SAC_CODE_NAMES = dict(HSN_SAC_CODE_OPTIONS)
 BASE_UOM_NAMES = dict(BASE_UOM_OPTIONS)
+ITEM_SOURCING_NAMES = dict(ITEM_SOURCING_OPTIONS)
 
 STEPPER_NAMES = ["Additional Details", "Define Item Master Details", "Product Order Packeging Details"]
 
@@ -899,7 +901,28 @@ DEFAULT_ITEM_MASTER_FK_IDS = {
     "hsn_sac_code": HSN_SAC_CODE_OPTIONS,
     "base_uom": BASE_UOM_OPTIONS,
     "item_sourcing": ITEM_SOURCING_OPTIONS,
+    "sourcing_type": ITEM_SOURCING_OPTIONS,
 }
 
-def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None):
-    return generate_item_master_payloads(count=count)
+
+def get_fk_screen_mapping():
+    """Declare which FK dropdown fields need live resolution from which ERP screen."""
+    return {
+        "item_category":   "Item Category",
+        "item_group":      "Item Group",
+        "item_type":       "Item Type",
+        "item_attribute1": "Item Attribute1",
+        "item_attribute2": "Item Attribute2",
+        "item_attribute3": "Item Attribute3",
+        "item_attribute4": "Item Attribute4",
+        "item_attribute5": "Item Attribute5",
+        "uom":             "UOM",
+        "base_uom":        "UOM",
+        "hsn_sac_code":    "HSN SAC",
+        "sourcing_type":   "Item Sourcing",
+    }
+
+
+def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None, offset=0, existing_entries=None):
+    """Standardized batch generator — forwards live FK IDs to the payload generator."""
+    return generate_item_master_payloads(count=count, offset=offset, fk_ids=dropdown_ids)

@@ -389,8 +389,10 @@ class RhythmERPAPIClient:
         self._ensure_auth()
 
         try:
+            import urllib.parse
+            encoded_name = urllib.parse.quote(screen_name, safe='')
             resp = self.session.get(
-                f"{self.BASE_URL}{self.SCREEN_SCHEMA_ENDPOINT.format(screen_name=screen_name)}",
+                f"{self.BASE_URL}{self.SCREEN_SCHEMA_ENDPOINT.format(screen_name=encoded_name)}",
                 timeout=30,
             )
             if resp.status_code == 200:
@@ -507,8 +509,10 @@ class RhythmERPAPIClient:
         }
 
         try:
+            import urllib.parse
+            encoded_name = urllib.parse.quote(screen_name, safe='')
             resp = self.session.get(
-                f"{self.BASE_URL}{self.API_ENDPOINT}{screen_name}/",
+                f"{self.BASE_URL}{self.API_ENDPOINT}{encoded_name}/",
                 params=params,
                 timeout=30,
             )
@@ -617,8 +621,10 @@ class RhythmERPAPIClient:
         self._ensure_auth()
 
         try:
+            import urllib.parse
+            encoded_name = urllib.parse.quote(screen_name, safe='')
             resp = self.session.get(
-                f"{self.BASE_URL}{self.API_ENDPOINT}{screen_name}/{entry_id}/",
+                f"{self.BASE_URL}{self.API_ENDPOINT}{encoded_name}/{entry_id}/",
                 timeout=30,
             )
             if resp.status_code == 200:

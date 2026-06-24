@@ -17,9 +17,7 @@ from pages.common_settings.modules.uom.data.uom_data import (
     generate_uom_api_payload,
     generate_uom_data,
     generate_batch_payloads,
-    FIELD_VALIDATION_RULES,
     STATUS_OPTIONS,
-    DEFAULT_UOM_FK_IDS,
 )
 
 
@@ -118,11 +116,6 @@ class TestUOMAPIPayload:
         payload = build_uom_api_payload()
         assert payload["uom_code"] != ""
         assert isinstance(payload["uom_code"], str)
-
-    def test_payload_no_fk_ids_needed(self):
-        """UOM has no FK dropdowns — DEFAULT_UOM_FK_IDS should be empty."""
-        assert DEFAULT_UOM_FK_IDS == {}
-
 
 @pytest.mark.api
 class TestUOMBatchGeneration:

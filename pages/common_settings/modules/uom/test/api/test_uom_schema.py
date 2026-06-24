@@ -13,9 +13,8 @@ PROJECT_ROOT = os.path.abspath(
 sys.path.insert(0, PROJECT_ROOT)
 
 from pages.common_settings.modules.uom.data.uom_data import (
-    FIELD_VALIDATION_RULES,
+    get_field_validation_rules,
     STATUS_OPTIONS,
-    DEFAULT_UOM_FK_IDS,
 )
 
 
@@ -23,56 +22,60 @@ from pages.common_settings.modules.uom.data.uom_data import (
 class TestUOMSchema:
     """Verify the UOM screen schema matches our code expectations."""
 
+    def _rules(self):
+        return get_field_validation_rules()
+
     def test_field_validation_rules_has_uom_code(self):
         """FIELD_VALIDATION_RULES must include uom_code."""
-        assert "uom_code" in FIELD_VALIDATION_RULES
+        assert "uom_code" in self._rules()
 
     def test_field_validation_rules_has_uom_description(self):
         """FIELD_VALIDATION_RULES must include uom_description."""
-        assert "uom_description" in FIELD_VALIDATION_RULES
+        assert "uom_description" in self._rules()
 
     def test_field_validation_rules_has_status(self):
         """FIELD_VALIDATION_RULES must include status."""
-        assert "status" in FIELD_VALIDATION_RULES
+        assert "status" in self._rules()
 
     def test_field_validation_rules_has_3_fields(self):
         """UOM has exactly 3 fields: uom_code, uom_description, status."""
-        assert len(FIELD_VALIDATION_RULES) == 3
-        assert set(FIELD_VALIDATION_RULES.keys()) == {
+        rules = self._rules()
+        assert len(rules) == 3
+        assert set(rules.keys()) == {
             "uom_code", "uom_description", "status"
         }
 
     def test_uom_code_is_required(self):
         """uom_code must be marked as required."""
-        assert FIELD_VALIDATION_RULES["uom_code"]["required"] is True
+        assert self._rules()["uom_code"]["required"] is True
 
     def test_uom_description_is_optional(self):
         """uom_description must be marked as NOT required."""
-        assert FIELD_VALIDATION_RULES["uom_description"]["required"] is False
+        assert self._rules()["uom_description"]["required"] is False
 
     def test_uom_code_max_length_is_255(self):
         """uom_code must have max_length of 255."""
-        assert FIELD_VALIDATION_RULES["uom_code"]["max_length"] == 255
+        assert self._rules()["uom_code"]["max_length"] == 255
 
     def test_uom_description_max_length_is_255(self):
         """uom_description must have max_length of 255."""
-        assert FIELD_VALIDATION_RULES["uom_description"]["max_length"] == 255
+        assert self._rules()["uom_description"]["max_length"] == 255
 
     def test_uom_code_type_is_text(self):
         """uom_code type should be 'text' (accepts letters + numbers)."""
-        assert FIELD_VALIDATION_RULES["uom_code"]["type"] == "text"
+        assert self._rules()["uom_code"]["type"] == "text"
 
     def test_uom_description_type_is_text(self):
         """uom_description type should be 'text'."""
-        assert FIELD_VALIDATION_RULES["uom_description"]["type"] == "text"
+        assert self._rules()["uom_description"]["type"] == "text"
 
     def test_status_type_is_toggle(self):
         """status type should be 'toggle'."""
-        assert FIELD_VALIDATION_RULES["status"]["type"] == "toggle"
+        assert self._rules()["status"]["type"] == "toggle"
 
     def test_status_default_is_true(self):
         """status default should be True (Active)."""
-        assert FIELD_VALIDATION_RULES["status"]["default"] is True
+        assert self._rules()["status"]["default"] is True
 
     def test_status_options_has_2_entries(self):
         """STATUS_OPTIONS should have 2 entries: Active and Inactive."""
@@ -86,10 +89,6 @@ class TestUOMSchema:
         """Inactive status should map to False."""
         assert STATUS_OPTIONS["Inactive"] is False
 
-    def test_default_fk_ids_is_empty(self):
-        """UOM has no FK dropdowns — DEFAULT_UOM_FK_IDS must be empty."""
-        assert DEFAULT_UOM_FK_IDS == {}
-
     def test_status_is_not_required(self):
         """status should not be marked as required (has a default)."""
-        assert FIELD_VALIDATION_RULES["status"]["required"] is False
+        assert self._rules()["status"]["required"] is False

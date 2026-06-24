@@ -45,8 +45,6 @@ class TestUOMConversionPerformance:
     def test_batch_create_5_conversions(self, api_client):
         """Create, Read, and Update 5 UOM Conversion entries via live API."""
 
-        from pages.common_settings.modules.uom_conversion.data.uom_conversion_data import UOM_IDS
-
         # Fetch existing conversions to avoid duplicates
         # The unique constraint is bidirectional: (A→B) conflicts with (B→A)
         result = api_client.list_entries(SCREEN_NAME, page=1, page_size=200)

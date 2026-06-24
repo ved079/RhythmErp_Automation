@@ -282,28 +282,34 @@ def generate_uom_api_payloads(count=20, prefix=None, dropdown_ids=None):
 # UOM is a flat screen — no children, no steppers, no FK dropdowns.
 # Only 3 fields: uom_code (required), uom_description (optional), status (toggle).
 
-FIELD_VALIDATION_RULES = {
-    "uom_code": {
-        "type": "text",
-        "required": True,
-        "max_length": 255,
-        "note": "Accepts letters and numbers (type='text', not 'character'). "
-                 "Frontend rejects special characters.",
-    },
-    "uom_description": {
-        "type": "text",
-        "required": False,
-        "max_length": 255,
-        "note": "Optional field. Accepts special characters. "
-                 "Can be empty/null.",
-    },
-    "status": {
-        "type": "toggle",
-        "required": False,
-        "default": True,
-        "note": "Boolean toggle. True=Active, False=Inactive.",
-    },
-}
+def get_field_validation_rules(fk_ids=None):
+    """Return validation rules dict. UOM has no FK fields, so fk_ids is unused."""
+    return {
+        "uom_code": {
+            "type": "text",
+            "required": True,
+            "max_length": 255,
+            "note": "Accepts letters and numbers (type='text', not 'character'). "
+                     "Frontend rejects special characters.",
+        },
+        "uom_description": {
+            "type": "text",
+            "required": False,
+            "max_length": 255,
+            "note": "Optional field. Accepts special characters. "
+                     "Can be empty/null.",
+        },
+        "status": {
+            "type": "toggle",
+            "required": False,
+            "default": True,
+            "note": "Boolean toggle. True=Active, False=Inactive.",
+        },
+    }
+
+
+# Backward-compat constant
+FIELD_VALIDATION_RULES = get_field_validation_rules()
 
 # Status toggle options (display name -> API boolean value)
 STATUS_OPTIONS = {
@@ -311,14 +317,18 @@ STATUS_OPTIONS = {
     "Inactive": False,
 }
 
-# No FK dropdown pools — UOM has zero FK fields
-DEFAULT_UOM_FK_IDS = {}
+
+def get_fk_screen_mapping():
+    """UOM has no FK dropdown fields — return empty mapping."""
+    return {}
 
 
 def generate_batch_payloads(
     count: int = 20,
     prefix: str = None,
     dropdown_ids: dict = None,
+    offset: int = 0,
+    existing_entries: list = None,
 ) -> list:
     """Generate a batch of unique UOM API payloads.
 
@@ -329,6 +339,8 @@ def generate_batch_payloads(
         count: Number of payloads to generate.
         prefix: Ignored for UOM (realistic codes are used instead).
         dropdown_ids: Not used for UOM (no FK dropdown fields).
+        offset: Ignored for UOM (codes are unique, not pool-based).
+        existing_entries: Ignored for UOM (dedup is by unique code per batch).
 
     Returns:
         List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
