@@ -161,13 +161,7 @@ export function SidebarModuleItem({
             } ${isActive || isParentActive ? 'text-[#1B4332] dark:text-green-300' : 'text-[#495584] dark:text-gray-400'}`}
           />
         ) : isChild ? (
-          <span
-            className={`w-[7px] h-[7px] rounded-full shrink-0 mr-2 ${
-              isActive
-                ? 'bg-[#1A56DB] dark:bg-indigo-400'
-                : 'border-[1.5px] border-[#777777] dark:border-gray-500'
-            }`}
-          />
+          <span className={`w-[7px] h-[7px] rounded-full shrink-0 mr-2 ${isActive ? 'bg-[#1A56DB] dark:bg-indigo-400' : ''}`} />
         ) : (
           <span className="w-[18px] shrink-0 mr-1.5" />
         )}

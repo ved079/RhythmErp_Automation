@@ -259,12 +259,12 @@ SHARE_CLASS_TYPES = [
 ]
 
 # Common director designations for realistic data
-COMMON_DIRECTOR_DESIGNATIONS = [30, 41, 49]  # Managing Director variants
+COMMON_DIRECTOR_DESIGNATIONS = [2]  # Managing Director variants
 
 # Default FK IDs dict
 DEFAULT_DIRECTORS_FK_IDS = {
     "prefix_ref_id": 1896,     # Mr
-    "designation": 30,         # Managing Director
+    "designation": 2,         # Managing Director
     "qualification_ref_id": 511,  # Graduation
     "party_ref_id": None,      # Skip by default — auto-patches fields
     "kyc_doc_id": 65,          # PAN
@@ -395,12 +395,7 @@ def generate_date_of_cessation():
 
 
 def generate_details_of_other_directorships():
-    """Generate details about other directorships.
-
-    Always returns a single valid company name from the pool.
-    Avoids the literal "None" string which the ERP rejects.
-    """
-    return random.choice([c for c in _DIRECTORSHIP_COMPANIES if c != "None"])
+    return "NA"
 
 
 def generate_kyc_number(kyc_doc_id=65):
@@ -836,7 +831,7 @@ def build_directors_api_payload(
         "date_of_appointment": directors_data.get("date_of_appointment") or generate_date_of_appointment(),
         "date_of_cessation": directors_data.get("date_of_cessation", None),
         "no_class_shares_held": directors_data.get("no_class_shares_held") or generate_share_class(),
-        "details_of_other_directorships": directors_data.get("details_of_other_directorships") or "None",
+        "details_of_other_directorships": directors_data.get("details_of_other_directorships") or "NA",
         "percentage_of_shares": directors_data.get("percentage_of_shares") or generate_percentage_of_shares(),
         "age": directors_data.get("age") or generate_age(),
         "qualification_ref_id": qualification_ref_id,
@@ -911,6 +906,15 @@ def generate_batch_payloads(count: int, offset: int = 0, **kwargs) -> list:
         p = generate_directors_api_payload(**kwargs)
         payloads.append(p)
     return payloads
+
+
+# ──────────────────────────────────────────────
+# SweetAlert title constants
+# ──────────────────────────────────────────────
+
+SWAL_TITLE_VALIDATION_FAILED = "Validation Failed"
+SWAL_TITLE_SUCCESS = "Your record has been added successfully!"
+SWAL_TITLE_UPDATED = "Your record has been updated successfully!"
 
 
 # ──────────────────────────────────────────────
@@ -998,7 +1002,7 @@ FIELD_VALIDATION_RULES = {
     },
     "details_of_other_directorships": {
         "field_key": "details_of_other_directorships",
-        "label": "Details of Other Directorships",
+        "label": "NA",
         "type": "character",
         "required": True,
         "max_length": 255,

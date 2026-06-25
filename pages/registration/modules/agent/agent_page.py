@@ -520,10 +520,10 @@ class AgentPage(BasePage):
             row_index: Optional row index (0-based) for repeatable rows.
         """
         js = f"""
-            var popup = document.querySelector(
-                '.edit_pop_up.override_edit_pop_up.popup-mode'
-            );
-            if (!popup) return 'No popup';
+            var popup = document.querySelector('.edit_pop_up.override_edit_pop_up.popup-mode')
+                     || document.querySelector('mat-dialog-container')
+                     || document.querySelector('.cdk-overlay-container')
+                     || document.body;
             var inputs = popup.querySelectorAll('input[name="{name_attr}"]');
             var idx = {row_index if row_index is not None else 0};
             if (inputs[idx]) {{
@@ -1677,3 +1677,298 @@ class AgentPage(BasePage):
         result = self.driver.execute_script(js)
         log.info(f"POPUP STRUCTURE: {result}")
         return result
+
+    # ==============================================================
+    #  5-test pattern helpers (fill_form, submit, search, row actions)
+    # ==============================================================
+
+    CHANGE_LOG_PANEL = ("xpath", "//th[contains(@class,'cdk-column-created_date_time')]")
+
+    def fill_form(self, data):
+        """Fill the complete 3-step Agent stepper form from a flat data dict.
+
+        Step 0: Universal (name/phone/email) + Address cascade
+        Step 1: Payment (skip — optional)
+        Step 2: Bank details
+        """
+        log.info("Filling Agent form (3-step stepper)...")
+
+        # ── Step 0: Universal fields ──────────────────────────────
+        if data.get("agent_name"):
+            self._fill_input_by_name("Agent Name", data["agent_name"])
+            self.wait_seconds(0.3)
+        if data.get("phone_number"):
+            self._fill_input_by_name("Phone Number", str(data["phone_number"]))
+            self.wait_seconds(0.3)
+        if data.get("email"):
+            self._fill_input_by_name("Email", data["email"])
+            self.wait_seconds(0.3)
+
+        # ── Address cascade ───────────────────────────────────────────
+        country = data.get("country") or "India"
+        self.select_dropdown_by_label("Country", country)
+        self.wait_seconds(1.5)  # wait for State options to load
+        self.select_random_from_dropdown_by_label("State")
+        self.wait_seconds(1.5)  # wait for District options to load
+        self.select_random_from_dropdown_by_label("District")
+        self.wait_seconds(1.0)  # wait for Village options to load
+        self.select_random_from_dropdown_by_label("Village")
+        self.wait_seconds(0.5)
+        # Taluka — skip (optional)
+
+        if data.get("address"):
+            self._fill_input_by_name("Address", data["address"])
+            self.wait_seconds(0.2)
+        if data.get("pin_code"):
+            self._fill_input_by_name("Pin Code", str(data["pin_code"]))
+            self.wait_seconds(0.2)
+
+        # ── Navigate to Step 1 (Payment) ─────────────────────────
+        self.click_next()
+        # Step 1: Payment — all optional, skip
+        self.wait_seconds(0.5)
+
+        # ── Navigate to Step 2 (Bank) ────────────────────────────
+        self.click_next()
+        self.wait_seconds(0.5)
+
+        if data.get("bank_name"):
+            self._fill_input_by_name("Bank Name", data["bank_name"])
+            self.wait_seconds(0.2)
+        if data.get("ifsc_code"):
+            self._fill_input_by_name("IFSC Code", data["ifsc_code"])
+            self.wait_seconds(0.2)
+        # Account Type — auto-pick
+        self.select_random_from_dropdown_by_label("Account Type")
+        self.wait_seconds(0.3)
+        if data.get("account_holder_name"):
+            self._fill_input_by_name("Account Holder Name", data["account_holder_name"])
+            self.wait_seconds(0.2)
+        if data.get("account_number"):
+            self._fill_input_by_name("Account Number", str(data["account_number"]))
+            self.wait_seconds(0.2)
+        # Bank Proof is a file upload — skip
+
+        log.info("Agent form filled (all 3 steps)")
+
+    def submit_form(self):
+        """Click the Submit button on the final stepper step."""
+        log.info("Submitting Agent form...")
+        try:
+            btn = self.driver.find_element(
+                By.XPATH, "//div[@class='popup-footer']//button[contains(.,'Submit')]"
+            )
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block:'center'});arguments[0].click();", btn
+            )
+            self.wait_seconds(1)
+            log.info("Submit clicked")
+        except Exception as e:
+            log.warning(f"submit_form failed: {e}")
+
+    def update_form(self):
+        """Click the Update button on the edit stepper."""
+        log.info("Clicking Update button...")
+        try:
+            btn = self.driver.find_element(
+                By.XPATH, "//div[@class='popup-footer']//button[contains(.,'Update')]"
+            )
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block:'center'});arguments[0].click();", btn
+            )
+            self.wait_seconds(1)
+            log.info("Update clicked")
+        except Exception as e:
+            log.warning(f"update_form failed: {e}")
+
+    def click_cancel_button(self):
+        """Click the Cancel button in the popup footer."""
+        log.info("Clicking Cancel button...")
+        try:
+            btn = self.driver.find_element(
+                By.XPATH, "//div[@class='popup-footer']//button[contains(.,'Cancel')]"
+            )
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block:'center'});arguments[0].click();", btn
+            )
+            self.wait_seconds(0.5)
+        except Exception as e:
+            log.warning(f"click_cancel_button failed: {e}")
+
+    def click_close_button(self):
+        """Click the close (X) button on the form popup."""
+        log.info("Clicking Close (X) button...")
+        try:
+            btn = self.driver.find_element(
+                By.XPATH, "//mat-icon[text()='close']/ancestor::button"
+            )
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block:'center'});arguments[0].click();", btn
+            )
+            self.wait_seconds(0.5)
+        except Exception as e:
+            log.warning(f"click_close_button failed: {e}")
+
+    def force_close_form_popup(self):
+        """Force close any open form popup (cancel → close → JS)."""
+        try:
+            btns = self.driver.find_elements(
+                By.XPATH, "//div[@class='popup-footer']//button[contains(.,'Cancel')]"
+            )
+            if btns and btns[0].is_displayed():
+                self.driver.execute_script("arguments[0].click();", btns[0])
+                self.wait_seconds(0.5)
+                if not self._is_form_popup_open():
+                    return
+        except Exception:
+            pass
+        try:
+            btns = self.driver.find_elements(
+                By.XPATH, "//mat-icon[text()='close']/ancestor::button"
+            )
+            if btns and btns[0].is_displayed():
+                self.driver.execute_script("arguments[0].click();", btns[0])
+                self.wait_seconds(0.5)
+                if not self._is_form_popup_open():
+                    return
+        except Exception:
+            pass
+        self.driver.execute_script("""
+            document.querySelectorAll('div.cdk-overlay-backdrop').forEach(e=>e.remove());
+            document.querySelectorAll('div.cdk-overlay-pane').forEach(e=>e.remove());
+        """)
+        self.wait_seconds(0.3)
+
+    def handle_success_alert(self, timeout=15):
+        """Wait for SweetAlert2, capture title, click OK. Returns title text."""
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, "#swal2-title"))
+            )
+            title = self.driver.find_element(By.CSS_SELECTOR, "#swal2-title").text.strip()
+            try:
+                self.driver.find_element(By.CSS_SELECTOR, ".swal2-confirm").click()
+                self.wait_seconds(0.5)
+            except Exception:
+                pass
+            return title
+        except TimeoutException:
+            return ""
+
+    def handle_validation_warning(self, timeout=5):
+        """Wait for SweetAlert2 validation alert, dismiss, return title. Empty string on timeout."""
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, "#swal2-title"))
+            )
+            title = self.driver.find_element(By.CSS_SELECTOR, "#swal2-title").text.strip()
+            try:
+                self.driver.find_element(By.CSS_SELECTOR, ".swal2-confirm").click()
+                self.wait_seconds(0.5)
+            except Exception:
+                pass
+            return title
+        except TimeoutException:
+            return ""
+
+    def get_mat_error_text(self):
+        """Return list of visible mat-error texts on the current form."""
+        errors = []
+        try:
+            for el in self.driver.find_elements(By.CSS_SELECTOR, "mat-error, .mat-mdc-form-field-error"):
+                try:
+                    if el.is_displayed():
+                        t = el.text.strip()
+                        if t:
+                            errors.append(t)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return errors
+
+    def get_table_row_count(self):
+        """Return number of data rows in the Agent listing table."""
+        try:
+            rows = self.driver.find_elements(By.CSS_SELECTOR, "table#excel-table tbody tr")
+            return len(rows)
+        except Exception:
+            return 0
+
+    def is_entry_in_table(self, name):
+        """Return True if an agent with the given name is visible in the table."""
+        try:
+            cells = self.driver.find_elements(
+                By.CSS_SELECTOR, "td.cdk-column-name, td.mat-column-name"
+            )
+            for cell in cells:
+                try:
+                    if cell.text.strip().lower() == name.strip().lower():
+                        return True
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return False
+
+    def search_entry(self, text):
+        """Search for an agent by clicking the search button and entering text."""
+        log.info(f"Searching agent: {text}")
+        try:
+            search_btn = self.driver.find_element(
+                By.XPATH, "//button[@mattooltip='Search']"
+            )
+            self.driver.execute_script("arguments[0].click();", search_btn)
+            self.wait_seconds(0.5)
+        except Exception:
+            pass
+        try:
+            inp = self.driver.find_element(By.CSS_SELECTOR, "#erpSearchInput")
+            inp.clear()
+            inp.send_keys(text)
+            self.wait_seconds(0.3)
+            from selenium.webdriver.common.keys import Keys
+            inp.send_keys(Keys.RETURN)
+            self.wait_seconds(2)
+        except Exception as e:
+            log.warning(f"search_entry failed: {e}")
+
+    def click_row_action(self, row_index=0):
+        """Click the 3-dot (more_vert) menu trigger on a table row."""
+        try:
+            triggers = self.driver.find_elements(By.CSS_SELECTOR, "button.erp-row-trigger")
+            if row_index < len(triggers):
+                self.driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center'});arguments[0].click();",
+                    triggers[row_index],
+                )
+                self.wait_seconds(0.5)
+        except Exception as e:
+            log.warning(f"click_row_action({row_index}) failed: {e}")
+
+    def click_menu_view(self):
+        """Click 'Open record details' from an open row menu."""
+        try:
+            btn = self.driver.find_element(By.XPATH, "//button[contains(.,'Open record details')]")
+            self.driver.execute_script("arguments[0].click();", btn)
+            self.wait_seconds(1)
+        except Exception as e:
+            log.warning(f"click_menu_view failed: {e}")
+
+    def click_menu_edit(self):
+        """Click 'Modify this record' from an open row menu."""
+        try:
+            btn = self.driver.find_element(By.XPATH, "//button[contains(.,'Modify this record')]")
+            self.driver.execute_script("arguments[0].click();", btn)
+            self.wait_seconds(1)
+        except Exception as e:
+            log.warning(f"click_menu_edit failed: {e}")
+
+    def click_menu_history(self):
+        """Click 'View change log' from an open row menu."""
+        try:
+            btn = self.driver.find_element(By.XPATH, "//button[contains(.,'View change log')]")
+            self.driver.execute_script("arguments[0].click();", btn)
+            self.wait_seconds(1)
+        except Exception as e:
+            log.warning(f"click_menu_history failed: {e}")

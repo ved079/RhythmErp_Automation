@@ -119,6 +119,10 @@ def agt_page(logged_in_driver):
     page = AgentPage(logged_in_driver)
     page.navigate_to_page()
     yield page
+    try:
+        page.force_close_form_popup()
+    except Exception:
+        pass
 
 
 @pytest.fixture(scope="session")

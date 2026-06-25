@@ -147,3 +147,22 @@ def generate_batch_payloads(count, offset=0, **kwargs):
         p = generate_api_payload(**kwargs)
         payloads.append(p)
     return payloads
+
+
+# ──────────────────────────────────────────────
+# SweetAlert titles (used by UI tests)
+# ──────────────────────────────────────────────
+SWAL_TITLE_SUCCESS = "Your record has been added successfully!"
+SWAL_TITLE_VALIDATION_FAILED = "Validation Failed"
+SWAL_TITLE_UPDATED = "Your record has been updated successfully!"
+
+
+def generate_ui_form_data():
+    """UI-friendly form data dict for fill_form().
+
+    document_rows is a list of True sentinels — one per row to add.
+    fill_form uses _select_first_available_mat_option("Document Name") for each row.
+    """
+    data = generate_valid_data()
+    data["document_rows"] = [True]   # 1 row minimum
+    return data

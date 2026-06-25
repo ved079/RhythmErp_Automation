@@ -566,6 +566,23 @@ def generate_batch_payloads(count: int, offset: int = 0, **kwargs) -> list:
 # Field validation summary (for test parametrize)
 # ──────────────────────────────────────────────
 
+# ──────────────────────────────────────────────
+# SweetAlert titles (used by UI tests)
+# ──────────────────────────────────────────────
+SWAL_TITLE_SUCCESS = "Your record has been added successfully!"
+SWAL_TITLE_VALIDATION_FAILED = "Validation Failed"
+SWAL_TITLE_UPDATED = "Your record has been updated successfully!"
+
+
+def generate_ui_form_data():
+    """Tenant-universal form data — designation/department auto-picked by UI."""
+    data = generate_valid_employee_data()
+    data["designation"] = None      # auto-pick first available (tenant-universal)
+    data["department"] = None       # auto-pick first available
+    data["phone_number"] = str(generate_phone())  # UI input takes string
+    return data
+
+
 FIELD_VALIDATION_RULES = {
     "name": {
         "field_key": "name",

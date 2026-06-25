@@ -850,6 +850,78 @@ class EmployeePage(BasePage):
             pass
 
     # ==============================================================
+    #  SweetAlert2 — standardised helpers (5-test pattern)
+    # ==============================================================
+
+    CHANGE_LOG_PANEL = ("xpath", "//th[contains(@class,'cdk-column-created_date_time')]")
+
+    def handle_success_alert(self, timeout=15):
+        """Wait for SweetAlert2, capture title, click OK. Returns title text."""
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, "#swal2-title"))
+            )
+            title = self.driver.find_element(By.CSS_SELECTOR, "#swal2-title").text.strip()
+            try:
+                self.driver.find_element(By.CSS_SELECTOR, ".swal2-confirm").click()
+                self.wait_seconds(0.5)
+            except Exception:
+                pass
+            return title
+        except TimeoutException:
+            return ""
+
+    def handle_validation_warning(self, timeout=5):
+        """Wait for SweetAlert2 validation alert, dismiss it, return title. Empty string on timeout."""
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, "#swal2-title"))
+            )
+            title = self.driver.find_element(By.CSS_SELECTOR, "#swal2-title").text.strip()
+            try:
+                self.driver.find_element(By.CSS_SELECTOR, ".swal2-confirm").click()
+                self.wait_seconds(0.5)
+            except Exception:
+                pass
+            return title
+        except TimeoutException:
+            return ""
+
+    def get_mat_error_text(self):
+        """Return list of visible mat-error texts on the current form."""
+        errors = []
+        try:
+            for el in self.driver.find_elements(By.CSS_SELECTOR, "mat-error, .mat-mdc-form-field-error"):
+                try:
+                    if el.is_displayed():
+                        t = el.text.strip()
+                        if t:
+                            errors.append(t)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return errors
+
+    def click_menu_history(self):
+        """Click 'View change log' from an open row menu."""
+        try:
+            btn = self.driver.find_element(By.XPATH, "//button[contains(.,'View change log')]")
+            self.driver.execute_script("arguments[0].click();", btn)
+            self.wait_seconds(1)
+            log.info("View change log clicked")
+        except Exception as e:
+            log.warning(f"click_menu_history failed: {e}")
+
+    def is_entry_in_table(self, name):
+        """Alias for employee_exists_in_table — matches 5-test pattern interface."""
+        return self.employee_exists_in_table(name)
+
+    def search_entry(self, text):
+        """Alias for search_employee — matches 5-test pattern interface."""
+        return self.search_employee(text)
+
+    # ==============================================================
     #  Validation error detection
     # ==============================================================
 
