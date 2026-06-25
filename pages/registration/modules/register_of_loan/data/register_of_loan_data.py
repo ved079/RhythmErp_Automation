@@ -224,3 +224,29 @@ def generate_batch_payloads(count, offset=0, **kwargs):
         p = generate_api_payload(**kwargs)
         payloads.append(p)
     return payloads
+
+
+# ──────────────────────────────────────────────
+# SweetAlert titles (used by UI tests)
+# ──────────────────────────────────────────────
+SWAL_TITLE_SUCCESS = "Your record has been added successfully!"
+SWAL_TITLE_VALIDATION_FAILED = "Validation Failed"
+SWAL_TITLE_UPDATED = "Your record has been updated successfully!"
+
+
+def generate_ui_form_data():
+    """UI-friendly form data dict for fill_form().
+
+    Number fields are stringified (UI inputs take text).
+    facility_details and emi_period are set to True sentinels —
+    fill_form uses _select_first_available_mat_option so the actual FK value is ignored.
+    """
+    data = generate_valid_data()
+    data["facility_details"] = True      # sentinel — uses first available option
+    data["emi_period_label"] = True      # sentinel — uses first available option
+    data["sanction_amount"] = str(int(data["sanction_amount"]))
+    data["disbursement_amount"] = str(int(data["disbursement_amount"]))
+    data["instalment_amount"] = str(int(data["instalment_amount"]))
+    data["outstanding_amount"] = str(int(data["outstanding_amount"]))
+    data["reminder_period_in_days"] = str(data["reminder_period_in_days"])
+    return data

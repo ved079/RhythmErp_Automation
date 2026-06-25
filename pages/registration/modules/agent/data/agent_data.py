@@ -554,3 +554,36 @@ def generate_agent_api_payload(fk_ids: dict = None) -> dict:
 def generate_batch_payloads(count: int = 10, **kwargs) -> list:
     """Generate multiple unique Agent API payloads."""
     return [generate_agent_api_payload(**kwargs) for _ in range(count)]
+
+
+# ──────────────────────────────────────────────
+# SweetAlert titles (used by UI tests)
+# ──────────────────────────────────────────────
+SWAL_TITLE_SUCCESS = "Your record has been added successfully!"
+SWAL_TITLE_VALIDATION_FAILED = "Validation Failed"
+SWAL_TITLE_UPDATED = "Your record has been updated successfully!"
+
+
+def generate_ui_form_data():
+    """Tenant-universal form data for fill_form(). Cascade dropdowns set to None for auto-pick."""
+    return {
+        "agent_name": generate_agent_name(),
+        "phone_number": generate_phone_number(),
+        "email": generate_email("agent"),
+        # Address cascade — auto-picked by UI (tenant-universal)
+        "country": None,
+        "state": None,
+        "district": None,
+        "taluka": None,
+        "village": None,
+        "address": generate_address(),
+        "pin_code": generate_pin_code(),
+        # Payment — optional, skip
+        "preferred_payment_method": None,
+        # Bank
+        "bank_name": generate_bank_name(),
+        "ifsc_code": generate_ifsc_code(),
+        "account_type": None,
+        "account_holder_name": generate_account_holder_name(),
+        "account_number": generate_account_number(),
+    }

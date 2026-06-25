@@ -36,6 +36,13 @@ import random
 import string
 from datetime import datetime, date
 
+# ──────────────────────────────────────────────
+# SweetAlert titles (used by UI tests)
+# ──────────────────────────────────────────────
+SWAL_TITLE_SUCCESS = "Your record has been added successfully!"
+SWAL_TITLE_VALIDATION_FAILED = "Validation Failed"
+SWAL_TITLE_UPDATED = "Your record has been updated successfully!"
+
 
 # ──────────────────────────────────────────────
 # FK ID pools (verified on tenant 711, 2026-06-12)
@@ -263,6 +270,25 @@ def generate_api_payload(**kwargs):
     payload = build_api_payload(data)
     payload.update(kwargs)
     return payload
+
+
+def generate_ui_form_data():
+    """UI-friendly form data dict for fill_form().
+
+    amount_secured is stringified (UI input takes text).
+    type_of_charge is set to a truthy sentinel — fill_form uses
+    _select_first_available_mat_option so the actual value is ignored.
+    date_of_creation / date_of_modification included (required by UI).
+    """
+    data = generate_valid_data()
+    data["type_of_charge"] = True
+    data["amount_secured"] = str(int(data["amount_secured"]))
+    # Ensure dates are populated (required fields in the UI form)
+    if not data.get("date_of_creation"):
+        data["date_of_creation"] = generate_date_string()
+    if not data.get("date_of_modification"):
+        data["date_of_modification"] = generate_date_string()
+    return data
 
 
 def generate_batch_payloads(count, offset=0, **kwargs):

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Loader2, Database, CheckCircle2, XCircle, Play, Info, ShieldCheck, BadgeCheck, ChevronRight, ChevronDown, History, Download, RefreshCw } from 'lucide-react'
+import { Loader2, Database, CheckCircle2, XCircle, Play, Info, ShieldCheck, BadgeCheck, ChevronRight, ChevronDown, History, Download, RefreshCw, RotateCcw } from 'lucide-react'
 import { startBatchCreate, exportBatchExcel, fetchBatchHistory, type SSEEvent, type BatchRunSummary } from '@/lib/api'
 import { BatchCompleteDialog } from './BatchCompleteDialog'
 import { FarmerBatchConfig, type FarmerConfig } from './FarmerBatchConfig'
@@ -223,6 +223,10 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
         <div className="flex items-center gap-2 px-4 pt-2.5 pb-0">
           <Database className="size-4 text-[#3F51B5] dark:text-[#7986CB] shrink-0" />
           <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 flex-1">Batch Data Creation</span>
+          <button onClick={() => { onClearToken(); onNeedsToken(); }} className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md cursor-pointer text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+            <RotateCcw className="size-3" />
+            Reset Token
+          </button>
         </div>
         <div className="flex gap-0 px-4 mt-2">
           {(['create', 'history'] as const).map((t) => (

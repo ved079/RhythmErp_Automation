@@ -20,6 +20,13 @@ import random
 import string
 from datetime import datetime, date, timedelta
 
+# ──────────────────────────────────────────────
+# SweetAlert titles (used by UI tests)
+# ──────────────────────────────────────────────
+SWAL_TITLE_SUCCESS = "Your record has been added successfully!"
+SWAL_TITLE_VALIDATION_FAILED = "Validation Failed"
+SWAL_TITLE_UPDATED = "Your record has been updated successfully!"
+
 
 # ──────────────────────────────────────────────
 # Name pools
@@ -176,3 +183,13 @@ def generate_batch_payloads(count, offset=0, **kwargs):
         p = generate_api_payload(**kwargs)
         payloads.append(p)
     return payloads
+
+
+def generate_ui_form_data():
+    """UI-friendly form data dict for fill_form().
+
+    document_no is stringified (UI input takes text).
+    """
+    data = generate_valid_data()
+    data["document_no"] = str(data["document_no"])
+    return data

@@ -362,17 +362,23 @@ export function TestRunnerTab({
         showRawNames={showRawNames}
         sectionLabel={effectiveTab === 'api' ? 'API Tests' : 'UI Tests'}
         tokenBadge={effectiveTab === 'api' ? (
-          <button
-            onClick={onOpenCredentials}
-            className={`flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full cursor-pointer transition-colors ${
-              erpToken
-                ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
-                : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
-            }`}
-          >
-            <Key className="size-3" />
-            {erpToken ? 'Token set' : 'Set Token'}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onOpenCredentials}
+              className={`flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full cursor-pointer transition-colors ${
+                erpToken
+                  ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+                  : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
+              }`}
+            >
+              <Key className="size-3" />
+              {erpToken ? 'Token set' : 'Set Token'}
+            </button>
+            <button onClick={() => { onClearToken?.(); onOpenCredentials?.(); }} className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-full cursor-pointer bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 transition-colors">
+              <RotateCcw className="size-3" />
+              Reset
+            </button>
+          </div>
         ) : undefined}
       />
     </div>
