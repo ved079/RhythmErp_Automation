@@ -184,9 +184,9 @@ class LoginPage(BasePage):
 
 
     def click_login(self):
-        """Click Login twice back-to-back — first fetches tenant, second logs in."""
+        """Click the Login button via JS to bypass overlay/interactability issues in headless."""
         login_btn = self.driver.find_element(*self.LOGIN_BUTTON)
-        self.driver.execute_script("arguments[0].click(); arguments[0].click();", login_btn)
+        self.driver.execute_script("arguments[0].click();", login_btn)
 
     def login_default(self):
         """Login using default PACS credentials from config."""

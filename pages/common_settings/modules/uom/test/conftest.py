@@ -67,7 +67,11 @@ def logged_in_driver(driver):
 
     login_page.wait_seconds(1)
 
-    log.step(4, "Clicking Login button (double-click)")
+    log.step(4, "Clicking Login button (1st click — triggers tenant fetch)")
+    login_page.click_login()
+    login_page.wait_seconds(2)
+
+    log.step(5, "Clicking Login button (2nd click — logs in after tenant loaded)")
     login_page.click_login()
     login_page.wait_seconds(3)
 
