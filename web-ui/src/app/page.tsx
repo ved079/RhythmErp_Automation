@@ -144,7 +144,13 @@ export default function Home() {
       const res = await fetch('/api/credentials')
       if (res.ok) {
         const data = await res.json()
-        setErpCredentials(data.credentials || [])
+        const creds = data.credentials || []
+        // store passwords in ref so they survive re-renders but aren't in state
+        creds.forEach((c: any) => { if (c.password) credPasswords.current[c.id] = c.password })
+        setErpCredentials(creds.map((c: any) => ({ ...c, password: undefined })))
+        // auto-select default
+        const def = creds.find((c: any) => c.isDefault)
+        if (def) setActiveCredId(def.id)
       }
     } finally {
       setCredLoading(false)
