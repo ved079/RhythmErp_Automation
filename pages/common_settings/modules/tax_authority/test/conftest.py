@@ -84,6 +84,19 @@ def logged_in_driver(driver):
     stop_screenshot_broadcast()
 
 
+@pytest.fixture(scope="session")
+def shared_tax_authority(logged_in_driver):
+    """Creates one Tax Authority record via UI once for the session."""
+    from pages.common_settings.modules.tax_authority.tax_authority_page import TaxAuthorityPage
+    from pages.common_settings.modules.tax_authority.data.tax_authority_data import valid_tax_authority_data
+    page = TaxAuthorityPage(logged_in_driver)
+    data = valid_tax_authority_data()
+    page.navigate_to_page()
+    result = page.create_record(data)
+    assert result.get("status") == "success", f"shared_tax_authority fixture failed: {result.get('error')}"
+    yield data
+
+
 # ================================================================
 # PYTEST MARKERS
 # ================================================================
