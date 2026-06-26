@@ -312,6 +312,7 @@ STATUS_OPTIONS = {
     "Inactive": False,
 }
 
+DESIGNATION_NAME_MAX_LENGTH = 255
 
 def get_fk_screen_mapping():
     """Designation has no FK dropdown fields — return empty mapping."""
