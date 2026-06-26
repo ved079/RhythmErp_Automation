@@ -105,3 +105,20 @@ class TestUOMConversionSchema:
         """UOM_IDS should not have duplicate ID values."""
         values = list(UOM_IDS.values())
         assert len(values) == len(set(values)), "Duplicate ID values found in UOM_IDS"
+
+    def test_fk_screen_mapping_returns_2_keys(self):
+        """get_fk_screen_mapping must return source_uom_code and target_uom_code."""
+        from pages.common_settings.modules.uom_conversion.data.uom_conversion_data import get_fk_screen_mapping
+        m = get_fk_screen_mapping()
+        assert set(m.keys()) == {"source_uom_code", "target_uom_code"}
+
+    def test_generate_batch_payloads_accepts_standard_params(self):
+        """generate_batch_payloads must accept count, prefix, dropdown_ids, offset, existing_entries."""
+        from pages.common_settings.modules.uom_conversion.data.uom_conversion_data import generate_batch_payloads
+        result = generate_batch_payloads(count=3, prefix=None, dropdown_ids=None, offset=0, existing_entries=None)
+        assert len(result) == 3
+
+    def test_uom_conversion_factor_max_digits_is_9(self):
+        """Backend rejects conversion factors >= 1 billion (10+ digits). Max confirmed ~522M."""
+        from pages.common_settings.modules.uom_conversion.data.uom_conversion_data import UOM_CONVERSION_FACTOR_MAX_DIGITS
+        assert UOM_CONVERSION_FACTOR_MAX_DIGITS == 9

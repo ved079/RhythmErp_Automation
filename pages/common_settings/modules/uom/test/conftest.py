@@ -86,6 +86,28 @@ def logged_in_driver(driver):
     stop_screenshot_broadcast()
 
 
+@pytest.fixture(scope="session")
+def shared_uom_code(logged_in_driver):
+    """Creates one UOM record via UI once for the session. Yields the uom_code.
+    Tests that only READ the record (view, history, edit-empty-code) share this."""
+    from pages.common_settings.modules.uom.uom_page import UOMPage
+    from pages.common_settings.modules.uom.data.uom_data import generate_uom_data
+
+    driver = logged_in_driver
+    uom_page = UOMPage(driver)
+    uom_data = generate_uom_data()
+    uom_code = uom_data["uom_code"]
+
+    uom_page.navigate_to_page()
+    uom_page.open_add_form()
+    uom_page.type_text(uom_page.UOM_CODE_INPUT, uom_code)
+    uom_page.type_text(uom_page.UOM_DESCRIPTION_INPUT, "shared fixture record")
+    uom_page.submit()
+    uom_page.handle_success_alert()
+
+    yield uom_code
+
+
 # ================================================================
 # REPORT GENERATOR HOOKS
 # Auto-generates Excel report after every Common Settings test run.

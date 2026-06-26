@@ -289,8 +289,8 @@ def get_field_validation_rules(fk_ids=None):
             "type": "text",
             "required": True,
             "max_length": 255,
-            "note": "Accepts letters and numbers (type='text', not 'character'). "
-                     "Frontend rejects special characters.",
+            "note": "Accepts uppercase letters, numbers, hyphen (-), underscore (_). "
+                    "Lowercase rejected. Frontend maxlength=255 but backend enforces max 10 chars.",
         },
         "uom_description": {
             "type": "text",
@@ -316,6 +316,8 @@ STATUS_OPTIONS = {
     "Active": True,
     "Inactive": False,
 }
+
+UOM_CODE_BACKEND_MAX_LENGTH = 10  # backend rejects codes longer than 10 chars
 
 
 def get_fk_screen_mapping():
