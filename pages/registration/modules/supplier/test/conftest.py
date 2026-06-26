@@ -165,9 +165,13 @@ def sp_page(logged_in_driver):
 def _prompt_for_api_credentials():
     """Interactively prompt user for ERP API token and tenant ID.
 
-    Called only when env vars are not set and API login fails.
-    Shows instructions on how to grab the token from DevTools.
+    Only runs when stdin is a real TTY (local terminal). When running
+    non-interactively (CI, web UI subprocess) returns (None, None) so
+    the caller can skip rather than crash with OSError.
     """
+    if not sys.stdin.isatty():
+        return None, None
+
     print()
     print("=" * 60)
     print("  API AUTHENTICATION REQUIRED")
@@ -257,20 +261,20 @@ def erp_api():
     except Exception:
         log.warning("[API] Auto login failed — will prompt for token")
 
-    # Strategy 3: Interactive prompt
+    # Strategy 3: Interactive prompt (TTY only) or skip
     prompt_token, prompt_tenant = _prompt_for_api_credentials()
-    if prompt_token:
-        tenant_id = prompt_tenant or tenant_id
-        client.tenant_id = tenant_id
-        client.login_from_browser(token=prompt_token, tenant_id=tenant_id)
-        # Verify
-        result = client.list_entries("Supplier", page=1, page_size=1)
-        if result:
-            log.info(f"[API] Interactive auth successful. Tenant: {tenant_id}")
-        else:
-            log.warning("[API] Interactive auth verification failed — token may be invalid")
+    if not prompt_token:
+        pytest.skip("ERP_TOKEN not set and auto-login failed. Set ERP_TOKEN env var to run API tests.")
+        return
+
+    tenant_id = prompt_tenant or tenant_id
+    client.tenant_id = tenant_id
+    client.login_from_browser(token=prompt_token, tenant_id=tenant_id)
+    result = client.list_entries("Supplier", page=1, page_size=1)
+    if result:
+        log.info(f"[API] Interactive auth successful. Tenant: {tenant_id}")
     else:
-        log.warning("[API] No token provided — API tests will fail")
+        log.warning("[API] Interactive auth verification failed — token may be invalid")
 
     yield client
 

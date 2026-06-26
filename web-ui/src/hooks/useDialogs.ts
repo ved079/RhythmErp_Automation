@@ -12,7 +12,6 @@ export function useDialogs() {
   const [selectedRunForDetail, setSelectedRunForDetail] = useState<RunSnapshot | null>(null)
   const [runComparisonOpen, setRunComparisonOpen] = useState(false)
   const [runHistoryOpen, setRunHistoryOpen] = useState(false)
-  const [credentialsOpen, setCredentialsOpen] = useState(false)
   const [showTokenHelp, setShowTokenHelp] = useState(false)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
@@ -31,7 +30,6 @@ export function useDialogs() {
     selectedRunForDetail, setSelectedRunForDetail,
     runComparisonOpen, setRunComparisonOpen,
     runHistoryOpen, setRunHistoryOpen,
-    credentialsOpen, setCredentialsOpen,
     showTokenHelp, setShowTokenHelp,
     lightboxOpen, setLightboxOpen,
     lightboxIndex, setLightboxIndex,

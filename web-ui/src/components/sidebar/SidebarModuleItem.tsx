@@ -18,6 +18,7 @@ interface SidebarModule {
   menuIcon?: boolean
   homeIcon?: boolean
   tagIcon?: boolean
+  keyIcon?: boolean
 }
 
 // ─── Sidebar Module Item ─────────────────────────────────
@@ -153,6 +154,10 @@ export function SidebarModuleItem({
           <svg className="size-[18px] shrink-0 mr-[10px] text-[#6b7280]" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20.59 13.41L13.42 20.58a2 2 0 0 1-2.83 0L2.59 12.58a2 2 0 0 1 0-2.83l7.17-7.17a2 2 0 0 1 1.42-.58H19a2 2 0 0 1 2 2v6.59a2 2 0 0 1-.58 1.42z" />
             <line x1="7" y1="7" x2="7.01" y2="7" />
+          </svg>
+        ) : module.keyIcon ? (
+          <svg className="size-[18px] shrink-0 mr-[10px] text-[#6b7280]" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
           </svg>
         ) : hasChildren ? (
           <ChevronDown

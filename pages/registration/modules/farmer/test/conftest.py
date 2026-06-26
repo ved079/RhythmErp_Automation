@@ -100,13 +100,19 @@ def fr_page(logged_in_driver):
 # ================================================================
 
 def _prompt_for_api_credentials():
-    """Interactive prompt for ERP API token (fallback auth strategy)."""
+    """Interactive prompt for ERP API token (fallback auth strategy).
+
+    Returns (None, None) when not running in a TTY so callers can skip
+    instead of crashing with OSError when stdin is captured by pytest.
+    """
+    if not sys.stdin.isatty():
+        return None, None
     print("\n" + "=" * 50)
     print("  ERP API Authentication Required")
     print("=" * 50)
     token = input("  Paste ERP token from DevTools: ").strip()
     if not token:
-        return "", ""
+        return None, None
     tenant_id = input("  Enter Tenant ID [681]: ").strip()
     if not tenant_id:
         tenant_id = "681"
@@ -177,20 +183,20 @@ def erp_api():
     except Exception:
         log.warning("[API] Auto login failed — will prompt for token")
 
-    # Strategy 3: Interactive prompt
+    # Strategy 3: Interactive prompt (TTY only) or skip
     prompt_token, prompt_tenant = _prompt_for_api_credentials()
-    if prompt_token:
-        tenant_id = prompt_tenant or tenant_id
-        client.tenant_id = tenant_id
-        client.login_from_browser(token=prompt_token, tenant_id=tenant_id)
-        # Verify
-        result = client.list_entries("Farmer", page=1, page_size=1)
-        if result:
-            log.info(f"[API] Interactive auth successful. Tenant: {tenant_id}")
-        else:
-            log.warning("[API] Interactive auth verification failed — token may be invalid")
+    if not prompt_token:
+        pytest.skip("ERP_TOKEN not set and auto-login failed. Set ERP_TOKEN env var to run API tests.")
+        return
+
+    tenant_id = prompt_tenant or tenant_id
+    client.tenant_id = tenant_id
+    client.login_from_browser(token=prompt_token, tenant_id=tenant_id)
+    result = client.list_entries("Farmer", page=1, page_size=1)
+    if result:
+        log.info(f"[API] Interactive auth successful. Tenant: {tenant_id}")
     else:
-        log.warning("[API] No token provided — API tests will fail")
+        log.warning("[API] Interactive auth verification failed — token may be invalid")
 
     yield client
 
