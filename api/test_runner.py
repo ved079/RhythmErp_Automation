@@ -438,6 +438,10 @@ def run_tests_stream(request: CreateRunRequest):
         env["ERP_TOKEN"] = request.erp_token
     if request.erp_tenant_id:
         env["ERP_TENANT_ID"] = request.erp_tenant_id
+    if request.erp_email:
+        env["RHYTHMERP_EMAIL"] = request.erp_email
+    if request.erp_password:
+        env["RHYTHMERP_PASSWORD"] = request.erp_password
 
     try:
         process = subprocess.Popen(

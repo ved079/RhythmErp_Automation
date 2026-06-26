@@ -179,6 +179,8 @@ export async function startRun(
   onError: (err: Error) => void,
   erpToken?: string,
   erpTenantId?: string,
+  erpEmail?: string,
+  erpPassword?: string,
 ) {
   try {
     const res = await fetch(`${PROXY}?path=runs/start`, withCsrf({
@@ -190,6 +192,8 @@ export async function startRun(
         tests,
         erp_token: erpToken || undefined,
         erp_tenant_id: erpTenantId || undefined,
+        erp_email: erpEmail || undefined,
+        erp_password: erpPassword || undefined,
       }),
     }));
 

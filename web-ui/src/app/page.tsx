@@ -103,6 +103,15 @@ export default function Home() {
   const [showRawNames, setShowRawNames] = useState(() => typeof window !== 'undefined' && localStorage.getItem('showRawNames') === 'true')
   const [erpToken, setErpToken] = useState('')
   const [erpTenantId, setErpTenantId] = useState('')
+  // ERP UI credentials (email/password for Selenium tests)
+  type ErpCred = { id: string; name: string; email: string; tenantUrl: string; isDefault: boolean }
+  const [erpCredentials, setErpCredentials] = useState<ErpCred[]>([])
+  const [activeCredId, setActiveCredId] = useState<string | null>(null)
+  const [credLoading, setCredLoading] = useState(false)
+  const [credForm, setCredForm] = useState({ name: '', email: '', password: '', tenantUrl: 'https://rhythmerp.algorhythms.in', isDefault: false })
+  const [credFormOpen, setCredFormOpen] = useState(false)
+  const [credSaving, setCredSaving] = useState(false)
+  const credPasswords = useRef<Record<string, string>>({})
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [notifications, setNotifications] = useState<NotifType[]>([])
@@ -122,10 +131,67 @@ export default function Home() {
 
   const pd = usePageData({ user, selectedModule })
   const moduleHealth = useModuleHealth(pd.runHistory, sidebarModules)
-  const tr = useTestRun({ user, selectedModule, apiModules, allTestCases: pd.allTestCases, visibilityData: pd.visibilityData, loadRunHistory: pd.loadRunHistory, loadDashboardStats: pd.loadDashboardStats, sidebarModules, loadBugReports: pd.loadBugReports, erpToken, erpTenantId })
+  const activeCred = erpCredentials.find(c => c.id === activeCredId) ?? erpCredentials.find(c => c.isDefault) ?? null
+  const tr = useTestRun({ user, selectedModule, apiModules, allTestCases: pd.allTestCases, visibilityData: pd.visibilityData, loadRunHistory: pd.loadRunHistory, loadDashboardStats: pd.loadDashboardStats, sidebarModules, loadBugReports: pd.loadBugReports, erpToken, erpTenantId, erpEmail: activeCred?.email, erpPassword: activeCred ? credPasswords.current[activeCred.id] : undefined })
   const d = useDialogs()
   const onOpenCredentials = useCallback(() => d.setCredentialsOpen(true), [])
   const onClearToken = useCallback(() => { setErpToken(''); setErpTenantId('') }, [])
+
+  const loadCredentials = useCallback(async () => {
+    if (!user) return
+    setCredLoading(true)
+    try {
+      const res = await fetch('/api/credentials')
+      if (res.ok) {
+        const data = await res.json()
+        setErpCredentials(data.credentials || [])
+      }
+    } finally {
+      setCredLoading(false)
+    }
+  }, [user])
+
+  const saveCredential = useCallback(async () => {
+    if (!credForm.name || !credForm.email || !credForm.password || !credForm.tenantUrl) return
+    setCredSaving(true)
+    try {
+      const res = await fetch('/api/credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credForm),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        // store password client-side so we can pass it to run
+        credPasswords.current[data.credential.id] = credForm.password
+        setErpCredentials(prev => {
+          const updated = credForm.isDefault ? prev.map(c => ({ ...c, isDefault: false })) : prev
+          return [...updated, data.credential]
+        })
+        if (credForm.isDefault || erpCredentials.length === 0) setActiveCredId(data.credential.id)
+        setCredForm({ name: '', email: '', password: '', tenantUrl: 'https://rhythmerp.algorhythms.in', isDefault: false })
+        setCredFormOpen(false)
+      }
+    } finally {
+      setCredSaving(false)
+    }
+  }, [credForm, erpCredentials])
+
+  const setDefaultCred = useCallback(async (id: string) => {
+    await fetch(`/api/credentials/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isDefault: true }),
+    })
+    setErpCredentials(prev => prev.map(c => ({ ...c, isDefault: c.id === id })))
+    setActiveCredId(id)
+  }, [])
+
+  const deleteCred = useCallback(async (id: string) => {
+    await fetch(`/api/credentials/${id}`, { method: 'DELETE' })
+    setErpCredentials(prev => prev.filter(c => c.id !== id))
+    if (activeCredId === id) setActiveCredId(null)
+  }, [activeCredId])
 
   // ─── Effects ─────────────────────────────────────────
   useEffect(() => {
@@ -134,6 +200,8 @@ export default function Home() {
     const interval = setInterval(refreshNotifications, 30000)
     return () => clearInterval(interval)
   }, [refreshNotifications, user])
+
+  useEffect(() => { loadCredentials() }, [loadCredentials])
 
   useEffect(() => {
     if (!user) return
@@ -833,31 +901,66 @@ export default function Home() {
       <ReportToAdminDialog open={d.reportDialogOpen} onClose={() => d.setReportDialogOpen(false)} testId={d.reportingTest?.id || ''} testDescription={d.reportingTest?.name || ''} error={d.reportingTest?.error} moduleName={modulePath.name} userName={user?.name || ''} userEmail={user?.email || ''} />
       {user && <UserProfileDialog open={d.profileDialogOpen} onClose={() => d.setProfileDialogOpen(false)} user={user} />}
       <Dialog open={d.credentialsOpen} onOpenChange={d.setCredentialsOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>ERP API Credentials</DialogTitle><DialogDescription>Token and tenant ID for API test execution.</DialogDescription></DialogHeader>
-          <div className="space-y-3 py-2">
-            <div>
-              <div className="flex items-center justify-between">
-                <label className="text-[12px] font-medium text-gray-700 dark:text-gray-300">ERP Token</label>
-                <button onClick={() => d.setShowTokenHelp(!d.showTokenHelp)} className="inline-flex items-center gap-1 text-[11px] text-[#3F51B5] hover:text-[#3949AB] dark:text-[#7986CB] dark:hover:text-[#9FA8DA] hover:underline transition-colors cursor-pointer"><HelpCircle className="size-3" />{d.showTokenHelp ? 'Hide help' : 'Where to find it?'}</button>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>ERP Credentials</DialogTitle>
+            <DialogDescription>Saved login accounts for UI Selenium test runs. The default is used automatically.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            {/* Saved credentials list */}
+            {credLoading ? (
+              <p className="text-[12px] text-gray-400 text-center py-4">Loading...</p>
+            ) : erpCredentials.length === 0 ? (
+              <p className="text-[12px] text-gray-400 text-center py-4">No saved credentials yet. Add one below.</p>
+            ) : (
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {erpCredentials.map(cred => (
+                  <div key={cred.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-[12px] cursor-pointer transition-colors ${activeCred?.id === cred.id ? 'border-[#3F51B5] bg-[#3F51B5]/5 dark:bg-[#3F51B5]/10' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`} onClick={() => setActiveCredId(cred.id)}>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-800 dark:text-gray-200 truncate">{cred.name}</div>
+                      <div className="text-gray-500 dark:text-gray-400 truncate">{cred.email}</div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {activeCred?.id === cred.id && <span className="text-[10px] bg-[#3F51B5] text-white px-1.5 py-0.5 rounded-full">Active</span>}
+                      <button title={cred.isDefault ? 'Default' : 'Set as default'} onClick={(e) => { e.stopPropagation(); setDefaultCred(cred.id) }} className={`p-1 rounded transition-colors ${cred.isDefault ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'} cursor-pointer`}>★</button>
+                      <button title="Delete" onClick={(e) => { e.stopPropagation(); deleteCred(cred.id) }} className="p-1 rounded text-gray-300 hover:text-red-400 transition-colors cursor-pointer">✕</button>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <input type="password" value={erpToken} onChange={(e) => setErpToken(e.target.value)} className="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-[13px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" placeholder="Bearer eyJhbGciOiJIUzI1NiI..." />
-              {d.showTokenHelp && (
-                <div className="mt-2 p-3 rounded-lg bg-[#3F51B5]/[0.05] dark:bg-[#3F51B5]/10 border border-[#3F51B5]/20 dark:border-[#3F51B5]/30 text-[12px] text-gray-700 dark:text-gray-300 space-y-1">
-                  <p className="font-semibold text-blue-700 dark:text-blue-400">How to find your token</p>
-                  <ol className="list-decimal list-inside space-y-0.5 text-[11.5px] leading-relaxed">
-                    <li>Log into ERP and open <strong>DevTools</strong> (F12) → <strong>Network</strong> tab</li>
-                    <li>Click any <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">dynamic-screen-wrapper</code> request (e.g. <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">Employee/</code>, <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">Supplier/</code>, <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">tenants/</code>)</li>
-                    <li>In <strong>Request Headers</strong>, find <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">Authorization: Bearer &lt;token&gt;</code></li>
-                    <li>The token is the <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">eyJ...</code> string after <strong>Bearer</strong></li>
-                    <li>Below that, copy <code className="text-[11px] bg-blue-100 dark:bg-blue-900/50 px-1 rounded">x-tenant-id: 711</code> — that is your <strong>Tenant ID</strong></li>
-                  </ol>
+            )}
+            {/* Add new */}
+            {credFormOpen ? (
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 space-y-2">
+                <p className="text-[11px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">New Credential</p>
+                <input placeholder="Label (e.g. Gautam Prod)" value={credForm.name} onChange={e => setCredForm(f => ({ ...f, name: e.target.value }))} className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-[12px] bg-white dark:bg-gray-800" />
+                <input placeholder="ERP Email" value={credForm.email} onChange={e => setCredForm(f => ({ ...f, email: e.target.value }))} className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-[12px] bg-white dark:bg-gray-800" />
+                <input type="password" placeholder="ERP Password" value={credForm.password} onChange={e => setCredForm(f => ({ ...f, password: e.target.value }))} className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-[12px] bg-white dark:bg-gray-800" />
+                <input placeholder="Tenant URL" value={credForm.tenantUrl} onChange={e => setCredForm(f => ({ ...f, tenantUrl: e.target.value }))} className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-[12px] bg-white dark:bg-gray-800" />
+                <label className="flex items-center gap-2 text-[12px] text-gray-600 dark:text-gray-300 cursor-pointer">
+                  <input type="checkbox" checked={credForm.isDefault} onChange={e => setCredForm(f => ({ ...f, isDefault: e.target.checked }))} />
+                  Set as default
+                </label>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={saveCredential} disabled={credSaving} className="bg-[#3F51B5] hover:bg-[#3949AB] text-white cursor-pointer text-[12px]">{credSaving ? 'Saving...' : 'Save'}</Button>
+                  <Button size="sm" variant="outline" onClick={() => setCredFormOpen(false)} className="cursor-pointer text-[12px]">Cancel</Button>
                 </div>
-              )}
-            </div>
-            <div><label className="text-[12px] font-medium text-gray-700 dark:text-gray-300">Tenant ID</label><input type="text" value={erpTenantId} onChange={(e) => setErpTenantId(e.target.value)} className="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-[13px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" placeholder="e.g. 681" /></div>
+              </div>
+            ) : (
+              <button onClick={() => setCredFormOpen(true)} className="w-full py-2 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-[12px] text-gray-500 hover:border-[#3F51B5] hover:text-[#3F51B5] transition-colors cursor-pointer">+ Add Credential</button>
+            )}
+            {/* API token section (collapsed) */}
+            <details className="mt-1">
+              <summary className="text-[11px] text-gray-400 cursor-pointer hover:text-gray-600">API Token (for API tests)</summary>
+              <div className="mt-2 space-y-2">
+                <input type="password" value={erpToken} onChange={(e) => setErpToken(e.target.value)} className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-[12px] bg-white dark:bg-gray-800" placeholder="Bearer eyJ..." />
+                <input type="text" value={erpTenantId} onChange={(e) => setErpTenantId(e.target.value)} className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-[12px] bg-white dark:bg-gray-800" placeholder="Tenant ID e.g. 681" />
+              </div>
+            </details>
           </div>
-          <DialogFooter className="gap-1.5">{erpToken || erpTenantId ? <Button variant="outline" onClick={() => { setErpToken(''); setErpTenantId(''); d.setCredentialsOpen(false) }} className="cursor-pointer border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">Clear</Button> : null}<Button variant="outline" onClick={() => d.setCredentialsOpen(false)} className="cursor-pointer">Cancel</Button><Button onClick={() => d.setCredentialsOpen(false)} className="bg-[#3F51B5] hover:bg-[#3949AB] text-white cursor-pointer">Save</Button></DialogFooter>
+          <DialogFooter>
+            <Button onClick={() => d.setCredentialsOpen(false)} className="bg-[#3F51B5] hover:bg-[#3949AB] text-white cursor-pointer">Done</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
       <RunDetailDialog open={d.runDetailDialogOpen} onClose={() => { d.setRunDetailDialogOpen(false); d.setSelectedRunForDetail(null) }} run={d.selectedRunForDetail} visibilityData={pd.visibilityData} showRawNames={showRawNames} onReportTest={handleQuickReport} />

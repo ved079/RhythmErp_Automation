@@ -59,6 +59,8 @@ class CreateRunRequest(BaseModel):
     env_url: Optional[str] = None        # override base URL (optional)
     erp_token: Optional[str] = None      # ERP JWT token for API tests
     erp_tenant_id: Optional[str] = None  # ERP tenant ID (default "681")
+    erp_email: Optional[str] = None      # ERP login email for UI Selenium tests
+    erp_password: Optional[str] = None   # ERP login password for UI Selenium tests
 
 
 class StartRunRequest(BaseModel):
@@ -68,6 +70,8 @@ class StartRunRequest(BaseModel):
     env_url: Optional[str] = None
     erp_token: Optional[str] = None
     erp_tenant_id: Optional[str] = None
+    erp_email: Optional[str] = None
+    erp_password: Optional[str] = None
 
 
 class TestResult(BaseModel):
