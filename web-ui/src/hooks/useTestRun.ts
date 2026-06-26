@@ -26,10 +26,12 @@ interface UseTestRunParams {
   loadBugReports: () => Promise<void>
   erpToken: string
   erpTenantId: string
+  erpEmail?: string
+  erpPassword?: string
 }
 
 export function useTestRun(params: UseTestRunParams) {
-  const { user, selectedModule, apiModules, allTestCases, visibilityData, loadRunHistory, loadDashboardStats, sidebarModules, loadBugReports, erpToken, erpTenantId } = params
+  const { user, selectedModule, apiModules, allTestCases, visibilityData, loadRunHistory, loadDashboardStats, sidebarModules, loadBugReports, erpToken, erpTenantId, erpEmail, erpPassword } = params
 
   const [tests, setTests] = useState<TestItem[]>(initialTests)
   const [currentTestGroups, setCurrentTestGroups] = useState<TestClassGroup[]>(testSpecGroups)
@@ -161,9 +163,11 @@ export function useTestRun(params: UseTestRunParams) {
         (err) => { setIsRunning(false); setRunningProgress(''); toast.error('Connection failed', { description: err.message, duration: 8000 }) },
         erpToken || undefined,
         erpTenantId || undefined,
+        erpEmail || undefined,
+        erpPassword || undefined,
       )
     },
-    [isRunning, tests, testChecks, selectedModule, user, loadRunHistory, loadDashboardStats, sidebarModules, loadBugReports, erpToken, erpTenantId]
+    [isRunning, tests, testChecks, selectedModule, user, loadRunHistory, loadDashboardStats, sidebarModules, loadBugReports, erpToken, erpTenantId, erpEmail, erpPassword]
   )
 
   const runByPriority = useCallback((priority: TestPriority) => {
