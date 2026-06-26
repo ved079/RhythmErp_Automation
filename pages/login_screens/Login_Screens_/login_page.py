@@ -184,8 +184,9 @@ class LoginPage(BasePage):
 
 
     def click_login(self):
-        """Click the Login button via JS to bypass overlay/interactability issues in headless."""
+        """Double-click login — first click fetches tenant, second logs in."""
         login_btn = self.driver.find_element(*self.LOGIN_BUTTON)
+        self.driver.execute_script("arguments[0].click();", login_btn)
         self.driver.execute_script("arguments[0].click();", login_btn)
 
     def login_default(self):
