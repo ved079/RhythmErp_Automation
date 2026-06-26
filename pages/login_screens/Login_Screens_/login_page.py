@@ -184,10 +184,15 @@ class LoginPage(BasePage):
 
 
     def click_login(self):
-        """Double-click login — first click fetches tenant, second logs in."""
+        """Click the Login button twice to handle tenant dropdown backend bug."""
         login_btn = self.driver.find_element(*self.LOGIN_BUTTON)
-        self.driver.execute_script("arguments[0].click();", login_btn)
-        self.driver.execute_script("arguments[0].click();", login_btn)
+        login_btn.click()
+        # Second click — tenant dropdown animation sometimes swallows the first click
+        self.wait_seconds(1)
+        try:
+            login_btn.click()
+        except Exception:
+            pass  # If first click already logged in, second will fail — that's fine
 
     def login_default(self):
         """Login using default PACS credentials from config."""
