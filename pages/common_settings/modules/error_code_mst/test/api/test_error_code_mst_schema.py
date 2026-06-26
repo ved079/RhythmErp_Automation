@@ -57,3 +57,17 @@ class TestErrorCodeMstSchema:
     def test_error_code_type_ids_no_duplicate_values(self):
         values = list(ERROR_CODE_TYPE_IDS.values())
         assert len(values) == len(set(values))
+
+    def test_fk_screen_mapping_returns_1_key(self):
+        from pages.common_settings.modules.error_code_mst.data.error_code_mst_data import get_fk_screen_mapping
+        m = get_fk_screen_mapping()
+        assert set(m.keys()) == {"error_code_type"}
+
+    def test_generate_batch_payloads_accepts_standard_params(self):
+        from pages.common_settings.modules.error_code_mst.data.error_code_mst_data import generate_batch_payloads
+        result = generate_batch_payloads(count=3, prefix=None, dropdown_ids=None, offset=0, existing_entries=None)
+        assert len(result) == 3
+
+    def test_error_code_max_length_is_255(self):
+        from pages.common_settings.modules.error_code_mst.data.error_code_mst_data import ERROR_CODE_MAX_LENGTH
+        assert ERROR_CODE_MAX_LENGTH == 255

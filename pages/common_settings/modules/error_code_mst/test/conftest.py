@@ -19,7 +19,7 @@ from common.logger import log
 from common.browser_utils import get_driver
 from pages.login_screens.Login_Screens_.login_page import LoginPage
 from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
-from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHYTHMERP_FACILITY
+from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
 from pages.common_settings.cs_report_generator import CSReportStore, generate_cs_report
 
 
@@ -84,17 +84,28 @@ def logged_in_driver(driver):
     stop_screenshot_broadcast()
 
 
+@pytest.fixture(scope="session")
+def shared_error_code_mst(logged_in_driver):
+    """Creates one Error Code Mst record via UI once for the session."""
+    from pages.common_settings.modules.error_code_mst.error_code_mst_page import ErrorCodeMstPage
+    from pages.common_settings.modules.error_code_mst.data.error_code_mst_data import generate_valid_error_code_mst_data
+    page = ErrorCodeMstPage(logged_in_driver)
+    data = generate_valid_error_code_mst_data()
+    page.navigate_to_page()
+    result = page.create_record(data)
+    assert result.get("status") == "success", f"shared_error_code_mst fixture failed: {result.get('error')}"
+    yield data  # dict with keys: error_code_type, code, description, is_qty_amt
+
+
 # ================================================================
 # PYTEST MARKERS
 # ================================================================
 
 def pytest_configure(config):
     """Register custom pytest markers for Error Code Mst module."""
-    config.addinivalue_line("markers", "smoke: Core CRUD + critical path tests (4 tests)")
-    config.addinivalue_line("markers", "sanity: All 22 tests — full module sanity check")
-    config.addinivalue_line("markers", "regression: All 22 tests — full regression suite")
-    config.addinivalue_line("markers", "bug: Known bugs — duplicate create/edit accepted, no max-length on Code (3 tests)")
-    config.addinivalue_line("markers", "ui: UI interaction tests — alerts, view mode, edit mode, history popup, table columns (18 tests)")
+    config.addinivalue_line("markers", "smoke: Core CRUD + critical path tests")
+    config.addinivalue_line("markers", "ui: UI interaction tests")
+    config.addinivalue_line("markers", "live_api: Live API CRUD tests against real ERP")
 
 
 # ================================================================

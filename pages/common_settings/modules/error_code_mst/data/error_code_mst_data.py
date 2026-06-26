@@ -8,6 +8,10 @@ Fields: error_code_type, code, description, is_qty_amount
 
 import random
 
+# ── Field length constraints ──────────────────────────────────────────
+ERROR_CODE_MAX_LENGTH = 255          # frontend caps code at 255
+ERROR_DESCRIPTION_MAX_LENGTH = 255   # frontend caps description at 255
+
 # ── Realistic data pools ─────────────────────────────────────────────
 
 # Real FK IDs discovered from live ERP (discover_all.py run 2026-06-02)
@@ -73,13 +77,13 @@ DESCRIPTIONS_BY_TYPE = {
     ],
 }
 
-IS_QTY_AMOUNT_OPTIONS = [True, False]
+IS_QTY_AMOUNT_OPTIONS = ["Qty", "Amount"]
 
 
 # ── Payload builder ──────────────────────────────────────────────────
 
 def build_error_code_mst_api_payload(error_code_type_id, code, description,
-                                      is_qty_amount=True):
+                                      is_qty_amount="Amount"):
     """Build a single API payload for Error Code Mst."""
     return {
         "id": "",
