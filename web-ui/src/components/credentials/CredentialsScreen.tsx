@@ -1,7 +1,7 @@
 'use client'
 
-import React, { type Dispatch, type SetStateAction } from 'react'
-import { KeyRound, Star, Trash2, Plus, X, ShieldCheck, Loader2 } from 'lucide-react'
+import React, { type Dispatch, type SetStateAction, useState } from 'react'
+import { KeyRound, Star, Trash2, Plus, X, ShieldCheck, Loader2, Pencil, Eye, EyeOff, Check } from 'lucide-react'
 import type { ErpCred } from '@/lib/types'
 
 const EMPTY_FORM = { name: '', email: '', password: '', tenantUrl: 'https://rhythmerp.algorhythms.in', isDefault: false }
@@ -19,11 +19,38 @@ interface Props {
   saveCredential: () => void
   setDefaultCred: (id: string) => Promise<void>
   deleteCred: (id: string) => Promise<void>
+  updateCredential: (id: string, data: Partial<typeof EMPTY_FORM>) => Promise<void>
+  getPassword: (id: string) => string
   erpToken: string
   setErpToken: (token: string) => void
   erpTenantId: string
   setErpTenantId: (id: string) => void
 }
+
+function PasswordInput({ value, onChange, placeholder, className }: { value: string; onChange: (v: string) => void; placeholder?: string; className?: string }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="relative">
+      <input
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={`pr-8 ${className}`}
+      />
+      <button
+        type="button"
+        onClick={() => setShow(s => !s)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer"
+        tabIndex={-1}
+      >
+        {show ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+      </button>
+    </div>
+  )
+}
+
+const INPUT = 'w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-[12px] bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#3F51B5]/50'
 
 export function CredentialsScreen({
   erpCredentials,
@@ -38,21 +65,47 @@ export function CredentialsScreen({
   saveCredential,
   setDefaultCred,
   deleteCred,
+  updateCredential,
+  getPassword,
   erpToken,
   setErpToken,
   erpTenantId,
   setErpTenantId,
 }: Props) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState(EMPTY_FORM)
+  const [editSaving, setEditSaving] = useState(false)
+
   const activeCred = erpCredentials.find(c => c.id === activeCredId) ?? erpCredentials.find(c => c.isDefault) ?? null
 
-  const openForm = () => {
+  const openAdd = () => {
+    setEditingId(null)
     setCredForm(EMPTY_FORM)
     setCredFormOpen(true)
   }
 
-  const closeForm = () => {
+  const closeAdd = () => {
     setCredForm(EMPTY_FORM)
     setCredFormOpen(false)
+  }
+
+  const openEdit = (cred: ErpCred) => {
+    setCredFormOpen(false)
+    setEditingId(cred.id)
+    setEditForm({ name: cred.name, email: cred.email, password: getPassword(cred.id), tenantUrl: cred.tenantUrl, isDefault: cred.isDefault })
+  }
+
+  const closeEdit = () => {
+    setEditingId(null)
+    setEditForm(EMPTY_FORM)
+  }
+
+  const saveEdit = async () => {
+    if (!editingId) return
+    setEditSaving(true)
+    await updateCredential(editingId, editForm)
+    setEditSaving(false)
+    closeEdit()
   }
 
   return (
@@ -70,7 +123,6 @@ export function CredentialsScreen({
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-xl mx-auto space-y-5">
 
-          {/* Header */}
           <div>
             <h2 className="text-[15px] font-semibold text-gray-800 dark:text-gray-100">Saved Credentials</h2>
             <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">
@@ -78,7 +130,6 @@ export function CredentialsScreen({
             </p>
           </div>
 
-          {/* Active credential banner */}
           {activeCred && (
             <div className="flex items-center gap-2.5 px-4 py-2.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/40 rounded-lg">
               <ShieldCheck className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -90,7 +141,6 @@ export function CredentialsScreen({
             </div>
           )}
 
-          {/* Credentials list */}
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
             {credLoading ? (
               <div className="flex items-center justify-center gap-2 py-10 text-[12px] text-gray-400">
@@ -105,14 +155,70 @@ export function CredentialsScreen({
               <div className="divide-y divide-gray-100 dark:divide-gray-700/60">
                 {erpCredentials.map(cred => {
                   const isActive = activeCred?.id === cred.id
+                  const isEditing = editingId === cred.id
+
+                  if (isEditing) {
+                    return (
+                      <div key={cred.id} className="bg-gray-50/60 dark:bg-gray-800/60 p-4 space-y-3 border-l-2 border-[#3F51B5]">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] font-semibold text-[#3F51B5] dark:text-[#7986CB] uppercase tracking-wider">Edit Credential</p>
+                          <button onClick={closeEdit} className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer">
+                            <X className="size-3.5" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            placeholder="Label"
+                            value={editForm.name}
+                            onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                            className={`col-span-2 ${INPUT}`}
+                          />
+                          <input
+                            placeholder="ERP Email"
+                            value={editForm.email}
+                            onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                            className={INPUT}
+                          />
+                          <PasswordInput
+                            value={editForm.password}
+                            onChange={v => setEditForm(f => ({ ...f, password: v }))}
+                            placeholder="ERP Password"
+                            className={INPUT}
+                          />
+                          <input
+                            placeholder="Tenant URL"
+                            value={editForm.tenantUrl}
+                            onChange={e => setEditForm(f => ({ ...f, tenantUrl: e.target.value }))}
+                            className={`col-span-2 ${INPUT}`}
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 text-[12px] text-gray-600 dark:text-gray-300 cursor-pointer select-none">
+                          <input type="checkbox" checked={editForm.isDefault} onChange={e => setEditForm(f => ({ ...f, isDefault: e.target.checked }))} className="rounded" />
+                          Set as default
+                        </label>
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            onClick={saveEdit}
+                            disabled={editSaving || !editForm.name || !editForm.email}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-[#3F51B5] hover:bg-[#3949AB] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-[12px] font-medium transition-colors cursor-pointer"
+                          >
+                            {editSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                            {editSaving ? 'Saving...' : 'Save Changes'}
+                          </button>
+                          <button onClick={closeEdit} className="px-4 py-2 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-lg text-[12px] font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  }
+
                   return (
                     <div
                       key={cred.id}
                       onClick={() => setActiveCredId(cred.id)}
                       className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
-                        isActive
-                          ? 'bg-[#3F51B5]/5 dark:bg-[#3F51B5]/10'
-                          : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
+                        isActive ? 'bg-[#3F51B5]/5 dark:bg-[#3F51B5]/10' : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
                       }`}
                     >
                       <div className="flex-1 min-w-0">
@@ -120,16 +226,19 @@ export function CredentialsScreen({
                           <span className={`text-[13px] font-medium truncate ${isActive ? 'text-[#3F51B5] dark:text-[#7986CB]' : 'text-gray-800 dark:text-gray-200'}`}>
                             {cred.name}
                           </span>
-                          {isActive && (
-                            <span className="text-[10px] bg-[#3F51B5] text-white px-1.5 py-0.5 rounded-full shrink-0">Active</span>
-                          )}
-                          {cred.isDefault && (
-                            <span className="text-[10px] bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-1.5 py-0.5 rounded-full shrink-0">Default</span>
-                          )}
+                          {isActive && <span className="text-[10px] bg-[#3F51B5] text-white px-1.5 py-0.5 rounded-full shrink-0">Active</span>}
+                          {cred.isDefault && <span className="text-[10px] bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-1.5 py-0.5 rounded-full shrink-0">Default</span>}
                         </div>
                         <div className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5">{cred.email}</div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          title="Edit credential"
+                          onClick={e => { e.stopPropagation(); openEdit(cred) }}
+                          className="p-1.5 rounded-md text-gray-300 dark:text-gray-600 hover:text-[#3F51B5] hover:bg-[#3F51B5]/10 transition-colors cursor-pointer"
+                        >
+                          <Pencil className="size-3.5" />
+                        </button>
                         <button
                           title={cred.isDefault ? 'Default credential' : 'Set as default'}
                           onClick={e => { e.stopPropagation(); setDefaultCred(cred.id) }}
@@ -160,7 +269,7 @@ export function CredentialsScreen({
               <div className="border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/50 dark:bg-gray-800/50 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">New Credential</p>
-                  <button onClick={closeForm} className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer">
+                  <button onClick={closeAdd} className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer">
                     <X className="size-3.5" />
                   </button>
                 </div>
@@ -169,26 +278,25 @@ export function CredentialsScreen({
                     placeholder="Label (e.g. Vedant Prod)"
                     value={credForm.name}
                     onChange={e => setCredForm(f => ({ ...f, name: e.target.value }))}
-                    className="col-span-2 px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-[12px] bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#3F51B5]/50"
+                    className={`col-span-2 ${INPUT}`}
                   />
                   <input
                     placeholder="ERP Email"
                     value={credForm.email}
                     onChange={e => setCredForm(f => ({ ...f, email: e.target.value }))}
-                    className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-[12px] bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#3F51B5]/50"
+                    className={INPUT}
                   />
-                  <input
-                    type="password"
-                    placeholder="ERP Password"
+                  <PasswordInput
                     value={credForm.password}
-                    onChange={e => setCredForm(f => ({ ...f, password: e.target.value }))}
-                    className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-[12px] bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#3F51B5]/50"
+                    onChange={v => setCredForm(f => ({ ...f, password: v }))}
+                    placeholder="ERP Password"
+                    className={INPUT}
                   />
                   <input
                     placeholder="Tenant URL"
                     value={credForm.tenantUrl}
                     onChange={e => setCredForm(f => ({ ...f, tenantUrl: e.target.value }))}
-                    className="col-span-2 px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-[12px] bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#3F51B5]/50"
+                    className={`col-span-2 ${INPUT}`}
                   />
                 </div>
                 <label className="flex items-center gap-2 text-[12px] text-gray-600 dark:text-gray-300 cursor-pointer select-none">
@@ -204,18 +312,18 @@ export function CredentialsScreen({
                     {credSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
                     {credSaving ? 'Saving...' : 'Save'}
                   </button>
-                  <button onClick={closeForm} className="px-4 py-2 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-lg text-[12px] font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer">
+                  <button onClick={closeAdd} className="px-4 py-2 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-lg text-[12px] font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer">
                     Cancel
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Add button (when form is closed) */}
-            {!credFormOpen && (
+            {/* Add button */}
+            {!credFormOpen && !editingId && (
               <div className={`px-4 py-3 ${erpCredentials.length > 0 ? 'border-t border-gray-100 dark:border-gray-700/60' : ''}`}>
                 <button
-                  onClick={openForm}
+                  onClick={openAdd}
                   className="flex items-center gap-1.5 text-[12px] text-[#3F51B5] dark:text-[#7986CB] hover:text-[#3949AB] font-medium transition-colors cursor-pointer"
                 >
                   <Plus className="size-3.5" />
@@ -235,23 +343,11 @@ export function CredentialsScreen({
               <div className="px-4 pb-4 space-y-2 border-t border-gray-100 dark:border-gray-700/60 pt-3">
                 <div>
                   <label className="text-[11px] text-gray-400 dark:text-gray-500 mb-1 block">Bearer Token</label>
-                  <input
-                    type="password"
-                    value={erpToken}
-                    onChange={e => setErpToken(e.target.value)}
-                    placeholder="Bearer eyJ..."
-                    className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-[12px] bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#3F51B5]/50"
-                  />
+                  <PasswordInput value={erpToken} onChange={setErpToken} placeholder="Bearer eyJ..." className={INPUT} />
                 </div>
                 <div>
                   <label className="text-[11px] text-gray-400 dark:text-gray-500 mb-1 block">Tenant ID</label>
-                  <input
-                    type="text"
-                    value={erpTenantId}
-                    onChange={e => setErpTenantId(e.target.value)}
-                    placeholder="e.g. 681"
-                    className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-[12px] bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#3F51B5]/50"
-                  />
+                  <input type="text" value={erpTenantId} onChange={e => setErpTenantId(e.target.value)} placeholder="e.g. 681" className={INPUT} />
                 </div>
               </div>
             </details>

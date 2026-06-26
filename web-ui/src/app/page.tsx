@@ -199,6 +199,22 @@ export default function Home() {
     }
   }, [])
 
+  const updateCredential = useCallback(async (id: string, data: { name?: string; email?: string; password?: string; tenantUrl?: string; isDefault?: boolean }) => {
+    const res = await fetch(`/api/credentials/${id}`, withCsrf({
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }))
+    if (res.ok) {
+      if (data.password) credPasswords.current[id] = data.password
+      if (data.isDefault) setErpCredentials(prev => prev.map(c => ({ ...c, isDefault: c.id === id, ...(c.id === id ? data : {}) })))
+      else setErpCredentials(prev => prev.map(c => c.id === id ? { ...c, ...data } : c))
+      toast.success('Credential updated')
+    } else {
+      toast.error('Failed to update credential')
+    }
+  }, [])
+
   const deleteCred = useCallback(async (id: string) => {
     const res = await fetch(`/api/credentials/${id}`, withCsrf({ method: 'DELETE' }))
     if (res.ok) {
@@ -780,6 +796,8 @@ export default function Home() {
               saveCredential={saveCredential}
               setDefaultCred={setDefaultCred}
               deleteCred={deleteCred}
+              updateCredential={updateCredential}
+              getPassword={(id) => credPasswords.current[id] || ''}
               erpToken={erpToken}
               setErpToken={setErpToken}
               erpTenantId={erpTenantId}
