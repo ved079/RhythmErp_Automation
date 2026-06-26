@@ -16,6 +16,9 @@ Discovered FK IDs (2026-06-02):
 import random
 from datetime import date
 
+# ── Field length constants ────────────────────────────────────────────
+TAX_RATE_NAME_MAX_LENGTH = 255
+
 # ── Realistic GST rate structures ────────────────────────────────────
 
 GST_RATES = [
