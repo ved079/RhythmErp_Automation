@@ -184,10 +184,10 @@ class LoginPage(BasePage):
 
 
     def click_login(self):
-        """Click the Login button twice to handle tenant dropdown backend bug."""
+        """Click the Login button twice to handle tenant dropdown backend bug.
+        First click via JS to bypass any loading overlay; second click after tenant fetch."""
         login_btn = self.driver.find_element(*self.LOGIN_BUTTON)
-        login_btn.click()
-        # Second click — tenant dropdown animation sometimes swallows the first click
+        self.driver.execute_script("arguments[0].click();", login_btn)
         self.wait_seconds(1)
         try:
             login_btn.click()
