@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
 
   const credentials = await db.erpCredential.findMany({
     where: { createdBy: user.id },
-    select: { id: true, name: true, email: true, tenantUrl: true, isDefault: true, createdAt: true },
+    select: { id: true, name: true, email: true, password: true, tenantUrl: true, isDefault: true, createdAt: true },
     orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
   })
 
