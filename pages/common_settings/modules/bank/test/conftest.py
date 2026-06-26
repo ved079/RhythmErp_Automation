@@ -87,9 +87,17 @@ def logged_in_driver(driver):
     stop_screenshot_broadcast()
 
 
-# NOTE: No function-scoped bnk_page fixture!
-# Each test creates its own BankPage(driver) instance and calls navigate_to_page()
-# or hard_refresh() directly — same pattern as UOM gold standard.
+@pytest.fixture(scope="session")
+def shared_bank(logged_in_driver):
+    """Creates one Bank record via UI once for the session."""
+    from pages.common_settings.modules.bank.bank_page import BankPage
+    from pages.common_settings.modules.bank.data.bank_data import generate_valid_bank_data
+    page = BankPage(logged_in_driver)
+    data = generate_valid_bank_data("SHARED")
+    page.navigate_to_page()
+    result = page.create_bank(data)
+    assert result.get("status") == "PASSED", f"shared_bank fixture failed: {result.get('error')}"
+    yield data  # dict with keys: bank_name, bank_code, branch_name, ... etc.
 
 
 # ================================================================

@@ -16,6 +16,10 @@ Discovered FK IDs (2026-06-02):
 import random
 import string
 
+# ── Field length constraints ──────────────────────────────────────────
+BANK_NAME_MAX_LENGTH = 255   # frontend caps at 255
+BANK_NAME_MIN_LENGTH = 10    # frontend enforces minimum 10 chars
+
 # ── Real FK IDs from live ERP ────────────────────────────────────────
 ACCOUNT_TYPE_IDS = {
     "Current": 1849,
