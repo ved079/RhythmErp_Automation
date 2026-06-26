@@ -14,7 +14,7 @@ from common.logger import log
 from common.browser_utils import get_driver
 from pages.login_screens.Login_Screens_.login_page import LoginPage
 from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
-from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHYTHMERP_FACILITY
+from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
 from pages.common_settings.cs_report_generator import CSReportStore, generate_cs_report
 
 
@@ -148,6 +148,19 @@ def logged_in_driver(driver):
     yield driver
 
     stop_screenshot_broadcast()
+
+
+@pytest.fixture(scope="session")
+def shared_vehicle_master(logged_in_driver):
+    """Creates one Vehicle Master record via UI once for the session."""
+    from pages.common_settings.modules.vehicle_master.vehicle_master_page import VehicleMasterPage
+    from pages.common_settings.modules.vehicle_master.data.vehicle_master_data import generate_valid_vehicle_data
+    page = VehicleMasterPage(logged_in_driver)
+    data = generate_valid_vehicle_data("SHARED")
+    page.navigate_to_page()
+    result = page.create_vehicle(data)
+    assert result.get("status") == "PASSED", f"shared_vehicle_master fixture failed: {result.get('error')}"
+    yield data
 
 
 @pytest.fixture
