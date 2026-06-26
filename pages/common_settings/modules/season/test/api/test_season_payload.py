@@ -48,9 +48,9 @@ class TestSeasonAPIPayload:
         assert len(payload["name"]) > 0
 
     def test_payload_name_has_no_special_chars(self):
-        """Generated names should be letters and spaces only."""
+        """Generated names must not contain chars rejected by API: !@#$%^&*()_"""
         payload = generate_season_api_payload()
-        special_chars = set("!@#$%^&*()_0123456789")
+        special_chars = set("!@#$%^&*()_")
         assert not any(c in special_chars for c in payload["name"])
 
     def test_payload_description_is_string_or_none(self):

@@ -83,6 +83,23 @@ def logged_in_driver(driver):
     stop_screenshot_broadcast()
 
 
+@pytest.fixture(scope="session")
+def shared_season(logged_in_driver):
+    """Creates one Season record via UI once for the session.
+    History appears immediately after create — no edit needed."""
+    from pages.common_settings.modules.season.season_page import SeasonPage
+    from pages.common_settings.modules.season.data.season_data import valid_season_name
+    driver = logged_in_driver
+    page = SeasonPage(driver)
+    name = valid_season_name()
+    page.navigate_to_season()
+    page.open_add_form()
+    page.enter_name(name)
+    result = page.click_submit()
+    assert result == "success", f"Shared season fixture create failed: {result}"
+    yield name
+
+
 # NOTE: No per-test season_page fixture — each test creates its own
 # SeasonPage(logged_in_driver) and calls navigate_to_season() or
 # hard_refresh() as needed. This matches the UOM pattern and avoids
