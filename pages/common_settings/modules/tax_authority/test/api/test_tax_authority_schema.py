@@ -4,6 +4,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 sys.path.insert(0, PROJECT_ROOT)
 from pages.common_settings.modules.tax_authority.data.tax_authority_data import (
     FIELD_VALIDATION_RULES, get_field_validation_rules, get_fk_screen_mapping,
+    TAX_NAME_MAX_LENGTH,
 )
 
 @pytest.mark.schema
@@ -36,3 +37,16 @@ class TestTaxAuthoritySchema:
         assert len(mapping) == 2
         fields = set(mapping)
         assert fields == {"tax_type_ref_id", "country_ref_id"}
+
+    def test_fk_screen_mapping_returns_2_keys(self):
+        m = get_fk_screen_mapping()
+        assert set(m.keys()) == {"tax_type_ref_id", "country_ref_id"}
+
+    def test_generate_batch_payloads_accepts_standard_params(self):
+        from pages.common_settings.modules.tax_authority.data.tax_authority_data import generate_batch_payloads
+        mock_ids = {"tax_type_ref_id": {"GST": 93}, "country_ref_id": {"India": 1}}
+        result = generate_batch_payloads(count=3, prefix=None, dropdown_ids=mock_ids, offset=0, existing_entries=None)
+        assert len(result) == 3
+
+    def test_tax_name_max_length_is_255(self):
+        assert TAX_NAME_MAX_LENGTH == 255

@@ -14,6 +14,9 @@ import random
 import time
 from datetime import datetime
 
+# ── Field length constants ───────────────────────────────────────────
+TAX_NAME_MAX_LENGTH = 255
+
 # ── Page constants (used by tax_authority_page.py) ──────────────────
 TAX_AUTHORITY_PAGE_URL = "https://rhythmerp.algorhythms.in/#/dynamic-screens/Tax%20Authority"
 FIELD_TAX_NAME = "tax_name"
