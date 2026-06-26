@@ -143,3 +143,17 @@ class TestBankSchema:
     def test_account_ref_ids_no_duplicate_values(self):
         values = list(ACCOUNT_REF_IDS.values())
         assert len(values) == len(set(values))
+
+    def test_fk_screen_mapping_returns_2_keys(self):
+        from pages.common_settings.modules.bank.data.bank_data import get_fk_screen_mapping
+        m = get_fk_screen_mapping()
+        assert set(m.keys()) == {"account_type", "account_ref_id"}
+
+    def test_generate_batch_payloads_accepts_standard_params(self):
+        from pages.common_settings.modules.bank.data.bank_data import generate_batch_payloads
+        result = generate_batch_payloads(count=3, prefix=None, dropdown_ids=None, offset=0, existing_entries=None)
+        assert len(result) == 3
+
+    def test_bank_name_min_length_is_10(self):
+        from pages.common_settings.modules.bank.data.bank_data import BANK_NAME_MIN_LENGTH
+        assert BANK_NAME_MIN_LENGTH == 10
