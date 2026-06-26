@@ -77,6 +77,9 @@ for src, tgt, factor in CONVERSIONS:
         VALID_CONVERSIONS.append((src, tgt, factor))
 
 
+UOM_CONVERSION_FACTOR_MAX_VALUE = 522222222  # confirmed backend max via API (~9 digits, ~522M). Bug #1 (22-digit scientific notation) is UI-only — API rejects oversized factors directly.
+UOM_CONVERSION_FACTOR_MAX_DIGITS = 9  # backend rejects integers >= 1 billion (10+ digits)
+
 # ── Payload builder ──────────────────────────────────────────────────
 
 def build_uom_conversion_api_payload(source_uom_code, target_uom_code, conversion_factor):
@@ -242,9 +245,8 @@ def get_field_validation_rules(fk_ids=None):
         "conversion_factor": {
             "type": "number",
             "required": True,
-            "note": "Decimal number. 21-digit values OK, 22+ digits cause "
-                    "scientific notation display bug (record becomes uneditable). "
-                    "Input type='character' in UI (no native number validation).",
+            "note": "Input type='character' not 'number' (Bug #2 — no native browser validation). "
+                    "Backend accepts up to 21 digits; 22+ saves as scientific notation (Bug #1), making the record uneditable.",
         },
     }
 

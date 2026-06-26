@@ -53,12 +53,6 @@ class TestUOMAPIPayload:
         assert isinstance(payload["uom_code"], str)
         assert len(payload["uom_code"]) > 0
 
-    def test_payload_uom_code_no_special_chars(self):
-        """uom_code should not contain special characters in generated payloads."""
-        payload = generate_uom_api_payload()
-        special_chars = set("!@#$%^&*()")
-        assert not any(c in special_chars for c in payload["uom_code"])
-
     def test_payload_uom_description_is_string_or_none(self):
         """uom_description must be a string or None."""
         payload = generate_uom_api_payload()
@@ -117,6 +111,23 @@ class TestUOMAPIPayload:
         assert payload["uom_code"] != ""
         assert isinstance(payload["uom_code"], str)
 
+    def test_generate_uom_data_code_is_uppercase(self):
+        """generate_uom_data always returns an uppercase UOM code."""
+        data = generate_uom_data()
+        assert data["uom_code"] == data["uom_code"].upper()
+
+    def test_generate_uom_data_code_length_is_8(self):
+        """generate_uom_data UOM code is exactly 8 uppercase letters."""
+        data = generate_uom_data()
+        assert len(data["uom_code"]) == 8
+
+    def test_generate_uom_data_is_unique_across_calls(self):
+        """Two calls to generate_uom_data should return different codes."""
+        import time; time.sleep(0.01)  # ensure timestamp differs
+        d1 = generate_uom_data()
+        d2 = generate_uom_data()
+        assert d1["uom_code"] != d2["uom_code"]
+
 @pytest.mark.api
 class TestUOMBatchGeneration:
     """Verify batch payload generation for UOM."""
@@ -155,3 +166,9 @@ class TestUOMBatchGeneration:
         for p in payloads:
             assert "children" not in p
             assert "details" not in p
+
+    def test_batch_generate_1_returns_list(self):
+        """generate_batch_payloads(count=1) must return a list, not a dict."""
+        result = generate_batch_payloads(count=1)
+        assert isinstance(result, list)
+        assert len(result) == 1

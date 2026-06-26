@@ -41,7 +41,7 @@ def api_client():
             pytest.skip("No ERP token available. Set ERP_TOKEN env var.")
 
     # Verify auth works
-    result = client.list_entries("UOM%20Conversion", page=1, page_size=1)
+    result = client.list_entries("UOM Conversion", page=1, page_size=1)
     if not result:
         pytest.skip("ERP authentication failed. Check token/credentials.")
 

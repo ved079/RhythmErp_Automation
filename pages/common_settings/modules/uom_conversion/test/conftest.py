@@ -14,27 +14,18 @@ from common.logger import log
 from common.browser_utils import get_driver
 from pages.login_screens.Login_Screens_.login_page import LoginPage
 from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
+from pages.common_settings.modules.uom_conversion.uom_conversion_page import UOMConversionPage
 from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHYTHMERP_FACILITY
 from pages.common_settings.cs_report_generator import CSReportStore, generate_cs_report
 
 
 def pytest_configure(config):
     """Register custom pytest markers for UOM Conversion tests."""
-    config.addinivalue_line(
-        "markers", "smoke: Critical path tests â€” must pass for build acceptance (6 tests)"
-    )
-    config.addinivalue_line(
-        "markers", "sanity: Full functional validation of every test case (22 tests)"
-    )
-    config.addinivalue_line(
-        "markers", "regression: Complete regression suite covering all 22 tests"
-    )
-    config.addinivalue_line(
-        "markers", "bug: Tests verifying known open bugs (6 tests)"
-    )
-    config.addinivalue_line(
-        "markers", "ui: UI/popup/dropdown/visual behaviour tests (13 tests)"
-    )
+    config.addinivalue_line("markers", "smoke: Critical path tests - must pass for build acceptance")
+    config.addinivalue_line("markers", "sanity: Full functional validation of every test case")
+    config.addinivalue_line("markers", "regression: Complete regression suite")
+    config.addinivalue_line("markers", "bug: Tests verifying known open bugs")
+    config.addinivalue_line("markers", "ui: UI/popup/dropdown/visual behaviour tests")
 
 
 # ================================================================
@@ -102,7 +93,7 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    # Facility selection disabled — single-tenant setup (dropdown handled by double-click)
+    # Facility selection disabled -- single-tenant setup (dropdown handled by double-click)
     # if RHYTHMERP_FACILITY:
     #     log.step(3, "Selecting facility: " + str(RHYTHMERP_FACILITY))
     #     login_page.select_facility(RHYTHMERP_FACILITY)
@@ -125,6 +116,17 @@ def logged_in_driver(driver):
     stop_screenshot_broadcast()
 
 
+@pytest.fixture(scope="session")
+def shared_uom_conversion(logged_in_driver):
+    """Creates one UOM Conversion record via UI once for the session.
+    Tests that only READ the record (view, history, edit-empty-factor) share this."""
+    page = UOMConversionPage(logged_in_driver)
+    page.navigate_to_page()
+    result = page.create_fresh_record()
+    assert result.get("success"), f"shared_uom_conversion fixture failed to create record: {result.get('error')}"
+    yield result  # dict with keys: source_uom, target_uom, conversion_factor, success
+
+
 # ================================================================
 # REPORT GENERATOR HOOKS
 # ================================================================
@@ -139,7 +141,7 @@ _cs_store.record_issue(
     description="Conversion factor with 22+ digits saves successfully but displays "
                 "as scientific notation (e.g. 1e+22) when the edit form is reopened. "
                 "Clicking Update with the scientific notation value triggers 'Invalid "
-                "Conversion Factor' validation â€” making the record permanently uneditable.",
+                "Conversion Factor' validation - making the record permanently uneditable.",
     expected="System should either reject values that cannot be displayed accurately, "
              "or preserve the full numeric value so the record remains editable.",
     actual="Value saves and displays as 1e+22 on reopen. Update fails with "
