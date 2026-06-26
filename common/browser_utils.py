@@ -24,6 +24,7 @@ def get_chrome_driver():
     # Headless mode
     if HEADLESS:
         options.add_argument("--headless=new")
+        options.add_argument("--window-size=1920,1080")  # --start-maximized has no effect in headless
         log.info("Headless mode: ON")
 
     # Fresh temp profile — no saved creds, no autofill memory, clean slate every run
