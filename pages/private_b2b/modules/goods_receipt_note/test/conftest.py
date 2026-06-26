@@ -42,9 +42,6 @@ def driver():
 def logged_in_driver(driver):
     from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
     from pages.login_screens.Login_Screens_.login_page import LoginPage
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.webdriver.common.by import By
 
     log.separator()
     log.info("LOGGING INTO RHYTHMERP (GRN)...")
@@ -52,22 +49,16 @@ def logged_in_driver(driver):
 
     login_page = LoginPage(driver)
     driver.get(RHYTHMERP_LOGIN_URL)
-
-    WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.CSS_SELECTOR, "input[formcontrolname='email']"))
-    )
-
+    login_page.wait_seconds(2)
     login_page.enter_email(RHYTHMERP_EMAIL)
     login_page.enter_password(RHYTHMERP_PASSWORD)
-    login_page._dismiss_tenant_dropdown()
-
-    try:
-        login_page.click_login()
-    except Exception:
-        pass
-    WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.CSS_SELECTOR, "app-root, .main-content, .dashboard"))
-    )
+    login_page.wait_seconds(1)
+    login_page.click_login()
+    login_page.wait_seconds(3)
+    login_page.wait_for_login_complete()
+    if "login" in driver.current_url.lower():
+        raise RuntimeError("RhythmERP login failed — still on login page after wait.")
+    log.info("RhythmERP login successful!")
     yield driver
 
 
