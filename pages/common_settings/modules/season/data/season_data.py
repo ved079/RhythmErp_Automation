@@ -400,6 +400,15 @@ STATUS_OPTIONS = {
     "Inactive": False,
 }
 
+SEASON_NAME_MAX_LENGTH = 255  # frontend caps at 255; backend also enforces this
+# Verified name validation rules (confirmed via API probe on tenant 751):
+# ACCEPTED by both frontend and API: letters, numbers, spaces, hyphens
+# REJECTED by both frontend and API: underscore, special chars (@#$%)
+# REJECTED by frontend only (API accepts): hyphen  <-- frontend is MORE restrictive
+# Note: the frontend rejects hyphens but the API accepts them — frontend-only restriction
+SEASON_NAME_ACCEPTED_CHARS = "letters, numbers, spaces, hyphens (API only)"
+SEASON_NAME_REJECTED_BY_BOTH = "underscore, special chars (@#$%)"
+
 
 def get_fk_screen_mapping():
     """Season has no FK dropdown fields — return empty mapping."""

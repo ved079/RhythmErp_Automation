@@ -74,3 +74,16 @@ class TestSeasonSchema:
 
     def test_status_is_not_required(self):
         assert self._rules()["status"]["required"] is False
+
+    def test_fk_screen_mapping_is_empty(self):
+        from pages.common_settings.modules.season.data.season_data import get_fk_screen_mapping
+        assert get_fk_screen_mapping() == {}
+
+    def test_generate_batch_payloads_accepts_standard_params(self):
+        from pages.common_settings.modules.season.data.season_data import generate_batch_payloads
+        result = generate_batch_payloads(count=3, prefix=None, dropdown_ids=None, offset=0, existing_entries=None)
+        assert len(result) == 3
+
+    def test_season_name_max_length_is_255(self):
+        from pages.common_settings.modules.season.data.season_data import SEASON_NAME_MAX_LENGTH
+        assert SEASON_NAME_MAX_LENGTH == 255
