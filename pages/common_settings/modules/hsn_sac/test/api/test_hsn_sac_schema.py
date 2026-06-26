@@ -56,3 +56,17 @@ class TestHsnSacSchema:
     def test_hsn_sac_type_ids_values_are_integers(self):
         for name, uid in HSN_SAC_TYPE_IDS.items():
             assert isinstance(uid, int)
+
+    def test_fk_screen_mapping_returns_1_key(self):
+        from pages.common_settings.modules.hsn_sac.data.hsn_sac_data import get_fk_screen_mapping
+        m = get_fk_screen_mapping()
+        assert set(m.keys()) == {"hsn_sac_type"}
+
+    def test_generate_batch_payloads_accepts_standard_params(self):
+        from pages.common_settings.modules.hsn_sac.data.hsn_sac_data import generate_batch_payloads
+        result = generate_batch_payloads(count=3, prefix=None, dropdown_ids=None, offset=0, existing_entries=None)
+        assert len(result) == 3
+
+    def test_hsn_sac_no_max_length_is_255(self):
+        from pages.common_settings.modules.hsn_sac.data.hsn_sac_data import HSN_SAC_NO_MAX_LENGTH
+        assert HSN_SAC_NO_MAX_LENGTH == 255
