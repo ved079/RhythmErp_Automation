@@ -12,6 +12,10 @@ Discovered FK IDs (2026-06-02):
 
 import random
 
+# ── Field length constraints ──────────────────────────────────────────
+HSN_SAC_NO_MAX_LENGTH = 255          # frontend caps at 255
+HSN_SAC_DESCRIPTION_MAX_LENGTH = 255 # frontend caps at 255
+
 # ── Real FK IDs from live ERP ────────────────────────────────────────
 HSN_SAC_TYPE_IDS = {
     "Services":       212,

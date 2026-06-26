@@ -1,4 +1,4 @@
-﻿"""
+"""
 conftest.py - HSN SAC Common Settings (RhythmERP)
 """
 
@@ -14,7 +14,7 @@ from common.logger import log
 from common.browser_utils import get_driver
 from pages.login_screens.Login_Screens_.login_page import LoginPage
 from common.screenshot_broadcast import start as start_screenshot_broadcast, stop as stop_screenshot_broadcast
-from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD, RHYTHMERP_FACILITY
+from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
 from pages.common_settings.cs_report_generator import CSReportStore, generate_cs_report
 
 
@@ -58,7 +58,7 @@ def logged_in_driver(driver):
     log.step(2, "Entering password")
     login_page.enter_password(RHYTHMERP_PASSWORD)
 
-    # Facility selection disabled — single-tenant setup (dropdown handled by double-click)
+    # Facility selection disabled -- single-tenant setup (dropdown handled by double-click)
     # if RHYTHMERP_FACILITY:
     #     log.step(3, "Selecting facility: " + str(RHYTHMERP_FACILITY))
     #     login_page.select_facility(RHYTHMERP_FACILITY)
@@ -73,45 +73,43 @@ def logged_in_driver(driver):
     login_page.wait_seconds(3)
 
     login_page.wait_for_login_complete()
+
+    if "login" in driver.current_url.lower():
+        log.error("Login did not complete -- still on login page. URL: " + driver.current_url)
+        raise RuntimeError("RhythmERP login failed -- still on login page after wait. Check credentials in .env")
+
     log.info("RhythmERP login successful!")
     start_screenshot_broadcast(driver)
-    start_screenshot_broadcast(driver)
-    log.info("RhythmERP login successful!")
 
     yield driver
 
     stop_screenshot_broadcast()
 
 
-@pytest.fixture
-def hsn_sac_page(logged_in_driver):
-    """
-    Fresh HSN SAC page per test.
-    Navigates to the HSN SAC page before each test.
-    Hard refreshes after each test for clean state.
-    """
-    from pages.common_settings.modules.hsn_sac.hsn_sac_page import HsnSacPage
-    page = HsnSacPage(logged_in_driver)
-    page.navigate_to_page()
-    yield page
-    # Hard refresh after each test for clean state (UOM pattern)
-    try:
-        page.hard_refresh()
-    except Exception:
-        pass
 
 
 # ================================================================
 # PYTEST MARKERS
 # ================================================================
 
+@pytest.fixture(scope="session")
+def shared_hsn_sac(logged_in_driver):
+    """Creates one HSN SAC record via UI once for the session."""
+    from pages.common_settings.modules.hsn_sac.hsn_sac_page import HsnSacPage
+    from pages.common_settings.modules.hsn_sac.data.hsn_sac_data import generate_valid_hsn_sac_data
+    page = HsnSacPage(logged_in_driver)
+    data = generate_valid_hsn_sac_data()
+    page.navigate_to_page()
+    result = page.create_hsn_sac(data)
+    assert result.get("status") == "success", f"shared_hsn_sac fixture failed: {result.get('error')}"
+    yield data  # dict with keys: hsn_sac_number, hsn_sac_type, hsn_sac_description
+
+
 def pytest_configure(config):
     """Register custom pytest markers for HSN SAC module."""
-    config.addinivalue_line("markers", "smoke: Core CRUD + critical path tests (4 tests)")
-    config.addinivalue_line("markers", "sanity: All 20 tests â€” full module sanity check")
-    config.addinivalue_line("markers", "regression: All 20 tests â€” full regression suite")
-    config.addinivalue_line("markers", "bug: Known bug â€” no duplicate HSN SAC number check (1 test)")
-    config.addinivalue_line("markers", "ui: UI interaction tests â€” alerts, view mode, search, history, cancel, table, refresh (15 tests)")
+    config.addinivalue_line("markers", "smoke: Core CRUD + critical path tests")
+    config.addinivalue_line("markers", "ui: UI interaction tests")
+    config.addinivalue_line("markers", "live_api: Live API CRUD tests against real ERP")
 
 
 # ================================================================
