@@ -185,12 +185,14 @@ class LoginPage(BasePage):
 
     def click_login(self):
         """Click the Login button twice to handle tenant dropdown backend bug."""
-        self._dismiss_tenant_dropdown()
-        login_btn = WebDriverWait(self.driver, 10).until(
-            EC.element_to_be_clickable(self.LOGIN_BUTTON)
-        )
-        login_btn.click()
-        # Second click — tenant dropdown animation sometimes swallows the first click
+        from selenium.common.exceptions import ElementNotInteractableException
+        login_btn = self.driver.find_element(*self.LOGIN_BUTTON)
+        try:
+            login_btn.click()
+        except ElementNotInteractableException:
+            # Overlay blocking click (headless/slow server) — use ActionChains which
+            # moves mouse to element center and fires real events Angular responds to
+            ActionChains(self.driver).move_to_element(login_btn).click().perform()
         self.wait_seconds(1)
         try:
             login_btn = self.driver.find_element(*self.LOGIN_BUTTON)
