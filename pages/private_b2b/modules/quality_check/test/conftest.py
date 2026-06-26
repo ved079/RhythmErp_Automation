@@ -7,9 +7,6 @@ PROJECT_ROOT = os.path.abspath(
 )
 sys.path.insert(0, PROJECT_ROOT)
 
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-
 from common.erp_api_client import RhythmERPAPIClient
 from pages.login_screens.Login_Screens_.login_page import LoginPage
 from pages.private_b2b.modules.quality_check.utils.api_quality_check_utils import QCAPIUtils
@@ -27,20 +24,44 @@ def pytest_configure(config):
 
 @pytest.fixture(scope="session")
 def driver():
-    options = Options()
-    options.add_argument("--start-maximized")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option("useAutomationExtension", False)
-    driver = webdriver.Chrome(options=options)
-    yield driver
-    driver.quit()
+    from common.browser_utils import get_driver
+    from common.logger import log
+    log.separator()
+    log.info("LAUNCHING BROWSER (RhythmERP - QC Tests)...")
+    log.separator()
+    drv = get_driver()
+    drv.maximize_window()
+    yield drv
+    log.separator()
+    log.info("CLOSING BROWSER...")
+    log.separator()
+    try:
+        drv.quit()
+    except Exception:
+        pass
 
 
 @pytest.fixture(scope="session")
 def logged_in_driver(driver):
+    from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
+    from common.logger import log
+
+    log.separator()
+    log.info("LOGGING INTO RHYTHMERP (Quality Check)...")
+    log.separator()
+
     login_page = LoginPage(driver)
-    login_page.login_default()
+    driver.get(RHYTHMERP_LOGIN_URL)
+    login_page.wait_seconds(2)
+    login_page.enter_email(RHYTHMERP_EMAIL)
+    login_page.enter_password(RHYTHMERP_PASSWORD)
+    login_page.wait_seconds(1)
+    login_page.click_login()
+    login_page.wait_seconds(3)
+    login_page.wait_for_login_complete()
+    if "login" in driver.current_url.lower():
+        raise RuntimeError("RhythmERP login failed — still on login page after wait.")
+    log.info("RhythmERP login successful!")
     return driver
 
 
