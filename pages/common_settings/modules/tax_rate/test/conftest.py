@@ -99,6 +99,33 @@ def logged_in_driver(driver):
     stop_screenshot_broadcast()
 
 
+@pytest.fixture(scope="session")
+def shared_tax_rate(logged_in_driver):
+    """Creates one Tax Rate record via UI once for the session."""
+    from datetime import datetime
+    from pages.common_settings.modules.tax_rate.tax_rate_page import TaxRatePage
+    page = TaxRatePage(logged_in_driver)
+    ts = datetime.now().strftime("%H%M%S%f")[:10]
+    name = "SHARED" + "".join(chr(ord("A") + int(c)) for c in ts)
+    data = {
+        "header": {
+            "tax_rate_name": name,
+            "tax_type": "GST",
+            "tax_authority": "CGST Authority",
+            "from_date": "2025-04-01",
+            "to_date": "2026-03-31",
+            "revision_status": "Active",
+        },
+        "sub_table_rows": [
+            {"hsn_number": "995411", "tax_rate": 18.0}
+        ],
+    }
+    page.navigate_to_page()
+    result = page.create_record(data)
+    assert result.get("status") == "success", f"shared_tax_rate fixture failed: {result.get('error')}"
+    yield data
+
+
 @pytest.fixture
 def tr_page(logged_in_driver):
     """Tax Rate page object — fresh navigation for each test.

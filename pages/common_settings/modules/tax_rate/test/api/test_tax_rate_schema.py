@@ -5,6 +5,7 @@ sys.path.insert(0, PROJECT_ROOT)
 from pages.common_settings.modules.tax_rate.data.tax_rate_data import (
     FIELD_VALIDATION_RULES, REVISION_STATUS_OPTIONS, STEPPER_NAME,
     HSN_SAC_CODES, get_field_validation_rules, get_fk_screen_mapping,
+    TAX_RATE_NAME_MAX_LENGTH,
 )
 
 @pytest.mark.schema
@@ -67,3 +68,20 @@ class TestTaxRateSchema:
         assert len(mapping) == 3
         fields = set(mapping)
         assert fields == {"tax_type_ref_id", "tax_authority_ref_id", "hsn_sac_number"}
+
+    def test_fk_screen_mapping_returns_3_keys(self):
+        m = get_fk_screen_mapping()
+        assert set(m.keys()) == {"tax_type_ref_id", "tax_authority_ref_id", "hsn_sac_number"}
+
+    def test_generate_batch_payloads_accepts_standard_params(self):
+        from pages.common_settings.modules.tax_rate.data.tax_rate_data import generate_batch_payloads, HSN_SAC_CODES
+        mock_ids = {
+            "tax_type_ref_id": {"GST": 93},
+            "tax_authority_ref_id": {"CGST Authority": 103},
+            "hsn_sac_number": {code: i + 100 for i, code in enumerate(HSN_SAC_CODES)},
+        }
+        result = generate_batch_payloads(count=3, prefix=None, dropdown_ids=mock_ids, offset=0, existing_entries=None)
+        assert len(result) == 3
+
+    def test_tax_rate_name_max_length_is_255(self):
+        assert TAX_RATE_NAME_MAX_LENGTH == 255
