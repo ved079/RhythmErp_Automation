@@ -4,6 +4,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 sys.path.insert(0, PROJECT_ROOT)
 from pages.common_settings.modules.vehicle_master.data.vehicle_master_data import (
     FIELD_VALIDATION_RULES, get_field_validation_rules, get_fk_screen_mapping,
+    VEHICLE_NAME_MAX_LENGTH,
 )
 
 @pytest.mark.schema
@@ -50,3 +51,19 @@ class TestVehicleMasterSchema:
         assert len(mapping) == 2
         fields = set(mapping)
         assert fields == {"vehicle_type_id", "fuel_type_ref_id"}
+
+    def test_fk_screen_mapping_returns_2_keys(self):
+        m = get_fk_screen_mapping()
+        assert set(m.keys()) == {"vehicle_type_id", "fuel_type_ref_id"}
+
+    def test_generate_batch_payloads_accepts_standard_params(self):
+        from pages.common_settings.modules.vehicle_master.data.vehicle_master_data import generate_batch_payloads
+        mock_ids = {
+            "vehicle_type_id": {"Truck": 1, "Trailer": 2},
+            "fuel_type_ref_id": {"Diesel": 1, "CNG": 3},
+        }
+        result = generate_batch_payloads(count=3, prefix=None, dropdown_ids=mock_ids, offset=0, existing_entries=None)
+        assert len(result) == 3
+
+    def test_vehicle_name_max_length_is_255(self):
+        assert VEHICLE_NAME_MAX_LENGTH == 255

@@ -12,6 +12,9 @@ import random
 import string
 from datetime import datetime
 
+# ── Field length constants ────────────────────────────────────────────
+VEHICLE_NAME_MAX_LENGTH = 255
+
 # ── Tenant-agnostic data pools (display names only) ──────────────────
 
 VEHICLES = [
