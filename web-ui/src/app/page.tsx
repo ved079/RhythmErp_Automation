@@ -32,7 +32,7 @@ import {
 import dynamic from 'next/dynamic'
 import { startAppTour } from '@/components/tour/AppTour'
 import { LoginPage } from '@/components/auth/LoginPage'
-import type { AuthUser } from '@/lib/types'
+import type { AuthUser, ErpCred } from '@/lib/types'
 import { SidebarModuleItem } from '@/components/sidebar/SidebarModuleItem'
 import type { SidebarModule } from '@/components/sidebar/SidebarModuleItem'
 import Link from 'next/link'
@@ -55,6 +55,7 @@ const MyTicketsTab = dynamic(() => import('@/components/tickets/MyTicketsTab').t
 const ReportToAdminDialog = dynamic(() => import('@/components/dialogs/ReportToAdminDialog').then(m => ({ default: m.ReportToAdminDialog })), { ssr: false })
 const CompletionSummaryModal = dynamic(() => import('@/components/dialogs/CompletionSummaryModal').then(m => ({ default: m.CompletionSummaryModal })), { ssr: false })
 const UserProfileDialog = dynamic(() => import('@/components/dialogs/UserProfileDialog').then(m => ({ default: m.UserProfileDialog })), { ssr: false })
+const CredentialsScreen = dynamic(() => import('@/components/credentials/CredentialsScreen').then(m => ({ default: m.CredentialsScreen })), { ssr: false })
 const RunDetailDialog = dynamic(() => import('@/components/dialogs/RunDetailDialog').then(m => ({ default: m.RunDetailDialog })), { ssr: false })
 const AppTour = dynamic(() => import('@/components/tour/AppTour').then(m => ({ default: m.AppTour })), { ssr: false })
 const ScreenshotGallery = dynamic(() => import('@/components/screenshot/ScreenshotGallery').then(m => ({ default: m.ScreenshotGallery })), { ssr: false })
@@ -104,7 +105,6 @@ export default function Home() {
   const [erpToken, setErpToken] = useState('')
   const [erpTenantId, setErpTenantId] = useState('')
   // ERP UI credentials (email/password for Selenium tests)
-  type ErpCred = { id: string; name: string; email: string; tenantUrl: string; isDefault: boolean }
   const [erpCredentials, setErpCredentials] = useState<ErpCred[]>([])
   const [activeCredId, setActiveCredId] = useState<string | null>(null)
   const [credLoading, setCredLoading] = useState(false)
@@ -134,7 +134,7 @@ export default function Home() {
   const activeCred = erpCredentials.find(c => c.id === activeCredId) ?? erpCredentials.find(c => c.isDefault) ?? null
   const tr = useTestRun({ user, selectedModule, apiModules, allTestCases: pd.allTestCases, visibilityData: pd.visibilityData, loadRunHistory: pd.loadRunHistory, loadDashboardStats: pd.loadDashboardStats, sidebarModules, loadBugReports: pd.loadBugReports, erpToken, erpTenantId, erpEmail: activeCred?.email, erpPassword: activeCred ? credPasswords.current[activeCred.id] : undefined })
   const d = useDialogs()
-  const onOpenCredentials = useCallback(() => d.setCredentialsOpen(true), [])
+  const onOpenCredentials = useCallback(() => setSelectedModule('credentials'), [])
   const onClearToken = useCallback(() => { setErpToken(''); setErpTenantId('') }, [])
 
   const loadCredentials = useCallback(async () => {
@@ -161,14 +161,13 @@ export default function Home() {
     if (!credForm.name || !credForm.email || !credForm.password || !credForm.tenantUrl) return
     setCredSaving(true)
     try {
-      const res = await fetch('/api/credentials', {
+      const res = await fetch('/api/credentials', withCsrf({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credForm),
-      })
+      }))
       if (res.ok) {
         const data = await res.json()
-        // store password client-side so we can pass it to run
         credPasswords.current[data.credential.id] = credForm.password
         setErpCredentials(prev => {
           const updated = credForm.isDefault ? prev.map(c => ({ ...c, isDefault: false })) : prev
@@ -177,26 +176,35 @@ export default function Home() {
         if (credForm.isDefault || erpCredentials.length === 0) setActiveCredId(data.credential.id)
         setCredForm({ name: '', email: '', password: '', tenantUrl: 'https://rhythmerp.algorhythms.in', isDefault: false })
         setCredFormOpen(false)
+        toast.success(`Credential "${credForm.name}" saved`)
+      } else {
+        toast.error('Failed to save credential')
       }
+    } catch {
+      toast.error('Failed to save credential')
     } finally {
       setCredSaving(false)
     }
   }, [credForm, erpCredentials])
 
   const setDefaultCred = useCallback(async (id: string) => {
-    await fetch(`/api/credentials/${id}`, {
+    const res = await fetch(`/api/credentials/${id}`, withCsrf({
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isDefault: true }),
-    })
-    setErpCredentials(prev => prev.map(c => ({ ...c, isDefault: c.id === id })))
-    setActiveCredId(id)
+    }))
+    if (res.ok) {
+      setErpCredentials(prev => prev.map(c => ({ ...c, isDefault: c.id === id })))
+      setActiveCredId(id)
+    }
   }, [])
 
   const deleteCred = useCallback(async (id: string) => {
-    await fetch(`/api/credentials/${id}`, { method: 'DELETE' })
-    setErpCredentials(prev => prev.filter(c => c.id !== id))
-    if (activeCredId === id) setActiveCredId(null)
+    const res = await fetch(`/api/credentials/${id}`, withCsrf({ method: 'DELETE' }))
+    if (res.ok) {
+      setErpCredentials(prev => prev.filter(c => c.id !== id))
+      if (activeCredId === id) setActiveCredId(null)
+    }
   }, [activeCredId])
 
   // ─── Effects ─────────────────────────────────────────
@@ -404,6 +412,7 @@ export default function Home() {
       return { label: id, parent: null }
     })()
     setNavToast({ key: Date.now(), label: found.label, parent: found.parent })
+    if (id === 'credentials') { loadCredentials(); return }
     setActiveTab('test-runner')
     tr.setTestChecks(new Set())
     const visData = await pd.loadVisibility() || pd.visibilityData
@@ -751,13 +760,33 @@ export default function Home() {
                 <PurchaseChainSection
                   erpToken={erpToken}
                   erpTenantId={erpTenantId || '681'}
-                  onNeedsToken={onOpenCredentials}
+                  onNeedsToken={() => setSelectedModule('credentials')}
                   onClearToken={onClearToken}
                 />
               </div>
             </div>
           )}
-          {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && selectedModule !== 'full-purchase-flow' && (
+          {selectedModule === 'credentials' && (
+            <CredentialsScreen
+              erpCredentials={erpCredentials}
+              activeCredId={activeCredId}
+              setActiveCredId={setActiveCredId}
+              credLoading={credLoading}
+              credFormOpen={credFormOpen}
+              setCredFormOpen={setCredFormOpen}
+              credForm={credForm}
+              setCredForm={setCredForm}
+              credSaving={credSaving}
+              saveCredential={saveCredential}
+              setDefaultCred={setDefaultCred}
+              deleteCred={deleteCred}
+              erpToken={erpToken}
+              setErpToken={setErpToken}
+              erpTenantId={erpTenantId}
+              setErpTenantId={setErpTenantId}
+            />
+          )}
+          {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && selectedModule !== 'full-purchase-flow' && selectedModule !== 'credentials' && (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="border-b border-gray-300 dark:border-gray-500/70 bg-gray-50/50 dark:bg-gray-800/30 shrink-0" data-tour="tab-bar">
                 <div className="flex items-center h-10 px-4 gap-0">
@@ -767,7 +796,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="flex-1 overflow-hidden min-h-0">
-                {activeTab === 'test-runner' && <div data-tour="test-runner" className="h-full"><TestRunnerTab tests={tr.tests} testChecks={tr.testChecks} toggleTestCheck={toggleTestCheck} isRunning={tr.isRunning} totalFailed={failedCount} onRun={(selectedOnly, testType) => { tr.runTests(selectedOnly, undefined, testType); setActiveTab('live-execution') }} onRunByPriority={tr.runByPriority} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds); setActiveTab('live-execution') } }} erpToken={erpToken} erpTenantId={erpTenantId} currentModuleId={selectedModule} onOpenCredentials={onOpenCredentials} onClearToken={onClearToken} showRawNames={showRawNames} /></div>}
+                {activeTab === 'test-runner' && <div data-tour="test-runner" className="h-full"><TestRunnerTab tests={tr.tests} testChecks={tr.testChecks} toggleTestCheck={toggleTestCheck} isRunning={tr.isRunning} totalFailed={failedCount} onRun={(selectedOnly, testType) => { tr.runTests(selectedOnly, undefined, testType); setActiveTab('live-execution') }} onRunByPriority={tr.runByPriority} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds); setActiveTab('live-execution') } }} erpToken={erpToken} erpTenantId={erpTenantId} currentModuleId={selectedModule} onOpenCredentials={onOpenCredentials} onClearToken={onClearToken} showRawNames={showRawNames} credentials={erpCredentials} activeCredId={activeCredId} onSelectCred={(id) => setActiveCredId(id)} onOpenCredentialsScreen={() => setSelectedModule('credentials')} /></div>}
                 {activeTab === 'live-execution' && <div data-tour="live-execution" className="h-full"><LiveExecutionTab tests={tr.tests} testGroups={tr.currentTestGroups} isRunning={tr.isRunning} runningProgress={tr.runningProgress} consoleLogs={tr.consoleLogs} showRawNames={showRawNames} onStop={tr.handleStopRun} onBack={() => setActiveTab('test-runner')} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds) } }} onScreenshotCaptured={(entry) => { tr.setScreenshotEntries((prev) => { if (prev.length >= 50) return [entry, ...prev.slice(0, 49)]; return [entry, ...prev] }) }} /></div>}
                 {activeTab === 'results' && <div data-tour="results" className="h-full"><ResultsTab tests={tr.tests} passedCount={passedCount} failedCount={failedCount} totalCount={tr.tests.length} runHistory={pd.runHistory} bugReportsList={pd.bugReportsList} onRunDetail={(run) => { d.setSelectedRunForDetail(run); d.setRunDetailDialogOpen(true) }} onCompareRuns={() => d.setRunComparisonOpen(true)} onViewAllRuns={() => d.setRunHistoryOpen(true)} onReportTest={handleQuickReport} testGroups={tr.currentTestGroups} moduleHealth={moduleHealth} moduleName={modulePath.name} currentModuleId={selectedModule} isRunning={tr.isRunning} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds); setActiveTab('live-execution') } }} /></div>}
                 {activeTab === 'screenshots' && (
@@ -906,69 +935,6 @@ export default function Home() {
       <CompletionSummaryModal open={tr.completionModalOpen} onClose={() => tr.setCompletionModalOpen(false)} passedCount={tr.completionStats.passed} failedCount={tr.completionStats.failed} totalDuration={tr.completionStats.duration} moduleName={tr.completionStats.moduleName} subModuleName={tr.completionStats.subModuleName} failedTests={tr.completionStats.failedTests} onViewResults={handleViewResults} onRerunFailed={handleCompletionRerunFailed} onNewRun={handleNewRun} onReportTest={handleQuickReport} />
       <ReportToAdminDialog open={d.reportDialogOpen} onClose={() => d.setReportDialogOpen(false)} testId={d.reportingTest?.id || ''} testDescription={d.reportingTest?.name || ''} error={d.reportingTest?.error} moduleName={modulePath.name} userName={user?.name || ''} userEmail={user?.email || ''} />
       {user && <UserProfileDialog open={d.profileDialogOpen} onClose={() => d.setProfileDialogOpen(false)} user={user} />}
-      <Dialog open={d.credentialsOpen} onOpenChange={d.setCredentialsOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>ERP Credentials</DialogTitle>
-            <DialogDescription>Saved login accounts for UI Selenium test runs. The default is used automatically.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-1">
-            {/* Saved credentials list */}
-            {credLoading ? (
-              <p className="text-[12px] text-gray-400 text-center py-4">Loading...</p>
-            ) : erpCredentials.length === 0 ? (
-              <p className="text-[12px] text-gray-400 text-center py-4">No saved credentials yet. Add one below.</p>
-            ) : (
-              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                {erpCredentials.map(cred => (
-                  <div key={cred.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-[12px] cursor-pointer transition-colors ${activeCred?.id === cred.id ? 'border-[#3F51B5] bg-[#3F51B5]/5 dark:bg-[#3F51B5]/10' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`} onClick={() => setActiveCredId(cred.id)}>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-800 dark:text-gray-200 truncate">{cred.name}</div>
-                      <div className="text-gray-500 dark:text-gray-400 truncate">{cred.email}</div>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {activeCred?.id === cred.id && <span className="text-[10px] bg-[#3F51B5] text-white px-1.5 py-0.5 rounded-full">Active</span>}
-                      <button title={cred.isDefault ? 'Default' : 'Set as default'} onClick={(e) => { e.stopPropagation(); setDefaultCred(cred.id) }} className={`p-1 rounded transition-colors ${cred.isDefault ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-400'} cursor-pointer`}>★</button>
-                      <button title="Delete" onClick={(e) => { e.stopPropagation(); deleteCred(cred.id) }} className="p-1 rounded text-gray-300 hover:text-red-400 transition-colors cursor-pointer">✕</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* Add new */}
-            {credFormOpen ? (
-              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 space-y-2">
-                <p className="text-[11px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">New Credential</p>
-                <input placeholder="Label (e.g. Gautam Prod)" value={credForm.name} onChange={e => setCredForm(f => ({ ...f, name: e.target.value }))} className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-[12px] bg-white dark:bg-gray-800" />
-                <input placeholder="ERP Email" value={credForm.email} onChange={e => setCredForm(f => ({ ...f, email: e.target.value }))} className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-[12px] bg-white dark:bg-gray-800" />
-                <input type="password" placeholder="ERP Password" value={credForm.password} onChange={e => setCredForm(f => ({ ...f, password: e.target.value }))} className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-[12px] bg-white dark:bg-gray-800" />
-                <input placeholder="Tenant URL" value={credForm.tenantUrl} onChange={e => setCredForm(f => ({ ...f, tenantUrl: e.target.value }))} className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-[12px] bg-white dark:bg-gray-800" />
-                <label className="flex items-center gap-2 text-[12px] text-gray-600 dark:text-gray-300 cursor-pointer">
-                  <input type="checkbox" checked={credForm.isDefault} onChange={e => setCredForm(f => ({ ...f, isDefault: e.target.checked }))} />
-                  Set as default
-                </label>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={saveCredential} disabled={credSaving} className="bg-[#3F51B5] hover:bg-[#3949AB] text-white cursor-pointer text-[12px]">{credSaving ? 'Saving...' : 'Save'}</Button>
-                  <Button size="sm" variant="outline" onClick={() => setCredFormOpen(false)} className="cursor-pointer text-[12px]">Cancel</Button>
-                </div>
-              </div>
-            ) : (
-              <button onClick={() => setCredFormOpen(true)} className="w-full py-2 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-[12px] text-gray-500 hover:border-[#3F51B5] hover:text-[#3F51B5] transition-colors cursor-pointer">+ Add Credential</button>
-            )}
-            {/* API token section (collapsed) */}
-            <details className="mt-1">
-              <summary className="text-[11px] text-gray-400 cursor-pointer hover:text-gray-600">API Token (for API tests)</summary>
-              <div className="mt-2 space-y-2">
-                <input type="password" value={erpToken} onChange={(e) => setErpToken(e.target.value)} className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-[12px] bg-white dark:bg-gray-800" placeholder="Bearer eyJ..." />
-                <input type="text" value={erpTenantId} onChange={(e) => setErpTenantId(e.target.value)} className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-[12px] bg-white dark:bg-gray-800" placeholder="Tenant ID e.g. 681" />
-              </div>
-            </details>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => d.setCredentialsOpen(false)} className="bg-[#3F51B5] hover:bg-[#3949AB] text-white cursor-pointer">Done</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       <RunDetailDialog open={d.runDetailDialogOpen} onClose={() => { d.setRunDetailDialogOpen(false); d.setSelectedRunForDetail(null) }} run={d.selectedRunForDetail} visibilityData={pd.visibilityData} showRawNames={showRawNames} onReportTest={handleQuickReport} />
       <RunComparisonDialog open={d.runComparisonOpen} onClose={() => d.setRunComparisonOpen(false)} runHistory={pd.runHistory} currentModuleId={selectedModule} />
       <RunHistoryDialog open={d.runHistoryOpen} onClose={() => d.setRunHistoryOpen(false)} runHistory={pd.runHistory} sidebarModules={sidebarModules} currentModuleId={selectedModule} onRunDetail={(run) => { d.setSelectedRunForDetail(run); d.setRunDetailDialogOpen(true) }} />

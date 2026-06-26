@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useCallback, useMemo, useState } from 'react'
-import { Play, RotateCcw, CheckCircle2, XCircle, Circle, Key, Monitor, Terminal, Search, RefreshCw, SlidersHorizontal, Database, ChevronRight } from 'lucide-react'
+import { Play, RotateCcw, CheckCircle2, XCircle, Circle, Key, Monitor, Terminal, Search, RefreshCw, SlidersHorizontal, Database, ChevronDown } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { type TestPriority, type TestItem } from '@/data/testSpecGroups'
@@ -33,6 +33,79 @@ function StatusBadge({ status }: { status: TestItem['status'] }) {
   )
 }
 
+function CredentialDropdown({
+  credentials,
+  activeCredId,
+  onSelectCred,
+  onOpenCredentialsScreen,
+}: {
+  credentials?: { id: string; name: string; email: string; isDefault: boolean }[]
+  activeCredId?: string | null
+  onSelectCred?: (credId: string) => void
+  onOpenCredentialsScreen?: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const active = credentials?.find(c => c.id === activeCredId)
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full cursor-pointer transition-colors ${
+          active
+            ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+            : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
+        }`}
+      >
+        <Key className="size-3" />
+        {active ? active.name : 'Set Credential'}
+        <ChevronDown className="size-3" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-50" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg min-w-[240px] overflow-hidden">
+            {(!credentials || credentials.length === 0) ? (
+              <div className="px-3 py-6 text-center text-[12px] text-gray-400 dark:text-gray-500">No saved credentials</div>
+            ) : (
+              <>
+                <div className="max-h-48 overflow-y-auto">
+                  {credentials.map(cred => (
+                    <button
+                      key={cred.id}
+                      onClick={() => { onSelectCred?.(cred.id); setOpen(false) }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-[12px] text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
+                        cred.id === activeCredId ? 'bg-[#3F51B5]/10 dark:bg-[#3F51B5]/20' : ''
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className={`truncate font-medium ${cred.id === activeCredId ? 'text-[#3F51B5] dark:text-[#7986CB]' : 'text-gray-700 dark:text-gray-200'}`}>{cred.name}</div>
+                        <div className="truncate text-gray-400">{cred.email}</div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {cred.id === activeCredId && <span className="text-[10px] bg-[#3F51B5] text-white px-1.5 py-0.5 rounded-full">Active</span>}
+                        {cred.isDefault && <span className="text-yellow-500 text-[12px]">★</span>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <div className="border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    onClick={() => { setOpen(false); onOpenCredentialsScreen?.() }}
+                    className="w-full px-3 py-2 text-[12px] text-left text-[#3F51B5] dark:text-[#7986CB] hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer font-medium"
+                  >
+                    Manage credentials...
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 function TestSection({
   tests,
   testChecks,
@@ -42,6 +115,7 @@ function TestSection({
   totalFailed,
   onRerunFailed,
   tokenBadge,
+  uiCredentialBadge,
   tabSwitcher,
   showRawNames,
   sectionLabel,
@@ -54,6 +128,7 @@ function TestSection({
   totalFailed: number
   onRerunFailed: () => void
   tokenBadge?: React.ReactNode
+  uiCredentialBadge?: React.ReactNode
   tabSwitcher?: React.ReactNode
   showRawNames?: boolean
   sectionLabel?: string
@@ -176,6 +251,7 @@ function TestSection({
             </button>
           )}
 
+          {uiCredentialBadge && <div className="shrink-0">{uiCredentialBadge}</div>}
           {tokenBadge && <div className="shrink-0">{tokenBadge}</div>}
 
           <div className="flex-1" />
@@ -268,6 +344,10 @@ export function TestRunnerTab({
   onOpenCredentials,
   onClearToken,
   showRawNames,
+  credentials,
+  activeCredId,
+  onSelectCred,
+  onOpenCredentialsScreen,
 }: {
   tests: TestItem[]
   testChecks: Set<string>
@@ -284,6 +364,10 @@ export function TestRunnerTab({
   onClearToken?: () => void
   onRunApi?: (selectedOnly: boolean) => void
   showRawNames?: boolean
+  credentials?: { id: string; name: string; email: string; isDefault: boolean }[]
+  activeCredId?: string | null
+  onSelectCred?: (credId: string) => void
+  onOpenCredentialsScreen?: () => void
 }) {
   const [activeTab, setActiveTab] = useState<'ui' | 'api' | 'batch'>('ui')
 
@@ -379,6 +463,14 @@ export function TestRunnerTab({
               Reset
             </button>
           </div>
+        ) : undefined}
+        uiCredentialBadge={effectiveTab === 'ui' ? (
+          <CredentialDropdown
+            credentials={credentials}
+            activeCredId={activeCredId}
+            onSelectCred={onSelectCred}
+            onOpenCredentialsScreen={onOpenCredentialsScreen}
+          />
         ) : undefined}
       />
     </div>

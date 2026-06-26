@@ -49,6 +49,16 @@ export interface SidebarModule {
   menuIcon?: boolean
   homeIcon?: boolean
   tagIcon?: boolean
+  keyIcon?: boolean
+}
+
+// ─── Credential Types ────────────────────────────────────
+export interface ErpCred {
+  id: string
+  name: string
+  email: string
+  tenantUrl: string
+  isDefault: boolean
 }
 
 // ─── Auth Types ──────────────────────────────────────────

@@ -117,4 +117,5 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
     ],
   },
   { id: 'my-tickets', label: 'My Tickets', tagIcon: true },
+  { id: 'credentials', label: 'Credentials', keyIcon: true },
 ]

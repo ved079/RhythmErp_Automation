@@ -87,6 +87,8 @@ def start_run(request: StartRunRequest):
         env_url=request.env_url,
         erp_token=request.erp_token,
         erp_tenant_id=request.erp_tenant_id,
+        erp_email=request.erp_email,
+        erp_password=request.erp_password,
     )
 
     return StreamingResponse(
