@@ -185,11 +185,15 @@ class LoginPage(BasePage):
 
     def click_login(self):
         """Click the Login button twice to handle tenant dropdown backend bug."""
-        login_btn = self.driver.find_element(*self.LOGIN_BUTTON)
+        self._dismiss_tenant_dropdown()
+        login_btn = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable(self.LOGIN_BUTTON)
+        )
         login_btn.click()
         # Second click — tenant dropdown animation sometimes swallows the first click
         self.wait_seconds(1)
         try:
+            login_btn = self.driver.find_element(*self.LOGIN_BUTTON)
             login_btn.click()
         except Exception:
             pass  # If first click already logged in, second will fail — that's fine
