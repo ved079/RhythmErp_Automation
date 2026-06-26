@@ -86,6 +86,25 @@ def logged_in_driver(driver):
     stop_screenshot_broadcast()
 
 
+@pytest.fixture(scope="session")
+def shared_designation(logged_in_driver):
+    """Creates one Designation record via UI once for the session. Yields dict with name."""
+    from pages.common_settings.modules.designation.designation_page import DesignationPage
+    from pages.common_settings.modules.designation.data.designation_data import generate_valid_designation_data
+
+    driver = logged_in_driver
+    page = DesignationPage(driver)
+    data = generate_valid_designation_data()
+
+    page.navigate_to_page()
+    page.open_add_form()
+    page.fill_designation_form(data)
+    page.submit()
+    page.handle_success_alert()
+
+    yield {"name": data["name"]}
+
+
 # ================================================================
 # REPORT GENERATOR HOOKS (UOM pattern)
 # ================================================================

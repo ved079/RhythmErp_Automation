@@ -74,3 +74,19 @@ class TestDesignationSchema:
 
     def test_status_is_not_required(self):
         assert self._rules()["status"]["required"] is False
+
+    def test_fk_screen_mapping_is_empty(self):
+        """Designation has no FK dropdowns — mapping must be empty dict."""
+        from pages.common_settings.modules.designation.data.designation_data import get_fk_screen_mapping
+        assert get_fk_screen_mapping() == {}
+
+    def test_generate_batch_payloads_accepts_standard_params(self):
+        """generate_batch_payloads must accept count, prefix, dropdown_ids, offset, existing_entries."""
+        from pages.common_settings.modules.designation.data.designation_data import generate_batch_payloads
+        result = generate_batch_payloads(count=3, prefix=None, dropdown_ids=None, offset=0, existing_entries=None)
+        assert len(result) == 3
+
+    def test_max_length_constant_exists(self):
+        """DESIGNATION_NAME_MAX_LENGTH must be 255."""
+        from pages.common_settings.modules.designation.data.designation_data import DESIGNATION_NAME_MAX_LENGTH
+        assert DESIGNATION_NAME_MAX_LENGTH == 255
