@@ -53,8 +53,19 @@ def get_chrome_driver():
     }
     options.add_experimental_option("prefs", prefs)
 
-    # Selenium 4.41+ built-in SeleniumManager — no webdriver-manager needed
-    driver = webdriver.Chrome(options=options)
+    # Point Selenium at the Chrome binary when running in Docker/CI
+    chrome_bin = os.environ.get("CHROME_BIN") or os.environ.get("GOOGLE_CHROME_BIN")
+    if chrome_bin:
+        options.binary_location = chrome_bin
+
+    # Use pre-installed chromedriver if available (avoids Selenium Manager download)
+    chromedriver_path = os.environ.get("CHROMEDRIVER_PATH")
+    if chromedriver_path:
+        from selenium.webdriver.chrome.service import Service
+        driver = webdriver.Chrome(service=Service(chromedriver_path), options=options)
+    else:
+        # Selenium 4.41+ built-in SeleniumManager — no webdriver-manager needed
+        driver = webdriver.Chrome(options=options)
 
     # Set timeouts
     driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
