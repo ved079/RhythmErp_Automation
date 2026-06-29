@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { Loader2 } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 import { fetchScreenshot } from '@/lib/api'
 
 export function LiveScreencast({ isRunning, onScreenshotReady }: { isRunning: boolean; onScreenshotReady?: (src: string, active: boolean) => void }) {

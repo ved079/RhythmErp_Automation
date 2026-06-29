@@ -2,7 +2,8 @@
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Plus, Pencil, Trash2, Globe } from 'lucide-react'
+import { Plus, Pencil, Trash2, Globe } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 
 interface Environment {
   id: string; name: string; baseUrl: string; browser: string
@@ -29,7 +30,7 @@ export function EnvironmentsSection({
         </Button>
       </div>
       {!envLoaded ? (
-        <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
+        <div className="flex justify-center py-12"><Spinner size={24} /></div>
       ) : environments.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 border border-gray-100 dark:border-gray-700 text-center">
           <Globe className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />

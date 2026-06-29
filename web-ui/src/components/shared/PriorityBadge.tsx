@@ -1,7 +1,8 @@
 'use client'
 
 import React from 'react'
-import { CheckCircle2, XCircle, Loader2, Circle, ArrowUpDown } from 'lucide-react'
+import { CheckCircle2, XCircle, Circle, ArrowUpDown } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 import { priorityConfig, type TestPriority } from '@/data/testSpecGroups'
 
 // ─── Priority Badge ──────────────────────────────────────
@@ -24,7 +25,7 @@ export function TestStatusIcon({ status, size = 4 }: { status: string; size?: nu
     case 'failed':
       return <XCircle className={`${cls} text-red-500`} />
     case 'running':
-      return <Loader2 className={`${cls} text-indigo-500 animate-spin`} />
+      return <Spinner size={size * 4} accent="#6366f1" />
     default:
       return <Circle className={`size-${Math.max(size - 0.5, 3)} text-gray-300 dark:text-gray-600`} />
   }

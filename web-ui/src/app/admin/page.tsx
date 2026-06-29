@@ -31,8 +31,9 @@ import {
 import {
   LayoutDashboard, ClipboardList, FolderTree, EyeOff, Inbox,
   Globe, Settings, Users as UsersIcon, Activity, FileText,
-  ChevronLeft, Loader2, LogOut, Menu, Sun, Moon, Home, Shield,
+  ChevronLeft, LogOut, Menu, Sun, Moon, Home, Shield,
 } from 'lucide-react'
+import LoadingCard from '@/components/ui/LoadingCard'
 
 export default function AdminPage() {
   const router = useRouter()
@@ -42,14 +43,7 @@ export default function AdminPage() {
   const s = useAdminState()
 
   if (s.authLoading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-[#F1F2F7] dark:bg-gray-900">
-        <div className="flex flex-col items-center gap-3">
-          <Image src="/agdi-logo-new.webp" width={40} height={40} className="object-contain animate-pulse" alt="agDi Logo" />
-          <Loader2 className="size-5 text-[#6777EF] animate-spin" />
-        </div>
-      </div>
-    )
+    return <LoadingCard />
   }
   if (!s.user) return null
 

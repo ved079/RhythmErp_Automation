@@ -8,8 +8,9 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  Loader2, Plus, CheckCircle2, XCircle, Trash2, Pencil, Key,
+  Plus, CheckCircle2, XCircle, Trash2, Pencil, Key,
 } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 
 interface AdminUser {
   id: string; email: string; name: string
@@ -78,7 +79,7 @@ export function UsersSection({
         </div>
       )}
       {!usersLoaded ? (
-        <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
+        <div className="flex justify-center py-12"><Spinner size={24} /></div>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <div className="space-y-1 p-3">

@@ -1,10 +1,10 @@
 'use client'
 
 import { Badge } from '@/components/ui/badge'
-import { Loader2 } from 'lucide-react'
 import {
   Activity, Database, HardDrive, Zap, Timer, FolderTree,
 } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 import { useSystemHealth } from '@/hooks/admin/useSystemHealth'
 
 export function SystemHealthSection({
@@ -37,7 +37,7 @@ export function SystemHealthSection({
     <div className="space-y-4">
       <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">System Health</h2>
       {!healthLoaded ? (
-        <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
+        <div className="flex justify-center py-12"><Spinner size={24} /></div>
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -11,8 +11,9 @@ import {
 import { withCsrf } from '@/lib/csrf-client'
 import { toast } from 'sonner'
 import {
-  Loader2, RotateCcw, Save, Settings as SettingsIcon,
+  RotateCcw, Save, Settings as SettingsIcon,
 } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 
 interface SystemSetting {
   id: string; key: string; label: string; value: string
@@ -78,7 +79,7 @@ export function SettingsSection() {
         </Button>
       </div>
       {!settingsLoaded ? (
-        <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
+        <div className="flex justify-center py-12"><Spinner size={24} /></div>
       ) : settings.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 border border-gray-100 dark:border-gray-700 text-center">
           <SettingsIcon className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />

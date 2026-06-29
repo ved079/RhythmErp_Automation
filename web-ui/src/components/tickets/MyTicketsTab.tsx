@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { RefreshCw, Filter, Ticket, Play, CheckCircle2, RotateCcw, Loader2, MessageSquare, Send, Timer, FlaskConical, XCircle, ShieldCheck } from 'lucide-react'
+import { RefreshCw, Filter, Ticket, Play, CheckCircle2, RotateCcw, MessageSquare, Send, Timer, FlaskConical, XCircle, ShieldCheck } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'

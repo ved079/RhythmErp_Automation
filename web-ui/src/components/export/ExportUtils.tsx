@@ -17,8 +17,8 @@ import {
   Printer,
   Copy,
   CheckCircle2,
-  Loader2,
 } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 import { toast } from 'sonner'
 import type { TestClassGroup, RunSnapshot, ModuleHealth } from '@/lib/types'
 import type { BugReport } from '@/lib/bug-reports'
@@ -925,7 +925,7 @@ export function ExportMenu({
 
   const renderIcon = (action: string, Icon: React.ElementType) => {
     if (loadingAction === action) {
-      return <Loader2 className="size-4 animate-spin" />
+      return <Spinner size={16} />
     }
     return <Icon className="size-4" />
   }

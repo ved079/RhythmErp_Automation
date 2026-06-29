@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { Loader2, Key, AlertTriangle } from 'lucide-react'
+import { Key, AlertTriangle } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 
 interface AdminUser {
   id: string; email: string; name: string
@@ -103,14 +104,14 @@ export function ResetPasswordDialog({ open, onOpenChange, user, onReset }: {
             </div>
           )}
           {historyLoading && (
-            <div className="flex justify-center py-2"><Loader2 className="size-4 animate-spin text-[#3F51B5]" /></div>
+            <div className="flex justify-center py-2"><Spinner size={16} /></div>
           )}
         </div>
 
         <DialogFooter className="mt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)} className="font-['Roboto']">Cancel</Button>
           <Button onClick={handleReset} disabled={loading || password.length < 6} className="bg-[#F57C00] hover:bg-[#E65100] text-white font-['Roboto']">
-            {loading ? <Loader2 className="size-4 animate-spin mr-1" /> : <Key className="size-3.5 mr-1" />}
+            {loading ? <Spinner size={16} className="mr-1" /> : <Key className="size-3.5 mr-1" />}
             Reset Password
           </Button>
         </DialogFooter>

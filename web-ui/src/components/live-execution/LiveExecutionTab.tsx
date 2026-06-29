@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   ArrowLeft, Globe, Play, Square, RotateCcw, CheckCircle2,
-  XCircle, Circle, Loader2, ClipboardList, Monitor, Maximize2, X,
+  XCircle, Circle, ClipboardList, Monitor, Maximize2, X,
   Terminal, Search, ChevronDown, ChevronRight, Clock, Copy, Check,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'

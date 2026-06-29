@@ -8,8 +8,9 @@ import {
 } from '@/components/ui/dialog'
 import { useTheme } from 'next-themes'
 import {
-  ClipboardList, FolderTree, Globe, UsersIcon, Settings, Loader2, XCircle,
+  ClipboardList, FolderTree, Globe, UsersIcon, Settings, XCircle,
 } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 
 interface OverviewStats {
   activeTests: number; totalModules: number; activeEnvs: number; activeUsers: number
@@ -133,7 +134,7 @@ export function OverviewSection({
                 ))}
                 {environments.filter(e => e.status === 'active').length === 0 && <p className="text-xs text-[#888] dark:text-gray-400 text-center py-4">No active environments</p>}
               </div>
-            ) : <Loader2 className="size-5 animate-spin text-[#3F51B5] mx-auto" />}
+            ) : <Spinner size={20} />}
           </div>
         )}
 
@@ -153,7 +154,7 @@ export function OverviewSection({
                 ))}
                 {stats.failedTests.length === 0 && <p className="text-xs text-[#888] dark:text-gray-400 text-center py-4">No failures 🎉</p>}
               </div>
-            ) : <Loader2 className="size-5 animate-spin text-[#3F51B5] mx-auto" />}
+            ) : <Spinner size={20} />}
           </div>
         )}
       </div>

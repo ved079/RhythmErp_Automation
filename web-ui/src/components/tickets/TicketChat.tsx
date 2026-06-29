@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, MessageSquare, Bug } from 'lucide-react'
+import { Send, MessageSquare, Bug } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'

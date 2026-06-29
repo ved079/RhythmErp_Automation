@@ -1,7 +1,8 @@
 'use client'
 
 import React, { type Dispatch, type SetStateAction, useState } from 'react'
-import { KeyRound, Star, Trash2, Plus, X, ShieldCheck, Loader2, Pencil, Eye, EyeOff, Check } from 'lucide-react'
+import { KeyRound, Star, Trash2, Plus, X, ShieldCheck, Pencil, Eye, EyeOff, Check } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 import type { ErpCred } from '@/lib/types'
 
 const EMPTY_FORM = { name: '', email: '', password: '', tenantUrl: 'https://rhythmerp.algorhythms.in', isDefault: false }

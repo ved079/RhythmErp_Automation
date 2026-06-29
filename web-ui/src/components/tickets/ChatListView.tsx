@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { MessageSquare, Bug, Clock, CheckCircle2, Loader2 } from 'lucide-react'
+import { MessageSquare, Bug, Clock, CheckCircle2 } from 'lucide-react'
 import { TicketChat } from './TicketChat'
 import { type BugReport } from '@/lib/bug-reports'
 
