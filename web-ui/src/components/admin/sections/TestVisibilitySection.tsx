@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import {
-  EyeOff, RotateCcw, Loader2, FolderTree, ChevronRight,
+  EyeOff, RotateCcw, FolderTree, ChevronRight,
   Search, Pencil, Eye, Monitor, Server, List, AlertTriangle,
   CheckCircle2, XCircle, Save, EyeOff as EyeOffIcon,
   ChevronDown,
 } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -206,7 +207,7 @@ export function TestVisibilitySection() {
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Test Visibility</h2>
           <Button onClick={syncTestsFromBackend} disabled={syncingTests} className="h-8 text-xs bg-[#2D3FC7] hover:bg-[#3F51B5] cursor-pointer gap-1.5">
-            {syncingTests ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
+            {syncingTests ? <Spinner size={14} /> : <RotateCcw className="size-3.5" />}
             {syncingTests ? 'Syncing...' : 'Sync from Backend'}
           </Button>
         </div>
@@ -260,7 +261,7 @@ export function TestVisibilitySection() {
             </div>
           )}
           <Button onClick={syncTestsFromBackend} disabled={syncingTests} className="h-8 text-xs bg-[#2D3FC7] hover:bg-[#3F51B5] cursor-pointer gap-1.5">
-            {syncingTests ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
+            {syncingTests ? <Spinner size={14} /> : <RotateCcw className="size-3.5" />}
             {syncingTests ? 'Syncing...' : 'Sync'}
           </Button>
         </div>
@@ -630,13 +631,13 @@ export function TestVisibilitySection() {
             <Button size="sm" variant="outline" disabled={batchActionLoading}
               onClick={() => batchUpdate(Array.from(visSelectedTests).map(n => ({ testName: n, disabled: true })))}
               className="h-8 text-xs font-['Roboto']">
-              {batchActionLoading ? <Loader2 className="size-3 animate-spin mr-1" /> : <XCircle className="size-3 mr-1" />}
+              {batchActionLoading ? <Spinner size={12} /> : <XCircle className="size-3 mr-1" />}
               Disable
             </Button>
             <Button size="sm" variant="outline" disabled={batchActionLoading}
               onClick={() => batchUpdate(Array.from(visSelectedTests).map(n => ({ testName: n, disabled: false })))}
               className="h-8 text-xs font-['Roboto']">
-              {batchActionLoading ? <Loader2 className="size-3 animate-spin mr-1" /> : <CheckCircle2 className="size-3 mr-1" />}
+              {batchActionLoading ? <Spinner size={12} /> : <CheckCircle2 className="size-3 mr-1" />}
               Enable
             </Button>
             <Button size="sm" variant="outline" disabled={batchActionLoading}

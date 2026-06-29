@@ -3,9 +3,10 @@
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
-  Loader2, Plus, Database, Pencil, Trash2, FolderTree,
+  Plus, Database, Pencil, Trash2, FolderTree,
   CheckCircle2, Clock, XCircle, ChevronRight, AlertTriangle,
 } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 
 interface AdminModule {
   id: string; name: string; label: string; parentId?: string; parentLabel?: string
@@ -83,7 +84,7 @@ export function ModulesSection({
       </div>
 
       {!modulesLoaded ? (
-        <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
+        <div className="flex justify-center py-12"><Spinner size={24} /></div>
       ) : modules.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 border border-gray-100 dark:border-gray-700 text-center">
           <FolderTree className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />

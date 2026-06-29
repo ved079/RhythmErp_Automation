@@ -23,12 +23,14 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import {
   Search, Play, RotateCcw, X, Minimize2, CheckCircle2,
-  XCircle, AlertTriangle, Loader2, Menu, Sun, Moon,
+  XCircle, AlertTriangle, Menu, Sun, Moon,
   Zap, Shield, MessageSquare, Bell, CalendarClock,
   Terminal, Monitor, HelpCircle, Copyright, ExternalLink,
   ChevronRight, LogOut, GitCompare, FlaskConical, BarChart2, Camera,
   Copy, Check,
 } from 'lucide-react'
+import LoadingCard from '@/components/ui/LoadingCard'
+import Spinner from '@/components/ui/Spinner'
 import dynamic from 'next/dynamic'
 import { startAppTour } from '@/components/tour/AppTour'
 import { LoginPage } from '@/components/auth/LoginPage'
@@ -63,6 +65,7 @@ const ScreenshotLightbox = dynamic(() => import('@/components/screenshot/Screens
 const ScreenshotCompare = dynamic(() => import('@/components/screenshot/ScreenshotGallery').then(m => ({ default: m.ScreenshotCompare })), { ssr: false })
 const RunComparisonDialog = dynamic(() => import('@/components/comparison/RunComparisonDialog'), { ssr: false })
 const RunHistoryDialog = dynamic(() => import('@/components/dialogs/RunHistoryDialog').then(m => ({ default: m.RunHistoryDialog })), { ssr: false })
+const SetTokenDialog = dynamic(() => import('@/components/dialogs/SetTokenDialog').then(m => ({ default: m.SetTokenDialog })), { ssr: false })
 import type { RunSnapshot, ModuleHealth } from '@/lib/types'
 
 export default function Home() {
@@ -134,7 +137,8 @@ export default function Home() {
   const activeCred = erpCredentials.find(c => c.id === activeCredId) ?? erpCredentials.find(c => c.isDefault) ?? null
   const tr = useTestRun({ user, selectedModule, apiModules, allTestCases: pd.allTestCases, visibilityData: pd.visibilityData, loadRunHistory: pd.loadRunHistory, loadDashboardStats: pd.loadDashboardStats, sidebarModules, loadBugReports: pd.loadBugReports, erpToken, erpTenantId, erpEmail: activeCred?.email, erpPassword: activeCred ? credPasswords.current[activeCred.id] : undefined })
   const d = useDialogs()
-  const onOpenCredentials = useCallback(() => setSelectedModule('credentials'), [])
+  const [tokenDialogOpen, setTokenDialogOpen] = useState(false)
+  const onOpenCredentials = useCallback(() => setTokenDialogOpen(true), [])
   const onClearToken = useCallback(() => { setErpToken(''); setErpTenantId('') }, [])
 
   const loadCredentials = useCallback(async () => {
@@ -574,14 +578,7 @@ export default function Home() {
   }, [tr.isRunning])
 
   if (loading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-[#F1F2F7] dark:bg-gray-900">
-        <div className="flex flex-col items-center gap-3">
-          <Image src="/agdi-logo-new.webp" alt="AgDi Automation" width={80} height={36} className="object-contain animate-pulse" />
-          <Loader2 className="size-5 text-[#3F51B5] animate-spin" />
-        </div>
-      </div>
-    )
+    return <LoadingCard />
   }
 
   if (!user) return <LoginPage onLogin={handleLogin} />
@@ -953,6 +950,7 @@ export default function Home() {
       <CompletionSummaryModal open={tr.completionModalOpen} onClose={() => tr.setCompletionModalOpen(false)} passedCount={tr.completionStats.passed} failedCount={tr.completionStats.failed} totalDuration={tr.completionStats.duration} moduleName={tr.completionStats.moduleName} subModuleName={tr.completionStats.subModuleName} failedTests={tr.completionStats.failedTests} onViewResults={handleViewResults} onRerunFailed={handleCompletionRerunFailed} onNewRun={handleNewRun} onReportTest={handleQuickReport} />
       <ReportToAdminDialog open={d.reportDialogOpen} onClose={() => d.setReportDialogOpen(false)} testId={d.reportingTest?.id || ''} testDescription={d.reportingTest?.name || ''} error={d.reportingTest?.error} moduleName={modulePath.name} userName={user?.name || ''} userEmail={user?.email || ''} />
       {user && <UserProfileDialog open={d.profileDialogOpen} onClose={() => d.setProfileDialogOpen(false)} user={user} />}
+      <SetTokenDialog open={tokenDialogOpen} onClose={() => setTokenDialogOpen(false)} erpToken={erpToken} setErpToken={setErpToken} erpTenantId={erpTenantId} setErpTenantId={setErpTenantId} />
       <RunDetailDialog open={d.runDetailDialogOpen} onClose={() => { d.setRunDetailDialogOpen(false); d.setSelectedRunForDetail(null) }} run={d.selectedRunForDetail} visibilityData={pd.visibilityData} showRawNames={showRawNames} onReportTest={handleQuickReport} />
       <RunComparisonDialog open={d.runComparisonOpen} onClose={() => d.setRunComparisonOpen(false)} runHistory={pd.runHistory} currentModuleId={selectedModule} />
       <RunHistoryDialog open={d.runHistoryOpen} onClose={() => d.setRunHistoryOpen(false)} runHistory={pd.runHistory} sidebarModules={sidebarModules} currentModuleId={selectedModule} onRunDetail={(run) => { d.setSelectedRunForDetail(run); d.setRunDetailDialogOpen(true) }} />

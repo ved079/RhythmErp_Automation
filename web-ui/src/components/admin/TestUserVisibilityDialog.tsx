@@ -13,7 +13,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Search, EyeOff, Loader2 } from 'lucide-react'
+import { Search, EyeOff } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 
 interface UserItem {
   id: string
@@ -105,7 +106,7 @@ export function TestUserVisibilityDialog({
 
         <div className="max-h-[280px] overflow-y-auto space-y-1">
           {loading ? (
-            <div className="flex justify-center py-8"><Loader2 className="size-5 animate-spin text-[#3F51B5]" /></div>
+            <div className="flex justify-center py-8"><Spinner size={20} /></div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-8 text-xs text-[#888] dark:text-gray-400 font-['Manrope']">No users found</div>
           ) : (

@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
-import { Bug, Send, Loader2, AlertTriangle, CheckCircle2, MessageSquare, Clock } from 'lucide-react'
+import { Bug, Send, AlertTriangle, CheckCircle2, MessageSquare, Clock } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'

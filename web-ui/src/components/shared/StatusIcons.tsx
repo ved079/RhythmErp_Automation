@@ -1,7 +1,8 @@
 'use client'
 
 import React from 'react'
-import { CheckCircle2, XCircle, Circle, Loader2, ArrowUpDown } from 'lucide-react'
+import { CheckCircle2, XCircle, Circle, ArrowUpDown } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 
 // ─── Test Status Icon ────────────────────────────────────
 function TestStatusIcon({ status, size = 4 }: { status: string; size?: number }) {
@@ -12,7 +13,7 @@ function TestStatusIcon({ status, size = 4 }: { status: string; size?: number })
     case 'failed':
       return <XCircle className={`${cls} text-red-500`} />
     case 'running':
-      return <Loader2 className={`${cls} text-indigo-500 animate-spin`} />
+      return <Spinner size={size * 4} accent="#6366f1" />
     default:
       return <Circle className={`size-${Math.max(size - 0.5, 3)} text-gray-300 dark:text-gray-600`} />
   }

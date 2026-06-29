@@ -8,8 +8,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  Search, Loader2, ChevronLeft, ChevronRight, RotateCcw, FileText,
+  Search, ChevronLeft, ChevronRight, RotateCcw, FileText,
 } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 interface AuditEntry {
   id: string; userId: string; userName: string; action: string
   targetType: string; targetId: string; targetLabel: string
@@ -96,7 +97,7 @@ export function AuditLogSection({
         </div>
       </div>
       {!auditLoaded ? (
-        <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
+        <div className="flex justify-center py-12"><Spinner size={24} /></div>
       ) : filteredAuditLog.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 border border-gray-100 dark:border-gray-700 text-center">
           <FileText className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />

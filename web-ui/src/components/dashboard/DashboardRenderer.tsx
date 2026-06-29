@@ -9,7 +9,7 @@ import {
 import { ExportMenu } from '@/components/export/ExportUtils'
 import { DashboardTab } from '@/components/dashboard/DashboardTab'
 import {
-  RefreshCw, Loader2, CheckCircle2, Bug, Play, LayoutDashboard, AlertTriangle,
+  RefreshCw, CheckCircle2, Bug, Play, LayoutDashboard, AlertTriangle,
   BarChart3, Activity, Clock, XCircle, ChevronRight, TrendingUp,
 } from 'lucide-react'
 import type { RunSnapshot, ModuleHealth } from '@/lib/types'

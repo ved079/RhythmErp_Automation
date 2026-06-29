@@ -37,10 +37,10 @@ import {
   XCircle,
   Circle,
   AlertTriangle,
-  Loader2,
   Bookmark,
   BookmarkCheck,
 } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 import { fetchRunDetail, type RunHistoryItem } from '@/lib/api'
 import type { RunSnapshot } from '@/lib/types'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'

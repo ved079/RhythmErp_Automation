@@ -8,8 +8,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  Search, Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Circle,
+  Search, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Circle,
 } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 interface AdminTest {
   id: string; description: string; className: string
   status: 'active' | 'draft' | 'disabled'; priority: 'smoke' | 'regression' | 'sanity'
@@ -97,7 +98,7 @@ export function TestsSection({
       </div>
       <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
         {!testsLoaded ? (
-          <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
+          <div className="flex justify-center py-12"><Spinner size={24} /></div>
         ) : filteredTests.length === 0 ? (
           <div className="text-center py-12 text-[#888] dark:text-gray-400 font-['Manrope'] text-sm">No tests found</div>
         ) : (

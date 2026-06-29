@@ -2,10 +2,11 @@
 
 import React, { useState, useMemo } from 'react'
 import {
-  Search, ChevronDown, Loader2, FolderTree, Clock, Inbox,
+  Search, ChevronDown, FolderTree, Clock, Inbox,
   Send, RotateCcw, Check, CheckCircle2, MessageSquare,
   XCircle,
 } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -183,7 +184,7 @@ export function BugReportsSection({
         </div>
 
         {!bugsLoaded ? (
-          <div className="flex-1 flex items-center justify-center"><Loader2 className="size-6 animate-spin text-[#3F51B5]" /></div>
+          <div className="flex-1 flex items-center justify-center"><Spinner size={24} /></div>
         ) : filtered.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
