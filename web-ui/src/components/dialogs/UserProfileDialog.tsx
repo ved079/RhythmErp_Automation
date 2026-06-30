@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { User, Clock, Lock, Shield } from 'lucide-react'
+import { User, Clock, Lock, Shield, Loader2 } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

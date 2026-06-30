@@ -94,10 +94,14 @@ function ModulePicker({ value, onChange, groups, allLeaves }: {
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
   const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setActiveGroup(null) }
+      const target = e.target as Node
+      const insideTrigger = ref.current?.contains(target)
+      const insidePanel = panelRef.current?.contains(target)
+      if (!insideTrigger && !insidePanel) { setOpen(false); setActiveGroup(null) }
     }
     if (open) document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -135,6 +139,7 @@ function ModulePicker({ value, onChange, groups, allLeaves }: {
 
       {open && coords && createPortal(
         <div
+          ref={panelRef}
           style={{ position: 'fixed', top: coords.top, left: coords.left, width: 480, zIndex: 9999 }}
           className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-2xl overflow-hidden flex flex-col"
         >
@@ -168,8 +173,8 @@ function ModulePicker({ value, onChange, groups, allLeaves }: {
               </div>
             </div>
           ) : (
-            <div>
-              <div className="flex items-center gap-2 px-3 pt-2.5 pb-2 border-b border-gray-100 dark:border-gray-700">
+            <div className="p-2.5 flex flex-col gap-2">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setActiveGroup(null)}
@@ -177,18 +182,18 @@ function ModulePicker({ value, onChange, groups, allLeaves }: {
                 >
                   ← Back
                 </button>
-                <span className="text-[12px] text-gray-400 dark:text-gray-500 truncate">{activeGroup}</span>
+                <span className="text-[11px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-medium truncate">{activeGroup}</span>
               </div>
-              <div className="py-1 max-h-52 overflow-y-auto">
+              <div className="grid grid-cols-3 gap-1.5">
                 {children.map((m) => (
                   <button
                     key={m.id}
                     type="button"
                     onClick={() => { onChange(m.id); setOpen(false); setActiveGroup(null) }}
-                    className={`w-full text-left px-3 py-2 text-[13px] transition-colors ${
+                    className={`px-3 py-2 rounded-lg border text-[12px] font-medium text-left transition-colors truncate ${
                       m.id === value
-                        ? 'bg-[#3F51B5]/10 text-[#3F51B5] dark:text-[#7986CB] font-medium'
-                        : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                        ? 'border-[#3F51B5]/50 bg-[#3F51B5]/10 text-[#3F51B5] dark:text-[#7986CB]'
+                        : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-200 hover:border-[#3F51B5]/50 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10'
                     }`}
                   >
                     {m.label}

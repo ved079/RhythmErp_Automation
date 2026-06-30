@@ -1,7 +1,7 @@
 'use client'
 
 import React, { type Dispatch, type SetStateAction, useState } from 'react'
-import { KeyRound, Star, Trash2, Plus, X, ShieldCheck, Pencil, Eye, EyeOff, Check } from 'lucide-react'
+import { KeyRound, Star, Trash2, Plus, X, ShieldCheck, Pencil, Eye, EyeOff, Check, Loader2 } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import type { ErpCred } from '@/lib/types'
 

@@ -66,3 +66,4 @@ server.log
 /bun.lock
 /mini-services/
 /examples/
+.vercel

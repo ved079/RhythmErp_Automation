@@ -286,7 +286,14 @@ def _resolve_tests(test_path: str, requested: list) -> tuple[list, list]:
                 found = True
                 break
         if not found:
-            still_unmatched.append(t)
+            # Check if the test ID is already covered by an already-resolved node ID
+            already_covered = False
+            for nid in resolved:
+                if t.lower() in nid.lower():
+                    already_covered = True
+                    break
+            if not already_covered:
+                still_unmatched.append(t)
     unmatched = still_unmatched
 
     return resolved, unmatched

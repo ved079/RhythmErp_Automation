@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { BarChart3, Flag } from 'lucide-react'
+import { BarChart3, Flag, Loader2 } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'

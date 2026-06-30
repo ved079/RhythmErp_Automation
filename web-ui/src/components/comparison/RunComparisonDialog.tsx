@@ -39,6 +39,7 @@ import {
   AlertTriangle,
   Bookmark,
   BookmarkCheck,
+  Loader2,
 } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import { fetchRunDetail, type RunHistoryItem } from '@/lib/api'

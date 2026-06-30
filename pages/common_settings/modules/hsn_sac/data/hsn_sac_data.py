@@ -254,11 +254,16 @@ HSN_SAC_TYPE_OPTIONS = list(HSN_SAC_TYPE_IDS.keys())
 _hsn_counter = 0
 
 
+_ALL_HSN_CODES = [c for c, _ in HSN_COMMODITY]
+_ALL_SAC_CODES = [c for c, _ in SAC_SERVICES + SAC_TRANSPORTATION + SAC_COMMISSION]
+
+
 def generate_hsn_sac_number():
-    """Return a unique HSN/SAC number string."""
+    """Return a unique HSN/SAC number string (4-digit HSN or 6-digit SAC)."""
     global _hsn_counter
     _hsn_counter += 1
-    return f"99{random.randint(1000, 9999)}{_hsn_counter:03d}"
+    pool = _ALL_SAC_CODES if _hsn_counter % 2 == 0 else _ALL_HSN_CODES
+    return random.choice(pool)
 
 
 def generate_hsn_sac_description():

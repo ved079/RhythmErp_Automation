@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Package, CheckCircle2, XCircle, Play, Key, RefreshCw, RotateCcw } from 'lucide-react'
+import { Package, CheckCircle2, XCircle, Play, Key, RefreshCw, RotateCcw, Loader2 } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import { startPurchaseChain, fetchMasterData, type SSEEvent, type MasterDataItem } from '@/lib/api'
 
