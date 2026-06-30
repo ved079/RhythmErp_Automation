@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   ArrowLeft, Globe, Play, Square, RotateCcw, CheckCircle2,
   XCircle, Circle, ClipboardList, Monitor, Maximize2, X,
-  Terminal, Search, ChevronDown, ChevronRight, Clock, Copy, Check,
+  Terminal, Search, ChevronDown, ChevronRight, Clock, Copy, Check, Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { type TestClassGroup, type TestItem } from '@/data/testSpecGroups'

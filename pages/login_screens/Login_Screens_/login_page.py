@@ -25,8 +25,8 @@ class LoginPage(BasePage):
     # ================================================================
 
     # --- Input Fields ---
-    EMAIL_INPUT = ("css", "input[formcontrolname='email']")
-    PASSWORD_INPUT = ("css", "input[formcontrolname='password']")
+    EMAIL_INPUT = ("css", "input[name='Username']")
+    PASSWORD_INPUT = ("css", "input[name='Password']")
 
     # --- Facility Dropdown ---
     # FACILITY_SELECT = ("css", "mat-select")

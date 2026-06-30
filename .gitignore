@@ -88,3 +88,5 @@ api/batch_results/
 bug_sheet.csv
 web-ui/erp-*.png
 GP_Bugs_Report.xlsx
+.vercel
+.env*

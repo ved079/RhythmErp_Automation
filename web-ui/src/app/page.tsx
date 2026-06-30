@@ -66,6 +66,7 @@ const ScreenshotCompare = dynamic(() => import('@/components/screenshot/Screensh
 const RunComparisonDialog = dynamic(() => import('@/components/comparison/RunComparisonDialog'), { ssr: false })
 const RunHistoryDialog = dynamic(() => import('@/components/dialogs/RunHistoryDialog').then(m => ({ default: m.RunHistoryDialog })), { ssr: false })
 const SetTokenDialog = dynamic(() => import('@/components/dialogs/SetTokenDialog').then(m => ({ default: m.SetTokenDialog })), { ssr: false })
+const ConcurrencyTab = dynamic(() => import('@/components/concurrency/ConcurrencyTab').then(m => ({ default: m.ConcurrencyTab })), { ssr: false })
 import type { RunSnapshot, ModuleHealth } from '@/lib/types'
 
 export default function Home() {
@@ -718,7 +719,20 @@ export default function Home() {
         <div className="shrink-0 overflow-hidden h-full" style={{ width: sidebarOpen ? sidebarWidth : 0 }}>
           <aside className="flex flex-col h-full font-['Poppins'] bg-gradient-to-b from-[#F7FBF8] via-[#EAF5EC] to-[#D6EDDC] dark:from-[#1e293b] dark:via-[#1e293b] dark:to-[#1e293b] shadow-[-1px_0px_0px_#D4E3D9] dark:shadow-[-1px_0px_0px_#334155]" style={{ width: sidebarWidth }}>
             <ScrollArea className="flex-1 min-h-0" data-tour="sidebar-modules">
-              <div className="py-2 px-2">{sidebarModules.map((mod) => (<SidebarModuleItem key={mod.id} module={mod} activeId={selectedModule} onSelect={handleSelectModule} expandedIds={expandedIds} toggleExpand={toggleExpand} justExpandedId={justExpandedId} />))}</div>
+              <div className="py-2 px-2">
+                {sidebarModules.map((mod) => (<SidebarModuleItem key={mod.id} module={mod} activeId={selectedModule} onSelect={handleSelectModule} expandedIds={expandedIds} toggleExpand={toggleExpand} justExpandedId={justExpandedId} />))}
+                <button
+                  onClick={() => { setActiveTab('concurrency'); setSelectedModule('dashboard') }}
+                  className={`w-full flex items-center text-[14px] transition-all duration-200 cursor-pointer text-left font-['Poppins'] px-[15px] py-[7px] rounded-[5px] ${
+                    activeTab === 'concurrency'
+                      ? 'bg-gradient-to-r from-[#DFF3E3] via-[#C8E6C9] to-[#B7E4C7] dark:bg-[#1B4332]/25 text-[#1B4332] dark:text-green-300 font-semibold shadow-[rgba(34,197,94,0.25)_2px_0px_4px_inset,rgba(34,197,94,0.15)_0px_2px_6px]'
+                      : 'text-[#545454] dark:text-gray-300 font-medium hover:text-[#6777EF] dark:hover:text-indigo-400 hover:bg-[rgba(82,183,136,0.08)] hover:shadow-[rgba(82,183,136,0.5)_2px_0px_inset]'
+                  }`}
+                >
+                  <Zap className="size-[18px] shrink-0 mr-[10px] text-[#6b7280]" />
+                  <span className="truncate flex-1">Concurrency Testing</span>
+                </button>
+              </div>
             </ScrollArea>
             <div className="relative shrink-0 overflow-hidden" style={{ height: 99 }}><Image src="/agri2.png" alt="" fill className="object-cover" sizes="280px" style={{ objectPosition: 'center 25%' }} /></div>
           </aside>
@@ -801,7 +815,10 @@ export default function Home() {
               setErpTenantId={setErpTenantId}
             />
           )}
-          {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && selectedModule !== 'full-purchase-flow' && selectedModule !== 'credentials' && (
+          {activeTab === 'concurrency' && (
+            <ConcurrencyTab modules={sidebarModules} />
+          )}
+          {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && selectedModule !== 'full-purchase-flow' && selectedModule !== 'credentials' && activeTab !== 'concurrency' && (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="border-b border-gray-300 dark:border-gray-500/70 bg-gray-50/50 dark:bg-gray-800/30 shrink-0" data-tour="tab-bar">
                 <div className="flex items-center h-10 px-4 gap-0">

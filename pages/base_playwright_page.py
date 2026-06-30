@@ -54,9 +54,14 @@ class BasePlaywrightPage:
         self.page.wait_for_timeout(1000)
 
     def click_row_action(self, row_index, action):
-        self.page.locator("button.erp-row-trigger").nth(row_index).click()
+        self.page.evaluate(f"""
+            var btns = document.querySelectorAll('button.erp-row-trigger');
+            if (btns[{row_index}]) {{ btns[{row_index}].scrollIntoView({{block:'center'}}); btns[{row_index}].click(); }}
+        """)
+        self.page.wait_for_selector("div.mat-mdc-menu-panel", timeout=3000)
         selector = self.MENU_SELECTORS.get(action)
         if selector:
-            self.page.locator(selector).click()
+            self.page.locator(selector).first.click()
         else:
-            self.page.locator(f"button:has-text('{action}')").click()
+            self.page.locator(f"button:has-text('{action}')").first.click()
+        self.page.wait_for_timeout(500)
