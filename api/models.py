@@ -136,6 +136,7 @@ class BatchCreateRequest(BaseModel):
     erp_token: str                     # Bearer token for ERP API
     erp_tenant_id: str = "681"         # ERP tenant ID
     config: Optional[dict] = None      # Module-specific config (e.g. farmer_type, attr_number)
+    fixed_payloads: Optional[list[dict]] = None  # pre-generated payloads (conflict mode); skips generation
 
 
 # --- Run Completion Callback Payload ---
@@ -169,3 +170,17 @@ class PurchaseChainRequest(BaseModel):
     erp_token: str                       # Bearer token for ERP API
     erp_tenant_id: str = "681"           # ERP tenant ID
     documents: list[str] = ["PO", "GP", "GRN", "QC"]  # which documents to create
+
+
+# --- Concurrency Testing ---
+
+class ConcurrencyDispatchRequest(BaseModel):
+    payload: CreateRunRequest
+    agents: Optional[list[str]] = None  # override PC_AGENT_URLS
+
+
+class AgentStatusResponse(BaseModel):
+    url: str
+    pc: str
+    status: str  # "ok" | "unreachable"
+    latency_ms: float

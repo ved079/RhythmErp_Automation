@@ -29,11 +29,12 @@ from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 
 from api.models import (
     ModuleListResponse, CreateRunRequest, StartRunRequest, BatchCreateRequest,
-    PurchaseChainRequest,
+    PurchaseChainRequest, ConcurrencyDispatchRequest,
 )
+from api.concurrency_dispatch import dispatch_concurrent, ping_agents
 from api.test_discovery import discover_all_modules
 from api.test_runner import run_tests_stream, stop_run
-from api.batch_create import batch_create_stream, export_batch_excel
+from api.batch_create import batch_create_stream, _build_payloads_only, export_batch_excel
 from api.purchase_chain_endpoint import purchase_chain_stream
 from api.database import init_db
 from api.screenshot_store import take_screenshot
@@ -142,6 +143,13 @@ def batch_create_endpoint(request: BatchCreateRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
+
+
+@app.post("/api/batch-create/preview")
+def batch_preview_endpoint(request: BatchCreateRequest):
+    """Generate payloads without creating them — used by conflict mode."""
+    payloads = _build_payloads_only(request)
+    return {"payloads": payloads}
 
 
 # ================================================================
@@ -289,6 +297,26 @@ def health():
         "engine": "pure-execution",
         "project_root": str(PROJECT_ROOT),
     }
+
+
+# ================================================================
+# CONCURRENCY TESTING ENDPOINTS
+# ================================================================
+
+@app.post("/api/concurrency/dispatch")
+async def concurrency_dispatch(request: ConcurrencyDispatchRequest):
+    """Dispatch a test run to all configured PC agents and merge SSE streams."""
+    return StreamingResponse(
+        dispatch_concurrent(request),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
+
+
+@app.get("/api/concurrency/agents")
+async def concurrency_agents():
+    """Ping all configured PC agents and return their health status."""
+    return await ping_agents()
 
 
 # ================================================================

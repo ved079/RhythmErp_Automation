@@ -17,7 +17,7 @@ interface BatchTarget {
   label: string
 }
 
-const MODULE_TO_BATCH: Record<string, BatchTarget | null> = {
+export const MODULE_TO_BATCH: Record<string, BatchTarget | null> = {
   employee:     { module: 'registration', subModule: 'employee', label: 'Registration → Employee' },
   supplier:     { module: 'registration', subModule: 'supplier', label: 'Registration → Supplier' },
   customer:     { module: 'registration', subModule: 'customer', label: 'Registration → Customer' },
@@ -189,6 +189,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
         setLogs((prev) => [...prev, { text: `ERROR: ${err.message}`, ts: new Date(), isErr: true, isDone: false }])
         setRunning(false)
       },
+      undefined,
       batchConfig,
     )
   }, [target, erpToken, erpTenantId, count, farmerConfig, onNeedsToken])

@@ -292,7 +292,8 @@ export async function startBatchCreate(
   onEvent: (event: SSEEvent) => void,
   onDone: (runId: string | null) => void,
   onError: (err: Error) => void,
-  config?: unknown
+  fixedPayloads?: Record<string, unknown>[] | null,
+  config?: unknown,
 ) {
   try {
     const res = await fetch(`${PROXY}?path=batch-create`, withCsrf({
@@ -305,6 +306,7 @@ export async function startBatchCreate(
         erp_token: erpToken,
         erp_tenant_id: erpTenantId,
         ...(config ? { config } : {}),
+        ...(fixedPayloads?.length ? { fixed_payloads: fixedPayloads } : {}),
       }),
     }));
 
@@ -346,6 +348,7 @@ export async function startBatchCreate(
 }
 
 /**
+ * Start a purchase chain creation job and return an SSE stream.
  * Start a purchase chain creation job and return an SSE stream.
  * Creates linked PO->GP->GRN->QC chain(s) via the FastAPI purchase-chain endpoint.
  */
@@ -494,9 +497,61 @@ export async function saveRunResults(summary: RunCompletionSummary, userId?: str
 }
 
 /**
- * Sync modules from FastAPI to Next.js DB.
- * Called when modules are fetched, keeps the TestModule table up to date.
+ * Save a concurrency run result to the database.
+ * Reuses the RunHistory table with a 'concurrency' moduleId prefix.
  */
+export async function saveConcurrencyRun(data: {
+  totalCreated: number
+  totalFailed: number
+  durationMs: number
+  overlapMs: number
+  conflicts: number
+  duplicates: string[]
+  jobs: Array<{ id: string; label: string; moduleId: string; side: 'pc1' | 'pc2'; created: string[]; failed: { name: string; reason: string }[] }>
+  timing: Record<string, { startMs: number; endMs: number; events: { name: string; ms: number; side: 'created' | 'failed' }[] }>
+}): Promise<RunHistoryItem | null> {
+  try {
+    const total = data.totalCreated + data.totalFailed
+    const rate = total > 0 ? Math.round((data.totalCreated / total) * 10000) / 100 : 0
+    const mins = Math.floor(data.durationMs / 60000)
+    const secs = Math.floor((data.durationMs % 60000) / 1000)
+    const durationStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
+    const now = new Date().toISOString()
+    const startedAt = new Date(Date.now() - data.durationMs).toISOString()
+
+    const res = await fetch('/api/runs', withCsrf({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        moduleId: 'concurrency',
+        moduleName: 'Concurrency Test',
+        passed: data.totalCreated,
+        failed: data.totalFailed,
+        total,
+        duration: durationStr,
+        rate,
+        results: {
+          type: 'concurrency',
+          overlapMs: data.overlapMs,
+          conflicts: data.conflicts,
+          duplicates: data.duplicates,
+          jobs: data.jobs,
+          timing: data.timing,
+        },
+        status: data.totalFailed > 0 ? 'failed' : 'completed',
+        startedAt,
+        completedAt: now,
+      }),
+    }))
+    if (!res.ok) return null
+    return res.json()
+  } catch (err) {
+    console.error('[saveConcurrencyRun] Failed to save:', err)
+    return null
+  }
+}
+
+/** Called when modules are fetched, keeps the TestModule table up to date. */
 export async function syncModulesToDB(modules: ApiModule[]): Promise<void> {
   try {
     await fetch('/api/admin/modules/sync', withCsrf({

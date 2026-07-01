@@ -2,10 +2,14 @@
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Share2, Play, BadgeCheck, Key, Check, X, Box, Monitor } from 'lucide-react'
+import { Plus, Share2, Play, BadgeCheck, Key, Check, X, Box, Monitor, Loader2, Terminal, RefreshCw, BarChart2, History, Search, Clock, ChevronLeft, ChevronRight, Filter } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { SetTokenDialog } from '@/components/dialogs/SetTokenDialog'
+import { MODULE_TO_BATCH } from '@/components/dialogs/BatchCreateSection'
+import { startBatchCreate, saveConcurrencyRun } from '@/lib/api'
+import type { RunHistoryItem } from '@/lib/api'
 import type { SidebarModule } from '@/components/sidebar/SidebarModuleItem'
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -92,7 +96,7 @@ function ModulePicker({ value, onChange, groups, allLeaves }: {
 }) {
   const [open, setOpen] = useState(false)
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
-  const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -109,10 +113,20 @@ function ModulePicker({ value, onChange, groups, allLeaves }: {
 
   useEffect(() => {
     if (!open || !ref.current) return
-    const r = ref.current.getBoundingClientRect()
-    const dropW = 480
-    const left = Math.max(8, Math.min(r.left + r.width / 2 - dropW / 2, window.innerWidth - dropW - 8))
-    setCoords({ top: r.bottom + 4, left, width: r.width })
+    ref.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    requestAnimationFrame(() => {
+      if (!ref.current) return
+      const r = ref.current.getBoundingClientRect()
+      const dropW = 480
+      const left = Math.max(8, Math.min(r.left + r.width / 2 - dropW / 2, window.innerWidth - dropW - 8))
+      const panelH = panelRef.current?.offsetHeight || 340
+      const spaceBelow = window.innerHeight - r.bottom - 8
+      if (spaceBelow < panelH && r.top > panelH) {
+        setCoords({ bottom: window.innerHeight - r.top + 4, left, width: r.width })
+      } else {
+        setCoords({ top: r.bottom + 4, left, width: r.width })
+      }
+    })
   }, [open])
 
   const companyOnboarding = allLeaves.find((m) => m.id === COMPANY_ONBOARDING_ID)
@@ -140,7 +154,7 @@ function ModulePicker({ value, onChange, groups, allLeaves }: {
       {open && coords && createPortal(
         <div
           ref={panelRef}
-          style={{ position: 'fixed', top: coords.top, left: coords.left, width: 480, zIndex: 9999 }}
+          style={{ position: 'fixed', top: coords.top, bottom: coords.bottom, left: coords.left, width: 480, zIndex: 9999 }}
           className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-2xl overflow-hidden flex flex-col"
         >
           {!activeGroup ? (
@@ -242,6 +256,7 @@ export function ConcurrencyTab({ modules }: { modules: SidebarModule[] }) {
   const [pc1Tenants, setPc1Tenants] = useState<Pc1Tenant[]>([])
   const [pc2Entries, setPc2Entries] = useState<Pc2Entry[]>([])
   const [mode, setMode] = useState<'api' | 'ui'>('api')
+  const [apiMode, setApiMode] = useState<'create' | 'crud'>('create')
 
   // wizard
   const [wizardPhase, setWizardPhase] = useState<'setup' | 'step' | 'board'>('setup')
@@ -260,6 +275,42 @@ export function ConcurrencyTab({ modules }: { modules: SidebarModule[] }) {
   const [tokenDialogOpenFor, setTokenDialogOpenFor] = useState<string | null>(null)
   const [dialogToken, setDialogToken] = useState('')
   const [dialogTenantId, setDialogTenantId] = useState('')
+
+  // batch run
+  const [batchCount, setBatchCount] = useState(10)
+  const [cardLogs, setCardLogs] = useState<Record<string, string[]>>({})
+  const [cardStatus, setCardStatus] = useState<Record<string, 'idle' | 'running' | 'done' | 'error'>>({})
+
+  interface CardResult {
+    created: string[]
+    failed: { name: string; reason: string }[]
+  }
+  const [runResults, setRunResults] = useState<Record<string, CardResult> | null>(null)
+  const [showResults, setShowResults] = useState(false)
+  const resultsRef = useRef<Record<string, CardResult>>({})
+  const resultJobsRef = useRef<Array<{ id: string; label: string; moduleId: string; side: 'pc1' | 'pc2' }>>([])
+  const timingRef = useRef<Record<string, { startMs: number; endMs: number; events: { name: string; ms: number; side: 'created' | 'failed' }[] }>>({})
+  const [runTiming, setRunTiming] = useState<typeof timingRef.current | null>(null)
+
+  // history
+  const [showHistory, setShowHistory] = useState(false)
+  const [historyRuns, setHistoryRuns] = useState<RunHistoryItem[] | null>(null)
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [historyDetail, setHistoryDetail] = useState<RunHistoryItem | null>(null)
+  const [showHistoryDetail, setShowHistoryDetail] = useState(false)
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'completed' | 'failed'>('all')
+  const [historyPeriod, setHistoryPeriod] = useState<'all' | 'today' | 'week' | 'month'>('all')
+  const [historyPage, setHistoryPage] = useState(0)
+  const fetchHistory = useCallback(async () => {
+    setLoadingHistory(true)
+    try {
+      const res = await fetch('/api/runs?limit=100')
+      if (res.ok) {
+        const all: RunHistoryItem[] = await res.json()
+        setHistoryRuns(all.filter(r => r.moduleId === 'concurrency'))
+      }
+    } catch {} finally { setLoadingHistory(false) }
+  }, [])
 
   const moduleGroups = useMemo(() => buildModuleGroups(modules), [modules])
   const allLeaves = useMemo(() => moduleGroups.flatMap((g) => g.leaves), [moduleGroups])
@@ -363,17 +414,138 @@ export function ConcurrencyTab({ modules }: { modules: SidebarModule[] }) {
   const moduleLabel = (id: string) => allLeaves.find((m) => m.id === id)?.label ?? id
 
   const canRun = useMemo(() => {
-    for (const t of pc1Tenants) { if (!t.token || !t.tenantId || !t.moduleId) return false }
+    for (const t of pc1Tenants) {
+      if (!t.token || !t.tenantId || !t.moduleId) return false
+      if (!MODULE_TO_BATCH[t.moduleId]) return false
+    }
     for (const e of pc2Entries) {
       if (!e.token || !e.tenantId) return false
       if (e.kind === 'independent' && !e.moduleId) return false
+      const mid = e.kind === 'auto-patched' ? findPc1ModuleId(e.sourceId) : e.moduleId
+      if (!mid || !MODULE_TO_BATCH[mid]) return false
     }
     return true
-  }, [pc1Tenants, pc2Entries])
+  }, [pc1Tenants, pc2Entries, findPc1ModuleId])
 
-  const handleRun = useCallback(() => {
-    console.log('RUN', { mode, pc1: pc1Tenants, pc2: pc2Entries })
-  }, [mode, pc1Tenants, pc2Entries])
+  const isRunning = useMemo(() => Object.values(cardStatus).some((s) => s === 'running'), [cardStatus])
+
+  const handleRun = useCallback(async () => {
+    const jobs: Array<{ id: string; token: string; tenantId: string; moduleId: string }> = []
+
+    for (const t of pc1Tenants) {
+      if (t.token && t.tenantId && t.moduleId) jobs.push({ id: t.id, token: t.token, tenantId: t.tenantId, moduleId: t.moduleId })
+    }
+    for (const e of pc2Entries) {
+      if (e.kind === 'auto-patched') {
+        const src = pc1Tenants.find((t) => t.id === e.sourceId)
+        if (e.token && e.tenantId && src?.moduleId) jobs.push({ id: e.sourceId + '-pc2', token: e.token, tenantId: e.tenantId, moduleId: src.moduleId })
+      } else {
+        if (e.token && e.tenantId && e.moduleId) jobs.push({ id: e.id, token: e.token, tenantId: e.tenantId, moduleId: e.moduleId })
+      }
+    }
+
+    if (jobs.length === 0) return
+
+    setRunResults(null)
+    setShowResults(false)
+    setRunTiming(null)
+    resultsRef.current = {}
+    timingRef.current = {}
+    resultJobsRef.current = pc1Tenants.filter((t) => t.token && t.tenantId && t.moduleId && MODULE_TO_BATCH[t.moduleId]).map((t) => ({ id: t.id, label: t.label, moduleId: t.moduleId, side: 'pc1' as const }))
+    for (const e of pc2Entries) {
+      if (e.kind === 'auto-patched') {
+        const src = pc1Tenants.find((t) => t.id === e.sourceId)
+        if (e.token && e.tenantId && src?.moduleId && MODULE_TO_BATCH[src.moduleId]) {
+          resultJobsRef.current.push({ id: src.id + '-pc2', label: src.label + ' (PC-2)', moduleId: src.moduleId, side: 'pc2' as const })
+        }
+      } else {
+        if (e.token && e.tenantId && e.moduleId && MODULE_TO_BATCH[e.moduleId]) {
+          resultJobsRef.current.push({ id: e.id, label: e.label, moduleId: e.moduleId, side: 'pc2' as const })
+        }
+      }
+    }
+
+    setCardLogs({})
+    setCardStatus(Object.fromEntries(jobs.map((j) => [j.id, 'running'])))
+
+    const runStartMs = Date.now()
+    jobs.forEach(j => { timingRef.current[j.id] = { startMs: Date.now() - runStartMs, endMs: 0, events: [] } })
+
+    await Promise.all(jobs.map((job) => {
+      const target = MODULE_TO_BATCH[job.moduleId]
+      if (!target) {
+        setCardStatus((prev) => ({ ...prev, [job.id]: 'error' }))
+        setCardLogs((prev) => ({ ...prev, [job.id]: [`Module "${job.moduleId}" not supported for batch create`] }))
+        return Promise.resolve()
+      }
+      return startBatchCreate(
+        target.module,
+        target.subModule,
+        batchCount,
+        job.token,
+        job.tenantId,
+        (event) => {
+          if (event.message) {
+            setCardLogs((prev) => ({ ...prev, [job.id]: [...(prev[job.id] ?? []), event.message] }))
+            const createdMatch = event.message.match(/^\s*\[\d+\/\d+\]\s+(?:CREATED|UPDATED)\s+#\d+\s+-\s+(.+)$/)
+            const failedMatch = event.message.match(/^\s*\[\d+\/\d+\]\s+FAILED\s+-\s+(.+?):\s+(.+)/)
+            if (createdMatch) {
+              if (!resultsRef.current[job.id]) resultsRef.current[job.id] = { created: [], failed: [] }
+              resultsRef.current[job.id].created.push(createdMatch[1].trim())
+              timingRef.current[job.id]?.events.push({ name: createdMatch[1].trim(), ms: Date.now() - runStartMs, side: 'created' })
+            }
+            if (failedMatch) {
+              if (!resultsRef.current[job.id]) resultsRef.current[job.id] = { created: [], failed: [] }
+              resultsRef.current[job.id].failed.push({ name: failedMatch[1].trim(), reason: failedMatch[2].trim() })
+              timingRef.current[job.id]?.events.push({ name: failedMatch[1].trim(), ms: Date.now() - runStartMs, side: 'failed' })
+            }
+          }
+        },
+        () => {
+          if (timingRef.current[job.id]) timingRef.current[job.id].endMs = Date.now() - runStartMs
+          setCardStatus((prev) => ({ ...prev, [job.id]: 'done' }))
+        },
+        () => setCardStatus((prev) => ({ ...prev, [job.id]: 'error' })),
+        null,
+        undefined,
+      )
+    }))
+    const finalResults = { ...resultsRef.current }
+    const finalTiming = { ...timingRef.current }
+    setRunResults(finalResults)
+    setRunTiming(finalTiming)
+    setShowResults(true)
+    resultsRef.current = {}
+    timingRef.current = {}
+
+    // Fire-and-forget save to run history
+    const pc1End = Math.max(...resultJobsRef.current.filter(j => j.side === 'pc1').map(j => finalTiming[j.id]?.endMs ?? 0), 0)
+    const pc2End = Math.max(...resultJobsRef.current.filter(j => j.side === 'pc2').map(j => finalTiming[j.id]?.endMs ?? 0), 0)
+    saveConcurrencyRun({
+      totalCreated: Object.values(finalResults).reduce((s, r) => s + (r?.created?.length ?? 0), 0),
+      totalFailed: Object.values(finalResults).reduce((s, r) => s + (r?.failed?.length ?? 0), 0),
+      durationMs: Math.max(pc1End, pc2End),
+      overlapMs: Math.min(pc1End, pc2End),
+      conflicts: (() => {
+        const pc1fn = new Set(resultJobsRef.current.filter(j => j.side === 'pc1').flatMap(j => finalResults[j.id]?.failed.map(f => f.name) ?? []))
+        const pc2fn = new Set(resultJobsRef.current.filter(j => j.side === 'pc2').flatMap(j => finalResults[j.id]?.failed.map(f => f.name) ?? []))
+        const pc1cn = new Set(resultJobsRef.current.filter(j => j.side === 'pc1').flatMap(j => finalResults[j.id]?.created ?? []))
+        const pc2cn = new Set(resultJobsRef.current.filter(j => j.side === 'pc2').flatMap(j => finalResults[j.id]?.created ?? []))
+        return [...pc1cn].filter(n => pc2fn.has(n)).length + [...pc2cn].filter(n => pc1fn.has(n)).length
+      })(),
+      duplicates: (() => {
+        const a = new Set(resultJobsRef.current.filter(j => j.side === 'pc1').flatMap(j => finalResults[j.id]?.created ?? []))
+        const b = new Set(resultJobsRef.current.filter(j => j.side === 'pc2').flatMap(j => finalResults[j.id]?.created ?? []))
+        return [...a].filter(n => b.has(n))
+      })(),
+      jobs: resultJobsRef.current.map(j => ({
+        ...j,
+        created: finalResults[j.id]?.created ?? [],
+        failed: finalResults[j.id]?.failed ?? [],
+      })),
+      timing: finalTiming,
+    })
+  }, [pc1Tenants, pc2Entries, batchCount, cardStatus])
 
   // wizard helpers
   const labelForIndex = (i: number) => String.fromCharCode(65 + i)
@@ -436,6 +608,199 @@ export function ConcurrencyTab({ modules }: { modules: SidebarModule[] }) {
           <Key className="size-3" />{token ? 'Update' : 'Set Token'}
         </button>
       </div>
+    )
+  }
+
+  function CardLogs({ cardKey }: { cardKey: string }) {
+    const status = cardStatus[cardKey]
+    const logs = cardLogs[cardKey]
+    if (!status) return null
+    return (
+      <div className="mt-2 rounded-lg bg-gray-950 dark:bg-gray-950 border border-gray-800 p-2 max-h-28 overflow-y-auto">
+        {status === 'running' && (!logs || logs.length === 0) && (
+          <p className="text-[11px] text-gray-500 italic">Starting…</p>
+        )}
+        {(logs ?? []).map((line, i) => (
+          <p key={i} className="text-[11px] text-gray-300 font-mono leading-relaxed">{line}</p>
+        ))}
+        {status === 'done' && <p className="text-[11px] text-green-400 font-mono mt-1">Done</p>}
+        {status === 'error' && <p className="text-[11px] text-red-400 font-mono mt-1">Error</p>}
+      </div>
+    )
+  }
+
+  function RunResultsPanel({ results, jobs, runTiming, onClose }: {
+    results: Record<string, CardResult>
+    jobs: Array<{ id: string; label: string; moduleId: string; side: 'pc1' | 'pc2' }>
+    runTiming?: Record<string, { startMs: number; endMs: number; events: { name: string; ms: number; side: 'created' | 'failed' }[] }>
+    onClose: () => void
+  }) {
+    if (jobs.length === 0) return null
+    const [viewMode, setViewMode] = useState<'bypc' | 'timeline'>('bypc')
+    const totalCreated = Object.values(results).reduce((s, r) => s + (r?.created?.length ?? 0), 0)
+    const totalFailed = Object.values(results).reduce((s, r) => s + (r?.failed?.length ?? 0), 0)
+    const allPc1 = new Set(jobs.filter((j) => j.side === 'pc1').flatMap((j) => results[j.id]?.created ?? []))
+    const allPc2 = new Set(jobs.filter((j) => j.side === 'pc2').flatMap((j) => results[j.id]?.created ?? []))
+    const duplicates = [...allPc1].filter((name) => allPc2.has(name))
+    const pc1FailedNames = new Set(jobs.filter((j) => j.side === 'pc1').flatMap((j) => results[j.id]?.failed.map(f => f.name) ?? []))
+    const pc2FailedNames = new Set(jobs.filter((j) => j.side === 'pc2').flatMap((j) => results[j.id]?.failed.map(f => f.name) ?? []))
+    const pc1CreatedNames = new Set(jobs.filter((j) => j.side === 'pc1').flatMap((j) => results[j.id]?.created ?? []))
+    const pc2CreatedNames = new Set(jobs.filter((j) => j.side === 'pc2').flatMap((j) => results[j.id]?.created ?? []))
+    const conflicts = [...pc1CreatedNames].filter(n => pc2FailedNames.has(n)).length + [...pc2CreatedNames].filter(n => pc1FailedNames.has(n)).length
+    const pc1End = Math.max(...jobs.filter(j => j.side === 'pc1').map(j => runTiming?.[j.id]?.endMs ?? 0), 0)
+    const pc2End = Math.max(...jobs.filter(j => j.side === 'pc2').map(j => runTiming?.[j.id]?.endMs ?? 0), 0)
+    const totalMs = Math.max(pc1End, pc2End)
+    const overlapMs = Math.min(pc1End, pc2End)
+    const allEvents = jobs.flatMap(j =>
+      (runTiming?.[j.id]?.events ?? []).map(e => ({ ...e, eventSide: e.side, side: j.side, jobLabel: j.label, jobId: j.id }))
+    ).sort((a, b) => a.ms - b.ms)
+
+    return createPortal(
+      <>
+        {/* Backdrop */}
+        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 z-[9998]" onClick={onClose} />
+        {/* Modal */}
+        <div className="fixed z-[9999] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[80vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700/50 shadow-2xl">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-gray-700/30">
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="text-[15px] font-semibold text-gray-800 dark:text-gray-100">Load Test Complete</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-400 font-medium">Parallel Run</span>
+                </div>
+                <span className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">Both PCs ran simultaneously — {totalCreated} records created in {(totalMs/1000).toFixed(1)}s</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0.5 mr-2 bg-gray-100 dark:bg-gray-700/50 rounded-lg p-0.5">
+                <button onClick={() => setViewMode('bypc')} className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${viewMode === 'bypc' ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>By PC</button>
+                <button onClick={() => setViewMode('timeline')} className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${viewMode === 'timeline' ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>Timeline</button>
+              </div>
+              <Button onClick={handleRun} disabled={isRunning} className="h-8 px-3 text-[12px] gap-1.5 cursor-pointer">
+                <RefreshCw className="size-3.5" />
+                Run Again
+              </Button>
+              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer">
+                <X className="size-4" />
+              </button>
+            </div>
+          </div>
+
+          {runTiming && totalMs > 0 && (
+            <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700/30">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] font-semibold w-8 text-gray-500 dark:text-gray-400">PC-1</span>
+                  <div className="flex-1 h-2 rounded-full bg-gray-100 dark:bg-gray-700/50 overflow-hidden">
+                    <div className="h-full rounded-full bg-indigo-400 dark:bg-indigo-500" style={{ width: `${(pc1End / totalMs) * 100}%` }} />
+                  </div>
+                  <span className="text-[11px] text-gray-400 font-mono w-12 text-right">{(pc1End / 1000).toFixed(1)}s</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] font-semibold w-8 text-gray-500 dark:text-gray-400">PC-2</span>
+                  <div className="flex-1 h-2 rounded-full bg-gray-100 dark:bg-gray-700/50 overflow-hidden">
+                    <div className="h-full rounded-full bg-purple-400 dark:bg-purple-500" style={{ width: `${(pc2End / totalMs) * 100}%` }} />
+                  </div>
+                  <span className="text-[11px] text-gray-400 font-mono w-12 text-right">{(pc2End / 1000).toFixed(1)}s</span>
+                </div>
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                {overlapMs > 500 ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">⚡ {overlapMs}ms concurrent overlap</span>
+                ) : overlapMs > 0 ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">⚠ Runs barely overlapped ({overlapMs}ms)</span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">⚠ No overlap — sequential</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {viewMode === 'bypc' ? (
+            <div className="grid grid-cols-2 gap-4 p-4">
+              {['pc1', 'pc2'].map((side) => {
+                const sideJobs = jobs.filter((j) => j.side === side)
+                if (sideJobs.length === 0) return <div key={side} />
+                return (
+                  <div key={side} className="flex flex-col gap-3">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">{side === 'pc1' ? 'PC-1' : 'PC-2'}</p>
+                    {sideJobs.map((job) => {
+                      const r = results[job.id]
+                      const t = runTiming?.[job.id]
+                      const avgMs = t && t.events.length > 0 ? Math.round(t.events[t.events.length - 1].ms / t.events.length) : 0
+                      if (!r) return null
+                      return (
+                        <div key={job.id} className="bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-100 dark:border-gray-700/30 p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-[13px] font-medium text-gray-800 dark:text-gray-100 truncate flex-1">{job.label}</span>
+                            {avgMs > 0 && <span className="text-[11px] text-gray-400 font-mono">~{avgMs}ms/record</span>}
+                            <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-[12px] px-2 py-0.5 rounded-full shrink-0">
+                              ✓ {r.created.length} created
+                            </span>
+                            {r.failed.length > 0 && (
+                              <span className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-[12px] px-2 py-0.5 rounded-full shrink-0">
+                                ✗ {r.failed.length} failed
+                              </span>
+                            )}
+                          </div>
+                          {r.created.length > 0 && (
+                            <div className="max-h-32 overflow-y-auto">
+                              {r.created.map((name, i) => (
+                                <p key={i} className="text-[12px] text-gray-600 dark:text-gray-400 font-mono leading-relaxed">{name}</p>
+                              ))}
+                            </div>
+                          )}
+                          {r.failed.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-red-100 dark:border-red-900/30">
+                              {r.failed.map((f, i) => (
+                                <p key={i} className="text-[12px] text-red-600 dark:text-red-400 font-mono leading-relaxed">
+                                  {f.name}: {f.reason}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="p-4">
+              <div className="max-h-72 overflow-y-auto flex flex-col gap-1">
+                {allEvents.map((ev, i, arr) => {
+                  const prev = i > 0 ? arr[i - 1] : null
+                  const concurrent = prev && ev.ms - prev.ms <= 100 && prev.side !== ev.side
+                  return (
+                    <div key={i} className={`flex items-center gap-2 px-2 py-1 rounded text-[12px] ${concurrent ? 'border-l-2 border-amber-400 bg-amber-50/30 dark:bg-amber-900/10' : ''}`}>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium ${ev.side === 'pc1' ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'}`}>
+                        {ev.side === 'pc1' ? 'PC-1' : 'PC-2'}
+                      </span>
+                      <span className="text-[11px] text-gray-400 font-mono w-14 shrink-0">+{(ev.ms / 1000).toFixed(2)}s</span>
+                      <span className={ev.eventSide === 'created' ? 'text-green-500 shrink-0' : 'text-red-500 shrink-0'}>{ev.eventSide === 'created' ? '✓' : '✗'}</span>
+                      <span className="text-gray-700 dark:text-gray-300 font-mono truncate">{ev.name}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {duplicates.length > 0 && (
+            <div className="mx-4 mb-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 text-amber-700 dark:text-amber-300 text-[13px] rounded-lg px-4 py-2">
+              ⚠ {duplicates.length} duplicate{duplicates.length > 1 ? 's' : ''} detected across PCs: {duplicates.join(', ')}
+            </div>
+          )}
+          <div className="px-5 py-2.5 border-t border-gray-100 dark:border-gray-700/30 text-[12px] text-gray-500 dark:text-gray-400">
+            {runTiming && totalMs > 0 && <span>⚡ {overlapMs}ms overlap · </span>}
+            <strong className="text-gray-700 dark:text-gray-200">{totalCreated}</strong> created,{' '}
+            <strong className={totalFailed > 0 ? 'text-red-600 dark:text-red-400' : ''}>{totalFailed}</strong> failed
+            {conflicts > 0 && <span className="text-red-600 dark:text-red-400"> · {conflicts} conflict{conflicts > 1 ? 's' : ''}</span>}
+          </div>
+        </div>
+      </>,
+      document.body
     )
   }
 
@@ -616,34 +981,76 @@ export function ConcurrencyTab({ modules }: { modules: SidebarModule[] }) {
   return (
     <div className="flex flex-col h-full min-h-0">
 
-      {/* Top bar */}
-      <div className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-700/50 bg-white dark:bg-gray-900">
-        <div className="flex items-center gap-5">
-          <span className="text-[13px] font-semibold text-gray-600 dark:text-gray-300">Mode</span>
-          {(['api', 'ui'] as const).map((m) => (
-            <label key={m} className="flex items-center gap-2 text-[13px] cursor-pointer">
-              <input type="radio" name="conc-mode" value={m} checked={mode === m} onChange={() => setMode(m)} className="accent-[#3F51B5]" />
-              <span className="text-gray-700 dark:text-gray-300 uppercase font-medium">{m}</span>
-            </label>
-          ))}
+      {/* Tab bar */}
+      <div className="flex items-center gap-0 px-4 py-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
+        <button className="flex items-center gap-1.5 px-3.5 py-2.5 text-[12px] font-medium border-b-2 border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB] cursor-default">
+          <Terminal className="size-3.5" />
+          API Tests
+        </button>
+        <div className="flex items-center gap-1 ml-3">
+          <button
+            onClick={() => setApiMode('create')}
+            className={`px-3 py-1.5 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${
+              apiMode === 'create' ? 'bg-[#3F51B5] text-white' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
+            }`}
+          >
+            Create
+          </button>
+          <button
+            onClick={() => setApiMode('crud')}
+            className={`px-3 py-1.5 text-[11px] font-medium rounded-md transition-colors cursor-pointer ${
+              apiMode === 'crud' ? 'bg-[#3F51B5] text-white' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
+            }`}
+          >
+            CRUD
+          </button>
         </div>
-        <div className="flex items-center gap-3">
-          {confirmReset ? (
-            <div className="flex items-center gap-2">
-              <span className="text-[12px] text-gray-500 dark:text-gray-400">Reset everything?</span>
-              <button onClick={resetWizard} className="text-[12px] font-medium text-red-500 hover:text-red-600 cursor-pointer px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">Yes, reset</button>
-              <button onClick={() => setConfirmReset(false)} className="text-[12px] text-gray-400 hover:text-gray-600 cursor-pointer px-2 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">Cancel</button>
-            </div>
-          ) : (
-            <button onClick={resetWizard} className="text-[13px] text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors cursor-pointer px-3 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 border border-transparent hover:border-gray-200 dark:hover:border-gray-700">
-              Edit Setup
-            </button>
-          )}
-          <Button onClick={handleRun} disabled={!canRun} title={!canRun ? 'All tenants need a token, tenant ID, and module' : 'Backend wiring coming soon'} className="h-9 px-4 text-[13px] gap-2 cursor-pointer">
-            <Play className="size-4" />
-            Run
-          </Button>
+        <div className="flex-1" />
+        {confirmReset ? (
+          <div className="flex items-center gap-2 mr-3">
+            <span className="text-[12px] text-gray-500 dark:text-gray-400">Reset everything?</span>
+            <button onClick={resetWizard} className="text-[12px] font-medium text-red-500 hover:text-red-600 cursor-pointer px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">Yes, reset</button>
+            <button onClick={() => setConfirmReset(false)} className="text-[12px] text-gray-400 hover:text-gray-600 cursor-pointer px-2 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">Cancel</button>
+          </div>
+        ) : (
+          <button onClick={resetWizard} className="text-[12px] text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors cursor-pointer px-3 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 border border-transparent hover:border-gray-200 dark:hover:border-gray-700 mr-2">
+            Edit Setup
+          </button>
+        )}
+        <Button onClick={handleRun} disabled={!canRun || isRunning} title={!canRun ? 'All tenants need a token, tenant ID, and supported module' : ''} className="h-8 px-3 text-[12px] gap-1.5 cursor-pointer">
+          {isRunning ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
+          {isRunning ? 'Running...' : 'Run'}
+        </Button>
+        {runResults && !isRunning && (
+          <button onClick={() => setShowResults(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-[#3F51B5]/50 hover:text-[#3F51B5] transition-colors cursor-pointer bg-white dark:bg-gray-800">
+            <BarChart2 className="size-3.5" /> View Results
+          </button>
+        )}
+        <button onClick={() => { fetchHistory(); setShowHistory(true) }} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-[#3F51B5]/50 hover:text-[#3F51B5] transition-colors cursor-pointer bg-white dark:bg-gray-800">
+          <History className="size-3.5" /> History
+        </button>
+      </div>
+
+      {/* Mode indicator + Records input */}
+      <div key={apiMode} className="animate-fadeIn shrink-0 flex items-center gap-3 px-5 py-1.5 bg-gradient-to-r from-indigo-50/60 to-transparent dark:from-indigo-950/20 dark:to-transparent border-b border-indigo-100/50 dark:border-indigo-900/30">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300">
+          {apiMode === 'crud' ? 'CRUD' : 'Create'} Mode
+        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Records:</span>
+          <Input
+            type="number"
+            min={1}
+            max={500}
+            value={batchCount}
+            onChange={(e) => setBatchCount(Math.max(1, Math.min(500, parseInt(e.target.value) || 10)))}
+            disabled={isRunning}
+            className="h-6 w-14 text-[11px]"
+          />
         </div>
+        <span className="text-[11px] text-gray-400 dark:text-gray-500">
+          {apiMode === 'crud' ? 'Run full CRUD cycle per record' : `Batch-create ${batchCount} record${batchCount > 1 ? 's' : ''} per tenant`}
+        </span>
       </div>
 
       {/* Column headers + add inputs */}
@@ -732,6 +1139,7 @@ export function ConcurrencyTab({ modules }: { modules: SidebarModule[] }) {
                       <MP value={t.moduleId} onChange={(v) => updatePc1Tenant(t.id, { moduleId: v })} />
                     </div>
                     <TokenRow token={t.token} tenantId={t.tenantId} onSet={() => openTokenDialog(t.id, 'pc1')} />
+                    <CardLogs cardKey={t.id} />
                   </div>
                 </div>
 
@@ -763,6 +1171,7 @@ export function ConcurrencyTab({ modules }: { modules: SidebarModule[] }) {
                       </div>
                     </div>
                     <TokenRow token={pc2e.token} tenantId={pc2e.tenantId} onSet={() => openTokenDialog(t.id, 'pc2')} colorClass={pc.tokenOk} />
+                    <CardLogs cardKey={t.id + '-pc2'} />
                   </div>
                 </div>
               </div>
@@ -807,6 +1216,7 @@ export function ConcurrencyTab({ modules }: { modules: SidebarModule[] }) {
                       <MP value={t.moduleId} onChange={(v) => updatePc1Tenant(t.id, { moduleId: v })} />
                     </div>
                     <TokenRow token={t.token} tenantId={t.tenantId} onSet={() => openTokenDialog(t.id, 'pc1')} />
+                    <CardLogs cardKey={t.id} />
                   </div>
                 </div>
               ))}
@@ -849,6 +1259,7 @@ export function ConcurrencyTab({ modules }: { modules: SidebarModule[] }) {
                         <MP value={entry.moduleId} onChange={(v) => updateIndependentPc2(entry.id, { moduleId: v })} />
                       </div>
                       <TokenRow token={entry.token} tenantId={entry.tenantId} onSet={() => openTokenDialog(entry.id, 'pc2')} />
+                      <CardLogs cardKey={entry.id} />
                     </div>
                   </div>
                 )
@@ -857,6 +1268,233 @@ export function ConcurrencyTab({ modules }: { modules: SidebarModule[] }) {
           </div>
         )}
       </div>
+
+      {/* Run results modal */}
+      {runResults && showResults && resultJobsRef.current.length > 0 && (
+        <RunResultsPanel results={runResults} jobs={resultJobsRef.current} runTiming={runTiming ?? undefined} onClose={() => setShowResults(false)} />
+      )}
+
+      {/* History dialog */}
+      <Dialog open={showHistory} onOpenChange={(v) => { if (!v) setShowHistory(false) }}>
+        <DialogContent className="sm:max-w-[750px] dark:bg-gray-800 dark:border-gray-600/60 p-0 gap-0">
+          <DialogTitle className="sr-only">Concurrency Run History</DialogTitle>
+          <DialogDescription className="sr-only">Browse past concurrency test runs</DialogDescription>
+
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-600/40">
+            <div className="flex items-center gap-2">
+              <BarChart2 className="size-4 text-gray-500" />
+              <h2 className="text-[15px] font-semibold text-gray-800 dark:text-gray-100">Concurrency History</h2>
+              <span className="text-[12px] text-gray-400 dark:text-gray-500">({historyRuns?.length ?? 0} runs)</span>
+            </div>
+            <button onClick={() => setShowHistory(false)} className="size-6 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer">
+              <X className="size-4" />
+            </button>
+          </div>
+
+          {/* Filters */}
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-200 dark:border-gray-600/40 bg-gray-50/50 dark:bg-gray-800/30">
+            <Filter className="size-3.5 text-gray-400 shrink-0" />
+            <select value={historyFilter} onChange={(e) => { setHistoryFilter(e.target.value as typeof historyFilter); setHistoryPage(0) }}
+              className="h-7 text-[12px] px-2 rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 outline-none focus:border-indigo-400 cursor-pointer"
+            >
+              <option value="all">All Status</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+            </select>
+            <select value={historyPeriod} onChange={(e) => { setHistoryPeriod(e.target.value as typeof historyPeriod); setHistoryPage(0) }}
+              className="h-7 text-[12px] px-2 rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 outline-none focus:border-indigo-400 cursor-pointer"
+            >
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+            </select>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-y-auto max-h-[420px]">
+            {loadingHistory ? (
+              <div className="flex items-center justify-center py-12 text-gray-400 dark:text-gray-500">
+                <Loader2 className="size-5 animate-spin mr-2" />
+                <span className="text-[13px]">Loading…</span>
+              </div>
+            ) : historyRuns && historyRuns.length > 0 ? (
+              (() => {
+                let filtered = historyRuns
+                if (historyFilter === 'completed') filtered = filtered.filter(r => r.status === 'completed')
+                if (historyFilter === 'failed') filtered = filtered.filter(r => r.status === 'failed')
+                if (historyPeriod !== 'all') {
+                  const now = new Date()
+                  const start = historyPeriod === 'today' ? new Date(now.getFullYear(), now.getMonth(), now.getDate())
+                    : historyPeriod === 'week' ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay())
+                    : new Date(now.getFullYear(), now.getMonth(), 1)
+                  filtered = filtered.filter(r => new Date(r.startedAt) >= start)
+                }
+                const totalPages = Math.ceil(filtered.length / 15)
+                const page = Math.min(historyPage, Math.max(0, totalPages - 1))
+                const paginated = filtered.slice(page * 15, (page + 1) * 15)
+                return (
+                  <>
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-gray-700/40 bg-gray-50 dark:bg-gray-800/50">
+                          <th className="text-left px-4 py-2 font-medium w-10">#</th>
+                          <th className="text-left px-3 py-2 font-medium">Date</th>
+                          <th className="text-right px-3 py-2 font-medium">Jobs</th>
+                          <th className="text-right px-3 py-2 font-medium">Created</th>
+                          <th className="text-right px-3 py-2 font-medium">Failed</th>
+                          <th className="text-right px-3 py-2 font-medium">Overlap</th>
+                          <th className="text-right px-3 py-2 font-medium">Duration</th>
+                          <th className="text-right px-3 py-2 font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700/40">
+                        {paginated.map((run, idx) => {
+                          const r = typeof run.results === 'string' ? JSON.parse(run.results) : run.results
+                          const jc = r?.jobs?.length ?? 0
+                          const started = new Date(run.startedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                          return (
+                            <tr key={run.id}
+                              onClick={() => { setHistoryDetail(run); setShowHistoryDetail(true) }}
+                              className="text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors cursor-pointer"
+                            >
+                              <td className="px-4 py-2.5 text-gray-400 dark:text-gray-500 font-mono text-[12px]">{page * 15 + idx + 1}</td>
+                              <td className="px-3 py-2.5 whitespace-nowrap text-[12px] text-gray-600 dark:text-gray-300">{started}</td>
+                              <td className="px-3 py-2.5 text-right text-gray-600 dark:text-gray-300">{jc}</td>
+                              <td className="px-3 py-2.5 text-right text-green-600 dark:text-green-400 font-medium">{run.passed}</td>
+                              <td className={`px-3 py-2.5 text-right font-medium ${run.failed > 0 ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`}>{run.failed}</td>
+                              <td className="px-3 py-2.5 text-right font-mono text-[12px] text-gray-500 dark:text-gray-400">{r?.overlapMs > 0 ? `${r.overlapMs}ms` : '—'}</td>
+                              <td className="px-3 py-2.5 text-right font-mono text-[12px] text-gray-500 dark:text-gray-400">{run.duration}</td>
+                              <td className="px-3 py-2.5 text-right">
+                                <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${run.status === 'completed' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'}`}>
+                                  {run.status}
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between px-4 py-2.5 border-t border-gray-200 dark:border-gray-600/40 bg-gray-50/50 dark:bg-gray-800/30">
+                        <span className="text-[12px] text-gray-500 dark:text-gray-400">{filtered.length} run{filtered.length !== 1 ? 's' : ''}</span>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => setHistoryPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                            className="size-6 flex items-center justify-center rounded text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          >
+                            <ChevronLeft className="size-3.5" />
+                          </button>
+                          {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                            const start = Math.max(0, Math.min(page - 2, totalPages - 5))
+                            const p = start + i
+                            return (
+                              <button key={p} onClick={() => setHistoryPage(p)}
+                                className={`size-6 text-[12px] rounded transition-colors cursor-pointer ${p === page ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-medium' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                              >{p + 1}</button>
+                            )
+                          })}
+                          <button onClick={() => setHistoryPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+                            className="size-6 flex items-center justify-center rounded text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          >
+                            <ChevronRight className="size-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )
+              })()
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-gray-400 dark:text-gray-500">
+                <History className="size-8 mb-2" />
+                <p className="text-[13px]">No concurrency runs yet</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* History detail dialog */}
+      <Dialog open={showHistoryDetail} onOpenChange={(v) => { if (!v) setShowHistoryDetail(false) }}>
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto dark:bg-gray-800 dark:border-gray-600/60">
+          <DialogTitle className="text-[15px] flex items-center gap-2">
+            <BarChart2 className="size-4 text-[#3F51B5]" />
+            Run Details
+          </DialogTitle>
+          <DialogDescription className="sr-only" />
+          {historyDetail && (() => {
+            const r = typeof historyDetail.results === 'string' ? JSON.parse(historyDetail.results) : historyDetail.results
+            return (
+              <div className="flex flex-col gap-4">
+                {/* Summary cards */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3 text-center">
+                    <p className="text-[11px] uppercase text-gray-500 dark:text-gray-400 font-medium">Created</p>
+                    <p className="text-[16px] font-bold text-green-600 dark:text-green-400 mt-0.5">{historyDetail.passed}</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3 text-center">
+                    <p className="text-[11px] uppercase text-gray-500 dark:text-gray-400 font-medium">Failed</p>
+                    <p className="text-[16px] font-bold text-red-500 mt-0.5">{historyDetail.failed}</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3 text-center">
+                    <p className="text-[11px] uppercase text-gray-500 dark:text-gray-400 font-medium">Duration</p>
+                    <p className="text-[16px] font-bold text-gray-700 dark:text-gray-200 font-mono mt-0.5">{historyDetail.duration}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3 text-center">
+                    <p className="text-[11px] uppercase text-gray-500 dark:text-gray-400 font-medium">Overlap</p>
+                    <p className="text-[14px] font-bold text-gray-700 dark:text-gray-200 mt-0.5">{r?.overlapMs ?? 0}ms</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3 text-center">
+                    <p className="text-[11px] uppercase text-gray-500 dark:text-gray-400 font-medium">Status</p>
+                    <p className={`text-[14px] font-bold mt-0.5 ${historyDetail.status === 'completed' ? 'text-green-600' : 'text-red-500'}`}>{historyDetail.status}</p>
+                  </div>
+                </div>
+
+                {/* Job breakdown */}
+                {r?.jobs?.length > 0 && (
+                  <>
+                    <h4 className="text-[13px] font-semibold text-gray-800 dark:text-gray-100">Jobs ({r.jobs.length})</h4>
+                    <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
+                      {r.jobs.map((job: any, i: number) => (
+                        <div key={i} className="bg-gray-50 dark:bg-gray-700/20 rounded-lg border border-gray-100 dark:border-gray-700/30 p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[12px] font-medium text-gray-800 dark:text-gray-100">{job.label}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium ${job.side === 'pc1' ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700'}`}>{job.side === 'pc1' ? 'PC-1' : 'PC-2'}</span>
+                            <span className="text-[11px] text-green-600 ml-auto">✓ {job.created?.length ?? 0}</span>
+                            {job.failed?.length > 0 && <span className="text-[11px] text-red-500">✗ {job.failed.length}</span>}
+                          </div>
+                          {job.created?.length > 0 && (
+                            <p className="text-[11px] text-gray-500 font-mono truncate">{job.created.join(', ')}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Duplicates & Conflicts */}
+                {r?.duplicates?.length > 0 && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 text-amber-700 dark:text-amber-300 text-[12px] rounded-lg px-3 py-2">
+                    ⚠ {r.duplicates.length} duplicate{r.duplicates.length > 1 ? 's' : ''}: {r.duplicates.join(', ')}
+                  </div>
+                )}
+                {r?.conflicts > 0 && (
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/40 text-red-700 dark:text-red-300 text-[12px] rounded-lg px-3 py-2">
+                    ✗ {r.conflicts} conflict{r.conflicts > 1 ? 's' : ''} detected
+                  </div>
+                )}
+
+                <div className="text-[11px] text-gray-400 dark:text-gray-500">
+                  {new Date(historyDetail.startedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            )
+          })()}
+        </DialogContent>
+      </Dialog>
 
       {/* Token dialog */}
       <SetTokenDialog

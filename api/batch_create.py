@@ -134,6 +134,100 @@ def _extract_wf_error(client) -> str:
         return last.text[:200]
 
 
+def _build_payloads_only(request: BatchCreateRequest) -> list[dict]:
+    """Generate payloads without creating them — used by conflict mode preview."""
+    from common.erp_api_client import RhythmERPAPIClient
+
+    module_paths = MODULE_IMPORT_PATHS.get(request.module, {})
+    data_path = module_paths.get(request.sub_module)
+    if not data_path:
+        return []
+
+    data_mod = importlib.import_module(data_path)
+    generate_fn = getattr(data_mod, "generate_batch_payloads", None)
+    if not generate_fn:
+        return []
+
+    client = RhythmERPAPIClient(username="", password="", tenant_id=request.erp_tenant_id)
+    try:
+        client.login_from_browser(token=request.erp_token, tenant_id=request.erp_tenant_id)
+    except Exception:
+        return []
+
+    # FK resolution
+    raw_fk_map = getattr(data_mod, "get_fk_screen_mapping", lambda: [])()
+    if isinstance(raw_fk_map, list):
+        fk_map = {item["fk_field"]: item["screen_name"] for item in raw_fk_map}
+    elif isinstance(raw_fk_map, dict):
+        fk_map = raw_fk_map
+    else:
+        fk_map = {}
+    dropdown_ids = None
+    if fk_map:
+        from common.fk_resolver import FkResolver
+        try:
+            resolver = FkResolver(client)
+            parent_screen = _screen_name(request.sub_module)
+            dropdown_ids = {}
+            for field, screen in fk_map.items():
+                resolved = resolver.resolve(screen, parent_screen=parent_screen, field_key=field)
+                if resolved:
+                    dropdown_ids[field] = resolved
+            if "item_ref_id" in dropdown_ids:
+                try:
+                    im_resp = client.list_entries("Item Master", page_size=500)
+                    im_rows = im_resp.get("screenmatlistingdata_set", im_resp.get("results", im_resp.get("data", [])))
+                    item_uom_map = {}
+                    for row in (im_rows or []):
+                        iid = row.get("id")
+                        uom = row.get("uom") or row.get("base_uom")
+                        if iid is not None and uom is not None:
+                            item_uom_map[int(iid)] = uom
+                    if item_uom_map:
+                        dropdown_ids["item_uom_map"] = item_uom_map
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    # Query existing entries
+    try:
+        screen = _screen_name(request.sub_module)
+        existing = client.list_entries(screen, page_size=500)
+        existing_items = existing.get("screenmatlistingdata_set", existing.get("results", existing.get("data", [])))
+    except Exception:
+        existing_items = []
+
+    enrich_fn = getattr(data_mod, "enrich_existing_entries", None)
+    if enrich_fn and existing_items:
+        try:
+            existing_items = enrich_fn(client, existing_items)
+        except Exception:
+            pass
+
+    sig = inspect.signature(generate_fn)
+    total = min(request.count, 500)
+    kwargs = {"count": total}
+    if dropdown_ids and "dropdown_ids" in sig.parameters:
+        kwargs["dropdown_ids"] = dropdown_ids
+    if existing_items and "existing_entries" in sig.parameters:
+        kwargs["existing_entries"] = existing_items
+    if "config" in sig.parameters:
+        kwargs["config"] = request.config
+    attr_number = (request.config or {}).get("attr_number", 1)
+    if attr_number and "attr_number" in sig.parameters:
+        kwargs["attr_number"] = attr_number
+
+    payloads = generate_fn(**kwargs)
+
+    try:
+        client.close()
+    except Exception:
+        pass
+
+    return payloads
+
+
 def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, None]:
     """Generate batch create progress as SSE events."""
     run_id = str(uuid.uuid4())[:8]
@@ -238,7 +332,7 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
                 run_id=run_id,
             ))
 
-    # 4. Generate payloads and create
+    # 4. Generate payloads
     start = time.time()
     created = 0
     failed = 0
@@ -275,18 +369,27 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
         except Exception:
             pass
 
-    sig = inspect.signature(generate_fn)
-    kwargs = {"count": total}
-    if dropdown_ids and "dropdown_ids" in sig.parameters:
-        kwargs["dropdown_ids"] = dropdown_ids
-    if existing_items and "existing_entries" in sig.parameters:
-        kwargs["existing_entries"] = existing_items
-    if "config" in sig.parameters:
-        kwargs["config"] = request.config
-    attr_number = (request.config or {}).get("attr_number", 1)
-    if attr_number and "attr_number" in sig.parameters:
-        kwargs["attr_number"] = attr_number
-    payloads = generate_fn(**kwargs)
+    if request.fixed_payloads:
+        payloads = request.fixed_payloads
+    else:
+        sig = inspect.signature(generate_fn)
+        kwargs = {"count": total}
+        if dropdown_ids and "dropdown_ids" in sig.parameters:
+            kwargs["dropdown_ids"] = dropdown_ids
+        if existing_items and "existing_entries" in sig.parameters:
+            kwargs["existing_entries"] = existing_items
+        if "config" in sig.parameters:
+            kwargs["config"] = request.config
+        attr_number = (request.config or {}).get("attr_number", 1)
+        if attr_number and "attr_number" in sig.parameters:
+            kwargs["attr_number"] = attr_number
+        payloads = generate_fn(**kwargs)
+
+    # Conflict mode: override specific fields on every generated payload
+    conflict_override = (request.config or {}).get("_conflict_override", {})
+    if conflict_override and isinstance(conflict_override, dict):
+        for p in payloads:
+            p.update(conflict_override)
     batch_size = len(payloads)
 
     yield _sse_event(LogEvent(
