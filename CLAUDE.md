@@ -64,3 +64,39 @@ cd web-ui && npx tsc --noEmit
 ## CI
 
 GitLab CI via `.gitlab-ci.yml` — runs lint, typecheck, vitest, next build, and pytest on every MR and main push.
+
+## Session Progress — Concurrency Batch-Create System
+
+### Goal
+Build a full-stack concurrency batch-create testing system (UI + FastAPI backend) for parallel record creation across two ERP tenant groups (PC-1 / PC-2) with run results, history, and conflict detection.
+
+### Constraints
+- No new DB tables — concurrency runs reuse existing `RunHistory` table with `moduleId: 'concurrency'`
+- Existing test/page-object files untouched
+- Only `ConcurrencyTab.tsx`, `api.ts`, `api/models.py`, `api/batch_create.py` may be modified for new features
+
+### Done
+- Two-column PC-1 | PC-2 layout with per-tenant token+module via `SetTokenDialog`, auto-patch sharing, independent tenants, per-card terminal log (`CardLogs`), `batchCount` input, `canRun` + `MODULE_TO_BATCH` validation, Run button
+- SSE streaming parsing for created (`CREATED|UPDATED #id - Name`) and failed (`FAILED - Name: reason`)
+- `RunResultsPanel`: centered portal modal with overlap bar, By PC / Timeline view toggle, per-job avg ms/record, duplicate detection (same name on both PCs), conflict detection (created on one, failed on other), footer with overlap/created/failed/conflicts metrics
+- Run persistence: `saveConcurrencyRun()` → `POST /api/runs` with `moduleId: 'concurrency'`
+- History dialog: full table with filters, pagination (15/page), detail view with summary cards + job breakdown + duplicates/conflicts
+- Conflict mode: toggle (`Swords` icon) → calls `/api/batch-create/preview` to generate payloads once → both PCs receive identical `fixed_payloads` list → race condition detection
+- UI cleaned up: only "API Tests" tab visible with Create / CRUD sub-mode toggle
+
+### Bug Fixes
+- **422 error**: swapped `startBatchCreate` param order so `fixedPayloads` comes before `config` (was: `seed` landed in `config` slot)
+- **Different data despite same seed**: replaced `random.seed()` approach with `fixed_payloads` — payloads are generated once via a preview endpoint and sent as the same list to both PCs, bypassing the module-level `_generated_names` dedup set that persisted across requests
+
+### Key Decisions
+- `RunHistory` table reused with `moduleId: 'concurrency'` — all concurrency data stored in `results` JSON string
+- **Conflict mode now uses client-side override injection** instead of `fixed_payloads` — frontend generates one random value per unique field (e.g. PAN, email), passes it as `config._conflict_override` to both PCs. Backend spreads it into `kwargs` so every payload gets the same unique value, triggering a duplicate-key conflict on the second PC. No preview endpoint needed, no fragile FK resolution mismatch.
+- shadcn `Dialog` components used for history list/detail instead of custom portals
+
+### Relevant Files
+- `web-ui/src/components/concurrency/ConcurrencyTab.tsx`: full concurrency UI
+- `web-ui/src/lib/api.ts`: `startBatchCreate()` (SSE), `saveConcurrencyRun()`
+- `web-ui/src/components/dialogs/BatchCreateSection.tsx`: `MODULE_TO_BATCH` with `conflictField`/`conflictValue` per module
+- `api/batch_create.py`: `_conflict_override` handling in kwargs
+- `web-ui/src/app/globals.css`: `animate-fadeIn` keyframe
+- `web-ui/src/components/dialogs/SetTokenDialog.tsx`: reused token+tenantId dialog
