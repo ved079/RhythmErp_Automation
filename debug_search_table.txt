@@ -1,0 +1,2 @@
+searched=TaxRate 864747 0002
+table=ActionsTax TypeTax AuthorityFrom DateTo DateRevision Statusmore_vertGSTCGST Authority01-Apr-2024 12:00 AM31-Mar-2026 12:00 AMTaxRate 864747 0002

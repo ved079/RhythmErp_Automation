@@ -10,7 +10,8 @@ class ErrorCodeMstPage(BasePlaywrightPage):
     SUBMIT = ".popup-footer button:has-text('Submit')"
     UPDATE = ".popup-footer button:has-text('Update')"
     CANCEL = ".popup-footer button:has-text('Cancel')"
-
+    CHANGE_LOG = "app-dynamic-history table#excel-table tbody tr"
+ 
     def navigate_to_page(self):
         self.page.reload()
         try:
@@ -68,23 +69,27 @@ class ErrorCodeMstPage(BasePlaywrightPage):
         self.page.wait_for_timeout(300)
         self.page.click(self.CANCEL, force=True)
 
+    def _clear_overlays(self):
+        self.page.evaluate(
+            "document.querySelectorAll('.cdk-overlay-backdrop').forEach(el => el.remove())"
+        )
+
     def handle_success_alert(self):
         try:
-            self.page.wait_for_selector(".swal2-container", timeout=5000)
-            title = self.page.evaluate("document.querySelector('#swal2-title')?.textContent")
-            if title and "success" not in title.lower() and "added" not in title.lower() and "updated" not in title.lower():
-                self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
-                self.page.wait_for_timeout(1000)
-                return
+            self.page.wait_for_selector(".swal2-container", timeout=4000)
             self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
-            self.page.wait_for_selector(".swal2-container", state="hidden", timeout=5000)
+            self.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
         except Exception:
             pass
+        self.page.evaluate("""
+            document.querySelectorAll('.cdk-overlay-backdrop').forEach(el => el.remove());
+            document.querySelectorAll('.cdk-overlay-pane').forEach(el => el.remove());
+        """)
         try:
-            self.page.wait_for_selector("table#excel-table", timeout=3000)
-        except Exception:
-            self.force_close_popup()
             self.page.wait_for_selector("table#excel-table", timeout=5000)
+        except Exception:
+            self.page.reload()
+            self.page.wait_for_selector("table#excel-table", timeout=15000)
 
     def search_record(self, text):
         btn = self.page.locator("button.search-btn")
@@ -161,3 +166,9 @@ class ErrorCodeMstPage(BasePlaywrightPage):
 
     def update_code(self, new_code):
         self.page.fill(self.CODE_INPUT, new_code)
+
+    def verify_view_popup_read_only(self):
+        buttons = self.page.locator(".popup-footer button")
+        texts = [buttons.nth(i).text_content().strip() for i in range(buttons.count())]
+        assert "Submit" not in texts and "Update" not in texts, \
+            "View popup must not have Submit or Update"

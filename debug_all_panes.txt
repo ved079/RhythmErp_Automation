@@ -1,0 +1,1 @@
+Pane0: Click to edit row details HTML:<mat-tooltip-component aria-hidden="true" class="ng-star-inserted"><div class="mdc-tooltip mat-mdc-tooltip mat-mdc-tooltip-show" style="transform-origin: center top;"><div class="mat-mdc-tooltip-surface mdc-tooltip__surface">Click to edit row details</div></div></mat-tooltip-component>

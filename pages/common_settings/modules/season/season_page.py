@@ -13,7 +13,13 @@ class SeasonPage(BasePlaywrightPage):
     CHANGE_LOG = "app-dynamic-history table#excel-table tbody tr"
 
     def navigate_to_page(self):
-        self.page.goto(self.URL)
+        try:
+            if "Season" in self.page.url:
+                self.page.reload()
+            else:
+                self.page.goto(self.URL)
+        except Exception:
+            self.page.goto(self.URL)
         try:
             self.page.wait_for_selector("table#excel-table", timeout=10000)
         except Exception:
@@ -29,14 +35,38 @@ class SeasonPage(BasePlaywrightPage):
         if data.get("Description"):
             self.page.fill(self.DESC_INPUT, data["Description"])
 
+    def _clear_overlays(self):
+        self.page.evaluate(
+            "document.querySelectorAll('.cdk-overlay-backdrop').forEach(el => el.remove())"
+        )
+
     def submit(self):
+        self._clear_overlays()
         self.page.click(self.SUBMIT)
 
     def click_update(self):
+        self._clear_overlays()
         self.page.click(self.UPDATE)
 
     def close_popup(self):
+        self._clear_overlays()
         self.page.click(self.CANCEL)
+
+    def handle_success_alert(self):
+        try:
+            self.page.wait_for_selector(".swal2-container", timeout=4000)
+            self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+            self.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
+        except Exception:
+            pass
+        try:
+            if self.page.locator(self.CANCEL).is_visible():
+                self._clear_overlays()
+                self.page.click(self.CANCEL)
+                self.page.wait_for_timeout(500)
+        except Exception:
+            pass
+        self.page.wait_for_selector("table#excel-table", timeout=5000)
 
     def search_season(self, name):
         self.page.evaluate("""

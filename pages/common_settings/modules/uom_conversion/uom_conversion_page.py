@@ -18,10 +18,23 @@ class UOMConversionPage(BasePlaywrightPage):
             self.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
         except Exception:
             pass
+        try:
+            if self.page.locator(self.CANCEL).is_visible():
+                self._force_close_panels()
+                self.page.click(self.CANCEL)
+                self.page.wait_for_timeout(500)
+        except Exception:
+            pass
         self.page.wait_for_selector("table#excel-table", timeout=5000)
 
     def navigate_to_page(self):
-        self.page.goto(self.URL)
+        try:
+            if "UOM%20Conversion" in self.page.url or "UOM Conversion" in self.page.url:
+                self.page.reload()
+            else:
+                self.page.goto(self.URL)
+        except Exception:
+            self.page.goto(self.URL)
         try:
             self.page.wait_for_selector("table#excel-table", timeout=10000)
         except Exception:

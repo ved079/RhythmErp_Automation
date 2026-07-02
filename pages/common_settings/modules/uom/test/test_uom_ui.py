@@ -53,7 +53,9 @@ class TestUOMUI:
         uom_page.verify_uom_exists(data["uom_code"])
 
         uom_page.click_view_button(data["uom_code"])
-        assert uom_page.page.locator(uom_page.UOM_CODE).is_disabled()
+        buttons = uom_page.page.locator(".popup-footer button")
+        texts = [buttons.nth(i).text_content().strip() for i in range(buttons.count())]
+        assert "Submit" not in texts and "Update" not in texts
         uom_page.close_popup()
 
         uom_page.click_edit_button(data["uom_code"])

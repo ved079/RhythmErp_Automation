@@ -1,0 +1,5 @@
+BUTTON id= placeholder="" type=submit val= invalid=false valid=false text="close"
+MAT-SELECT id=mat-select-5 placeholder="" type= val= invalid=true valid=false text="Select hsn number"
+INPUT id=mat-input-7 placeholder="Tax Rate" type=number val= invalid=false valid=true text=""
+BUTTON id= placeholder="" type=submit val= invalid=false valid=false text="check Save"
+BUTTON id= placeholder="" type=submit val= invalid=false valid=false text="Cancel"
