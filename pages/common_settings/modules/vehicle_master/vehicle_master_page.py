@@ -48,11 +48,15 @@ class VehicleMasterPage(BasePlaywrightPage):
         sel.wait_for(state="visible", timeout=5000)
         sel.click()
         self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
+        self.page.wait_for_selector(
+            ".mat-mdc-select-panel mat-option",
+            timeout=10000
+        )
+        self.page.wait_for_timeout(300)
         opts = self.page.locator(".mat-mdc-select-panel mat-option")
-        opts.first.wait_for(state="visible", timeout=3000)
         text = opts.first.text_content().strip()
         opts.first.click(force=True)
-        self.page.wait_for_timeout(300)
+        self.page.wait_for_timeout(500)
         self._clear_overlays()
         return text
 
@@ -164,7 +168,7 @@ class VehicleMasterPage(BasePlaywrightPage):
 
     def update_name(self, new_name):
         name_input = self.page.locator(self.NAME_INPUT)
-        name_input.triple_click()
+        name_input.click(click_count=3)
         name_input.fill(new_name)
 
     def verify_view_popup_read_only(self):

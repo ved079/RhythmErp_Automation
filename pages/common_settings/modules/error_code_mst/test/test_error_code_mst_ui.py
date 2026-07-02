@@ -1,9 +1,7 @@
 import time
 from pages.common_settings.modules.error_code_mst.data.error_code_mst_data import (
     generate_valid_error_code_mst_data,
-    generate_create_without_description,
 )
-
 
 _ts = int(time.time() * 1000) % 1000000
 _ucounter = 0
@@ -17,11 +15,24 @@ def _unique_code():
 
 class TestErrorCodeMstUI:
 
-    def test_validation_sweep(self, ecm_page):
+    def test_create_smoke(self, ecm_page):
+        data = generate_valid_error_code_mst_data()
+        data["code"] = _unique_code()
         ecm_page.open_add_form()
+        ecm_page.fill_form(data)
         ecm_page.submit()
-        ecm_page.handle_validation_alert()
-        ecm_page.close_popup()
+        ecm_page.handle_success_alert()
+        assert ecm_page.is_code_in_table(data["code"]), \
+            f"Error code '{data['code']}' not found after create"
+
+        data2 = generate_valid_error_code_mst_data()
+        data2["code"] = _unique_code()
+        ecm_page.open_add_form()
+        ecm_page.fill_form(data2)
+        ecm_page.submit()
+        ecm_page.handle_success_alert()
+        assert ecm_page.is_code_in_table(data2["code"]), \
+            f"Error code '{data2['code']}' not found after second create"
 
     def test_form_discard(self, ecm_page):
         code = _unique_code()
@@ -32,17 +43,14 @@ class TestErrorCodeMstUI:
         assert not ecm_page.is_code_in_table(code), \
             "Cancelled record must not appear in table"
 
-    def test_create_smoke(self, ecm_page):
-        data = generate_valid_error_code_mst_data()
-        data["code"] = _unique_code()
+    def test_validation_sweep(self, ecm_page):
         ecm_page.open_add_form()
-        ecm_page.fill_form(data)
         ecm_page.submit()
-        ecm_page.handle_success_alert()
-        found = ecm_page.is_code_in_table(data["code"])
-        assert found, f"Error code '{data['code']}' not found in table after create"
+        ecm_page.handle_validation_alert()
+        ecm_page.close_popup()
 
     def test_listing_and_search(self, ecm_page):
+        assert ecm_page.get_table_row_count() > 0
         data = generate_valid_error_code_mst_data()
         data["code"] = _unique_code()
         ecm_page.open_add_form()
@@ -53,12 +61,27 @@ class TestErrorCodeMstUI:
         assert ecm_page.is_code_in_table(data["code"]), \
             f"Error code '{data['code']}' must appear in search results"
 
-    def test_description_is_optional(self, ecm_page):
-        data = generate_create_without_description()
+    def test_full_row_actions(self, ecm_page):
+        data = generate_valid_error_code_mst_data()
         data["code"] = _unique_code()
         ecm_page.open_add_form()
         ecm_page.fill_form(data)
         ecm_page.submit()
         ecm_page.handle_success_alert()
-        found = ecm_page.is_code_in_table(data["code"])
-        assert found, f"Error code '{data['code']}' not found in table after create (no description)"
+        ecm_page.search_record(data["code"])
+        assert ecm_page.is_code_in_table(data["code"])
+
+        ecm_page.click_view_button(data["code"])
+        ecm_page.verify_view_popup_read_only()
+        ecm_page.close_popup()
+
+        updated_code = _unique_code()
+        ecm_page.click_edit_button(data["code"])
+        ecm_page.update_code(updated_code)
+        ecm_page.click_update()
+        ecm_page.handle_success_alert()
+
+        ecm_page.search_record(updated_code)
+        ecm_page.click_history_button(updated_code)
+        assert ecm_page.page.locator(ecm_page.CHANGE_LOG).count() > 0
+        ecm_page.close_popup()

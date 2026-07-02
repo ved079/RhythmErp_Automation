@@ -1,0 +1,2 @@
+Row0: : | :HSN Number* | :Tax Rate*
+Row1: :drag_indicator | INPUT: | INPUT:

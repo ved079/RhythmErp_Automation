@@ -1,0 +1,23 @@
+Search anything... invalid=false valid=false val=
+detailView invalid=false valid=false val=on
+detailView invalid=false valid=false val=on
+layoutMode invalid=false valid=false val=on
+layoutMode invalid=false valid=false val=on
+orientation invalid=false valid=false val=on
+orientation invalid=false valid=false val=on
+fillColors invalid=false valid=false val=on
+fillColors invalid=false valid=false val=on
+showPercentage invalid=false valid=false val=on
+showPercentage invalid=false valid=false val=on
+erpSearchInput invalid=false valid=true val=TaxRate 542354 0001
+mat-select-1 invalid=false valid=false val=25
+mat-select-6 invalid=false valid=true val=GST
+mat-select-7 invalid=false valid=true val=CGST Authority
+mat-input-8 invalid=false valid=true val=01/04/2024
+INPUT invalid=false valid=true val=01/04/2024
+mat-input-9 invalid=false valid=true val=31/03/2026
+INPUT invalid=false valid=true val=31/03/2026
+mat-input-10 invalid=false valid=true val=TaxRate 542354 0002
+mat-input-11 invalid=false valid=false val=
+mat-input-12 invalid=false valid=false val=
+mat-select-8 invalid=false valid=false val=5

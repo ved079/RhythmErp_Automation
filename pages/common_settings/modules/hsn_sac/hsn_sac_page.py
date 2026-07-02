@@ -32,7 +32,13 @@ class HsnSacPage(BasePlaywrightPage):
     CHANGE_LOG = "app-dynamic-history table#excel-table tbody tr"
 
     def navigate_to_page(self):
-        self.page.goto(self.URL)
+        try:
+            if "HSN" in self.page.url:
+                self.page.reload()
+            else:
+                self.page.goto(self.URL)
+        except Exception:
+            self.page.goto(self.URL)
         try:
             self.page.wait_for_selector("table#excel-table", timeout=10000)
         except Exception:
