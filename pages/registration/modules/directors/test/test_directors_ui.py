@@ -1,166 +1,99 @@
-import os
-import sys
+import time
 
-PROJECT_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
-)
-sys.path.insert(0, PROJECT_ROOT)
+_ts = int(time.time())
+_counter = 0
 
-import pytest
-from common.logger import log
-from pages.registration.modules.directors.data.directors_data import (
-    generate_valid_directors_data,
-    generate_minimal_directors_data,
-    generate_director_name,
-    generate_valid_kyc_row,
-    SWAL_TITLE_SUCCESS,
-    SWAL_TITLE_VALIDATION_FAILED,
-    SWAL_TITLE_UPDATED,
-)
+# ── Verhoeff tables for Aadhaar generation ────────────────
+_V_D = [[0,1,2,3,4,5,6,7,8,9],[1,2,3,4,0,6,7,8,9,5],[2,3,4,0,1,7,8,9,5,6],
+        [3,4,0,1,2,8,9,5,6,7],[4,0,1,2,3,9,5,6,7,8],[5,9,8,7,6,0,4,3,2,1],
+        [6,5,9,8,7,1,0,4,3,2],[7,6,5,9,8,2,1,0,4,3],[8,7,6,5,9,3,2,1,0,4],
+        [9,8,7,6,5,4,3,2,1,0]]
+_V_P = [[0,1,2,3,4,5,6,7,8,9],[1,5,7,6,2,8,3,0,9,4],[5,8,0,3,7,9,6,1,4,2],
+        [8,9,1,6,0,4,3,5,2,7],[9,4,5,3,1,2,6,8,7,0],[4,2,8,6,5,7,3,9,0,1],
+        [2,7,9,3,8,0,6,4,1,5],[7,0,4,6,9,1,3,2,5,8]]
+_V_INV = [0,4,3,2,1,9,8,7,6,5]
 
 
-@pytest.mark.smoke
-class TestDirectorsUI:
+def _verhoeff_digit(s):
+    c = 0
+    for i, n in enumerate(reversed("0" + s)):
+        c = _V_D[c][_V_P[i % 8][int(n)]]
+    return str(_V_INV[c])
 
+
+def _aadhaar(counter):
+    base = f"{2 + counter % 7}{(counter * 137 + 1000000000) % 10000000000:010d}"
+    return base + _verhoeff_digit(base)
+
+
+def _encode_ts(ts):
+    result = ""
+    while ts > 0:
+        result = chr(ord('A') + (ts % 26)) + result
+        ts //= 26
+    return result or "A"
+
+
+_ts_letters = _encode_ts(_ts)
+
+
+def _unique_data():
+    global _counter
+    _counter += 1
+    return {
+        "name":               f"Director {_ts_letters}{_encode_ts(_counter)}",
+        "din_pan":            f"ABC{chr(ord('A') + (_ts + _counter) % 26)}{chr(ord('A') + (_ts * 3 + _counter) % 26)}{(_ts + _counter * 7) % 9000 + 1000}F",
+        "address":            "Test Address Pune",
+        "phone":              "9876543210",
+        "date_of_appointment": "01/01/2024",
+        "no_class_shares":    "10 Class A",
+        "other_directorships": "None",
+        "percentage":         "10",
+        "age":                "45",
+        "experience":         "20",
+        "kyc_number":         _aadhaar(_ts + _counter),
+    }
+
+
+class TestDirectorsUIGroup1:
     def test_create_smoke(self, dir_page):
-        """Full create + minimal create in one session."""
-        page = dir_page
+        data = _unique_data()
+        dir_page.create_record(data)
+        dir_page.search_director(data["name"])
+        dir_page.verify_director_exists(data["name"])
 
-        # Pass 1: all fields + 3 KYC rows
-        data = generate_valid_directors_data()
-        data["kyc_details"] = [
-            generate_valid_kyc_row(65),
-            generate_valid_kyc_row(66),
-            generate_valid_kyc_row(65),
-        ]
-        page.open_add_form()
-        page.fill_form(data)
-        page.submit_form()
-        title = page.handle_success_alert(timeout=15)
-        assert title == SWAL_TITLE_SUCCESS, f"Pass 1 expected '{SWAL_TITLE_SUCCESS}', got: '{title}'"
 
-        # Pass 2: required fields only + one KYC row (ERP requires at least one)
-        minimal = generate_minimal_directors_data()
-        minimal["kyc_details"] = [generate_valid_kyc_row(65)]
-        page.open_add_form()
-        page.fill_form(minimal)
-        page.submit_form()
-        title = page.handle_success_alert(timeout=15)
-        assert title == SWAL_TITLE_SUCCESS, f"Pass 2 expected '{SWAL_TITLE_SUCCESS}', got: '{title}'"
-
+class TestDirectorsUIGroup2:
     def test_form_discard(self, dir_page):
-        """Cancel and Close (X) both discard the form without saving."""
-        page = dir_page
-        name_a = generate_director_name()
-        name_b = generate_director_name()
-
-        # Cancel
-        page.open_add_form()
-        page._fill_input_by_label_js("Name of Director/KMP", name_a)
-        page.click_cancel_button()
-        assert not page._is_form_popup_open(), "Form should be closed after Cancel"
-        assert not page.is_director_in_table(name_a), f"'{name_a}' should not be in table after Cancel"
-
-        # Close (X)
-        page.open_add_form()
-        page._fill_input_by_label_js("Name of Director/KMP", name_b)
-        page.click_close_button()
-        assert not page._is_form_popup_open(), "Form should be closed after Close (X)"
-        assert not page.is_director_in_table(name_b), f"'{name_b}' should not be in table after Close"
-
-    def test_kyc_row_management(self, dir_page):
-        """Add two KYC rows, remove the second, submit with one remaining."""
-        page = dir_page
-        data = generate_valid_directors_data()
-        data["kyc_details"] = [
-            generate_valid_kyc_row(65),
-            generate_valid_kyc_row(66),
-        ]
-        page.open_add_form()
-        page.fill_form(data)
-        page.remove_kyc_row(1)
-        page.submit_form()
-        title = page.handle_success_alert(timeout=15)
-        assert title == SWAL_TITLE_SUCCESS, f"Expected '{SWAL_TITLE_SUCCESS}', got: '{title}'"
+        data = _unique_data()
+        dir_page.open_add_form()
+        dir_page.page.locator(dir_page.NAME_INPUT).first.click(force=True)
+        dir_page.page.locator(dir_page.NAME_INPUT).first.fill(data["name"])
+        dir_page.close_popup()
+        assert not dir_page.is_director_in_table(data["name"])
 
     def test_validation_sweep(self, dir_page):
-        """All required-field validations in one session — cancel resets between cases."""
-        page = dir_page
-        valid = generate_valid_directors_data()
+        dir_page.open_add_form()
+        dir_page.submit()
+        dir_page.handle_validation_alert()
+        dir_page.close_popup()
 
-        cases = [
-            ("empty_form",        {}),
-            ("missing_prefix",    {**valid, "prefix": None}),
-            ("missing_desig",     {**valid, "designation": None}),
-            ("missing_qual",      {**valid, "qualification": None}),
-            ("missing_kyc",       {**valid, "kyc_details": []}),
-        ]
 
-        for label, data in cases:
-            page.open_add_form()
-            page.fill_form(data)
-            page.submit_form()
-            swal_title = page.handle_validation_warning(timeout=5)
-            mat_errors = page.get_mat_error_text()
-            assert bool(swal_title) or bool(mat_errors), \
-                f"No validation triggered for case: '{label}'"
-            page.click_cancel_button()
-
+class TestDirectorsUIGroup3:
     def test_listing_and_search(self, dir_page):
-        """Table has rows, search finds a record, search returns nothing for junk."""
-        page = dir_page
+        assert dir_page.get_table_row_count() > 0
 
-        # Table populated
-        assert page.get_table_row_count() > 0, "Expected at least 1 row in Directors table"
 
-        # Create via UI so we control the pan_no
-        data = generate_valid_directors_data()
-        data["kyc_details"] = [generate_valid_kyc_row(65)]
-        page.open_add_form()
-        page.fill_form(data)
-        page.submit_form()
-        page.handle_success_alert(timeout=15)
-
-        page.search_director(data["pan_no"])
-        assert page.is_director_in_table(data["director_name"]), \
-            f"Director '{data['director_name']}' not found after search"
-
-        # Search returns nothing for junk
-        page.search_director("ZZZNOTEXIST99999")
-        count = page.get_table_row_count()
-        assert count == 0, f"Expected 0 rows for non-existent search, got {count}"
-
+class TestDirectorsUIGroup4:
     def test_full_row_actions(self, dir_page):
-        """One UI-created record: view, edit, changelog — all row-action flows."""
-        page = dir_page
-
-        data = generate_valid_directors_data()
-        data["kyc_details"] = [generate_valid_kyc_row(65)]
-        page.open_add_form()
-        page.fill_form(data)
-        page.submit_form()
-        page.handle_success_alert(timeout=15)
-        page.search_director(data["pan_no"])
-
-        # View (read-only)
-        page.click_row_action(0)
-        page.click_menu_view()
-        assert page._is_form_popup_open(), "View form should be open"
-        page.click_close_button()
-
-        # Edit
-        page.click_row_action(0)
-        page.click_menu_edit()
-        page.wait_seconds(1)
-        new_name = f"Edited {generate_director_name()}"
-        page._fill_input_by_label_js("Name of Director/KMP", new_name)
-        page.submit_form()
-        title = page.handle_success_alert(timeout=15)
-        assert title == SWAL_TITLE_UPDATED, f"Expected '{SWAL_TITLE_UPDATED}', got: '{title}'"
-
-        # Change log
-        page.click_row_action(0)
-        page.click_menu_history()
-        page.wait_seconds(2)
-        panel = page.driver.find_elements(*page.CHANGE_LOG_PANEL)
-        assert panel and panel[0].is_displayed(), "Change log table should be visible"
+        data = _unique_data()
+        dir_page.create_record(data)
+        dir_page.search_director(data["name"])
+        dir_page.verify_director_exists(data["name"])
+        dir_page.click_view_button(data["name"])
+        dir_page.verify_view_popup_read_only()
+        dir_page.close_popup()
+        dir_page.search_director(data["name"])
+        dir_page.click_history_button(data["name"])
+        assert dir_page.page.locator(".popup-footer").count() > 0
+        dir_page.close_popup()

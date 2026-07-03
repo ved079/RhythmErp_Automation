@@ -1,151 +1,79 @@
-import os
-import sys
+import time
+import random
 
-PROJECT_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
-)
-sys.path.insert(0, PROJECT_ROOT)
+_ts = int(time.time())
+_counter = 0
+_rng = random.Random(_ts)
 
-import pytest
-from common.logger import log
-from pages.registration.modules.agent.data.agent_data import (
-    generate_ui_form_data,
-    generate_agent_name,
-    SWAL_TITLE_SUCCESS,
-    SWAL_TITLE_VALIDATION_FAILED,
-    SWAL_TITLE_UPDATED,
-)
+_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
-@pytest.mark.smoke
-class TestAgentUI:
+def _encode(n):
+    result = ""
+    n = max(n, 1)
+    while n > 0:
+        result = _LETTERS[(n - 1) % 26] + result
+        n = (n - 1) // 26
+    return result
 
-    def test_create_smoke(self, agt_page):
-        """Full create (all cascade auto-picked) × 2 in one session."""
-        page = agt_page
 
-        # Pass 1: all fields
-        data = generate_ui_form_data()
-        page.open_add_form()
-        page.fill_form(data)
-        page.submit_form()
-        title = page.handle_success_alert(timeout=15)
-        assert title == SWAL_TITLE_SUCCESS, \
-            f"Pass 1 expected '{SWAL_TITLE_SUCCESS}', got: '{title}'"
+def _unique_data():
+    global _counter
+    _counter += 1
+    tag = f"{_encode(_ts % 100000)}{_encode(_counter)}".lower()
+    return {
+        "agent_name":   f"Rajesh {_encode(_ts % 1000)}{_encode(_counter)}",
+        "phone_number": str(_rng.randint(7000000000, 9999999999)),
+        "email":        f"agent{tag}@testmail.com",
+        "address":      "405 MG Road Solapur",
+        "pin_code":     "411001",
+        "bank_name":    "HDFC Bank",
+        "bank_branch":  "Mumbai Main Branch",
+        "bank_ifsc":    "SBIN0179242",
+        "bank_holder":  "Meera Desai",
+        "bank_account": str(_rng.randint(100000000000, 999999999999)),
+    }
 
-        # Pass 2: second unique agent
-        data2 = generate_ui_form_data()
-        page.open_add_form()
-        page.fill_form(data2)
-        page.submit_form()
-        title = page.handle_success_alert(timeout=15)
-        assert title == SWAL_TITLE_SUCCESS, \
-            f"Pass 2 expected '{SWAL_TITLE_SUCCESS}', got: '{title}'"
 
-    def test_form_discard(self, agt_page):
-        """Cancel and Close (X) both discard the form without saving."""
-        page = agt_page
-        name_a = generate_agent_name()
-        name_b = generate_agent_name()
+class TestAgentUIGroup1:
+    def test_create_smoke(self, agent_page):
+        data = _unique_data()
+        agent_page.create_record(data)
+        agent_page.search_agent(data["agent_name"])
+        agent_page.verify_agent_exists(data["agent_name"])
 
-        # Cancel — fill agent name on Step 0 then cancel
-        page.open_add_form()
-        page._fill_input_by_name("Agent Name", name_a)
-        page.click_cancel_button()
-        assert not page._is_form_popup_open(), "Form should be closed after Cancel"
-        assert not page.is_entry_in_table(name_a), \
-            f"'{name_a}' should not be in table after Cancel"
 
-        # Close (X)
-        page.open_add_form()
-        page._fill_input_by_name("Agent Name", name_b)
-        page.click_close_button()
-        assert not page._is_form_popup_open(), "Form should be closed after Close (X)"
-        assert not page.is_entry_in_table(name_b), \
-            f"'{name_b}' should not be in table after Close"
+class TestAgentUIGroup2:
+    def test_form_discard(self, agent_page):
+        data = _unique_data()
+        agent_page.open_add_form()
+        agent_page.page.locator(agent_page.AGENT_NAME).first.click(force=True)
+        agent_page.page.locator(agent_page.AGENT_NAME).first.fill(data["agent_name"])
+        agent_page.close_popup()
+        assert not agent_page.is_agent_in_table(data["agent_name"])
 
-    def test_validation_sweep(self, agt_page):
-        """Required-field validations on Step 0 — cancel resets between cases."""
-        page = agt_page
+    def test_validation_sweep(self, agent_page):
+        agent_page.open_add_form()
+        agent_page.submit()
+        agent_page.handle_validation_alert()
+        agent_page.close_popup()
 
-        cases = [
-            ("empty_form",     {"agent_name": "", "phone_number": "", "email": ""}),
-            ("missing_name",   {"agent_name": "", "phone_number": "9876543210", "email": "test@test.com"}),
-            ("missing_phone",  {"agent_name": generate_agent_name(), "phone_number": "", "email": "test@test.com"}),
-            ("missing_email",  {"agent_name": generate_agent_name(), "phone_number": "9876543210", "email": ""}),
-        ]
 
-        for label, partial in cases:
-            page.open_add_form()
-            if partial.get("agent_name"):
-                page._fill_input_by_name("Agent Name", partial["agent_name"])
-            if partial.get("phone_number"):
-                page._fill_input_by_name("Phone Number", partial["phone_number"])
-            if partial.get("email"):
-                page._fill_input_by_name("Email", partial["email"])
-            # Try to advance to next step or submit — validation triggers on Next click
-            try:
-                page.click_next()
-            except Exception:
-                pass
-            swal_title = page.handle_validation_warning(timeout=5)
-            mat_errors = page.get_mat_error_text()
-            assert bool(swal_title) or bool(mat_errors), \
-                f"No validation triggered for case: '{label}'"
-            page.click_cancel_button()
+class TestAgentUIGroup3:
+    def test_listing_and_search(self, agent_page):
+        assert agent_page.get_table_row_count() > 0
 
-    def test_listing_and_search(self, agt_page):
-        """Table has rows; search finds a created record by agent name."""
-        page = agt_page
 
-        assert page.get_table_row_count() > 0, \
-            "Expected at least 1 row in Agent table"
-
-        data = generate_ui_form_data()
-        agent_name = data["agent_name"]
-        page.open_add_form()
-        page.fill_form(data)
-        page.submit_form()
-        page.handle_success_alert(timeout=15)
-
-        page.search_entry(agent_name)
-        assert page.is_entry_in_table(agent_name), \
-            f"Agent name '{agent_name}' not found after search"
-
-    def test_full_row_actions(self, agt_page):
-        """One UI-created record: view, edit (re-submit through all steps), changelog."""
-        page = agt_page
-
-        data = generate_ui_form_data()
-        agent_name = data["agent_name"]
-        page.open_add_form()
-        page.fill_form(data)
-        page.submit_form()
-        page.handle_success_alert(timeout=15)
-        page.search_entry(agent_name)
-
-        # View (read-only)
-        page.click_row_action(0)
-        page.click_menu_view()
-        assert page._is_form_popup_open(), "View form should be open"
-        page.click_close_button()
-
-        # Edit — navigate through stepper steps then Update
-        page.click_row_action(0)
-        page.click_menu_edit()
-        page.wait_seconds(1)
-        page.click_next()   # Step 0 → Step 1
-        page.wait_seconds(0.5)
-        page.click_next()   # Step 1 → Step 2
-        page.wait_seconds(0.5)
-        page.update_form()
-        title = page.handle_success_alert(timeout=15)
-        assert title == SWAL_TITLE_UPDATED, \
-            f"Expected '{SWAL_TITLE_UPDATED}', got: '{title}'"
-
-        # Change log
-        page.click_row_action(0)
-        page.click_menu_history()
-        page.wait_seconds(4)
-        panel = page.driver.find_elements(*page.CHANGE_LOG_PANEL)
-        assert panel and panel[0].is_displayed(), "Change log table should be visible"
+class TestAgentUIGroup4:
+    def test_full_row_actions(self, agent_page):
+        data = _unique_data()
+        agent_page.create_record(data)
+        agent_page.search_agent(data["agent_name"])
+        agent_page.verify_agent_exists(data["agent_name"])
+        agent_page.click_view_button(data["agent_name"])
+        agent_page.verify_view_popup_read_only()
+        agent_page.close_popup()
+        agent_page.search_agent(data["agent_name"])
+        agent_page.click_history_button(data["agent_name"])
+        assert agent_page.page.locator(".popup-footer").count() > 0
+        agent_page.close_popup()

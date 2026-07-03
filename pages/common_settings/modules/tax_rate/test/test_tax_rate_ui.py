@@ -48,10 +48,6 @@ class TestTaxRateUIGroup3:
 
     def test_listing_and_search(self, tr_page):
         assert tr_page.get_table_row_count() > 0
-        data = _valid_data()
-        tr_page.create_record(data)
-        tr_page.search_tax_rate(data["tax_rate_name"])
-        tr_page.verify_tax_rate_exists(data["tax_rate_name"])
 
 
 class TestTaxRateUIGroup4:

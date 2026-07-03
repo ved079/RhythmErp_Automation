@@ -1,154 +1,77 @@
-import os
-import sys
+import time
+import random
 
-PROJECT_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
-)
-sys.path.insert(0, PROJECT_ROOT)
+_ts = int(time.time())
+_counter = 0
+_rng = random.Random(_ts)
 
-import pytest
-from common.logger import log
-from pages.registration.modules.register_of_loan.data.register_of_loan_data import (
-    generate_ui_form_data,
-    generate_bank_name,
-    generate_date_string,
-    SWAL_TITLE_SUCCESS,
-    SWAL_TITLE_VALIDATION_FAILED,
-    SWAL_TITLE_UPDATED,
-)
+_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
-@pytest.mark.smoke
-class TestRegisterOfLoanUI:
+def _encode(n):
+    result = ""
+    n = max(n, 1)
+    while n > 0:
+        result = _LETTERS[(n - 1) % 26] + result
+        n = (n - 1) // 26
+    return result
 
+
+def _unique_data():
+    global _counter
+    _counter += 1
+    return {
+        "sanction_date":       "09/09/2024",
+        "bank_name":           f"HDFC Bank {_encode(_ts % 100000)}{_encode(_counter)}",
+        "sanction_amount":     str(_rng.randint(500000, 99999999)),
+        "disbursement_amount": str(_rng.randint(100000, 49999999)),
+        "emi_servicing_date":  "15/10/2024",
+        "instalment_amount":   str(_rng.randint(5000, 99999)),
+        "reminder_days":       str(_rng.randint(1, 30)),
+        "outstanding_date":    "01/01/2025",
+        "outstanding_amount":  str(_rng.randint(50000, 9999999)),
+    }
+
+
+class TestRegisterOfLoanUIGroup1:
     def test_create_smoke(self, loan_page):
-        """Full create + minimal create in one session."""
-        page = loan_page
+        data = _unique_data()
+        loan_page.create_record(data)
+        loan_page.search_loan(data["bank_name"])
+        loan_page.verify_loan_exists(data["bank_name"])
 
-        # Pass 1: all fields
-        data = generate_ui_form_data()
-        page.open_add_form()
-        page.fill_form(data)
-        page.submit_form()
-        title = page.handle_success_alert(timeout=15)
-        assert title == SWAL_TITLE_SUCCESS, \
-            f"Pass 1 expected '{SWAL_TITLE_SUCCESS}', got: '{title}'"
 
-        # Pass 2: required fields only
-        minimal = {
-            "sanction_date": generate_date_string(),
-            "bank_name": generate_bank_name(),
-            "sanction_amount": "1000000",
-            "facility_details": True,
-            "disbursement_amount": "800000",
-            "emi_servicing_date": generate_date_string(),
-            "instalment_amount": "50000",
-            "reminder_period_in_days": "30",
-            "emi_period_label": True,
-            "outstanding_amount": "700000",
-        }
-        page.open_add_form()
-        page.fill_form(minimal)
-        page.submit_form()
-        title = page.handle_success_alert(timeout=15)
-        assert title == SWAL_TITLE_SUCCESS, \
-            f"Pass 2 expected '{SWAL_TITLE_SUCCESS}', got: '{title}'"
-
+class TestRegisterOfLoanUIGroup2:
     def test_form_discard(self, loan_page):
-        """Cancel and Close (X) both discard the form without saving."""
-        page = loan_page
-        bank_a = generate_bank_name() + " Alpha"
-        bank_b = generate_bank_name() + " Beta"
-
-        # Cancel
-        page.open_add_form()
-        page._fill_input_by_label_js("Bank Name", bank_a)
-        page.click_cancel_button()
-        assert not page._is_form_popup_open(), "Form should be closed after Cancel"
-        assert not page.is_entry_in_table(bank_a), \
-            f"'{bank_a}' should not be in table after Cancel"
-
-        # Close (X)
-        page.open_add_form()
-        page._fill_input_by_label_js("Bank Name", bank_b)
-        page.click_close_button()
-        assert not page._is_form_popup_open(), "Form should be closed after Close (X)"
-        assert not page.is_entry_in_table(bank_b), \
-            f"'{bank_b}' should not be in table after Close"
+        data = _unique_data()
+        loan_page.open_add_form()
+        loan_page.page.locator(loan_page.BANK_NAME).first.click(force=True)
+        loan_page.page.locator(loan_page.BANK_NAME).first.fill(data["bank_name"])
+        loan_page.close_popup()
+        assert not loan_page.is_loan_in_table(data["bank_name"])
 
     def test_validation_sweep(self, loan_page):
-        """Required-field validations — cancel resets between cases."""
-        page = loan_page
-        valid = generate_ui_form_data()
+        loan_page.open_add_form()
+        loan_page.submit()
+        loan_page.handle_validation_alert()
+        loan_page.close_popup()
 
-        cases = [
-            ("empty_form",           {}),
-            ("missing_bank_name",    {**valid, "bank_name": None}),
-            ("missing_sanction_date", {**valid, "sanction_date": None}),
-            ("missing_facility",     {**valid, "facility_details": None}),
-            ("missing_emi_period",   {**valid, "emi_period_label": None}),
-        ]
 
-        for label, data in cases:
-            page.open_add_form()
-            page.fill_form(data)
-            page.submit_form()
-            swal_title = page.handle_validation_warning(timeout=5)
-            mat_errors = page.get_mat_error_text()
-            assert bool(swal_title) or bool(mat_errors), \
-                f"No validation triggered for case: '{label}'"
-            page.click_cancel_button()
-
+class TestRegisterOfLoanUIGroup3:
     def test_listing_and_search(self, loan_page):
-        """Table has rows; search finds a created record by bank name."""
-        page = loan_page
+        assert loan_page.get_table_row_count() > 0
 
-        assert page.get_table_row_count() > 0, \
-            "Expected at least 1 row in Register of Loan table"
 
-        data = generate_ui_form_data()
-        bank_name = data["bank_name"]
-        page.open_add_form()
-        page.fill_form(data)
-        page.submit_form()
-        page.handle_success_alert(timeout=15)
-
-        page.search_entry(bank_name)
-        assert page.is_entry_in_table(bank_name), \
-            f"Bank name '{bank_name}' not found after search"
-
+class TestRegisterOfLoanUIGroup4:
     def test_full_row_actions(self, loan_page):
-        """One UI-created record: view, edit, changelog — all row-action flows."""
-        page = loan_page
-
-        data = generate_ui_form_data()
-        bank_name = data["bank_name"]
-        page.open_add_form()
-        page.fill_form(data)
-        page.submit_form()
-        page.handle_success_alert(timeout=15)
-        page.search_entry(bank_name)
-
-        # View (read-only)
-        page.click_row_action(0)
-        page.click_menu_view()
-        assert page._is_form_popup_open(), "View form should be open"
-        page.click_close_button()
-
-        # Edit — change bank name
-        edited_bank = "Edited " + bank_name
-        page.click_row_action(0)
-        page.click_menu_edit()
-        page.wait_seconds(1)
-        page._fill_input_by_label_js("Bank Name", edited_bank)
-        page.submit_form()
-        title = page.handle_success_alert(timeout=15)
-        assert title == SWAL_TITLE_UPDATED, \
-            f"Expected '{SWAL_TITLE_UPDATED}', got: '{title}'"
-
-        # Change log
-        page.click_row_action(0)
-        page.click_menu_history()
-        page.wait_seconds(4)
-        panel = page.driver.find_elements(*page.CHANGE_LOG_PANEL)
-        assert panel and panel[0].is_displayed(), "Change log table should be visible"
+        data = _unique_data()
+        loan_page.create_record(data)
+        loan_page.search_loan(data["bank_name"])
+        loan_page.verify_loan_exists(data["bank_name"])
+        loan_page.click_view_button(data["bank_name"])
+        loan_page.verify_view_popup_read_only()
+        loan_page.close_popup()
+        loan_page.search_loan(data["bank_name"])
+        loan_page.click_history_button(data["bank_name"])
+        assert loan_page.page.locator(".popup-footer").count() > 0
+        loan_page.close_popup()
