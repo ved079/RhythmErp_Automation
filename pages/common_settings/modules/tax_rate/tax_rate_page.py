@@ -163,7 +163,9 @@ class TaxRatePage(BasePlaywrightPage):
         self.page.wait_for_timeout(300)
         save_btns = self.page.locator("xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Save')]")
         save_btns.first.click()
-        self.page.wait_for_timeout(1500)
+        # Wait for sub-popup to actually close before returning
+        save_btns.first.wait_for(state="hidden", timeout=8000)
+        self.page.wait_for_timeout(500)
 
     def create_record(self, data):
         self.open_add_form()
@@ -172,7 +174,7 @@ class TaxRatePage(BasePlaywrightPage):
         self.fill_sub_table_row()
         self.submit()
         self.handle_success_alert()
-        self.page.wait_for_selector("table#excel-table", timeout=8000)
+        self.navigate_to_page()
 
     def go_to_first_page(self):
         try:

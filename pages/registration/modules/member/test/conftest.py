@@ -1,109 +1,53 @@
-"""
-conftest.py — Member Screen (RhythmERP)
-"""
-
 import os
-import sys
-import logging
 import pytest
+from playwright.sync_api import sync_playwright
+from pages.registration.modules.member.member_page import MemberPage
 
-PROJECT_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
-)
-sys.path.insert(0, PROJECT_ROOT)
-
-from common.logger import log
-from common.browser_utils import get_driver
-from pages.login_screens.Login_Screens_.login_page import LoginPage
-from common.screenshot_broadcast import (
-    start as start_screenshot_broadcast,
-    stop as stop_screenshot_broadcast,
-)
-from config import RHYTHMERP_LOGIN_URL, RHYTHMERP_EMAIL, RHYTHMERP_PASSWORD
-
-
-# ================================================================
-# LOGIN CREDENTIALS — Member Screen (from config.py / .env)
-# ================================================================
-MB_LOGIN_EMAIL = RHYTHMERP_EMAIL
-MB_LOGIN_PASSWORD = RHYTHMERP_PASSWORD
-
-
-# ================================================================
-# FIXTURES
-# ================================================================
+RHYTHMERP_LOGIN_URL = os.environ.get("RHYTHMERP_LOGIN_URL", "https://rhythmerp.algorhythms.in")
+RHYTHMERP_EMAIL = os.environ.get("RHYTHMERP_EMAIL", "")
+RHYTHMERP_PASSWORD = os.environ.get("RHYTHMERP_PASSWORD", "")
 
 
 @pytest.fixture(scope="session")
-def driver():
-    log.separator()
-    log.info("LAUNCHING BROWSER (RhythmERP - Member Tests)...")
-    log.separator()
-    drv = get_driver()
-    drv.maximize_window()
-    yield drv
-    log.separator()
-    log.info("CLOSING BROWSER...")
-    log.separator()
+def playwright_instance():
+    with sync_playwright() as p:
+        yield p
+
+
+@pytest.fixture(scope="class")
+def browser(playwright_instance):
+    b = playwright_instance.chromium.launch(headless=True)
+    yield b
+    b.close()
+
+
+@pytest.fixture(scope="class")
+def logged_in_page(browser):
+    page = browser.new_page()
+    page.goto(RHYTHMERP_LOGIN_URL)
+    page.wait_for_selector("input[name='Username']", timeout=15000)
+    page.fill("input[name='Username']", RHYTHMERP_EMAIL)
+    page.fill("input[name='Password']", RHYTHMERP_PASSWORD)
+    page.locator("button[type='submit']").click()
+    page.wait_for_timeout(1000)
     try:
-        drv.quit()
+        page.locator("button[type='submit']").click()
     except Exception:
         pass
-
-
-@pytest.fixture(scope="session")
-def logged_in_driver(driver):
-    """Driver with completed RhythmERP login session."""
-    log.separator()
-    log.info("LOGGING INTO RHYTHMERP...")
-    log.separator()
-
-    login_page = LoginPage(driver)
-
-    log.info("Navigating to: " + str(RHYTHMERP_LOGIN_URL))
-    driver.get(RHYTHMERP_LOGIN_URL)
-    login_page.wait_seconds(2)
-
-    log.step(1, "Entering email: " + str(MB_LOGIN_EMAIL))
-    login_page.enter_email(MB_LOGIN_EMAIL)
-
-    log.step(2, "Entering password")
-    login_page.enter_password(MB_LOGIN_PASSWORD)
-
-    login_page._dismiss_tenant_dropdown()
-
-    log.step(3, "Clicking Login button")
-    login_page.click_login()
-    login_page.wait_seconds(3)
-
-    login_page.wait_for_login_complete()
-    log.info("RhythmERP login successful!")
-    start_screenshot_broadcast(driver)
-
-    yield driver
-
-    stop_screenshot_broadcast()
+    page.wait_for_url(
+        lambda url: "signin" not in url.lower() and "authentication" not in url.lower(),
+        timeout=20000,
+    )
+    yield page
+    page.close()
 
 
 @pytest.fixture(scope="function")
-def mb_page(logged_in_driver):
-    """Member page object — fresh navigation for each test."""
-    from pages.registration.modules.member.member_page import MemberPage
-
-    page = MemberPage(logged_in_driver)
-    page.navigate_to_page()
-    yield page
+def mb_page(logged_in_page):
+    p = MemberPage(logged_in_page)
+    p.navigate_to_page()
+    yield p
     try:
-        page.force_close_form_popup()
+        p.force_close_popup()
     except Exception:
         pass
-
-
-# ================================================================
-# MARKER REGISTRATION
-# ================================================================
-
-
-def pytest_configure(config):
-    config.addinivalue_line("markers", "smoke: smoke tests")
-    config.addinivalue_line("markers", "bug: known bug tests")

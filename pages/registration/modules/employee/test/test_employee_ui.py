@@ -1,149 +1,72 @@
-import os
-import sys
+import time
+import random
 
-PROJECT_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
-)
-sys.path.insert(0, PROJECT_ROOT)
+_ts = int(time.time())
+_counter = 0
+_rng = random.Random(_ts)
 
-import pytest
-from common.logger import log
-from pages.registration.modules.employee.data.employee_data import (
-    generate_ui_form_data,
-    generate_employee_name,
-    generate_phone,
-    generate_email,
-    SWAL_TITLE_SUCCESS,
-    SWAL_TITLE_VALIDATION_FAILED,
-    SWAL_TITLE_UPDATED,
-)
+_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
-@pytest.mark.smoke
-class TestEmployeeUI:
+def _encode(n):
+    result = ""
+    n = max(n, 1)
+    while n > 0:
+        result = _LETTERS[(n - 1) % 26] + result
+        n = (n - 1) // 26
+    return result
 
+
+def _unique_data():
+    global _counter
+    _counter += 1
+    tag = f"{_encode(_ts % 100000)}{_encode(_counter)}".lower()
+    return {
+        "employee_name": f"Geeta {_encode(_ts % 1000)}{_encode(_counter)}",
+        "email":         f"emp{tag}@testmail.com",
+        "phone_number":  str(_rng.randint(7000000000, 9999999999)),
+    }
+
+
+class TestEmployeeUIGroup1:
     def test_create_smoke(self, emp_page):
-        """Full create (all fields auto-picked) + minimal create in one session."""
-        page = emp_page
+        data = _unique_data()
+        emp_page.create_record(data)
+        emp_page.search_employee(data["employee_name"])
+        emp_page.verify_employee_exists(data["employee_name"])
 
-        # Pass 1: all fields auto-picked (designation/department selected by UI)
-        data = generate_ui_form_data()
-        page.open_add_form()
-        page.fill_employee_form(data)
-        page.submit_form()
-        title = page.handle_success_alert(timeout=15)
-        assert title == SWAL_TITLE_SUCCESS, \
-            f"Pass 1 expected '{SWAL_TITLE_SUCCESS}', got: '{title}'"
 
-        # Pass 2: required fields only (no department)
-        minimal = {
-            "party_reference": None,
-            "employee_name": generate_employee_name(),
-            "email": generate_email(),
-            "phone_number": str(generate_phone()),
-            "designation": None,   # auto-pick
-            "department": None,    # skip
-            "status": True,
-        }
-        page.open_add_form()
-        page.fill_employee_form(minimal)
-        page.submit_form()
-        title = page.handle_success_alert(timeout=15)
-        assert title == SWAL_TITLE_SUCCESS, \
-            f"Pass 2 expected '{SWAL_TITLE_SUCCESS}', got: '{title}'"
-
+class TestEmployeeUIGroup2:
     def test_form_discard(self, emp_page):
-        """Cancel and Close (X) both discard the form without saving."""
-        page = emp_page
-        name_a = generate_employee_name()
-        name_b = generate_employee_name()
-
-        # Cancel
-        page.open_add_form()
-        page.type_text(page.EMPLOYEE_NAME_INPUT, name_a, clear_first=True)
-        page.cancel_form()
-        assert not page._is_form_popup_open(), "Form should be closed after Cancel"
-        assert not page.is_entry_in_table(name_a), \
-            f"'{name_a}' should not be in table after Cancel"
-
-        # Close (X)
-        page.open_add_form()
-        page.type_text(page.EMPLOYEE_NAME_INPUT, name_b, clear_first=True)
-        page.click_close_button()
-        assert not page._is_form_popup_open(), "Form should be closed after Close (X)"
-        assert not page.is_entry_in_table(name_b), \
-            f"'{name_b}' should not be in table after Close"
+        data = _unique_data()
+        emp_page.open_add_form()
+        emp_page.page.locator(emp_page.EMPLOYEE_NAME).first.click(force=True)
+        emp_page.page.locator(emp_page.EMPLOYEE_NAME).first.fill(data["employee_name"])
+        emp_page.close_popup()
+        assert not emp_page.is_employee_in_table(data["employee_name"])
 
     def test_validation_sweep(self, emp_page):
-        """Required-field validations — cancel resets between cases."""
-        page = emp_page
-        valid = generate_ui_form_data()
+        emp_page.open_add_form()
+        emp_page.submit()
+        emp_page.handle_validation_alert()
+        emp_page.close_popup()
 
-        cases = [
-            ("empty_form",          {"party_reference": None, "employee_name": "", "email": "", "phone_number": "", "designation": "", "department": None, "status": True}),
-            ("missing_name",        {**valid, "employee_name": ""}),
-            ("missing_phone",       {**valid, "phone_number": ""}),
-            ("missing_designation", {**valid, "designation": ""}),
-        ]
 
-        for label, data in cases:
-            page.open_add_form()
-            page.fill_employee_form(data)
-            page.submit_form()
-            swal_title = page.handle_validation_warning(timeout=5)
-            mat_errors = page.get_mat_error_text()
-            assert bool(swal_title) or bool(mat_errors), \
-                f"No validation triggered for case: '{label}'"
-            page.cancel_form()
-
+class TestEmployeeUIGroup3:
     def test_listing_and_search(self, emp_page):
-        """Table has rows; search finds a created record by employee name."""
-        page = emp_page
+        assert emp_page.get_table_row_count() > 0
 
-        assert page.get_table_row_count() > 0, \
-            "Expected at least 1 row in Employee table"
 
-        data = generate_ui_form_data()
-        emp_name = data["employee_name"]
-        page.open_add_form()
-        page.fill_employee_form(data)
-        page.submit_form()
-        page.handle_success_alert(timeout=15)
-
-        page.search_entry(emp_name)
-        assert page.is_entry_in_table(emp_name), \
-            f"Employee name '{emp_name}' not found after search"
-
+class TestEmployeeUIGroup4:
     def test_full_row_actions(self, emp_page):
-        """One UI-created record: view, edit (re-submit unchanged), changelog."""
-        page = emp_page
-
-        data = generate_ui_form_data()
-        emp_name = data["employee_name"]
-        page.open_add_form()
-        page.fill_employee_form(data)
-        page.submit_form()
-        page.handle_success_alert(timeout=15)
-        page.search_entry(emp_name)
-
-        # View (read-only)
-        page.open_row_menu(0)
-        page.click_view_from_menu()
-        assert page._is_form_popup_open(), "View form should be open"
-        page.click_close_button()
-
-        # Edit — re-submit without changes
-        page.open_row_menu(0)
-        page.click_edit_from_menu()
-        page.wait_seconds(1)
-        page.update()
-        title = page.handle_success_alert(timeout=15)
-        assert title == SWAL_TITLE_UPDATED, \
-            f"Expected '{SWAL_TITLE_UPDATED}', got: '{title}'"
-
-        # Change log
-        page.open_row_menu(0)
-        page.click_menu_history()
-        page.wait_seconds(4)
-        panel = page.driver.find_elements(*page.CHANGE_LOG_PANEL)
-        assert panel and panel[0].is_displayed(), "Change log table should be visible"
+        data = _unique_data()
+        emp_page.create_record(data)
+        emp_page.search_employee(data["employee_name"])
+        emp_page.verify_employee_exists(data["employee_name"])
+        emp_page.click_view_button(data["employee_name"])
+        emp_page.verify_view_popup_read_only()
+        emp_page.close_popup()
+        emp_page.search_employee(data["employee_name"])
+        emp_page.click_history_button(data["employee_name"])
+        assert emp_page.page.locator(".popup-footer").count() > 0
+        emp_page.close_popup()

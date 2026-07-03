@@ -1,1974 +1,284 @@
-"""
-agent_page.py
--------------
-Page Object Model for RhythmERP Agent screen.
-
-Location: Registration > Agent
-URL:      /#/dynamic-screens/Agent
-
-FORM LAYOUT (multi-step STEPPER popup):
-
-  Step 0 - Universal + Address Details (SAME PAGE, click "Next" to advance):
-    Universal fields:
-    - Agent Name             (text input,   required)
-    - Phone Number           (text input,   required)
-    - Email                  (text input,   required)
-
-    Address Details (on same page as Universal):
-    - Add Row button         (to add address rows)
-    For EACH row:
-    - Address Type           (mat-select,   required, searchable)
-    - Country                (mat-select,   required, searchable)
-    - State                  (mat-select,   required, searchable, dependent on Country)
-    - District               (mat-select,   required, searchable, dependent on State)
-    - Taluka                 (mat-select,   optional, searchable, dependent on District)
-    - Village                (mat-select,   optional, searchable)
-    - Address                (text input,   required)
-    - Pin Code               (text input,   required)
-    - GST                    (text input,   optional)
-
-  Step 1 - Payment Details (after clicking "Next" from Step 0):
-    - Payment Terms          (mat-select,   optional)
-    - Preferred Payment Method (mat-select, optional)
-
-  Step 2 - Bank Details (after clicking "Next" from Step 1):
-    - Add Row button         (to add bank rows)
-    For EACH row:
-    - Bank Name              (text input,   required)
-    - Branch                 (text input,   optional)
-    - IFSC Code              (text input,   required)
-    - Account Type           (mat-select,   required, searchable)
-    - Account Holder Name    (text input,   required)
-    - Account Number         (text input,   required)
-    - Bank Proof             (file upload,  required)
-    - Attachment             (file upload,  optional)
-
-  Submit (click "Submit" on the last step or footer)
-
-KEY RULES:
-  - Universal and Address Details are on the SAME page (Step 0)
-  - DO NOT click Next between Universal and Address — fill both, then click Next once
-  - Multi-step STEPPER form - must click "Next" / "Back" to navigate steps
-  - Angular Material UI - use execute_script for reading/writing input values
-  - Address and Bank Details are repeatable rows (add multiple)
-  - State depends on Country, District depends on State (cascading dropdowns)
-  - SweetAlert2 for success/validation popups
-"""
-
-import os
-import sys
-import time
-import random
-
-PROJECT_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
-)
-sys.path.insert(0, PROJECT_ROOT)
-
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import (
-    TimeoutException,
-    ElementClickInterceptedException,
-    StaleElementReferenceException,
-)
-
-from common.base_page import BasePage
-from common.logger import log
-from config import RHYTHMERP_BASE_URL, EXPLICIT_WAIT
-
-
-class AgentPage(BasePage):
-    PAGE_URL = f"{RHYTHMERP_BASE_URL}/#/dynamic-screens/Agent"
-
-    # ==============================================================
-    #  LOCATORS - Toolbar
-    # ==============================================================
-    ADD_BUTTON = ("css", "button.erp-add-btn")
-    SEARCH_TOGGLE = ("css", "button.search-btn, button[aria-label='Search']")
-    REFRESH_BUTTON = ("css", "button[mattooltip='Refresh']")
-    MORE_BUTTON = ("css", "button[mattooltip='More']")
-
-    # ==============================================================
-    #  LOCATORS - Search bar
-    # ==============================================================
-    SEARCH_INPUT = ("css", ".erp-search-wrapper input, input#erpSearchInput")
-    SEARCH_SUBMIT = ("css", "button.search-btn")
-
-    # ==============================================================
-    #  LOCATORS - Table (main listing)
-    # ==============================================================
-    TABLE = ("css", "table#excel-table")
-    TABLE_ROWS = ("css", "table#excel-table tbody tr")
-    NO_DATA_ROW = (
-        "css",
-        "table#excel-table tbody td.no-data, "
-        "table#excel-table tbody tr.mat-mdc-no-data-row",
-    )
-
-    # ==============================================================
-    #  LOCATORS - Form popup (stepper)
-    # ==============================================================
-    FORM_POPUP = (
-        "css",
-        ".edit_pop_up.override_edit_pop_up.popup-mode",
-    )
-    FORM_HEADING = (
-        "css",
-        ".edit_pop_up h3, .edit_pop_up.override_edit_pop_up.popup-mode h3",
-    )
-
-    # ==============================================================
-    #  LOCATORS - Stepper navigation
-    # ==============================================================
-    NEXT_BUTTON = (
-        "xpath",
-        "//div[@class='popup-footer']//button[contains(.,'Next')]",
-    )
-    BACK_BUTTON = (
-        "xpath",
-        "//div[@class='popup-footer']//button[contains(.,'Back')]",
-    )
-    SUBMIT_BUTTON = (
-        "xpath",
-        "//div[@class='popup-footer']//button[contains(.,'Submit')]",
-    )
-    UPDATE_BUTTON = (
-        "xpath",
-        "//div[@class='popup-footer']//button[contains(.,'Update')]",
-    )
-    CANCEL_BUTTON = (
-        "xpath",
-        "//div[@class='popup-footer']//button[contains(.,'Cancel')]",
-    )
-
-    # ==============================================================
-    #  LOCATORS - Stepper step indicators
-    # ==============================================================
-    STEPPER_STEPS = ("css", "mat-horizontal-stepper mat-step-header")
-    ACTIVE_STEP = ("css", "mat-horizontal-stepper mat-step-header[aria-selected='true']")
-
-    # ==============================================================
-    #  LOCATORS - SweetAlert2
-    # ==============================================================
-    SWAL_TITLE = ("css", "#swal2-title")
-    SWAL_HTML = ("css", ".swal2-html-container")
-    SWAL_CONFIRM = ("css", ".swal2-confirm")
-    SWAL_CANCEL = ("css", ".swal2-cancel")
-    SWAL_CONTAINER = ("css", ".swal2-container")
-
-    # ==============================================================
-    #  LOCATORS - Validation errors
-    # ==============================================================
-    MAT_ERROR = ("css", "mat-error, .mat-mdc-form-field-error")
-    FIELD_ERROR = (
-        "xpath",
-        "//mat-label[contains(.,'{field_label}')]"
-        "/ancestor::mat-form-field//mat-error",
-    )
-
-    # ==============================================================
-    #  LOCATORS - Dropdown overlay
-    # ==============================================================
-    DROPDOWN_PANEL = (
-        "css",
-        "div.cdk-overlay-pane mat-select-panel, div[role='listbox']",
-    )
-    DROPDOWN_OPTIONS = (
-        "css",
-        "div[role='listbox'] mat-option, div[role='listbox'] [role='option']",
-    )
-    DROPDOWN_SEARCH = (
-        "css",
-        "div[role='listbox'] input, .cdk-overlay-pane input[placeholder]",
-    )
-
-    # ==============================================================
-    #  LOCATORS - Pagination
-    # ==============================================================
-    PAGINATION_NEXT = ("css", "button[aria-label='Next page'], button.mat-mdc-paginator-navigation-next")
-    PAGINATION_PREV = ("css", "button[aria-label='Previous page'], button.mat-mdc-paginator-navigation-previous")
-
-    # ==============================================================
-    #  Navigation & page load
-    # ==============================================================
-
-    def navigate_to_page(self):
-        """Navigate to the Agent listing page."""
-        log.info("Navigating to Agent page...")
-        self.navigate_to(self.PAGE_URL)
-        self.driver.refresh()
-        self._wait_for_page_ready()
-
-    def _wait_for_page_ready(self):
-        """Wait until the Agent page is fully loaded."""
-        try:
-            WebDriverWait(self.driver, EXPLICIT_WAIT).until(
-                EC.visibility_of_element_located(
-                    (By.CSS_SELECTOR, "table#excel-table")
-                )
-            )
-            log.info("Agent table loaded")
-        except TimeoutException:
-            log.warning("Agent table not found, page may be empty")
-
-        try:
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, "ul.tbl-export-btn")
-                )
-            )
-            self.wait_seconds(1)
-            log.info("Agent toolbar ready")
-        except TimeoutException:
-            log.warning("Toolbar not found, ADD button may be delayed")
-            self.wait_seconds(3)
-
-    def is_page_loaded(self):
-        """Check if the Agent listing page has loaded."""
-        return self.is_displayed(self.TABLE, timeout=10)
-
-    # ==============================================================
-    #  Overlay cleanup - NEVER use Keys.ESCAPE
-    # ==============================================================
-
-    def _force_close_panels(self):
-        """Remove ALL select overlay panes from the DOM via JS.
-        Keeps dialog backdrop intact so form popups stay open.
-        """
-        self.driver.execute_script("""
-            document.querySelectorAll(
-                'div.cdk-overlay-backdrop:not(.cdk-overlay-dark-backdrop)'
-            ).forEach(function(el) { el.remove(); });
-            document.querySelectorAll(
-                'div.cdk-overlay-pane'
-            ).forEach(function(el) {
-                if (!el.querySelector('mat-dialog-container')) el.remove();
-            });
-        """)
-        self.wait_seconds(0.2)
-
-    def _close_dropdown_panel(self):
-        """Close any open dropdown overlay panel."""
-        self._force_close_panels()
-        self.wait_seconds(0.3)
-
-    # ==============================================================
-    #  Toolbar actions
-    # ==============================================================
-
-    def open_add_form(self):
-        """Click the ADD (+) button to open the create form.
-        Agent opens a multi-step stepper popup.
-        """
-        log.info("Clicking ADD Agent button...")
-        self._wait_for_toolbar()
-
-        # Strategy 1: button.erp-add-btn
-        try:
-            btn = self.driver.find_element(
-                By.CSS_SELECTOR, "button.erp-add-btn"
-            )
-            if btn.is_displayed():
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});"
-                    "arguments[0].click();",
-                    btn,
-                )
-                self.wait_seconds(1.5)
-                if self._is_form_popup_open():
-                    self._wait_for_form_content(timeout=5)
-                    log.info("ADD form opened via erp-add-btn")
-                    return
-        except Exception:
-            pass
-
-        # Strategy 2: Find mini-fab button with 'add' icon
-        try:
-            add_btns = self.driver.find_elements(
-                By.CSS_SELECTOR, "button.mat-mdc-mini-fab"
-            )
-            for btn in add_btns:
-                try:
-                    icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
-                    if icon.text.strip().lower() == "add" and btn.is_displayed():
-                        self.driver.execute_script(
-                            "arguments[0].scrollIntoView({block:'center'});"
-                            "arguments[0].click();",
-                            btn,
-                        )
-                        self.wait_seconds(1.5)
-                        if self._is_form_popup_open():
-                            self._wait_for_form_content(timeout=5)
-                            log.info("ADD form opened via mini-fab icon")
-                            return
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-        # Strategy 3: Button with 'Add Agent' text
-        try:
-            btns = self.driver.find_elements(By.TAG_NAME, "button")
-            for btn in btns:
-                try:
-                    if "Add Agent" in btn.text and btn.is_displayed():
-                        self.driver.execute_script(
-                            "arguments[0].scrollIntoView({block:'center'});"
-                            "arguments[0].click();",
-                            btn,
-                        )
-                        self.wait_seconds(1.5)
-                        if self._is_form_popup_open():
-                            self._wait_for_form_content(timeout=5)
-                            log.info("ADD form opened via text match")
-                            return
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-        # Strategy 4: BasePage click_with_retry
-        try:
-            self.click_with_retry(self.ADD_BUTTON)
-            self.wait_seconds(1.5)
-            if self._is_form_popup_open():
-                self._wait_for_form_content(timeout=5)
-                log.info("ADD form opened via click_with_retry")
-                return
-        except Exception:
-            pass
-
-        raise Exception("ADD Agent button not found or not clickable")
-
-    def _wait_for_toolbar(self):
-        """Wait for the toolbar and ADD button to be present and visible."""
-        for attempt in range(3):
-            try:
-                add_container = self.driver.find_elements(
-                    By.CSS_SELECTOR, "button.erp-add-btn"
-                )
-                if add_container and add_container[0].is_displayed():
-                    return
-            except Exception:
-                pass
-
-            try:
-                btns = self.driver.find_elements(By.TAG_NAME, "button")
-                for btn in btns:
-                    try:
-                        if "Add Agent" in btn.text and btn.is_displayed():
-                            return
-                    except Exception:
-                        continue
-            except Exception:
-                pass
-
-            log.info(f"Waiting for toolbar... attempt {attempt + 1}/3")
-            self.wait_seconds(2)
-
-        log.warning("Toolbar wait exhausted, ADD button may not be ready")
-
-    def _is_form_popup_open(self):
-        """Quick check if the Agent form popup is visible."""
-        try:
-            popups = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                ".edit_pop_up.override_edit_pop_up.popup-mode, "
-                "mat-dialog-container, "
-                "div.cdk-overlay-container div.popup-wrapper",
-            )
-            for p in popups:
-                try:
-                    if p.is_displayed():
-                        return True
-                except Exception:
-                    continue
-        except Exception:
-            pass
-        return False
-
-    def _wait_for_form_content(self, timeout=5):
-        """Wait for form content to render inside the popup."""
-        import time as _time
-        deadline = _time.time() + timeout
-        while _time.time() < deadline:
-            try:
-                elements = self.driver.find_elements(
-                    By.CSS_SELECTOR,
-                    ".edit_pop_up.override_edit_pop_up.popup-mode input, "
-                    ".edit_pop_up.override_edit_pop_up.popup-mode mat-select, "
-                    ".edit_pop_up.override_edit_pop_up.popup-mode .popup-footer button",
-                )
-                for el in elements:
-                    try:
-                        if el.is_displayed():
-                            return True
-                    except Exception:
-                        continue
-            except Exception:
-                pass
-            self.wait_seconds(0.5)
-
-        log.warning(f"Form content did not render within {timeout}s")
-        return False
-
-    def click_refresh(self):
-        """Click the Refresh button."""
-        log.info("Clicking Refresh button...")
-        try:
-            refresh_btns = self.driver.find_elements(
-                By.CSS_SELECTOR, "button.mat-mdc-mini-fab"
-            )
-            for btn in refresh_btns:
-                try:
-                    icon = btn.find_element(By.CSS_SELECTOR, "mat-icon")
-                    if icon.text.strip().lower() == "refresh" and btn.is_displayed():
-                        self.driver.execute_script("arguments[0].click();", btn)
-                        self.wait_seconds(2)
-                        log.info("Refresh clicked")
-                        return
-                except Exception:
-                    continue
-        except Exception:
-            pass
-        log.warning("Refresh button not found")
-
-    # ==============================================================
-    #  Stepper navigation
-    # ==============================================================
-
-    def click_next(self):
-        """Click the Next button on the current stepper step."""
-        log.info("Clicking Next button...")
-        next_btn = self.driver.find_element(By.CSS_SELECTOR, "button.mat-stepper-next")
-        self.driver.execute_script("arguments[0].click();", next_btn)
-        self.wait_seconds(2)
-        log.info("Next clicked")
-
-    def click_back(self):
-        """Click the Back button on the current stepper step."""
-        log.info("Clicking Back button...")
-        back_btn = self.driver.find_element(By.CSS_SELECTOR, "button.mat-stepper-previous")
-        self.driver.execute_script("arguments[0].click();", back_btn)
-        self.wait_seconds(2)
-        log.info("Back clicked")
-
-    def get_active_step_index(self):
-        """Get the current active stepper step index (0-based)."""
-        js = """
-            var steps = document.querySelectorAll(
-                'mat-horizontal-stepper mat-step-header'
-            );
-            for (var i = 0; i < steps.length; i++) {
-                if (steps[i].getAttribute('aria-selected') === 'true') {
-                    return i;
-                }
-            }
-            return -1;
-        """
-        return self.driver.execute_script(js)
-
-    def get_active_step_label(self):
-        """Get the label text of the current active stepper step."""
-        js = """
-            var steps = document.querySelectorAll(
-                'mat-horizontal-stepper mat-step-header'
-            );
-            for (var i = 0; i < steps.length; i++) {
-                if (steps[i].getAttribute('aria-selected') === 'true') {
-                    var label = steps[i].querySelector('.mat-step-label');
-                    return label ? label.textContent.trim() : '';
-                }
-            }
-            return '';
-        """
-        return self.driver.execute_script(js)
-
-    def navigate_to_step(self, step_index):
-        """Navigate to a specific stepper step by clicking the step header.
-        Returns True if step was changed, False otherwise.
-        """
-        js = f"""
-            var steps = document.querySelectorAll(
-                'mat-horizontal-stepper mat-step-header'
-            );
-            if (steps[{step_index}]) {{
-                steps[{step_index}].click();
-                return 'Clicked step ' + {step_index};
-            }}
-            return 'Step not found';
-        """
-        result = self.driver.execute_script(js)
-        self.wait_seconds(1)
-        log.info(f"Navigate to step {step_index}: {result}")
-        return "Clicked" in str(result)
-
-    # ==============================================================
-    #  Form filling - JS value-setter for Angular compatibility
-    # ==============================================================
-
-    def _fill_input_by_name(self, name_attr, value, row_index=None):
-        """Fill an input field by its name attribute using JS value-setter.
-
-        Args:
-            name_attr: The name attribute of the input.
-            value: Value to set.
-            row_index: Optional row index (0-based) for repeatable rows.
-        """
-        js = f"""
-            var popup = document.querySelector('.edit_pop_up.override_edit_pop_up.popup-mode')
-                     || document.querySelector('mat-dialog-container')
-                     || document.querySelector('.cdk-overlay-container')
-                     || document.body;
-            var inputs = popup.querySelectorAll('input[name="{name_attr}"]');
-            var idx = {row_index if row_index is not None else 0};
-            if (inputs[idx]) {{
-                var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype, 'value'
-                ).set;
-                nativeInputValueSetter.call(inputs[idx], arguments[0]);
-                inputs[idx].dispatchEvent(new Event('input', {{ bubbles: true }}));
-                inputs[idx].dispatchEvent(new Event('change', {{ bubbles: true }}));
-                return 'OK';
-            }}
-            return 'Not found: {name_attr} (idx=' + idx + ', total=' + inputs.length + ')';
-        """
-        result = self.driver.execute_script(js, str(value))
-        if "OK" not in str(result):
-            log.warning(f"Input not filled: {name_attr} - {result}")
-
-    def _fill_input_by_placeholder(self, placeholder_text, value):
-        """Fill an input field by its placeholder text using JS value-setter."""
-        js = f"""
-            var popup = document.querySelector(
-                '.edit_pop_up.override_edit_pop_up.popup-mode'
-            );
-            if (!popup) return 'No popup';
-            var inputs = popup.querySelectorAll('input');
-            for (var i = 0; i < inputs.length; i++) {{
-                if (inputs[i].placeholder && inputs[i].placeholder.trim() === '{placeholder_text}') {{
-                    var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                        window.HTMLInputElement.prototype, 'value'
-                    ).set;
-                    nativeInputValueSetter.call(inputs[i], arguments[0]);
-                    inputs[i].dispatchEvent(new Event('input', {{ bubbles: true }}));
-                    inputs[i].dispatchEvent(new Event('change', {{ bubbles: true }}));
-                    return 'OK';
-                }}
-            }}
-            return 'Not found: {placeholder_text}';
-        """
-        result = self.driver.execute_script(js, str(value))
-        if "OK" not in str(result):
-            log.warning(f"Input not filled by placeholder '{placeholder_text}': {result}")
-
-    def _clear_input_by_name(self, name_attr, row_index=None):
-        """Clear an input field by its name attribute using JS value-setter."""
-        self._fill_input_by_name(name_attr, "", row_index=row_index)
-
-    # ==============================================================
-    #  Dropdown selection - JS approach (Angular Material)
-    # ==============================================================
-
-    def _open_dropdown_by_label(self, label_text):
-        """Open a mat-select dropdown by finding its form-field label."""
-        js = f"""
-            var popup = document.querySelector(
-                '.edit_pop_up.override_edit_pop_up.popup-mode'
-            );
-            if (!popup) return 'No popup';
-            var formFields = popup.querySelectorAll('mat-form-field');
-            for (var i = 0; i < formFields.length; i++) {{
-                var label = formFields[i].querySelector('mat-label');
-                if (label && label.textContent.trim() === '{label_text}') {{
-                    var select = formFields[i].querySelector('mat-select');
-                    if (select) {{
-                        select.click();
-                        return 'Opened';
-                    }}
-                }}
-            }}
-            return 'Not found: {label_text}';
-        """
-        result = self.driver.execute_script(js)
-        self.wait_seconds(1.5)
-        if "Opened" in str(result):
-            return True
-        log.warning(f"Dropdown not opened: {label_text} - {result}")
-        return False
-
-    def _open_dropdown_by_placeholder(self, placeholder_text):
-        """Open a mat-select dropdown by finding its placeholder text."""
-        js = f"""
-            var popup = document.querySelector(
-                '.edit_pop_up.override_edit_pop_up.popup-mode'
-            );
-            if (!popup) return 'No popup';
-            var selects = popup.querySelectorAll('mat-select');
-            for (var i = 0; i < selects.length; i++) {{
-                var placeholder = selects[i].querySelector('.mat-select-placeholder, .mat-mdc-select-placeholder');
-                if (placeholder && placeholder.textContent.trim() === '{placeholder_text}') {{
-                    selects[i].click();
-                    return 'Opened';
-                }}
-            }}
-            var formFields = popup.querySelectorAll('mat-form-field');
-            for (var j = 0; j < formFields.length; j++) {{
-                var matSelect = formFields[j].querySelector('mat-select');
-                if (matSelect) {{
-                    var allPlaceholders = formFields[j].querySelectorAll('.mat-select-placeholder, .mat-mdc-select-placeholder, span');
-                    for (var k = 0; k < allPlaceholders.length; k++) {{
-                        if (allPlaceholders[k].textContent.trim() === '{placeholder_text}') {{
-                            matSelect.click();
-                            return 'Opened via span';
-                        }}
-                    }}
-                }}
-            }}
-            return 'Not found: {placeholder_text}';
-        """
-        result = self.driver.execute_script(js)
-        self.wait_seconds(1.5)
-        if "Opened" in str(result):
-            return True
-        log.warning(f"Dropdown not opened by placeholder '{placeholder_text}': {result}")
-        return False
-
-    def _select_option_by_text(self, option_text):
-        """Select a mat-option from the currently open dropdown panel."""
-        js = f"""
-            var options = document.querySelectorAll(
-                '.cdk-overlay-pane mat-option'
-            );
-            for (var i = 0; i < options.length; i++) {{
-                if (options[i].textContent.trim() === '{option_text}') {{
-                    options[i].click();
-                    return 'Selected';
-                }}
-            }}
-            var allOpts = document.querySelectorAll(
-                '.cdk-overlay-pane [role="option"]'
-            );
-            for (var i = 0; i < allOpts.length; i++) {{
-                if (allOpts[i].textContent.trim() === '{option_text}') {{
-                    allOpts[i].click();
-                    return 'Selected (role=option)';
-                }}
-            }}
-            return 'Not found: {option_text}';
-        """
-        result = self.driver.execute_script(js)
-        self.wait_seconds(1)
-        if "Selected" in str(result):
-            return True
-        log.warning(f"Option not selected: {option_text} - {result}")
-        return False
-
-    def _select_option_contains(self, partial_text):
-        """Select a mat-option whose text contains the given partial text."""
-        js = f"""
-            var options = document.querySelectorAll(
-                '.cdk-overlay-pane mat-option'
-            );
-            for (var i = 0; i < options.length; i++) {{
-                if (options[i].textContent.trim().indexOf('{partial_text}') > -1) {{
-                    options[i].click();
-                    return 'Selected: ' + options[i].textContent.trim();
-                }}
-            }}
-            return 'Not found containing: {partial_text}';
-        """
-        result = self.driver.execute_script(js)
-        self.wait_seconds(1)
-        if "Selected" in str(result):
-            return str(result).split("Selected: ")[1] if "Selected: " in str(result) else True
-        log.warning(f"Option not selected (contains '{partial_text}'): {result}")
-        return False
-
-    def _search_and_select_option(self, search_text, exact_match=False):
-        """Type search text in dropdown filter, then select the matching option."""
-        try:
-            search_input = self.driver.find_element(
-                By.CSS_SELECTOR,
-                ".cdk-overlay-pane input, .cdk-overlay-pane [role='combobox']"
-            )
-            if search_input.is_displayed():
-                search_input.clear()
-                search_input.send_keys(search_text)
-                self.wait_seconds(1.5)
-        except Exception:
-            pass
-
-        if exact_match:
-            return self._select_option_by_text(search_text)
-        else:
-            return self._select_option_contains(search_text)
-
-    def _get_dropdown_options(self):
-        """Get all option texts from the currently open dropdown panel."""
-        js = """
-            var options = document.querySelectorAll(
-                '.cdk-overlay-pane mat-option'
-            );
-            var texts = [];
-            for (var i = 0; i < options.length; i++) {
-                texts.push(options[i].textContent.trim());
-            }
-            return texts;
-        """
-        return self.driver.execute_script(js) or []
-
-    def select_dropdown_by_label(self, label_text, option_text, index=0):
-        """Select a mat-select dropdown by its <mat-label> text, then pick an option.
-
-        Works for app-dropdown-v2 components where the label is in <mat-label>
-        and there's no placeholder attribute on the mat-select. For searchable
-        dropdowns (with filter input), types the option text in the search field
-        first to filter, then selects the matching option.
-
-        Args:
-            label_text: The visible label text (e.g., "Country", "State")
-            option_text: The option to select (e.g., "India", "Maharashtra")
-            index: Which matching dropdown (0-based) if multiple have same label
-        """
-        log.info(f"Selecting dropdown by label '{label_text}': {option_text}")
-
-        # Find all mat-labels matching the text
-        labels = self.driver.find_elements(
-            By.XPATH, f"//mat-label[normalize-space()='{label_text}']"
+from pages.base_playwright_page import BasePlaywrightPage
+
+
+class AgentPage(BasePlaywrightPage):
+    URL = "https://rhythmerp.algorhythms.in/#/dynamic-screens/Agent/Agent"
+
+    # Step 1 — basic info
+    AGENT_NAME   = "xpath=//mat-form-field[.//mat-label[contains(.,'Agent Name')]]//input"
+    PHONE_NUMBER = "xpath=//mat-form-field[.//mat-label[contains(.,'Phone Number')]]//input"
+    EMAIL        = "xpath=//mat-form-field[.//mat-label[contains(.,'Email')]]//input"
+
+    # Step 3 — payment details
+    PAYMENT_TERMS            = "xpath=//mat-form-field[.//mat-label[contains(.,'Payment Terms')]]//mat-select"
+    PREFERRED_PAYMENT_METHOD = "xpath=//mat-form-field[.//mat-label[contains(.,'Preferred Payment Method')]]//mat-select"
+
+    # Grid row selector (pre-existing clickable rows)
+    GRID_ROW = "xpath=//tbody/tr[contains(@mattooltip,'Click to edit row details')]"
+
+    # Address popup fields (open by clicking address grid row)
+    ADDR_COUNTRY      = "xpath=//mat-form-field[.//mat-label[contains(.,'Country')]]//mat-select"
+    ADDR_STATE        = "xpath=//mat-form-field[.//mat-label[contains(.,'State')]]//mat-select"
+    ADDR_DISTRICT     = "xpath=//mat-form-field[.//mat-label[contains(.,'District')]]//mat-select"
+    ADDR_TALUKA       = "xpath=//mat-form-field[.//mat-label[contains(.,'Taluka')]]//mat-select"
+    ADDR_VILLAGE      = "xpath=//mat-form-field[.//mat-label[contains(.,'Village')]]//mat-select"
+    ADDR_ADDRESS      = "xpath=//mat-form-field[.//mat-label[contains(.,'Address')]]//input"
+    ADDR_PIN_CODE     = "xpath=//mat-form-field[.//mat-label[contains(.,'Pin Code')]]//mat-select"
+    SAME_AS_ABOVE     = "xpath=//mat-checkbox[.//*[contains(.,'Same as Above')]]"
+
+    # Bank popup fields (open by clicking bank grid row)
+    BANK_NAME_INPUT    = "xpath=//mat-form-field[.//mat-label[normalize-space(.)='Bank Name']]//input"
+    BANK_BRANCH        = "xpath=//mat-form-field[.//mat-label[contains(.,'Branch')]]//input"
+    BANK_IFSC          = "xpath=//mat-form-field[.//mat-label[contains(.,'IFSC Code')]]//input"
+    BANK_ACCOUNT_TYPE  = "xpath=//mat-form-field[.//mat-label[contains(.,'Account Type')]]//mat-select"
+    BANK_HOLDER_NAME   = "xpath=//mat-form-field[.//mat-label[contains(.,'Account Holder Name')]]//input"
+    BANK_ACCOUNT_NO    = "xpath=//mat-form-field[.//mat-label[contains(.,'Account Number')]]//input"
+    BANK_PROOF         = "xpath=//mat-form-field[.//mat-label[contains(.,'Bank Proof')]]//mat-select"
+
+    SAVE_BTN   = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Save')]"
+    SUBMIT_BTN = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
+    CANCEL_BTN = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
+    NEXT_BTN   = "xpath=//div[contains(@class,'step-shell-footer')]//button[contains(.,'Next')]"
+    SEARCH_INPUT = "#erpSearchInput"
+
+    def _clear_overlays(self):
+        self.page.evaluate(
+            "document.querySelectorAll('.cdk-overlay-backdrop').forEach(el => el.remove())"
         )
 
-        if len(labels) <= index:
-            log.warning(
-                f"[WARNING] Label '{label_text}' not found "
-                f"(found {len(labels)}, index={index})"
-            )
-            return False
+    def _select_mat_option(self, selector):
+        sel = self.page.locator(selector)
+        sel.wait_for(state="visible", timeout=5000)
+        sel.click(force=True)
+        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
+        self.page.locator(".mat-mdc-select-panel mat-option").first.wait_for(state="visible", timeout=3000)
+        self.page.evaluate("document.querySelector('.mat-mdc-select-panel mat-option')?.click()")
+        self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=5000)
+        self.page.wait_for_timeout(300)
 
-        # Get the specific label, walk up to mat-form-field, then find mat-select inside
-        label_el = labels[index]
-        form_field = label_el.find_element(By.XPATH, "./ancestor::mat-form-field")
-        mat_select = form_field.find_element(By.CSS_SELECTOR, "mat-select")
-
-        # Click to open the dropdown
-        self.driver.execute_script("arguments[0].click();", mat_select)
-        self.wait_seconds(1)
-
-        # STRATEGY 1: Use the search/filter input inside the dropdown overlay
-        # Searchable Angular Material dropdowns have an <input> for filtering
-        search_used = False
-        try:
-            search_inputs = self.driver.find_elements(
-                By.CSS_SELECTOR, ".cdk-overlay-pane input"
-            )
-            for si in search_inputs:
-                try:
-                    if si.is_displayed():
-                        si.clear()
-                        si.send_keys(option_text)
-                        self.wait_seconds(1.5)
-                        search_used = True
-                        log.info(
-                            f"Typed '{option_text}' in dropdown search input"
-                        )
-                        break
-                except Exception:
-                    continue
-        except Exception:
-            pass
-
-        # STRATEGY 2: Find and click the option (multiple XPath strategies)
-        option_found = False
-
-        # 2a: Exact span match inside mat-option
-        if not option_found:
-            try:
-                options = self.driver.find_elements(
-                    By.XPATH,
-                    f"//mat-option//span[normalize-space()='{option_text}']"
-                    f"/ancestor::mat-option",
-                )
-                if options:
-                    self.driver.execute_script("arguments[0].click();", options[0])
-                    option_found = True
-            except Exception:
-                pass
-
-        # 2b: Contains match on mat-option text
-        if not option_found:
-            try:
-                options = self.driver.find_elements(
-                    By.XPATH,
-                    f"//mat-option[contains(., '{option_text}')]",
-                )
-                if options:
-                    self.driver.execute_script("arguments[0].click();", options[0])
-                    option_found = True
-            except Exception:
-                pass
-
-        # 2c: role=option with contains match
-        if not option_found:
-            try:
-                options = self.driver.find_elements(
-                    By.XPATH,
-                    f"//*[@role='option'][contains(., '{option_text}')]",
-                )
-                if options:
-                    self.driver.execute_script("arguments[0].click();", options[0])
-                    option_found = True
-            except Exception:
-                pass
-
-        # 2d: Case-insensitive contains via JS (catches odd formatting)
-        if not option_found:
-            js = f"""
-                var opts = document.querySelectorAll(
-                    '.cdk-overlay-pane mat-option, '
-                    + '.cdk-overlay-pane [role="option"]'
-                );
-                var lower = '{option_text}'.toLowerCase();
-                for (var i = 0; i < opts.length; i++) {{
-                    if (opts[i].textContent.trim().toLowerCase()
-                            .indexOf(lower) > -1) {{
-                        opts[i].click();
-                        return 'Selected: ' + opts[i].textContent.trim();
-                    }}
-                }}
-                return 'Not found';
-            """
-            result = self.driver.execute_script(js)
-            self.wait_seconds(1)
-            if "Selected" in str(result):
-                option_found = True
-                selected_text = str(result).replace("Selected: ", "")
-                log.info(
-                    f"Selected '{selected_text}' from '{label_text}' "
-                    f"(case-insensitive match for '{option_text}')"
-                )
-
-        if option_found:
-            log.info(f"Selected '{option_text}' from '{label_text}'")
-            self.wait_seconds(1)
-            return True
-        else:
-            # Log available options for debugging
-            try:
-                available = self.driver.execute_script("""
-                    var opts = document.querySelectorAll(
-                        '.cdk-overlay-pane mat-option, '
-                        + '.cdk-overlay-pane [role="option"]'
-                    );
-                    var texts = [];
-                    for (var i = 0; i < Math.min(opts.length, 10); i++) {
-                        texts.push(opts[i].textContent.trim());
-                    }
-                    return texts;
-                """)
-                log.warning(
-                    f"[WARNING] Option '{option_text}' not found in "
-                    f"'{label_text}' dropdown (search_used={search_used}). "
-                    f"First 10 available: {available}"
-                )
-            except Exception:
-                log.warning(
-                    f"[WARNING] Option '{option_text}' not found in "
-                    f"'{label_text}' dropdown (search_used={search_used})"
-                )
-            # Close the dropdown panel via JS DOM removal
-            self._force_close_panels()
-            return False
-        
-
-    def select_dropdown_by_placeholder(self, placeholder_text, option_text):
-        """Open dropdown by placeholder and select option by exact text."""
-        log.info(f"Selecting (placeholder '{placeholder_text}'): {option_text}")
-        self._open_dropdown_by_placeholder(placeholder_text)
-        self._select_option_by_text(option_text)
-        self._close_dropdown_panel()
-
-    def select_random_from_dropdown_by_label(self, label_text):
-        """Open dropdown by label, select a random option. Returns the text."""
-        log.info(f"Selecting random option for: {label_text}")
-        self._open_dropdown_by_label(label_text)
-        options = self._get_dropdown_options()
-        if not options:
-            self._close_dropdown_panel()
-            return None
-        valid_opts = [o for o in options if o.strip()]
-        if not valid_opts:
-            self._close_dropdown_panel()
-            return None
-        chosen = random.choice(valid_opts)
-        self._select_option_by_text(chosen)
-        self._close_dropdown_panel()
-        log.info(f"Selected: {chosen}")
-        return chosen
-
-    def select_random_from_dropdown_by_placeholder(self, placeholder_text):
-        """Open dropdown by placeholder, select a random option. Returns the text."""
-        log.info(f"Selecting random option for placeholder: {placeholder_text}")
-        self._open_dropdown_by_placeholder(placeholder_text)
-        options = self._get_dropdown_options()
-        if not options:
-            self._close_dropdown_panel()
-            return None
-        valid_opts = [o for o in options if o.strip()]
-        if not valid_opts:
-            self._close_dropdown_panel()
-            return None
-        chosen = random.choice(valid_opts)
-        self._select_option_by_text(chosen)
-        self._close_dropdown_panel()
-        log.info(f"Selected: {chosen}")
-        return chosen
-
-    def get_dropdown_options_by_label(self, label_text):
-        """Get all dropdown options by opening dropdown via label."""
-        self._open_dropdown_by_label(label_text)
-        opts = self._get_dropdown_options()
-        self._close_dropdown_panel()
-        return opts
-
-    # ==============================================================
-    #  Add Row buttons (for address and bank repeatable sections)
-    # ==============================================================
-
-    def click_add_address_row(self):
-        """Click the Add Row button in the Address Details section."""
-        log.info("Clicking Add Address Row button...")
-        js = """
-            var popup = document.querySelector(
-                '.edit_pop_up.override_edit_pop_up.popup-mode'
-            );
-            if (!popup) return 'No popup';
-            var buttons = popup.querySelectorAll('button');
-            for (var i = 0; i < buttons.length; i++) {
-                if (buttons[i].textContent.trim().toLowerCase().indexOf('add row') > -1 ||
-                    buttons[i].textContent.trim().toLowerCase().indexOf('add') > -1) {
-                    var parent = buttons[i].closest('mat-tab-content, .mat-tab-body-active, [ng-reflect-label]');
-                    if (parent) {
-                        buttons[i].click();
-                        return 'Clicked: ' + buttons[i].textContent.trim();
-                    }
+    def _click_next(self):
+        # Click the Next button inside the currently active (visible) stepper step
+        self.page.evaluate("""
+            const btns = document.querySelectorAll('button.mat-stepper-next');
+            for (const btn of btns) {
+                const content = btn.closest('.mat-horizontal-stepper-content, .step-shell');
+                if (content && !content.classList.contains('mat-horizontal-stepper-content-inactive')
+                    && getComputedStyle(content).display !== 'none') {
+                    btn.click();
+                    break;
                 }
             }
-            var addButtons = popup.querySelectorAll('button mat-icon');
-            for (var j = 0; j < addButtons.length; j++) {
-                if (addButtons[j].textContent.trim() === 'add' ||
-                    addButtons[j].textContent.trim() === 'plus_one') {
-                    addButtons[j].click();
-                    return 'Clicked icon: ' + addButtons[j].textContent.trim();
-                }
-            }
-            return 'Add row button not found';
-        """
-        result = self.driver.execute_script(js)
-        self.wait_seconds(1)
-        log.info(f"Add address row: {result}")
-
-    def click_add_bank_row(self):
-        """Click the Add Row button in the Bank Details section."""
-        log.info("Clicking Add Bank Row button...")
-        js = """
-            var popup = document.querySelector(
-                '.edit_pop_up.override_edit_pop_up.popup-mode'
-            );
-            if (!popup) return 'No popup';
-            var buttons = popup.querySelectorAll('button');
-            var addButtons = [];
-            for (var i = 0; i < buttons.length; i++) {
-                var txt = buttons[i].textContent.trim().toLowerCase();
-                if (txt.indexOf('add') > -1 || txt.indexOf('+') > -1) {
-                    addButtons.push(buttons[i]);
-                }
-            }
-            if (addButtons.length > 0) {
-                addButtons[addButtons.length - 1].click();
-                return 'Clicked last add button';
-            }
-            return 'No add buttons found';
-        """
-        result = self.driver.execute_script(js)
-        self.wait_seconds(1)
-        log.info(f"Add bank row: {result}")
-
-    # ==============================================================
-    #  Form fill - Step 0: Universal
-    # ==============================================================
-
-    def fill_universal_step(self, data):
-        """Fill Step 0 (Universal) fields: Agent Name, Phone Number, Email."""
-        log.info("Filling Universal step...")
-
-        if data.get("agent_name"):
-            self._fill_input_by_name("Agent Name", data["agent_name"])
-        if data.get("phone_number"):
-            self._fill_input_by_name("Phone Number", data["phone_number"])
-        if data.get("email"):
-            self._fill_input_by_name("Email", data["email"])
-
-        self.wait_seconds(0.5)
-
-    # ==============================================================
-    #  Form fill - Step 0: Address Details (same page as Universal)
-    # ==============================================================
-
-    def fill_address_step(self, addr_data=None):
-        """Fill the required Address fields (cascading dropdowns + inputs) on Step 0.
-        
-        Args:
-            addr_data: Optional dict with address data. The cascading dropdowns
-                    (Country/State/District/Taluka) are always filled with defaults
-                    since they require specific valid combinations. Text fields
-                    (Address, Pin Code) use values from addr_data if provided.
-        """
-        log.info("Filling Address step (cascading dropdowns + inputs)...")
-        
-        # Address Type — REQUIRED dropdown (first in the address form)
-        addr_type = "Permanent"
-        if addr_data and isinstance(addr_data, dict):
-            addr_type = addr_data.get("address_type", addr_data.get("Address Type", addr_type))
-        self.select_dropdown_by_label("Address Type", addr_type)
-        self.wait_seconds(1)
-        
-        # Cascading dropdowns — each selection populates the next
-        self.select_dropdown_by_label("Country", "India")
-        self.wait_seconds(1.5)
-        
-        self.select_dropdown_by_label("State", "Maharashtra")
-        self.wait_seconds(1.5)
-        
-        self.select_dropdown_by_label("District", "Pune")
-        self.wait_seconds(1.5)
-        
-        self.select_dropdown_by_label("Taluka", "Haveli")
-        self.wait_seconds(1.5)
-        
-        # Text inputs — use addr_data if provided, else defaults
-        address_text = "123 Test Street, Pune"
-        pin_code = "411001"
-        
-        if addr_data and isinstance(addr_data, dict):
-            address_text = addr_data.get("address", addr_data.get("Address", address_text))
-            pin_code = addr_data.get("pin_code", addr_data.get("Pin Code", pin_code))
-        
-        self._fill_input_by_name("Address", address_text)
-        self._fill_input_by_name("Pin Code", pin_code)
-        
-        log.info("Address step filled")
-
-        # ==============================================================
-    #  Form fill - Step 1: Payment Details
-    # ==============================================================
-
-    def fill_payment_step(self, data):
-        """Fill Step 1 (Payment Details): Payment Terms, Preferred Payment Method."""
-        log.info("Filling Payment Details step...")
-
-        if data.get("payment_terms"):
-            self.select_dropdown_by_label("Payment Terms", data["payment_terms"])
-        if data.get("preferred_payment_method"):
-            self.select_dropdown_by_label(
-                "Preferred Payment Method", data["preferred_payment_method"]
-            )
-
-        self.wait_seconds(0.5)
-
-    # ==============================================================
-    #  Form fill - Step 2: Bank Details
-    # ==============================================================
-
-    def fill_bank_detail_step(self, data, row_index=0):
-        """Fill Step 2 (Bank Details) for a specific row.
-
-        Args:
-            data: Dict with bank detail fields.
-            row_index: Row index (0 for first row).
-        """
-        log.info(f"Filling Bank Details (row {row_index})...")
-
-        if data.get("bank_name"):
-            self._fill_input_by_name("Bank Name", data["bank_name"], row_index=row_index)
-        if data.get("branch"):
-            self._fill_input_by_name("Branch", data["branch"], row_index=row_index)
-        if data.get("ifsc_code"):
-            self._fill_input_by_name("IFSC Code", data["ifsc_code"], row_index=row_index)
-        if data.get("account_type"):
-            self.select_dropdown_by_label("Account Type", data["account_type"])
-        if data.get("account_holder_name"):
-            self._fill_input_by_name(
-                "Account Holder Name", data["account_holder_name"], row_index=row_index
-            )
-        if data.get("account_number"):
-            self._fill_input_by_name("Account Number", data["account_number"], row_index=row_index)
-
-        self.wait_seconds(0.5)
-
-    # ==============================================================
-    #  Form fill - Complete all steps
-    # ==============================================================
-
-    def fill_agent_form(self, data):
-        """Fill all stepper steps with provided data dict.
-
-        Flow: Universal + Address (same page) -> Payment -> Bank Details
-
-        Args:
-            data: Dict with keys: agent_name, phone_number, email,
-                  address (dict), payment (dict), bank (dict).
-        """
-        log.info("Filling Agent form (all steps)...")
-
-        # Step 0: Universal + Address Details (SAME PAGE)
-        self.fill_universal_step(data)
-        if data.get("address"):
-            self.fill_address_step(data["address"])
-        self.click_next()  # Step 0 -> Step 1 (Payment)
-        self.wait_seconds(1)
-
-        # Step 1: Payment Details
-        if data.get("payment"):
-            self.fill_payment_step(data["payment"])
-        self.click_next()  # Step 1 -> Step 2 (Bank Details)
-        self.wait_seconds(1)
-
-        # Step 2: Bank Details
-        if data.get("bank"):
-            self.fill_bank_detail_step(data["bank"])
-
-        self.wait_seconds(0.5)
-
-    # ==============================================================
-    #  Create / Edit / Submit / Cancel
-    # ==============================================================
-
-    def create_agent(self, data):
-        """Open Add form, fill all steps, and submit.
-
-        Returns dict with:
-            status: "PASSED" or "FAILED"
-            agent_name: the agent name used
-            error: error message if any
-        """
-        log.info("Creating Agent record...")
-        self.open_add_form()
-        self.wait_seconds(1)
-        assert self._is_form_popup_open(), "Add form did not open"
-
-        self.fill_agent_form(data)
-        self.wait_seconds(0.5)
-
-        return self._submit_and_handle_result(data)
-
-    def _submit_and_handle_result(self, data):
-        """Click Submit and handle the result."""
-        result = {"status": "FAILED", "agent_name": "", "error": ""}
-
-        self._force_close_panels()
-        try:
-            submit_btn = self.driver.find_element(
-                By.XPATH,
-                "//div[@class='popup-footer']//button[contains(.,'Submit')]"
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});"
-                "arguments[0].click();",
-                submit_btn,
-            )
-        except Exception:
-            try:
-                update_btn = self.driver.find_element(
-                    By.XPATH,
-                    "//div[@class='popup-footer']//button[contains(.,'Update')]"
-                )
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});"
-                    "arguments[0].click();",
-                    update_btn,
-                )
-            except Exception as e:
-                log.error(f"Submit/Update button not found: {e}")
-                result["error"] = "Submit/Update button not found"
-                return result
-
-        self.wait_seconds(3)
-
-        # Check SweetAlert
-        swal_title = self.get_swal_title()
-
-        if swal_title and "success" in swal_title.lower():
-            result["status"] = "PASSED"
-            result["agent_name"] = data.get("agent_name", "")
-            log.info(f"Agent created successfully: {result['agent_name']}")
-        elif swal_title and "validation" in swal_title.lower():
-            result["error"] = f"{swal_title} - validation failed"
-            log.warning(f"Validation failed: {result['error']}")
-            self._dismiss_swal()
-        else:
-            popup_visible = self._is_form_popup_open()
-            if popup_visible:
-                result["error"] = "Submit clicked but no SweetAlert appeared"
-                log.warning(result["error"])
-            else:
-                result["status"] = "PASSED"
-                result["agent_name"] = data.get("agent_name", "")
-                log.info(f"Agent created (no alert): {result['agent_name']}")
-
-        return result
-
-    def submit(self):
-        """Click the Submit button on the form."""
-        log.info("Clicking Submit button...")
-        self._force_close_panels()
-        try:
-            submit_btn = self.driver.find_element(
-                By.XPATH,
-                "//div[@class='popup-footer']//button[contains(.,'Submit')]"
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});"
-                "arguments[0].click();",
-                submit_btn,
-            )
-            self.wait_seconds(2)
-        except Exception as e:
-            log.error(f"Submit button not found: {e}")
-
-    def update(self):
-        """Click the Update button on the edit form."""
-        log.info("Clicking Update button...")
-        self._force_close_panels()
-        try:
-            update_btn = self.driver.find_element(
-                By.XPATH,
-                "//div[@class='popup-footer']//button[contains(.,'Update')]"
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});"
-                "arguments[0].click();",
-                update_btn,
-            )
-            self.wait_seconds(2)
-        except Exception as e:
-            log.error(f"Update button not found: {e}")
-
-    def cancel(self):
-        """Click the Cancel button on the form popup."""
-        log.info("Clicking Cancel button...")
-        try:
-            cancel_btn = self.driver.find_element(
-                By.XPATH,
-                "//div[@class='popup-footer']//button[contains(.,'Cancel')]"
-            )
-            self.driver.execute_script("arguments[0].click();", cancel_btn)
-            self.wait_seconds(1)
-        except Exception as e:
-            log.warning(f"Cancel button not found: {e}")
-
-    def close_popup(self):
-        """Close the form popup via Cancel button or JS removal."""
-        try:
-            self.cancel()
-        except Exception:
-            pass
-        try:
-            self.force_close_form_popup()
-        except Exception:
-            pass
-
-    def force_close_form_popup(self):
-        """Force close the form popup by removing it from DOM."""
-        self.driver.execute_script("""
-            var popup = document.querySelector(
-                '.edit_pop_up.override_edit_pop_up.popup-mode'
-            );
-            if (popup) {
-                popup.remove();
-            }
-            var backdrop = document.querySelector(
-                '.cdk-overlay-dark-backdrop, .cdk-overlay-backdrop'
-            );
-            if (backdrop) {
-                backdrop.remove();
+            // fallback: click first visible Next button
+            if (!document.querySelector('.mat-horizontal-stepper-content:not(.mat-horizontal-stepper-content-inactive) button.mat-stepper-next')) {
+                const allBtns = document.querySelectorAll('button.mat-stepper-next');
+                if (allBtns.length) allBtns[0].click();
             }
         """)
-        self.wait_seconds(0.5)
+        self.page.wait_for_timeout(1000)
 
-    # ==============================================================
-    #  SweetAlert2 handling
-    # ==============================================================
+    def _save_row_popup(self):
+        self._clear_overlays()
+        save = self.page.locator(self.SAVE_BTN).first
+        save.wait_for(state="visible", timeout=5000)
+        save.click()
+        save.wait_for(state="hidden", timeout=8000)
+        self.page.wait_for_timeout(500)
 
-    def get_swal_title(self):
-        """Get the SweetAlert2 title text."""
+    def _select_mat_option_by_text(self, selector, text):
+        sel = self.page.locator(selector)
+        sel.wait_for(state="visible", timeout=5000)
+        sel.click(force=True)
+        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
+        opt = self.page.locator(f".mat-mdc-select-panel mat-option:has-text('{text}')")
+        opt.first.wait_for(state="visible", timeout=3000)
+        opt.first.click(force=True)
+        self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=5000)
+        self.page.wait_for_timeout(300)
+
+    def _fill_address_row1(self, data):
+        # Country always India
+        self._select_mat_option_by_text(self.ADDR_COUNTRY, "India")
+        # Remaining cascading selects — pick first available option
+        for sel in [self.ADDR_STATE, self.ADDR_DISTRICT, self.ADDR_TALUKA]:
+            self._select_mat_option(sel)
+        # Village is optional
         try:
-            el = self.driver.find_element(By.CSS_SELECTOR, "#swal2-title")
-            if el.is_displayed():
-                return el.text.strip()
+            self._select_mat_option(self.ADDR_VILLAGE)
         except Exception:
             pass
-        return ""
+        # Address text
+        addr = self.page.locator(self.ADDR_ADDRESS).first
+        addr.wait_for(state="visible", timeout=5000)
+        addr.click(force=True)
+        addr.fill(data.get("address", "405 MG Road Solapur"))
+        addr.press("Tab")
+        # Pin Code is a mat-select
+        self._select_mat_option(self.ADDR_PIN_CODE)
 
-    def get_swal_content(self):
-        """Get the SweetAlert2 content text."""
+    def _fill_address_row2(self):
+        # Second row — tick "Same as Above"
+        cb = self.page.locator(self.SAME_AS_ABOVE).first
+        cb.wait_for(state="visible", timeout=5000)
+        cb.click(force=True)
+        self.page.wait_for_timeout(300)
+
+    def _fill_bank_row(self, data):
+        for selector, key, default in [
+            (self.BANK_NAME_INPUT,  "bank_name",    "HDFC Bank"),
+            (self.BANK_BRANCH,      "bank_branch",  "Mumbai Main Branch"),
+            (self.BANK_IFSC,        "bank_ifsc",    "SBIN0179242"),
+            (self.BANK_HOLDER_NAME, "bank_holder",  "Meera Desai"),
+            (self.BANK_ACCOUNT_NO,  "bank_account", "398177224327"),
+        ]:
+            loc = self.page.locator(selector).first
+            loc.click(force=True)
+            loc.fill(data.get(key, default))
+            loc.press("Tab")
+        self._select_mat_option(self.BANK_ACCOUNT_TYPE)
+        self._select_mat_option(self.BANK_PROOF)
+
+    def navigate_to_page(self):
         try:
-            el = self.driver.find_element(By.CSS_SELECTOR, ".swal2-html-container")
-            if el.is_displayed():
-                return el.text.strip()
+            if "Agent" in self.page.url:
+                self.page.reload()
+            else:
+                self.page.goto(self.URL)
         except Exception:
-            pass
-        return ""
-
-    def _dismiss_swal(self):
-        """Dismiss a SweetAlert2 popup by clicking OK/Confirm."""
+            self.page.goto(self.URL)
         try:
-            confirm = self.driver.find_element(
-                By.CSS_SELECTOR, ".swal2-confirm"
-            )
-            if confirm.is_displayed():
-                self.driver.execute_script("arguments[0].click();", confirm)
-                self.wait_seconds(0.5)
-                log.info("SweetAlert dismissed")
+            self.page.wait_for_selector("table#excel-table", timeout=10000)
         except Exception:
-            pass
+            self.page.reload()
+            self.page.wait_for_selector("table#excel-table", timeout=15000)
 
-    def handle_validation_warning(self, timeout=5):
-        """Check for and handle validation warning SweetAlert.
-        Returns the alert title text if found, empty string otherwise.
-        """
+    def open_add_form(self):
         try:
-            title = WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located(
-                    (By.CSS_SELECTOR, "#swal2-title")
-                )
-            )
-            alert_text = title.text.strip()
-            log.info(f"Validation alert: {alert_text}")
-            self._dismiss_swal()
-            return alert_text
-        except TimeoutException:
-            return ""
-
-    def handle_success_alert(self, timeout=5):
-        """Check for success SweetAlert and dismiss it.
-        Returns the alert title text if found.
-        """
-        return self.handle_validation_warning(timeout=timeout)
-
-    # ==============================================================
-    #  Form state checks
-    # ==============================================================
-
-    def is_add_form_open(self):
-        """Check if the add form popup is currently open."""
-        return self._is_form_popup_open()
-
-    def is_form_popup_open(self):
-        """Check if any form popup is currently open."""
-        return self._is_form_popup_open()
-
-    def get_form_field_values(self):
-        """Read all input values from the current form step using JS.
-
-        Uses execute_script with querySelectorAll('input') and inp.value
-        for reliable Angular Material value reading.
-        """
-        js = """
-            var popup = document.querySelector(
-                '.edit_pop_up.override_edit_pop_up.popup-mode'
-            );
-            if (!popup) return {};
-            var result = {};
-            var inputs = popup.querySelectorAll('input');
-            for (var i = 0; i < inputs.length; i++) {
-                var inp = inputs[i];
-                var key = inp.name || inp.placeholder || ('input_' + i);
-                if (key && result[key] === undefined) {
-                    result[key] = inp.value || '';
-                }
-            }
-            return result;
-        """
-        return self.driver.execute_script(js) or {}
-
-    def get_input_value(self, name_attr):
-        """Get the current value of an input by its name attribute using JS."""
-        js = f"""
-            var popup = document.querySelector(
-                '.edit_pop_up.override_edit_pop_up.popup-mode'
-            );
-            if (!popup) return '';
-            var input = popup.querySelector('input[name="{name_attr}"]');
-            return input ? input.value : '';
-        """
-        return self.driver.execute_script(js) or ""
-
-    def get_field_validation_state(self, field_label):
-        """Check if a field has validation errors.
-
-        Returns dict: {"invalid": bool, "error": str}
-        """
-        js = f"""
-            var popup = document.querySelector(
-                '.edit_pop_up.override_edit_pop_up.popup-mode'
-            );
-            if (!popup) return {{invalid: false, error: ''}};
-            var formFields = popup.querySelectorAll('mat-form-field');
-            for (var i = 0; i < formFields.length; i++) {{
-                var label = formFields[i].querySelector('mat-label');
-                if (label && label.textContent.trim().indexOf('{field_label}') > -1) {{
-                    var matError = formFields[i].querySelector('mat-error');
-                    if (matError && matError.textContent.trim()) {{
-                        return {{invalid: true, error: matError.textContent.trim()}};
-                    }}
-                    var hasErrorClass = formFields[i].classList.contains('mat-form-field-invalid') ||
-                                       formFields[i].getAttribute('aria-invalid') === 'true';
-                    return {{invalid: hasErrorClass, error: hasErrorClass ? '(red highlight, no text)' : ''}};
-                }}
-            }}
-            return {{invalid: false, error: ''}};
-        """
-        return self.driver.execute_script(js) or {"invalid": False, "error": ""}
-
-    def get_mat_error_text(self):
-        """Get all mat-error texts currently visible in the form."""
-        js = """
-            var popup = document.querySelector(
-                '.edit_pop_up.override_edit_pop_up.popup-mode'
-            );
-            if (!popup) return [];
-            var errors = popup.querySelectorAll('mat-error');
-            var texts = [];
-            for (var i = 0; i < errors.length; i++) {
-                var t = errors[i].textContent.trim();
-                if (t && texts.indexOf(t) === -1) {
-                    texts.push(t);
-                }
-            }
-            return texts;
-        """
-        return self.driver.execute_script(js) or []
-
-    # ==============================================================
-    #  Table operations
-    # ==============================================================
-
-    def search(self, search_text):
-        """Search for a record in the Agent table."""
-        log.info(f"Searching for: {search_text}")
-        try:
-            search_toggle = self.driver.find_elements(
-                By.CSS_SELECTOR, "button.search-btn, button[aria-label='Search']"
-            )
-            for btn in search_toggle:
-                try:
-                    if btn.is_displayed():
-                        btn.click()
-                        self.wait_seconds(0.5)
-                        break
-                except Exception:
-                    continue
-
-            search_input = self.driver.find_element(
-                By.CSS_SELECTOR,
-                ".erp-search-wrapper input, input#erpSearchInput"
-            )
-            search_input.clear()
-            search_input.send_keys(search_text)
-            self.wait_seconds(0.5)
-
-            search_submit = self.driver.find_elements(
-                By.CSS_SELECTOR, "button.search-btn"
-            )
-            for btn in search_submit:
-                try:
-                    if btn.is_displayed():
-                        btn.click()
-                        self.wait_seconds(2)
-                        break
-                except Exception:
-                    continue
-
-            log.info(f"Search submitted for: {search_text}")
-        except Exception as e:
-            log.warning(f"Search failed: {e}")
-
-    def search_agent(self, agent_name):
-        """Search for an agent by name and return True if found in the table.
-        
-        Handles search toggle, input, submit, and result check.
-        """
-        self.click_refresh()
-        self.wait_seconds(2)
-        self.search(agent_name)
-        self.wait_seconds(2)
-        found = self.is_agent_in_table(agent_name)
-        if found:
-            log.info(f"Agent found in table: {agent_name}")
-        else:
-            log.warning(f"Agent NOT found in table: {agent_name}")
-        return found
-
-    def is_agent_in_table(self, agent_name):
-        """Check if an agent name exists in the table rows."""
-        js = f"""
-            var rows = document.querySelectorAll('table#excel-table tbody tr');
-            for (var i = 0; i < rows.length; i++) {{
-                if (rows[i].textContent.indexOf('{agent_name}') > -1) {{
-                    return true;
-                }}
-            }}
-            return false;
-        """
-        return self.driver.execute_script(js)
-
-    def get_table_row_count(self):
-        """Get the number of data rows in the Agent table."""
-        js = """
-            var rows = document.querySelectorAll('table#excel-table tbody tr');
-            var count = 0;
-            for (var i = 0; i < rows.length; i++) {
-                if (rows[i].textContent.trim() !== '' &&
-                    !rows[i].querySelector('.no-data')) {
-                    count++;
-                }
-            }
-            return count;
-        """
-        return self.driver.execute_script(js)
-
-    # ==============================================================
-    #  Row action buttons (3-dot ERP menu pattern)
-    # ==============================================================
-
-    def is_edit_mode(self):
-        """Check if the form is in Edit mode (has Update button in footer)."""
-        try:
-            update_btns = self.driver.find_elements(
-                By.XPATH,
-                "//div[@class='popup-footer']//button[contains(.,'Update')]"
-            )
-            for btn in update_btns:
-                try:
-                    if btn.is_displayed():
-                        return True
-                except Exception:
-                    continue
+            self.page.click("button.erp-add-btn")
         except Exception:
-            pass
-        return False
-
-    def _click_first_menu_option(self, agent_name, option_text):
-        """Open the 3-dot menu on a table row and click the given option.
-        
-        Args:
-            agent_name: Text to find the correct table row.
-            option_text: 'Edit', 'View', or 'History' — the menu item to click.
-        """
-        log.info(f"Opening 3-dot menu for '{agent_name}' → clicking '{option_text}'")
-        
-        # Step 1: Find the row containing the agent name and click its 3-dot trigger
-        js_trigger = f"""
-            var rows = document.querySelectorAll('table#excel-table tbody tr');
-            for (var i = 0; i < rows.length; i++) {{
-                if (rows[i].textContent.indexOf('{agent_name}') > -1) {{
-                    var trigger = rows[i].querySelector(
-                        'button.mat-mdc-menu-trigger.erp-row-trigger'
-                    );
-                    if (trigger) {{
-                        trigger.click();
-                        return 'Trigger clicked';
-                    }}
-                    // Fallback: any button with mat-mdc-menu-trigger
-                    var anyTrigger = rows[i].querySelector(
-                        'button.mat-mdc-menu-trigger'
-                    );
-                    if (anyTrigger) {{
-                        anyTrigger.click();
-                        return 'Trigger clicked (fallback)';
-                    }}
-                    return 'No trigger found in row';
-                }}
-            }}
-            return 'Row not found: {agent_name}';
-        """
-        result = self.driver.execute_script(js_trigger)
-        log.info(f"3-dot trigger: {result}")
-        self.wait_seconds(1)
-        
-        # Step 2: Click the desired option from the mat-mdc-menu-content
-        js_option = f"""
-            var menus = document.querySelectorAll(
-                'div.mat-mdc-menu-content'
-            );
-            for (var i = 0; i < menus.length; i++) {{
-                var items = menus[i].querySelectorAll('button');
-                for (var j = 0; j < items.length; j++) {{
-                    if (items[j].textContent.trim().indexOf('{option_text}') > -1) {{
-                        items[j].click();
-                        return 'Clicked {option_text}';
-                    }}
-                }}
-            }}
-            return '{option_text} not found in menu';
-        """
-        result2 = self.driver.execute_script(js_option)
-        self.wait_seconds(2)
-        log.info(f"Menu option: {result2}")
-        return "Clicked" in str(result2)
-
-    def click_edit_button(self, agent_name):
-        """Click the Edit button for a specific agent in the table via 3-dot menu."""
-        return self._click_first_menu_option(agent_name, "Edit")
-
-    def click_view_button(self, agent_name):
-        """Click the View button for a specific agent in the table via 3-dot menu."""
-        return self._click_first_menu_option(agent_name, "View")
-
-    def dump_address_fields(self):
-        """Dump ALL input/select fields in the popup, regardless of container."""
-        js = """
-            var results = [];
-            var inputs = document.querySelectorAll('.cdk-overlay-pane input, .mat-mdc-dialog input');
-            for (var i = 0; i < inputs.length; i++) {
-                results.push({
-                    tag: 'input',
-                    name: inputs[i].getAttribute('name') || '',
-                    placeholder: inputs[i].getAttribute('placeholder') || '',
-                    formControlName: inputs[i].getAttribute('formcontrolname') || '',
-                    type: inputs[i].getAttribute('type') || '',
-                    visible: inputs[i].offsetParent !== null
-                });
-            }
-            var selects = document.querySelectorAll('.cdk-overlay-pane mat-select, .mat-mdc-dialog mat-select');
-            for (var i = 0; i < selects.length; i++) {
-                results.push({
-                    tag: 'mat-select',
-                    placeholder: selects[i].getAttribute('placeholder') || '',
-                    formControlName: selects[i].getAttribute('formcontrolname') || '',
-                    visible: selects[i].offsetParent !== null
-                });
-            }
-            return JSON.stringify(results, null, 2);
-        """
-        result = self.driver.execute_script(js)
-        log.info(f"ADDRESS FIELDS: {result}")
-        return result
-
-
-    def dump_popup_structure(self):
-        """Dump the popup's top-level DOM class names to understand the container structure."""
-        js = """
-            var dialog = document.querySelector('.cdk-overlay-pane');
-            if (!dialog) return 'No .cdk-overlay-pane found';
-            var children = [];
-            for (var i = 0; i < dialog.children.length; i++) {
-                children.push({
-                    tag: dialog.children[i].tagName,
-                    class: dialog.children[i].className.substring(0, 120)
-                });
-            }
-            return JSON.stringify(children, null, 2);
-        """
-        result = self.driver.execute_script(js)
-        log.info(f"POPUP STRUCTURE: {result}")
-        return result
-
-    # ==============================================================
-    #  5-test pattern helpers (fill_form, submit, search, row actions)
-    # ==============================================================
-
-    CHANGE_LOG_PANEL = ("xpath", "//th[contains(@class,'cdk-column-created_date_time')]")
+            self.page.evaluate("""
+                var btn = document.querySelector('button.erp-add-btn');
+                if (btn) { btn.scrollIntoView({block:'center'}); btn.click(); }
+            """)
+        self.page.wait_for_selector(self.AGENT_NAME, timeout=5000)
 
     def fill_form(self, data):
-        """Fill the complete 3-step Agent stepper form from a flat data dict.
-
-        Step 0: Universal (name/phone/email) + Address cascade
-        Step 1: Payment (skip — optional)
-        Step 2: Bank details
-        """
-        log.info("Filling Agent form (3-step stepper)...")
-
-        # ── Step 0: Universal fields ──────────────────────────────
+        # Page 1 — universal fields + address (no Next needed)
         if data.get("agent_name"):
-            self._fill_input_by_name("Agent Name", data["agent_name"])
-            self.wait_seconds(0.3)
+            self.page.locator(self.AGENT_NAME).first.click(force=True)
+            self.page.locator(self.AGENT_NAME).first.fill(data["agent_name"])
+            self.page.locator(self.AGENT_NAME).first.press("Tab")
         if data.get("phone_number"):
-            self._fill_input_by_name("Phone Number", str(data["phone_number"]))
-            self.wait_seconds(0.3)
+            self.page.locator(self.PHONE_NUMBER).first.click(force=True)
+            self.page.locator(self.PHONE_NUMBER).first.fill(data["phone_number"])
+            self.page.locator(self.PHONE_NUMBER).first.press("Tab")
         if data.get("email"):
-            self._fill_input_by_name("Email", data["email"])
-            self.wait_seconds(0.3)
+            self.page.locator(self.EMAIL).first.click(force=True)
+            self.page.locator(self.EMAIL).first.fill(data["email"])
+            self.page.locator(self.EMAIL).first.press("Tab")
+        # Address rows are on the same page — inline editable
+        self._fill_address_row1(data)
+        self._fill_address_row2()
 
-        # ── Address cascade ───────────────────────────────────────────
-        country = data.get("country") or "India"
-        self.select_dropdown_by_label("Country", country)
-        self.wait_seconds(1.5)  # wait for State options to load
-        self.select_random_from_dropdown_by_label("State")
-        self.wait_seconds(1.5)  # wait for District options to load
-        self.select_random_from_dropdown_by_label("District")
-        self.wait_seconds(1.0)  # wait for Village options to load
-        self.select_random_from_dropdown_by_label("Village")
-        self.wait_seconds(0.5)
-        # Taluka — skip (optional)
+        # Page 2 — Payment Details
+        self._click_next()
+        self._select_mat_option(self.PAYMENT_TERMS)
+        self.page.wait_for_timeout(300)
+        self._select_mat_option(self.PREFERRED_PAYMENT_METHOD)
+        self.page.wait_for_timeout(300)
 
-        if data.get("address"):
-            self._fill_input_by_name("Address", data["address"])
-            self.wait_seconds(0.2)
-        if data.get("pin_code"):
-            self._fill_input_by_name("Pin Code", str(data["pin_code"]))
-            self.wait_seconds(0.2)
+        # Page 3 — Bank Details — inline editable
+        self._click_next()
+        self._fill_bank_row(data)
+        self._clear_overlays()
 
-        # ── Navigate to Step 1 (Payment) ─────────────────────────
-        self.click_next()
-        # Step 1: Payment — all optional, skip
-        self.wait_seconds(0.5)
+    def submit(self):
+        self._clear_overlays()
+        self.page.click(self.SUBMIT_BTN)
 
-        # ── Navigate to Step 2 (Bank) ────────────────────────────
-        self.click_next()
-        self.wait_seconds(0.5)
+    def close_popup(self):
+        self._clear_overlays()
+        self.page.click(self.CANCEL_BTN)
 
-        if data.get("bank_name"):
-            self._fill_input_by_name("Bank Name", data["bank_name"])
-            self.wait_seconds(0.2)
-        if data.get("ifsc_code"):
-            self._fill_input_by_name("IFSC Code", data["ifsc_code"])
-            self.wait_seconds(0.2)
-        # Account Type — auto-pick
-        self.select_random_from_dropdown_by_label("Account Type")
-        self.wait_seconds(0.3)
-        if data.get("account_holder_name"):
-            self._fill_input_by_name("Account Holder Name", data["account_holder_name"])
-            self.wait_seconds(0.2)
-        if data.get("account_number"):
-            self._fill_input_by_name("Account Number", str(data["account_number"]))
-            self.wait_seconds(0.2)
-        # Bank Proof is a file upload — skip
-
-        log.info("Agent form filled (all 3 steps)")
-
-    def submit_form(self):
-        """Click the Submit button on the final stepper step."""
-        log.info("Submitting Agent form...")
+    def handle_success_alert(self):
         try:
-            btn = self.driver.find_element(
-                By.XPATH, "//div[@class='popup-footer']//button[contains(.,'Submit')]"
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});arguments[0].click();", btn
-            )
-            self.wait_seconds(1)
-            log.info("Submit clicked")
-        except Exception as e:
-            log.warning(f"submit_form failed: {e}")
-
-    def update_form(self):
-        """Click the Update button on the edit stepper."""
-        log.info("Clicking Update button...")
-        try:
-            btn = self.driver.find_element(
-                By.XPATH, "//div[@class='popup-footer']//button[contains(.,'Update')]"
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});arguments[0].click();", btn
-            )
-            self.wait_seconds(1)
-            log.info("Update clicked")
-        except Exception as e:
-            log.warning(f"update_form failed: {e}")
-
-    def click_cancel_button(self):
-        """Click the Cancel button in the popup footer."""
-        log.info("Clicking Cancel button...")
-        try:
-            btn = self.driver.find_element(
-                By.XPATH, "//div[@class='popup-footer']//button[contains(.,'Cancel')]"
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});arguments[0].click();", btn
-            )
-            self.wait_seconds(0.5)
-        except Exception as e:
-            log.warning(f"click_cancel_button failed: {e}")
-
-    def click_close_button(self):
-        """Click the close (X) button on the form popup."""
-        log.info("Clicking Close (X) button...")
-        try:
-            btn = self.driver.find_element(
-                By.XPATH, "//mat-icon[text()='close']/ancestor::button"
-            )
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});arguments[0].click();", btn
-            )
-            self.wait_seconds(0.5)
-        except Exception as e:
-            log.warning(f"click_close_button failed: {e}")
-
-    def force_close_form_popup(self):
-        """Force close any open form popup (cancel → close → JS)."""
-        try:
-            btns = self.driver.find_elements(
-                By.XPATH, "//div[@class='popup-footer']//button[contains(.,'Cancel')]"
-            )
-            if btns and btns[0].is_displayed():
-                self.driver.execute_script("arguments[0].click();", btns[0])
-                self.wait_seconds(0.5)
-                if not self._is_form_popup_open():
-                    return
+            self.page.wait_for_selector(".swal2-container", timeout=5000)
+            title = (self.page.locator("#swal2-title").text_content() or "").strip().lower()
+            body = (self.page.locator("#swal2-html-container").text_content() or "").strip()
+            self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+            self.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
+            if "validation" in title or "failed" in title or "error" in title:
+                labels = self.page.locator("mat-form-field.ng-invalid mat-label").all_text_contents()
+                raise AssertionError(f"Validation failed — invalid fields: {labels} — body: '{body}'")
+        except AssertionError:
+            raise
         except Exception:
             pass
         try:
-            btns = self.driver.find_elements(
-                By.XPATH, "//mat-icon[text()='close']/ancestor::button"
-            )
-            if btns and btns[0].is_displayed():
-                self.driver.execute_script("arguments[0].click();", btns[0])
-                self.wait_seconds(0.5)
-                if not self._is_form_popup_open():
-                    return
+            if self.page.locator(self.CANCEL_BTN).is_visible():
+                self._clear_overlays()
+                self.page.locator(self.CANCEL_BTN).click()
+                self.page.wait_for_timeout(500)
         except Exception:
             pass
-        self.driver.execute_script("""
-            document.querySelectorAll('div.cdk-overlay-backdrop').forEach(e=>e.remove());
-            document.querySelectorAll('div.cdk-overlay-pane').forEach(e=>e.remove());
-        """)
-        self.wait_seconds(0.3)
+        self.page.wait_for_selector("table#excel-table", timeout=8000)
 
-    def handle_success_alert(self, timeout=15):
-        """Wait for SweetAlert2, capture title, click OK. Returns title text."""
+    def handle_validation_alert(self):
         try:
-            WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located((By.CSS_SELECTOR, "#swal2-title"))
-            )
-            title = self.driver.find_element(By.CSS_SELECTOR, "#swal2-title").text.strip()
-            try:
-                self.driver.find_element(By.CSS_SELECTOR, ".swal2-confirm").click()
-                self.wait_seconds(0.5)
-            except Exception:
-                pass
-            return title
-        except TimeoutException:
-            return ""
-
-    def handle_validation_warning(self, timeout=5):
-        """Wait for SweetAlert2 validation alert, dismiss, return title. Empty string on timeout."""
-        try:
-            WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located((By.CSS_SELECTOR, "#swal2-title"))
-            )
-            title = self.driver.find_element(By.CSS_SELECTOR, "#swal2-title").text.strip()
-            try:
-                self.driver.find_element(By.CSS_SELECTOR, ".swal2-confirm").click()
-                self.wait_seconds(0.5)
-            except Exception:
-                pass
-            return title
-        except TimeoutException:
-            return ""
-
-    def get_mat_error_text(self):
-        """Return list of visible mat-error texts on the current form."""
-        errors = []
-        try:
-            for el in self.driver.find_elements(By.CSS_SELECTOR, "mat-error, .mat-mdc-form-field-error"):
-                try:
-                    if el.is_displayed():
-                        t = el.text.strip()
-                        if t:
-                            errors.append(t)
-                except Exception:
-                    continue
+            self.page.wait_for_selector(".swal2-container", timeout=5000)
+            self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+            self.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
         except Exception:
             pass
-        return errors
+        self.page.wait_for_selector("table#excel-table", timeout=5000)
 
-    def get_table_row_count(self):
-        """Return number of data rows in the Agent listing table."""
-        try:
-            rows = self.driver.find_elements(By.CSS_SELECTOR, "table#excel-table tbody tr")
-            return len(rows)
-        except Exception:
-            return 0
+    def create_record(self, data):
+        self.open_add_form()
+        self.fill_form(data)
+        self.submit()
+        self.handle_success_alert()
+        self.navigate_to_page()
 
-    def is_entry_in_table(self, name):
-        """Return True if an agent with the given name is visible in the table."""
-        try:
-            cells = self.driver.find_elements(
-                By.CSS_SELECTOR, "td.cdk-column-name, td.mat-column-name"
-            )
-            for cell in cells:
-                try:
-                    if cell.text.strip().lower() == name.strip().lower():
-                        return True
-                except Exception:
-                    continue
-        except Exception:
-            pass
+    def search_agent(self, agent_name):
+        inp = self.page.locator(self.SEARCH_INPUT)
+        if not inp.is_visible():
+            self.page.evaluate("""
+                var btn = document.querySelector('button[mattooltip="Search"]');
+                if (btn) { btn.scrollIntoView({block:'center'}); btn.click(); }
+            """)
+            self.page.wait_for_timeout(800)
+        inp.wait_for(state="visible", timeout=5000)
+        inp.fill(agent_name)
+        self.page.keyboard.press("Enter")
+        self.page.wait_for_timeout(1500)
+
+    def is_agent_in_table(self, agent_name):
+        for _ in range(10):
+            rows = self.page.locator("table#excel-table tbody tr")
+            for i in range(rows.count()):
+                if agent_name in rows.nth(i).inner_text():
+                    return True
+            self.page.wait_for_timeout(300)
         return False
 
-    def search_entry(self, text):
-        """Search for an agent by clicking the search button and entering text."""
-        log.info(f"Searching agent: {text}")
-        try:
-            search_btn = self.driver.find_element(
-                By.XPATH, "//button[@mattooltip='Search']"
-            )
-            self.driver.execute_script("arguments[0].click();", search_btn)
-            self.wait_seconds(0.5)
-        except Exception:
-            pass
-        try:
-            inp = self.driver.find_element(By.CSS_SELECTOR, "#erpSearchInput")
-            inp.clear()
-            inp.send_keys(text)
-            self.wait_seconds(0.3)
-            from selenium.webdriver.common.keys import Keys
-            inp.send_keys(Keys.RETURN)
-            self.wait_seconds(2)
-        except Exception as e:
-            log.warning(f"search_entry failed: {e}")
+    def verify_agent_exists(self, agent_name):
+        assert self.is_agent_in_table(agent_name), f"Agent '{agent_name}' not found in table"
 
-    def click_row_action(self, row_index=0):
-        """Click the 3-dot (more_vert) menu trigger on a table row."""
-        try:
-            triggers = self.driver.find_elements(By.CSS_SELECTOR, "button.erp-row-trigger")
-            if row_index < len(triggers):
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});arguments[0].click();",
-                    triggers[row_index],
-                )
-                self.wait_seconds(0.5)
-        except Exception as e:
-            log.warning(f"click_row_action({row_index}) failed: {e}")
+    def _find_row_index(self, agent_name):
+        rows = self.page.locator("table#excel-table tbody tr")
+        for i in range(rows.count()):
+            if agent_name in rows.nth(i).inner_text():
+                return i
+        raise AssertionError(f"Agent '{agent_name}' not found in table")
 
-    def click_menu_view(self):
-        """Click 'Open record details' from an open row menu."""
-        try:
-            btn = self.driver.find_element(By.XPATH, "//button[contains(.,'Open record details')]")
-            self.driver.execute_script("arguments[0].click();", btn)
-            self.wait_seconds(1)
-        except Exception as e:
-            log.warning(f"click_menu_view failed: {e}")
+    def click_view_button(self, agent_name):
+        self.click_row_action(self._find_row_index(agent_name), "View")
 
-    def click_menu_edit(self):
-        """Click 'Modify this record' from an open row menu."""
-        try:
-            btn = self.driver.find_element(By.XPATH, "//button[contains(.,'Modify this record')]")
-            self.driver.execute_script("arguments[0].click();", btn)
-            self.wait_seconds(1)
-        except Exception as e:
-            log.warning(f"click_menu_edit failed: {e}")
+    def click_history_button(self, agent_name):
+        self.click_row_action(self._find_row_index(agent_name), "History")
+        self.page.wait_for_timeout(1000)
 
-    def click_menu_history(self):
-        """Click 'View change log' from an open row menu."""
-        try:
-            btn = self.driver.find_element(By.XPATH, "//button[contains(.,'View change log')]")
-            self.driver.execute_script("arguments[0].click();", btn)
-            self.wait_seconds(1)
-        except Exception as e:
-            log.warning(f"click_menu_history failed: {e}")
+    def verify_view_popup_read_only(self):
+        buttons = self.page.locator(".popup-footer button")
+        texts = [buttons.nth(i).text_content().strip() for i in range(buttons.count())]
+        assert "Submit" not in texts and "Update" not in texts, \
+            "View popup must not have Submit or Update"
