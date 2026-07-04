@@ -5,33 +5,50 @@ _ts = int(time.time())
 _counter = 0
 _rng = random.Random(_ts)
 
-_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+_FIRST_NAMES = [
+    "Ramesh", "Suresh", "Mahesh", "Dinesh", "Ganesh", "Rajesh", "Naresh", "Umesh", "Yogesh", "Lokesh",
+    "Anil", "Sunil", "Pankaj", "Sanjay", "Vijay", "Ajay", "Manoj", "Ravi", "Vinod", "Pramod",
+    "Santosh", "Rakesh", "Mukesh", "Devendra", "Narendra", "Hemant", "Prasad", "Nitin", "Sachin", "Rohit",
+    "Amol", "Vishal", "Nikhil", "Rahul", "Abhijit", "Deepak", "Vivek", "Prashant", "Nilesh", "Tushar",
+    "Kiran", "Shubham", "Abhishek", "Aniket", "Akash", "Omkar", "Siddhesh", "Pratik", "Gaurav", "Swapnil",
+]
+
+_MIDDLE_NAMES = [
+    "Baburao", "Shankar", "Sitaram", "Govind", "Dattatray", "Pandurang", "Vitthal", "Narayan", "Bhimrao", "Kondiba",
+    "Krishnarao", "Vishwanath", "Laxmanrao", "Bhalchandra", "Trimbakrao", "Anandrao", "Madhavrao", "Shivaji", "Bajirao", "Tatya",
+]
+
+_LAST_NAMES = [
+    "Patil", "Shinde", "Jadhav", "Deshmukh", "More", "Pawar", "Kulkarni", "Bhosale", "Mane", "Gaikwad",
+    "Yadav", "Chavan", "Salunke", "Kadam", "Sawant", "Thorat", "Waghmare", "Bandal", "Kale", "Doke",
+    "Mohite", "Bhoir", "Lokhande", "Deshpande", "Joshi", "Nair", "Iyer", "Reddy", "Sharma", "Verma",
+    "Kumar", "Singh", "Gupta", "Shah", "Mehta", "Patel", "Rao", "Naik", "Nayak", "Pillai",
+    "Wagh", "Borse", "Gholap", "Gavhane", "Sonawane", "Nimbalkar", "Zende", "Kshirsagar", "Bagal", "Mulik",
+]
 
 
-def _encode(n):
-    result = ""
-    n = max(n, 1)
-    while n > 0:
-        result = _LETTERS[(n - 1) % 26] + result
-        n = (n - 1) // 26
-    return result
+def _unique_name():
+    first  = _rng.choice(_FIRST_NAMES)
+    middle = _rng.choice(_MIDDLE_NAMES)
+    last   = _rng.choice(_LAST_NAMES)
+    return f"{first} {middle} {last}"
 
 
 def _unique_data():
     global _counter
     _counter += 1
-    tag = f"{_encode(_ts % 100000)}{_encode(_counter)}"
-    # Name must be letters + spaces only
+    name = _unique_name()
+    slug = f"{_ts}{_counter}"
     return {
-        "farmer_name":  f"Ramesh {tag}",
-        "email":        f"farmer{tag.lower()}@testmail.com",
+        "farmer_name":  name,
+        "email":        f"farmer{slug}@testmail.com",
         "phone_number": str(_rng.randint(7000000000, 9999999999)),
         "address1":     "101 Shivaji Path Pune",
         "address2":     "202 MG Road Kolhapur",
         "bank_name":    "HDFC Bank",
         "bank_branch":  "Pune Branch",
         "bank_ifsc":    "BARB0696379",
-        "bank_holder":  f"Ramesh {tag}",
+        "bank_holder":  name,
         "bank_account": str(_rng.randint(100000000000, 999999999999)),
     }
 
@@ -78,3 +95,43 @@ class TestFarmerUIGroup4:
         farmer_page.click_history_button(data["farmer_name"])
         assert farmer_page.page.locator(".popup-footer").count() > 0
         farmer_page.close_popup()
+
+
+class TestFarmerFPCCreate:
+    def test_create_fpc_member(self, farmer_page):
+        data = _unique_data()
+        farmer_page.create_record(data, category="FPC Member")
+        farmer_page.search_farmer(data["farmer_name"])
+        farmer_page.verify_farmer_exists(data["farmer_name"])
+
+        # Verify workflow
+        farmer_page.click_edit_button(data["farmer_name"])
+        farmer_page.click_workflow_btn(farmer_page.VERIFY_BTN)
+        farmer_page.search_farmer(data["farmer_name"])
+        assert farmer_page.get_workflow_status(data["farmer_name"]) == "Verify"
+
+        # Approve workflow
+        farmer_page.click_edit_button(data["farmer_name"])
+        farmer_page.click_workflow_btn(farmer_page.APPROVE_BTN)
+        farmer_page.search_farmer(data["farmer_name"])
+        assert farmer_page.get_workflow_status(data["farmer_name"]) == "Approve"
+
+
+class TestFarmerBorrowerCreate:
+    def test_create_borrower_farmer(self, farmer_page):
+        data = _unique_data()
+        farmer_page.create_record(data, category="Borrower Farmer")
+        farmer_page.search_farmer(data["farmer_name"])
+        farmer_page.verify_farmer_exists(data["farmer_name"])
+
+        # Verify workflow
+        farmer_page.click_edit_button(data["farmer_name"])
+        farmer_page.click_workflow_btn(farmer_page.VERIFY_BTN)
+        farmer_page.search_farmer(data["farmer_name"])
+        assert farmer_page.get_workflow_status(data["farmer_name"]) == "Verify"
+
+        # Approve workflow
+        farmer_page.click_edit_button(data["farmer_name"])
+        farmer_page.click_workflow_btn(farmer_page.APPROVE_BTN)
+        farmer_page.search_farmer(data["farmer_name"])
+        assert farmer_page.get_workflow_status(data["farmer_name"]) == "Approve"
