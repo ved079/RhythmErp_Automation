@@ -7,14 +7,30 @@ _rng = random.Random(_ts)
 
 _LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+_CO_FIRST = [
+    "Shivaji", "Balaji", "Ganesh", "Laxmi", "Sai", "Vitthal", "Mahalaxmi", "Bhavani",
+    "Rajlaxmi", "Samarth", "Omkar", "Siddhivinayak", "Datta", "Renuka", "Ambika",
+    "Gurukripa", "Swami", "Kalpana", "Nirmala", "Prathamesh", "Shraddha", "Suvidha",
+    "Aarav", "Vedant", "Pranav", "Tanvi", "Shreya", "Siddhi", "Atharva", "Ruturaj",
+]
 
-def _encode(n):
-    result = ""
-    n = max(n, 1)
-    while n > 0:
-        result = _LETTERS[(n - 1) % 26] + result
-        n = (n - 1) // 26
-    return result
+_CO_MIDDLE = [
+    "Traders", "Enterprises", "Industries", "Agro", "Foods", "Exports", "Farms",
+    "Suppliers", "Distributors", "Associates", "Solutions", "Group", "Services",
+    "Products", "Resources", "Networks", "Commodities", "Ventures", "Holdings",
+]
+
+_CO_SUFFIX = [
+    "Pvt Ltd", "Ltd", "LLP", "& Co", "and Sons", "Brothers", "International",
+    "India", "Corporation", "Agency", "Works", "Trading Co", "Impex",
+]
+
+
+def _unique_company_name():
+    first  = _rng.choice(_CO_FIRST)
+    middle = _rng.choice(_CO_MIDDLE)
+    suffix = _rng.choice(_CO_SUFFIX)
+    return f"{first} {middle} {suffix}"
 
 
 def _pan(counter):
@@ -29,10 +45,11 @@ def _gstin(counter, state_code="29"):
 def _unique_data():
     global _counter
     _counter += 1
-    tag = f"{_encode(_ts % 100000)}{_encode(_counter)}"
+    slug = f"{_ts}{_counter}"
+    name = _unique_company_name()
     return {
-        "company_name": f"Balaji {tag}",
-        "email":        f"supp{tag.lower()}@testmail.com",
+        "company_name": name,
+        "email":        f"supp{slug}@testmail.com",
         "phone_number": str(_rng.randint(7000000000, 9999999999)),
         "pan_number":   _pan(_counter),
         "address1":     "101 Shivaji Path Pune",
@@ -42,7 +59,7 @@ def _unique_data():
         "bank_name":    "HDFC Bank",
         "bank_branch":  "Pune Branch",
         "bank_ifsc":    "BARB0696379",
-        "bank_holder":  f"Balaji {tag}",
+        "bank_holder":  name,
         "bank_account": str(_rng.randint(100000000000, 999999999999)),
     }
 

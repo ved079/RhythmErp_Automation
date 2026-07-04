@@ -1,11 +1,11 @@
 import os
 import pytest
 from playwright.sync_api import sync_playwright
-from pages.registration.modules.farmer.farmer_page import FarmerPage
+from pages.documents.modules.member.member_page import MemberPage
 
 RHYTHMERP_LOGIN_URL = os.environ.get("RHYTHMERP_LOGIN_URL", "https://rhythmerp.algorhythms.in")
-RHYTHMERP_EMAIL     = os.environ.get("RHYTHMERP_EMAIL", "")
-RHYTHMERP_PASSWORD  = os.environ.get("RHYTHMERP_PASSWORD", "")
+RHYTHMERP_EMAIL = os.environ.get("RHYTHMERP_EMAIL", "")
+RHYTHMERP_PASSWORD = os.environ.get("RHYTHMERP_PASSWORD", "")
 
 
 @pytest.fixture(scope="session")
@@ -43,8 +43,8 @@ def logged_in_page(browser):
 
 
 @pytest.fixture(scope="function")
-def farmer_page(logged_in_page):
-    p = FarmerPage(logged_in_page)
+def mb_page(logged_in_page):
+    p = MemberPage(logged_in_page)
     p.navigate_to_page()
     yield p
     try:

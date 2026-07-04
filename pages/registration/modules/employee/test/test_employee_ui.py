@@ -5,25 +5,43 @@ _ts = int(time.time())
 _counter = 0
 _rng = random.Random(_ts)
 
-_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+_FIRST_NAMES = [
+    "Ramesh", "Suresh", "Mahesh", "Dinesh", "Ganesh", "Rajesh", "Naresh", "Umesh", "Yogesh", "Lokesh",
+    "Anil", "Sunil", "Pankaj", "Sanjay", "Vijay", "Ajay", "Manoj", "Ravi", "Vinod", "Pramod",
+    "Santosh", "Rakesh", "Mukesh", "Devendra", "Narendra", "Hemant", "Prasad", "Nitin", "Sachin", "Rohit",
+    "Amol", "Vishal", "Nikhil", "Rahul", "Abhijit", "Deepak", "Vivek", "Prashant", "Nilesh", "Tushar",
+    "Kiran", "Shubham", "Abhishek", "Aniket", "Akash", "Omkar", "Siddhesh", "Pratik", "Gaurav", "Swapnil",
+]
+
+_MIDDLE_NAMES = [
+    "Baburao", "Shankar", "Sitaram", "Govind", "Dattatray", "Pandurang", "Vitthal", "Narayan", "Bhimrao", "Kondiba",
+    "Krishnarao", "Vishwanath", "Laxmanrao", "Bhalchandra", "Trimbakrao", "Anandrao", "Madhavrao", "Shivaji", "Bajirao", "Tatya",
+]
+
+_LAST_NAMES = [
+    "Patil", "Shinde", "Jadhav", "Deshmukh", "More", "Pawar", "Kulkarni", "Bhosale", "Mane", "Gaikwad",
+    "Yadav", "Chavan", "Salunke", "Kadam", "Sawant", "Thorat", "Waghmare", "Bandal", "Kale", "Doke",
+    "Mohite", "Bhoir", "Lokhande", "Deshpande", "Joshi", "Nair", "Iyer", "Reddy", "Sharma", "Verma",
+    "Kumar", "Singh", "Gupta", "Shah", "Mehta", "Patel", "Rao", "Naik", "Nayak", "Pillai",
+    "Wagh", "Borse", "Gholap", "Gavhane", "Sonawane", "Nimbalkar", "Zende", "Kshirsagar", "Bagal", "Mulik",
+]
 
 
-def _encode(n):
-    result = ""
-    n = max(n, 1)
-    while n > 0:
-        result = _LETTERS[(n - 1) % 26] + result
-        n = (n - 1) // 26
-    return result
+def _unique_name():
+    first  = _rng.choice(_FIRST_NAMES)
+    middle = _rng.choice(_MIDDLE_NAMES)
+    last   = _rng.choice(_LAST_NAMES)
+    return f"{first} {middle} {last}"
 
 
 def _unique_data():
     global _counter
     _counter += 1
-    tag = f"{_encode(_ts % 100000)}{_encode(_counter)}".lower()
+    slug = f"{_ts}{_counter}"
+    name = _unique_name()
     return {
-        "employee_name": f"Geeta {_encode(_ts % 1000)}{_encode(_counter)}",
-        "email":         f"emp{tag}@testmail.com",
+        "employee_name": name,
+        "email":         f"emp{slug}@testmail.com",
         "phone_number":  str(_rng.randint(7000000000, 9999999999)),
     }
 
