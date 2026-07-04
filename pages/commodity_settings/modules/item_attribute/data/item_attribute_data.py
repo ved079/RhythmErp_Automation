@@ -239,45 +239,70 @@ SUCCESS_UPDATE_MSG = 'Your record has been updated successfully!'
 #  Name/Description Generators
 # ═══════════════════════════════════════════
 
-REAL_ATTRIBUTE_NAMES = {
-    1: ["Apple", "Banana", "Mango", "Orange", "Grapes", "Tomato", "Potato",
-        "Onion", "Carrot", "Spinach", "Cabbage", "Cauliflower", "Strawberry",
-        "Watermelon", "Papaya", "Pineapple", "Guava", "Lemon", "Pea", "Beetroot",
-        "Cucumber", "Radish", "Broccoli", "Celery", "Mushroom", "Cherry",
-        "Plum", "Kiwi", "Pear", "Fig", "Coconut", "Corn", "Garlic", "Ginger"],
-    2: ["Shiny", "Skinny", "Glossy", "Matte", "Smooth", "Rough", "Soft",
-        "Hard", "Thin", "Thick", "Bright", "Dull", "Round", "Flat", "Curved",
-        "Silky", "Crisp", "Fuzzy", "Bumpy", "Slick", "Coarse", "Fine",
-        "Dense", "Hollow", "Stiff", "Flexible", "Sleek", "Pale", "Vivid", "Mild"],
-    3: ["Red", "Blue", "Green", "Yellow", "Pink", "Purple", "Orange",
-        "White", "Black", "Brown", "Grey", "Golden", "Silver", "Maroon",
-        "Navy", "Teal", "Peach", "Lime", "Coral", "Ivory", "Turquoise",
-        "Magenta", "Beige", "Burgundy", "Charcoal", "Cream", "Olive",
-        "Plum", "Rose", "Ruby"],
-    4: ["Small", "Medium", "Large", "Extra Large", "Tiny", "Huge", "Mini",
-        "Giant", "Narrow", "Wide", "Deep", "Shallow", "Compact", "Jumbo",
-        "Petite", "Oversized", "Slim", "Broad", "Tall", "Short", "Micro",
-        "Macro", "Teeny", "Enormous", "Vast", "Minute", "Colossal",
-        "Mighty", "Puny", "Scrawny"],
-    5: ["Square", "Circle", "Triangle", "Oval", "Hexagon", "Octagon",
-        "Rectangle", "Cone", "Sphere", "Cube", "Cylinder", "Pyramid",
-        "Star", "Heart", "Diamond", "Cross", "Arrow", "Spiral", "Arc", "Ring",
-        "Crescent", "Droplet", "Crossover", "Knot", "Loop", "Coil",
-        "Ribbon", "Blade", "Wedge", "Crest"],
-}
+_IA1_CROPS = [
+    "Basmati 1121 Rice", "Basmati 1509 Rice", "Sona Masoori Rice", "IR-64 Rice",
+    "PR-106 Rice", "Pusa Basmati Rice", "Swarna Rice", "MTU-7029 Rice",
+    "BPT-5204 Rice", "Sarjoo-52 Rice", "Dubraj Rice", "Indrayani Rice",
+    "Kolam Rice", "HMT Rice", "Minikit Rice",
+    "Sharbati Wheat", "Lok-1 Wheat", "GW-322 Wheat", "HD-2967 Wheat",
+    "PBW-343 Wheat", "K-307 Wheat", "NW-1014 Wheat", "HI-8498 Wheat",
+    "MP-3173 Wheat", "GW-496 Wheat",
+    "Chana Dal", "Tur Dal", "Moong Dal", "Urad Dal", "Masoor Dal",
+    "Rajma", "Chawli", "Vatana", "Kulthi Dal", "Moth Dal",
+    "Soybean", "Groundnut Bold", "Groundnut Java", "Sunflower Seed",
+    "Mustard Seed", "Sesame Seed", "Linseed", "Castor Seed",
+    "Safflower Seed", "Niger Seed",
+    "Shankar-6 Cotton", "H-4 Cotton", "MCU-5 Cotton", "DCH-32 Cotton",
+    "Bunny BT Cotton",
+    "Jowar", "Bajra", "Maize", "Ragi", "Kodo Millet", "Foxtail Millet",
+    "Turmeric Finger", "Red Chilli Teja", "Coriander Seed", "Cumin Seed",
+    "Fenugreek Seed", "Ginger Dry", "Garlic", "Onion Dry",
+    "Sugarcane", "Potato", "Tomato", "Banana Robusta", "Mango Alphonso",
+]
+
+_IA1_QUALIFIERS = [
+    "FAQ Grade", "Premium Grade", "Grade A", "Grade B", "Grade C",
+    "Export Quality", "Sortex Quality", "Bold Grade", "Medium Grade", "Small Grade",
+    "Sun Dried", "Machine Dried", "Raw", "Processed", "Milled",
+    "Certified Seed", "Foundation Seed", "Hybrid Seed", "OPV",
+    "Kharif Lot", "Rabi Lot",
+]
+
+_IA25_TERMS = [
+    "Parboiled", "Polished", "Milled", "Sortex", "Graded", "Cleaned",
+    "Sieved", "Husked", "Dehusked", "Bleached", "Roasted", "Puffed",
+    "Flaked", "Powdered", "Crushed", "Dried", "Fermented", "Sprouted",
+    "Steamed", "Pressed", "Refined", "Extracted", "Filtered", "Decorticated",
+    "Bold", "Fine", "Medium", "Small", "Large", "Extra", "Super",
+    "Regular", "Special", "Desi", "Hybrid", "Organic", "Raw", "Premium",
+    "Standard", "FAQ", "Certified", "Export", "Local", "Commercial",
+    "Bold Grade", "Fine Meal", "Raw Paddy", "Sun Dried", "Hand Picked",
+    "Machine Cleaned", "Double Sortex", "Triple Cleaned", "Steam Processed", "Cold Pressed",
+    "Light Weight", "Heavy Weight", "Short Grain", "Long Grain", "Medium Grain",
+    "Thin Flake", "Thick Flake", "Coarse Ground", "Fine Ground", "Extra Bold",
+    "New Crop", "Old Stock", "Kharif Crop", "Rabi Crop", "Mixed Lot",
+    "Dry Milled", "Wet Milled", "Air Cleaned", "Screen Cleaned", "Gravity Sorted",
+]
+
+_ia_name_counter = 0
+_ia_rng = random.Random(int(time.time()))
 
 
 def generate_ia_name(attr_num=1):
-    """Generate a realistic Item Attribute name."""
-    pool = REAL_ATTRIBUTE_NAMES.get(attr_num, ["Attribute"])
-    used = getattr(generate_ia_name, "used", set())
-    available = [n for n in pool if n not in used]
-    if not available:
-        available = pool
-    name = random.choice(available)
-    used.add(name)
-    generate_ia_name.used = used
-    return name
+    """Generate a unique realistic Item Attribute name."""
+    global _ia_name_counter
+    _ia_name_counter += 1
+    if attr_num == 1:
+        crop      = _ia_rng.choice(_IA1_CROPS)
+        qualifier = _ia_rng.choice(_IA1_QUALIFIERS)
+        return f"{crop} - {qualifier} {_ia_name_counter}"
+    else:
+        term = _ia_rng.choice(_IA25_TERMS)
+        return f"{term} {_ia_name_counter}"
+
+
+# kept for backwards-compat with any code that imports REAL_ATTRIBUTE_NAMES
+REAL_ATTRIBUTE_NAMES = {n: _IA1_CROPS if n == 1 else _IA25_TERMS for n in range(1, 6)}
 
 
 def generate_ia_description(prefix="Auto Desc"):

@@ -67,6 +67,7 @@ const RunComparisonDialog = dynamic(() => import('@/components/comparison/RunCom
 const RunHistoryDialog = dynamic(() => import('@/components/dialogs/RunHistoryDialog').then(m => ({ default: m.RunHistoryDialog })), { ssr: false })
 const SetTokenDialog = dynamic(() => import('@/components/dialogs/SetTokenDialog').then(m => ({ default: m.SetTokenDialog })), { ssr: false })
 const ConcurrencyTab = dynamic(() => import('@/components/concurrency/ConcurrencyTab').then(m => ({ default: m.ConcurrencyTab })), { ssr: false })
+const DeploymentCheckTab = dynamic(() => import('@/components/deployment/DeploymentCheckTab').then(m => ({ default: m.DeploymentCheckTab })), { ssr: false })
 import type { RunSnapshot, ModuleHealth } from '@/lib/types'
 
 export default function Home() {
@@ -458,7 +459,7 @@ export default function Home() {
   }, [apiModules, pd.allTestCases, sidebarModules, pd.loadVisibility, pd.visibilityData])
 
   useEffect(() => {
-    if (selectedModule === 'dashboard' || selectedModule === 'my-tickets') return
+    if (selectedModule === 'dashboard' || selectedModule === 'my-tickets' || selectedModule === 'deployment-check') return
     const moduleKey = selectedModule.toLowerCase().replace(" ", "_").replace("-", "_")
     const overrides = pd.visibilityData?.overrides || {}
     const excludedSet = new Set(pd.visibilityData?.excludedTestNames || [])
@@ -738,8 +739,10 @@ export default function Home() {
           </aside>
         </div>
         {sidebarOpen && <div onMouseDown={handleResizeStart} className="w-1 cursor-col-resize bg-transparent hover:bg-[#3F51B5]/40 active:bg-[#3F51B5]/60 transition-colors shrink-0 relative z-10" />}
-        <main className="flex-1 flex flex-col overflow-hidden bg-[#F1F2F7] dark:bg-gray-900 relative">
+        <main className="flex-1 flex flex-col overflow-hidden bg-[#F1F2F7] dark:bg-gray-900 relative p-3">
           {navToast && <NavToast key={navToast.key} label={navToast.label} parent={navToast.parent} />}
+          {/* White card wrapper — scrolls internally, browser never moves */}
+          <div className="flex flex-col flex-1 min-h-0 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
           {!sidebarOpen && selectedModule !== 'dashboard' && (
             <div className="flex items-center gap-1.5 px-4 py-2 border-b border-gray-200 dark:border-gray-600/40 bg-white dark:bg-gray-900 shrink-0">
               <button onClick={handleGoHome} className="text-[12px] text-[#3F51B5] hover:text-[#3949AB] dark:text-[#7986CB] font-medium cursor-pointer transition-colors hover:underline">Dashboard</button>
@@ -772,6 +775,9 @@ export default function Home() {
             />
           ))}
           {selectedModule === 'my-tickets' && user && <MyTicketsTab userEmail={user.email} userName={user.name} onVerifyFix={handleVerifyFix} verifyingTicketId={verifyingTicket?.id} verifyResult={verifyResult} />}
+          {selectedModule === 'deployment-check' && (
+            <DeploymentCheckTab erpToken={erpToken} erpTenantId={erpTenantId} credentials={erpCredentials} activeCredId={activeCredId} getPassword={(id) => credPasswords.current[id] || ''} />
+          )}
           {selectedModule === 'full-purchase-flow' && (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="border-b border-gray-300 dark:border-gray-500/70 bg-gray-50/50 dark:bg-gray-800/30 shrink-0">
@@ -818,7 +824,7 @@ export default function Home() {
           {activeTab === 'concurrency' && (
             <ConcurrencyTab modules={sidebarModules} />
           )}
-          {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && selectedModule !== 'full-purchase-flow' && selectedModule !== 'credentials' && activeTab !== 'concurrency' && (
+          {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && selectedModule !== 'deployment-check' && selectedModule !== 'full-purchase-flow' && selectedModule !== 'credentials' && activeTab !== 'concurrency' && (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="border-b border-gray-300 dark:border-gray-500/70 bg-gray-50/50 dark:bg-gray-800/30 shrink-0" data-tour="tab-bar">
                 <div className="flex items-center h-10 px-4 gap-0">
@@ -849,6 +855,7 @@ export default function Home() {
               </div>
             </div>
           )}
+          </div>{/* end white card */}
         </main>
       </div>
       {/* Console Popup */}
