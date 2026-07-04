@@ -5,6 +5,7 @@ import type { SidebarModule } from '@/components/sidebar/SidebarModuleItem'
  * API data enriches these with real test counts.
  */
 export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
+  { id: 'deployment-check', label: 'Deployment Check', rocketIcon: true },
   { id: 'dashboard', label: 'Dashboard', homeIcon: true },
   { id: 'company-onboarding', label: 'Company Onboarding', userIcon: true },
   {
