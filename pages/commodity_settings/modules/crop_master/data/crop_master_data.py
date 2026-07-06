@@ -389,35 +389,6 @@ def generate_crop_master_payloads(count: int = 10, offset: int = 0) -> list:
     return payloads
 
 
-# ──────────────────────────────────────────────
-# FIELD VALIDATION RULES (from live ERP schema)
-# ──────────────────────────────────────────────
-FIELD_VALIDATION_RULES = {
-    "name": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "Crop name. Must be unique (BUG-CM02: duplicates currently allowed).",
-    },
-    "description": {
-        "type": "character",
-        "required": False,
-        "max_length": 255,
-        "note": "Optional description of the crop.",
-    },
-    "status": {
-        "type": "toggle",
-        "required": False,
-        "default": True,
-        "note": "Active/Inactive toggle. Default: Active (True).",
-    },
-}
-
-STATUS_OPTIONS = {"Active": True, "Inactive": False}
-
-DEFAULT_CROP_MASTER_FK_IDS = {}  # No FK dropdowns
-
-
 def get_fk_screen_mapping():
     """Return FK field → screen name mapping. Crop Master has no FK dropdowns."""
     return {}

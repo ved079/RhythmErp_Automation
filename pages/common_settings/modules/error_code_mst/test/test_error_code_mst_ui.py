@@ -61,6 +61,23 @@ class TestErrorCodeMstUI:
         assert ecm_page.is_code_in_table(data["code"]), \
             f"Error code '{data['code']}' must appear in search results"
 
+    def test_duplicate_code_rejected(self, ecm_page):
+        existing_code = ecm_page.page.locator("td.cdk-column-code").first.inner_text().strip()
+        ecm_page.open_add_form()
+        ecm_page.page.fill(ecm_page.CODE_INPUT, existing_code)
+        ecm_page.submit()
+        ecm_page.page.wait_for_selector(".swal2-container", timeout=5000)
+        title = (ecm_page.page.locator("#swal2-title").text_content() or "").strip().lower()
+        assert any(w in title for w in ("validation", "already", "exists", "duplicate", "error")), \
+            f"Expected duplicate rejection alert, got: '{title}'"
+        ecm_page.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        ecm_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
+        ecm_page.close_popup()
+
+    def test_search_nonexistent(self, ecm_page):
+        ecm_page.search_record("searchNonexitingCode")
+        assert not ecm_page.is_code_in_table("searchNonexitingCode")
+
     def test_full_row_actions(self, ecm_page):
         data = generate_valid_error_code_mst_data()
         data["code"] = _unique_code()

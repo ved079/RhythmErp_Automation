@@ -1,11 +1,25 @@
 import os
+import sys
 import pytest
 from playwright.sync_api import sync_playwright
-from pages.commodity_settings.modules.services_master.sm_playwright_page import SMPlaywrightPage
+from pages.private_b2b.modules.purchase_order.po_playwright_page import POPlaywrightPage
+
+PROJECT_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..")
+)
+sys.path.insert(0, PROJECT_ROOT)
 
 RHYTHMERP_LOGIN_URL = os.environ.get("RHYTHMERP_LOGIN_URL", "https://rhythmerp.algorhythms.in")
 RHYTHMERP_EMAIL     = os.environ.get("RHYTHMERP_EMAIL", "")
 RHYTHMERP_PASSWORD  = os.environ.get("RHYTHMERP_PASSWORD", "")
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "smoke: Critical happy-path tests")
+    config.addinivalue_line("markers", "calculation: Computed field verification")
+    config.addinivalue_line("markers", "workflow: PO approval workflow tests")
+    config.addinivalue_line("markers", "validation: Form validation and error handling")
+    config.addinivalue_line("markers", "multi_row: Multi-item PO tests")
 
 
 @pytest.fixture(scope="session")
@@ -16,7 +30,7 @@ def playwright_instance():
 
 @pytest.fixture(scope="class")
 def browser(playwright_instance):
-    b = playwright_instance.chromium.launch(headless=True, slow_mo=0)
+    b = playwright_instance.chromium.launch(headless=False, slow_mo=150)
     yield b
     b.close()
 
@@ -43,8 +57,8 @@ def logged_in_page(browser):
 
 
 @pytest.fixture(scope="function")
-def sm_page(logged_in_page):
-    p = SMPlaywrightPage(logged_in_page)
+def po_page(logged_in_page):
+    p = POPlaywrightPage(logged_in_page)
     p.navigate_to_page()
     yield p
     try:

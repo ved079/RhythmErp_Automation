@@ -70,6 +70,25 @@ class TestVehicleMasterUI:
         vm_page.search_vehicle(data["name"])
         vm_page.verify_vehicle_exists(data["name"])
 
+    def test_duplicate_name_rejected(self, vm_page):
+        existing_name = vm_page.page.locator("td.cdk-column-name").first.inner_text().strip()
+        data = generate_valid_vehicle_data()
+        data["name"] = existing_name
+        vm_page.open_add_form()
+        vm_page.fill_form(data)
+        vm_page.submit()
+        vm_page.page.wait_for_selector(".swal2-container", timeout=5000)
+        title = (vm_page.page.locator("#swal2-title").text_content() or "").strip().lower()
+        assert any(w in title for w in ("validation", "already", "exists", "duplicate", "error")), \
+            f"Expected duplicate rejection alert, got: '{title}'"
+        vm_page.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        vm_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
+        vm_page.close_popup()
+
+    def test_search_nonexistent(self, vm_page):
+        vm_page.search_vehicle("searchNonexitingName")
+        assert not vm_page.is_vehicle_in_table("searchNonexitingName")
+
     def test_full_row_actions(self, vm_page):
         data = generate_valid_vehicle_data()
         data["name"] = _unique_name(data["name"])

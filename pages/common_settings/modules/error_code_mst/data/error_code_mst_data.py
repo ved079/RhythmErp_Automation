@@ -8,14 +8,6 @@ Fields: error_code_type, code, description, is_qty_amount
 
 import random
 
-# ── Field length constraints ──────────────────────────────────────────
-ERROR_CODE_MAX_LENGTH = 255          # frontend caps code at 255
-ERROR_DESCRIPTION_MAX_LENGTH = 255   # frontend caps description at 255
-
-# ── Realistic data pools ─────────────────────────────────────────────
-
-# Real FK IDs discovered from live ERP (discover_all.py run 2026-06-02)
-# Screen: Error Code Type → dropdown field: error_code_type
 ERROR_CODE_TYPE_IDS = {
     "Farmer":      643,
     "Debit Note":  216,
@@ -25,19 +17,7 @@ ERROR_CODE_TYPE_IDS = {
 
 ERROR_CODE_TYPES = list(ERROR_CODE_TYPE_IDS.keys())
 
-# ── Page constants (used by error_code_mst_page.py) ──────────────────
-PAGE_URL = "https://rhythmerp.algorhythms.in/#/dynamic-screens/Error%20Code%20Mst"
-FIELD_ERROR_CODE_TYPE = "Error Code Type"
-FIELD_CODE = "Code"
-FIELD_DESCRIPTION = "Description"
-FIELD_IS_QTY_AMT = "Is Qty/Amount"
-VALIDATION_FAILED_TITLE = "Validation Failed"
-VALIDATION_FAILED_CONTENT = "Please correct the highlighted fields"
-POPUP_TITLE = "Error Code Mst"
-HISTORY_POPUP_TITLE = "Error Code Mst History"
 ERROR_CODE_TYPE_OPTIONS = list(ERROR_CODE_TYPE_IDS.keys())
-TOGGLE_AMOUNT = "Amount"
-TOGGLE_QUANTITY = "Qty"
 
 CODES_BY_TYPE = {
     "Farmer":       ["FM-DOC", "FM-KYC", "FM-LAND", "FM-BANK", "FM-VERIFY"],
@@ -189,10 +169,6 @@ def get_field_validation_rules(fk_ids=None):
     }
 
 
-# Backward-compat constant
-FIELD_VALIDATION_RULES = get_field_validation_rules()
-
-
 def get_fk_screen_mapping():
     """Declare which FK dropdown fields need live resolution from which ERP screen."""
     return {"error_code_type": "Error Code Type"}
@@ -208,8 +184,6 @@ def generate_batch_payloads(
     """Generate a batch of unique Error Code Mst API payloads."""
     return generate_error_code_mst_api_payloads(count=count, offset=offset, fk_ids=dropdown_ids)
 
-
-# ── UI Validation Helpers (restored for test compatibility) ──
 
 _ec_counter = 0
 
@@ -235,116 +209,7 @@ def generate_valid_error_code_mst_data():
         "error_code_type": ec_type,
         "code": generate_error_code(),
         "description": generate_error_description(),
-        "is_qty_amt": TOGGLE_AMOUNT,
+        "is_qty_amt": "Amount",
     }
 
 
-def generate_create_test_data():
-    """Return a dict with all fields for UI create_record (alias)."""
-    return generate_valid_error_code_mst_data()
-
-
-def generate_edit_test_data():
-    """Return a dict with fields for UI edit_record."""
-    return {
-        "error_code_type": random.choice(ERROR_CODE_TYPE_OPTIONS),
-        "code": generate_error_code(),
-        "description": generate_error_description(),
-        "is_qty_amt": TOGGLE_AMOUNT,
-    }
-
-
-def generate_create_with_toggle_qty():
-    """Return valid data with toggle set to Quantity."""
-    ec_type = random.choice(ERROR_CODE_TYPE_OPTIONS)
-    return {
-        "error_code_type": ec_type,
-        "code": generate_error_code(),
-        "description": generate_error_description(),
-        "is_qty_amt": TOGGLE_QUANTITY,
-    }
-
-
-def generate_create_without_description():
-    """Return valid data without description (optional)."""
-    ec_type = random.choice(ERROR_CODE_TYPE_OPTIONS)
-    return {
-        "error_code_type": ec_type,
-        "code": generate_error_code(),
-        "description": "",
-        "is_qty_amt": TOGGLE_AMOUNT,
-    }
-
-
-def empty_fields_data():
-    """Return a dict with all fields empty."""
-    return {
-        "error_code_type": "",
-        "code": "",
-        "description": "",
-        "is_qty_amt": TOGGLE_AMOUNT,
-    }
-
-
-def missing_dropdown_data():
-    """Return a dict with dropdown empty but code and description filled."""
-    return {
-        "error_code_type": "",
-        "code": generate_error_code(),
-        "description": generate_error_description(),
-        "is_qty_amt": TOGGLE_AMOUNT,
-    }
-
-
-def missing_code_data():
-    """Return a dict with code empty but dropdown and description filled."""
-    return {
-        "error_code_type": random.choice(ERROR_CODE_TYPE_OPTIONS),
-        "code": "",
-        "description": generate_error_description(),
-        "is_qty_amt": TOGGLE_AMOUNT,
-    }
-
-
-def special_chars_code_data():
-    """Return a dict with special characters in code field."""
-    ec_type = random.choice(ERROR_CODE_TYPE_OPTIONS)
-    return {
-        "error_code_type": ec_type,
-        "code": "TEST@#$%^&*()",
-        "description": generate_error_description(),
-        "is_qty_amt": TOGGLE_AMOUNT,
-    }
-
-
-def very_long_code_data():
-    """Return a dict with a very long code string (256 chars)."""
-    ec_type = random.choice(ERROR_CODE_TYPE_OPTIONS)
-    return {
-        "error_code_type": ec_type,
-        "code": "A" * 256,
-        "description": generate_error_description(),
-        "is_qty_amt": TOGGLE_AMOUNT,
-    }
-
-
-def spaces_only_code_data():
-    """Return a dict with spaces-only code."""
-    ec_type = random.choice(ERROR_CODE_TYPE_OPTIONS)
-    return {
-        "error_code_type": ec_type,
-        "code": "     ",
-        "description": generate_error_description(),
-        "is_qty_amt": TOGGLE_AMOUNT,
-    }
-
-
-def very_long_description_data():
-    """Return a dict with a very long description string (256 chars)."""
-    ec_type = random.choice(ERROR_CODE_TYPE_OPTIONS)
-    return {
-        "error_code_type": ec_type,
-        "code": generate_error_code(),
-        "description": "D" * 256,
-        "is_qty_amt": TOGGLE_AMOUNT,
-    }

@@ -47,6 +47,23 @@ class TestSeasonUI:
         season_page.search_season(data["Name"])
         season_page.verify_season_exists(data["Name"])
 
+    def test_duplicate_name_rejected(self, season_page):
+        existing_name = season_page.page.locator("td.cdk-column-name").first.inner_text().strip()
+        season_page.open_add_form()
+        season_page.page.fill(season_page.NAME_INPUT, existing_name)
+        season_page.submit()
+        season_page.page.wait_for_selector(".swal2-container", timeout=5000)
+        title = (season_page.page.locator("#swal2-title").text_content() or "").strip().lower()
+        assert any(w in title for w in ("validation", "already", "exists", "duplicate", "error")), \
+            f"Expected duplicate rejection alert, got: '{title}'"
+        season_page.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        season_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
+        season_page.close_popup()
+
+    def test_search_nonexistent(self, season_page):
+        season_page.search_season("searchNonexitingName")
+        assert not season_page.is_season_in_table("searchNonexitingName")
+
     def test_full_row_actions(self, season_page):
         data = valid_season_with_description()
         season_page.open_add_form()

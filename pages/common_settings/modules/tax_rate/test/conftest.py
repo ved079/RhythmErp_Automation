@@ -16,7 +16,7 @@ def playwright_instance():
 
 @pytest.fixture(scope="class")
 def browser(playwright_instance):
-    b = playwright_instance.chromium.launch(headless=True)
+    b = playwright_instance.chromium.launch(headless=False)
     yield b
     b.close()
 
@@ -48,6 +48,6 @@ def tr_page(logged_in_page):
     p.navigate_to_page()
     yield p
     try:
-        p.force_close_popup()
+        p.close_popup()
     except Exception:
         pass

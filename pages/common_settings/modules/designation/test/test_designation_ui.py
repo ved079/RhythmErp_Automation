@@ -46,6 +46,23 @@ class TestDesignationUI:
         designation_page.search_designation(data["name"])
         designation_page.verify_designation_exists(data["name"])
 
+    def test_duplicate_name_rejected(self, designation_page):
+        existing_name = designation_page.page.locator("td.cdk-column-name").first.inner_text().strip()
+        designation_page.open_add_form()
+        designation_page.page.fill(designation_page.NAME_INPUT, existing_name)
+        designation_page.submit()
+        designation_page.page.wait_for_selector(".swal2-container", timeout=5000)
+        title = (designation_page.page.locator("#swal2-title").text_content() or "").strip().lower()
+        assert any(w in title for w in ("validation", "already", "exists", "duplicate", "error")), \
+            f"Expected duplicate rejection alert, got: '{title}'"
+        designation_page.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        designation_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
+        designation_page.close_popup()
+
+    def test_search_nonexistent(self, designation_page):
+        designation_page.search_designation("searchNonexitingName")
+        assert not designation_page.is_designation_in_table("searchNonexitingName")
+
     def test_full_row_actions(self, designation_page):
         data = generate_valid_designation_data()
         designation_page.open_add_form()

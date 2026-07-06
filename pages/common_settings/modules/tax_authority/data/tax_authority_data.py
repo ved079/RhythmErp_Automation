@@ -14,17 +14,6 @@ import random
 import time
 from datetime import datetime
 
-# ── Field length constants ───────────────────────────────────────────
-TAX_NAME_MAX_LENGTH = 255
-
-# ── Page constants (used by tax_authority_page.py) ──────────────────
-TAX_AUTHORITY_PAGE_URL = "https://rhythmerp.algorhythms.in/#/dynamic-screens/Tax%20Authority"
-FIELD_TAX_NAME = "tax_name"
-VALIDATION_FAILED_TITLE = "Validation Failed"
-VALIDATION_FAILED_CONTENT = "Please correct the highlighted fields"
-POPUP_TITLE = "Tax Authority"
-HISTORY_POPUP_TITLE = "Tax Authority History"
-
 # ── Realistic data pools ─────────────────────────────────────────────
 
 TAX_AUTHORITIES = [
@@ -94,34 +83,7 @@ def valid_tax_authority_data():
     """Return a dict with all fields for UI create_record.
     Hardcoded: tax_type=GST, country=India (user requirement)."""
     return {
-        FIELD_TAX_NAME: generate_tax_name(),
-        "tax_type": "GST",
-        "country": "India",
-    }
-
-
-def duplicate_tax_authority_data(tax_name):
-    """Return data that duplicates an existing tax_name."""
-    return {
-        FIELD_TAX_NAME: tax_name,
-        "tax_type": "GST",
-        "country": "India",
-    }
-
-
-def special_chars_tax_name():
-    """Return data with special characters in tax_name."""
-    return {
-        FIELD_TAX_NAME: "TEST@#$%^&*()_+-=[]{}|;':\",./<>?",
-        "tax_type": "GST",
-        "country": "India",
-    }
-
-
-def invalid_very_long_tax_name(length=200):
-    """Return data with a very long tax_name."""
-    return {
-        FIELD_TAX_NAME: "X" * length,
+        "tax_name": generate_tax_name(),
         "tax_type": "GST",
         "country": "India",
     }
@@ -203,9 +165,6 @@ def get_field_validation_rules():
             "note": "FK to Country. Resolved at runtime via FkResolver.",
         },
     }
-
-
-FIELD_VALIDATION_RULES = get_field_validation_rules()
 
 
 def get_fk_screen_mapping():

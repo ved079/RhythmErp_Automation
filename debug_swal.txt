@@ -1,8 +1,0 @@
-<div class="swal2-container swal2-center swal2-backdrop-show" style="overflow-y: auto;"><div aria-labelledby="swal2-title" aria-describedby="swal2-html-container" class="swal2-popup swal2-modal swal2-icon-warning swal2-show" tabindex="-1" role="dialog" aria-live="assertive" aria-modal="true" style="Validation Failed
-Validation Failed
-Validation Failed
-Your record has been added successfully!
-Your record has been added successfully!
-Validation Failed
-Your record has been added successfully!
-Validation Failed

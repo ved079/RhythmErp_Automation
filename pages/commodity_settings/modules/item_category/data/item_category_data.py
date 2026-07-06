@@ -440,39 +440,6 @@ def generate_item_category_payloads(count: int = 10, offset: int = 0) -> list:
 # 4 fields: item_code (required), item_description (required),
 #           level (required, number), status (optional, toggle).
 
-FIELD_VALIDATION_RULES = {
-    "item_code": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "Item Category name. Maps to 'Item Category' UI label. API field key is item_code.",
-    },
-    "item_description": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "Item Category description text.",
-    },
-    "level": {
-        "type": "number",
-        "required": True,
-        "note": "Hierarchy level: 1=top, 2=sub-category, 3=sub-sub-category. Integer.",
-    },
-    "status": {
-        "type": "toggle",
-        "required": False,
-        "default": True,
-        "note": "Active/Inactive toggle. Default: Active (True).",
-    },
-}
-
-# Status toggle options (display name -> API boolean value)
-STATUS_OPTIONS = {"Active": True, "Inactive": False}
-
-# No FK dropdown pools — Item Category has zero FK fields
-DEFAULT_ITEM_CATEGORY_FK_IDS = {}
-
-
 def get_fk_screen_mapping():
     """Return FK field → screen name mapping. Item Category has no FK dropdowns."""
     return {}

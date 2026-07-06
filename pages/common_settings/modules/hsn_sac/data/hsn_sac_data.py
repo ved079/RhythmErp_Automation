@@ -244,11 +244,6 @@ def generate_batch_payloads(
     return generate_hsn_sac_api_payloads(count=count, fk_ids=dropdown_ids)
 
 
-# ── UI Validation Helpers (restored for test compatibility) ──
-
-SUCCESS_ADD_MESSAGE = "added successfully"
-SUCCESS_UPDATE_MESSAGE = "updated successfully"
-VALIDATION_FAILED_TITLE = "Validation Failed"
 HSN_SAC_TYPE_OPTIONS = list(HSN_SAC_TYPE_IDS.keys())
 
 _hsn_counter = 0
@@ -283,64 +278,3 @@ def generate_valid_hsn_sac_data():
     }
 
 
-def empty_fields_data():
-    """Return a dict with all fields empty."""
-    return {
-        "hsn_sac_number": "",
-        "hsn_sac_type": "",
-        "hsn_sac_description": "",
-    }
-
-
-def missing_number_data():
-    """Return a dict with empty number but type and description filled."""
-    return {
-        "hsn_sac_number": "",
-        "hsn_sac_type": random.choice(HSN_SAC_TYPE_OPTIONS),
-        "hsn_sac_description": generate_hsn_sac_description(),
-    }
-
-
-def missing_type_data():
-    """Return a dict with empty type but number and description filled."""
-    return {
-        "hsn_sac_number": generate_hsn_sac_number(),
-        "hsn_sac_type": "",
-        "hsn_sac_description": generate_hsn_sac_description(),
-    }
-
-
-def missing_description_data():
-    """Return a dict with empty description but number and type filled."""
-    return {
-        "hsn_sac_number": generate_hsn_sac_number(),
-        "hsn_sac_type": random.choice(HSN_SAC_TYPE_OPTIONS),
-        "hsn_sac_description": "",
-    }
-
-
-def special_chars_number_data():
-    """Return a dict with special characters in number field."""
-    return {
-        "hsn_sac_number": "@#$%^&",
-        "hsn_sac_type": random.choice(HSN_SAC_TYPE_OPTIONS),
-        "hsn_sac_description": generate_hsn_sac_description(),
-    }
-
-
-def very_long_number_data():
-    """Return a dict with a very long number string (256 chars)."""
-    return {
-        "hsn_sac_number": "9" * 256,
-        "hsn_sac_type": random.choice(HSN_SAC_TYPE_OPTIONS),
-        "hsn_sac_description": generate_hsn_sac_description(),
-    }
-
-
-def spaces_only_number_data():
-    """Return a dict with spaces-only number."""
-    return {
-        "hsn_sac_number": "     ",
-        "hsn_sac_type": random.choice(HSN_SAC_TYPE_OPTIONS),
-        "hsn_sac_description": generate_hsn_sac_description(),
-    }

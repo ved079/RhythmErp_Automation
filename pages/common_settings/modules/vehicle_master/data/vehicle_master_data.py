@@ -12,9 +12,6 @@ import random
 import string
 from datetime import datetime
 
-# ── Field length constants ────────────────────────────────────────────
-VEHICLE_NAME_MAX_LENGTH = 255
-
 # ── Tenant-agnostic data pools (display names only) ──────────────────
 
 VEHICLES = [
@@ -99,97 +96,6 @@ def generate_valid_vehicle_data(prefix="VM"):
         "vehicle_type": vehicle["vehicle_type"],
         "fuel_type": vehicle["fuel_type"],
         "description": f"{prefix} Test Vehicle {desc_suffix}",
-    }
-
-
-def generate_valid_edit_data():
-    """Generate data suitable for editing a vehicle (description change)."""
-    return {
-        "description": f"Edited Description {_random_alpha(6)}",
-    }
-
-
-def generate_empty_data():
-    """Return a dict with all empty/blank values."""
-    return {
-        "name": "",
-        "price": "",
-        "vehicle_type": "",
-        "fuel_type": "",
-        "description": "",
-    }
-
-
-def generate_name_only_data(prefix="NameOnly"):
-    """Return data with only the name filled in (alpha-only name)."""
-    return {
-        "name": generate_vehicle_name(prefix),
-        "price": "",
-        "vehicle_type": "",
-        "fuel_type": "",
-        "description": "",
-    }
-
-
-def generate_spaces_only(count=5):
-    """Return a string of only spaces."""
-    return " " * count
-
-
-def generate_zero_price():
-    """Return '0' as a price string."""
-    return "0"
-
-
-def generate_negative_price():
-    """Return a negative price string."""
-    return f"-{random.randint(100, 9999)}"
-
-
-def generate_alpha_price():
-    """Return alphabetic characters as price (invalid)."""
-    return f"abc{_random_alpha(3)}"
-
-
-def generate_decimal_price():
-    """Return a decimal price string (e.g., '1500.50')."""
-    return f"{random.randint(100, 9999)}.{random.randint(10, 99)}"
-
-
-def generate_price_with_special_chars():
-    """Return price with special characters (invalid)."""
-    return "500$%@"
-
-
-def generate_price_with_spaces():
-    """Return price with leading/trailing spaces."""
-    return f"  {random.randint(100, 9999)}  "
-
-
-def generate_special_char_name():
-    """Return a name with special characters (invalid per ERP alpha-only rule)."""
-    return f"Test!@#$%^&* {_random_alpha(4)}"
-
-
-def generate_string_255():
-    """Return a string of exactly 255 characters."""
-    return "A" * 255
-
-
-def generate_string_256():
-    """Return a string of exactly 256 characters."""
-    return "A" * 256
-
-
-def generate_duplicate_name_data(existing_name):
-    """Return valid data dict that uses an existing vehicle name (for dup test)."""
-    vehicle = random.choice(VEHICLES)
-    return {
-        "name": existing_name,
-        "price": str(vehicle["price"]),
-        "vehicle_type": vehicle["vehicle_type"],
-        "fuel_type": vehicle["fuel_type"],
-        "description": f"Dup test {_timestamp_suffix()}",
     }
 
 
@@ -284,9 +190,6 @@ def get_field_validation_rules():
             "max_length": 255,
         },
     }
-
-
-FIELD_VALIDATION_RULES = get_field_validation_rules()
 
 
 def get_fk_screen_mapping():

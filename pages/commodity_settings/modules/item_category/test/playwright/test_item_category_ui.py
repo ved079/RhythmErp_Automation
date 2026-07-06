@@ -69,6 +69,10 @@ class TestICUIGroup3:
     def test_listing_and_search(self, ic_page):
         assert ic_page.get_table_row_count() > 0
 
+    def test_search_nonexistent(self, ic_page):
+        ic_page.search_category("searchNonexitingCode")
+        assert not ic_page.is_category_in_table("searchNonexitingCode")
+
 
 class TestICUIGroup4:
     def test_full_row_actions(self, ic_page):
@@ -76,9 +80,20 @@ class TestICUIGroup4:
         ic_page.create_record(data)
         ic_page.search_category(data["item_category"])
         ic_page.verify_category_exists(data["item_category"])
+
+        # View
         ic_page.click_view_button(data["item_category"])
         ic_page.verify_view_popup_read_only()
         ic_page.close_popup()
+
+        # Edit — update description
+        ic_page.search_category(data["item_category"])
+        ic_page.click_edit_button(data["item_category"])
+        ic_page.update_item_description("Updated description after edit")
+        ic_page.click_update()
+        ic_page.handle_success_alert()
+
+        # History
         ic_page.search_category(data["item_category"])
         ic_page.click_history_button(data["item_category"])
         assert ic_page.page.locator(".popup-footer").count() > 0

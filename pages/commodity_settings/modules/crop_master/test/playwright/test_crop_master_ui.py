@@ -72,6 +72,10 @@ class TestCMUIGroup3:
     def test_listing_and_search(self, cm_page):
         assert cm_page.get_table_row_count() > 0
 
+    def test_search_nonexistent(self, cm_page):
+        cm_page.search_crop("searchNonexitingCode")
+        assert not cm_page.is_crop_in_table("searchNonexitingCode")
+
 
 class TestCMUIGroup4:
     def test_full_row_actions(self, cm_page):
@@ -79,10 +83,38 @@ class TestCMUIGroup4:
         cm_page.create_record(data)
         cm_page.search_crop(data["name"])
         cm_page.verify_crop_exists(data["name"])
+
+        # View
         cm_page.click_view_button(data["name"])
         cm_page.verify_view_popup_read_only()
         cm_page.close_popup()
+
+        # Edit — update name
         cm_page.search_crop(data["name"])
-        cm_page.click_history_button(data["name"])
+        updated_name = data["name"] + " Edited"
+        cm_page.click_edit_button(data["name"])
+        cm_page.update_name(updated_name)
+        cm_page.click_update()
+        cm_page.handle_success_alert()
+        cm_page.navigate_to_page()
+
+        # History
+        cm_page.search_crop(updated_name)
+        cm_page.click_history_button(updated_name)
         assert cm_page.page.locator(".popup-footer").count() > 0
+        cm_page.close_popup()
+
+
+class TestCMUIGroup5:
+    def test_duplicate_name_rejected(self, cm_page):
+        existing_name = cm_page.page.locator("td.cdk-column-name").first.inner_text().strip()
+        cm_page.open_add_form()
+        cm_page.fill_form({"name": existing_name})
+        cm_page.submit()
+        cm_page.page.wait_for_selector(".swal2-container", timeout=5000)
+        title = (cm_page.page.locator("#swal2-title").text_content() or "").strip().lower()
+        assert any(w in title for w in ("validation", "already", "exists", "duplicate", "error")), \
+            f"Expected duplicate rejection alert, got: '{title}'"
+        cm_page.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        cm_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
         cm_page.close_popup()

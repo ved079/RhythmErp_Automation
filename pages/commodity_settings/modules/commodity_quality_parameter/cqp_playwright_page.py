@@ -13,6 +13,7 @@ class CQPPlaywrightPage(BasePlaywrightPage):
     MAX_QUALITY      = "xpath=//mat-form-field[.//mat-label[contains(.,'Max Quality Value')]]//input"
     MULTIPLIER       = "xpath=//mat-form-field[.//mat-label[contains(.,'Multiplier')]]//input"
     SUBMIT_BTN       = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
+    UPDATE_BTN       = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]"
     CANCEL_BTN       = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
     ADD_BTN          = "button.erp-add-btn"
     ADD_ROW_BTN      = "button.add-row-btn"
@@ -20,6 +21,7 @@ class CQPPlaywrightPage(BasePlaywrightPage):
     def navigate_to_page(self):
         self.page.goto(self.URL)
         self.page.wait_for_selector("table#excel-table", timeout=15000)
+        self.page.wait_for_timeout(800)
 
     def open_add_form(self):
         self.page.locator(self.ADD_BTN).click()
@@ -29,7 +31,10 @@ class CQPPlaywrightPage(BasePlaywrightPage):
         self.page.locator(self.SUBMIT_BTN).click()
 
     def close_popup(self):
-        self.force_close_popup()
+        try:
+            self.page.locator(self.CANCEL_BTN).click()
+        except Exception:
+            pass
         self.page.wait_for_selector("table#excel-table", timeout=8000)
 
     def _select_random_mat_option(self, selector):
@@ -97,6 +102,17 @@ class CQPPlaywrightPage(BasePlaywrightPage):
     def get_first_item_name_in_table(self) -> str:
         cell = self.page.locator("td.cdk-column-item_ref_id").first
         return cell.inner_text().strip()
+
+    def click_edit_button(self):
+        self.click_row_action(0, "Edit")
+
+    def update_multiplier(self, value: str):
+        field = self.page.locator(self.MULTIPLIER).first
+        field.click(force=True)
+        field.fill(value)
+
+    def click_update(self):
+        self.page.locator(self.UPDATE_BTN).click()
 
     def click_view_button(self):
         self.click_row_action(0, "View")

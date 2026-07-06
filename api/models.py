@@ -139,6 +139,11 @@ class BatchCreateRequest(BaseModel):
     fixed_payloads: Optional[list[dict]] = None  # pre-generated payloads (conflict mode); skips generation
 
 
+class CbrTokenRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str = "681"
+
+
 # --- Run Completion Callback Payload ---
 # Sent from FastAPI to Next.js when a test run finishes.
 

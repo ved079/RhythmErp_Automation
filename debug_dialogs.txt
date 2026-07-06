@@ -1,1 +1,0 @@
-DIV# display=flex rect=1280x720 text=Define Tax Rate DetailsEdit row detailscloseHSN NumberSelect hsn numberTax Ratecheck Save Cancel

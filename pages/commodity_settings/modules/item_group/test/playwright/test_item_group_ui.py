@@ -71,6 +71,10 @@ class TestIGUIGroup3:
     def test_listing_and_search(self, ig_page):
         assert ig_page.get_table_row_count() > 0
 
+    def test_search_nonexistent(self, ig_page):
+        ig_page.search_group("searchNonexitingCode")
+        assert not ig_page.is_group_in_table("searchNonexitingCode")
+
 
 class TestIGUIGroup4:
     def test_full_row_actions(self, ig_page):
@@ -78,10 +82,37 @@ class TestIGUIGroup4:
         ig_page.create_record(data)
         ig_page.search_group(data["item_group"])
         ig_page.verify_group_exists(data["item_group"])
+
+        # View
         ig_page.click_view_button(data["item_group"])
         ig_page.verify_view_popup_read_only()
         ig_page.close_popup()
+
+        # Edit — update description
+        ig_page.search_group(data["item_group"])
+        ig_page.click_edit_button(data["item_group"])
+        ig_page.update_description("Updated description after edit")
+        ig_page.click_update()
+        ig_page.handle_success_alert()
+
+        # History
         ig_page.search_group(data["item_group"])
         ig_page.click_history_button(data["item_group"])
         assert ig_page.page.locator(".popup-footer").count() > 0
+        ig_page.close_popup()
+
+
+class TestIGUIGroup5:
+    def test_duplicate_name_rejected(self, ig_page):
+        existing_name = ig_page.page.locator("td.cdk-column-code").first.inner_text().strip()
+        data = {"item_group": existing_name, "description": "dup test"}
+        ig_page.open_add_form()
+        ig_page.fill_form(data)
+        ig_page.submit()
+        ig_page.page.wait_for_selector(".swal2-container", timeout=5000)
+        title = (ig_page.page.locator("#swal2-title").text_content() or "").strip().lower()
+        assert any(w in title for w in ("validation", "already", "exists", "duplicate", "error")), \
+            f"Expected duplicate rejection alert, got: '{title}'"
+        ig_page.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        ig_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
         ig_page.close_popup()

@@ -39,6 +39,10 @@ class TestIMUIGroup3:
     def test_listing_and_search(self, im_page):
         assert im_page.get_table_row_count() > 0
 
+    def test_search_nonexistent(self, im_page):
+        im_page.search_item("searchNonexitingCode")
+        assert not im_page.is_item_in_table("searchNonexitingCode")
+
 
 class TestIMUIGroup4:
     def test_full_row_actions(self, im_page):
@@ -47,9 +51,22 @@ class TestIMUIGroup4:
         if name:
             im_page.search_item(name)
             im_page.verify_item_exists(name)
+
+        # View
         im_page.click_view_button(name or "")
         im_page.verify_view_popup_read_only()
         im_page.close_popup()
+
+        # Edit — update description
+        if name:
+            im_page.search_item(name)
+        im_page.click_edit_button(name or "")
+        im_page.update_description("Updated description after edit")
+        im_page.click_update()
+        im_page.handle_success_alert()
+        im_page.navigate_to_page()
+
+        # History
         if name:
             im_page.search_item(name)
         im_page.click_history_button(name or "")
