@@ -158,6 +158,17 @@ class EmployeePage(BasePlaywrightPage):
     def click_view_button(self, employee_name):
         self.click_row_action(self._find_row_index(employee_name), "View")
 
+    def click_edit_button(self, employee_name):
+        self.click_row_action(self._find_row_index(employee_name), "Edit")
+        self.page.wait_for_selector(self.EMPLOYEE_NAME, timeout=5000)
+
+    def update_employee_name(self, new_value):
+        self.page.locator(self.EMPLOYEE_NAME).first.click(click_count=3)
+        self.page.locator(self.EMPLOYEE_NAME).first.fill(new_value)
+
+    def click_update(self):
+        self.page.locator("xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]").click()
+
     def click_history_button(self, employee_name):
         self.click_row_action(self._find_row_index(employee_name), "History")
         self.page.wait_for_timeout(1000)

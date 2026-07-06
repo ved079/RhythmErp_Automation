@@ -19,14 +19,15 @@ FIELD_DESCRIPTION = "Description"
 STATUS_ACTIVE = "Active"
 STATUS_INACTIVE = "Inactive"
 
+_SEASON_PREFIXES = ["Kharif", "Rabi", "Summer", "Zaid", "Winter", "Spring"]
+
 
 # ================================================================
 # SAFE DATA — these won't collide with existing records
 # ================================================================
 
 def _random_suffix(length=6):
-    """Generate a random alphanumeric suffix to avoid collisions."""
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+    return ''.join(random.choices(string.ascii_uppercase, k=length))
 
 
 # --- Valid test data ---
@@ -37,7 +38,7 @@ def valid_season_name():
     Uses spaces (not underscores) because the ERP Name field has a
     type='character' validator that rejects underscores.
     """
-    return f"SEASON {_random_suffix()}"
+    return f"{random.choice(_SEASON_PREFIXES)} Season {_random_suffix()}"
 
 
 def valid_season_with_description():
@@ -47,7 +48,7 @@ def valid_season_with_description():
     type='character' validator that rejects underscores.
     """
     return {
-        FIELD_NAME: f"SEASON {_random_suffix()}",
+        FIELD_NAME: f"{random.choice(_SEASON_PREFIXES)} Season {_random_suffix()}",
         FIELD_DESCRIPTION: f"Test season created by automation - {_random_suffix()}",
     }
 
@@ -59,7 +60,7 @@ def valid_season_name_only():
     type='character' validator that rejects underscores.
     """
     return {
-        FIELD_NAME: f"SEASON {_random_suffix()}",
+        FIELD_NAME: f"{random.choice(_SEASON_PREFIXES)} Season {_random_suffix()}",
         FIELD_DESCRIPTION: "",
     }
 

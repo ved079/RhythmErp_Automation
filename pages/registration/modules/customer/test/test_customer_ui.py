@@ -102,7 +102,15 @@ class TestCustomerUIGroup4:
         cust_page.click_view_button(data["company_name"])
         cust_page.verify_view_popup_read_only()
         cust_page.close_popup()
+
+        updated_name = data["company_name"] + " U"
         cust_page.search_customer(data["company_name"])
-        cust_page.click_history_button(data["company_name"])
+        cust_page.click_edit_button(data["company_name"])
+        cust_page.update_company_name(updated_name)
+        cust_page.click_update()
+        cust_page.handle_success_alert()
+
+        cust_page.search_customer(updated_name)
+        cust_page.click_history_button(updated_name)
         assert cust_page.page.locator(".popup-footer").count() > 0
         cust_page.close_popup()

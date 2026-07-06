@@ -63,17 +63,11 @@ class ConstituentDocumentsPage(BasePlaywrightPage):
         self.page.wait_for_selector(self.CIN_NO, timeout=5000)
 
     def _fill_one_row(self):
-        row = self.page.locator(self.DOCUMENTS_ROW).first
+        row = self.page.locator("app-dynamic-details tbody tr.preview-row").first
         row.wait_for(state="visible", timeout=5000)
-        row.click(force=True)
-        self.page.wait_for_timeout(800)
+        self.page.wait_for_timeout(300)
         self._select_mat_option(self.DOC_NAME_SELECT)
         self._clear_overlays()
-        save = self.page.locator(self.SAVE_BTN).first
-        save.wait_for(state="visible", timeout=5000)
-        save.click()
-        save.wait_for(state="hidden", timeout=8000)
-        self.page.wait_for_timeout(500)
 
     def fill_document_row(self):
         self._fill_one_row()
@@ -177,6 +171,17 @@ class ConstituentDocumentsPage(BasePlaywrightPage):
 
     def click_view_button(self, cin_no):
         self.click_row_action(self._find_row_index(cin_no), "View")
+
+    def click_edit_button(self, cin_no):
+        self.click_row_action(self._find_row_index(cin_no), "Edit")
+        self.page.wait_for_selector(self.CIN_NO, timeout=5000)
+
+    def update_cin_no(self, new_value):
+        self.page.locator(self.CIN_NO).first.click(click_count=3)
+        self.page.locator(self.CIN_NO).first.fill(new_value)
+
+    def click_update(self):
+        self.page.locator("xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]").click()
 
     def click_history_button(self, cin_no):
         self.click_row_action(self._find_row_index(cin_no), "History")

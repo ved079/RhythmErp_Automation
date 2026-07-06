@@ -119,7 +119,15 @@ class TestMemberUIGroup4:
         mb_page.click_view_button(data["member_name"])
         mb_page.verify_view_popup_read_only()
         mb_page.close_popup()
+
+        updated_name = data["member_name"] + " U"
         mb_page.search_member(data["member_name"])
-        mb_page.click_history_button(data["member_name"])
+        mb_page.click_edit_button(data["member_name"])
+        mb_page.update_name(updated_name)
+        mb_page.click_update()
+        mb_page.handle_success_alert()
+
+        mb_page.search_member(updated_name)
+        mb_page.click_history_button(updated_name)
         assert mb_page.page.locator(".popup-footer").count() > 0
         mb_page.close_popup()

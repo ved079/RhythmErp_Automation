@@ -91,7 +91,15 @@ class TestAgentUIGroup4:
         agent_page.click_view_button(data["agent_name"])
         agent_page.verify_view_popup_read_only()
         agent_page.close_popup()
+
+        updated_name = data["agent_name"] + " U"
         agent_page.search_agent(data["agent_name"])
-        agent_page.click_history_button(data["agent_name"])
+        agent_page.click_edit_button(data["agent_name"])
+        agent_page.update_agent_name(updated_name)
+        agent_page.click_update()
+        agent_page.handle_success_alert()
+
+        agent_page.search_agent(updated_name)
+        agent_page.click_history_button(updated_name)
         assert agent_page.page.locator(".popup-footer").count() > 0
         agent_page.close_popup()

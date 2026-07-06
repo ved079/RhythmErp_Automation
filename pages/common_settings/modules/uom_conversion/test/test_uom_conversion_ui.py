@@ -7,20 +7,12 @@ class TestUOMConversionUI:
 
     def test_create_smoke(self, uom_conv_page):
         data = generate_uom_conversion_data()
-        uom_conv_page.open_add_form()
-        actual_src = uom_conv_page.select_source_uom(data["source_uom"])
-        actual_tgt = uom_conv_page.select_target_uom(data["target_uom"])
-        uom_conv_page.fill_conversion_factor(data["conversion_factor"])
-        uom_conv_page.submit()
+        actual_src, actual_tgt = uom_conv_page.create_record(data["conversion_factor"])
         uom_conv_page.handle_success_alert()
         uom_conv_page.verify_record_exists(actual_src, actual_tgt)
 
         data2 = generate_uom_conversion_data()
-        uom_conv_page.open_add_form()
-        actual_src2 = uom_conv_page.select_source_uom(data2["source_uom"])
-        actual_tgt2 = uom_conv_page.select_target_uom(data2["target_uom"])
-        uom_conv_page.fill_conversion_factor(data2["conversion_factor"])
-        uom_conv_page.submit()
+        actual_src2, actual_tgt2 = uom_conv_page.create_record(data2["conversion_factor"])
         uom_conv_page.handle_success_alert()
         uom_conv_page.verify_record_exists(actual_src2, actual_tgt2)
 
@@ -45,22 +37,14 @@ class TestUOMConversionUI:
     def test_listing_and_search(self, uom_conv_page):
         assert uom_conv_page.get_table_row_count() > 0
         data = generate_uom_conversion_data()
-        uom_conv_page.open_add_form()
-        actual_src = uom_conv_page.select_source_uom(data["source_uom"])
-        actual_tgt = uom_conv_page.select_target_uom(data["target_uom"])
-        uom_conv_page.fill_conversion_factor(data["conversion_factor"])
-        uom_conv_page.submit()
+        actual_src, actual_tgt = uom_conv_page.create_record(data["conversion_factor"])
         uom_conv_page.handle_success_alert()
         uom_conv_page.search_conversion(actual_src)
         uom_conv_page.verify_record_exists(actual_src, actual_tgt)
 
     def test_full_row_actions(self, uom_conv_page):
         data = generate_uom_conversion_data()
-        uom_conv_page.open_add_form()
-        actual_src = uom_conv_page.select_source_uom(data["source_uom"])
-        actual_tgt = uom_conv_page.select_target_uom(data["target_uom"])
-        uom_conv_page.fill_conversion_factor(data["conversion_factor"])
-        uom_conv_page.submit()
+        actual_src, actual_tgt = uom_conv_page.create_record(data["conversion_factor"])
         uom_conv_page.handle_success_alert()
         uom_conv_page.search_conversion(actual_src)
         uom_conv_page.verify_record_exists(actual_src, actual_tgt)

@@ -87,7 +87,15 @@ class TestRegisterOfLoanUIGroup4:
         loan_page.click_view_button(data["bank_name"])
         loan_page.verify_view_popup_read_only()
         loan_page.close_popup()
+
+        updated_bank = data["bank_name"] + " U"
         loan_page.search_loan(data["bank_name"])
-        loan_page.click_history_button(data["bank_name"])
+        loan_page.click_edit_button(data["bank_name"])
+        loan_page.update_bank_name(updated_bank)
+        loan_page.click_update()
+        loan_page.handle_success_alert()
+
+        loan_page.search_loan(updated_bank)
+        loan_page.click_history_button(updated_bank)
         assert loan_page.page.locator(".popup-footer").count() > 0
         loan_page.close_popup()

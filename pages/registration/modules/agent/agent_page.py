@@ -273,6 +273,17 @@ class AgentPage(BasePlaywrightPage):
     def click_view_button(self, agent_name):
         self.click_row_action(self._find_row_index(agent_name), "View")
 
+    def click_edit_button(self, agent_name):
+        self.click_row_action(self._find_row_index(agent_name), "Edit")
+        self.page.wait_for_selector(self.AGENT_NAME, timeout=5000)
+
+    def update_agent_name(self, new_value):
+        self.page.locator(self.AGENT_NAME).first.click(click_count=3)
+        self.page.locator(self.AGENT_NAME).first.fill(new_value)
+
+    def click_update(self):
+        self.page.locator("xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]").click()
+
     def click_history_button(self, agent_name):
         self.click_row_action(self._find_row_index(agent_name), "History")
         self.page.wait_for_timeout(1000)

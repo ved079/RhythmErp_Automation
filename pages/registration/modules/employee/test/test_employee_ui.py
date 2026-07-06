@@ -84,7 +84,15 @@ class TestEmployeeUIGroup4:
         emp_page.click_view_button(data["employee_name"])
         emp_page.verify_view_popup_read_only()
         emp_page.close_popup()
+
+        updated_name = data["employee_name"] + " U"
         emp_page.search_employee(data["employee_name"])
-        emp_page.click_history_button(data["employee_name"])
+        emp_page.click_edit_button(data["employee_name"])
+        emp_page.update_employee_name(updated_name)
+        emp_page.click_update()
+        emp_page.handle_success_alert()
+
+        emp_page.search_employee(updated_name)
+        emp_page.click_history_button(updated_name)
         assert emp_page.page.locator(".popup-footer").count() > 0
         emp_page.close_popup()

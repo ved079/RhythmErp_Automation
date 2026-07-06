@@ -66,6 +66,12 @@ class TestConstituentDocumentsUIGroup4:
         cd_page.click_view_button(data["cin_no"])
         cd_page.verify_view_popup_read_only()
         cd_page.close_popup()
+
+        cd_page.search_document(data["cin_no"])
+        cd_page.click_edit_button(data["cin_no"])
+        cd_page.click_update()
+        cd_page.handle_success_alert()
+
         cd_page.search_document(data["cin_no"])
         cd_page.click_history_button(data["cin_no"])
         assert cd_page.page.locator(".popup-footer").count() > 0

@@ -11,11 +11,15 @@ import string
 import time
 
 
-def generate_designation_name(prefix="AutoDesig"):
-    """Generate a unique valid designation name - alphabetic only (no digits/underscores).
-    Uses random alphabetic suffix to ensure uniqueness."""
-    suffix = ''.join(random.choices(string.ascii_uppercase, k=8))
-    return f"{prefix} {suffix}"
+_designation_counter = 0
+
+
+def generate_designation_name(prefix=None):
+    """Generate a unique realistic designation name with counter suffix."""
+    global _designation_counter
+    _designation_counter += 1
+    name = random.choice(REALISTIC_DESIGNATION_NAMES)
+    return f"{name} {_designation_counter}"
 
 
 def generate_description(prefix="Test Description"):

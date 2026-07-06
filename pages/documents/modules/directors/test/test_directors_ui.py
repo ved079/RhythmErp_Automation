@@ -121,7 +121,15 @@ class TestDirectorsUIGroup4:
         dir_page.click_view_button(data["name"])
         dir_page.verify_view_popup_read_only()
         dir_page.close_popup()
+
+        updated_name = data["name"] + " U"
         dir_page.search_director(data["name"])
-        dir_page.click_history_button(data["name"])
+        dir_page.click_edit_button(data["name"])
+        dir_page.update_name(updated_name)
+        dir_page.click_update()
+        dir_page.handle_success_alert()
+
+        dir_page.search_director(updated_name)
+        dir_page.click_history_button(updated_name)
         assert dir_page.page.locator(".popup-footer").count() > 0
         dir_page.close_popup()
