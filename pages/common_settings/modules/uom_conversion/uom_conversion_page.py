@@ -135,6 +135,74 @@ class UOMConversionPage(BasePlaywrightPage):
     def fill_conversion_factor(self, value):
         self.page.fill(self.CONVERSION_FACTOR, str(value))
 
+    def _is_validation_error(self):
+        """Returns True if a SweetAlert validation error is currently shown."""
+        try:
+            self.page.wait_for_selector(".swal2-container", timeout=2000)
+            title = self.page.evaluate("document.querySelector('#swal2-title')?.textContent?.toLowerCase() || ''")
+            return "validation" in title or "already" in title or "exists" in title or "duplicate" in title
+        except Exception:
+            return False
+
+    def _dismiss_validation_alert(self):
+        try:
+            self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+            self.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
+        except Exception:
+            pass
+
+    def _get_all_panel_options(self):
+        """Return all visible real option texts from the currently open mat-select panel."""
+        all_opts = self.page.locator(".mat-mdc-select-panel mat-option")
+        count = all_opts.count()
+        opts = []
+        for i in range(count):
+            text = all_opts.nth(i).text_content().strip()
+            if text and "No results" not in text and "no records" not in text.lower():
+                opts.append((i, text))
+        return opts
+
+    def create_record(self, conversion_factor=1):
+        """Open form, fill, submit. On duplicate validation error: close form, reopen, retry.
+
+        Phase 1 — 10 retries changing Source UOM each time.
+        Phase 2 — 10 retries changing Target UOM each time.
+        Returns (actual_src, actual_tgt) on success.
+        """
+        import random as _random
+
+        def _attempt(src_code=None, tgt_code=None):
+            self.open_add_form()
+            src = self.select_source_uom(src_code or "")
+            tgt = self.select_target_uom(tgt_code or "")
+            self.fill_conversion_factor(conversion_factor)
+            self._force_close_panels()
+            self.page.click(self.SUBMIT)
+            if not self._is_validation_error():
+                return src, tgt
+            self._dismiss_validation_alert()
+            self.close_popup()
+            return None
+
+        # First try
+        result = _attempt()
+        if result:
+            return result
+
+        # Phase 1: retry with different Source UOM (keep target random each time)
+        for _ in range(10):
+            result = _attempt()
+            if result:
+                return result
+
+        # Phase 2: retry with different Target UOM (keep source random each time)
+        for _ in range(10):
+            result = _attempt()
+            if result:
+                return result
+
+        raise AssertionError("UOM Conversion: duplicate record persists after 20 retries")
+
     def submit(self):
         self._force_close_panels()
         self.page.click(self.SUBMIT)

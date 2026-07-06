@@ -266,6 +266,17 @@ class SupplierPage(BasePlaywrightPage):
     def click_view_button(self, company_name):
         self.click_row_action(self._find_row_index(company_name), "View")
 
+    def click_edit_button(self, company_name):
+        self.click_row_action(self._find_row_index(company_name), "Edit")
+        self.page.wait_for_selector(self.COMPANY_NAME, timeout=5000)
+
+    def update_company_name(self, new_value):
+        self.page.locator(self.COMPANY_NAME).first.click(click_count=3)
+        self.page.locator(self.COMPANY_NAME).first.fill(new_value)
+
+    def click_update(self):
+        self.page.locator("xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]").click()
+
     def click_history_button(self, company_name):
         self.click_row_action(self._find_row_index(company_name), "History")
         self.page.wait_for_timeout(1000)

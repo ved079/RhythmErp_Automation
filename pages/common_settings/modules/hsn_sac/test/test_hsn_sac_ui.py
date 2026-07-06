@@ -41,13 +41,12 @@ class TestHsnSacUI:
         hsn_page.verify_view_popup_read_only()
         hsn_page.close_popup()
 
-        updated_no = "9998"
         hsn_page.click_edit_button(data["hsn_sac_number"])
-        hsn_page.update_number(updated_no)
+        hsn_page.update_description("Updated description by automation")
         hsn_page.click_update()
         hsn_page.handle_success_alert()
 
-        hsn_page.search_hsn_sac(updated_no)
-        hsn_page.click_history_button(updated_no)
+        hsn_page.search_hsn_sac(data["hsn_sac_number"])
+        hsn_page.click_history_button(data["hsn_sac_number"])
         assert hsn_page.page.locator(hsn_page.CHANGE_LOG).count() > 0
         hsn_page.close_popup()

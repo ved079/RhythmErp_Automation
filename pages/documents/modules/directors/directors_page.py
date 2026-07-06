@@ -130,12 +130,9 @@ class DirectorsPage(BasePlaywrightPage):
         self._clear_overlays()
 
     def fill_kyc_row(self, kyc_number="234567890123"):
-        row = self.page.locator(
-            "xpath=//app-dynamic-details//tbody/tr[contains(@mattooltip,'Click to edit row details')]"
-        ).first
+        row = self.page.locator("app-dynamic-details tbody tr.preview-row").first
         row.wait_for(state="visible", timeout=5000)
-        row.click(force=True)
-        self.page.wait_for_timeout(1000)
+        self.page.wait_for_timeout(300)
 
         kyc_doc_sel = self.page.locator(
             "xpath=//mat-form-field[.//mat-label[contains(.,'KYC Document') or contains(.,'Kyc Document')]]//mat-select"
@@ -152,13 +149,6 @@ class DirectorsPage(BasePlaywrightPage):
         )
         kyc_num.fill(kyc_number)
         self.page.wait_for_timeout(300)
-
-        save_btns = self.page.locator(
-            "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Save')]"
-        )
-        save_btns.first.click()
-        save_btns.first.wait_for(state="hidden", timeout=8000)
-        self.page.wait_for_timeout(500)
 
     def submit(self):
         self._clear_overlays()
@@ -241,6 +231,17 @@ class DirectorsPage(BasePlaywrightPage):
 
     def click_view_button(self, name):
         self.click_row_action(self._find_row_index(name), "View")
+
+    def click_edit_button(self, name):
+        self.click_row_action(self._find_row_index(name), "Edit")
+        self.page.wait_for_selector(self.NAME_INPUT, timeout=5000)
+
+    def update_name(self, new_value):
+        self.page.locator(self.NAME_INPUT).first.click(click_count=3)
+        self.page.locator(self.NAME_INPUT).first.fill(new_value)
+
+    def click_update(self):
+        self.page.locator("xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]").click()
 
     def click_history_button(self, name):
         self.click_row_action(self._find_row_index(name), "History")

@@ -58,6 +58,14 @@ class TestRegisterChargesUIGroup4:
         rc_page.click_view_button(data["charge_id"])
         rc_page.verify_view_popup_read_only()
         rc_page.close_popup()
+
+        updated_desc = data["description"] + " U"
+        rc_page.search_charge(data["charge_id"])
+        rc_page.click_edit_button(data["charge_id"])
+        rc_page.update_description(updated_desc)
+        rc_page.click_update()
+        rc_page.handle_success_alert()
+
         rc_page.search_charge(data["charge_id"])
         rc_page.click_history_button(data["charge_id"])
         assert rc_page.page.locator(".popup-footer").count() > 0

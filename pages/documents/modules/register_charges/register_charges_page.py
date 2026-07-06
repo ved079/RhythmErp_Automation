@@ -175,6 +175,21 @@ class RegisterChargesPage(BasePlaywrightPage):
     def click_view_button(self, charge_id):
         self.click_row_action(self._find_row_index(charge_id), "View")
 
+    def click_edit_button(self, charge_id):
+        self.click_row_action(self._find_row_index(charge_id), "Edit")
+        self.page.wait_for_selector(self.CHARGE_ID_ROC, timeout=5000)
+
+    def update_charge_id(self, new_value):
+        self.page.locator(self.CHARGE_ID_ROC).first.click(click_count=3)
+        self.page.locator(self.CHARGE_ID_ROC).first.fill(new_value)
+
+    def update_description(self, new_value):
+        self.page.locator(self.DESCRIPTION_OF_ASSETS_PROPERTY).first.click(click_count=3)
+        self.page.locator(self.DESCRIPTION_OF_ASSETS_PROPERTY).first.fill(new_value)
+
+    def click_update(self):
+        self.page.locator("xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]").click()
+
     def click_history_button(self, charge_id):
         self.click_row_action(self._find_row_index(charge_id), "History")
         self.page.wait_for_timeout(1000)

@@ -171,6 +171,9 @@ class HsnSacPage(BasePlaywrightPage):
     def update_number(self, new_number):
         self.page.fill(self.NUMBER_INPUT, new_number)
 
+    def update_description(self, new_description):
+        self.page.fill(self.DESC_INPUT, new_description)
+
     def verify_view_popup_read_only(self):
         buttons = self.page.locator(".popup-footer button")
         texts = [buttons.nth(i).text_content().strip() for i in range(buttons.count())]

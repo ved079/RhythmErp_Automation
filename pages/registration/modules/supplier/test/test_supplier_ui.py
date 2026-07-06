@@ -102,7 +102,15 @@ class TestSupplierUIGroup4:
         supp_page.click_view_button(data["company_name"])
         supp_page.verify_view_popup_read_only()
         supp_page.close_popup()
+
+        updated_name = data["company_name"] + " U"
         supp_page.search_supplier(data["company_name"])
-        supp_page.click_history_button(data["company_name"])
+        supp_page.click_edit_button(data["company_name"])
+        supp_page.update_company_name(updated_name)
+        supp_page.click_update()
+        supp_page.handle_success_alert()
+
+        supp_page.search_supplier(updated_name)
+        supp_page.click_history_button(updated_name)
         assert supp_page.page.locator(".popup-footer").count() > 0
         supp_page.close_popup()

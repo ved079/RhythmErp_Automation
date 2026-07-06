@@ -81,7 +81,15 @@ class TestMiscellaneousDocumentsUIGroup4:
         md_page.click_view_button(data["document_name"])
         md_page.verify_view_popup_read_only()
         md_page.close_popup()
+
+        updated_name = data["document_name"] + " U"
         md_page.search_document(data["document_name"])
-        md_page.click_history_button(data["document_name"])
+        md_page.click_edit_button(data["document_name"])
+        md_page.update_document_name(updated_name)
+        md_page.click_update()
+        md_page.handle_success_alert()
+
+        md_page.search_document(updated_name)
+        md_page.click_history_button(updated_name)
         assert md_page.page.locator(".popup-footer").count() > 0
         md_page.close_popup()
