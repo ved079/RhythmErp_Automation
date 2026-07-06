@@ -16,9 +16,6 @@ Discovered FK IDs (2026-06-02):
 import random
 from datetime import date
 
-# ── Field length constants ────────────────────────────────────────────
-TAX_RATE_NAME_MAX_LENGTH = 255
-
 # ── Realistic GST rate structures ────────────────────────────────────
 
 GST_RATES = [
@@ -174,66 +171,6 @@ def generate_tax_rate_api_payloads(count=10, offset=0, fk_ids=None):
     return payloads
 
 
-# ──────────────────────────────────────────────
-# FIELD VALIDATION RULES (from live ERP schema)
-# ──────────────────────────────────────────────
-# Tax Rate is the ONLY Common Settings screen with a stepper structure.
-# Root fields + 1 stepper child "Define Tax Rate Details" with detail lines.
-# fk_options_count is 0 by default — resolved at runtime via FkResolver.
-
-def get_field_validation_rules():
-    """Return field validation rules (FK counts resolved at runtime)."""
-    return {
-        "tax_rate_name": {
-            "type": "character",
-            "required": True,
-            "max_length": 255,
-            "note": "Tax rate name (e.g. 'GST 18%').",
-        },
-        "tax_type_ref_id": {
-            "type": "dropdown",
-            "required": True,
-            "fk_options_count": 0,
-            "note": "FK to Tax Type. Resolved at runtime via FkResolver.",
-        },
-        "tax_authority_ref_id": {
-            "type": "dropdown",
-            "required": True,
-            "fk_options_count": 0,
-            "note": "FK to Tax Authority. Resolved at runtime via FkResolver.",
-        },
-        "from_date": {
-            "type": "date",
-            "required": True,
-            "note": "Start date in ISO format (YYYY-MM-DD).",
-        },
-        "to_date": {
-            "type": "date",
-            "required": True,
-            "note": "End date in ISO format (YYYY-MM-DD).",
-        },
-        "revision_status": {
-            "type": "character",
-            "required": True,
-            "note": "Enum: 'Active' or other status values.",
-        },
-        "hsn_sac_number": {
-            "type": "dropdown",
-            "required": True,
-            "fk_options_count": 0,
-            "note": "FK to HSN/SAC Number. In stepper detail lines. Resolved at runtime.",
-        },
-        "tax_rate": {
-            "type": "number",
-            "required": True,
-            "note": "Tax rate percentage (decimal). In stepper detail lines.",
-        },
-    }
-
-
-FIELD_VALIDATION_RULES = get_field_validation_rules()
-
-
 def get_fk_screen_mapping():
     """Return FK field → screen name mapping for live FkResolver resolution."""
     return {
@@ -241,11 +178,6 @@ def get_fk_screen_mapping():
         "tax_authority_ref_id": "Tax Authority",
         "hsn_sac_number":       "HSN SAC",
     }
-
-
-REVISION_STATUS_OPTIONS = ["Active"]
-
-STEPPER_NAME = "Define Tax Rate Details"
 
 
 def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None, offset: int = 0, existing_entries: list = None) -> list:

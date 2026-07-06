@@ -46,6 +46,25 @@ class TestTaxAuthorityUI:
         ta_page.search_tax_authority(data["tax_name"])
         ta_page.verify_tax_authority_exists(data["tax_name"])
 
+    def test_duplicate_name_rejected(self, ta_page):
+        existing_name = ta_page.page.locator("td.cdk-column-tax_name").first.inner_text().strip()
+        data = valid_tax_authority_data()
+        data["tax_name"] = existing_name
+        ta_page.open_add_form()
+        ta_page.fill_form(data)
+        ta_page.submit()
+        ta_page.page.wait_for_selector(".swal2-container", timeout=5000)
+        title = (ta_page.page.locator("#swal2-title").text_content() or "").strip().lower()
+        assert any(w in title for w in ("validation", "already", "exists", "duplicate", "error")), \
+            f"Expected duplicate rejection alert, got: '{title}'"
+        ta_page.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        ta_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
+        ta_page.close_popup()
+
+    def test_search_nonexistent(self, ta_page):
+        ta_page.search_tax_authority("searchNonexitingName")
+        assert not ta_page.is_tax_authority_in_table("searchNonexitingName")
+
     def test_full_row_actions(self, ta_page):
         data = valid_tax_authority_data()
         ta_page.open_add_form()

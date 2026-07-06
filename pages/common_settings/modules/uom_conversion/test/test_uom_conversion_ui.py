@@ -42,6 +42,43 @@ class TestUOMConversionUI:
         uom_conv_page.search_conversion(actual_src)
         uom_conv_page.verify_record_exists(actual_src, actual_tgt)
 
+    def test_search_nonexistent(self, uom_conv_page):
+        uom_conv_page.search_conversion("searchNonexitingCode")
+        assert not uom_conv_page.is_record_in_table("searchNonexitingCode", "searchNonexitingCode")
+
+    def test_duplicate_pair_rejected(self, uom_conv_page):
+        src_cells = uom_conv_page.page.locator("td.cdk-column-source_uom_code")
+        tgt_cells = uom_conv_page.page.locator("td.cdk-column-target_uom_code")
+        existing_src = src_cells.first.inner_text().strip()
+        existing_tgt = tgt_cells.first.inner_text().strip()
+        uom_conv_page.open_add_form()
+        uom_conv_page.select_source_uom(existing_src)
+        uom_conv_page.select_target_uom(existing_tgt)
+        uom_conv_page.fill_conversion_factor("1")
+        uom_conv_page.page.click(uom_conv_page.SUBMIT)
+        uom_conv_page.page.wait_for_selector(".swal2-container", timeout=5000)
+        title = (uom_conv_page.page.locator("#swal2-title").text_content() or "").strip().lower()
+        assert any(w in title for w in ("validation", "already", "exists", "duplicate", "error")), \
+            f"Expected duplicate rejection alert, got: '{title}'"
+        uom_conv_page.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        uom_conv_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
+        uom_conv_page.close_popup()
+
+    def test_same_source_and_target(self, uom_conv_page):
+        uom_conv_page.open_add_form()
+        src = uom_conv_page.select_source_uom("")
+        uom_conv_page.select_target_uom(src)
+        uom_conv_page.fill_conversion_factor("1")
+        uom_conv_page.page.click(uom_conv_page.SUBMIT)
+        uom_conv_page.page.wait_for_selector(".swal2-container", timeout=5000)
+        title = (uom_conv_page.page.locator("#swal2-title").text_content() or "").strip().lower()
+        uom_conv_page.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        uom_conv_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
+        if "validation" not in title and "error" not in title:
+            uom_conv_page.page.wait_for_selector("table#excel-table", timeout=5000)
+        else:
+            uom_conv_page.close_popup()
+
     def test_full_row_actions(self, uom_conv_page):
         data = generate_uom_conversion_data()
         actual_src, actual_tgt = uom_conv_page.create_record(data["conversion_factor"])

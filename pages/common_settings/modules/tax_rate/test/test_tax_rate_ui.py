@@ -49,6 +49,10 @@ class TestTaxRateUIGroup3:
     def test_listing_and_search(self, tr_page):
         assert tr_page.get_table_row_count() > 0
 
+    def test_search_nonexistent(self, tr_page):
+        tr_page.search_tax_rate("searchNonexitingCode")
+        assert not tr_page.is_tax_rate_in_table("searchNonexitingCode")
+
 
 class TestTaxRateUIGroup4:
 

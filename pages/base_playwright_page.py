@@ -45,10 +45,17 @@ class BasePlaywrightPage:
         search_input = self.page.locator("input#erpSearchInput")
         if not search_input.is_visible():
             self.page.evaluate("""
-                var btn = document.querySelector('button[mattooltip="Search"]');
+                var btn = document.querySelector('button[mattooltip="Search"]')
+                       || document.querySelector('button[matTooltip="Search"]');
                 if (btn) { btn.scrollIntoView({block:'center'}); btn.click(); }
             """)
-            search_input.wait_for(state="visible", timeout=5000)
+            self.page.wait_for_timeout(300)
+            if not search_input.is_visible():
+                try:
+                    self.page.locator("button").filter(has_text="search").first.click(force=True)
+                except Exception:
+                    pass
+            search_input.wait_for(state="visible", timeout=8000)
         search_input.fill(value)
         search_input.press("Enter")
         self.page.wait_for_timeout(1000)

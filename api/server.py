@@ -29,7 +29,7 @@ from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 
 from api.models import (
     ModuleListResponse, CreateRunRequest, StartRunRequest, BatchCreateRequest,
-    PurchaseChainRequest, ConcurrencyDispatchRequest,
+    PurchaseChainRequest, ConcurrencyDispatchRequest, CbrTokenRequest,
 )
 from api.concurrency_dispatch import dispatch_concurrent, ping_agents
 from api.test_discovery import discover_all_modules
@@ -150,6 +150,31 @@ def batch_preview_endpoint(request: BatchCreateRequest):
     """Generate payloads without creating them — used by conflict mode."""
     payloads = _build_payloads_only(request)
     return {"payloads": payloads}
+
+
+@app.post("/api/batch-create/cbr-location-count")
+def cbr_location_count_endpoint(request: CbrTokenRequest):
+    """Return the number of available Location options in the CBR screen schema."""
+    from pages.commodity_settings.modules.commodity_base_rate.data.cbr_data import LOCATION_ID_MAP
+    fallback = len(LOCATION_ID_MAP)
+    try:
+        from common.erp_api_client import RhythmERPAPIClient
+        client = RhythmERPAPIClient(tenant_id=request.erp_tenant_id)
+        client.login_from_browser(token=request.erp_token, tenant_id=request.erp_tenant_id)
+        schema = client.get_screen_schema("Commodity Base Rate")
+        if not schema:
+            return {"count": fallback}
+        fields = client._flatten_fields(schema.get("screendefinition_set", []))
+        for field in fields:
+            if field.get("field_key") == "location_ref_id":
+                opts = field.get("filter_dropdown_raw_query", [])
+                if isinstance(opts, list) and len(opts) > 0:
+                    return {"count": len(opts)}
+                break
+        return {"count": fallback}
+    except Exception as e:
+        print(f"[CBR] location count fetch failed: {e}")
+        return {"count": fallback}
 
 
 # ================================================================

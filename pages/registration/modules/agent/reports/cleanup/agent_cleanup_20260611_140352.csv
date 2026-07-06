@@ -1,6 +1,0 @@
-id,agent_name,timestamp,prefix,payload_summary,deactivated
-180,<null>,2026-06-11T14:03:50.079278,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
-181,!@#$%^&*()Agent,2026-06-11T14:03:50.659392,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
-182,'; DROP TABLE Agent; --,2026-06-11T14:03:50.856485,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
-183,<script>alert('xss')</script>,2026-06-11T14:03:51.106131,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
-184,EditInvEmail_20260611140352_9b4cdc4f,2026-06-11T14:03:52.537137,EditInvEmail,Created via API with prefix=EditInvEmail,False

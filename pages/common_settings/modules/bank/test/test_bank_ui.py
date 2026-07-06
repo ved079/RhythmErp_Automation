@@ -70,6 +70,19 @@ class TestBankUI:
         bank_page.go_to_first_page()
         bank_page.verify_bank_exists(data["bank_name"])
 
+    def test_duplicate_name_rejected(self, bank_page):
+        existing_name = bank_page.page.locator("td.cdk-column-bank_name").first.inner_text().strip()
+        bank_page.open_add_form()
+        bank_page.page.fill(bank_page.NAME_INPUT, existing_name)
+        bank_page.submit()
+        bank_page.page.wait_for_selector(".swal2-container", timeout=5000)
+        title = (bank_page.page.locator("#swal2-title").text_content() or "").strip().lower()
+        assert any(w in title for w in ("validation", "already", "exists", "duplicate", "error")), \
+            f"Expected duplicate rejection alert, got: '{title}'"
+        bank_page.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        bank_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
+        bank_page.close_popup()
+
     def test_full_row_actions(self, bank_page):
         data = _unique_data()
         bank_page.open_add_form()

@@ -70,6 +70,10 @@ class TestSMUIGroup3:
     def test_listing_and_search(self, sm_page):
         assert sm_page.get_table_row_count() > 0
 
+    def test_search_nonexistent(self, sm_page):
+        sm_page.search_service("searchNonexitingCode")
+        assert not sm_page.is_service_in_table("searchNonexitingCode")
+
 
 class TestSMUIGroup4:
     def test_full_row_actions(self, sm_page):
@@ -77,10 +81,23 @@ class TestSMUIGroup4:
         sm_page.create_record(data)
         sm_page.search_service(data["name"])
         sm_page.verify_service_exists(data["name"])
+
+        # View
         sm_page.click_view_button(data["name"])
         sm_page.verify_view_popup_read_only()
         sm_page.close_popup()
+
+        # Edit — update name
         sm_page.search_service(data["name"])
-        sm_page.click_history_button(data["name"])
+        updated_name = data["name"] + " Edited"
+        sm_page.click_edit_button(data["name"])
+        sm_page.update_name(updated_name)
+        sm_page.click_update()
+        sm_page.handle_success_alert()
+        sm_page.navigate_to_page()
+
+        # History
+        sm_page.search_service(updated_name)
+        sm_page.click_history_button(updated_name)
         assert sm_page.page.locator(".popup-footer").count() > 0
         sm_page.close_popup()

@@ -254,7 +254,7 @@ def build_cbr_api_payload(pricing_type_ref_id, location_ref_id,
         "details": [],
         "children": [
             {
-                "stepper_name": "Define Item Rate Commision Details",
+                "stepper_name": "Define Item Rate Details",
                 "is_stepper": True,
                 "details": detail_rows,
                 "children": [],
@@ -426,6 +426,13 @@ def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None, offset=0, 
         return int(uom_map[val]) if val in uom_map else None
 
     all_item_ids = [int(v) for v in item_map.values()]
+    all_uom_ids = [int(v) for v in uom_map.values()] if uom_map else []
+
+    def _resolve_uom_with_fallback(item_id):
+        uom_id = _resolve_uom(item_uom_map.get(item_id))
+        if uom_id is None and all_uom_ids:
+            uom_id = random.choice(all_uom_ids)
+        return uom_id
 
     # Build map of location_id → enriched existing entry (if any)
     existing_by_loc = {}
@@ -457,9 +464,7 @@ def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None, offset=0, 
 
             new_rows = list(existing_rows)
             for item_id in missing_items:
-                uom_id = _resolve_uom(item_uom_map.get(item_id))
-                if uom_id is None:
-                    continue
+                uom_id = _resolve_uom_with_fallback(item_id)
                 new_rows.append({
                     "item_ref_id": item_id,
                     "uom": uom_id,
@@ -470,7 +475,7 @@ def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None, offset=0, 
                 **detail,
                 "id": existing["id"],
                 "children": [{
-                    "stepper_name": "Define Item Rate Commision Details",
+                    "stepper_name": "Define Item Rate Details",
                     "is_stepper": True,
                     "details": new_rows,
                     "children": [],
@@ -481,17 +486,12 @@ def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None, offset=0, 
             # No record for this location yet — CREATE with all items
             detail_rows = []
             for item_id in all_item_ids:
-                uom_id = _resolve_uom(item_uom_map.get(item_id))
-                if uom_id is None:
-                    continue
+                uom_id = _resolve_uom_with_fallback(item_id)
                 detail_rows.append({
                     "item_ref_id": item_id,
                     "uom": uom_id,
                     "item_rate": str(random.randint(1000, 5000)),
                 })
-
-            if not detail_rows:
-                continue
 
             payloads.append(build_cbr_api_payload(pt_id, loc_id, detail_rows=detail_rows))
 

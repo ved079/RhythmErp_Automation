@@ -43,6 +43,23 @@ class TestUOMUI:
         uom_page.search_uom(data["uom_code"])
         uom_page.verify_uom_exists(data["uom_code"])
 
+    def test_search_nonexistent(self, uom_page):
+        uom_page.search_uom("searchNonexitingCode")
+        assert not uom_page.is_uom_in_table("searchNonexitingCode")
+
+    def test_duplicate_code_rejected(self, uom_page):
+        existing_code = uom_page.page.locator("td.cdk-column-uom_code").first.inner_text().strip()
+        uom_page.open_add_form()
+        uom_page.page.fill(uom_page.UOM_CODE, existing_code)
+        uom_page.submit()
+        uom_page.page.wait_for_selector(".swal2-container", timeout=5000)
+        title = (uom_page.page.locator("#swal2-title").text_content() or "").strip().lower()
+        assert any(w in title for w in ("validation", "already", "exists", "duplicate", "error")), \
+            f"Expected duplicate rejection alert, got: '{title}'"
+        uom_page.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        uom_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
+        uom_page.close_popup()
+
     def test_full_row_actions(self, uom_page):
         data = generate_uom_data()
         uom_page.open_add_form()

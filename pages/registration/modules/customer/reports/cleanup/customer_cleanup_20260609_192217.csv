@@ -1,7 +1,0 @@
-id,company_name,timestamp,prefix,payload_summary,deactivated
-409,ValidCust_20260609192210_f8a8eaaf,2026-06-09T19:22:10.680710,ValidCust,Created via API with prefix=ValidCust,False
-410,          ,2026-06-09T19:22:10.868720,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
-411,"Test!@#$%^&*()_+-=[]{}|;':"",./<>?",2026-06-09T19:22:12.216894,Test!@#$%^&*(),"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
-412,'; DROP TABLE customers; --,2026-06-09T19:22:12.402676,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
-413,<script>alert('xss')</script>,2026-06-09T19:22:12.626539,,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False
-414,PanSpCust_20260609192212_de5c1b48,2026-06-09T19:22:13.136680,PanSpCust,"ACCIDENTAL CREATION — invalid payload was accepted, needs manual purge",False

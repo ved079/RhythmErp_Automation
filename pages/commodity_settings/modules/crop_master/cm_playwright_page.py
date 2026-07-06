@@ -7,6 +7,7 @@ class CMPlaywrightPage(BasePlaywrightPage):
     URL        = f"{BASE_URL}/#/dynamic-screens/Crop%20Master"
     NAME       = "xpath=//mat-form-field[.//mat-label[normalize-space(.)='Name']]//input"
     SUBMIT_BTN = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
+    UPDATE_BTN = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]"
     CANCEL_BTN = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
     ADD_BTN    = "button.erp-add-btn"
 
@@ -22,7 +23,10 @@ class CMPlaywrightPage(BasePlaywrightPage):
         self.page.locator(self.SUBMIT_BTN).click()
 
     def close_popup(self):
-        self.force_close_popup()
+        try:
+            self.page.locator(self.CANCEL_BTN).click()
+        except Exception:
+            pass
         self.page.wait_for_selector("table#excel-table", timeout=8000)
 
     def fill_form(self, data: dict):
@@ -49,6 +53,16 @@ class CMPlaywrightPage(BasePlaywrightPage):
         return self.page.locator(
             f"//td[contains(@class,'cdk-column-name') and contains(.,'{name}')]"
         ).count() > 0
+
+    def click_edit_button(self, name: str):
+        self.click_row_action(0, "Edit")
+
+    def update_name(self, name: str):
+        self.page.locator(self.NAME).first.click(force=True)
+        self.page.locator(self.NAME).first.fill(name)
+
+    def click_update(self):
+        self.page.locator(self.UPDATE_BTN).click()
 
     def click_view_button(self, name: str):
         self.click_row_action(0, "View")

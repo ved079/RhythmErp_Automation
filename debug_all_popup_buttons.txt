@@ -1,9 +1,0 @@
-0: txt=fullscreen aria= icon=fullscreen cls=mat-mdc-tooltip-trigger mdc-ic
-1: txt=close aria= icon=close cls=mat-mdc-tooltip-trigger mdc-ic
-2: txt= aria=Open calendar icon= cls=mdc-icon-button mat-mdc-icon-b
-3: txt= aria=Open calendar icon= cls=mdc-icon-button mat-mdc-icon-b
-4: txt=addAdd Row aria= icon=add cls=add-row-btn
-5: txt= aria=Previous page icon= cls=mat-mdc-tooltip-trigger mat-md
-6: txt= aria=Next page icon= cls=mat-mdc-tooltip-trigger mat-md
-7: txt=Cancel aria= icon= cls=mdc-button mat-mdc-button mat-
-8: txt=Submit aria= icon= cls=mdc-button mdc-button--raised 

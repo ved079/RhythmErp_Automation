@@ -134,49 +134,6 @@ def generate_all_attribute_payloads(count=3, fk_ids=None):
 
 
 # ═══════════════════════════════════════════
-#  STATUS OPTIONS
-# ═══════════════════════════════════════════
-
-STATUS_OPTIONS = ["Active", "Inactive"]
-
-# ═══════════════════════════════════════════
-#  FIELD VALIDATION RULES (from live ERP schema)
-# ═══════════════════════════════════════════
-
-def get_field_validation_rules():
-    """Return field validation rules (FK counts resolved at runtime)."""
-    return {
-        "name": {
-            "type": "character",
-            "required": True,
-            "max_length": 255,
-            "note": "Item Attribute name.",
-        },
-        "base_uom": {
-            "type": "dropdown",
-            "required": True,
-            "fk_options_count": 0,
-            "note": "Base UOM dropdown — only on Item Attribute 1. Resolved at runtime via FkResolver.",
-        },
-        "description": {
-            "type": "character",
-            "required": False,
-            "max_length": 255,
-            "note": "Optional description text.",
-        },
-        "status": {
-            "type": "toggle",
-            "required": False,
-            "default": True,
-            "note": "Status toggle — Active/Inactive. Default is Active.",
-        },
-    }
-
-
-FIELD_VALIDATION_RULES = get_field_validation_rules()
-
-
-# ═══════════════════════════════════════════
 #  FK Screen Mapping
 # ═══════════════════════════════════════════
 
@@ -225,15 +182,6 @@ def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: d
         return unique_payloads
     return generate_item_attribute_payloads(count=count, offset=offset, attr_number=attr_number, fk_ids=fk_ids)
 
-
-# ═══════════════════════════════════════════
-#  Validation Messages
-# ═══════════════════════════════════════════
-
-VALIDATION_FAILED_TITLE = 'Validation Failed'
-VALIDATION_FAILED_CONTENT = 'Please correct the highlighted fields'
-SUCCESS_CREATE_MSG = 'Your record has been added successfully!'
-SUCCESS_UPDATE_MSG = 'Your record has been updated successfully!'
 
 # ═══════════════════════════════════════════
 #  Name/Description Generators

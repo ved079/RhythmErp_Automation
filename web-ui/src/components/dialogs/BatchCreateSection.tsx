@@ -97,6 +97,8 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
   const [historyLoading, setHistoryLoading] = useState(false)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
+  const [cbrLocationCount, setCbrLocationCount] = useState<number | null>(null)
+  const [cbrCountLoading, setCbrCountLoading] = useState(false)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const startTimeRef = useRef<number>(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -120,6 +122,30 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
   }, [tab, loadHistory])
 
   const target = MODULE_TO_BATCH[moduleId]
+
+  useEffect(() => {
+    if (target?.subModule !== 'commodity_base_rate' || !erpToken) {
+      setCbrLocationCount(null)
+      setCbrCountLoading(false)
+      return
+    }
+    setCbrLocationCount(null)
+    setCbrCountLoading(true)
+    fetch('/api/proxy?path=batch-create/cbr-location-count', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        setCbrLocationCount(typeof data.count === 'number' ? data.count : null)
+        setCbrCountLoading(false)
+      })
+      .catch(() => {
+        setCbrLocationCount(null)
+        setCbrCountLoading(false)
+      })
+  }, [target?.subModule, erpToken, erpTenantId])
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -406,6 +432,24 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
               <span className="text-[11px] font-medium text-[#3F51B5] dark:text-[#7986CB] uppercase tracking-wider">Creating</span>
               <span className="text-[13px] font-semibold text-gray-800 dark:text-gray-100">{target.label}</span>
             </div>
+
+            {/* CBR info banner */}
+            {target.subModule === 'commodity_base_rate' && (
+              <div className="flex items-start gap-2 rounded-md border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 px-3 py-2">
+                <Info className="size-3.5 text-sky-500 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-sky-700 dark:text-sky-300 leading-relaxed">
+                  You can create up to{' '}
+                  {cbrCountLoading ? (
+                    <Loader2 className="size-3 inline animate-spin mx-0.5 text-sky-500" />
+                  ) : (
+                    <span className="font-semibold">
+                      {cbrLocationCount !== null ? cbrLocationCount : '?'}
+                    </span>
+                  )}{' '}
+                  Commodity Base Rate {cbrLocationCount === 1 ? 'entry' : 'entries'} at once — one per available location, each populated with all items at random rates.
+                </p>
+              </div>
+            )}
 
             {/* Controls row */}
             <div className="flex items-end gap-3">

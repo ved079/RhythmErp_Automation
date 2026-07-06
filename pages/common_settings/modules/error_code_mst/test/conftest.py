@@ -48,7 +48,7 @@ def ecm_page(logged_in_page):
     p.navigate_to_page()
     yield p
     try:
-        p.force_close_popup()
+        p.close_popup()
     except Exception:
         pass
     # Reset Angular SPA state for clean next test

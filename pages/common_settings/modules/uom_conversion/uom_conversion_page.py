@@ -151,17 +151,6 @@ class UOMConversionPage(BasePlaywrightPage):
         except Exception:
             pass
 
-    def _get_all_panel_options(self):
-        """Return all visible real option texts from the currently open mat-select panel."""
-        all_opts = self.page.locator(".mat-mdc-select-panel mat-option")
-        count = all_opts.count()
-        opts = []
-        for i in range(count):
-            text = all_opts.nth(i).text_content().strip()
-            if text and "No results" not in text and "no records" not in text.lower():
-                opts.append((i, text))
-        return opts
-
     def create_record(self, conversion_factor=1):
         """Open form, fill, submit. On duplicate validation error: close form, reopen, retry.
 

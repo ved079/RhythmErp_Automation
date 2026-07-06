@@ -67,6 +67,10 @@ class TestQPMUIGroup3:
     def test_listing_and_search(self, qpm_page):
         assert qpm_page.get_table_row_count() > 0
 
+    def test_search_nonexistent(self, qpm_page):
+        qpm_page.search_parameter("searchNonexitingCode")
+        assert not qpm_page.is_parameter_in_table("searchNonexitingCode")
+
 
 class TestQPMUIGroup4:
     def test_full_row_actions(self, qpm_page):
@@ -74,10 +78,38 @@ class TestQPMUIGroup4:
         qpm_page.create_record(data)
         qpm_page.search_parameter(data["name"])
         qpm_page.verify_parameter_exists(data["name"])
+
+        # View
         qpm_page.click_view_button(data["name"])
         qpm_page.verify_view_popup_read_only()
         qpm_page.close_popup()
+
+        # Edit — update name
         qpm_page.search_parameter(data["name"])
-        qpm_page.click_history_button(data["name"])
+        updated_name = data["name"] + " Edited"
+        qpm_page.click_edit_button(data["name"])
+        qpm_page.update_name(updated_name)
+        qpm_page.click_update()
+        qpm_page.handle_success_alert()
+        qpm_page.navigate_to_page()
+
+        # History
+        qpm_page.search_parameter(updated_name)
+        qpm_page.click_history_button(updated_name)
         assert qpm_page.page.locator(".popup-footer").count() > 0
+        qpm_page.close_popup()
+
+
+class TestQPMUIGroup5:
+    def test_duplicate_name_rejected(self, qpm_page):
+        existing_name = qpm_page.page.locator("td.cdk-column-name").first.inner_text().strip()
+        qpm_page.open_add_form()
+        qpm_page.fill_form({"name": existing_name})
+        qpm_page.submit()
+        qpm_page.page.wait_for_selector(".swal2-container", timeout=5000)
+        title = (qpm_page.page.locator("#swal2-title").text_content() or "").strip().lower()
+        assert any(w in title for w in ("validation", "already", "exists", "duplicate", "error")), \
+            f"Expected duplicate rejection alert, got: '{title}'"
+        qpm_page.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        qpm_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
         qpm_page.close_popup()

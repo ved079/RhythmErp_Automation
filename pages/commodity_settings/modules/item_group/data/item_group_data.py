@@ -28,16 +28,6 @@ ALL_BUGS = [BUG_IG01, BUG_IG02, BUG_IG03, BUG_IG04, BUG_IG05,
             BUG_IG06, BUG_IG07, BUG_IG08, BUG_IG09]
 
 # ═══════════════════════════════════════════
-#  Validation Messages
-# ═══════════════════════════════════════════
-
-VALIDATION_FAILED_TITLE = 'Validation Failed'
-VALIDATION_FAILED_CONTENT = 'Please correct the highlighted fields'
-SUCCESS_CREATE_MSG = 'Your record has been added successfully!'
-SUCCESS_UPDATE_MSG = 'Your record has been updated successfully!'
-
-
-# ═══════════════════════════════════════════
 #  Code/Description Generators
 # ═══════════════════════════════════════════
 
@@ -206,28 +196,6 @@ def generate_item_group_payloads(count: int = 10, offset: int = 0) -> list:
             code = f"{code} (Batch {wrap_count})"
         payloads.append(build_item_group_api_payload(code=code, description=description))
     return payloads
-
-
-# ═══════════════════════════════════════════
-# FIELD VALIDATION RULES (from live ERP schema)
-# ═══════════════════════════════════════════
-
-FIELD_VALIDATION_RULES = {
-    "code": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "Item Group code. BUG-IG01: duplicates currently allowed.",
-    },
-    "description": {
-        "type": "character",
-        "required": True,
-        "max_length": 255,
-        "note": "Item Group description text.",
-    },
-}
-
-DEFAULT_ITEM_GROUP_FK_IDS = {}
 
 
 def get_fk_screen_mapping():

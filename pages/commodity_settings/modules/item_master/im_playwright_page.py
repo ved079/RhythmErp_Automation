@@ -18,6 +18,7 @@ class IMPlaywrightPage(BasePlaywrightPage):
     DESCRIPTION   = "xpath=//mat-form-field[.//mat-label[contains(.,'Description')]]//input"
     UOM           = "xpath=//mat-form-field[.//mat-label[normalize-space(.)='UOM']]//mat-select"
     SUBMIT_BTN    = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
+    UPDATE_BTN    = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]"
     CANCEL_BTN    = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
     ADD_BTN       = "button.erp-add-btn"
 
@@ -33,7 +34,10 @@ class IMPlaywrightPage(BasePlaywrightPage):
         self.page.locator(self.SUBMIT_BTN).click()
 
     def close_popup(self):
-        self.force_close_popup()
+        try:
+            self.page.locator(self.CANCEL_BTN).click()
+        except Exception:
+            pass
         self.page.wait_for_selector("table#excel-table", timeout=8000)
 
     def _select_random_mat_option(self, selector):
@@ -140,6 +144,16 @@ class IMPlaywrightPage(BasePlaywrightPage):
         return self.page.locator(
             f"//td[contains(@class,'cdk-column-name') and contains(.,'{name}')]"
         ).count() > 0
+
+    def click_edit_button(self, name: str):
+        self.click_row_action(0, "Edit")
+
+    def update_description(self, desc: str):
+        self.page.locator(self.DESCRIPTION).first.click(force=True)
+        self.page.locator(self.DESCRIPTION).first.fill(desc)
+
+    def click_update(self):
+        self.page.locator(self.UPDATE_BTN).click()
 
     def click_view_button(self, name: str):
         self.click_row_action(0, "View")

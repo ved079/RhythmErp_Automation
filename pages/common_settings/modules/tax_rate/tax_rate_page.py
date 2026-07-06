@@ -74,27 +74,6 @@ class TaxRatePage(BasePlaywrightPage):
         name = data.get("tax_rate_name", "Active")
         self.page.fill(self.NAME_INPUT, name)
 
-    def fill_sub_row(self, row_index=0):
-        # The sub-table uses inline editing: click the row to make it editable
-        # Find the sub-table inside the popup
-        rows = self.page.locator("div.edit_pop_up table tbody tr, div.edit_pop_up .mat-mdc-row")
-        n = rows.count()
-        with open("debug_table_rows_count.txt","w") as f: f.write("rows=" + str(n))
-        if n > 0:
-            rows.first.click(force=True)
-            self.page.wait_for_timeout(2000)
-            # Check if inputs are now editable
-            hsn = self.page.locator("input[placeholder='Select HSN Number']").first
-            is_readonly = self.page.evaluate("document.querySelector('input[placeholder=\"Select HSN Number\"]')?.readOnly")
-            with open("debug_after_row_click.txt","w") as f: f.write("readonly=" + str(is_readonly))
-            if is_readonly == False:
-                hsn.fill("995411")
-                self.page.wait_for_timeout(300)
-                # Tab to Tax Rate
-                self.page.keyboard.press("Tab")
-                tax = self.page.locator("input[placeholder='Enter Tax Rate']").first
-                tax.fill("18")
-
     def submit(self):
         self._clear_overlays()
         self.page.evaluate("""
@@ -146,31 +125,31 @@ class TaxRatePage(BasePlaywrightPage):
         self.page.wait_for_selector("table#excel-table", timeout=8000)
 
     def fill_sub_table_row(self):
-        """Click the existing preview row → popup opens → fill HSN + Tax Rate → Save."""
-        row = self.page.locator("tr[mattooltip='Click to edit row details']").first
-        row.wait_for(state="visible", timeout=5000)
-        row.click(force=True)
-        self.page.wait_for_timeout(1500)
-        hsn_sel = self.page.locator("xpath=//mat-form-field[.//mat-label[contains(.,'HSN Number')]]//mat-select")
-        hsn_sel.wait_for(state="visible", timeout=5000)
-        hsn_sel.click()
-        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
+        """Fill HSN Number + Tax Rate inline in the preview row (no sub-popup)."""
+        row = self.page.locator("tr.preview-row, tr.cdk-drag").first
+        row.wait_for(state="visible", timeout=8000)
+        # Click the HSN mat-select inside the row
+        hsn_sel = row.locator("mat-select").first
+        hsn_sel.click(force=True)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", timeout=3000)
+        except Exception:
+            self._clear_overlays()
+            hsn_sel.click(force=True)
+            self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
         self.page.locator(".mat-mdc-select-panel mat-option").first.click(force=True)
         self.page.wait_for_timeout(400)
         self._clear_overlays()
-        tax_input = self.page.locator("xpath=//mat-form-field[.//mat-label[contains(.,'Tax Rate')]]//input[not(@readonly)]")
+        # Fill Tax Rate input inline
+        tax_input = row.locator("input").first
+        tax_input.click()
         tax_input.fill("18")
         self.page.wait_for_timeout(300)
-        save_btns = self.page.locator("xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Save')]")
-        save_btns.first.click()
-        # Wait for sub-popup to actually close before returning
-        save_btns.first.wait_for(state="hidden", timeout=8000)
-        self.page.wait_for_timeout(500)
 
     def create_record(self, data):
         self.open_add_form()
         self.fill_header(data)
-        self.page.wait_for_timeout(500)
+        self.page.wait_for_timeout(1500)
         self.fill_sub_table_row()
         self.submit()
         self.handle_success_alert()

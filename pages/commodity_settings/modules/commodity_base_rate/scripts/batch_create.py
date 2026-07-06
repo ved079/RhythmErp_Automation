@@ -61,6 +61,7 @@ import sys
 import os
 import re
 import argparse
+import random
 import time
 
 # ── Path setup ────────────────────────────────────────────────────────
@@ -393,29 +394,34 @@ def create_new_location(api: ErpApiClient, name: str) -> int:
 # ── Step 4: Create CBR entries for free locations ─────────────────────
 
 def create_cbr_entry(api: ErpApiClient, pricing_type_id: int,
-                     location_id: int, item_ref_id: int = None,
-                     uom_id: int = None, item_rate: str = "1500") -> dict:
+                     location_id: int, item_map: dict,
+                     uom_list: list) -> dict:
     """
-    Create a single CBR header entry with a grid detail row.
+    Create a single CBR header entry with one detail row per item.
+
+    For each item in item_map, adds a detail row with:
+      - item_ref_id: the item's FK ID
+      - uom: a randomly chosen UOM FK ID from uom_list
+      - item_rate: a random integer between 500 and 5000
 
     Args:
         api: Authenticated ErpApiClient instance
-        pricing_type_id: 118 (Common) or 120 (Supplier)
-        location_id: Integer FK for the location
-        item_ref_id: FK for Item Master (grid detail row)
-        uom_id: FK for UOM (grid detail row)
-        item_rate: Item rate string (grid detail row)
+        pricing_type_id: FK for Pricing Type
+        location_id: FK for Location
+        item_map: {item_name: item_id} — all live items from FkResolver
+        uom_list: list of UOM FK IDs to pick from randomly
 
     Returns:
         Result dict: {"success": bool, "data": ..., "error": ..., "payload": ...}
     """
     detail_rows = []
-    if item_ref_id is not None and uom_id is not None:
-        detail_rows.append({
-            "item_ref_id": item_ref_id,
-            "uom": uom_id,
-            "item_rate": item_rate,
-        })
+    for item_name, item_id in item_map.items():
+        uom_id = random.choice(uom_list) if uom_list else None
+        rate = str(random.randint(500, 5000))
+        row = {"item_ref_id": item_id, "item_rate": rate}
+        if uom_id is not None:
+            row["uom"] = uom_id
+        detail_rows.append(row)
 
     payload = {
         "id": "",
@@ -427,7 +433,7 @@ def create_cbr_entry(api: ErpApiClient, pricing_type_id: int,
         "details": [],
         "children": [
             {
-                "stepper_name": "Define Item Rate Commision Details",
+                "stepper_name": "Define Item Rate Details",
                 "is_stepper": True,
                 "details": detail_rows,
                 "children": [],
@@ -602,33 +608,29 @@ def main():
         print(f"  Step 3: {available} free locations available — enough for {needed}.")
         print("  No new locations needed.")
 
+    # Build item map and UOM list from live FkResolver results
+    item_map = fk_ids.get("item_ref_id", ITEM_ID_MAP)
+    uom_list = list(fk_ids.get("uom", UOM_ID_MAP).values()) if fk_ids.get("uom") else list(UOM_ID_MAP.values())
+    pricing_type_map = fk_ids.get("pricing_type_ref_id", {118: "Common", 120: "Supplier"})
+    pricing_type_ids = list(pricing_type_map.keys()) if pricing_type_map else [118, 120]
+
+    sorted_free = sorted(free_locations.items(), key=lambda x: x[1])
+
     # ── Dry-run: show what would be created ────────────────────────────
     if args.dry_run:
-        # Build resolved maps for item and UOM
-        item_map = fk_ids.get("item_ref_id", ITEM_ID_MAP)
-        uom_map = fk_ids.get("uom", UOM_ID_MAP)
-
         print()
         print(f"  [DRY-RUN] Would create {count} CBR entries:")
+        print(f"  Items per entry: {len(item_map)} ({', '.join(list(item_map.keys())[:3])}{'...' if len(item_map) > 3 else ''})")
         print("-" * 70)
-        pricing_types = [118, 120]
-        sorted_free = sorted(free_locations.items(), key=lambda x: x[1])
         for i in range(count):
             if i >= len(sorted_free):
                 print(f"    [{i+1}/{count}] No more free locations — would stop")
                 break
             loc_name, loc_id = sorted_free[i]
-            pt_id = pricing_types[i % len(pricing_types)]
-            pt_name = "Common" if pt_id == 118 else "Supplier"
-            # Resolve grid detail
-            gidx = i % len(CBR_GRID_DATA)
-            item_name, uom_name = CBR_GRID_DATA[gidx]
-            item_id = item_map.get(item_name)
-            uid = uom_map.get(uom_name)
-            item_display = f"item={item_id}({item_name})" if item_id else "item=?"
-            uom_display = f"uom={uid}({uom_name})" if uid else "uom=?"
+            pt_id = pricing_type_ids[i % len(pricing_type_ids)]
+            pt_name = pricing_type_map.get(pt_id, str(pt_id))
             print(f"    [{i+1}/{count}] CBR: {pt_name}/{loc_name} (loc_id={loc_id}) "
-                  f"{item_display} {uom_display}")
+                  f"— {len(item_map)} detail rows, random rates 500-5000")
         if will_create_locations > 0:
             print(f"    (would also create {will_create_locations} new locations)")
         print()
@@ -638,19 +640,12 @@ def main():
 
     # ── Step 4: Create CBR entries ─────────────────────────────────────
     print()
-    print(f"  Step 4: Creating {count} CBR entries for free locations...")
+    print(f"  Step 4: Creating {count} CBR entries ({len(item_map)} items each)...")
     print("-" * 70)
 
-    # Resolve item and UOM maps from FkResolver (fallback to hardcoded)
-    item_map = fk_ids.get("item_ref_id", ITEM_ID_MAP)
-    uom_map = fk_ids.get("uom", UOM_ID_MAP)
-
-    pricing_types = [118, 120]
     results = []
     created = 0
     failed = 0
-
-    sorted_free = sorted(free_locations.items(), key=lambda x: x[1])
 
     for i in range(count):
         if i >= len(sorted_free):
@@ -658,27 +653,19 @@ def main():
             break
 
         loc_name, loc_id = sorted_free[i]
-        pt_id = pricing_types[i % len(pricing_types)]
-        pt_name = "Common" if pt_id == 118 else "Supplier"
-
-        # Pick grid detail row from CBR_GRID_DATA
-        gidx = i % len(CBR_GRID_DATA)
-        item_name, uom_name = CBR_GRID_DATA[gidx]
-        item_id = item_map.get(item_name)
-        uid = uom_map.get(uom_name)
-        item_rate = str(1500 + i * 100)
+        pt_id = pricing_type_ids[i % len(pricing_type_ids)]
+        pt_name = pricing_type_map.get(pt_id, str(pt_id))
 
         print(
             f"    [{i+1}/{count}] Creating CBR: {pt_name}/{loc_name} "
-            f"(loc_id={loc_id}) item={item_id} uom={uid} rate={item_rate}...",
+            f"(loc_id={loc_id}) {len(item_map)} items...",
             end=" ",
             flush=True,
         )
 
         result = create_cbr_entry(api, pt_id, loc_id,
-                                   item_ref_id=item_id,
-                                   uom_id=uid,
-                                   item_rate=item_rate)
+                                   item_map=item_map,
+                                   uom_list=uom_list)
 
         if result.get("success"):
             created += 1

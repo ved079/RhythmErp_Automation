@@ -22,7 +22,7 @@ class HsnSacPage(BasePlaywrightPage):
         try:
             self.page.wait_for_selector("table#excel-table", timeout=3000)
         except Exception:
-            self.force_close_popup()
+            self.close_popup()
             self.page.wait_for_selector("table#excel-table", timeout=5000)
     NUMBER_INPUT = "mat-form-field:has(mat-label:has-text('HSN SAC Number')) input"
     DESC_INPUT = "mat-form-field:has(mat-label:has-text('HSN SAC Description')) input"

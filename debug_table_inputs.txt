@@ -1,7 +1,0 @@
-#0 ph=DD/MM/YYYY id=mat-input-2 type= name= rect=348x24 visible=true
-#1 ph= id= type= name= rect=0x0 visible=false
-#2 ph=DD/MM/YYYY id=mat-input-3 type= name= rect=348x24 visible=true
-#3 ph= id= type= name= rect=0x0 visible=false
-#4 ph=Enter revision status id=mat-input-4 type=character name=Revision Status rect=348x24 visible=true
-#5 ph=Select HSN Number id=mat-input-5 type= name= rect=336x24 visible=true
-#6 ph=Enter Tax Rate id=mat-input-6 type= name= rect=336x24 visible=true

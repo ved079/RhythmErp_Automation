@@ -279,36 +279,3 @@ def generate_uom_conversion_data():
     }
 
 
-def generate_fresh_pair():
-    """Return a tuple of (source_uom, target_uom) from the UOM_IDS."""
-    return _next_pair()
-
-
-def generate_decimal_conversion_factor():
-    """Return a decimal conversion factor string."""
-    return "1.5"
-
-
-def generate_large_conversion_factor(n=22):
-    """Return a string of n digits for boundary testing."""
-    return "9" * n
-
-
-def generate_negative_conversion_factor():
-    """Return a negative conversion factor string."""
-    return "-5"
-
-
-def generate_zero_conversion_factor():
-    """Return a zero conversion factor string."""
-    return "0"
-
-
-def generate_text_conversion_factor():
-    """Return a text (non-numeric) conversion factor string."""
-    return "abc"
-
-
-def generate_special_char_conversion_factor():
-    """Return a special-character conversion factor string."""
-    return "@#$"

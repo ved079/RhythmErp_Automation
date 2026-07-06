@@ -28,6 +28,23 @@ class TestHsnSacUI:
         hsn_page.search_hsn_sac(data["hsn_sac_number"])
         hsn_page.verify_hsn_exists(data["hsn_sac_number"])
 
+    def test_duplicate_number_rejected(self, hsn_page):
+        existing_no = hsn_page.page.locator("td.cdk-column-hsn_sac_no").first.inner_text().strip()
+        hsn_page.open_add_form()
+        hsn_page.page.fill(hsn_page.NUMBER_INPUT, existing_no)
+        hsn_page.submit()
+        hsn_page.page.wait_for_selector(".swal2-container", timeout=5000)
+        title = (hsn_page.page.locator("#swal2-title").text_content() or "").strip().lower()
+        assert any(w in title for w in ("validation", "already", "exists", "duplicate", "error")), \
+            f"Expected duplicate rejection alert, got: '{title}'"
+        hsn_page.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        hsn_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
+        hsn_page.close_popup()
+
+    def test_search_nonexistent(self, hsn_page):
+        hsn_page.search_hsn_sac("searchNonexitingCode")
+        assert not hsn_page.is_hsn_in_table("searchNonexitingCode")
+
     def test_full_row_actions(self, hsn_page):
         data = generate_valid_hsn_sac_data()
         hsn_page.open_add_form()

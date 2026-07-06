@@ -1,9 +1,0 @@
-BUTTON.mat-mdc-tooltip-trigger mdc-ic:fullscreen VIS
-BUTTON.mat-mdc-tooltip-trigger mdc-ic:close VIS
-BUTTON.mdc-icon-button mat-mdc-icon-b: VIS
-BUTTON.mdc-icon-button mat-mdc-icon-b: VIS
-BUTTON.add-row-btn:addAdd Row VIS
-BUTTON.mat-mdc-tooltip-trigger mat-md: VIS
-BUTTON.mat-mdc-tooltip-trigger mat-md: VIS
-BUTTON.mdc-button mat-mdc-button mat-:Cancel VIS
-BUTTON.mdc-button mdc-button--raised :Submit VIS

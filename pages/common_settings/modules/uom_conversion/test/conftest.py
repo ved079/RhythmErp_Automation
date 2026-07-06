@@ -48,6 +48,6 @@ def uom_conv_page(logged_in_page):
     p.navigate_to_page()
     yield p
     try:
-        p.force_close_popup()
+        p._force_close_panels()
     except Exception:
         pass
