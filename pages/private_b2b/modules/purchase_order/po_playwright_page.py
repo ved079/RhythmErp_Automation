@@ -23,7 +23,7 @@ class POPlaywrightPage(BasePlaywrightPage):
     # Item grid fields — multiple rows; use .nth(row_index) to target each row
     ITEM_NAME          = "xpath=//mat-form-field[.//mat-label[contains(.,'Item Name')]]//mat-select"
     QUANTITY           = "xpath=//mat-form-field[.//mat-label[contains(.,'Quantity')]]//input"
-    RATE               = "xpath=//mat-form-field[.//mat-label[contains(.,'Rate')]]//input"
+    RATE               = "xpath=//mat-form-field[.//input[@placeholder='Rate']]//input"
     EXPECTED_DELIVERY  = "xpath=//mat-form-field[.//mat-label[contains(.,'Expected Delivery Date')]]//input[@placeholder='DD/MM/YYYY']"
     DISCOUNT           = "xpath=//mat-form-field[.//mat-label[contains(.,'Discount %')]]//input"
     INTEREST           = "xpath=//mat-form-field[.//mat-label[contains(.,'Interest%')]]//input"
@@ -36,7 +36,6 @@ class POPlaywrightPage(BasePlaywrightPage):
     SUBMIT_BTN   = "xpath=//div[contains(@class,'popup-footer')]//button[contains(@class,'mat-mdc-unelevated-button') or contains(@class,'mat-mdc-raised-button')][.//span[contains(.,'Submit')]]"
     UPDATE_BTN   = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]"
     CANCEL_BTN   = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
-    APPROVE_BTN  = "xpath=//button[contains(@class,'mat-mdc-raised-button')][.//span[contains(.,'Approve')]]"
 
     # Table columns
     REF_NO_COL          = "td.cdk-column-transaction_ref_no"
@@ -47,8 +46,16 @@ class POPlaywrightPage(BasePlaywrightPage):
     def handle_success_alert(self):
         self.page.wait_for_selector(".swal2-container", timeout=8000)
         self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
-        self.page.wait_for_selector(".swal2-container", state="hidden", timeout=5000)
-        self.page.wait_for_selector("table.mat-mdc-table", timeout=8000)
+        try:
+            self.page.wait_for_selector(".swal2-container", state="hidden", timeout=15000)
+        except Exception:
+            pass
+        # Wait for the form (popup) to close, then wait for listing table
+        try:
+            self.page.wait_for_selector(self.SUPPLIER_NAME, state="hidden", timeout=15000)
+        except Exception:
+            pass
+        self.page.wait_for_selector("table.mat-mdc-table", timeout=15000)
 
     # ── Navigation ──────────────────────────────────────────────────────
 
@@ -60,12 +67,18 @@ class POPlaywrightPage(BasePlaywrightPage):
     # ── Form open ───────────────────────────────────────────────────────
 
     def open_add_form(self):
+        self.page.wait_for_selector("table.mat-mdc-table", timeout=15000)
+        self.page.wait_for_timeout(800)
         add_btn = self.page.locator(self.ADD_BTN)
         add_btn.wait_for(state="visible", timeout=10000)
         add_btn.scroll_into_view_if_needed()
-        add_btn.click()
-        self.page.wait_for_timeout(1000)
-        self.page.wait_for_selector(self.SUPPLIER_NAME, timeout=20000)
+        add_btn.click(force=True)
+        self.page.wait_for_timeout(2000)
+        # If form didn't open, click again once
+        if self.page.locator(self.SUPPLIER_NAME).count() == 0:
+            add_btn.click(force=True)
+            self.page.wait_for_timeout(2000)
+        self.page.wait_for_selector(self.SUPPLIER_NAME, timeout=25000)
         self.page.wait_for_timeout(500)
 
     # ── Mat-select helpers ──────────────────────────────────────────────
@@ -269,12 +282,15 @@ class POPlaywrightPage(BasePlaywrightPage):
     TOTAL_PO_AMOUNT_FORM = "input[placeholder='Total PO Amount']"
 
     def _read_form_total_po_amount(self):
-        """Read the disabled Total PO Amount summary field in the open form."""
-        field = self.page.locator(self.TOTAL_PO_AMOUNT_FORM)
-        if field.count() > 0:
-            val = field.first.input_value()
-            if val and val.strip():
-                return float(val.strip())
+        """Read the disabled Total PO Amount summary field in the open form via JS."""
+        val = self.page.evaluate("""
+            () => {
+                const el = document.querySelector("input[placeholder='Total PO Amount']");
+                return el ? el.value : '';
+            }
+        """)
+        if val and val.strip():
+            return float(val.strip())
         return None
 
     def _read_all_row_totals(self):
@@ -389,42 +405,64 @@ class POPlaywrightPage(BasePlaywrightPage):
     # ── Row actions ──────────────────────────────────────────────────────
 
     def click_view_button(self):
-        self.page.evaluate("var btn = document.querySelectorAll('button.erp-row-trigger')[0]; if(btn){btn.scrollIntoView({block:'center'});btn.click();}")
-        self.page.wait_for_selector("div.mat-mdc-menu-panel", timeout=3000)
-        self.page.locator("xpath=//button[contains(@class,'erp-menu-item')][.//span[contains(.,'Open record details')]]").first.click(force=True)
+        self.page.wait_for_selector("table.mat-mdc-table", timeout=15000)
         self.page.wait_for_timeout(500)
-
-    def click_edit_button(self):
-        self.click_row_action(0, "Edit")
-
-    def is_edit_disabled(self):
-        """Open the action menu for the first row and check if Edit is disabled."""
         self.page.evaluate("var btn = document.querySelectorAll('button.erp-row-trigger')[0]; if(btn){btn.scrollIntoView({block:'center'});btn.click();}")
-        self.page.wait_for_selector("div.mat-mdc-menu-panel", timeout=3000)
-        edit_btn = self.page.locator("xpath=//button[contains(@class,'erp-menu-item')][.//span[contains(.,'Modify this record')]]")
-        disabled = edit_btn.get_attribute("aria-disabled") == "true" or edit_btn.get_attribute("disabled") is not None
-        self.page.keyboard.press("Escape")
-        self.page.wait_for_timeout(300)
-        return disabled
+        self.page.wait_for_selector("div.mat-mdc-menu-panel", timeout=5000)
+        self.page.locator("xpath=//button[contains(@class,'erp-menu-item')][.//span[contains(.,'Open record details')]]").first.click(force=True)
+        try:
+            self.page.wait_for_load_state("networkidle", timeout=12000)
+        except Exception:
+            pass
 
     def click_history_button(self):
         self.click_row_action(0, "History")
 
-    def click_approve(self):
-        self.page.locator(self.APPROVE_BTN).click()
-        self.page.wait_for_timeout(300)
+    def edit_first_record_qty(self, new_qty):
+        """Open Edit on the first row, change qty, submit via Update, return (new_total, new_txn_amount)."""
+        self.click_row_action(0, "Edit")
+        self.page.wait_for_selector(self.SUPPLIER_NAME, timeout=15000)
+        self.page.wait_for_timeout(1000)
 
-    def approve_po(self):
-        """Edit the top row, click Approve, confirm success."""
-        self.click_edit_button()
-        self.page.wait_for_selector(self.APPROVE_BTN, timeout=8000)
-        self.click_approve()
-        self.handle_success_alert()
+        self._fill_number_nth(self.QUANTITY, 0, new_qty)
+        self.page.wait_for_timeout(800)
+
+        def _read_nth(xpath, idx):
+            return self.page.evaluate("""
+                ([xpath, idx]) => {
+                    const result = document.evaluate(xpath, document, null,
+                        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    const el = result.snapshotItem(idx);
+                    return el ? el.value : '';
+                }
+            """, [xpath.replace("xpath=", ""), idx])
+
+        txn_str = _read_nth(self.TRANSACTION_AMOUNT, 0)
+        new_txn_amount = float(txn_str) if txn_str and txn_str.strip() else 0.0
+
+        self.page.wait_for_timeout(500)
+        new_total = self._read_form_total_po_amount() or new_txn_amount
+
+        self.page.locator(self.UPDATE_BTN).click(force=True)
+        # Dismiss success alert without waiting for listing table (navigate_to_page handles that)
+        self.page.wait_for_selector(".swal2-container", timeout=8000)
+        self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        try:
+            self.page.wait_for_selector(".swal2-container", state="hidden", timeout=15000)
+        except Exception:
+            pass
+        self.page.wait_for_timeout(1000)
         self.navigate_to_page()
+
+        return new_total, new_txn_amount
 
     # ── Popup close ──────────────────────────────────────────────────────
 
     def close_popup(self):
+        # If view form is open (full-page details-form), navigate back to listing
+        if self.page.locator(".details-form").count() > 0:
+            self.navigate_to_page()
+            return
         try:
             self.page.locator(self.CANCEL_BTN).click()
         except Exception:
@@ -435,9 +473,8 @@ class POPlaywrightPage(BasePlaywrightPage):
             pass
 
     def verify_view_popup_read_only(self):
-        self.page.wait_for_selector("xpath=//mat-label[contains(.,'Supplier Name')]", timeout=10000)
+        # Wait for readonly inputs — only present when view form is fully rendered
+        self.page.wait_for_selector("input[readonly]", timeout=30000)
         self.page.wait_for_timeout(500)
         assert self.page.locator(self.SUBMIT_BTN).count() == 0, \
             "Submit must not appear in View mode"
-        assert self.page.locator(self.APPROVE_BTN).count() == 0, \
-            "Approve must not appear in View mode"

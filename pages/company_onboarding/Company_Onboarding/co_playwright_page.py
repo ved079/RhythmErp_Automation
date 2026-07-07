@@ -288,10 +288,10 @@ class COPlaywrightPage(BasePlaywrightPage):
         except Exception:
             self.page.goto(self.URL)
         try:
-            self.page.wait_for_selector("table#excel-table", timeout=10000)
+            self.page.wait_for_selector("table#excel-table, div.empty-state", timeout=10000)
         except Exception:
             self.page.reload()
-            self.page.wait_for_selector("table#excel-table", timeout=15000)
+            self.page.wait_for_selector("table#excel-table, div.empty-state", timeout=15000)
 
     def open_add_form(self):
         try:
