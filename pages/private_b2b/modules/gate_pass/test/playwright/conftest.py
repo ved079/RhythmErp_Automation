@@ -4,6 +4,12 @@ import pytest
 from playwright.sync_api import sync_playwright
 from pages.private_b2b.modules.gate_pass.gp_playwright_page import GPPlaywrightPage
 
+DOWNLOADS_DIR = os.path.join(
+    os.path.dirname(__file__), "..", "..", "..", "..", "..", "..",
+    "test_downloads", "gate_pass"
+)
+os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+
 PROJECT_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..", "..")
 )
@@ -35,8 +41,15 @@ def browser(playwright_instance):
 
 
 @pytest.fixture(scope="class")
-def logged_in_page(browser):
-    page = browser.new_page()
+def browser_context(browser):
+    ctx = browser.new_context(accept_downloads=True)
+    yield ctx
+    ctx.close()
+
+
+@pytest.fixture(scope="class")
+def logged_in_page(browser_context):
+    page = browser_context.new_page()
     page.goto(RHYTHMERP_LOGIN_URL)
     page.wait_for_selector("input[name='Username']", timeout=15000)
     page.fill("input[name='Username']", RHYTHMERP_EMAIL)
@@ -52,7 +65,11 @@ def logged_in_page(browser):
         timeout=20000,
     )
     yield page
-    page.close()
+
+
+@pytest.fixture(scope="session")
+def downloads_dir():
+    return os.path.abspath(DOWNLOADS_DIR)
 
 
 @pytest.fixture(scope="function")

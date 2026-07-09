@@ -37,8 +37,15 @@ def browser(playwright_instance):
 
 
 @pytest.fixture(scope="session")
-def logged_in_page(browser):
-    page = browser.new_page()
+def browser_context(browser):
+    ctx = browser.new_context(accept_downloads=True)
+    yield ctx
+    ctx.close()
+
+
+@pytest.fixture(scope="session")
+def logged_in_page(browser_context):
+    page = browser_context.new_page()
     page.goto(RHYTHMERP_LOGIN_URL)
     page.wait_for_selector("input[name='Username']", timeout=15000)
     page.fill("input[name='Username']", RHYTHMERP_EMAIL)

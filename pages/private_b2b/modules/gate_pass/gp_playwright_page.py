@@ -1,3 +1,4 @@
+import os
 import random
 from datetime import date, timedelta
 from pages.base_playwright_page import BasePlaywrightPage
@@ -40,14 +41,43 @@ class GPPlaywrightPage(BasePlaywrightPage):
 
     # ── Navigation ───────────────────────────────────────────────────────
 
-    def handle_success_alert(self):
+    # Default folder for validation error Excel downloads — always used when validation fails
+    _DOWNLOADS_DIR = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..", "test_downloads", "gate_pass")
+    )
+
+    def handle_success_alert(self, downloads_dir=None):
         try:
             self.page.wait_for_selector(".swal2-container", timeout=8000)
-            self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        except Exception:
+            return
+
+        title = self.page.locator("#swal2-title").inner_text().strip()
+
+        if "Validation" in title or "Failed" in title:
+            save_dir = downloads_dir or self._DOWNLOADS_DIR
+            os.makedirs(save_dir, exist_ok=True)
             try:
-                self.page.wait_for_selector(".swal2-container", state="hidden", timeout=10000)
+                with self.page.expect_download(timeout=10000) as dl_info:
+                    self.page.locator("button.swal2-confirm").click()
+                download = dl_info.value
+                save_path = os.path.join(save_dir, download.suggested_filename)
+                download.save_as(save_path)
+                print(f"\n[GP] Validation errors saved → {save_path}")
+            except Exception as e:
+                print(f"\n[GP] Download failed: {e}")
+                self.page.locator("button.swal2-cancel").click()
+
+            try:
+                self.page.wait_for_selector(".swal2-container", state="hidden", timeout=5000)
             except Exception:
                 pass
+            raise RuntimeError(f"GP creation failed — validation error: {title}")
+
+        # Success popup — click confirm
+        self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        try:
+            self.page.wait_for_selector(".swal2-container", state="hidden", timeout=10000)
         except Exception:
             pass
         try:
@@ -77,6 +107,23 @@ class GPPlaywrightPage(BasePlaywrightPage):
             pass
         self.page.wait_for_timeout(300)
 
+    def _select_random_mat_option_with_text(self, selector):
+        """Same as _select_random_mat_option but returns the selected option's text."""
+        self.page.locator(selector).first.click(force=True)
+        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
+        options = self.page.locator(".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text").all()
+        chosen_text = ""
+        if options:
+            chosen = random.choice(options)
+            chosen_text = chosen.inner_text().strip()
+            chosen.click(force=True)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            pass
+        self.page.wait_for_timeout(300)
+        return chosen_text
+
     def _select_mat_by_text(self, selector, text):
         self.page.locator(selector).first.click(force=True)
         self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
@@ -91,12 +138,14 @@ class GPPlaywrightPage(BasePlaywrightPage):
             pass
         self.page.wait_for_timeout(300)
 
-    def _select_random_mat_option_nth(self, selector, row_index, exclude_texts=None):
+    def _select_random_mat_option_nth(self, selector, row_index, exclude_texts=None, exclude_keywords=None):
         self.page.locator(selector).nth(row_index).click(force=True)
         self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
         options = self.page.locator(".mat-mdc-select-panel mat-option").all()
         if exclude_texts:
             options = [o for o in options if o.inner_text().strip() not in exclude_texts]
+        if exclude_keywords:
+            options = [o for o in options if not any(kw in o.inner_text() for kw in exclude_keywords)]
         if not options:
             self.page.locator(".cdk-overlay-backdrop").last.click(force=True)
             try:
@@ -193,7 +242,7 @@ class GPPlaywrightPage(BasePlaywrightPage):
         self._select_random_mat_option(self.SUPPLIER_NAME)
         self.page.wait_for_timeout(500)
         self._select_mat_by_text(self.ITEM_TYPE, "Farm")
-        self._select_random_mat_option(self.DELIVERY_TERMS)
+        self._select_mat_by_text(self.DELIVERY_TERMS, "Spot")
         self.fill_in_time(10, 0)
         self._select_random_mat_option(self.LOCATION)
         self._select_random_mat_option(self.DEPARTMENT)
@@ -218,9 +267,12 @@ class GPPlaywrightPage(BasePlaywrightPage):
         self.page.wait_for_timeout(300)
         return count
 
-    def _add_item_row(self, row_index, bags, qty, used_items=None):
+    def _add_item_row(self, row_index, bags, qty, used_items=None, exclude_keywords=None):
+        all_exclude = set(used_items or [])
         item_name = self._select_random_mat_option_nth(
-            self.ITEM_NAME, row_index, exclude_texts=used_items
+            self.ITEM_NAME, row_index,
+            exclude_texts=all_exclude,
+            exclude_keywords=exclude_keywords,
         )
         self.page.wait_for_timeout(800)
         self._fill_number_nth(self.NO_OF_BAGS, row_index, bags)
@@ -230,7 +282,7 @@ class GPPlaywrightPage(BasePlaywrightPage):
 
     # ── Create ───────────────────────────────────────────────────────────
 
-    def create_record(self, item_configs=None, all_items=False):
+    def create_record(self, item_configs=None, all_items=False, exclude_keywords=None):
         """Open form, fill header, add item rows, submit.
 
         item_configs: list of (bags, qty).
@@ -256,7 +308,7 @@ class GPPlaywrightPage(BasePlaywrightPage):
         row_dicts = []
         used_items = set()
         for i, (bags, qty) in enumerate(item_configs):
-            rd = self._add_item_row(i, bags, qty, used_items)
+            rd = self._add_item_row(i, bags, qty, used_items, exclude_keywords=exclude_keywords)
             if not rd["item_name"]:
                 break
             used_items.add(rd["item_name"])
