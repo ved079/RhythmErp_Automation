@@ -40,6 +40,10 @@ class PBPlaywrightPage(BasePlaywrightPage):
     ROUND_OFF_CREDIT = "xpath=//mat-form-field[.//mat-label[normalize-space()='Round Off Credit Amount(-)']]//input"
     ROUND_OFF_DEBIT  = "xpath=//mat-form-field[.//mat-label[normalize-space()='Round Off Debit Amount(+)']]//input"
 
+    # Other charges section
+    TRANSPORTATION_AMOUNT = "xpath=//mat-form-field[.//mat-label[contains(.,'Transportation Amount')]]//input"
+    AGENT_COMMISSION_AMT  = "xpath=//mat-form-field[.//mat-label[contains(.,'Agent Commision Amount')]]//input"
+
     # Buttons
     ADD_BTN    = "button.erp-add-btn"
     SUBMIT_BTN = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
@@ -298,9 +302,27 @@ class PBPlaywrightPage(BasePlaywrightPage):
 
     # ── Create record ─────────────────────────────────────────────────────
 
+    def fill_other_charges(self, transportation=None, agent_commission=None):
+        """Fill the Other Charges section (transportation / agent commission)."""
+        if transportation is not None:
+            loc = self.page.locator(self.TRANSPORTATION_AMOUNT).first
+            if loc.count() > 0:
+                loc.click(force=True)
+                loc.fill(str(transportation))
+                loc.press("Tab")
+                self.page.wait_for_timeout(300)
+        if agent_commission is not None:
+            loc = self.page.locator(self.AGENT_COMMISSION_AMT).first
+            if loc.count() > 0:
+                loc.click(force=True)
+                loc.fill(str(agent_commission))
+                loc.press("Tab")
+                self.page.wait_for_timeout(300)
+
     def create_record(self, supplier_name, row_configs=None,
                       row_ebw=None, row_labour=None, row_discount=None,
-                      row_round_debit=None, row_round_credit=None):
+                      row_round_debit=None, row_round_credit=None,
+                      transportation=None, agent_commission=None):
         """Full PB create flow.
 
         row_configs:     list of (no_of_bags, qty) per item row. None = vanilla (grn_qty, bags=1).
@@ -373,6 +395,10 @@ class PBPlaywrightPage(BasePlaywrightPage):
                 "debit":      debit or 0,
                 "credit":     credit or 0,
             })
+
+        # Other charges (stored separately, don't affect master Total Amount)
+        if transportation is not None or agent_commission is not None:
+            self.fill_other_charges(transportation=transportation, agent_commission=agent_commission)
 
         # Read master total from form before submit
         self.page.wait_for_timeout(500)

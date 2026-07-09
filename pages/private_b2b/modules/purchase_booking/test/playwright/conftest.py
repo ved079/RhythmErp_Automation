@@ -185,6 +185,18 @@ def session_qc_for_pb_multi(logged_in_page):
 
 
 @pytest.fixture(scope="function")
+def pb_bare_page(logged_in_page):
+    """PB page with no QC chain — just navigates to PB listing. For validation tests."""
+    p = PBPlaywrightPage(logged_in_page)
+    p.navigate_to_page()
+    yield p
+    try:
+        p.close_popup()
+    except Exception:
+        pass
+
+
+@pytest.fixture(scope="function")
 def pb_page(logged_in_page, session_qc_for_pb):
     supplier_name, grn_qtys = session_qc_for_pb
     p = PBPlaywrightPage(logged_in_page)
