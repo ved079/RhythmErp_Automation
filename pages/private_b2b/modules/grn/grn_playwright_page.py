@@ -66,14 +66,27 @@ class GRNPlaywrightPage(BasePlaywrightPage):
         self.page.wait_for_timeout(300)
 
     def _select_last_mat_option(self, selector):
-        self.page.locator(selector).first.click(force=True)
-        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=8000)
+        """Open mat-select and click the last option. Returns False if dropdown shows 'No results found'."""
+        loc = self.page.locator(selector).first
+        loc.wait_for(state="visible", timeout=10000)
+        loc.click(force=True)
+        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=12000)
+
+        if self.page.locator(".dd-empty-state").count() > 0:
+            self.page.keyboard.press("Escape")
+            try:
+                self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+            except Exception:
+                pass
+            return False
+
         self.page.locator(".mat-mdc-select-panel mat-option").last.click(force=True)
         try:
             self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
         except Exception:
             pass
         self.page.wait_for_timeout(300)
+        return True
 
     # ── Number helpers ───────────────────────────────────────────────────
 
@@ -100,7 +113,12 @@ class GRNPlaywrightPage(BasePlaywrightPage):
             ([xpath, idx]) => {
                 const result = document.evaluate(xpath, document, null,
                     XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-                const el = result.snapshotItem(idx);
+                const visible = [];
+                for (let i = 0; i < result.snapshotLength; i++) {
+                    const el = result.snapshotItem(i);
+                    if (el.offsetParent !== null) visible.push(el);
+                }
+                const el = visible[idx];
                 return el ? el.value : '';
             }
         """, [xpath, row_index])
@@ -132,25 +150,61 @@ class GRNPlaywrightPage(BasePlaywrightPage):
         def _attempt():
             self._select_mat_by_text(self.SUPPLIER_NAME, supplier_name)
             self.page.wait_for_timeout(5000)
-            self._select_last_mat_option(self.GATE_PASS_NO)
+            gp_selected = self._select_last_mat_option(self.GATE_PASS_NO)
+            if not gp_selected:
+                return 0
             self.page.wait_for_timeout(5000)
             return self.count_row_inputs()
 
         row_count = _attempt()
         if row_count < expected_rows:
-            # Hard refresh and retry
-            self.page.reload()
-            self.page.wait_for_selector("table.mat-mdc-table, div.empty-state", timeout=20000)
-            self.open_add_form()
+            self._retry_on_empty_gp()
             row_count = _attempt()
 
         return row_count
 
+    def _wait_for_gp_patch(self, timeout_ms=20000, poll_ms=500):
+        """Poll until GP Quantity field has a non-empty value (rows auto-patched)."""
+        elapsed = 0
+        while elapsed < timeout_ms:
+            val = self._read_readonly_nth(self.GP_QTY, 0)
+            if val:
+                return
+            self.page.wait_for_timeout(poll_ms)
+            elapsed += poll_ms
+        raise RuntimeError("GRN: GP Quantity field did not populate within timeout — GP may not have auto-patched")
+
+    def _retry_on_empty_gp(self):
+        """Hard refresh + reopen form when GP dropdown showed 'No results found'."""
+        self.page.reload()
+        self.page.wait_for_selector("table.mat-mdc-table, div.empty-state", timeout=20000)
+        self.open_add_form()
+
+    def _select_random_supplier(self):
+        """Select any supplier option (used to wake up the GP dropdown)."""
+        self.page.locator(self.SUPPLIER_NAME).first.click(force=True)
+        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=8000)
+        options = self.page.locator(".mat-mdc-select-panel mat-option").all()
+        if options:
+            import random as _random
+            _random.choice(options).click(force=True)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            pass
+        self.page.wait_for_timeout(2000)
+
     def fill_form(self, supplier_name, accepted_qty, row_index=0):
         self._select_mat_by_text(self.SUPPLIER_NAME, supplier_name)
         self.page.wait_for_timeout(5000)
-        self._select_last_mat_option(self.GATE_PASS_NO)
-        self.page.wait_for_timeout(2000)
+        gp_selected = self._select_last_mat_option(self.GATE_PASS_NO)
+        if not gp_selected:
+            # Wake up the dropdown by selecting a random supplier, then reselect ours
+            self._select_random_supplier()
+            self._select_mat_by_text(self.SUPPLIER_NAME, supplier_name)
+            self.page.wait_for_timeout(5000)
+            self._select_last_mat_option(self.GATE_PASS_NO)
+        self._wait_for_gp_patch()
         self._fill_number_nth(self.ACCEPTED_QTY, row_index, accepted_qty)
         self.page.wait_for_timeout(600)
 
