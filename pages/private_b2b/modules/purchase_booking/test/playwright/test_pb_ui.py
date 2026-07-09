@@ -2,9 +2,11 @@
 Purchase Booking — Playwright UI test suite
 ============================================
 Tests:
-  1  Smoke       — create PB, verify ref_no in listing, verify txn_amount formula
-  2  Multi-row   — all items: fill qty details per row, verify formula per row, submit
-  3  Calculations — EBW, Labour, combined, Discount %, Round Off credit/debit
+  1  Smoke        — create PB, verify ref_no in listing, verify txn_amount formula
+  2  Multi-row    — all items: fill qty details per row, verify formula per row, submit
+  3  Calculations — EBW, Labour, combined, Discount %, Round Off, Partial booking,
+                    Other charges (transportation), Master total formula
+  4  Validation   — submit empty form, assert validation errors appear
 """
 
 import pytest
@@ -158,7 +160,17 @@ class TestPBCalc:
             row_round_debit[4]  = DEBIT                 # row 4: Round Off debit + credit
             row_round_credit[4] = CREDIT
 
+        # row 5: Partial booking — intentionally book less than QC accepted qty
+        partial_qty = None
+        if n >= 6:
+            partial_qty = max(1, grn_qtys[5] // 2)
+            row_configs[5] = (1, partial_qty)           # override to partial qty
+
+        TRANSPORT = 100.0
+
         print(f"\n[CALC] supplier={supplier_name} rows={n} grn_qtys={grn_qtys}")
+        if partial_qty:
+            print(f"       row 5 partial: {partial_qty} of {grn_qtys[5]} (QC accepted)")
 
         total, rows = page_obj.create_record(
             supplier_name,
@@ -168,6 +180,7 @@ class TestPBCalc:
             row_discount=row_discount,
             row_round_debit=row_round_debit,
             row_round_credit=row_round_credit,
+            transportation=TRANSPORT,
         )
 
         failures = []
@@ -213,6 +226,22 @@ class TestPBCalc:
             r = rows[4]
             print(f"[ROW 4 / ROUNDOFF] qty={grn_qtys[4]} gross={r['txn_amount']:.2f} debit={DEBIT} credit={CREDIT}")
 
+        # ── Row 5: Partial booking ────────────────────────────────────────
+        if n >= 6 and partial_qty is not None:
+            r = rows[5]
+            full_gross = r["rate"] * grn_qtys[5]
+            print(f"[ROW 5 / PARTIAL] grn_qty={grn_qtys[5]} booked={partial_qty} "
+                  f"net_qty={r['net_qty']} gross={r['txn_amount']:.2f} full_would_be={full_gross:.2f}")
+            if r["net_qty"] != partial_qty:
+                failures.append(f"[PARTIAL] net_qty={r['net_qty']} != partial_qty {partial_qty}")
+            if r["txn_amount"] >= full_gross - 0.01:
+                failures.append(
+                    f"[PARTIAL] txn={r['txn_amount']:.2f} should be < full gross {full_gross:.2f}"
+                )
+
+        # Transportation is stored in other_charges, does not affect Total Amount
+        print(f"[OTHER CHARGES] transportation={TRANSPORT} (stored separately, not in total)")
+
         # ── Master Total = SUM of per-row finals ──────────────────────────
         # final_i = gross_i - gross_i×disc_i/100 - labour_i + debit_i - credit_i
         expected_total = 0.0
@@ -237,3 +266,43 @@ class TestPBCalc:
         print(f"[CALC] PB created: {ref_no}")
 
         assert not failures, "Calculation failures:\n" + "\n".join(failures)
+
+
+# ── Group 4: Validation ────────────────────────────────────────────────────────
+
+@pytest.mark.validation
+class TestPBValidation:
+    """Submit empty/incomplete PB form and assert the ERP shows validation errors.
+
+    No GP→GRN→QC chain needed — uses pb_bare_page which just navigates to the
+    PB listing. We open the add form and immediately click Submit without filling
+    anything, expecting Angular mat-errors or a SweetAlert validation response.
+    """
+
+    def test_submit_empty_form(self, pb_bare_page):
+        """Open PB add form, submit without filling any fields, expect validation errors."""
+        page_obj = pb_bare_page
+        page_obj.open_add_form()
+
+        # Click Submit without filling Supplier, QC, Currency, or any item data
+        page_obj.page.locator(page_obj.SUBMIT_BTN).click()
+        page_obj.page.wait_for_timeout(2000)
+
+        # Angular client-side validation → mat-error elements
+        mat_errors = page_obj.page.locator("mat-error").count()
+
+        # Server-side validation → SweetAlert with "Validation" in title
+        swal_visible = page_obj.page.locator(".swal2-container").is_visible()
+        swal_title = ""
+        if swal_visible:
+            swal_title = page_obj.page.locator("#swal2-title").inner_text().strip()
+            # Dismiss the alert so fixture teardown can close the popup cleanly
+            page_obj.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+            page_obj.page.wait_for_timeout(500)
+
+        print(f"\n[VALIDATION] mat_errors={mat_errors} swal_visible={swal_visible} swal_title='{swal_title}'")
+
+        assert mat_errors > 0 or (swal_visible and ("Validation" in swal_title or "Failed" in swal_title)), (
+            f"Expected validation errors on empty submit; "
+            f"mat_errors={mat_errors}, swal='{swal_title}'"
+        )
