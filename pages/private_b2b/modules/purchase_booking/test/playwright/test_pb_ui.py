@@ -142,16 +142,18 @@ class TestPBCalc:
         row_round_debit  = [None] * n
         row_round_credit = [None] * n
 
-        ebw_0 = max(1, grn_qtys[0] // 5)
-        row_ebw[0] = ebw_0                              # row 0: EBW only
+        ebw_0 = grn_qtys[0] - 0.5                          # row 0: float EBW leaving net_qty=0.5 (extreme case)
+        row_ebw[0] = ebw_0
 
         if n >= 2:
-            row_labour[1] = LABOUR                      # row 1: Labour only
+            row_labour[1]   = LABOUR                    # row 1: Discount + Labour combined
+            row_discount[1] = DISC
 
         if n >= 3:
             ebw_2 = max(1, grn_qtys[2] // 5)
-            row_ebw[2]    = ebw_2                       # row 2: EBW + Labour
-            row_labour[2] = LABOUR
+            row_ebw[2]      = ebw_2                     # row 2: EBW + Discount + Labour (all three)
+            row_labour[2]   = LABOUR
+            row_discount[2] = DISC
 
         if n >= 4:
             row_discount[3] = DISC                      # row 3: Discount %
@@ -190,30 +192,31 @@ class TestPBCalc:
         r = rows[0]
         expected_net = grn_qtys[0] - ebw_0
         expected_gross = round(r["rate"] * expected_net, 2)
-        print(f"[ROW 0 / EBW] qty={grn_qtys[0]} ebw={ebw_0} "
+        print(f"[ROW 0 / EBW float] qty={grn_qtys[0]} ebw={ebw_0} (float, extreme) "
               f"net_qty={r['net_qty']} gross={r['txn_amount']:.2f} expected_gross={expected_gross:.2f}")
         if abs(r["net_qty"] - expected_net) >= 0.05:
             failures.append(f"[EBW] net_qty={r['net_qty']:.2f} != qty {grn_qtys[0]} - ebw {ebw_0} = {expected_net}")
         if abs(r["txn_amount"] - expected_gross) >= 1.0:
             failures.append(f"[EBW] gross={r['txn_amount']:.2f} != rate {r['rate']:.2f} × net_qty {expected_net} = {expected_gross:.2f}")
 
-        # ── Row 1: Labour ─────────────────────────────────────────────────
-        # Transaction Amount (gross) stays rate×net_qty; labour only reduces master total
+        # ── Row 1: Discount + Labour combined ─────────────────────────────
+        # gross stays rate×net_qty; both disc and labour reduce master total
         if n >= 2:
             r = rows[1]
-            print(f"[ROW 1 / LABOUR] qty={grn_qtys[1]} net_qty={r['net_qty']} gross={r['txn_amount']:.2f} labour={LABOUR}")
+            print(f"[ROW 1 / DISC+LABOUR] qty={grn_qtys[1]} net_qty={r['net_qty']} "
+                  f"gross={r['txn_amount']:.2f} disc={DISC}% labour={LABOUR}")
 
-        # ── Row 2: EBW + Labour ───────────────────────────────────────────
+        # ── Row 2: EBW + Discount + Labour (all three) ───────────────────
         if n >= 3:
             r = rows[2]
             expected_net = grn_qtys[2] - ebw_2
             expected_gross = round(r["rate"] * expected_net, 2)
-            print(f"[ROW 2 / EBW+LABOUR] qty={grn_qtys[2]} ebw={ebw_2} "
-                  f"net_qty={r['net_qty']} gross={r['txn_amount']:.2f} labour={LABOUR}")
+            print(f"[ROW 2 / EBW+DISC+LABOUR] qty={grn_qtys[2]} ebw={ebw_2} "
+                  f"net_qty={r['net_qty']} gross={r['txn_amount']:.2f} disc={DISC}% labour={LABOUR}")
             if abs(r["net_qty"] - expected_net) >= 0.05:
-                failures.append(f"[COMBINED/EBW] net_qty={r['net_qty']:.2f} != qty {grn_qtys[2]} - ebw {ebw_2} = {expected_net}")
+                failures.append(f"[ALL3/EBW] net_qty={r['net_qty']:.2f} != qty {grn_qtys[2]} - ebw {ebw_2} = {expected_net}")
             if abs(r["txn_amount"] - expected_gross) >= 1.0:
-                failures.append(f"[COMBINED/EBW] gross={r['txn_amount']:.2f} != {expected_gross:.2f}")
+                failures.append(f"[ALL3/EBW] gross={r['txn_amount']:.2f} != {expected_gross:.2f}")
 
         # ── Row 3: Discount % ─────────────────────────────────────────────
         # Transaction Amount (gross) stays unchanged; discount only reduces master total
