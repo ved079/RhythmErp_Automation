@@ -61,6 +61,7 @@ DISPLAY_NAMES = {
     "goods_receipt_note": "Goods Receipt Note",
     "gate_pass": "Gate Pass",
     "quality_check": "Quality Check",
+    "Purchase_Flow_Tests": "Purchase Flow Tests",
 }
 
 # Curated display names per test function for BA/QA readability.
@@ -243,6 +244,13 @@ def discover_sub_modules(base_path: str) -> list[SubModule]:
                         if tf.startswith("test_") and tf.endswith(".py"):
                             test_files.append(f"api/{tf}")
                             all_tests.extend(parse_test_functions(os.path.join(api_dir, tf), test_type="api"))
+                # Scan test/playwright/ subdirectory (Playwright UI tests)
+                playwright_dir = os.path.join(test_dir, "playwright")
+                if os.path.isdir(playwright_dir):
+                    for tf in sorted(os.listdir(playwright_dir)):
+                        if tf.startswith("test_") and tf.endswith(".py"):
+                            test_files.append(f"playwright/{tf}")
+                            all_tests.extend(parse_test_functions(os.path.join(playwright_dir, tf), test_type="ui"))
             # Also check for test_*.py directly in sub_path
             for tf in sorted(os.listdir(sub_path)):
                 if tf.startswith("test_") and tf.endswith(".py") and tf not in test_files:

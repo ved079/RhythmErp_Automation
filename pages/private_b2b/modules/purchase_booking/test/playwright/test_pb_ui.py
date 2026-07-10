@@ -282,6 +282,70 @@ class TestPBValidation:
     anything, expecting Angular mat-errors or a SweetAlert validation response.
     """
 
+    def test_ebw_greater_than_qty(self, pb_page):
+        """EBW > qty → net_qty goes negative → mat-errors on Net Quantity and Transaction Amount."""
+        page_obj, (supplier_name, grn_qtys) = pb_page
+        qty = grn_qtys[0]
+        ebw = qty + 5   # always greater than qty
+
+        page_obj.open_add_form()
+        page_obj.select_supplier_and_qc(supplier_name)
+
+        # Fill EBW > qty before opening popup
+        page_obj._fill_number_nth(page_obj.EMPTY_BAG_WEIGHT, 0, ebw)
+        page_obj.open_qty_details_popup(0)
+        page_obj.fill_qty_details(1, qty)
+        page_obj.click_done()
+        page_obj.page.wait_for_timeout(500)
+
+        errors = page_obj.page.locator("mat-error").all_inner_texts()
+        print(f"\n[VAL/EBW>QTY] qty={qty} ebw={ebw} errors={errors}")
+
+        assert any("Amount cannot be less than 0" in e for e in errors), (
+            f"Expected 'Amount cannot be less than 0' error; got: {errors}"
+        )
+
+    def test_discount_above_100(self, pb_page):
+        """Discount % > 100 → mat-error 'Cannot be greater than 100%' on field."""
+        page_obj, (supplier_name, grn_qtys) = pb_page
+
+        page_obj.open_add_form()
+        page_obj.select_supplier_and_qc(supplier_name)
+
+        # Fill discount = 101 (one over the max)
+        page_obj._fill_number_nth(page_obj.DISC_PERCENTAGE, 0, 101)
+        page_obj.page.locator(page_obj.DISC_PERCENTAGE).first.press("Tab")
+        page_obj.page.wait_for_timeout(500)
+
+        errors = page_obj.page.locator("mat-error").all_inner_texts()
+        print(f"\n[VAL/DISC>100] errors={errors}")
+
+        assert any("Cannot be greater than 100" in e for e in errors), (
+            f"Expected 'Cannot be greater than 100%' error; got: {errors}"
+        )
+
+    def test_labour_exceeds_gross(self, pb_page):
+        """Labour > rate × net_qty → Total Amount goes negative → 'Amount cannot be less than 0'."""
+        page_obj, (supplier_name, grn_qtys) = pb_page
+        qty = grn_qtys[0]
+
+        page_obj.open_add_form()
+        page_obj.select_supplier_and_qc(supplier_name)
+
+        # Fill a labour charge guaranteed to exceed any gross (rate × qty)
+        page_obj._fill_number_nth(page_obj.LABOUR_CHARGES, 0, 999999)
+        page_obj.open_qty_details_popup(0)
+        page_obj.fill_qty_details(1, qty)
+        page_obj.click_done()
+        page_obj.page.wait_for_timeout(500)
+
+        errors = page_obj.page.locator("mat-error").all_inner_texts()
+        print(f"\n[VAL/LABOUR>GROSS] qty={qty} labour=999999 errors={errors}")
+
+        assert any("Amount cannot be less than 0" in e for e in errors), (
+            f"Expected 'Amount cannot be less than 0' error; got: {errors}"
+        )
+
     def test_submit_empty_form(self, pb_bare_page):
         """Open PB add form, submit without filling any fields, expect validation errors."""
         page_obj = pb_bare_page

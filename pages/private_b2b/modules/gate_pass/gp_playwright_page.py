@@ -29,11 +29,12 @@ class GPPlaywrightPage(BasePlaywrightPage):
     QUANTITY   = "xpath=//mat-form-field[.//mat-label[contains(.,'Quantity')]]//input"
 
     # Buttons
-    ADD_BTN     = "button.erp-add-btn"
-    ADD_ROW_BTN = "button.add-row-btn"
-    SUBMIT_BTN  = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
-    CANCEL_BTN  = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
-    UPDATE_BTN  = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]"
+    ADD_BTN        = "button.erp-add-btn"
+    ADD_ROW_BTN    = "button.add-row-btn"
+    DELETE_ROW_BTN = "button.apply-button"  # fa-minus; only visible when 2+ rows exist
+    SUBMIT_BTN     = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
+    CANCEL_BTN     = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
+    UPDATE_BTN     = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]"
 
     # Table columns
     REF_NO_COL     = "td.cdk-column-transaction_ref_no"
@@ -339,6 +340,163 @@ class GPPlaywrightPage(BasePlaywrightPage):
         self.search_entry(ref_no)
 
     # ── Close popup ──────────────────────────────────────────────────────
+
+    # ── Edit helpers ─────────────────────────────────────────────────────
+
+    def open_edit_form(self, row_index=0):
+        """Click Edit on listing row row_index and wait for the form to load."""
+        self.click_row_action(row_index, "Edit")
+        self.page.wait_for_selector(self.SUPPLIER_NAME, timeout=15000)
+        self.page.wait_for_timeout(1000)
+
+    def read_item_names_from_form(self):
+        """Return a list of selected item names from all Item Name mat-selects in the form.
+        Works in both edit and view modes. Skips blank/placeholder rows."""
+        spans = self.page.locator(
+            "xpath=//mat-form-field[.//mat-label[contains(.,'Item Name')]]"
+            "//span[contains(@class,'mat-mdc-select-min-line')]"
+        ).all()
+        return [
+            s.inner_text().strip()
+            for s in spans
+            if s.inner_text().strip() and "select" not in s.inner_text().lower()
+        ]
+
+    def count_form_rows(self):
+        """Count item rows currently in the form (by counting Item Name mat-selects)."""
+        return self.page.locator(self.ITEM_NAME).count()
+
+    def delete_row_nth(self, row_index):
+        """Click the minus (delete) button for the item row at row_index.
+        Minus buttons only appear when the form has 2+ rows."""
+        self.page.locator(self.DELETE_ROW_BTN).nth(row_index).click(force=True)
+        self.page.wait_for_timeout(500)
+
+    def submit_update(self):
+        """Click Update, dismiss success alert, navigate back to listing."""
+        self.page.locator(self.UPDATE_BTN).click(force=True)
+        self.page.wait_for_timeout(500)
+        self.handle_success_alert()
+        self.navigate_to_page()
+
+    # ── Integration helpers ──────────────────────────────────────────────
+
+    def fill_header_with_supplier(self, supplier_name, location=None, type_of_sale="B2B"):
+        """Fill header with a specific supplier, matching location and type_of_sale to the PO.
+
+        Pass the same location and type_of_sale as the PO so the GRN can correctly
+        link the GP to the PO (mismatched fields prevent the linkage from resolving).
+        """
+        self._select_mat_by_text(self.SUPPLIER_NAME, supplier_name)
+        self.page.wait_for_timeout(500)
+        self._select_mat_by_text(self.ITEM_TYPE, "Farm")
+        self._select_mat_by_text(self.DELIVERY_TERMS, "Spot")
+        self.fill_in_time(10, 0)
+        if location:
+            self._select_mat_by_text(self.LOCATION, location)
+        else:
+            self._select_random_mat_option(self.LOCATION)
+        self._select_random_mat_option(self.DEPARTMENT)
+        self._select_random_mat_option(self.DIVISION)
+        if type_of_sale:
+            self._select_mat_by_text(self.TYPE_OF_SALE, type_of_sale)
+        else:
+            self._select_random_mat_option(self.TYPE_OF_SALE)
+        self._fill_text_field(self.DISTANCE, "1")
+        self._fill_text_field(self.VEHICLE_NUMBER, "MH14KK2354")
+        self._fill_text_field(self.DRIVER_NAME, "TestDriver")
+        self._fill_number_nth(self.DRIVER_NUMBER, 0, 9999988888)
+
+    def _select_item_by_name_nth(self, row_index, item_name):
+        """Open the nth Item Name mat-select and click the option matching item_name exactly."""
+        self.page.locator(self.ITEM_NAME).nth(row_index).click(force=True)
+        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
+        options = self.page.locator(
+            ".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"
+        ).all()
+        for opt in options:
+            if opt.inner_text().strip() == item_name:
+                opt.click(force=True)
+                break
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            pass
+        self.page.wait_for_timeout(300)
+
+    def fill_items_form(self, supplier_name, items, location=None, type_of_sale="B2B"):
+        """Open GP add form and fill header + all item rows without submitting.
+
+        items: list of (item_name, bags, qty) tuples — one entry per row.
+        Call submit_items_form() when ready to submit. The fill/submit split lets
+        parallel tests fill simultaneously and only sequence the actual submit clicks.
+        """
+        self.open_add_form()
+        self.fill_header_with_supplier(supplier_name, location=location, type_of_sale=type_of_sale)
+
+        # Add extra rows if more than one item
+        for _ in range(len(items) - 1):
+            self.page.locator(self.ADD_ROW_BTN).click()
+            self.page.wait_for_timeout(600)
+
+        for i, (item_name, bags, qty) in enumerate(items):
+            self._select_item_by_name_nth(i, item_name)
+            self.page.wait_for_timeout(800)
+            self._fill_number_nth(self.NO_OF_BAGS, i, bags)
+            self._fill_number_nth(self.QUANTITY, i, qty)
+            self.page.wait_for_timeout(400)
+
+    def submit_items_form(self, items):
+        """Submit the already-filled GP form and return (ref_no, [row_dicts])."""
+        self.page.locator(self.SUBMIT_BTN).click()
+        self.page.wait_for_timeout(5000)
+        self.handle_success_alert()
+        self.navigate_to_page()
+        ref_no = self.get_ref_no_of_first_row()
+        row_dicts = [{"item_name": n, "bags": b, "qty": q} for n, b, q in items]
+        return ref_no, row_dicts
+
+    def create_record_with_specific_item(self, supplier_name, item_name, bags, qty,
+                                         location=None, type_of_sale="B2B"):
+        """Convenience wrapper for a single-item GP. Returns (ref_no, [row_dict])."""
+        items = [(item_name, bags, qty)]
+        self.fill_items_form(supplier_name, items, location=location, type_of_sale=type_of_sale)
+        return self.submit_items_form(items)
+
+    def create_record_with_supplier(self, supplier_name, item_configs=None, location=None,
+                                    type_of_sale="B2B", exclude_keywords=None):
+        """Create a GP using a specific supplier, location, and type_of_sale.
+
+        item_configs: list of (bags, qty). Defaults to one random row.
+        Returns (ref_no, row_dicts) — same shape as create_record.
+        """
+        if item_configs is None:
+            item_configs = [(random.randint(1, 5), random.randint(50, 200))]
+
+        self.open_add_form()
+        self.fill_header_with_supplier(supplier_name, location=location, type_of_sale=type_of_sale)
+
+        total_rows = len(item_configs)
+        for _ in range(total_rows - 1):
+            self.page.locator(self.ADD_ROW_BTN).click()
+            self.page.wait_for_timeout(600)
+
+        row_dicts = []
+        used_items = set()
+        for i, (bags, qty) in enumerate(item_configs):
+            rd = self._add_item_row(i, bags, qty, used_items, exclude_keywords=exclude_keywords)
+            if not rd["item_name"]:
+                break
+            used_items.add(rd["item_name"])
+            row_dicts.append(rd)
+
+        self.page.locator(self.SUBMIT_BTN).click()
+        self.page.wait_for_timeout(5000)
+        self.handle_success_alert()
+        self.navigate_to_page()
+
+        ref_no = self.get_ref_no_of_first_row()
+        return ref_no, row_dicts
 
     def close_popup(self):
         try:
