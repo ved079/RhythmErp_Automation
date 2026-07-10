@@ -41,6 +41,24 @@ total_quantity            = SUM(alternate_net_qty)
 
 Both master amount fields are identical — the ERP stores the same value in both.
 
+### UI formula (confirmed via Playwright calc tests)
+
+The UI exposes different field names but the maths is the same:
+
+```
+Transaction Amount (per row, UI)  = rate × net_qty          ← gross; never shows deductions
+net_qty                           = qty - empty_bag_weight
+per-row final                     = gross - (gross × disc_pct/100) - labour + round_debit - round_credit
+Master Total Amount               = SUM(per-row finals)
+```
+
+Key observations:
+- **Transaction Amount is always gross** — labour and discount do not appear there, only in Master Total.
+- **Round Off is per-row** — separate Debit (+) and Credit (−) fields on each item row; max value 1 each.
+- **EBW can be a float** (e.g. 3455.5) — net_qty becomes fractional (e.g. 0.5).
+- **Transportation** is stored in `other_charges` dict and does **not** affect Total Amount.
+- **1 QC → 1 PB constraint** — once a PB is created from a QC, that QC is hidden from the dropdown and cannot be reused.
+
 ---
 
 ## Rate Linkage from QC
@@ -173,9 +191,11 @@ pages/private_b2b/modules/purchase_booking/
             test_calculations.py        # pure unit tests (no network)
             test_live.py                # live ERP tests (require token)
             test_schema.py              # schema structure tests (require token)
+        playwright/
+            conftest.py                 # session-scoped GP→GRN→QC chain fixtures
+            pb_playwright_page.py       # PBPlaywrightPage page object
+            test_pb_ui.py               # full Playwright UI test suite (see below)
 ```
-
-No Playwright UI test suite yet — UI XPaths and flow being collected.
 
 ---
 
@@ -299,16 +319,69 @@ without a QC link. When building linked PBs, fetch the QC response and extract
 
 ---
 
-## Playwright UI — Pending
+## Playwright UI Test Suite
 
-XPaths and UI flow being collected. Will be added here once available.
+### Page Object — `pb_playwright_page.py`
 
-Expected fields to automate:
-- Header: Supplier, QC ref, GRN ref, Payment Terms, Currency, Location, Department, Division, Type of Sale
-- Item stepper grid: Item Name, No. of Bags, Alternate Qty, Rate (auto-filled from QC), labour charges
-- Sub-detail per row: bag breakdown (no_of_bags_subdetails, quantity_sub_details)
-- Other charges: Agent, Transportation
-- Submit → SweetAlert2 confirmation
+Key selectors:
+```python
+EMPTY_BAG_WEIGHT   = "xpath=//mat-form-field[.//mat-label[contains(.,'Empty Bag Weight (KG)')]]//input"
+LABOUR_CHARGES     = "xpath=//mat-form-field[.//mat-label[contains(.,'Labour Charges')]]//input"
+DISC_PERCENTAGE    = "xpath=//mat-form-field[.//mat-label[contains(.,'Discount Percentage')]]//input"
+ROUND_OFF_CREDIT   = "xpath=//mat-form-field[.//mat-label[normalize-space()='Round Off Credit Amount(-)']]//input"
+ROUND_OFF_DEBIT    = "xpath=//mat-form-field[.//mat-label[normalize-space()='Round Off Debit Amount(+)']]//input"
+TRANSPORTATION_AMOUNT = "xpath=//mat-form-field[.//mat-label[contains(.,'Transportation Amount')]]//input"
+AGENT_COMMISSION_AMT  = "xpath=//mat-form-field[.//mat-label[contains(.,'Agent Commision Amount')]]//input"
+```
+
+`create_record` fill order per row: **EBW → Labour → Discount → Round Off → open popup → fill bags/qty → Done**
+Transportation filled after all rows, before reading master total.
+
+`_fill_number_nth(selector, i, value)` — uses `offsetParent` JS filter to skip hidden/stale Angular inputs.
+
+### Fixtures (`conftest.py`)
+
+| Fixture | Scope | Purpose |
+|---------|-------|---------|
+| `session_qc_for_pb` | session | GP(1 item) → GRN → CQP → QC; returns `(supplier_name, grn_qtys)` |
+| `session_qc_for_pb_multi` | session | GP(all items) → GRN(multi) → CQP → QC(multi); returns `(supplier_name, grn_qtys)` |
+| `pb_page` | function | navigates to PB listing; yields `(page_obj, (supplier_name, grn_qtys))` using single-item QC |
+| `pb_page_multi` | function | same but uses multi-item QC |
+| `pb_bare_page` | function | navigates to PB listing only — no QC chain; for validation tests that don't submit |
+
+### Test Classes (`test_pb_ui.py`)
+
+#### `TestPBSmoke` (`-m smoke`)
+- `test_create_search_and_verify` — single row, vanilla qty, asserts `ref_no.startswith("PURB/")` and `txn_amount ≈ rate × net_qty`
+
+#### `TestPBMultiRow` (`-m multirow`)
+- `test_multi_row_formula` — all items, one row per item, asserts per-row formula and `total = SUM(txn_amounts)`
+
+#### `TestPBCalc` (`-m calc`)
+- `test_all_calculations` — all calc scenarios in ONE PB (1 QC → 1 PB constraint):
+
+| Row | Scenario |
+|-----|----------|
+| 0 | Float EBW: `ebw = qty - 0.5` → `net_qty = 0.5` (extreme fractional) |
+| 1 | Discount 10% + Labour 500 combined |
+| 2 | EBW + Discount + Labour (all three deductions) |
+| 3 | Discount % only |
+| 4 | Round Off: debit=1.0, credit=0.5 |
+| 5 | Partial booking: `qty = grn_qty // 2` |
+
+Transportation = 100 (other charges, does not affect Total Amount).
+Master total assertion: `SUM(gross_i - disc_i - labour_i + debit_i - credit_i)` ± 2.0
+
+#### `TestPBValidation` (`-m validation`)
+
+| Test | Fixture | Scenario | Asserted error |
+|------|---------|----------|----------------|
+| `test_submit_empty_form` | `pb_bare_page` | Submit with no fields filled | 14 mat-errors appear |
+| `test_ebw_greater_than_qty` | `pb_page` | EBW = qty + 5 → net_qty negative | `"Amount cannot be less than 0"` |
+| `test_discount_above_100` | `pb_page` | Discount = 101% | `"Cannot be greater than 100%"` |
+| `test_labour_exceeds_gross` | `pb_page` | Labour = 999999 | `"Amount cannot be less than 0"` on Total Amount |
+
+Validation tests open the form and assert client-side Angular mat-errors **without submitting** — QC stays unconsumed.
 
 ---
 
@@ -322,10 +395,16 @@ python -m pytest pages/private_b2b/modules/purchase_booking/test/api/test_calcul
 ERP_TOKEN=<jwt> ERP_TENANT_ID=751 \
 python -m pytest pages/private_b2b/modules/purchase_booking/test/api/ -v
 
-# By marker
+# By marker (API)
 python -m pytest pages/private_b2b/modules/purchase_booking/test/api/ -m calculation -v
 python -m pytest pages/private_b2b/modules/purchase_booking/test/api/ -m live -v
 python -m pytest pages/private_b2b/modules/purchase_booking/test/api/ -m schema -v
+
+# Playwright UI tests (browser opens; credentials via RHYTHMERP_EMAIL / RHYTHMERP_PASSWORD)
+python -m pytest pages/private_b2b/modules/purchase_booking/test/playwright/test_pb_ui.py -v -s
+python -m pytest pages/private_b2b/modules/purchase_booking/test/playwright/test_pb_ui.py -m smoke -v -s
+python -m pytest pages/private_b2b/modules/purchase_booking/test/playwright/test_pb_ui.py -m calc -v -s
+python -m pytest pages/private_b2b/modules/purchase_booking/test/playwright/test_pb_ui.py -m validation -v -s
 ```
 
 ## Environment Variables Required

@@ -31,11 +31,17 @@ class POPlaywrightPage(BasePlaywrightPage):
     TOTAL_AMOUNT       = "xpath=//mat-form-field[.//mat-label[contains(.,'Total Amount')]]//input"
 
     # Buttons
-    ADD_BTN      = "button.erp-add-btn"
-    ADD_ROW_BTN  = "button.add-row-btn"
-    SUBMIT_BTN   = "xpath=//div[contains(@class,'popup-footer')]//button[contains(@class,'mat-mdc-unelevated-button') or contains(@class,'mat-mdc-raised-button')][.//span[contains(.,'Submit')]]"
-    UPDATE_BTN   = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]"
-    CANCEL_BTN   = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
+    ADD_BTN        = "button.erp-add-btn"
+    ADD_ROW_BTN    = "button.add-row-btn"
+    DELETE_ROW_BTN = "button.apply-button"  # fa-minus; only visible when 2+ rows exist
+    SUBMIT_BTN     = "xpath=//div[contains(@class,'popup-footer')]//button[contains(@class,'mat-mdc-unelevated-button') or contains(@class,'mat-mdc-raised-button')][.//span[contains(.,'Submit')]]"
+    UPDATE_BTN     = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Update')]"
+    CANCEL_BTN     = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
+
+    # GST per-row fields (in item grid)
+    GST_TOGGLE_SLIDER = "app-slide-toggle-v2 div.slider"
+    TAX_RATE_SELECT   = "xpath=//mat-select[.//span[contains(@class,'mat-mdc-select-placeholder') and contains(.,'Select tax rate')]]"
+    TAX_AMOUNT_INPUT  = "xpath=//mat-form-field[.//input[@placeholder='Tax Amount']]//input"
 
     # Table columns
     REF_NO_COL          = "td.cdk-column-transaction_ref_no"
@@ -136,14 +142,19 @@ class POPlaywrightPage(BasePlaywrightPage):
 
     def _select_random_mat_option_nth(self, selector, row_index, exclude_texts=None):
         """Open the nth dropdown in the grid and pick a random option, skipping excluded ones.
-        Returns the text of the chosen option, or '' if none available."""
+
+        Uses search-then-click: types the item name into the dropdown's search box
+        (if present) before clicking, which triggers Angular's selectionChange on rows 2+
+        where the component might not be fully initialised via a direct click alone.
+
+        Returns the text of the chosen option, or '' if none available.
+        """
         self.page.locator(selector).nth(row_index).click(force=True)
         self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
         options = self.page.locator(".mat-mdc-select-panel mat-option").all()
         if exclude_texts:
             options = [o for o in options if o.inner_text().strip() not in exclude_texts]
         if not options:
-            # No options left — close safely via backdrop, not Escape (Escape can dismiss the whole form)
             self.page.locator(".cdk-overlay-backdrop").last.click(force=True)
             try:
                 self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
@@ -153,10 +164,18 @@ class POPlaywrightPage(BasePlaywrightPage):
         chosen = random.choice(options)
         text = chosen.inner_text().strip()
         chosen.click(force=True)
+
+        # Press Escape to close the panel if it's still open, then Tab away from the
+        # mat-select to trigger Angular's blur/change detection chain.  For rows 2+
+        # this blur is what fires selectionChange → rate auto-fetch.
         try:
-            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=2000)
         except Exception:
-            pass
+            # Panel still open — close it by pressing Escape
+            self.page.keyboard.press("Escape")
+            self.page.wait_for_timeout(300)
+        # Tab away to commit selection and trigger rate API call on all rows
+        self.page.keyboard.press("Tab")
         self.page.wait_for_timeout(300)
         return text
 
@@ -216,11 +235,38 @@ class POPlaywrightPage(BasePlaywrightPage):
         """, [selector.replace("xpath=", ""), row_index, str(value)])
         self.page.wait_for_timeout(400)
 
-    def _add_item_row(self, row_index, qty, disc_pct, int_pct, used_items=None):
+    def _enable_gst_nth(self, row_index):
+        """Toggle 'Is GST Set Off' ON for row_index and pick a random Tax Rate.
+
+        Must be called AFTER all previous rows have already had GST enabled,
+        so that row_index lines up with the nth visible Tax Rate dropdown.
+        Returns (tax_rate_float, tax_amount_float).
+        """
+        self.page.locator(self.GST_TOGGLE_SLIDER).nth(row_index).click(force=True)
+        self.page.wait_for_timeout(500)
+
+        tax_rate_text = self._select_random_mat_option_nth(self.TAX_RATE_SELECT, row_index)
+        self.page.wait_for_timeout(600)
+
+        tax_amount_str = self.page.evaluate("""
+            ([xpath, idx]) => {
+                const result = document.evaluate(xpath, document, null,
+                    XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                const el = result.snapshotItem(idx);
+                return el ? el.value : '';
+            }
+        """, [self.TAX_AMOUNT_INPUT.replace("xpath=", ""), row_index])
+
+        tax_rate   = float(tax_rate_text)   if tax_rate_text   and tax_rate_text.strip()   else 0.0
+        tax_amount = float(tax_amount_str)  if tax_amount_str  and tax_amount_str.strip()  else 0.0
+        return tax_rate, tax_amount
+
+    def _add_item_row(self, row_index, qty, disc_pct, int_pct, used_items=None, enable_gst=False):
         """Add one detail row to the PO grid.
 
         Returns dict:
-            item_name, rate, qty, disc_pct, int_pct, txn_amount, total_amount
+            item_name, rate, qty, disc_pct, int_pct, txn_amount, total_amount,
+            gst_enabled, tax_rate, tax_amount
         """
         # Rows are pre-created before filling starts — no ADD_ROW_BTN click needed here
 
@@ -228,19 +274,35 @@ class POPlaywrightPage(BasePlaywrightPage):
         item_name = self._select_random_mat_option_nth(
             self.ITEM_NAME, row_index, exclude_texts=used_items
         )
-        # Wait for Rate to be auto-fetched from Commodity Base Rate
-        self.page.wait_for_timeout(1500)
+        def _read_rate():
+            val = self.page.evaluate("""
+                ([xpath, idx]) => {
+                    const result = document.evaluate(xpath, document, null,
+                        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    const el = result.snapshotItem(idx);
+                    return el ? el.value : '';
+                }
+            """, [self.RATE.replace("xpath=", ""), row_index])
+            return float(val) if val and val.strip() else 0.0
 
-        # Read auto-populated rate via JS (field may be off-screen)
-        rate_str = self.page.evaluate("""
-            ([xpath, idx]) => {
-                const result = document.evaluate(xpath, document, null,
-                    XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-                const el = result.snapshotItem(idx);
-                return el ? el.value : '';
-            }
-        """, [self.RATE.replace("xpath=", ""), row_index])
-        rate = float(rate_str) if rate_str and rate_str.strip() else 0.0
+        # Wait up to 5s for rate to auto-fetch after initial selection
+        self.page.wait_for_timeout(1500)
+        rate = 0.0
+        for _ in range(4):
+            rate = _read_rate()
+            if rate > 0:
+                break
+            self.page.wait_for_timeout(1000)
+
+        # Rate still 0 — re-select the same item to re-trigger the API call
+        if rate == 0.0 and item_name:
+            self._select_mat_by_text_nth(self.ITEM_NAME, row_index, item_name)
+            self.page.wait_for_timeout(1500)
+            for _ in range(4):
+                rate = _read_rate()
+                if rate > 0:
+                    break
+                self.page.wait_for_timeout(1000)
 
         # Fill quantity → triggers Transaction Amount calculation
         self._fill_number_nth(self.QUANTITY, row_index, qty)
@@ -263,18 +325,31 @@ class POPlaywrightPage(BasePlaywrightPage):
             """, [xpath.replace("xpath=", ""), idx])
 
         txn_str   = _read_nth(self.TRANSACTION_AMOUNT, row_index)
-        total_str = _read_nth(self.TOTAL_AMOUNT, row_index)
-        txn_amount   = float(txn_str)   if txn_str   and txn_str.strip()   else rate * qty
-        total_amount = float(total_str) if total_str and total_str.strip() else txn_amount
+        txn_amount = float(txn_str) if txn_str and txn_str.strip() else rate * qty
+
+        # Optionally enable GST and read tax fields for this row
+        gst_enabled = False
+        tax_rate    = None
+        tax_amount  = 0.0
+        if enable_gst:
+            tax_rate, tax_amount = self._enable_gst_nth(row_index)
+            gst_enabled = True
+
+        # Read total_amount after any GST changes
+        total_str    = _read_nth(self.TOTAL_AMOUNT, row_index)
+        total_amount = float(total_str) if total_str and total_str.strip() else txn_amount + tax_amount
 
         return {
-            "item_name":   item_name,
-            "rate":        rate,
-            "qty":         qty,
-            "disc_pct":    disc_pct,
-            "int_pct":     int_pct,
-            "txn_amount":  txn_amount,
+            "item_name":    item_name,
+            "rate":         rate,
+            "qty":          qty,
+            "disc_pct":     disc_pct,
+            "int_pct":      int_pct,
+            "txn_amount":   txn_amount,
             "total_amount": total_amount,
+            "gst_enabled":  gst_enabled,
+            "tax_rate":     tax_rate,
+            "tax_amount":   tax_amount,
         }
 
     # ── Create ──────────────────────────────────────────────────────────
@@ -309,11 +384,12 @@ class POPlaywrightPage(BasePlaywrightPage):
         """, xpath)
         return sum(float(v) for v in values if v and v.strip())
 
-    def create_record(self, item_configs=None, all_items=False):
+    def create_record(self, item_configs=None, all_items=False, enable_gst=False):
         """Open form, fill header, add item rows, submit.
 
         item_configs: list of (qty, disc_pct, int_pct).
         all_items: if True, ignore item_configs and add one row per available item.
+        enable_gst: if True, toggle GST on for every row and select a random Tax Rate.
         Returns (total_po_amount, [row_dicts]).
         """
         if item_configs is None:
@@ -336,7 +412,7 @@ class POPlaywrightPage(BasePlaywrightPage):
         row_dicts = []
         used_items = set()
         for i, (qty, disc_pct, int_pct) in enumerate(item_configs):
-            rd = self._add_item_row(i, qty, disc_pct, int_pct, used_items)
+            rd = self._add_item_row(i, qty, disc_pct, int_pct, used_items, enable_gst=enable_gst)
             if not rd["item_name"]:
                 break
             used_items.add(rd["item_name"])
@@ -458,6 +534,130 @@ class POPlaywrightPage(BasePlaywrightPage):
 
     # ── Popup close ──────────────────────────────────────────────────────
 
+    # ── Integration helpers ──────────────────────────────────────────────
+
+    def _select_random_mat_option_text(self, selector):
+        """Same as _select_random_mat_option but returns the selected option's text."""
+        self.page.locator(selector).first.click(force=True)
+        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
+        options = self.page.locator(
+            ".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"
+        ).all()
+        chosen_text = ""
+        if options:
+            import random as _random
+            chosen = _random.choice(options)
+            chosen_text = chosen.inner_text().strip()
+            chosen.click(force=True)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            pass
+        self.page.wait_for_timeout(300)
+        return chosen_text
+
+    def fill_header_returning_supplier(self, forced_location=None):
+        """Like fill_header() but returns (supplier_name, location) for integration use.
+
+        forced_location: if provided, selects that exact location instead of random.
+        """
+        supplier_name = self._select_random_mat_option_text(self.SUPPLIER_NAME)
+        self._select_mat_by_text(self.PO_ITEM_TYPE, "Farm")
+        self._select_random_mat_option(self.PO_TYPE)
+        self._select_mat_by_text(self.TRANSACTION_CURRENCY, "INR")
+        self.page.wait_for_timeout(400)
+        conv_rate_field = self.page.locator(self.CONVERSION_RATE)
+        if conv_rate_field.count() > 0:
+            conv_rate_field.first.click(force=True)
+            conv_rate_field.first.fill("1")
+            conv_rate_field.first.press("Tab")
+            self.page.wait_for_timeout(300)
+        if forced_location:
+            self._select_mat_by_text(self.LOCATION, forced_location)
+            location = forced_location
+        else:
+            location = self._select_random_mat_option_text(self.LOCATION)
+        self.page.wait_for_timeout(500)
+        self._select_random_mat_option(self.DEPARTMENT)
+        self._select_random_mat_option(self.DIVISION)
+        self._select_mat_by_text(self.TYPE_OF_SALE, "B2B")
+        self._select_mat_by_text(self.PACKAGING_FORWARDING, "Nil")
+        return supplier_name, location
+
+    def create_record_for_integration(self, item_configs=None, all_items=False,
+                                      default_qty=500, forced_location=None):
+        """Like create_record but also returns supplier_name and po_ref_no.
+
+        Returns (total_po_amount, row_dicts, supplier_name, location, po_ref_no).
+        default_qty: qty used per row when all_items=True (keep large so GP qty fits).
+        forced_location: pin the Location dropdown to a specific value (e.g. "Pune").
+        """
+        if item_configs is None:
+            item_configs = [(default_qty, 0, 0)]
+
+        self.open_add_form()
+        supplier_name, location = self.fill_header_returning_supplier(
+            forced_location=forced_location,
+        )
+
+        if all_items:
+            available = self.count_available_items()
+            item_configs = [(default_qty, 0, 0)] * available
+
+        # Add and fill one row at a time so Angular fully initialises each row's
+        # mat-select before the next ADD_ROW_BTN click. Pre-creating all rows first
+        # leaves Angular components uninitialised — item selection then doesn't fire
+        # selectionChange and the rate auto-fetch never triggers for rows 2+.
+        row_dicts = []
+        used_items = set()
+        for i, (qty, disc_pct, int_pct) in enumerate(item_configs):
+            if i > 0:
+                self.page.locator(self.ADD_ROW_BTN).click()
+                # Give Angular time to run ngOnInit on the new row's mat-select
+                # before we interact with it — 1500ms is enough in practice.
+                self.page.wait_for_timeout(1500)
+            rd = self._add_item_row(i, qty, disc_pct, int_pct, used_items)
+            if not rd["item_name"]:
+                break
+            used_items.add(rd["item_name"])
+            row_dicts.append(rd)
+
+        self.page.wait_for_timeout(800)
+        total_po_amount = self._read_form_total_po_amount()
+        if total_po_amount is None:
+            total_po_amount = self._read_all_row_totals()
+
+        self.page.locator(self.SUBMIT_BTN).click()
+        self.handle_success_alert()
+        self.navigate_to_page()
+
+        po_ref_no = self.get_first_ref_no()
+        return total_po_amount, row_dicts, supplier_name, location, po_ref_no
+
+    def is_po_closed(self, ref_no):
+        """Return True if the given PO's status column shows 'Closed'.
+
+        The ERP only recalculates PO status when the listing receives a new record.
+        Caller must open and cancel the PO add form before calling this so the listing
+        refreshes — see trigger_listing_refresh().
+        """
+        self.search_po(ref_no)
+        self.page.wait_for_timeout(2000)
+        return self.page.locator(
+            "xpath=//td[contains(@class,'cdk-column-po_status')]"
+            "[.//text()[contains(.,'Closed')]]"
+        ).count() > 0
+
+    def trigger_po_status_recalculation(self):
+        """Create a minimal throwaway PO so the ERP recalculates statuses for all POs.
+
+        The ERP only marks a PO as 'Closed' (balance=0) after a new PO is inserted —
+        it does not update statuses on a simple listing refresh or form open/cancel.
+        This creates the smallest valid PO (1 bag, qty=1) to fire that backend trigger.
+        """
+        self.create_record_for_integration(item_configs=[(1, 0, 0)])
+        self.page.wait_for_timeout(1000)
+
     def close_popup(self):
         # If view form is open (full-page details-form), navigate back to listing
         if self.page.locator(".details-form").count() > 0:
@@ -478,3 +678,76 @@ class POPlaywrightPage(BasePlaywrightPage):
         self.page.wait_for_timeout(500)
         assert self.page.locator(self.SUBMIT_BTN).count() == 0, \
             "Submit must not appear in View mode"
+
+    # ── Edit helpers ─────────────────────────────────────────────────────
+
+    def click_row_action(self, row_index, action):
+        """Override base class with a longer menu panel timeout for PO's heavier DOM."""
+        self.page.evaluate(f"""
+            var btns = document.querySelectorAll('button.erp-row-trigger');
+            if (btns[{row_index}]) {{
+                btns[{row_index}].scrollIntoView({{block:'center'}});
+                btns[{row_index}].click();
+            }}
+        """)
+        self.page.wait_for_selector("div.mat-mdc-menu-panel", timeout=8000)
+        selector = self.MENU_SELECTORS.get(action)
+        if selector:
+            self.page.locator(selector).first.click()
+        else:
+            self.page.locator(f"button:has-text('{action}')").first.click()
+        self.page.wait_for_timeout(500)
+
+    def open_edit_form(self, row_index=0):
+        self.click_row_action(row_index, "Edit")
+        # Flat wait: XPath wait_for races with Angular re-renders; 3s is reliable in practice
+        self.page.wait_for_timeout(3000)
+
+    def count_form_rows(self):
+        return self.page.locator(self.ITEM_NAME).count()
+
+    def delete_row_nth(self, row_index):
+        self.page.locator(self.DELETE_ROW_BTN).nth(row_index).click(force=True)
+        self.page.wait_for_timeout(500)
+
+    def submit_update(self):
+        self.page.locator(self.UPDATE_BTN).click(force=True)
+        self.page.wait_for_timeout(500)
+        self.handle_success_alert()
+        self.navigate_to_page()
+
+    def read_item_names_from_form(self):
+        """Read selected item names from all rows in the current open form (edit or view)."""
+        spans = self.page.locator(
+            "xpath=//mat-form-field[.//mat-label[contains(.,'Item Name')]]"
+            "//span[contains(@class,'mat-mdc-select-min-line')]"
+        ).all()
+        return [
+            s.inner_text().strip()
+            for s in spans
+            if s.inner_text().strip() and "select" not in s.inner_text().lower()
+        ]
+
+    def read_rate_nth(self, row_index):
+        """Read the Rate field of a specific row via JS (field may be off-screen)."""
+        val = self.page.evaluate("""
+            ([xpath, idx]) => {
+                const result = document.evaluate(xpath, document, null,
+                    XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                const el = result.snapshotItem(idx);
+                return el ? el.value : '';
+            }
+        """, [self.RATE.replace("xpath=", ""), row_index])
+        return float(val) if val and val.strip() else 0.0
+
+    def read_txn_amount_nth(self, row_index):
+        """Read Transaction Amount of a specific row via JS."""
+        val = self.page.evaluate("""
+            ([xpath, idx]) => {
+                const result = document.evaluate(xpath, document, null,
+                    XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                const el = result.snapshotItem(idx);
+                return el ? el.value : '';
+            }
+        """, [self.TRANSACTION_AMOUNT.replace("xpath=", ""), row_index])
+        return float(val) if val and val.strip() else 0.0
