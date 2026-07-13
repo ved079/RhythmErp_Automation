@@ -223,6 +223,30 @@ CONVERSION_RATE field only appears in the DOM when the selected Transaction Curr
 fill_header() selects "INR" and then fills Conversion Rate with "1" only if the field count > 0.
 Don't unconditionally call .fill() on this field — it will throw if the field isn't there.
 
+### 7. Multi-row item selection — rate doesn't auto-fetch for rows 2+ (Angular selectionChange bug)
+
+**Symptom:** In a PO form with multiple item rows, selecting an item on rows 2+ leaves the Rate field at 0.
+The same issue occurs when a human fills the form manually — it is an ERP/Angular bug, not a Playwright limitation.
+
+**Root cause:** When a new row is added via ADD_ROW_BTN, Angular creates the row component but does not
+fully wire up the `selectionChange` subscription on the mat-select until the component receives some
+activation signal. Selecting an item immediately after row creation bypasses this wiring and the rate
+API call is never fired.
+
+**Confirmed workaround (manual + automated):**
+For each new row i > 0, after selecting the intended item:
+1. On the same row i, select row 0's item (creates a duplicate-item validation warning in Angular)
+2. This duplicate selection fires `selectionChange` and fully activates the row's component
+3. Then re-select the correct item for row i — rate auto-fetches normally
+
+**Implementation:** `_add_item_row` accepts a `nudge_item` parameter (row 0's item name).
+When `row_index > 0` and `nudge_item` is provided, it runs the nudge sequence before the
+rate-polling loop. `create_record_for_integration` passes `row0_item` as nudge_item for all
+subsequent rows.
+
+The duplicate-item mat-error that briefly appears during the nudge is cleared automatically
+when the correct item is re-selected on that row.
+
 ### 6. _select_mat_by_text exact-match guard
 "Farm" must not match "Non Farm". _select_mat_by_text() does an exact inner_text() comparison
 in a loop rather than just filter(has_text=...).first. The has_text filter does substring match,

@@ -23,7 +23,7 @@ import random
 class TestPOSmoke:
     def test_create_search_and_status(self, po_page):
         """Create a single-item PO (disc=2, int=5); verify calc, listing, and workflow status."""
-        total, row_dicts = po_page.create_record([(10, 2, 5)])
+        total, row_dicts, _, _, _ = po_page.create_record_for_integration(item_configs=[(10, 2, 5)])
         row = row_dicts[0]
         row_sum = row["txn_amount"]
 
@@ -86,7 +86,7 @@ class TestPOListing:
 class TestPOFullWorkflow:
     def test_full_workflow(self, po_page):
         """Create PO, verify Total PO Amount in table and workflow status is 'Created'."""
-        total, row_dicts = po_page.create_record([(10, 5, 2)])
+        total, row_dicts, _, _, _ = po_page.create_record_for_integration(item_configs=[(10, 5, 2)])
         row = row_dicts[0]
 
         # Calc: Transaction Amount = Rate × Qty
@@ -122,7 +122,7 @@ class TestPOFullWorkflow:
 
     def test_multi_row_total_po_amount_matches_table(self, po_page):
         """All-items PO: form Total PO Amount must appear correctly in the listing."""
-        total, rows = po_page.create_record(all_items=True)
+        total, rows, _, _, _ = po_page.create_record_for_integration(all_items=True)
         assert len(rows) >= 2, f"Expected at least 2 item rows, got {len(rows)}"
         assert total > 0, "Total PO Amount must be greater than 0"
 
@@ -260,7 +260,7 @@ def edit_po_state(logged_in_page):
     from pages.private_b2b.modules.purchase_order.po_playwright_page import POPlaywrightPage
     p = POPlaywrightPage(logged_in_page)
     p.navigate_to_page()
-    total, row_dicts = p.create_record(all_items=True)
+    total, row_dicts, _, _, _ = p.create_record_for_integration(all_items=True)
     assert len(row_dicts) >= 2, "Need at least 2 items for edit tests"
     # The newly created PO is the most recent — read its ref_no from the top of the listing
     p.search_by_total_amount(total)
@@ -449,7 +449,9 @@ class TestPOGST:
           - row_total  == txn_amount + tax_amount       (per row)
           - total_po_amount == sum(row_totals)          (whole PO)
         """
-        total, row_dicts = po_page.create_record(all_items=True, enable_gst=True)
+        total, row_dicts, _, _, _ = po_page.create_record_for_integration(
+            all_items=True, enable_gst=True
+        )
 
         for i, rd in enumerate(row_dicts):
             if not rd["gst_enabled"] or rd["tax_rate"] is None:
@@ -470,4 +472,56 @@ class TestPOGST:
         row_total_sum = sum(rd["total_amount"] for rd in row_dicts)
         assert abs(total - row_total_sum) < 1.0, (
             f"Total PO Amount {total:.2f} != sum of row totals {row_total_sum:.2f}"
+        )
+
+
+# ── Cross-check: tamper detection ─────────────────────────────────────────
+# Run with -s so the input() prompt is visible.
+# Flow: create PO → print expected total → PAUSE → you change DB value →
+#       press Enter → script reads listing → asserts match → FAILS if tampered.
+
+@pytest.mark.tamper_check
+class TestPOTamperDetection:
+    def test_po_total_matches_after_db_change(self, po_page):
+        """Create a PO, print the script-calculated total, then pause so you can
+        manually change txn_currency_total_amount in the DB.
+        After you press Enter the script reads the listing and asserts the value
+        matches what it calculated — it will FAIL if the DB was tampered with.
+
+        Run with:  pytest ... -v -s -m tamper_check
+        """
+        # Single row, fixed disc/int so the formula is easy to verify manually
+        qty      = 10
+        disc_pct = 5
+        int_pct  = 2
+
+        total, row_dicts, _, _, ref_no = po_page.create_record_for_integration(
+            item_configs=[(qty, disc_pct, int_pct)]
+        )
+        row = row_dicts[0]
+
+        print("\n" + "=" * 60)
+        print(f"  PO created:       {ref_no}")
+        print(f"  Item:             {row['item_name']}")
+        print(f"  Rate:             {row['rate']:.2f}")
+        print(f"  Qty:              {qty}    Disc: {disc_pct}%    Int: {int_pct}%")
+        print(f"  Form total read:  {total:.4f}  (script ground truth)")
+        print("=" * 60)
+        print("  >> Go change txn_currency_total_amount in the DB now.")
+        print("  >> Press Enter when done to let the script verify...")
+        input()
+
+        # Create a throwaway PO → forces DB to recalculate and listing to refresh
+        po_page.trigger_po_status_recalculation()
+        po_page.search_po(ref_no)
+        listing_total = po_page.get_total_po_amount_of_first_row()
+
+        print(f"\n  Listing shows:    {listing_total:.4f}")
+        print(f"  Script expected:  {total:.4f}")
+        print("=" * 60)
+
+        assert abs(listing_total - total) < 1.0, (
+            f"TAMPER DETECTED — listing shows {listing_total:.4f} "
+            f"but script recorded {total:.4f} at creation time "
+            f"(diff: {abs(listing_total - total):.4f})"
         )

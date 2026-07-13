@@ -434,14 +434,21 @@ class GPPlaywrightPage(BasePlaywrightPage):
         self.open_add_form()
         self.fill_header_with_supplier(supplier_name, location=location, type_of_sale=type_of_sale)
 
-        # Add extra rows if more than one item
-        for _ in range(len(items) - 1):
-            self.page.locator(self.ADD_ROW_BTN).click()
-            self.page.wait_for_timeout(600)
-
+        row0_item = items[0][0] if items else None
         for i, (item_name, bags, qty) in enumerate(items):
+            if i > 0:
+                self.page.locator(self.ADD_ROW_BTN).click()
+                self.page.wait_for_timeout(1000)
             self._select_item_by_name_nth(i, item_name)
             self.page.wait_for_timeout(800)
+            # Angular quirk: row 2+ don't fire selectionChange on first select.
+            # Nudge: select row 0's item on this row (creates duplicate warning →
+            # wakes Angular), then re-select the correct item.
+            if i > 0 and row0_item and row0_item != item_name:
+                self._select_item_by_name_nth(i, row0_item)
+                self.page.wait_for_timeout(600)
+                self._select_item_by_name_nth(i, item_name)
+                self.page.wait_for_timeout(600)
             self._fill_number_nth(self.NO_OF_BAGS, i, bags)
             self._fill_number_nth(self.QUANTITY, i, qty)
             self.page.wait_for_timeout(400)

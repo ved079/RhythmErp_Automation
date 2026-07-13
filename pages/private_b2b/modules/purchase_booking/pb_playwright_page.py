@@ -15,6 +15,7 @@ class PBPlaywrightPage(BasePlaywrightPage):
     # Header fields
     SUPPLIER_NAME        = "xpath=//mat-form-field[.//mat-label[contains(.,'Supplier Name')]]//mat-select"
     QC_SELECT            = "xpath=//mat-form-field[.//mat-label[contains(.,'QC')]]//mat-select"
+    PO_SELECT            = "xpath=//mat-form-field[.//mat-label[contains(.,'PO') or contains(.,'Purchase Order')]]//mat-select"
     TRANSACTION_CURRENCY = "xpath=//mat-form-field[.//mat-label[contains(.,'Transaction Currency')]]//mat-select"
     CONVERSION_RATE      = "xpath=//mat-form-field[.//mat-label[contains(.,'Conversion Rate')]]//input"
 
@@ -123,7 +124,11 @@ class PBPlaywrightPage(BasePlaywrightPage):
 
     def _select_mat_by_text(self, selector, text):
         self.page.locator(selector).first.click(force=True)
-        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=8000)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", timeout=8000)
+        except Exception:
+            # Panel didn't open — field is likely already set (e.g. auto-patched from QC)
+            return
         for opt in self.page.locator(".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text").all():
             if opt.inner_text().strip() == text:
                 opt.click(force=True)
@@ -245,6 +250,74 @@ class PBPlaywrightPage(BasePlaywrightPage):
             conv.first.fill("1")
             conv.first.press("Tab")
             self.page.wait_for_timeout(300)
+
+    def select_supplier_and_po(self, supplier_name):
+        """Select supplier → select last PO → wait for auto-patch → set currency."""
+        self._select_mat_by_text(self.SUPPLIER_NAME, supplier_name)
+        self.page.wait_for_timeout(1000)
+
+        self._select_last_mat_option(self.PO_SELECT)
+
+        # Wait for items / Payment Terms / Location to auto-patch from PO
+        self.page.wait_for_timeout(6000)
+
+        self._select_mat_by_text(self.TRANSACTION_CURRENCY, "INR")
+        self.page.wait_for_timeout(300)
+
+        conv = self.page.locator(self.CONVERSION_RATE)
+        if conv.count() > 0:
+            conv.first.click(force=True)
+            conv.first.fill("1")
+            conv.first.press("Tab")
+            self.page.wait_for_timeout(300)
+
+    def create_record_from_po(self, supplier_name, row_configs=None):
+        """PB create flow starting from PO (no QC chain).
+
+        supplier_name: supplier to select — must match the PO's supplier.
+        row_configs:   list of (no_of_bags, qty) per item row.
+                       None = default (1 bag, full net_qty per row).
+
+        Returns (total_amount, [row_dicts]).
+        """
+        self.open_add_form()
+        self.select_supplier_and_po(supplier_name)
+
+        row_count = self.count_item_rows()
+        assert row_count > 0, "No item rows auto-patched after PO selection"
+
+        if row_configs is None:
+            row_configs = []
+            for i in range(row_count):
+                net_qty = self.read_net_qty(i) or 1
+                row_configs.append((1, int(net_qty)))
+
+        row_dicts = []
+        for i, (bags, qty) in enumerate(row_configs[:row_count]):
+            self.open_qty_details_popup(i)
+            self.fill_qty_details(bags, qty)
+            self.click_done()
+            self.page.wait_for_timeout(500)
+
+            rate       = self.read_rate(i)
+            net_qty    = self.read_net_qty(i)
+            txn_amount = self.read_txn_amount(i)
+            row_dicts.append({
+                "rate":       rate,
+                "net_qty":    net_qty,
+                "txn_amount": txn_amount,
+                "no_of_bags": bags,
+                "qty":        qty,
+            })
+
+        self.page.wait_for_timeout(500)
+        total_amount = self.read_total_amount() or sum(r["txn_amount"] or 0 for r in row_dicts)
+
+        self.page.locator(self.SUBMIT_BTN).click()
+        self.handle_success_alert()
+        self.navigate_to_page()
+
+        return total_amount, row_dicts
 
     # ── Quantity Details popup ────────────────────────────────────────────
 
