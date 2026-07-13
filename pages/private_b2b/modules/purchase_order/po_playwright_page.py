@@ -163,19 +163,16 @@ class POPlaywrightPage(BasePlaywrightPage):
             return ""
         chosen = random.choice(options)
         text = chosen.inner_text().strip()
-        chosen.click(force=True)
-
-        # Press Escape to close the panel if it's still open, then Tab away from the
-        # mat-select to trigger Angular's blur/change detection chain.  For rows 2+
-        # this blur is what fires selectionChange → rate auto-fetch.
+        # Use a real (non-forced) click so the browser generates a trusted event
+        # (isTrusted=true). Angular on freshly-added rows guards selectionChange
+        # behind isTrusted; force=True bypasses actionability but marks the event
+        # as untrusted, so the rate auto-fetch never fires for rows 2+.
+        chosen.scroll_into_view_if_needed()
+        chosen.click()
         try:
-            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=2000)
+            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
         except Exception:
-            # Panel still open — close it by pressing Escape
-            self.page.keyboard.press("Escape")
-            self.page.wait_for_timeout(300)
-        # Tab away to commit selection and trigger rate API call on all rows
-        self.page.keyboard.press("Tab")
+            pass
         self.page.wait_for_timeout(300)
         return text
 
@@ -242,10 +239,15 @@ class POPlaywrightPage(BasePlaywrightPage):
         so that row_index lines up with the nth visible Tax Rate dropdown.
         Returns (tax_rate_float, tax_amount_float).
         """
-        self.page.locator(self.GST_TOGGLE_SLIDER).nth(row_index).click(force=True)
-        self.page.wait_for_timeout(500)
+        toggle = self.page.locator(self.GST_TOGGLE_SLIDER).nth(row_index)
+        toggle.scroll_into_view_if_needed()
+        toggle.click(force=True)
+        self.page.wait_for_timeout(1500)
 
-        tax_rate_text = self._select_random_mat_option_nth(self.TAX_RATE_SELECT, row_index)
+        # Always use nth(0) — by the time this row's toggle fires, previous rows have
+        # already had their tax rate selected, so their placeholder is gone. Only this
+        # row's "Select tax rate" placeholder remains → it is always the first match.
+        tax_rate_text = self._select_random_mat_option_nth(self.TAX_RATE_SELECT, 0)
         self.page.wait_for_timeout(600)
 
         tax_amount_str = self.page.evaluate("""
@@ -261,7 +263,7 @@ class POPlaywrightPage(BasePlaywrightPage):
         tax_amount = float(tax_amount_str)  if tax_amount_str  and tax_amount_str.strip()  else 0.0
         return tax_rate, tax_amount
 
-    def _add_item_row(self, row_index, qty, disc_pct, int_pct, used_items=None, enable_gst=False):
+    def _add_item_row(self, row_index, qty, disc_pct, int_pct, used_items=None, enable_gst=False, nudge_item=None):
         """Add one detail row to the PO grid.
 
         Returns dict:
@@ -274,6 +276,17 @@ class POPlaywrightPage(BasePlaywrightPage):
         item_name = self._select_random_mat_option_nth(
             self.ITEM_NAME, row_index, exclude_texts=used_items
         )
+
+        # Angular quirk: for rows 2+, selecting an item doesn't fire selectionChange
+        # (rate stays 0). Workaround confirmed manually: on THIS row, first select
+        # row 0's item (creates a duplicate-item validation warning but wakes Angular's
+        # selectionChange), then re-select the correct item — rate auto-fetches.
+        if row_index > 0 and nudge_item and item_name:
+            self.page.wait_for_timeout(600)
+            self._select_mat_by_text_nth(self.ITEM_NAME, row_index, nudge_item)
+            self.page.wait_for_timeout(800)
+            self._select_mat_by_text_nth(self.ITEM_NAME, row_index, item_name)
+
         def _read_rate():
             val = self.page.evaluate("""
                 ([xpath, idx]) => {
@@ -402,27 +415,37 @@ class POPlaywrightPage(BasePlaywrightPage):
             available = self.count_available_items()
             item_configs = [(10, 0, 0)] * available
 
-        total_rows = len(item_configs)
-
-        # Pre-create all rows upfront so every row's fields exist in DOM before filling
-        for _ in range(total_rows - 1):
-            self.page.locator(self.ADD_ROW_BTN).click()
-            self.page.wait_for_timeout(600)
-
+        # Pass 1 — add rows one-at-a-time so Angular fully initialises each row
+        # before the next ADD_ROW_BTN click. Use nudge_item for rows 2+ so
+        # selectionChange fires and rate auto-fetches correctly.
         row_dicts = []
         used_items = set()
+        row0_item = None
         for i, (qty, disc_pct, int_pct) in enumerate(item_configs):
-            rd = self._add_item_row(i, qty, disc_pct, int_pct, used_items, enable_gst=enable_gst)
+            if i > 0:
+                self.page.locator(self.ADD_ROW_BTN).click()
+                self.page.wait_for_timeout(1000)
+            rd = self._add_item_row(i, qty, disc_pct, int_pct, used_items,
+                                    enable_gst=False, nudge_item=row0_item)
             if not rd["item_name"]:
                 break
+            if i == 0:
+                row0_item = rd["item_name"]
             used_items.add(rd["item_name"])
             row_dicts.append(rd)
 
-        # Wait for Angular to finish recalculating all row totals
+        # Pass 2 — enable GST after all rows are filled so Angular is fully awake
+        if enable_gst:
+            self.page.wait_for_timeout(600)
+            for i in range(len(row_dicts)):
+                tax_rate, tax_amount = self._enable_gst_nth(i)
+                row_dicts[i]["gst_enabled"] = True
+                row_dicts[i]["tax_rate"]    = tax_rate
+                row_dicts[i]["tax_amount"]  = tax_amount
+
         self.page.wait_for_timeout(800)
         total_po_amount = self._read_form_total_po_amount()
         row_totals_sum = self._read_all_row_totals()
-        # Attach the live row-sum to each row_dict so tests can compare
         for rd in row_dicts:
             rd["live_row_sum"] = row_totals_sum
         if total_po_amount is None:
@@ -585,12 +608,14 @@ class POPlaywrightPage(BasePlaywrightPage):
         return supplier_name, location
 
     def create_record_for_integration(self, item_configs=None, all_items=False,
-                                      default_qty=500, forced_location=None):
+                                      default_qty=500, forced_location=None,
+                                      enable_gst=True):
         """Like create_record but also returns supplier_name and po_ref_no.
 
         Returns (total_po_amount, row_dicts, supplier_name, location, po_ref_no).
         default_qty: qty used per row when all_items=True (keep large so GP qty fits).
         forced_location: pin the Location dropdown to a specific value (e.g. "Pune").
+        enable_gst: toggle GST on for every row in a second pass after all rows filled.
         """
         if item_configs is None:
             item_configs = [(default_qty, 0, 0)]
@@ -604,23 +629,33 @@ class POPlaywrightPage(BasePlaywrightPage):
             available = self.count_available_items()
             item_configs = [(default_qty, 0, 0)] * available
 
-        # Add and fill one row at a time so Angular fully initialises each row's
-        # mat-select before the next ADD_ROW_BTN click. Pre-creating all rows first
-        # leaves Angular components uninitialised — item selection then doesn't fire
-        # selectionChange and the rate auto-fetch never triggers for rows 2+.
+        # Pass 1 — add one row at a time so Angular fully initialises each row's
+        # mat-select before the next ADD_ROW_BTN click. Use nudge_item for rows 2+
+        # so selectionChange fires and rate auto-fetches correctly.
         row_dicts = []
         used_items = set()
+        row0_item = None
         for i, (qty, disc_pct, int_pct) in enumerate(item_configs):
             if i > 0:
                 self.page.locator(self.ADD_ROW_BTN).click()
-                # Give Angular time to run ngOnInit on the new row's mat-select
-                # before we interact with it — 1500ms is enough in practice.
-                self.page.wait_for_timeout(1500)
-            rd = self._add_item_row(i, qty, disc_pct, int_pct, used_items)
+                self.page.wait_for_timeout(1000)
+            rd = self._add_item_row(i, qty, disc_pct, int_pct, used_items,
+                                    enable_gst=False, nudge_item=row0_item)
             if not rd["item_name"]:
                 break
+            if i == 0:
+                row0_item = rd["item_name"]
             used_items.add(rd["item_name"])
             row_dicts.append(rd)
+
+        # Pass 2 — enable GST after all rows are filled so Angular is fully awake.
+        if enable_gst:
+            self.page.wait_for_timeout(600)
+            for i in range(len(row_dicts)):
+                tax_rate, tax_amount = self._enable_gst_nth(i)
+                row_dicts[i]["gst_enabled"] = True
+                row_dicts[i]["tax_rate"]    = tax_rate
+                row_dicts[i]["tax_amount"]  = tax_amount
 
         self.page.wait_for_timeout(800)
         total_po_amount = self._read_form_total_po_amount()
