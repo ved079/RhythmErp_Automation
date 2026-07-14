@@ -19,7 +19,7 @@ import pathlib
 import random
 import pytest
 import openpyxl
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from pages.private_b2b.modules.purchase_booking.direct_pb_playwright_page import ITEMS
 
 # ── Seeded RNG — override via TEST_SEED env var for reproducibility ───────────
@@ -1152,46 +1152,6 @@ class TestMultiRowCalculations:
         assert ref_no.startswith("PURB/"), f"M1f: Expected PURB/ ref_no after save, got: {ref_no}"
         print(f"[M1f] saved → ref_no={ref_no}  header_total={hdr:.2f}")
 
-        # ── Export Excel ──────────────────────────────────────────────────────
-        reports_dir = pathlib.Path(__file__).parent / "reports"
-        reports_dir.mkdir(exist_ok=True)
-        ts        = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        xlsx_path = reports_dir / f"m1f_{ts}.xlsx"
-
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "M1f Results"
-
-        hdr_font  = Font(bold=True, color="FFFFFF")
-        hdr_fill  = PatternFill("solid", fgColor="2E5896")
-        tot_fill  = PatternFill("solid", fgColor="D9E1F2")
-        ctr       = Alignment(horizontal="center")
-
-        ws.append(["#", "Item", "Qty", "Disc%", "Labour", "EBW", "GST Type", "Tax%", "Row Total"])
-        for cell in ws[1]:
-            cell.font, cell.fill, cell.alignment = hdr_font, hdr_fill, ctr
-
-        for i in range(n):
-            gst_label = f"{gst_types[i]} {tax_rates[i]}%" if gst_on[i] else "No GST"
-            ws.append([i, items[i], qtys[i], discs[i], labours[i], ebws[i],
-                       gst_label, tax_rates[i] if gst_on[i] else 0, round(rows[i], 2)])
-
-        ws.append([])
-        ws.append(["", "HEADER TOTAL", "", "", "", "", "", "", round(hdr, 2)])
-        for cell in ws[ws.max_row]:
-            cell.fill = tot_fill
-            if cell.value:
-                cell.font = Font(bold=True)
-        ws.append(["", "SUM OF ROWS", "", "", "", "", "", "", round(sum(rows), 2)])
-        ws.append(["", "ref_no", ref_no, "", "", "", "seed", _SEED])
-
-        ws.column_dimensions["B"].width = 42
-        for letter in ["A", "C", "D", "E", "F", "G", "H", "I"]:
-            ws.column_dimensions[letter].width = 13
-
-        wb.save(xlsx_path)
-        print(f"[M1f] Excel exported → {xlsx_path}")
-
         # ── Open View mode ────────────────────────────────────────────────────
         pb_page.page.locator(self.ROW_TRIGGER).first.click(force=True)
         pb_page.page.wait_for_selector(".mat-mdc-menu-panel", timeout=5000)
@@ -1229,6 +1189,100 @@ class TestMultiRowCalculations:
             f"M1f: View header total {view_hdr:.2f} != created {hdr:.2f}"
         )
         print(f"[M1f] ✓ All {n} row totals + header match in view mode")
+
+        # ── Export Excel with cross-check ────────────────────────────────────
+        reports_dir = pathlib.Path(__file__).parent / "reports"
+        reports_dir.mkdir(exist_ok=True)
+        ts        = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        xlsx_path = reports_dir / f"m1f_{ts}.xlsx"
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Cross-Check"
+
+        hdr_font  = Font(bold=True, color="FFFFFF")
+        hdr_fill  = PatternFill("solid", fgColor="2E5896")
+        tot_fill  = PatternFill("solid", fgColor="D9E1F2")
+        mis_fill  = PatternFill("solid", fgColor="FCE4EC")
+        mis_font  = Font(color="C62828")
+        ok_fill   = PatternFill("solid", fgColor="E8F5E9")
+        ctr       = Alignment(horizontal="center")
+        thin_border = Border(
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin"),
+        )
+
+        headers = ["#", "Item", "Qty", "Disc%", "Labour", "EBW",
+                    "GST Type", "Tax%", "Created Total", "View Total",
+                    "Diff", "Status"]
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.font, cell.fill, cell.alignment = hdr_font, hdr_fill, ctr
+            cell.border = thin_border
+
+        pass_count = 0
+        for i in range(n):
+            gst_label = f"{gst_types[i]} {tax_rates[i]}%" if gst_on[i] else "No GST"
+            created = round(rows[i], 2)
+            viewed  = round(view_rows[i], 2)
+            diff    = round(viewed - created, 2)
+            ok      = abs(diff) <= self.TOL
+            status  = "PASS" if ok else "FAIL"
+            if ok:
+                pass_count += 1
+            vals = [i, items[i], qtys[i], discs[i], labours[i], ebws[i],
+                    gst_label, tax_rates[i] if gst_on[i] else 0,
+                    created, viewed, diff, status]
+            ws.append(vals)
+            row_idx = ws.max_row
+            for cell in ws[row_idx]:
+                cell.border = thin_border
+                cell.alignment = ctr
+            if not ok:
+                for cell in ws[row_idx]:
+                    cell.fill = mis_fill
+                    cell.font = mis_font
+            else:
+                ws.cell(row=row_idx, column=len(vals)).fill = ok_fill
+
+        ws.append([])
+        sep_row = ws.max_row
+
+        hdr_created = round(hdr, 2)
+        hdr_viewed  = round(view_hdr, 2)
+        hdr_diff    = round(hdr_viewed - hdr_created, 2)
+        hdr_ok      = abs(hdr_diff) <= self.TOL
+
+        ws.append(["HEADER TOTAL", "", "", "", "", "", "",
+                    "", hdr_created, hdr_viewed, hdr_diff,
+                    "PASS" if hdr_ok else "FAIL"])
+        for cell in ws[ws.max_row]:
+            cell.fill = tot_fill
+            cell.font = Font(bold=True, color="C62828" if not hdr_ok else "000000")
+            cell.border = thin_border
+            cell.alignment = ctr
+
+        ws.append(["SUM OF ROWS", "", "", "", "", "", "",
+                    "", round(sum(rows), 2), round(sum(view_rows), 2),
+                    round(sum(view_rows) - sum(rows), 2), ""])
+        for cell in ws[ws.max_row]:
+            cell.fill = PatternFill("solid", fgColor="FFF3E0")
+
+        ws.append([])
+        ws.append(["ref_no", ref_no])
+        ws.append(["seed", _SEED])
+        ws.append(["rows", n])
+        ws.append(["passed", pass_count])
+        ws.append(["failed", n - pass_count])
+        ws.append(["header_match", "PASS" if hdr_ok else "FAIL"])
+        ws.column_dimensions["B"].width = 42
+        for letter in ["A", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]:
+            ws.column_dimensions[letter].width = 14
+
+        wb.save(xlsx_path)
+        print(f"\n[M1f] Excel exported → {xlsx_path}")
 
     def test_m1e_gst_mixed_all_rows_header_sum(self, pb_page):
         """E4+M1: Row 0=IGST, Row 1=CGST+SGST, Row 2=no GST — header total = sum."""
