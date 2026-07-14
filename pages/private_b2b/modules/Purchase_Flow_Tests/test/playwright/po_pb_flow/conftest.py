@@ -86,11 +86,6 @@ def logged_in_page(browser_context):
     page.close()
 
 
-@pytest.fixture(scope="class")
-def integration_state():
-    return {}
-
-
 @pytest.fixture(scope="function")
 def po_page(logged_in_page):
     p = POPlaywrightPage(logged_in_page)
