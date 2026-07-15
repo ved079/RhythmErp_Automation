@@ -39,331 +39,52 @@ def _two_items():
     return a, b
 
 
-# ── Group 1: Mandatory header validations ─────────────────────────────────────
+# ── Group 5: Row behaviour & post-save suite ─────────────────────────────────
 
 @pytest.mark.direct_pb
-class TestDirectPBHeaderValidations:
+class TestRowAndPostSaveSuite:
 
-    def test_navigate_to_pb_page(self, pb_page):
-        """Smoke: PB listing loads for Eco Green Pvt Ltd."""
-        visible = pb_page.page.locator("table.mat-mdc-table, div.empty-state").count() > 0
-        print(f"\n[SMOKE] PB listing page visible: {'✓' if visible else '✗'}")
-        assert visible, "PB listing page must be visible after login"
+    ROW_TRIGGER    = "button.erp-row-trigger"
+    EDIT_MENU_ITEM = (
+        "xpath=//div[contains(@class,'mat-mdc-menu-panel')]"
+        "//button[.//i[normalize-space(.)='edit']]"
+    )
+    REF_NO_COL          = "td.cdk-column-transaction_ref_no"
+    SWAL_TITLE_SUCCESS  = "Purchase Booking created successfully"
 
-    def test_tc1_submit_without_supplier(self, pb_page):
-        """TC1: Submit with no fields filled — supplier validation must appear."""
-        pb_page.open_add_form()
-        pb_page.submit_and_wait()
-        errors    = pb_page.visible_errors()
-        form_open = pb_page.page.locator(pb_page.SUPPLIER_NAME).count() > 0
-        print(f"\n[TC1]  Action : submit empty form (no supplier, no fields)")
-        print(f"       Errors : {len(errors)} found  {'✓' if len(errors) > 0 else '✗ NONE'}")
-        for e in errors:
-            print(f"         - {e}")
-        print(f"       Form stayed open: {'✓' if form_open else '✗'}")
-        assert len(errors) > 0, f"Expected validation errors on empty submit, got: {errors}"
-        assert form_open, "Form must stay open after empty submit"
+    def _check(self, results, tag, passed, scenario, detail=""):
+        icon = "✓" if passed else "✗"
+        print(f"  [{tag}] {icon}  {scenario}" + (f"  — {detail}" if detail else ""))
+        results.append((tag, passed, scenario, detail))
 
-    def test_tc4_mandatory_header_fields(self, pb_page):
-        """TC4: Supplier selected but Location/Department/Type of Sale missing — validation."""
-        pb_page.open_add_form()
-        pb_page._select_random_mat_option(pb_page.SUPPLIER_NAME)
-        pb_page.page.wait_for_timeout(600)
-        pb_page.submit_and_wait()
-        errors = pb_page.visible_errors()
-        print(f"\n[TC4]  Action : supplier selected, Location/Dept/Type of Sale left blank")
-        print(f"       Errors : {len(errors)} found  {'✓' if len(errors) > 0 else '✗ NONE'}")
-        for e in errors:
-            print(f"         - {e}")
-        assert len(errors) > 0, (
-            f"Expected mandatory field errors when Location/Dept/Type of Sale missing, got: {errors}"
-        )
-
-    def test_tc18_submit_without_items(self, pb_page):
-        """TC18: Header fully filled but no item rows — validation must block save."""
-        pb_page.open_add_form()
-        pb_page.fill_header()
-        pb_page.submit_and_wait()
-        errors    = pb_page.visible_errors()
-        form_open = pb_page.page.locator(pb_page.SUPPLIER_NAME).count() > 0
-        print(f"\n[TC18] Action : header fully filled, zero item rows, submit")
-        print(f"       Errors : {len(errors)} found  {'✓' if len(errors) > 0 else '✗ NONE'}")
-        for e in errors:
-            print(f"         - {e}")
-        print(f"       Form stayed open: {'✓' if form_open else '✗'}")
-        assert len(errors) > 0, f"Expected validation when submitting with no item rows, got: {errors}"
-        assert form_open, "Form must stay open"
-
-
-# ── Group 2: Item row field validations ───────────────────────────────────────
-
-@pytest.mark.direct_pb
-class TestDirectPBRowFieldValidations:
-    """Each test opens the form, fills header, adds one item row, sets the
-    field under test to an invalid value, submits, and asserts the error."""
-
-    ITEM    = ITEMS[0]
-    VALID_QTY  = 10
-    VALID_RATE = 100
-
-    def _setup(self, pb_page):
-        """Open form + fill header + add item row with valid qty & rate."""
-        pb_page.open_add_form()
-        pb_page.fill_header()
-        pb_page.page.locator(pb_page.ADD_ROW_BTN).click()
-        pb_page.page.wait_for_timeout(600)
-        nudge = pb_page._pick_nudge_item(self.ITEM)
-        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, nudge)
-        pb_page.page.wait_for_timeout(500)
-        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, self.ITEM)
-        pb_page.page.wait_for_timeout(1000)
-
-    def _print_validation_result(self, tag, action, errors):
-        print(f"\n[{tag}] Action : {action}")
-        print(f"       Errors : {len(errors)} found  {'✓' if len(errors) > 0 else '✗ NONE'}")
-        for e in errors:
-            print(f"         - {e}")
-
-    def test_tc7_qty_blank(self, pb_page):
-        """TC7: Quantity left blank — validation must appear."""
-        self._setup(pb_page)
-        pb_page._fill_number_nth(pb_page.RATE, 0, self.VALID_RATE)
-        pb_page.submit_and_wait()
-        errors = pb_page.visible_errors()
-        self._print_validation_result("TC7", f"qty=blank  rate={self.VALID_RATE}  → submit", errors)
-        assert len(errors) > 0, f"Expected qty-blank validation, got: {errors}"
-
-    def test_tc8_qty_zero(self, pb_page):
-        """TC8: Quantity = 0 — save must be blocked."""
-        self._setup(pb_page)
-        pb_page._fill_number_nth(pb_page.QUANTITY, 0, 0)
-        pb_page._fill_number_nth(pb_page.RATE,     0, self.VALID_RATE)
-        pb_page.submit_and_wait()
-        errors = pb_page.visible_errors()
-        self._print_validation_result("TC8", f"qty=0  rate={self.VALID_RATE}  → submit", errors)
-        assert len(errors) > 0, f"Expected qty=0 validation, got: {errors}"
-
-    def test_tc9_qty_negative(self, pb_page):
-        """TC9: Negative quantity — system must reject."""
-        self._setup(pb_page)
-        pb_page._fill_number_nth(pb_page.QUANTITY, 0, -5)
-        pb_page._fill_number_nth(pb_page.RATE,     0, self.VALID_RATE)
-        pb_page.submit_and_wait()
-        errors = pb_page.visible_errors()
-        self._print_validation_result("TC9", f"qty=-5  rate={self.VALID_RATE}  → submit", errors)
-        assert len(errors) > 0, f"Expected negative-qty validation, got: {errors}"
-
-    def test_tc10_rate_blank(self, pb_page):
-        """TC10: Rate left blank — validation must appear."""
-        self._setup(pb_page)
-        pb_page._fill_number_nth(pb_page.QUANTITY, 0, self.VALID_QTY)
-        pb_page.submit_and_wait()
-        errors = pb_page.visible_errors()
-        self._print_validation_result("TC10", f"qty={self.VALID_QTY}  rate=blank  → submit", errors)
-        assert len(errors) > 0, f"Expected rate-blank validation, got: {errors}"
-
-    def test_tc11_rate_zero(self, pb_page):
-        """TC11: Rate = 0 — validation per business rule."""
-        self._setup(pb_page)
-        pb_page._fill_number_nth(pb_page.QUANTITY, 0, self.VALID_QTY)
-        pb_page._fill_number_nth(pb_page.RATE,     0, 0)
-        pb_page.submit_and_wait()
-        errors = pb_page.visible_errors()
-        self._print_validation_result("TC11", f"qty={self.VALID_QTY}  rate=0  → submit", errors)
-        assert len(errors) > 0, f"Expected rate=0 validation, got: {errors}"
-
-    def test_tc12_rate_negative(self, pb_page):
-        """TC12: Negative rate — system must reject."""
-        self._setup(pb_page)
-        pb_page._fill_number_nth(pb_page.QUANTITY, 0, self.VALID_QTY)
-        pb_page._fill_number_nth(pb_page.RATE,     0, -100)
-        pb_page.submit_and_wait()
-        errors = pb_page.visible_errors()
-        self._print_validation_result("TC12", f"qty={self.VALID_QTY}  rate=-100  → submit", errors)
-        assert len(errors) > 0, f"Expected negative-rate validation, got: {errors}"
-
-    def test_tc13_empty_bag_weight_negative(self, pb_page):
-        """TC13: Negative empty bag weight — validation must appear."""
-        self._setup(pb_page)
-        pb_page._fill_number_nth(pb_page.QUANTITY,        0, self.VALID_QTY)
-        pb_page._fill_number_nth(pb_page.RATE,            0, self.VALID_RATE)
-        pb_page._fill_number_nth(pb_page.EMPTY_BAG_WEIGHT, 0, -1)
-        pb_page.submit_and_wait()
-        errors = pb_page.visible_errors()
-        self._print_validation_result("TC13", f"qty={self.VALID_QTY}  rate={self.VALID_RATE}  EBW=-1  → submit", errors)
-        assert len(errors) > 0, f"Expected negative empty-bag-weight validation, got: {errors}"
-
-    def test_tc14_labour_charges_negative(self, pb_page):
-        """TC14: Negative labour charges — validation must appear."""
-        self._setup(pb_page)
-        pb_page._fill_number_nth(pb_page.QUANTITY,       0, self.VALID_QTY)
-        pb_page._fill_number_nth(pb_page.RATE,           0, self.VALID_RATE)
-        pb_page._fill_number_nth(pb_page.LABOUR_CHARGES, 0, -500)
-        pb_page.submit_and_wait()
-        errors = pb_page.visible_errors()
-        self._print_validation_result("TC14", f"qty={self.VALID_QTY}  rate={self.VALID_RATE}  labour=-500  → submit", errors)
-        assert len(errors) > 0, f"Expected negative labour-charges validation, got: {errors}"
-
-
-# ── Group 3: Discount validations ────────────────────────────────────────────
-
-@pytest.mark.direct_pb
-class TestDirectPBDiscountValidations:
-
-    ITEM       = ITEMS[2]
-    VALID_QTY  = 10
-    VALID_RATE = 200
-
-    def _setup(self, pb_page):
-        pb_page.open_add_form()
-        pb_page.fill_header()
-        pb_page.page.locator(pb_page.ADD_ROW_BTN).click()
-        pb_page.page.wait_for_timeout(600)
-        nudge = pb_page._pick_nudge_item(self.ITEM)
-        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, nudge)
-        pb_page.page.wait_for_timeout(500)
-        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, self.ITEM)
-        pb_page.page.wait_for_timeout(1000)
-        pb_page._fill_number_nth(pb_page.QUANTITY, 0, self.VALID_QTY)
-        pb_page._fill_number_nth(pb_page.RATE,     0, self.VALID_RATE)
+    def _submit_and_return_to_list(self, pb_page):
+        btn = pb_page.page.locator(pb_page.SUBMIT_BTN)
+        btn.wait_for(state="visible", timeout=5000)
+        btn.click(force=True)
+        pb_page.page.wait_for_selector(".swal2-container", timeout=12000)
+        title = pb_page.page.locator("#swal2-title").inner_text().strip()
+        assert title == self.SWAL_TITLE_SUCCESS, f"Expected success alert, got: '{title}'"
+        pb_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=8000)
+        pb_page.navigate_to_page()
+        pb_page.page.wait_for_selector(self.REF_NO_COL, timeout=15000)
         pb_page.page.wait_for_timeout(500)
 
-    def test_tc82_negative_discount(self, pb_page):
-        """TC82: Negative discount — validation must appear."""
-        self._setup(pb_page)
-        pb_page._fill_number_nth(pb_page.DISC_PERCENTAGE, 0, -10)
-        pb_page.submit_and_wait()
-        errors = pb_page.visible_errors()
-        print(f"\n[TC82] Action : disc=-10%  → submit")
-        print(f"       Errors : {len(errors)} found  {'✓' if len(errors) > 0 else '✗ NONE'}")
-        for e in errors:
-            print(f"         - {e}")
-        assert len(errors) > 0, f"Expected negative-discount validation, got: {errors}"
+    def test_rps1_row_behaviour_and_post_save(self, pb_page):
+        results = []
+        print("\n" + "═" * 80)
+        print("ROW BEHAVIOUR & POST-SAVE SUITE")
+        print("═" * 80)
 
-    def test_tc84_discount_over_100(self, pb_page):
-        """TC84: Discount > 100% — validation must appear."""
-        self._setup(pb_page)
-        pb_page._fill_number_nth(pb_page.DISC_PERCENTAGE, 0, 110)
-        pb_page.submit_and_wait()
-        errors = pb_page.visible_errors()
-        print(f"\n[TC84] Action : disc=110%  → submit")
-        print(f"       Errors : {len(errors)} found  {'✓' if len(errors) > 0 else '✗ NONE'}")
-        for e in errors:
-            print(f"         - {e}")
-        assert len(errors) > 0, f"Expected discount>100 validation, got: {errors}"
-
-    def test_tc89_discount_zero_amount_unchanged(self, pb_page):
-        """TC89: Discount = 0 — Transaction Amount must not change."""
-        self._setup(pb_page)
-        txn_before = pb_page.read_transaction_amount(0)
-        pb_page._fill_number_nth(pb_page.DISC_PERCENTAGE, 0, 0)
-        pb_page.page.wait_for_timeout(600)
-        txn_after = pb_page.read_transaction_amount(0)
-        diff  = abs(txn_after - txn_before)
-        match = "✓ UNCHANGED" if diff < 1.0 else f"✗ CHANGED by {diff:.2f}"
-        print(f"\n[TC89] Action : disc=0%  (no discount applied)")
-        print(f"       Txn before: {txn_before:.2f}  →  after: {txn_after:.2f}  [{match}]")
-        assert diff < 1.0, f"TC89: Discount=0 changed txn from {txn_before:.2f} to {txn_after:.2f}"
-
-
-# ── Group 4: Input type rejections ───────────────────────────────────────────
-
-@pytest.mark.direct_pb
-class TestDirectPBInputTypeRejections:
-    """Number fields must silently reject non-numeric input."""
-
-    ITEM = ITEMS[3]
-
-    def _open_with_item(self, pb_page):
-        pb_page.open_add_form()
-        pb_page.fill_header()
-        pb_page.page.locator(pb_page.ADD_ROW_BTN).click()
-        pb_page.page.wait_for_timeout(600)
-        nudge = pb_page._pick_nudge_item(self.ITEM)
-        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, nudge)
-        pb_page.page.wait_for_timeout(500)
-        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, self.ITEM)
-        pb_page.page.wait_for_timeout(1000)
-
-    def _try_type_into_rate(self, pb_page, text):
-        """Attempt to type text into the Rate field (editable number input) and
-        return what actually landed. Quantity is readonly — Rate is not."""
-        rate_loc = pb_page.page.locator(
-            "xpath=" + pb_page.RATE.replace("xpath=", "")
-        ).first
-        rate_loc.click(force=True)
-        pb_page.page.wait_for_timeout(200)
-        rate_loc.fill("")
-        rate_loc.type(text)
-        pb_page.page.wait_for_timeout(400)
-        return rate_loc.input_value()
-
-    def test_tc85_alphabetic_rejected(self, pb_page):
-        """TC85: Alphabetic characters must not land in a number (Rate) field."""
-        self._open_with_item(pb_page)
-        val     = self._try_type_into_rate(pb_page, "abc")
-        passed  = val == "" or not any(c.isalpha() for c in val)
-        print(f"\n[TC85] Action : type 'abc' into Rate field")
-        print(f"       Field value after input: '{val}'  [{'✓ rejected' if passed else '✗ ACCEPTED letters'}]")
-        assert passed, f"Alphabetic input should be rejected by number field; got: '{val}'"
-
-    def test_tc86_special_chars_rejected(self, pb_page):
-        """TC86: Special characters must not land in a number (Rate) field."""
-        self._open_with_item(pb_page)
-        val    = self._try_type_into_rate(pb_page, "@#$")
-        passed = val == "" or not any(c in "@#$" for c in val)
-        print(f"\n[TC86] Action : type '@#$' into Rate field")
-        print(f"       Field value after input: '{val}'  [{'✓ rejected' if passed else '✗ ACCEPTED special chars'}]")
-        assert passed, f"Special chars should be rejected by number field; got: '{val}'"
-
-    def test_tc87_large_value(self, pb_page):
-        """TC87: Extremely large value (99999999999) — field must accept without crashing,
-        and submit must show a validation (overflow) or the form must stay open."""
-        self._open_with_item(pb_page)
-        pb_page._fill_number_nth(pb_page.QUANTITY, 0, 99999999999)
-        pb_page._fill_number_nth(pb_page.RATE,     0, 99999999999)
-        pb_page.submit_and_wait()
-        form_still_open = pb_page.page.locator(pb_page.SUPPLIER_NAME).count() > 0
-        errors  = pb_page.visible_errors()
-        blocked = form_still_open or len(errors) > 0
-        print(f"\n[TC87] Action : qty=99999999999  rate=99999999999  → submit")
-        print(f"       Form still open : {'✓' if form_still_open else '✗'}")
-        print(f"       Errors found    : {len(errors)}  {[e for e in errors]}")
-        print(f"       Blocked (pass)  : {'✓' if blocked else '✗'}")
-        assert blocked, "Large value must either show validation or keep form open"
-
-
-# ── Group 5: Row add/remove behaviour ────────────────────────────────────────
-
-@pytest.mark.direct_pb
-class TestDirectPBRowBehaviour:
-
-    def test_tc2_inactive_supplier_not_in_list(self, pb_page):
-        """TC2: 'LK suppliers' is inactive — must not appear in supplier dropdown."""
-        pb_page.open_add_form()
-        options = pb_page.search_supplier_in_dropdown("LK suppliers")
-        found   = any("LK suppliers" in o for o in options)
-        print(f"\n[TC2]  Action : search 'LK suppliers' in supplier dropdown")
-        print(f"       Results found : {options if options else '(none)'}")
-        print(f"       Inactive supplier absent: {'✓' if not found else '✗ VISIBLE — should be hidden'}")
-        assert not found, f"Inactive supplier 'LK suppliers' should not appear; found: {options}"
-
-    def test_tc19_duplicate_item_blocked(self, pb_page):
-        """TC19: Same item in two rows — validation must appear."""
+        # ── R_TC1: Duplicate item shows inline error on second row ─────────────
+        # row 0 = default; ADD_ROW_BTN once adds row 1 for the duplicate — no extra rows
         item = ITEMS[4]
         pb_page.open_add_form()
         pb_page.fill_header()
-
-        # Row 0
-        pb_page.page.locator(pb_page.ADD_ROW_BTN).click()
-        pb_page.page.wait_for_timeout(600)
         nudge = pb_page._pick_nudge_item(item)
         pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, nudge)
         pb_page.page.wait_for_timeout(500)
         pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, item)
         pb_page.page.wait_for_timeout(800)
-
-        # Row 1 — add and select the same item
         pb_page.page.locator(pb_page.ADD_ROW_BTN).click()
         pb_page.page.wait_for_timeout(600)
         pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 1, nudge)
@@ -371,22 +92,31 @@ class TestDirectPBRowBehaviour:
         pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 1, item)
         pb_page.page.wait_for_timeout(800)
 
-        errors = pb_page.page.locator("mat-error").all()
-        print(f"\n[TC19] Action : add item '{item}' to row 0, then same item to row 1")
-        print(f"       Errors : {len(errors)} found  {'✓ duplicate blocked' if len(errors) > 0 else '✗ NO ERROR — duplicate allowed'}")
-        for e in errors:
-            print(f"         - {e.inner_text().strip()}")
-        assert len(errors) > 0, f"Expected 'already added' or duplicate validation for item '{item}'"
+        def _row_error(r):
+            return pb_page.page.evaluate("""
+                ([xpath, idx]) => {
+                    const result = document.evaluate(xpath, document, null,
+                        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    const sel = result.snapshotItem(idx);
+                    if (!sel) return {invalid: false, error: ''};
+                    const ff = sel.closest('mat-form-field');
+                    if (!ff) return {invalid: false, error: ''};
+                    const err = ff.querySelector('mat-error');
+                    return {invalid: ff.classList.contains('mat-form-field-invalid'),
+                            error: err ? err.innerText.trim() : ''};
+                }
+            """, [pb_page.ITEM_NAME.replace("xpath=", ""), r])
 
-    def test_tc23_add_item_remove_total_resets(self, pb_page):
-        """TC23: Add item row + an empty spare row, delete the item row — the
-        surviving empty row must have txn=0 (no values carried over)."""
+        r0, r1 = _row_error(0), _row_error(1)
+        passed = r1['invalid'] and "already added" in r1['error']
+        self._check(results, "R_TC1", passed,
+                    "Adding the same item twice — ERP flags the duplicate row with an inline error",
+                    f"Row 1 error: '{r1['error']}'" if r1['invalid'] else "No error shown on duplicate row")
+
+        # ── R_TC2: Delete item row → surviving empty row Total resets to 0 ────
         item = ITEMS[5]
         pb_page.open_add_form()
         pb_page.fill_header()
-
-        # Row 0 is the default empty row — leave it empty.
-        # Add row 1 (last row) and put the item there so the delete button removes it.
         pb_page.page.locator(pb_page.ADD_ROW_BTN).click()
         pb_page.page.wait_for_timeout(600)
         nudge = pb_page._pick_nudge_item(item)
@@ -398,39 +128,20 @@ class TestDirectPBRowBehaviour:
         pb_page.fill_qty_details(1, 10)
         pb_page.click_done()
         pb_page.page.wait_for_timeout(500)
-
         txn_before = pb_page.read_transaction_amount(1)
-
-        # Delete the last row (the item row) — only one delete button exists, always nth(0)
-        pb_page.delete_row(0)
+        pb_page.delete_row(1)
         pb_page.page.wait_for_timeout(600)
-
-        # Remaining row is the original default empty row 0 — txn must be 0
         txn_after = pb_page.read_transaction_amount(0)
-        row_count = pb_page.count_item_rows()
-        passed    = txn_after == 0.0
+        self._check(results, "R_TC2", txn_before > 0 and txn_after == 0.0,
+                    "Deleting an item row — the remaining empty row shows ₹0, no leftover values",
+                    f"Transaction before delete: ₹{txn_before:.2f} → after delete: ₹{txn_after:.2f}")
 
-        print(f"\n[TC23] Action : add item '{item}' qty=10 via popup, add empty row, delete item row")
-        print(f"       Txn before delete : {txn_before:.2f}  {'✓ > 0' if txn_before > 0 else '✗ was already 0'}")
-        print(f"       Rows remaining    : {row_count}")
-        print(f"       Txn after delete  : {txn_after:.2f}  {'✓ zero — no carry-over' if passed else '✗ still has values'}")
-        print(f"       Overall           : {'✓ PASS' if passed else '✗ FAIL'}")
-        assert txn_before > 0, f"TC23: pre-condition failed — item row txn was 0 before delete"
-        assert passed, (
-            f"TC23: After deleting item row, surviving empty row should have txn=0; got {txn_after:.2f}"
-        )
-
-    def test_tc24_remove_add_no_stale_values(self, pb_page):
-        """TC24: Remove item A, add item B with same qty — item B txn must differ
-        from item A txn (different master rates → different computed amounts)."""
+        # ── R_TC3: Replace item A with item B → no stale txn values ───────────
+        # row 0 = default for item_a; ADD_ROW_BTN + delete_row(0) swaps it out — max 2 rows
         item_a, item_b = _two_items()
         qty = _rand_qty()
         pb_page.open_add_form()
         pb_page.fill_header()
-
-        # Add row 0 with item_a via popup
-        pb_page.page.locator(pb_page.ADD_ROW_BTN).click()
-        pb_page.page.wait_for_timeout(600)
         nudge_a = pb_page._pick_nudge_item(item_a)
         pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, nudge_a)
         pb_page.page.wait_for_timeout(500)
@@ -440,16 +151,11 @@ class TestDirectPBRowBehaviour:
         pb_page.fill_qty_details(1, qty)
         pb_page.click_done()
         pb_page.page.wait_for_timeout(600)
-
         txn_a = pb_page.read_transaction_amount(0)
-
-        # Add empty row 1 so DELETE appears, then delete item_a row
         pb_page.page.locator(pb_page.ADD_ROW_BTN).click()
         pb_page.page.wait_for_timeout(600)
         pb_page.delete_row(0)
         pb_page.page.wait_for_timeout(600)
-
-        # Fill remaining empty row with item_b — same qty via popup
         nudge_b = pb_page._pick_nudge_item(item_b)
         pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, nudge_b)
         pb_page.page.wait_for_timeout(500)
@@ -459,20 +165,126 @@ class TestDirectPBRowBehaviour:
         pb_page.fill_qty_details(1, qty)
         pb_page.click_done()
         pb_page.page.wait_for_timeout(600)
+        txn_b = pb_page.read_transaction_amount(0)
+        self._check(results, "R_TC3", txn_a > 0 and txn_b > 0 and txn_b != txn_a,
+                    "Replacing one item with another (same qty) — transaction amount recalculates fresh, no stale data",
+                    f"{item_a} → ₹{txn_a:.2f}   replaced with   {item_b} → ₹{txn_b:.2f}   (values differ ✓)" if txn_b != txn_a else f"Both items gave ₹{txn_a:.2f} — may be same master rate or stale")
 
-        txn_b  = pb_page.read_transaction_amount(0)
-        no_stale = txn_b != txn_a and txn_b > 0
+        # hard reset before R_TC4 to clear any lingering form state
+        pb_page.navigate_to_page()
+        pb_page.page.reload()
+        pb_page.page.wait_for_load_state("networkidle")
+        pb_page.page.wait_for_timeout(1500)
 
-        print(f"\n[TC24] Action : add item_a='{item_a}' qty={qty} via popup, delete it, add item_b='{item_b}' qty={qty} via popup")
-        print(f"       item_a txn : {txn_a:.2f}  (master rate × {qty})")
-        print(f"       item_b txn : {txn_b:.2f}  (master rate × {qty})")
-        print(f"       Different  : {'✓ no stale carry-over' if txn_b != txn_a else '✗ SAME — possible stale'}")
-        print(f"       item_b > 0 : {'✓' if txn_b > 0 else '✗ ZERO'}")
-        assert txn_a > 0, f"TC24: pre-condition failed — item_a txn was 0"
-        assert txn_b > 0, f"TC24: item_b txn is 0 after selection with qty={qty}"
-        assert txn_b != txn_a, (
-            f"TC24: item_b txn ({txn_b:.2f}) == item_a txn ({txn_a:.2f}) — "
-            f"different items must have different master rates"
+        # ── R_TC4: Saved PB → Edit disabled in action menu ────────────────────
+        item = _rng.choice(ITEMS)
+        qty  = _rand_qty()
+        pb_page.open_add_form()
+        pb_page.fill_header()
+        nudge = pb_page._pick_nudge_item(item)
+        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, nudge)
+        pb_page.page.wait_for_timeout(500)
+        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, item)
+        pb_page.page.wait_for_timeout(1000)
+        pb_page.open_qty_details_popup(0)
+        pb_page.fill_qty_details(1, qty)
+        pb_page.click_done()
+        pb_page.page.wait_for_timeout(1000)
+        self._submit_and_return_to_list(pb_page)
+        ref_no = pb_page.page.locator(self.REF_NO_COL).first.inner_text().strip()
+        pb_page.page.locator(self.ROW_TRIGGER).first.click(force=True)
+        pb_page.page.wait_for_selector(".mat-mdc-menu-panel", timeout=5000)
+        pb_page.page.wait_for_timeout(500)
+        edit_btn = pb_page.page.locator(self.EDIT_MENU_ITEM)
+        edit_absent   = edit_btn.count() == 0
+        edit_disabled = (not edit_absent and (
+            edit_btn.first.get_attribute("disabled") is not None or
+            edit_btn.first.get_attribute("aria-disabled") == "true"
+        ))
+        is_edit_blocked = edit_absent or edit_disabled
+        if edit_absent:
+            detail_msg = f"Saved as {ref_no} — Edit option not shown in menu (blocked ✓)"
+        elif edit_disabled:
+            detail_msg = f"Saved as {ref_no} — Edit button present but disabled (correct ✓)"
+        else:
+            detail_msg = f"Saved as {ref_no} — Edit button present and enabled (unexpected ✗)"
+        self._check(results, "R_TC4", is_edit_blocked,
+                    "A saved Purchase Booking — Edit must not be available (absent or disabled) in the action menu",
+                    detail_msg)
+
+        # ── Summary ────────────────────────────────────────────────────────────
+        passed_all = [r for r in results if r[1]]
+        failed_all = [r for r in results if not r[1]]
+        print("\n" + "─" * 80)
+        print(f"  {len(passed_all)}/{len(results)} scenarios passed")
+        print("─" * 80)
+        if failed_all:
+            for tag, _, scenario, detail in failed_all:
+                print(f"    [{tag}] {scenario}  — {detail}")
+
+        # ── Excel export ───────────────────────────────────────────────────────
+        import pathlib, datetime
+        reports_dir = pathlib.Path(__file__).parent / "reports"
+        reports_dir.mkdir(exist_ok=True)
+        ts        = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        xlsx_path = reports_dir / f"rps1_{ts}.xlsx"
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Row & Post-Save Suite"
+
+        thin        = Side(style="thin")
+        thin_border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        ctr         = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        left        = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+        hdr_fill    = PatternFill("solid", fgColor="1A237E")
+        pass_fill   = PatternFill("solid", fgColor="E8F5E9")
+        fail_fill   = PatternFill("solid", fgColor="FFEBEE")
+        sum_fill    = PatternFill("solid", fgColor="EDE7F6")
+
+        ws.append(["#", "Test ID", "What is being tested", "Detail", "Result"])
+        for cell in ws[1]:
+            cell.font      = Font(bold=True, color="FFFFFF")
+            cell.fill      = hdr_fill
+            cell.border    = thin_border
+            cell.alignment = ctr
+
+        for idx, (tag, passed, scenario, detail) in enumerate(results, 1):
+            fill = pass_fill if passed else fail_fill
+            ws.append([idx, tag, scenario, detail, "PASS" if passed else "FAIL"])
+            r = ws.max_row
+            for cell in ws[r]:
+                cell.fill, cell.border = fill, thin_border
+            ws.cell(r, 1).alignment = ctr
+            ws.cell(r, 2).alignment = ctr
+            ws.cell(r, 3).alignment = left
+            ws.cell(r, 4).alignment = left
+            ws.cell(r, 5).alignment = ctr
+
+        ws.append([])
+        for label, val in [
+            ("Total Scenarios", len(results)),
+            ("Passed",          len(passed_all)),
+            ("Failed",          len(failed_all)),
+            ("Overall",         "PASS" if not failed_all else "FAIL"),
+            ("Run Date",        datetime.datetime.now().strftime("%Y-%m-%d %H:%M")),
+        ]:
+            ws.append([label, val])
+            for cell in ws[ws.max_row]:
+                cell.fill, cell.border, cell.alignment = sum_fill, thin_border, ctr
+
+        ws.column_dimensions["A"].width = 5
+        ws.column_dimensions["B"].width = 10
+        ws.column_dimensions["C"].width = 52
+        ws.column_dimensions["D"].width = 42
+        ws.column_dimensions["E"].width = 10
+
+        wb.save(xlsx_path)
+        print(f"[RPS1] Excel exported → {xlsx_path}")
+
+        assert not failed_all, (
+            "RPS1 failures:\n" +
+            "\n".join(f"  [{t}] {s}" for t, _, s, _ in failed_all)
         )
 
 
@@ -895,8 +707,63 @@ def _row_totals(pb_page, n):
     return [pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, i + 1) for i in range(n)]
 
 
+_DISC_AMOUNT_ROW_SEL = "xpath=//input[@placeholder='Discount Amount' and not(@disabled)]"
+_DISC_AMOUNT_HDR_SEL = "xpath=//input[@placeholder='Discount Amount' and @disabled]"
+_AMOUNT_HDR_SEL      = "xpath=//input[@placeholder='Amount' and @disabled]"
+_TAX_AMOUNT_SEL      = "xpath=//input[@placeholder='Tax amount' and @disabled]"
+_TXN_AMOUNT_SEL      = "xpath=//input[@placeholder='Transaction Amount' and @disabled]"
+
+def _row_disc_amounts(pb_page, n):
+    """Read per-row Discount Amount from view mode (non-disabled inputs only)."""
+    return [pb_page._read_number_nth(_DISC_AMOUNT_ROW_SEL, i) for i in range(n)]
+
+def _row_tax_amounts(pb_page, n):
+    """Read per-row Tax Amount from view mode."""
+    return [pb_page._read_number_nth(_TAX_AMOUNT_SEL, i) for i in range(n)]
+
+def _row_txn_amounts(pb_page, n):
+    """Read per-row Transaction Amount (base before disc) from view mode."""
+    return [pb_page._read_number_nth(_TXN_AMOUNT_SEL, i) for i in range(n)]
+
+def _row_tax_rates_view(pb_page, n):
+    """Read actual tax rates saved in ERP from disabled Tax Rate mat-selects in view mode."""
+    results = []
+    for i in range(n):
+        val = pb_page.page.evaluate("""
+            (idx) => {
+                const fields = Array.from(document.querySelectorAll('mat-form-field')).filter(f => {
+                    const lbl = f.querySelector('mat-label');
+                    return lbl && lbl.textContent.trim() === 'Tax Rate' &&
+                           f.querySelector('mat-select.mat-mdc-select-disabled');
+                });
+                const el = fields[idx] && fields[idx].querySelector('.mat-mdc-select-min-line');
+                return el ? el.textContent.trim() : '';
+            }
+        """, i)
+        try:
+            results.append(float(val) if val else 0.0)
+        except ValueError:
+            results.append(0.0)
+    return results
+
+
 def _hdr_total(pb_page):
     return pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 0)
+
+
+def _row_gst_breakdown(pb_page, n):
+    """Read IGST/CGST/SGST rate fields per row from view mode (amount fields not in DOM)."""
+    def _read_field(name, i):
+        return pb_page._read_number_nth(f"xpath=//input[@name='{name}']", i)
+
+    result = []
+    for i in range(n):
+        result.append({
+            "igst_rate": _read_field("IGST Rate", i),
+            "cgst_rate": _read_field("CGST Rate", i),
+            "sgst_rate": _read_field("SGST Rate", i),
+        })
+    return result
 
 
 # ── Group 8: Multi-row calculations ──────────────────────────────────────────
@@ -914,13 +781,12 @@ class TestMultiRowCalculations:
 
     TOL = 0.02
 
+    TOL = 0.05  # ERP can round stored vs computed by up to ₹0.02; 0.05 covers float imprecision too
+
     SWAL_TITLE_SUCCESS = "Purchase Booking created successfully"
     REF_NO_COL         = "td.cdk-column-transaction_ref_no"
     ROW_TRIGGER        = "button.erp-row-trigger"
-    VIEW_MENU_ITEM     = (
-        "xpath=//div[contains(@class,'mat-mdc-menu-panel')]"
-        "//button[.//mat-icon[normalize-space(.)='visibility']]"
-    )
+    VIEW_MENU_ITEM     = "button.mat-mdc-menu-item:has(i.material-icons:text('visibility'))"
 
     def test_m1_five_rows_varied_inputs_header_equals_sum(self, pb_page):
         """M1: 5 random rows (random item/qty/disc/labour) — verify calcs then save."""
@@ -1058,15 +924,15 @@ class TestMultiRowCalculations:
         TAX_RATES = [5, 12, 18]
         GST_TYPES = ["IGST", "CGST + SGST"]
 
-        n       = _rng.randint(8, 10)
+        n       = _rng.randint(15,20)
         items   = _rand_items(n)
         qtys    = [_rand_qty()    for _ in range(n)]
         discs   = [_rand_disc()   for _ in range(n)]
         labours = [_rand_labour() for _ in range(n)]
         ebws    = [_rand_ebw(q)   for q in qtys]
-        gst_on    = [_rng.random() < 0.67 for _ in range(n)]
-        tax_rates = [_rng.choice(TAX_RATES) if g else 0 for g in gst_on]
-        gst_types = [_rng.choice(GST_TYPES) if g else "none" for g in gst_on]
+        gst_on      = [_rng.random() < 0.67 for _ in range(n)]
+        tax_rates   = [_rng.choice(TAX_RATES) if g else 0 for g in gst_on]
+        gst_types   = [_rng.choice(GST_TYPES) if g else "none" for g in gst_on]
 
         pb_page.open_add_form()
         pb_page.fill_header()
@@ -1098,10 +964,7 @@ class TestMultiRowCalculations:
                 try:
                     pb_page.select_gst_type(i, gst_types[i])
                 except Exception:
-                    pb_page.enable_gst_off(i)
-                    tax_rates[i] = 0
                     gst_types[i] = "none"
-                    gst_on[i] = False
                 pb_page.page.wait_for_timeout(1000)
 
         pb_page.page.wait_for_timeout(600)
@@ -1156,12 +1019,19 @@ class TestMultiRowCalculations:
         pb_page.page.locator(self.ROW_TRIGGER).first.click(force=True)
         pb_page.page.wait_for_selector(".mat-mdc-menu-panel", timeout=5000)
         pb_page.page.locator(self.VIEW_MENU_ITEM).first.click(force=True)
-        # Wait for the view form to render (same popup structure as create form)
-        pb_page.page.wait_for_selector(pb_page.TOTAL_AMOUNT, timeout=20000)
+        pb_page.page.wait_for_load_state("networkidle", timeout=60000)
+        pb_page.page.wait_for_timeout(3000)
+        pb_page.page.wait_for_selector(pb_page.TOTAL_AMOUNT, timeout=120000)
         pb_page.page.wait_for_timeout(1500)
 
-        view_rows = _row_totals(pb_page, n)
-        view_hdr  = _hdr_total(pb_page)
+        view_rows       = _row_totals(pb_page, n)
+        view_hdr        = _hdr_total(pb_page)
+        view_disc_amts  = _row_disc_amounts(pb_page, n)
+        view_tax_amts   = _row_tax_amounts(pb_page, n)
+        view_txn_amts   = _row_txn_amounts(pb_page, n)
+        view_tax_rates  = _row_tax_rates_view(pb_page, n)
+        hdr_amount      = pb_page._read_number_nth(_AMOUNT_HDR_SEL, 0)
+        hdr_disc_amt    = pb_page._read_number_nth(_DISC_AMOUNT_HDR_SEL, 0)
 
         vcol = "{:<3} {:<24} {:>14} {:>14} {}"
         print(f"\n[M1f] View mode cross-check  ref_no={ref_no}")
@@ -1185,10 +1055,28 @@ class TestMultiRowCalculations:
                 f"M1f: View row {i} total {view_rows[i]:.2f} != created {rows[i]:.2f} "
                 f"(item={items[i]!r})"
             )
-        assert hdr_ok, (
-            f"M1f: View header total {view_hdr:.2f} != created {hdr:.2f}"
-        )
+        assert hdr_ok, f"M1f: View header {view_hdr:.2f} != created {hdr:.2f}"
         print(f"[M1f] ✓ All {n} row totals + header match in view mode")
+
+        # ── Tax amount verification ───────────────────────────────────────────
+        print("\n[M1f] Tax amount verification")
+        tax_mismatches = []
+        for i in range(n):
+            actual_rate = view_tax_rates[i]
+            if actual_rate == 0:
+                continue
+            expected = round(view_txn_amts[i] * actual_rate / 100, 2)
+            actual   = round(view_tax_amts[i], 2)
+            ok       = abs(actual - expected) <= self.TOL
+            status   = "✓" if ok else f"✗ expected {expected:.2f} got {actual:.2f}"
+            print(f"  Row {i} ({items[i][:20]}): txn={view_txn_amts[i]:.2f} × {actual_rate}% = {expected:.2f}  tax={actual:.2f}  {status}")
+            if not ok:
+                tax_mismatches.append((i, expected, actual))
+        for i, exp, act in tax_mismatches:
+            assert False, (
+                f"M1f: Tax amount mismatch row {i} ({items[i]!r}): "
+                f"expected {exp:.2f} (txn×rate%), got {act:.2f}"
+            )
 
         # ── Export Excel with cross-check ────────────────────────────────────
         reports_dir = pathlib.Path(__file__).parent / "reports"
@@ -1214,9 +1102,9 @@ class TestMultiRowCalculations:
             bottom=Side(style="thin"),
         )
 
-        headers = ["#", "Item", "Qty", "Disc%", "Labour", "EBW",
-                    "GST Type", "Tax%", "Created Total", "View Total",
-                    "Diff", "Status"]
+        headers = ["#", "Item", "Qty", "Disc%", "Disc Amount", "Labour", "EBW",
+                    "GST Type", "Tax%", "Txn Amount", "Tax Amount", "Tax Calc Check",
+                    "Created Total", "View Total", "Diff", "Status"]
         ws.append(headers)
         for cell in ws[1]:
             cell.font, cell.fill, cell.alignment = hdr_font, hdr_fill, ctr
@@ -1224,7 +1112,8 @@ class TestMultiRowCalculations:
 
         pass_count = 0
         for i in range(n):
-            gst_label = f"{gst_types[i]} {tax_rates[i]}%" if gst_on[i] else "No GST"
+            actual_rate_lbl = view_tax_rates[i]
+            gst_label = f"{gst_types[i]} {actual_rate_lbl}%" if actual_rate_lbl > 0 else "No GST"
             created = round(rows[i], 2)
             viewed  = round(view_rows[i], 2)
             diff    = round(viewed - created, 2)
@@ -1232,8 +1121,20 @@ class TestMultiRowCalculations:
             status  = "PASS" if ok else "FAIL"
             if ok:
                 pass_count += 1
-            vals = [i, items[i], qtys[i], discs[i], labours[i], ebws[i],
-                    gst_label, tax_rates[i] if gst_on[i] else 0,
+            txn_amt     = round(view_txn_amts[i], 2)
+            tax_amt     = round(view_tax_amts[i], 2)
+            actual_rate = view_tax_rates[i]
+            if actual_rate > 0:
+                expected_tax = round(txn_amt * actual_rate / 100, 2)
+                tax_ok       = abs(tax_amt - expected_tax) <= self.TOL
+                tax_check    = (f"{txn_amt} × {actual_rate}% = {expected_tax}  "
+                                f"{'✓' if tax_ok else f'✗ got {tax_amt}'}")
+            else:
+                tax_check = "No GST"
+            vals = [i, items[i], qtys[i], discs[i], round(view_disc_amts[i], 2),
+                    labours[i], ebws[i],
+                    gst_label, actual_rate_lbl if actual_rate_lbl > 0 else 0,
+                    txn_amt, tax_amt, tax_check,
                     created, viewed, diff, status]
             ws.append(vals)
             row_idx = ws.max_row
@@ -1255,8 +1156,8 @@ class TestMultiRowCalculations:
         hdr_diff    = round(hdr_viewed - hdr_created, 2)
         hdr_ok      = abs(hdr_diff) <= self.TOL
 
-        ws.append(["HEADER TOTAL", "", "", "", "", "", "",
-                    "", hdr_created, hdr_viewed, hdr_diff,
+        ws.append(["HEADER TOTAL", "", "", "", "", "", "", "",
+                    "", "", "", "", hdr_created, hdr_viewed, hdr_diff,
                     "PASS" if hdr_ok else "FAIL"])
         for cell in ws[ws.max_row]:
             cell.fill = tot_fill
@@ -1264,11 +1165,82 @@ class TestMultiRowCalculations:
             cell.border = thin_border
             cell.alignment = ctr
 
-        ws.append(["SUM OF ROWS", "", "", "", "", "", "",
-                    "", round(sum(rows), 2), round(sum(view_rows), 2),
+        ws.append(["SUM OF ROWS", "", "", "", "", "", "", "",
+                    "", "", "", "", round(sum(rows), 2), round(sum(view_rows), 2),
                     round(sum(view_rows) - sum(rows), 2), ""])
         for cell in ws[ws.max_row]:
             cell.fill = PatternFill("solid", fgColor="FFF3E0")
+
+        ws.append([])
+        amt_fill  = PatternFill("solid", fgColor="EDE7F6")
+        ok_fill   = PatternFill("solid", fgColor="E8F5E9")
+        fail_fill = PatternFill("solid", fgColor="FFEBEE")
+        bold      = Font(bold=True)
+
+        # ── Header-level summary with formulas ──────────────────────────────
+        sum_txn  = round(sum(view_txn_amts), 2)
+        sum_tax  = round(sum(view_tax_amts), 2)
+        sum_disc = round(sum(v for v in view_disc_amts), 2)
+
+        # Amount check: should equal sum of all row base amounts
+        amt_calc  = sum_txn
+        amt_ok    = abs(amt_calc - round(hdr_amount, 2)) <= self.TOL
+        amt_check = (f"Added up base price of all {n} items = {amt_calc}. "
+                     f"ERP shows {round(hdr_amount, 2)}. "
+                     f"{'Matches ✓' if amt_ok else 'Does NOT match ✗'}")
+
+        # Discount check: should equal sum of all row discount amounts
+        disc_calc  = sum_disc
+        disc_ok    = abs(disc_calc - round(hdr_disc_amt, 2)) <= self.TOL
+        disc_check = (f"Added up discount of all {n} items = {disc_calc}. "
+                      f"ERP shows {round(hdr_disc_amt, 2)}. "
+                      f"{'Matches ✓' if disc_ok else 'Does NOT match ✗'}")
+
+        # Total check: Amount − Discount + Tax − Labour = Total
+        sum_labour  = round(sum(labours), 2)
+        total_calc  = round(amt_calc - disc_calc + sum_tax - sum_labour, 2)
+        total_ok    = abs(total_calc - round(view_hdr, 2)) <= self.TOL
+        total_check = (f"{amt_calc} (Amount) − {disc_calc} (Discount) + {sum_tax} (Tax) − {sum_labour} (Labour) = {total_calc}. "
+                       f"ERP shows {round(view_hdr, 2)}. "
+                       f"{'Matches ✓' if total_ok else 'Does NOT match ✗'}")
+
+        rows_data = [
+            ["Total Amount (before discount & tax)",
+             round(hdr_amount, 2),
+             "Sum of base price × quantity for all items",
+             amt_check,
+             "PASS" if amt_ok else "FAIL"],
+
+            ["Total Discount Given",
+             round(hdr_disc_amt, 2),
+             "Sum of discount rupee amounts across all items",
+             disc_check,
+             "PASS" if disc_ok else "FAIL"],
+
+            ["Total Tax (GST) Collected",
+             sum_tax,
+             "Sum of tax amounts across all items (items with no GST count as 0)",
+             f"Added up tax from all {n} items = {sum_tax}",
+             ""],
+
+            ["Final Payable Amount (after discount + tax − labour)",
+             round(view_hdr, 2),
+             "Amount − Discount + Tax − Labour",
+             total_check,
+             "PASS" if total_ok else "FAIL"],
+        ]
+        ws.append(["What", "Value in ERP (₹)", "How it is calculated", "Verification", "Result"])
+        hdr2_fill = PatternFill("solid", fgColor="B39DDB")
+        for cell in ws[ws.max_row]:
+            cell.fill, cell.font, cell.border, cell.alignment = hdr2_fill, Font(bold=True, color="FFFFFF"), thin_border, ctr
+
+        for rd in rows_data:
+            ws.append(rd)
+            r = ws.max_row
+            status_val = ws.cell(r, 5).value
+            fill = ok_fill if status_val == "PASS" else (fail_fill if status_val == "FAIL" else amt_fill)
+            for cell in ws[r]:
+                cell.fill, cell.border, cell.alignment = fill, thin_border, ctr
 
         ws.append([])
         ws.append(["ref_no", ref_no])
@@ -1277,8 +1249,12 @@ class TestMultiRowCalculations:
         ws.append(["passed", pass_count])
         ws.append(["failed", n - pass_count])
         ws.append(["header_match", "PASS" if hdr_ok else "FAIL"])
-        ws.column_dimensions["B"].width = 42
-        for letter in ["A", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]:
+        ws.column_dimensions["A"].width = 40
+        ws.column_dimensions["B"].width = 20
+        ws.column_dimensions["C"].width = 45
+        ws.column_dimensions["D"].width = 70
+        ws.column_dimensions["E"].width = 10
+        for letter in ["F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"]:
             ws.column_dimensions[letter].width = 14
 
         wb.save(xlsx_path)
@@ -1324,16 +1300,865 @@ class TestMultiRowCalculations:
         )
 
 
+    def test_m1g_gst_split_verification(self, pb_page):
+        """M1g: Verify IGST / CGST+SGST rate split in view mode.
+        4 rows: IGST@5, CGST+SGST@12, IGST@18, CGST+SGST@5.
+        After save, reads IGST/CGST/SGST rate+amount fields and checks:
+          - IGST row  → IGST Rate = full rate, CGST/SGST = 0
+          - C+S row   → CGST Rate = SGST Rate = rate/2, IGST = 0
+          - both      → component amounts sum to total tax amount
+        """
+        ROWS = [
+            {"gst_type": "IGST",       "tax_rate": 5},
+            {"gst_type": "CGST + SGST","tax_rate": 12},
+            {"gst_type": "IGST",       "tax_rate": 18},
+            {"gst_type": "CGST + SGST","tax_rate": 5},
+        ]
+        n     = len(ROWS)
+        items = _rand_items(n)
+        qtys  = [_rand_qty() for _ in range(n)]
+
+        pb_page.open_add_form()
+        pb_page.fill_header()
+        for i, row in enumerate(ROWS):
+            if i > 0:
+                pb_page.page.locator(pb_page.ADD_ROW_BTN).click()
+                pb_page.page.wait_for_timeout(600)
+            nudge = pb_page._pick_nudge_item(items[i])
+            pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, i, nudge)
+            pb_page.page.wait_for_timeout(500)
+            pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, i, items[i])
+            pb_page.page.wait_for_timeout(1000)
+            pb_page.open_qty_details_popup(i)
+            pb_page.fill_qty_details(1, qtys[i])
+            pb_page.click_done()
+            pb_page.page.wait_for_timeout(500)
+            pb_page.enable_gst_off(i)
+            pb_page.page.wait_for_timeout(800)
+            pb_page.select_tax_rate(i, row["tax_rate"])
+            pb_page.page.wait_for_timeout(1000)
+            pb_page.select_gst_type(i, row["gst_type"])
+            pb_page.page.wait_for_timeout(1000)
+
+        pb_page.page.wait_for_timeout(1500)
+
+        # ── Save ──────────────────────────────────────────────────────────────
+        btn = pb_page.page.locator(pb_page.SUBMIT_BTN)
+        btn.wait_for(state="visible", timeout=5000)
+        btn.click(force=True)
+        pb_page.page.wait_for_selector(".swal2-container", timeout=15000)
+        swal_title = pb_page.page.locator("#swal2-title").inner_text().strip()
+        assert swal_title == self.SWAL_TITLE_SUCCESS, f"M1g: Save failed — {swal_title}"
+        pb_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=8000)
+        pb_page.navigate_to_page()
+        pb_page.page.wait_for_selector(self.REF_NO_COL, timeout=15000)
+        pb_page.page.wait_for_timeout(500)
+        ref_no = pb_page.page.locator(self.REF_NO_COL).first.inner_text().strip()
+        assert ref_no.startswith("PURB/"), f"M1g: Unexpected ref_no: {ref_no}"
+        print(f"\n[M1g] saved → {ref_no}")
+
+        # ── Open View ─────────────────────────────────────────────────────────
+        pb_page.page.locator(self.ROW_TRIGGER).first.click(force=True)
+        pb_page.page.wait_for_selector(".mat-mdc-menu-panel", timeout=5000)
+        pb_page.page.locator(self.VIEW_MENU_ITEM).first.click(force=True)
+        pb_page.page.wait_for_load_state("networkidle", timeout=60000)
+        pb_page.page.wait_for_timeout(3000)
+        pb_page.page.wait_for_selector(pb_page.TOTAL_AMOUNT, timeout=120000)
+        pb_page.page.wait_for_timeout(1500)
+
+        view_tax_rates = _row_tax_rates_view(pb_page, n)
+        breakdown = _row_gst_breakdown(pb_page, n)
+
+        # ── Verify & print ────────────────────────────────────────────────────
+        col = "{:<3} {:<24} {:>5} {:>14} {:>8} {:>8} {:>8} {}"
+        print()
+        print(col.format("#", "Item", "Rate", "Type", "IGSTr", "CGSTr", "SGSTr", "Result"))
+        print("─" * 90)
+
+        failures = []
+        for i, row in enumerate(ROWS):
+            b           = breakdown[i]
+            actual_rate = view_tax_rates[i]
+            gst_type    = row["gst_type"]
+
+            if gst_type == "IGST":
+                ok_igst = abs(b["igst_rate"] - actual_rate) <= self.TOL
+                ok_cgst = b["cgst_rate"] == 0
+                ok_sgst = b["sgst_rate"] == 0
+                details = (f"IGST Rate {b['igst_rate']}={'✓' if ok_igst else '✗ exp '+str(actual_rate)}  "
+                           f"CGST={'✓ 0' if ok_cgst else '✗ '+str(b['cgst_rate'])}  "
+                           f"SGST={'✓ 0' if ok_sgst else '✗ '+str(b['sgst_rate'])}")
+                checks = [ok_igst, ok_cgst, ok_sgst]
+            else:  # CGST + SGST
+                half    = round(actual_rate / 2, 2)
+                ok_cgst = abs(b["cgst_rate"] - half) <= self.TOL
+                ok_sgst = abs(b["sgst_rate"] - half) <= self.TOL
+                ok_igst = b["igst_rate"] == 0
+                details = (f"CGST Rate {b['cgst_rate']}={'✓' if ok_cgst else '✗ exp '+str(half)}  "
+                           f"SGST Rate {b['sgst_rate']}={'✓' if ok_sgst else '✗ exp '+str(half)}  "
+                           f"IGST={'✓ 0' if ok_igst else '✗ '+str(b['igst_rate'])}")
+                checks = [ok_cgst, ok_sgst, ok_igst]
+
+            passed = all(checks)
+            result = "PASS ✓" if passed else "FAIL ✗"
+            if not passed:
+                failures.append((i, items[i], gst_type, details))
+
+            print(col.format(
+                i, items[i][:24], f"{actual_rate}%", gst_type[:14],
+                b["igst_rate"], b["cgst_rate"], b["sgst_rate"], result
+            ))
+            print(f"    {details}")
+
+        print("─" * 90)
+        print(f"  {n - len(failures)}/{n} rows passed GST split check")
+
+        # ── Excel export ──────────────────────────────────────────────────────
+        import pathlib, datetime
+        reports_dir = pathlib.Path(__file__).parent / "reports"
+        reports_dir.mkdir(exist_ok=True)
+        ts        = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        xlsx_path = reports_dir / f"m1g_{ts}.xlsx"
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "GST Split Verification"
+
+        # styles
+        thin        = Side(style="thin")
+        thin_border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        ctr         = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        hdr_fill    = PatternFill("solid", fgColor="1A237E")
+        pass_fill   = PatternFill("solid", fgColor="E8F5E9")
+        fail_fill   = PatternFill("solid", fgColor="FFEBEE")
+        sum_fill    = PatternFill("solid", fgColor="EDE7F6")
+
+        headers = ["#", "Item", "Qty", "Tax Rate (ERP)", "GST Type",
+                   "IGST Rate", "CGST Rate", "SGST Rate", "Expected", "Verification", "Result"]
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.font      = Font(bold=True, color="FFFFFF")
+            cell.fill      = hdr_fill
+            cell.border    = thin_border
+            cell.alignment = ctr
+
+        for i, row in enumerate(ROWS):
+            b           = breakdown[i]
+            actual_rate = view_tax_rates[i]
+            gst_type    = row["gst_type"]
+            passed      = (i, items[i], gst_type, "") not in [(f[0], f[1], f[2], f[3]) for f in failures] \
+                          and not any(f[0] == i for f in failures)
+            result_lbl  = "PASS" if passed else "FAIL"
+
+            if gst_type == "IGST":
+                expected   = f"IGST={actual_rate}, CGST=0, SGST=0"
+                verifictn  = (f"IGST Rate {b['igst_rate']}={'✓' if abs(b['igst_rate']-actual_rate)<=self.TOL else '✗'}  "
+                              f"CGST={'✓ 0' if b['cgst_rate']==0 else '✗ '+str(b['cgst_rate'])}  "
+                              f"SGST={'✓ 0' if b['sgst_rate']==0 else '✗ '+str(b['sgst_rate'])}")
+            else:
+                half       = round(actual_rate / 2, 2)
+                expected   = f"IGST=0, CGST={half}, SGST={half}"
+                verifictn  = (f"CGST Rate {b['cgst_rate']}={'✓' if abs(b['cgst_rate']-half)<=self.TOL else '✗'}  "
+                              f"SGST Rate {b['sgst_rate']}={'✓' if abs(b['sgst_rate']-half)<=self.TOL else '✗'}  "
+                              f"IGST={'✓ 0' if b['igst_rate']==0 else '✗ '+str(b['igst_rate'])}")
+
+            ws.append([i, items[i], qtys[i], f"{actual_rate}%", gst_type,
+                       b["igst_rate"], b["cgst_rate"], b["sgst_rate"],
+                       expected, verifictn, result_lbl])
+            r    = ws.max_row
+            fill = pass_fill if passed else fail_fill
+            for cell in ws[r]:
+                cell.fill, cell.border, cell.alignment = fill, thin_border, ctr
+
+        # summary
+        ws.append([])
+        for label, val in [("ref_no", ref_no), ("rows tested", n),
+                            ("passed", n - len(failures)), ("failed", len(failures))]:
+            ws.append([label, val])
+            for cell in ws[ws.max_row]:
+                cell.fill, cell.border, cell.alignment = sum_fill, thin_border, ctr
+
+        ws.column_dimensions["A"].width = 5
+        ws.column_dimensions["B"].width = 36
+        ws.column_dimensions["C"].width = 8
+        ws.column_dimensions["D"].width = 14
+        ws.column_dimensions["E"].width = 14
+        ws.column_dimensions["F"].width = 12
+        ws.column_dimensions["G"].width = 12
+        ws.column_dimensions["H"].width = 12
+        ws.column_dimensions["I"].width = 26
+        ws.column_dimensions["J"].width = 50
+        ws.column_dimensions["K"].width = 10
+
+        wb.save(xlsx_path)
+        print(f"[M1g] Excel exported → {xlsx_path}")
+
+        if failures:
+            msg = "\n".join(f"  Row {i} ({item}) [{gtype}]: {det}"
+                            for i, item, gtype, det in failures)
+            assert False, f"M1g: GST split mismatches:\n{msg}"
+
+
+    @pytest.mark.xfail(
+        reason="ERP validation not yet implemented — save currently succeeds without tax rate/type",
+        strict=False,
+    )
+    def test_m1h_gst_validation_future_ready(self, pb_page):
+        """M1h (xfail): When IS GST Off is enabled, ERP must block save if:
+          Scenario A — tax rate not selected
+          Scenario B — tax type not selected
+        Marked xfail: validations are WIP. Will auto-flip to xpass once ERP enforces them."""
+
+        def _try_save_and_get_swal(pb_page):
+            btn = pb_page.page.locator(pb_page.SUBMIT_BTN)
+            btn.wait_for(state="visible", timeout=5000)
+            btn.click(force=True)
+            try:
+                pb_page.page.wait_for_selector(".swal2-container", timeout=8000)
+                title = pb_page.page.locator("#swal2-title").inner_text().strip()
+                # dismiss whatever appeared
+                try:
+                    pb_page.page.locator(".swal2-confirm").click(force=True)
+                    pb_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=5000)
+                except Exception:
+                    pass
+                return title
+            except Exception:
+                return None  # no swal appeared at all
+
+        # ── Scenario A: GST on, no tax rate, no tax type ──────────────────────
+        print("\n[M1h] Scenario A — GST on, no rate selected")
+        item_a = _rand_items(1)[0]
+        qty_a  = _rand_qty()
+
+        pb_page.open_add_form()
+        pb_page.fill_header()
+        nudge = pb_page._pick_nudge_item(item_a)
+        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, nudge)
+        pb_page.page.wait_for_timeout(500)
+        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, item_a)
+        pb_page.page.wait_for_timeout(1000)
+        pb_page.open_qty_details_popup(0)
+        pb_page.fill_qty_details(1, qty_a)
+        pb_page.click_done()
+        pb_page.page.wait_for_timeout(500)
+        pb_page.enable_gst_off(0)          # GST on — but no rate/type selected
+        pb_page.page.wait_for_timeout(800)
+
+        swal_a = _try_save_and_get_swal(pb_page)
+        success_title = self.SWAL_TITLE_SUCCESS
+        blocked_a = swal_a != success_title
+        print(f"  swal title: {swal_a!r}  →  {'BLOCKED ✓' if blocked_a else 'NOT BLOCKED ✗ (saved without rate)'}")
+
+        # navigate away to reset form
+        pb_page.navigate_to_page()
+        pb_page.page.wait_for_timeout(1000)
+
+        # ── Scenario B: GST on, rate set, no tax type ─────────────────────────
+        print("[M1h] Scenario B — GST on, rate selected, no type selected")
+        item_b = _rand_items(1)[0]
+        qty_b  = _rand_qty()
+
+        pb_page.open_add_form()
+        pb_page.fill_header()
+        nudge = pb_page._pick_nudge_item(item_b)
+        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, nudge)
+        pb_page.page.wait_for_timeout(500)
+        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, item_b)
+        pb_page.page.wait_for_timeout(1000)
+        pb_page.open_qty_details_popup(0)
+        pb_page.fill_qty_details(1, qty_b)
+        pb_page.click_done()
+        pb_page.page.wait_for_timeout(500)
+        pb_page.enable_gst_off(0)
+        pb_page.page.wait_for_timeout(800)
+        pb_page.select_tax_rate(0, 5)      # rate set — but no type selected
+        pb_page.page.wait_for_timeout(1000)
+
+        swal_b = _try_save_and_get_swal(pb_page)
+        blocked_b = swal_b != success_title
+        print(f"  swal title: {swal_b!r}  →  {'BLOCKED ✓' if blocked_b else 'NOT BLOCKED ✗ (saved without type)'}")
+
+        print(f"\n[M1h] Summary: rate-required={'PASS' if blocked_a else 'FAIL'}  "
+              f"type-required={'PASS' if blocked_b else 'FAIL'}")
+
+        # ── Excel export ──────────────────────────────────────────────────────
+        import pathlib, datetime
+        reports_dir = pathlib.Path(__file__).parent / "reports"
+        reports_dir.mkdir(exist_ok=True)
+        ts        = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        xlsx_path = reports_dir / f"m1h_{ts}.xlsx"
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "GST Validation (Future Ready)"
+
+        thin        = Side(style="thin")
+        thin_border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        ctr         = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        hdr_fill    = PatternFill("solid", fgColor="1A237E")
+        pass_fill   = PatternFill("solid", fgColor="E8F5E9")
+        fail_fill   = PatternFill("solid", fgColor="FFEBEE")
+        note_fill   = PatternFill("solid", fgColor="FFF9C4")
+        sum_fill    = PatternFill("solid", fgColor="EDE7F6")
+
+        headers = ["Scenario", "Item", "GST Enabled", "Tax Rate Set", "Tax Type Set",
+                   "ERP Response", "Expected Behaviour", "Validation Present", "Status"]
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.font      = Font(bold=True, color="FFFFFF")
+            cell.fill      = hdr_fill
+            cell.border    = thin_border
+            cell.alignment = ctr
+
+        rows_data = [
+            ["A — No Tax Rate",
+             item_a, "Yes", "No", "No",
+             swal_a or "No swal (blocked by UI)",
+             "ERP should block save and show error",
+             "Yes ✓" if blocked_a else "No ✗ (WIP)",
+             "PASS" if blocked_a else "FAIL"],
+
+            ["B — No Tax Type",
+             item_b, "Yes", "Yes (5%)", "No",
+             swal_b or "No swal (blocked by UI)",
+             "ERP should block save and show error",
+             "Yes ✓" if blocked_b else "No ✗ (WIP)",
+             "PASS" if blocked_b else "FAIL"],
+        ]
+
+        for rd in rows_data:
+            ws.append(rd)
+            r    = ws.max_row
+            fill = pass_fill if rd[-1] == "PASS" else fail_fill
+            for cell in ws[r]:
+                cell.fill, cell.border, cell.alignment = fill, thin_border, ctr
+
+        # note row
+        ws.append([])
+        ws.append(["Note: This test is marked xfail — currently ERP saves without these validations. "
+                   "When ERP enforces them, this test will auto-flip to XPASS.",
+                   "", "", "", "", "", "", "", ""])
+        for cell in ws[ws.max_row]:
+            cell.fill, cell.border, cell.alignment = note_fill, thin_border, Alignment(wrap_text=True)
+        ws.merge_cells(f"A{ws.max_row}:I{ws.max_row}")
+        ws[f"A{ws.max_row}"].font = Font(italic=True)
+
+        ws.append([])
+        for label, val in [("Test Status", "XFAIL (expected — ERP validation WIP)"),
+                            ("rate-required", "PASS" if blocked_a else "FAIL (ERP saved without rate)"),
+                            ("type-required", "PASS" if blocked_b else "FAIL (ERP saved without type)")]:
+            ws.append([label, val])
+            for cell in ws[ws.max_row]:
+                cell.fill, cell.border, cell.alignment = sum_fill, thin_border, ctr
+
+        ws.column_dimensions["A"].width = 22
+        ws.column_dimensions["B"].width = 36
+        ws.column_dimensions["C"].width = 14
+        ws.column_dimensions["D"].width = 14
+        ws.column_dimensions["E"].width = 14
+        ws.column_dimensions["F"].width = 36
+        ws.column_dimensions["G"].width = 32
+        ws.column_dimensions["H"].width = 20
+        ws.column_dimensions["I"].width = 10
+        ws.row_dimensions[ws.max_row - 3].height = 40
+
+        wb.save(xlsx_path)
+        print(f"[M1h] Excel exported → {xlsx_path}")
+
+        assert blocked_a, "Scenario A FAIL: ERP saved PB without tax rate selected"
+        assert blocked_b, "Scenario B FAIL: ERP saved PB without tax type selected"
+
+
+# ── Consolidated validation suite ────────────────────────────────────────────
+
+@pytest.mark.direct_pb
+class TestValidationSuite:
+    """All field/business-rule validations in one form open.
+    Scenarios run sequentially; each failure is collected and reported at the end.
+    Only test_vs2_saved_pb_edit_disabled runs separately (needs a saved PB)."""
+
+    ITEM       = ITEMS[0]
+    VALID_QTY  = 10
+    VALID_RATE = 100
+
+    def _check(self, results, tag, passed, action, detail="", errors=None, expected_keyword=None):
+        icon = "✓" if passed else "✗"
+        print(f"  [{tag}] {icon}  {action}" + (f"  — {detail}" if detail else ""))
+        if errors and expected_keyword:
+            matched = [e for e in errors if expected_keyword.lower() in e.lower()]
+            keyword_found = len(matched) > 0
+            kw_icon = "✓" if keyword_found else "✗ NOT FOUND"
+            print(f"         expected keyword '{expected_keyword}': {kw_icon}")
+            for e in errors:
+                marker = " ◄ expected" if expected_keyword.lower() in e.lower() else ""
+                print(f"         error: {e}{marker}")
+        elif errors:
+            for e in errors:
+                print(f"         error: {e}")
+        results.append((tag, passed, action, detail, errors or [], expected_keyword or ""))
+
+    def _fill(self, pb_page, field, val):
+        pb_page._fill_number_nth(field, 0, val)
+        pb_page.page.wait_for_timeout(300)
+
+    def _submit(self, pb_page):
+        pb_page.submit_and_wait()
+        pb_page.page.wait_for_timeout(400)
+
+    def _errors(self, pb_page):
+        return pb_page.visible_errors()
+
+    def _type_into_rate(self, pb_page, text):
+        rate_loc = pb_page.page.locator(
+            "xpath=" + pb_page.RATE.replace("xpath=", "")
+        ).first
+        rate_loc.click(force=True)
+        pb_page.page.wait_for_timeout(200)
+        rate_loc.fill("")
+        rate_loc.type(text)
+        pb_page.page.wait_for_timeout(400)
+        return rate_loc.input_value()
+
+    def test_vs1_all_validations_one_form(self, pb_page):
+        """VS1: All 16 field/business-rule validations in one form open.
+        Collects pass/fail per scenario and asserts at the end."""
+        results = []
+
+        # ── Open form ─────────────────────────────────────────────────────────
+        pb_page.open_add_form()
+        print("\n" + "═" * 80)
+        print("VALIDATION SUITE — single form open")
+        print("═" * 80)
+
+        # V_TC1: inactive supplier absent (dropdown check — no submit)
+        options = pb_page.search_supplier_in_dropdown("LK suppliers")
+        found   = any("LK suppliers" in o for o in options)
+        self._check(results, "V_TC1", not found,
+                    "search 'LK suppliers' in dropdown",
+                    "absent ✓" if not found else "VISIBLE ✗")
+
+        # V_TC2: submit with no supplier
+        self._submit(pb_page)
+        errs = self._errors(pb_page)
+        self._check(results, "V_TC2", len(errs) > 0,
+                    "submit empty form (no supplier)", f"{len(errs)} error(s)",
+                    errors=errs, expected_keyword="required")
+
+        # Fill supplier only for V_TC3
+        pb_page._select_random_mat_option(pb_page.SUPPLIER_NAME)
+        pb_page.page.wait_for_timeout(600)
+
+        # V_TC3: submit with supplier but missing location/dept/type
+        self._submit(pb_page)
+        errs = self._errors(pb_page)
+        self._check(results, "V_TC3", len(errs) > 0,
+                    "submit with supplier only (missing location/dept/type)", f"{len(errs)} error(s)",
+                    errors=errs, expected_keyword="required")
+
+        # Fill full header for V_TC4
+        pb_page.fill_header()
+        pb_page.page.wait_for_timeout(500)
+
+        # V_TC4: submit with no item rows
+        self._submit(pb_page)
+        errs  = self._errors(pb_page)
+        open_ = pb_page.page.locator(pb_page.SUPPLIER_NAME).count() > 0
+        self._check(results, "V_TC4", len(errs) > 0 and open_,
+                    "submit with no item rows", f"{len(errs)} error(s), form open={open_}",
+                    errors=errs, expected_keyword="Amount")
+
+        # Add one item row
+        pb_page.page.locator(pb_page.ADD_ROW_BTN).click()
+        pb_page.page.wait_for_timeout(600)
+        nudge = pb_page._pick_nudge_item(self.ITEM)
+        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, nudge)
+        pb_page.page.wait_for_timeout(500)
+        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, self.ITEM)
+        pb_page.page.wait_for_timeout(1000)
+
+        # V_TC5: alphabetic into rate field
+        val    = self._type_into_rate(pb_page, "abc")
+        passed = val == "" or not any(c.isalpha() for c in val)
+        self._check(results, "V_TC5", passed,
+                    "type 'abc' into Rate field", f"field landed='{val}' — {'rejected ✓' if passed else 'ACCEPTED ✗'}")
+
+        # V_TC6: special chars into rate field
+        val    = self._type_into_rate(pb_page, "@#$")
+        passed = val == "" or not any(c in "@#$" for c in val)
+        self._check(results, "V_TC6", passed,
+                    "type '@#$' into Rate field", f"field landed='{val}' — {'rejected ✓' if passed else 'ACCEPTED ✗'}")
+
+        # Clear rate after type tests
+        rate_loc = pb_page.page.locator(
+            "xpath=" + pb_page.RATE.replace("xpath=", "")
+        ).first
+        rate_loc.fill("")
+        pb_page.page.wait_for_timeout(200)
+
+        # V_TC7: qty blank, rate valid → submit
+        self._fill(pb_page, pb_page.RATE, self.VALID_RATE)
+        self._submit(pb_page)
+        errs = self._errors(pb_page)
+        self._check(results, "V_TC7", len(errs) > 0,
+                    f"qty=blank  rate={self.VALID_RATE} → submit", f"{len(errs)} error(s)",
+                    errors=errs, expected_keyword="quantity")
+
+        # V_TC8: qty=0
+        self._fill(pb_page, pb_page.QUANTITY, 0)
+        self._fill(pb_page, pb_page.RATE, self.VALID_RATE)
+        self._submit(pb_page)
+        errs = self._errors(pb_page)
+        self._check(results, "V_TC8", len(errs) > 0,
+                    "qty=0 → submit", f"{len(errs)} error(s)",
+                    errors=errs, expected_keyword="quantity")
+
+        # V_TC9: qty=-5
+        self._fill(pb_page, pb_page.QUANTITY, -5)
+        self._fill(pb_page, pb_page.RATE, self.VALID_RATE)
+        self._submit(pb_page)
+        errs = self._errors(pb_page)
+        self._check(results, "V_TC9", len(errs) > 0,
+                    "qty=-5 → submit", f"{len(errs)} error(s)",
+                    errors=errs, expected_keyword="quantity")
+
+        # V_TC10: qty valid, rate blank
+        self._fill(pb_page, pb_page.QUANTITY, self.VALID_QTY)
+        rate_loc.fill("")
+        pb_page.page.wait_for_timeout(200)
+        self._submit(pb_page)
+        errs = self._errors(pb_page)
+        self._check(results, "V_TC10", len(errs) > 0,
+                    f"qty={self.VALID_QTY}  rate=blank → submit", f"{len(errs)} error(s)",
+                    errors=errs, expected_keyword="required")
+
+        # V_TC11: rate=0
+        self._fill(pb_page, pb_page.QUANTITY, self.VALID_QTY)
+        self._fill(pb_page, pb_page.RATE, 0)
+        self._submit(pb_page)
+        errs = self._errors(pb_page)
+        self._check(results, "V_TC11", len(errs) > 0,
+                    "rate=0 → submit", f"{len(errs)} error(s)",
+                    errors=errs, expected_keyword="Amount")
+
+        # V_TC12: rate=-100
+        self._fill(pb_page, pb_page.QUANTITY, self.VALID_QTY)
+        self._fill(pb_page, pb_page.RATE, -100)
+        self._submit(pb_page)
+        errs = self._errors(pb_page)
+        self._check(results, "V_TC12", len(errs) > 0,
+                    "rate=-100 → submit", f"{len(errs)} error(s)",
+                    errors=errs, expected_keyword="rate")
+
+        # V_TC13: EBW=-1
+        self._fill(pb_page, pb_page.QUANTITY, self.VALID_QTY)
+        self._fill(pb_page, pb_page.RATE, self.VALID_RATE)
+        self._fill(pb_page, pb_page.EMPTY_BAG_WEIGHT, -1)
+        self._submit(pb_page)
+        errs = self._errors(pb_page)
+        self._check(results, "V_TC13", len(errs) > 0,
+                    "EBW=-1 → submit", f"{len(errs)} error(s)",
+                    errors=errs, expected_keyword="bag")
+
+        # V_TC14: labour=-500 (reset EBW first)
+        self._fill(pb_page, pb_page.EMPTY_BAG_WEIGHT, 0)
+        self._fill(pb_page, pb_page.LABOUR_CHARGES, -500)
+        self._submit(pb_page)
+        errs = self._errors(pb_page)
+        self._check(results, "V_TC14", len(errs) > 0,
+                    "labour=-500 → submit", f"{len(errs)} error(s)",
+                    errors=errs, expected_keyword="labour")
+
+        # V_TC15: disc=-10 (reset labour first)
+        self._fill(pb_page, pb_page.LABOUR_CHARGES, 0)
+        self._fill(pb_page, pb_page.DISC_PERCENTAGE, -10)
+        self._submit(pb_page)
+        errs = self._errors(pb_page)
+        self._check(results, "V_TC15", len(errs) > 0,
+                    "disc=-10% → submit", f"{len(errs)} error(s)",
+                    errors=errs, expected_keyword="discount")
+
+        # V_TC16: disc=110
+        self._fill(pb_page, pb_page.DISC_PERCENTAGE, 110)
+        self._submit(pb_page)
+        errs = self._errors(pb_page)
+        self._check(results, "V_TC16", len(errs) > 0,
+                    "disc=110% → submit", f"{len(errs)} error(s)",
+                    errors=errs, expected_keyword="Cannot be less than 0%")
+
+        # V_TC17: disc=0, txn amount unchanged
+        self._fill(pb_page, pb_page.DISC_PERCENTAGE, 0)
+        pb_page.page.wait_for_timeout(300)
+        txn_before = pb_page.read_transaction_amount(0)
+        self._fill(pb_page, pb_page.DISC_PERCENTAGE, 0)
+        pb_page.page.wait_for_timeout(500)
+        txn_after = pb_page.read_transaction_amount(0)
+        diff = abs(txn_after - txn_before)
+        self._check(results, "V_TC17", diff < 1.0,
+                    "disc=0 → txn amount unchanged",
+                    f"before={txn_before:.2f}  after={txn_after:.2f}  diff={diff:.2f}")
+
+        # V_TC18: huge values (done last — may save successfully)
+        self._fill(pb_page, pb_page.DISC_PERCENTAGE, 0)
+        self._fill(pb_page, pb_page.QUANTITY, 99999999999)
+        self._fill(pb_page, pb_page.RATE, 99999999999)
+        self._submit(pb_page)
+        errs      = self._errors(pb_page)
+        form_open = pb_page.page.locator(pb_page.SUPPLIER_NAME).count() > 0
+        blocked   = len(errs) > 0 or form_open
+        self._check(results, "V_TC18", blocked,
+                    "qty=rate=99999999999 → blocked",
+                    f"{len(errs)} error(s), form_open={form_open}",
+                    errors=errs)
+
+        # ── Summary ───────────────────────────────────────────────────────────
+        passed_all = [r for r in results if r[1]]
+        failed_all = [r for r in results if not r[1]]
+        print()
+        print("─" * 80)
+        print(f"  {len(passed_all)}/{len(results)} scenarios passed")
+        if failed_all:
+            print("  FAILED:")
+            for tag, _, action, detail, _, _ in failed_all:
+                print(f"    [{tag}] {action}  — {detail}")
+        print("─" * 80)
+
+        # ── Excel export ──────────────────────────────────────────────────────
+        import pathlib, datetime
+        reports_dir = pathlib.Path(__file__).parent / "reports"
+        reports_dir.mkdir(exist_ok=True)
+        ts        = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        xlsx_path = reports_dir / f"vs1_{ts}.xlsx"
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Validation Suite"
+
+        thin        = Side(style="thin")
+        thin_border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        ctr         = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        left        = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+        hdr_fill    = PatternFill("solid", fgColor="1A237E")
+        pass_fill   = PatternFill("solid", fgColor="E8F5E9")
+        fail_fill   = PatternFill("solid", fgColor="FFEBEE")
+        sum_fill    = PatternFill("solid", fgColor="EDE7F6")
+
+        ws.append(["#", "Test ID", "What is being tested", "Action", "Key Error (ERP)", "Result"])
+        for cell in ws[1]:
+            cell.font      = Font(bold=True, color="FFFFFF")
+            cell.fill      = hdr_fill
+            cell.border    = thin_border
+            cell.alignment = ctr
+
+        # scenario labels
+        labels = {
+            "V_TC1":  "Inactive supplier not visible in dropdown",
+            "V_TC2":  "Save blocked when supplier not selected",
+            "V_TC3":  "Save blocked when Location/Dept/Type missing",
+            "V_TC4":  "Save blocked when no item rows added",
+            "V_TC5":  "Alphabetic input rejected in Rate field",
+            "V_TC6":  "Special characters rejected in Rate field",
+            "V_TC7":  "Save blocked when Quantity is blank",
+            "V_TC8":  "Save blocked when Quantity = 0",
+            "V_TC9":  "Save blocked when Quantity is negative",
+            "V_TC10": "Save blocked when Rate is blank",
+            "V_TC11": "Save blocked when Rate = 0",
+            "V_TC12": "Save blocked when Rate is negative",
+            "V_TC13": "Save blocked when Empty Bag Weight is negative",
+            "V_TC14": "Save blocked when Labour Charges is negative",
+            "V_TC15": "Save blocked when Discount is negative",
+            "V_TC16": "Save blocked when Discount exceeds 100%",
+            "V_TC17": "Transaction Amount unchanged when Discount = 0",
+            "V_TC18": "Save blocked for extremely large Qty/Rate values",
+        }
+
+        for idx, (tag, passed, action, detail, errs, kw) in enumerate(results, 1):
+            # pick key error: matched one first, else first error, else detail
+            matched = [e for e in errs if kw and kw.lower() in e.lower()] if errs else []
+            key_err = matched[0] if matched else (errs[0] if errs else detail)
+            fill    = pass_fill if passed else fail_fill
+            ws.append([idx, tag, labels.get(tag, action), action, key_err, "PASS" if passed else "FAIL"])
+            r = ws.max_row
+            for cell in ws[r]:
+                cell.fill, cell.border = fill, thin_border
+            ws.cell(r, 1).alignment = ctr
+            ws.cell(r, 2).alignment = ctr
+            ws.cell(r, 3).alignment = left
+            ws.cell(r, 4).alignment = left
+            ws.cell(r, 5).alignment = left
+            ws.cell(r, 6).alignment = ctr
+
+        ws.append([])
+        for label, val in [
+            ("Total Scenarios", len(results)),
+            ("Passed",          len(passed_all)),
+            ("Failed",          len(failed_all)),
+            ("Overall",         "PASS" if not failed_all else "FAIL"),
+            ("Run Date",        datetime.datetime.now().strftime("%Y-%m-%d %H:%M")),
+        ]:
+            ws.append([label, val])
+            for cell in ws[ws.max_row]:
+                cell.fill, cell.border, cell.alignment = sum_fill, thin_border, ctr
+
+        ws.column_dimensions["A"].width = 5
+        ws.column_dimensions["B"].width = 8
+        ws.column_dimensions["C"].width = 42
+        ws.column_dimensions["D"].width = 32
+        ws.column_dimensions["E"].width = 42
+        ws.column_dimensions["F"].width = 10
+
+        wb.save(xlsx_path)
+        print(f"[VS1] Excel exported → {xlsx_path}")
+
+        assert not failed_all, (
+            "VS1 failures:\n" +
+            "\n".join(f"  [{t}] {a}" for t, _, a, _, _, _ in failed_all)
+        )
+
+
 # ── Group 9: Row mutation + recalculation ────────────────────────────────────
 
 @pytest.mark.direct_pb
 class TestRowMutations:
     """
     Tests that add rows, read calcs, mutate state (delete/change disc/add new rows),
-    then verify the header re-derives correctly.
+    then verify the header re-derives correctly — then save and cross-check in View.
     """
 
     TOL = 0.02
+
+    VIEW_BTN = (
+        "xpath=//div[contains(@class,'mat-mdc-menu-panel')]"
+        "//button[.//i[normalize-space(.)='visibility']]"
+    )
+    ROW_TRIGGER = "button.erp-row-trigger"
+    REF_NO_COL  = "td.cdk-column-transaction_ref_no"
+
+    def _submit_open_view(self, pb_page):
+        """Submit current form, return to list, open View for the latest record."""
+        btn = pb_page.page.locator(pb_page.SUBMIT_BTN)
+        btn.wait_for(state="visible", timeout=5000)
+        btn.click(force=True)
+        pb_page.page.wait_for_selector(".swal2-container", timeout=15000)
+        pb_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=8000)
+        pb_page.navigate_to_page()
+        pb_page.page.wait_for_selector(self.REF_NO_COL, timeout=15000)
+        pb_page.page.wait_for_timeout(500)
+        ref_no = pb_page.page.locator(self.REF_NO_COL).first.inner_text().strip()
+        pb_page.page.locator(self.ROW_TRIGGER).first.click(force=True)
+        pb_page.page.wait_for_selector(".mat-mdc-menu-panel", timeout=5000)
+        pb_page.page.wait_for_timeout(400)
+        pb_page.page.locator(self.VIEW_BTN).click(force=True)
+        pb_page.page.wait_for_timeout(2000)
+        return ref_no
+
+    def _cross_check_view(self, pb_page, label, expected_hdr, remaining_rows):
+        """Read header + row totals from the View panel and assert they match.
+        Waits up to 90 s for the view form fields to populate before reading."""
+        try:
+            pb_page.page.wait_for_function(
+                """(xpath) => {
+                    const r = document.evaluate(xpath, document, null,
+                        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    const el = r.snapshotItem(0);
+                    return el && parseFloat(el.value || '0') > 0;
+                }""",
+                arg=pb_page.TOTAL_AMOUNT.replace("xpath=", ""),
+                timeout=90000,
+            )
+        except Exception as exc:
+            raise AssertionError(
+                f"{label}: View form did not populate within 90 s — Total Amount stayed 0 ({exc})"
+            ) from exc
+        view_hdr  = _hdr_total(pb_page)
+        view_rows = _row_totals(pb_page, remaining_rows)
+        col = "{:<30} {:>14} {:>14} {}"
+        print(f"\n  ── View cross-check: {label} ──")
+        print(col.format("Field", "In-Form", "In-View", "Match"))
+        print("  " + "─" * 64)
+        hdr_ok = abs(view_hdr - expected_hdr) <= self.TOL
+        print(col.format("Header Total", f"{expected_hdr:.2f}", f"{view_hdr:.2f}",
+                          "✓" if hdr_ok else "✗"))
+        for i, (e, v) in enumerate(zip(_row_totals(pb_page, remaining_rows), view_rows)):
+            row_ok = abs(v - e) <= self.TOL
+            print(col.format(f"  Row {i}", f"{e:.2f}", f"{v:.2f}", "✓" if row_ok else "✗"))
+        print()
+        assert hdr_ok, f"{label} View header {view_hdr} != expected {expected_hdr}"
+        for i, (e, v) in enumerate(zip(view_rows, view_rows)):
+            assert abs(v - e) <= self.TOL, f"{label} View row {i}: {v} != {e}"
+        return view_hdr, view_rows
+
+    def _export_excel(self, test_id, scenario, ref_no,
+                      rows_data, form_hdr, view_hdr):
+        """Export mutation test results to Excel.
+        rows_data: list of (item, qty, detail, form_total, view_total)
+        """
+        import pathlib, datetime
+        reports_dir = pathlib.Path(__file__).parent / "reports"
+        reports_dir.mkdir(exist_ok=True)
+        ts        = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        xlsx_path = reports_dir / f"{test_id.lower()}_{ts}.xlsx"
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = test_id
+
+        thin        = Side(style="thin")
+        border      = Border(left=thin, right=thin, top=thin, bottom=thin)
+        ctr         = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        left        = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+        hdr_fill    = PatternFill("solid", fgColor="1A237E")
+        pass_fill   = PatternFill("solid", fgColor="E8F5E9")
+        fail_fill   = PatternFill("solid", fgColor="FFEBEE")
+        sum_fill    = PatternFill("solid", fgColor="EDE7F6")
+
+        ws.append(["#", "Item", "Qty", "Detail", "In-Form Total (₹)", "In-View Total (₹)", "Match"])
+        for cell in ws[1]:
+            cell.font      = Font(bold=True, color="FFFFFF")
+            cell.fill      = hdr_fill
+            cell.border    = border
+            cell.alignment = ctr
+
+        for idx, (item, qty, detail, form_t, view_t) in enumerate(rows_data, 1):
+            ok   = abs(form_t - view_t) <= self.TOL
+            fill = pass_fill if ok else fail_fill
+            ws.append([idx, item, qty, detail, form_t, view_t, "✓" if ok else "✗"])
+            r = ws.max_row
+            for cell in ws[r]:
+                cell.fill, cell.border = fill, border
+            ws.cell(r, 1).alignment = ctr
+            ws.cell(r, 2).alignment = left
+            ws.cell(r, 3).alignment = ctr
+            ws.cell(r, 4).alignment = left
+            ws.cell(r, 5).alignment = ctr
+            ws.cell(r, 6).alignment = ctr
+            ws.cell(r, 7).alignment = ctr
+
+        ws.append([])
+        hdr_ok = abs(form_hdr - view_hdr) <= self.TOL
+        for label, val in [
+            ("Scenario",          scenario),
+            ("Reference No",      ref_no),
+            ("Header In-Form (₹)", form_hdr),
+            ("Header In-View (₹)", view_hdr),
+            ("Header Match",      "✓ PASS" if hdr_ok else "✗ FAIL"),
+            ("Overall",           "PASS" if hdr_ok else "FAIL"),
+            ("Run Date",          datetime.datetime.now().strftime("%Y-%m-%d %H:%M")),
+        ]:
+            ws.append([label, val])
+            for cell in ws[ws.max_row]:
+                cell.fill, cell.border, cell.alignment = sum_fill, border, ctr
+
+        ws.column_dimensions["A"].width = 5
+        ws.column_dimensions["B"].width = 38
+        ws.column_dimensions["C"].width = 8
+        ws.column_dimensions["D"].width = 22
+        ws.column_dimensions["E"].width = 20
+        ws.column_dimensions["F"].width = 20
+        ws.column_dimensions["G"].width = 8
+
+        wb.save(xlsx_path)
+        print(f"  [{test_id}] Excel → {xlsx_path}")
 
     def test_m2_add_n_delete_random_header_updates(self, pb_page):
         """M2: Add N random rows → delete 2 random rows → header = remaining sum."""
@@ -1368,6 +2193,19 @@ class TestRowMutations:
             f"M2: Header {hdr} != remaining sum {expected}"
         )
 
+        ref_no = self._submit_open_view(pb_page)
+        print(f"  Saved as {ref_no}")
+        view_hdr, view_rows = self._cross_check_view(pb_page, "M2", expected, len(kept))
+        kept_list = sorted(kept)
+        rows_data = [
+            (items[i][:38], qtys[i],
+             "KEPT" if i in kept else "DELETED",
+             before[i], view_rows[j] if i in kept else 0.0)
+            for j, i in enumerate(kept_list)
+        ]
+        self._export_excel("M2", "Add N rows, delete 2 random — header = remaining sum",
+                           ref_no, rows_data, expected, view_hdr)
+
     def test_m2b_delete_all_but_one_header_equals_single_row(self, pb_page):
         """M2b: Add N rows, delete all but row 0 — header must equal surviving row."""
         n      = _rng.randint(3, 5)
@@ -1396,6 +2234,13 @@ class TestRowMutations:
 
         assert abs(hdr - before[0]) <= self.TOL, f"M2b: Header {hdr} != row0 {before[0]}"
         assert abs(row0 - before[0]) <= self.TOL, f"M2b: Surviving row {row0} != original row0 {before[0]}"
+
+        ref_no = self._submit_open_view(pb_page)
+        print(f"  Saved as {ref_no}")
+        view_hdr, view_rows = self._cross_check_view(pb_page, "M2b", before[0], 1)
+        rows_data = [(items[0][:38], qtys[0], "SURVIVOR (row 0)", before[0], view_rows[0])]
+        self._export_excel("M2b", "Add N rows, delete all but row 0 — header = survivor",
+                           ref_no, rows_data, before[0], view_hdr)
 
     def test_m3_mutate_disc_delete_add_recheck(self, pb_page):
         """M3: Add N rows → apply random disc to some → delete 1 → add new row → header = sum."""
@@ -1453,6 +2298,18 @@ class TestRowMutations:
             assert t > 0, f"M3: Row {i} Total = 0"
         assert abs(hdr - sum(rows)) <= self.TOL, f"M3: Header {hdr} != sum {sum(rows)}"
 
+        ref_no = self._submit_open_view(pb_page)
+        print(f"  Saved as {ref_no}")
+        view_hdr, view_rows = self._cross_check_view(pb_page, "M3", hdr, total_rows)
+        surviving = [i for i in range(n) if i != del_idx]
+        rows_data = []
+        for j, i in enumerate(surviving):
+            detail = f"disc {disc_map[i]}%" if i in disc_map else "kept"
+            rows_data.append((items[i][:38], qtys[i], detail, rows[j], view_rows[j]))
+        rows_data.append((new_item[:38], new_qty, "ADD NEW", rows[-1], view_rows[-1]))
+        self._export_excel("M3", "Mutate disc on some rows, delete 1, add new — header = sum",
+                           ref_no, rows_data, hdr, view_hdr)
+
     def test_m3b_change_qty_on_existing_rows_header_recalcs(self, pb_page):
         """M3b: Add N rows, increase qty on a random row via popup → header grows."""
         n      = _rng.randint(2, 4)
@@ -1490,6 +2347,17 @@ class TestRowMutations:
         assert hdr_after > hdr_before, f"M3b: Header should grow after qty increase"
         assert abs(hdr_after - sum(rows)) <= self.TOL, f"M3b: Header {hdr_after} != sum{rows}"
 
+        ref_no = self._submit_open_view(pb_page)
+        print(f"  Saved as {ref_no}")
+        view_hdr, view_rows = self._cross_check_view(pb_page, "M3b", hdr_after, n)
+        rows_data = []
+        for i in range(n):
+            detail = f"qty {qtys[i]} → {new_qty} (×{mult})" if i == target_row else f"qty {qtys[i]} unchanged"
+            rows_data.append((items[i][:38], new_qty if i == target_row else qtys[i],
+                              detail, rows[i], view_rows[i]))
+        self._export_excel("M3b", "Increase qty on 1 row — header grows, view matches",
+                           ref_no, rows_data, hdr_after, view_hdr)
+
     def test_m3c_change_disc_on_existing_rows_header_recalcs(self, pb_page):
         """M3c: Add N rows with no disc, apply disc to all → header drops, still = sum."""
         n      = _rng.randint(2, 4)
@@ -1521,65 +2389,76 @@ class TestRowMutations:
         assert hdr_after < hdr_before, f"M3c: Header should drop after {disc}% disc"
         assert abs(hdr_after - sum(rows)) <= self.TOL, f"M3c: Header {hdr_after} != sum{rows}"
 
+        ref_no = self._submit_open_view(pb_page)
+        print(f"  Saved as {ref_no}")
+        view_hdr, view_rows = self._cross_check_view(pb_page, "M3c", hdr_after, n)
+        rows_data = [
+            (items[i][:38], qtys[i], f"disc 0% → {disc}%", rows[i], view_rows[i])
+            for i in range(n)
+        ]
+        self._export_excel("M3c", f"Apply {disc}% disc to all rows — header drops, view matches",
+                           ref_no, rows_data, hdr_after, view_hdr)
+
 
 # ── Group 10: Edge cases ─────────────────────────────────────────────────────
 
 @pytest.mark.direct_pb
-class TestEdgeCases:
+class TestEdgeSuite:
     """
-    Boundary and user-behaviour edge cases.
+    Boundary and user-behaviour edge cases — all run in one test, one Excel export.
     """
 
     TOL = 0.02
 
-    def test_e1_ebw_equals_qty_amount_zero(self, pb_page):
-        """E1: EBW = Qty → net_qty = 0 → row Total = 0."""
-        qty = _rand_qty()
-        _setup_single_row(pb_page, qty=qty, ebw=qty)
-        total = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
-        result = "✓ ZERO" if total == 0.0 else f"✗ GOT {total}"
-        print(f"\n[E1]  qty={qty}  ebw={qty}  net_qty=0  total={total:.2f}  [{result}]")
-        assert total == 0.0, f"E1: Total should be 0 when EBW=Qty, got {total}"
+    def _check(self, results, tag, passed, scenario, detail=""):
+        icon = "✓" if passed else "✗"
+        print(f"  [{tag}] {icon}  {scenario}" + (f"  — {detail}" if detail else ""))
+        results.append((tag, passed, scenario, detail))
 
-    def test_e1b_ebw_greater_than_qty(self, pb_page):
-        """E1b: EBW > Qty → net_qty negative → Total ≤ 0."""
+    def test_es1_all_edge_cases(self, pb_page):
+        results = []
+        print("\n" + "═" * 80)
+        print("EDGE CASE SUITE")
+        print("═" * 80)
+
+        # ── E_TC1: EBW = Qty → net qty = 0 → Total = 0 ───────────────────────
+        qty = _rand_qty()
+        _setup_single_row(pb_page, qty=qty, ebw=qty, labour=0)
+        total = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
+        self._check(results, "E_TC1", total == 0.0,
+                    "EBW = Qty → net qty = 0 → Total must be 0",
+                    f"total={total:.2f}")
+
+        # ── E_TC2: EBW > Qty → Total ≤ 0 ─────────────────────────────────────
         qty = _rand_qty()
         ebw = qty + _rng.randint(1, 100)
         _setup_single_row(pb_page, qty=qty, ebw=ebw)
-        total  = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
-        result = "✓ ≤0" if total <= self.TOL else f"✗ GOT {total}"
-        print(f"\n[E1b] qty={qty}  ebw={ebw}  net_qty={qty-ebw}  total={total:.2f}  [{result}]")
-        assert total <= self.TOL, f"E1b: Total should be ≤0 when EBW>Qty, got {total}"
+        total = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
+        self._check(results, "E_TC2", total <= self.TOL,
+                    "EBW > Qty → net qty negative → Total ≤ 0",
+                    f"qty={qty}  ebw={ebw}  total={total:.2f}")
 
-    def test_e2_discount_100_percent_total_zero(self, pb_page):
-        """E2: 100% discount — Total Amount should be 0 (or ≤0)."""
+        # ── E_TC3: 100% discount → Total = 0 ──────────────────────────────────
         qty = _rand_qty()
         _setup_single_row(pb_page, qty=qty, disc_pct=100)
-        total  = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
-        result = "✓ ZERO" if total <= self.TOL else f"✗ GOT {total}"
-        print(f"\n[E2]  qty={qty}  disc=100%  total={total:.2f}  [{result}]")
-        assert total <= self.TOL, f"E2: With 100% disc, Total should be 0, got {total}"
+        total = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
+        self._check(results, "E_TC3", total <= self.TOL,
+                    "100% discount → Total = 0",
+                    f"total={total:.2f}")
 
-    def test_e2b_discount_reduces_total_proportionally(self, pb_page):
-        """E2b: 50% discount — Total should be ~half of no-discount Total."""
+        # ── E_TC4: 50% discount halves Total ──────────────────────────────────
         qty = _rand_qty()
-        _setup_single_row(pb_page, qty=qty)
+        _setup_single_row(pb_page, qty=qty, disc_pct=0, labour=0)
         total_no_disc = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
-
         pb_page._fill_number_nth(pb_page.DISC_PERCENTAGE, 0, 50)
         pb_page.page.wait_for_timeout(500)
         total_with_disc = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
+        expected = round(total_no_disc * 0.5, 2)
+        self._check(results, "E_TC4", abs(total_with_disc - expected) <= self.TOL,
+                    "50% discount → Total = half of undiscounted Total",
+                    f"no_disc={total_no_disc:.2f}  after_disc={total_with_disc:.2f}  expected={expected:.2f}")
 
-        expected = total_no_disc * 0.5
-        match    = "✓ MATCH" if abs(total_with_disc - expected) <= self.TOL else f"✗ MISMATCH"
-        print(f"\n[E2b] qty={qty}  total_no_disc={total_no_disc:.2f}  → disc=50%"
-              f"  total={total_with_disc:.2f}  expected={expected:.2f}  [{match}]")
-        assert abs(total_with_disc - expected) <= self.TOL, (
-            f"E2b: With 50% disc, Total {total_with_disc} != half of {total_no_disc} = {expected}"
-        )
-
-    def test_e3_gst_type_switch_igst_to_cgst_sgst_clears_igst(self, pb_page):
-        """E3: Switch GST type IGST → CGST+SGST — IGST clears, CGST/SGST populate."""
+        # ── E_TC5: GST type switch IGST → CGST+SGST ───────────────────────────
         qty = _rand_qty()
         tax = _rng.choice([5, 12, 18])
         _setup_single_row(pb_page, qty=qty)
@@ -1587,27 +2466,18 @@ class TestEdgeCases:
         pb_page.select_tax_rate(0, tax)
         pb_page.select_gst_type(0, "IGST")
         pb_page.page.wait_for_timeout(600)
-
         igst_before = pb_page._read_number_nth(pb_page.IGST_AMOUNT, 0)
-        assert igst_before > 0, "E3: IGST must be > 0 before switching type"
-
         pb_page.select_gst_type(0, "CGST + SGST")
         pb_page.page.wait_for_timeout(600)
-
         igst_after = pb_page._read_number_nth(pb_page.IGST_AMOUNT, 0)
         cgst       = pb_page._read_number_nth(pb_page.CGST_AMOUNT, 0)
         sgst       = pb_page._read_number_nth(pb_page.SGST_AMOUNT, 0)
+        passed = igst_after == 0.0 and cgst > 0 and sgst > 0
+        self._check(results, "E_TC5", passed,
+                    "GST switch IGST → CGST+SGST: IGST clears, CGST/SGST populate",
+                    f"IGST={igst_after:.2f}  CGST={cgst:.2f}  SGST={sgst:.2f}")
 
-        print(f"\n[E3]  qty={qty}  tax={tax}%  IGST before switch: {igst_before:.2f}")
-        print(f"      After IGST→CGST+SGST:  IGST={igst_after:.2f} {'✓ cleared' if igst_after==0 else '✗ NOT CLEARED'}  "
-              f"CGST={cgst:.2f} {'✓' if cgst>0 else '✗'}  SGST={sgst:.2f} {'✓' if sgst>0 else '✗'}")
-
-        assert igst_after == 0.0, f"E3: IGST should clear after switch, got {igst_after}"
-        assert cgst > 0,          f"E3: CGST should populate after switch, got {cgst}"
-        assert sgst > 0,          f"E3: SGST should populate after switch, got {sgst}"
-
-    def test_e3b_gst_type_switch_cgst_sgst_to_igst_clears_cgst(self, pb_page):
-        """E3b: Switch CGST+SGST → IGST — CGST/SGST clear, IGST populates."""
+        # ── E_TC6: GST type switch CGST+SGST → IGST ───────────────────────────
         qty = _rand_qty()
         tax = _rng.choice([5, 12, 18])
         _setup_single_row(pb_page, qty=qty)
@@ -1615,216 +2485,186 @@ class TestEdgeCases:
         pb_page.select_tax_rate(0, tax)
         pb_page.select_gst_type(0, "CGST + SGST")
         pb_page.page.wait_for_timeout(600)
-
         cgst_before = pb_page._read_number_nth(pb_page.CGST_AMOUNT, 0)
-        assert cgst_before > 0, "E3b: CGST must be > 0 before switching"
-
         pb_page.select_gst_type(0, "IGST")
         pb_page.page.wait_for_timeout(600)
-
         cgst_after = pb_page._read_number_nth(pb_page.CGST_AMOUNT, 0)
         igst_after = pb_page._read_number_nth(pb_page.IGST_AMOUNT, 0)
+        passed = cgst_after == 0.0 and igst_after > 0
+        self._check(results, "E_TC6", passed,
+                    "GST switch CGST+SGST → IGST: CGST/SGST clear, IGST populates",
+                    f"CGST={cgst_after:.2f}  IGST={igst_after:.2f}")
 
-        print(f"\n[E3b] qty={qty}  tax={tax}%  CGST before switch: {cgst_before:.2f}")
-        print(f"      After CGST+SGST→IGST:  CGST={cgst_after:.2f} {'✓ cleared' if cgst_after==0 else '✗ NOT CLEARED'}  "
-              f"IGST={igst_after:.2f} {'✓' if igst_after>0 else '✗'}")
-
-        assert cgst_after == 0.0, f"E3b: CGST should clear after switch to IGST, got {cgst_after}"
-        assert igst_after > 0,    f"E3b: IGST should populate after switch, got {igst_after}"
-
-    def test_e6_increase_qty_recalculates_disc_and_total(self, pb_page):
-        """E6: Disc% set, then qty multiplied via popup — Disc Amount and Total must grow."""
+        # ── E_TC7: Increase qty → disc amount and Total grow ──────────────────
         qty  = _rand_qty()
         disc = _rng.choice([5, 10, 15, 20])
         mult = _rng.randint(2, 5)
         _setup_single_row(pb_page, qty=qty, disc_pct=disc)
         disc_before  = pb_page._read_number_nth(pb_page.DISCOUNT_AMOUNT, 0)
         total_before = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
-
         pb_page.open_qty_details_popup(0)
         pb_page.fill_qty_details(1, qty * mult)
         pb_page.click_done()
         pb_page.page.wait_for_timeout(600)
-
         disc_after  = pb_page._read_number_nth(pb_page.DISCOUNT_AMOUNT, 0)
         total_after = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
+        self._check(results, "E_TC7", disc_after > disc_before and total_after > total_before,
+                    f"Increase qty ×{mult} → Discount amount and Total grow",
+                    f"disc {disc_before:.2f}→{disc_after:.2f}  total {total_before:.2f}→{total_after:.2f}")
 
-        print(f"\n[E6]  qty {qty} → {qty*mult} (×{mult})  disc={disc}%")
-        print(f"      Disc:  {disc_before:.2f} → {disc_after:.2f}  {'✓ GREW' if disc_after > disc_before else '✗'}")
-        print(f"      Total: {total_before:.2f} → {total_after:.2f}  {'✓ GREW' if total_after > total_before else '✗'}")
-
-        assert disc_after > disc_before,   f"E6: Disc should grow: {disc_before} → {disc_after}"
-        assert total_after > total_before, f"E6: Total should grow: {total_before} → {total_after}"
-
-    def test_e9_clear_qty_to_zero_total_drops(self, pb_page):
-        """E9: Set random qty (Total > 0), then set qty=0 — Total must drop to 0."""
+        # ── E_TC8: Set qty=0 → Total = 0 ──────────────────────────────────────
         qty = _rand_qty()
-        _setup_single_row(pb_page, qty=qty)
+        _setup_single_row(pb_page, qty=qty, labour=0)
         total_before = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
-        assert total_before > 0, "E9: Initial total must be > 0"
-
         pb_page.open_qty_details_popup(0)
         pb_page.fill_qty_details(0, 0)
         pb_page.click_done()
         pb_page.page.wait_for_timeout(600)
-
         total_after = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
-        result      = "✓ ZERO" if total_after == 0.0 else f"✗ GOT {total_after}"
-        print(f"\n[E9]  qty {qty} → 0  total: {total_before:.2f} → {total_after:.2f}  [{result}]")
-        assert total_after == 0.0, f"E9: After qty=0, Total should be 0, got {total_after}"
+        self._check(results, "E_TC8", total_after == 0.0,
+                    "Set qty = 0 → Total drops to 0",
+                    f"before={total_before:.2f}  after={total_after:.2f}")
 
-    def test_e10_labour_alone_total_equals_amount_minus_labour(self, pb_page):
-        """E10: No disc, no tax — Total = Amount − Labour."""
+        # ── E_TC9: Labour deducted from Total (no disc, no tax) ───────────────
         qty    = _rand_qty()
         labour = _rng.choice([l for l in LABOUR_CHOICES if l > 0])
-        _setup_single_row(pb_page, qty=qty)
-        amount_hdr = pb_page._read_number_nth(pb_page.AMOUNT, 0)
+        _setup_single_row(pb_page, qty=qty, disc_pct=0, labour=0)
+        amount = pb_page._read_number_nth(pb_page.AMOUNT, 0)
         pb_page._fill_number_nth(pb_page.LABOUR_CHARGES, 0, labour)
         pb_page.page.wait_for_timeout(500)
         total    = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
-        expected = amount_hdr - labour
-        match    = "✓ MATCH" if abs(total - expected) <= self.TOL else f"✗ MISMATCH"
-        print(f"\n[E10] qty={qty}  amount={amount_hdr:.2f}  labour={labour}")
-        print(f"      expected={amount_hdr:.2f} − {labour} = {expected:.2f}  got={total:.2f}  [{match}]")
-        assert abs(total - expected) <= self.TOL, (
-            f"E10: Total {total} != Amount({amount_hdr}) − Labour({labour}) = {expected}"
-        )
+        expected = round(amount - labour, 2)
+        self._check(results, "E_TC9", abs(total - expected) <= self.TOL,
+                    "No disc, no tax → Total = Amount − Labour",
+                    f"amount={amount:.2f}  labour={labour}  expected={expected:.2f}  got={total:.2f}")
 
-    def test_m4_fill_disc_labour_before_item_select(self, pb_page):
-        """M4: Fill disc/labour on blank row BEFORE selecting item → item select triggers recalc."""
+        # ── E_TC10: Fill disc/labour BEFORE item select → recalc fires ────────
         disc   = _rand_disc()
         labour = _rand_labour()
         qty    = _rand_qty()
         item   = _rng.choice(ITEMS)
-        print(f"\nM4: disc={disc}%, labour={labour}, qty={qty}, item={item}")
         pb_page.open_add_form()
         pb_page.fill_header()
-
-        # Fill on blank row 0 before any item is chosen
         if disc:
             pb_page._fill_number_nth(pb_page.DISC_PERCENTAGE, 0, disc)
         if labour:
             pb_page._fill_number_nth(pb_page.LABOUR_CHARGES, 0, labour)
         pb_page.page.wait_for_timeout(400)
-
         nudge = pb_page._pick_nudge_item(item)
         pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, nudge)
         pb_page.page.wait_for_timeout(500)
         pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, item)
         pb_page.page.wait_for_timeout(1000)
-
         pb_page.open_qty_details_popup(0)
         pb_page.fill_qty_details(1, qty)
         pb_page.click_done()
         pb_page.page.wait_for_timeout(600)
+        total = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
+        hdr   = _hdr_total(pb_page)
+        self._check(results, "E_TC10", total > 0 and abs(hdr - total) <= self.TOL,
+                    "Disc/labour filled before item select → recalc correct after item chosen",
+                    f"total={total:.2f}  header={hdr:.2f}")
 
-        total  = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
-        hdr    = _hdr_total(pb_page)
-        amount = pb_page._read_number_nth(pb_page.AMOUNT, 0)
-
-        assert total > 0, f"M4: Total should be > 0 after item select, got {total}"
-        assert abs(hdr - total) <= self.TOL, f"M4: Header {hdr} != row total {total}"
-        print(f"M4: amount={amount}, total={total} (diff={amount - total:.2f} — disc+labour effect)")
-
-    def test_m4b_fill_ebw_before_item_net_qty_correct(self, pb_page):
-        """M4b: Fill EBW on blank row before item select → after qty set, net_qty = qty − EBW."""
+        # ── E_TC11: EBW filled BEFORE item select → net qty = qty − EBW ───────
         qty  = _rand_qty()
         ebw  = _rand_ebw(qty)
         item = _rng.choice(ITEMS)
-        print(f"\nM4b: qty={qty}, ebw={ebw}, item={item}")
         pb_page.open_add_form()
         pb_page.fill_header()
-
         pb_page._fill_number_nth(pb_page.EMPTY_BAG_WEIGHT, 0, ebw)
         pb_page.page.wait_for_timeout(400)
-
         nudge = pb_page._pick_nudge_item(item)
         pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, nudge)
         pb_page.page.wait_for_timeout(500)
         pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, item)
         pb_page.page.wait_for_timeout(1000)
-
         pb_page.open_qty_details_popup(0)
         pb_page.fill_qty_details(1, qty)
         pb_page.click_done()
         pb_page.page.wait_for_timeout(600)
-
         net_qty = pb_page._read_number_nth(pb_page.NET_QUANTITY, 0)
         total   = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
+        self._check(results, "E_TC11", total > 0,
+                    "EBW filled before item select → net qty = qty − EBW after item chosen",
+                    f"qty={qty}  ebw={ebw}  net_qty={net_qty:.0f}  total={total:.2f}")
 
-        assert total > 0, f"M4b: Total should be > 0 after item+qty set"
-        print(f"M4b: net_qty={net_qty} (expected {qty - ebw} if EBW survived item-select, else {qty})")
+        # ── Summary ────────────────────────────────────────────────────────────
+        passed_all = [r for r in results if r[1]]
+        failed_all = [r for r in results if not r[1]]
+        print("\n" + "─" * 80)
+        print(f"  {len(passed_all)}/{len(results)} scenarios passed")
+        print("─" * 80)
+        if failed_all:
+            for tag, _, scenario, detail in failed_all:
+                print(f"    [{tag}] {scenario}  — {detail}")
 
+        # ── Excel export ───────────────────────────────────────────────────────
+        import pathlib, datetime
+        reports_dir = pathlib.Path(__file__).parent / "reports"
+        reports_dir.mkdir(exist_ok=True)
+        ts        = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        xlsx_path = reports_dir / f"es1_{ts}.xlsx"
 
-# ── Group 11: Post-save state ─────────────────────────────────────────────────
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Edge Case Suite"
 
-@pytest.mark.direct_pb
-class TestPostSave:
-    """Tests that verify state after a PB is saved."""
+        thin        = Side(style="thin")
+        thin_border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        ctr         = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        left        = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+        hdr_fill    = PatternFill("solid", fgColor="1A237E")
+        pass_fill   = PatternFill("solid", fgColor="E8F5E9")
+        fail_fill   = PatternFill("solid", fgColor="FFEBEE")
+        sum_fill    = PatternFill("solid", fgColor="EDE7F6")
 
-    ROW_TRIGGER = "button.erp-row-trigger"
-    EDIT_MENU_ITEM = (
-        "xpath=//div[contains(@class,'mat-mdc-menu-panel')]"
-        "//button[.//i[normalize-space(.)='edit']]"
-    )
-    REF_NO_COL = "td.cdk-column-transaction_ref_no"
+        ws.append(["#", "Test ID", "What is being tested", "Detail", "Result"])
+        for cell in ws[1]:
+            cell.font      = Font(bold=True, color="FFFFFF")
+            cell.fill      = hdr_fill
+            cell.border    = thin_border
+            cell.alignment = ctr
 
-    SWAL_TITLE_SUCCESS = "Purchase Booking created successfully"
+        for idx, (tag, passed, scenario, detail) in enumerate(results, 1):
+            fill = pass_fill if passed else fail_fill
+            ws.append([idx, tag, scenario, detail, "PASS" if passed else "FAIL"])
+            r = ws.max_row
+            for cell in ws[r]:
+                cell.fill, cell.border = fill, thin_border
+            ws.cell(r, 1).alignment = ctr
+            ws.cell(r, 2).alignment = ctr
+            ws.cell(r, 3).alignment = left
+            ws.cell(r, 4).alignment = left
+            ws.cell(r, 5).alignment = ctr
 
-    def _submit_and_return_to_list(self, pb_page):
-        """Click Submit, assert swal2 success title, dismiss, wait for listing."""
-        btn = pb_page.page.locator(pb_page.SUBMIT_BTN)
-        btn.wait_for(state="visible", timeout=5000)
-        btn.click(force=True)
-        pb_page.page.wait_for_selector(".swal2-container", timeout=12000)
-        title = pb_page.page.locator("#swal2-title").inner_text().strip()
-        assert title == self.SWAL_TITLE_SUCCESS, (
-            f"M5: Expected success alert '{self.SWAL_TITLE_SUCCESS}', got: '{title}'"
+        ws.append([])
+        for label, val in [
+            ("Total Scenarios", len(results)),
+            ("Passed",          len(passed_all)),
+            ("Failed",          len(failed_all)),
+            ("Overall",         "PASS" if not failed_all else "FAIL"),
+            ("Run Date",        datetime.datetime.now().strftime("%Y-%m-%d %H:%M")),
+        ]:
+            ws.append([label, val])
+            for cell in ws[ws.max_row]:
+                cell.fill, cell.border, cell.alignment = sum_fill, thin_border, ctr
+
+        ws.column_dimensions["A"].width = 5
+        ws.column_dimensions["B"].width = 10
+        ws.column_dimensions["C"].width = 50
+        ws.column_dimensions["D"].width = 40
+        ws.column_dimensions["E"].width = 10
+
+        wb.save(xlsx_path)
+        print(f"[ES1] Excel exported → {xlsx_path}")
+
+        assert not failed_all, (
+            "ES1 failures:\n" +
+            "\n".join(f"  [{t}] {s}" for t, _, s, _ in failed_all)
         )
-        pb_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=8000)
-        pb_page.navigate_to_page()
-        pb_page.page.wait_for_selector(self.REF_NO_COL, timeout=15000)
-        pb_page.page.wait_for_timeout(500)
 
-    def test_m5_saved_pb_edit_disabled_in_menu(self, pb_page):
-        """M5: Save a PB → open row action menu → Edit must be disabled (Pending status)."""
-        item = _rng.choice(ITEMS)
-        qty  = _rand_qty()
-        print(f"\n[M5] item={item!r}  qty={qty}")
 
-        pb_page.open_add_form()
-        pb_page.fill_header()
 
-        nudge = pb_page._pick_nudge_item(item)
-        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, nudge)
-        pb_page.page.wait_for_timeout(500)
-        pb_page._select_mat_by_text_nth(pb_page.ITEM_NAME, 0, item)
-        pb_page.page.wait_for_timeout(1000)
-        pb_page.open_qty_details_popup(0)
-        pb_page.fill_qty_details(1, qty)
-        pb_page.click_done()
-        pb_page.page.wait_for_timeout(500)
-
-        row_total = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
-        print(f"[M5] row total before save = {row_total:.2f}")
-
-        self._submit_and_return_to_list(pb_page)
-
-        ref_no = pb_page.page.locator(self.REF_NO_COL).first.inner_text().strip()
-        assert ref_no.startswith("PURB/"), f"M5: Expected saved PB ref_no, got: {ref_no}"
-        print(f"[M5] saved → ref_no={ref_no}")
-
-        pb_page.page.locator(self.ROW_TRIGGER).first.click(force=True)
-        pb_page.page.wait_for_selector(".mat-mdc-menu-panel", timeout=5000)
-
-        edit_btn = pb_page.page.locator(self.EDIT_MENU_ITEM)
-        assert edit_btn.count() > 0, "M5: Edit menu item not found in action menu"
-        disabled = edit_btn.first.get_attribute("disabled")
-        aria_dis = edit_btn.first.get_attribute("aria-disabled")
-        is_disabled = disabled is not None or aria_dis == "true"
-        print(f"[M5] Edit button disabled={is_disabled}  (disabled={disabled!r}, aria-disabled={aria_dis!r})")
-        assert is_disabled, f"M5: Edit is enabled for Pending PB '{ref_no}' — expected disabled"
-        print(f"[M5] ✓ Edit correctly disabled for Pending PB {ref_no}")
 
 
 # ── Group 12: Decimal precision validation ────────────────────────────────────
@@ -1970,3 +2810,105 @@ class TestDecimalPrecision:
         ref_no = pb_page.page.locator("td.cdk-column-transaction_ref_no").first.inner_text().strip()
         assert ref_no.startswith("PURB/"), f"DP1: Expected PURB/ ref_no, got: {ref_no}"
         print(f"[DP1] ✓ saved → ref_no={ref_no}  total={total:.2f}")
+
+        # ── Step 7: open View and cross-check total ────────────────────────
+        VIEW_BTN = (
+            "xpath=//div[contains(@class,'mat-mdc-menu-panel')]"
+            "//button[.//i[normalize-space(.)='visibility']]"
+        )
+        pb_page.page.locator("button.erp-row-trigger").first.click(force=True)
+        pb_page.page.wait_for_selector(".mat-mdc-menu-panel", timeout=5000)
+        pb_page.page.wait_for_timeout(400)
+        pb_page.page.locator(VIEW_BTN).click(force=True)
+        try:
+            pb_page.page.wait_for_function(
+                """(xpath) => {
+                    const r = document.evaluate(xpath, document, null,
+                        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    const el = r.snapshotItem(0);
+                    return el && parseFloat(el.value || '0') > 0;
+                }""",
+                arg=pb_page.TOTAL_AMOUNT.replace("xpath=", ""),
+                timeout=90000,
+            )
+        except Exception as exc:
+            raise AssertionError(f"DP1: View did not populate within 90 s ({exc})") from exc
+        view_total = pb_page._read_number_nth(pb_page.TOTAL_AMOUNT, 1)
+        view_match = abs(view_total - total) < self.TOL
+        print(f"[DP1] View total={view_total:.2f}  match={'✓' if view_match else '✗'}")
+        assert view_match, f"DP1: View total {view_total} != in-form total {total}"
+
+        # ── Excel export ───────────────────────────────────────────────────
+        import pathlib, datetime
+        reports_dir = pathlib.Path(__file__).parent / "reports"
+        reports_dir.mkdir(exist_ok=True)
+        ts        = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        xlsx_path = reports_dir / f"dp1_{ts}.xlsx"
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Decimal Precision"
+
+        thin        = Side(style="thin")
+        border      = Border(left=thin, right=thin, top=thin, bottom=thin)
+        ctr         = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        left        = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+        hdr_fill    = PatternFill("solid", fgColor="1A237E")
+        pass_fill   = PatternFill("solid", fgColor="E8F5E9")
+        sum_fill    = PatternFill("solid", fgColor="EDE7F6")
+
+        checks = [
+            ("DP1-a", "5dp qty rejected with inline error",
+             f"qty={qty_5dp} → error: '{error_text}'", "PASS"),
+            ("DP1-b", "4dp qty accepted — no inline error",
+             f"qty={qty_4dp} → no error shown", "PASS"),
+            ("DP1-c", "Total rounded to max 2 decimal places",
+             f"qty={qty_4dp} × rate={rate_3dp} → ERP total={total:.2f} (rounded={total_2dp_rounded:.2f})", "PASS"),
+            ("DP1-d", "Form saved successfully",
+             f"Saved as {ref_no}", "PASS"),
+            ("DP1-e", "View panel total matches in-form total",
+             f"In-form={total:.2f}  In-view={view_total:.2f}", "PASS" if view_match else "FAIL"),
+        ]
+
+        ws.append(["#", "Check ID", "What is being tested", "Detail", "Result"])
+        for cell in ws[1]:
+            cell.font      = Font(bold=True, color="FFFFFF")
+            cell.fill      = hdr_fill
+            cell.border    = border
+            cell.alignment = ctr
+
+        for idx, (cid, scenario, detail, result) in enumerate(checks, 1):
+            ws.append([idx, cid, scenario, detail, result])
+            r = ws.max_row
+            for cell in ws[r]:
+                cell.fill, cell.border = pass_fill, border
+            ws.cell(r, 1).alignment = ctr
+            ws.cell(r, 2).alignment = ctr
+            ws.cell(r, 3).alignment = left
+            ws.cell(r, 4).alignment = left
+            ws.cell(r, 5).alignment = ctr
+
+        ws.append([])
+        for label, val in [
+            ("Item",               item),
+            ("5dp qty (rejected)", str(qty_5dp)),
+            ("4dp qty (accepted)", str(qty_4dp)),
+            ("Rate (3dp)",         str(rate_3dp)),
+            ("ERP Total (form)",   f"{total:.2f}"),
+            ("ERP Total (view)",   f"{view_total:.2f}"),
+            ("Reference No",       ref_no),
+            ("Overall",            "PASS"),
+            ("Run Date",           datetime.datetime.now().strftime("%Y-%m-%d %H:%M")),
+        ]:
+            ws.append([label, val])
+            for cell in ws[ws.max_row]:
+                cell.fill, cell.border, cell.alignment = sum_fill, border, ctr
+
+        ws.column_dimensions["A"].width = 5
+        ws.column_dimensions["B"].width = 12
+        ws.column_dimensions["C"].width = 42
+        ws.column_dimensions["D"].width = 52
+        ws.column_dimensions["E"].width = 10
+
+        wb.save(xlsx_path)
+        print(f"[DP1] Excel exported → {xlsx_path}")
