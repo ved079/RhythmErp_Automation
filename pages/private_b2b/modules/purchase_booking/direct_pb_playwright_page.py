@@ -78,7 +78,7 @@ class DirectPBPlaywrightPage(BasePlaywrightPage):
     ADD_BTN        = "button.erp-add-btn"
     # Both row action buttons share .apply-button; distinguished by icon class.
     # fa-plus (add) is always visible; fa-minus (delete) only appears when rows >= 2.
-    ADD_ROW_BTN    = "button.apply-button:has(i.fa-plus)"
+    ADD_ROW_BTN    = "xpath=(//button[contains(@class,'add-row-btn') and contains(.,'Add Row')])[1]"
     DELETE_ROW_BTN = "button.apply-button:has(i.fa-minus)"
     SUBMIT_BTN     = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
     CANCEL_BTN     = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"

@@ -35,14 +35,14 @@ def playwright_instance():
 
 @pytest.fixture(scope="session")
 def browser(playwright_instance):
-    b = playwright_instance.chromium.launch(headless=False, slow_mo=150)
+    b = playwright_instance.chromium.launch(headless=False, slow_mo=150, args=["--start-maximized"])
     yield b
     b.close()
 
 
 @pytest.fixture(scope="session")
 def browser_context(browser):
-    ctx = browser.new_context()
+    ctx = browser.new_context(no_viewport=True)
     yield ctx
     ctx.close()
 
