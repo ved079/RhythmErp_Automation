@@ -355,7 +355,14 @@ class DirectPBPlaywrightPage(BasePlaywrightPage):
 
     def enable_gst_off(self, row_index):
         """Toggle IS GST Off to Yes for the given row."""
-        self.page.locator(self.IS_GST_OFF_SLIDER).nth(row_index).click(force=True)
+        # JS click on the hidden checkbox to properly fire Angular's change detection
+        self.page.evaluate(
+            """(idx) => {
+                const inputs = document.querySelectorAll('app-slide-toggle-v2 input[type="checkbox"]');
+                if (inputs[idx]) inputs[idx].click();
+            }""",
+            row_index,
+        )
         self.page.wait_for_timeout(500)
 
     def select_tax_rate(self, row_index, rate):

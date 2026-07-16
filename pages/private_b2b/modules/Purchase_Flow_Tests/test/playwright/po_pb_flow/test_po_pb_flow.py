@@ -56,9 +56,8 @@ def _assert_pb_rows(po_rows, pb_rows, po_ref_no):
 @pytest.mark.po_pb
 class TestPO_PB_DirectFlow:
 
-    def test_single_item_flow(self, po_page, pb_page):
+    def test_single_item_flow(self, pb_page, po_page):
         """Single-item PO (disc=5%, int=2%) -> PB qty/rate/txn must match."""
-        po_page.navigate_to_page()
         total, row_dicts, supplier_name, _, ref_no = \
             po_page.create_record_for_integration(item_configs=[(10, 5, 2)])
 
@@ -95,9 +94,8 @@ class TestPO_PB_DirectFlow:
 @pytest.mark.po_pb
 class TestPO_PB_MultiRow:
 
-    def test_multi_row_flow(self, po_page, pb_page):
+    def test_multi_row_flow(self, pb_page, po_page):
         """2-item PO (row0 disc=5%/int=2%, row1 disc=3%/int=1%) -> PB per-row match."""
-        po_page.navigate_to_page()
         total, row_dicts, supplier_name, _, ref_no = \
             po_page.create_record_for_integration(
                 item_configs=[(10, 5, 2), (5, 3, 1)]
@@ -136,9 +134,8 @@ class TestPO_PB_MultiRow:
 @pytest.mark.po_pb
 class TestPO_PB_CustomRate:
 
-    def test_custom_rate_flow(self, po_page, pb_page):
+    def test_custom_rate_flow(self, pb_page, po_page):
         """PO rate overridden 10% below auto-fetch -> PB must carry the custom rate."""
-        po_page.navigate_to_page()
         po_page.open_add_form()
         supplier_name, _ = po_page.fill_header_returning_supplier()
 
@@ -227,9 +224,8 @@ class TestPO_PB_CustomRate:
 @pytest.mark.po_pb
 class TestPO_PB_NoGST:
 
-    def test_no_gst_flow(self, po_page, pb_page):
+    def test_no_gst_flow(self, pb_page, po_page):
         """PO with GST off -> txn = qty x rate; PB must match with no tax added."""
-        po_page.navigate_to_page()
         total, row_dicts, supplier_name, _, ref_no = \
             po_page.create_record_for_integration(
                 item_configs=[(10, 0, 0)], enable_gst=False

@@ -126,6 +126,50 @@ class POPlaywrightPage(BasePlaywrightPage):
             pass
         self.page.wait_for_timeout(300)
 
+    def _try_select_random_mat_option(self, selector):
+        """Like _select_random_mat_option but silently skips if no panel appears (auto-fetched/disabled field)."""
+        self.page.locator(selector).first.click(force=True)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", timeout=3000)
+        except Exception:
+            return  # field is auto-fetched / disabled — skip
+        options = self.page.locator(".mat-mdc-select-panel mat-option").all()
+        if options:
+            random.choice(options).click(force=True)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            pass
+        self.page.wait_for_timeout(300)
+
+    def _try_select_mat_by_text(self, selector, text):
+        """Like _select_mat_by_text but silently skips if no panel appears (auto-fetched/disabled field)."""
+        self.page.locator(selector).first.click(force=True)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", timeout=3000)
+        except Exception:
+            return  # field is auto-fetched / disabled — skip
+        try:
+            self.page.locator(".dd-search-input").fill(text)
+            self.page.wait_for_timeout(400)
+        except Exception:
+            pass
+        option = self.page.locator(".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text")
+        matched = None
+        for opt in option.all():
+            if opt.inner_text().strip() == text:
+                matched = opt
+                break
+        if matched:
+            matched.click(force=True)
+        else:
+            self.page.locator(".mat-mdc-select-panel mat-option").filter(has_text=text).first.click(force=True)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            pass
+        self.page.wait_for_timeout(300)
+
     def count_available_items(self):
         """Open the Item Name dropdown on row 0 and count available options."""
         self.page.locator(self.ITEM_NAME).first.click(force=True)
@@ -192,8 +236,8 @@ class POPlaywrightPage(BasePlaywrightPage):
     def fill_header(self):
         self._select_random_mat_option(self.SUPPLIER_NAME)
         self._select_mat_by_text(self.PO_ITEM_TYPE, "Farm")
-        self._select_random_mat_option(self.PO_TYPE)
-        self._select_mat_by_text(self.TRANSACTION_CURRENCY, "INR")
+        self._try_select_random_mat_option(self.PO_TYPE)
+        self._try_select_mat_by_text(self.TRANSACTION_CURRENCY, "INR")
         self.page.wait_for_timeout(400)
         # Conversion Rate is required when currency is not the base currency
         conv_rate_field = self.page.locator(self.CONVERSION_RATE)
@@ -586,8 +630,8 @@ class POPlaywrightPage(BasePlaywrightPage):
         """
         supplier_name = self._select_random_mat_option_text(self.SUPPLIER_NAME)
         self._select_mat_by_text(self.PO_ITEM_TYPE, "Farm")
-        self._select_random_mat_option(self.PO_TYPE)
-        self._select_mat_by_text(self.TRANSACTION_CURRENCY, "INR")
+        self._try_select_random_mat_option(self.PO_TYPE)
+        self._try_select_mat_by_text(self.TRANSACTION_CURRENCY, "INR")
         self.page.wait_for_timeout(400)
         conv_rate_field = self.page.locator(self.CONVERSION_RATE)
         if conv_rate_field.count() > 0:
