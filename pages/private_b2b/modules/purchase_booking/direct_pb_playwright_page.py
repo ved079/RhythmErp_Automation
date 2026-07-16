@@ -186,6 +186,12 @@ class DirectPBPlaywrightPage(BasePlaywrightPage):
     SUPPLIERS = [
         "Omkar Agencies | 9389399233",
         "Vedant Company | 9494949494",
+        "Jagdamba Krishna Oil Mills Group | 9978228598",
+        "Jai Vindhya Exports & Sons | 9581809469",
+        "Maa Agro Traders Group | 6915553555",
+        "Supreme Godavari Oil Mills & Sons | 8761823111",
+        "Venkatesh Amul Enterprises & Bros | 6997018367",
+        "Falcon enterprises | 9388239912",
     ]
 
     def fill_header(self):
@@ -197,7 +203,8 @@ class DirectPBPlaywrightPage(BasePlaywrightPage):
         for opt in self.page.locator(
             ".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"
         ).all():
-            if opt.inner_text().strip() == supplier_name:
+            opt_text = opt.inner_text().strip()
+            if supplier_name in opt_text or opt_text in supplier_name:
                 opt.scroll_into_view_if_needed()
                 opt.click(force=True)
                 break
