@@ -10,7 +10,7 @@ class POPlaywrightPage(BasePlaywrightPage):
 
     # Header fields
     SUPPLIER_NAME        = "xpath=//mat-form-field[.//mat-label[contains(.,'Supplier Name')]]//mat-select"
-    PO_ITEM_TYPE         = "xpath=//mat-form-field[.//mat-label[contains(.,'PO Item Type')]]//mat-select"
+    PO_ITEM_TYPE         = "xpath=//mat-form-field[.//mat-label[contains(.,'PO Item Type') or contains(.,'Item Category')]]//mat-select"
     PO_TYPE              = "xpath=//mat-form-field[.//mat-label[contains(.,'PO Type')]]//mat-select"
     TRANSACTION_CURRENCY = "xpath=//mat-form-field[.//mat-label[contains(.,'Transaction Currency')]]//mat-select"
     LOCATION             = "xpath=//mat-form-field[.//mat-label[contains(.,'Location')]]//mat-select"
@@ -143,7 +143,9 @@ class POPlaywrightPage(BasePlaywrightPage):
         self.page.wait_for_timeout(300)
 
     def _try_select_mat_by_text(self, selector, text):
-        """Like _select_mat_by_text but silently skips if no panel appears (auto-fetched/disabled field)."""
+        """Like _select_mat_by_text but silently skips if the field is absent or no panel appears."""
+        if self.page.locator(selector).count() == 0:
+            return
         self.page.locator(selector).first.click(force=True)
         try:
             self.page.wait_for_selector(".mat-mdc-select-panel", timeout=3000)
@@ -307,7 +309,7 @@ class POPlaywrightPage(BasePlaywrightPage):
         tax_amount = float(tax_amount_str)  if tax_amount_str  and tax_amount_str.strip()  else 0.0
         return tax_rate, tax_amount
 
-    def _add_item_row(self, row_index, qty, disc_pct, int_pct, used_items=None, enable_gst=False, nudge_item=None):
+    def _add_item_row(self, row_index, qty, disc_pct, int_pct, used_items=None, enable_gst=False, nudge_item=None, forced_item=None):
         """Add one detail row to the PO grid.
 
         Returns dict:
@@ -316,10 +318,13 @@ class POPlaywrightPage(BasePlaywrightPage):
         """
         # Rows are pre-created before filling starts — no ADD_ROW_BTN click needed here
 
-        # Select item — avoid picking duplicates across rows
-        item_name = self._select_random_mat_option_nth(
-            self.ITEM_NAME, row_index, exclude_texts=used_items
-        )
+        if forced_item:
+            self._select_mat_by_text_nth(self.ITEM_NAME, row_index, forced_item)
+            item_name = forced_item
+        else:
+            item_name = self._select_random_mat_option_nth(
+                self.ITEM_NAME, row_index, exclude_texts=used_items
+            )
 
         # Angular quirk: for rows 2+, selecting an item doesn't fire selectionChange
         # (rate stays 0). Workaround confirmed manually: on THIS row, first select
@@ -360,6 +365,13 @@ class POPlaywrightPage(BasePlaywrightPage):
                 if rate > 0:
                     break
                 self.page.wait_for_timeout(1000)
+
+        # Rate still 0 after all retries — tenant doesn't auto-fetch rates, fill manually
+        if rate == 0.0:
+            import random as _random
+            rate = float(_random.randint(500, 5000))
+            self._fill_number_nth(self.RATE, row_index, int(rate))
+            self.page.wait_for_timeout(600)
 
         # Fill quantity → triggers Transaction Amount calculation
         self._fill_number_nth(self.QUANTITY, row_index, qty)
@@ -408,6 +420,108 @@ class POPlaywrightPage(BasePlaywrightPage):
             "tax_rate":     tax_rate,
             "tax_amount":   tax_amount,
         }
+
+    def get_all_item_names(self, supplier_name=None):
+        """Open PO add form, read item names from dropdown, leave form open.
+
+        Selects supplier + Agri Produce, reads items, closes the dropdown panel,
+        then continues filling the rest of the header in-place.
+        Returns (item_names, supplier_name, location).
+        Capped at 4-6 items to keep PO size manageable.
+        """
+        self.open_add_form()
+        if supplier_name:
+            self._select_mat_by_text(self.SUPPLIER_NAME, supplier_name)
+            chosen_supplier = supplier_name
+        else:
+            chosen_supplier = self._select_random_mat_option_text(self.SUPPLIER_NAME)
+        self._try_select_mat_by_text(self.PO_ITEM_TYPE, "Agri Produce")
+        self.page.wait_for_timeout(600)
+
+        self.page.locator(self.ITEM_NAME).first.click(force=True)
+        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
+        options = self.page.locator(
+            ".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"
+        ).all()
+        names = [o.inner_text().strip() for o in options if o.inner_text().strip()]
+        self.page.locator(".cdk-overlay-backdrop").last.click(force=True)
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            pass
+
+        # Cap to 4-6 items, then complete the rest of the header in-place
+        cap = random.randint(4, 6)
+        names = names[:cap]
+
+        # Complete remaining header fields (supplier + item type already selected)
+        self._try_select_random_mat_option(self.PO_TYPE)
+        self.page.wait_for_timeout(400)
+        conv_rate_field = self.page.locator(self.CONVERSION_RATE)
+        if conv_rate_field.count() > 0:
+            conv_rate_field.first.click(force=True)
+            conv_rate_field.first.fill("1")
+            conv_rate_field.first.press("Tab")
+            self.page.wait_for_timeout(300)
+        location = self._select_random_mat_option_text(self.LOCATION)
+        self.page.wait_for_timeout(500)
+        self._select_random_mat_option(self.DEPARTMENT)
+        self._select_random_mat_option(self.DIVISION)
+        self._select_mat_by_text(self.TYPE_OF_SALE, "B2B")
+        self._select_mat_by_text(self.PACKAGING_FORWARDING, "Nil")
+
+        return names, chosen_supplier, location
+
+    def _fix_zero_rate_rows(self, row_dicts):
+        """Pre-submit pass: re-read each row's rate/qty from the live DOM and fix zeros.
+
+        After the nudge mechanism or slow API responses some rows can end up with
+        rate=0 even though _add_item_row thought it filled a value. This re-checks
+        each row and patches any zeros before the form is submitted.
+        """
+        import random as _random
+
+        for i, rd in enumerate(row_dicts):
+            # Re-read rate from DOM
+            live_rate_str = self.page.evaluate("""
+                ([xpath, idx]) => {
+                    const result = document.evaluate(xpath, document, null,
+                        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    const el = result.snapshotItem(idx);
+                    return el ? el.value : '';
+                }
+            """, [self.RATE.replace("xpath=", ""), i])
+            live_rate = float(live_rate_str) if live_rate_str and live_rate_str.strip() else 0.0
+
+            if live_rate == 0.0:
+                fixed_rate = _random.randint(500, 5000)
+                print(f"[PO-fix] row{i} rate=0, filling {fixed_rate}")
+                self._fill_number_nth(self.RATE, i, fixed_rate)
+                self.page.wait_for_timeout(500)
+                # Re-fill qty so Transaction Amount recalculates
+                self._fill_number_nth(self.QUANTITY, i, rd["qty"])
+                self.page.wait_for_timeout(500)
+                rd["rate"] = float(fixed_rate)
+            else:
+                rd["rate"] = live_rate
+
+            # Re-read qty and patch if zero
+            live_qty_str = self.page.evaluate("""
+                ([xpath, idx]) => {
+                    const result = document.evaluate(xpath, document, null,
+                        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    const el = result.snapshotItem(idx);
+                    return el ? el.value : '';
+                }
+            """, [self.QUANTITY.replace("xpath=", ""), i])
+            live_qty = float(live_qty_str) if live_qty_str and live_qty_str.strip() else 0.0
+
+            if live_qty == 0.0:
+                print(f"[PO-fix] row{i} qty=0, re-filling {rd['qty']}")
+                self._fill_number_nth(self.QUANTITY, i, rd["qty"])
+                self.page.wait_for_timeout(500)
+
+        self.page.wait_for_timeout(600)
 
     # ── Create ──────────────────────────────────────────────────────────
 
@@ -623,15 +737,15 @@ class POPlaywrightPage(BasePlaywrightPage):
         self.page.wait_for_timeout(300)
         return chosen_text
 
-    def fill_header_returning_supplier(self, forced_location=None):
-        """Like fill_header() but returns (supplier_name, location) for integration use.
-
-        forced_location: if provided, selects that exact location instead of random.
-        """
-        supplier_name = self._select_random_mat_option_text(self.SUPPLIER_NAME)
-        self._select_mat_by_text(self.PO_ITEM_TYPE, "Farm")
+    def fill_header_returning_supplier(self, forced_location=None, forced_supplier=None):
+        """Like fill_header() but returns (supplier_name, location) for integration use."""
+        if forced_supplier:
+            self._select_mat_by_text(self.SUPPLIER_NAME, forced_supplier)
+            supplier_name = forced_supplier
+        else:
+            supplier_name = self._select_random_mat_option_text(self.SUPPLIER_NAME)
+        self._try_select_mat_by_text(self.PO_ITEM_TYPE, "Agri Produce")
         self._try_select_random_mat_option(self.PO_TYPE)
-        self._try_select_mat_by_text(self.TRANSACTION_CURRENCY, "INR")
         self.page.wait_for_timeout(400)
         conv_rate_field = self.page.locator(self.CONVERSION_RATE)
         if conv_rate_field.count() > 0:
@@ -653,25 +767,34 @@ class POPlaywrightPage(BasePlaywrightPage):
 
     def create_record_for_integration(self, item_configs=None, all_items=False,
                                       default_qty=500, forced_location=None,
-                                      enable_gst=True):
+                                      enable_gst=True, item_names_override=None,
+                                      forced_supplier=None, form_already_open=False,
+                                      prefilled_supplier=None, prefilled_location=None):
         """Like create_record but also returns supplier_name and po_ref_no.
 
         Returns (total_po_amount, row_dicts, supplier_name, location, po_ref_no).
-        default_qty: qty used per row when all_items=True (keep large so GP qty fits).
-        forced_location: pin the Location dropdown to a specific value (e.g. "Pune").
-        enable_gst: toggle GST on for every row in a second pass after all rows filled.
+        form_already_open: if True, skip open_add_form + fill_header (header already filled).
+        prefilled_supplier/prefilled_location: supplier and location captured before this call.
         """
         if item_configs is None:
             item_configs = [(default_qty, 0, 0)]
 
-        self.open_add_form()
-        supplier_name, location = self.fill_header_returning_supplier(
-            forced_location=forced_location,
-        )
+        if form_already_open and prefilled_supplier:
+            supplier_name = prefilled_supplier
+            location = prefilled_location or ""
+        else:
+            self.open_add_form()
+            supplier_name, location = self.fill_header_returning_supplier(
+                forced_location=forced_location,
+                forced_supplier=forced_supplier,
+            )
 
         if all_items:
             available = self.count_available_items()
             item_configs = [(default_qty, 0, 0)] * available
+
+        if item_names_override:
+            item_configs = [(default_qty, 0, 0)] * len(item_names_override)
 
         # Pass 1 — add one row at a time so Angular fully initialises each row's
         # mat-select before the next ADD_ROW_BTN click. Use nudge_item for rows 2+
@@ -683,8 +806,10 @@ class POPlaywrightPage(BasePlaywrightPage):
             if i > 0:
                 self.page.locator(self.ADD_ROW_BTN).click()
                 self.page.wait_for_timeout(1000)
+            forced_item = item_names_override[i] if item_names_override else None
             rd = self._add_item_row(i, qty, disc_pct, int_pct, used_items,
-                                    enable_gst=False, nudge_item=row0_item)
+                                    enable_gst=False, nudge_item=row0_item,
+                                    forced_item=forced_item)
             if not rd["item_name"]:
                 break
             if i == 0:
@@ -702,6 +827,16 @@ class POPlaywrightPage(BasePlaywrightPage):
                 row_dicts[i]["tax_amount"]  = tax_amount
 
         self.page.wait_for_timeout(800)
+
+        # Pre-submit check — fix any rows that still have rate=0 or qty=0
+        self._fix_zero_rate_rows(row_dicts)
+
+        # Dump any visible validation errors so failures are diagnosable
+        errors = [e.inner_text().strip() for e in self.page.locator("mat-error").all() if e.is_visible()]
+        if errors:
+            print(f"[PO-warn] mat-errors before submit: {errors}")
+        self.page.screenshot(path="po_pre_submit.png")
+
         total_po_amount = self._read_form_total_po_amount()
         if total_po_amount is None:
             total_po_amount = self._read_all_row_totals()
@@ -716,10 +851,27 @@ class POPlaywrightPage(BasePlaywrightPage):
     def is_po_closed(self, ref_no):
         """Return True if the given PO's status column shows 'Closed'.
 
-        The ERP only recalculates PO status when the listing receives a new record.
-        Caller must open and cancel the PO add form before calling this so the listing
-        refreshes — see trigger_listing_refresh().
+        First tries a hard refresh of the listing. Falls back to creating a throwaway
+        PO (which forces the ERP to recalculate statuses) if not closed after refresh.
         """
+        # Primary: hard refresh + search
+        self.navigate_to_page()
+        self.page.reload()
+        self.page.wait_for_selector("table.mat-mdc-table", timeout=15000)
+        self.page.wait_for_timeout(1000)
+        self.search_po(ref_no)
+        self.page.wait_for_timeout(2000)
+        closed = self.page.locator(
+            "xpath=//td[contains(@class,'cdk-column-po_status')]"
+            "[.//text()[contains(.,'Closed')]]"
+        ).count() > 0
+        if closed:
+            return True
+
+        # Fallback: create throwaway PO to force status recalculation
+        print("[PO] not closed after refresh — creating throwaway PO to trigger recalculation")
+        self.create_record_for_integration(item_configs=[(1, 0, 0)])
+        self.page.wait_for_timeout(1000)
         self.search_po(ref_no)
         self.page.wait_for_timeout(2000)
         return self.page.locator(
@@ -728,12 +880,7 @@ class POPlaywrightPage(BasePlaywrightPage):
         ).count() > 0
 
     def trigger_po_status_recalculation(self):
-        """Create a minimal throwaway PO so the ERP recalculates statuses for all POs.
-
-        The ERP only marks a PO as 'Closed' (balance=0) after a new PO is inserted —
-        it does not update statuses on a simple listing refresh or form open/cancel.
-        This creates the smallest valid PO (1 bag, qty=1) to fire that backend trigger.
-        """
+        """Kept as fallback — creates a throwaway PO to force ERP status recalculation."""
         self.create_record_for_integration(item_configs=[(1, 0, 0)])
         self.page.wait_for_timeout(1000)
 

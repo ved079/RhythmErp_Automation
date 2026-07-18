@@ -371,7 +371,7 @@ def get_all_transaction_types():
 
 # ── FK ID Mappings (from live ERP) ────────────────────────────────────
 
-# Transaction Type options (8 total)
+# Transaction Type options (8 total) — fallback only; resolved live at runtime
 TRANSACTION_TYPE_ID_MAP = {
     "Purchase": 154,
     "Sales": 155,
@@ -383,134 +383,40 @@ TRANSACTION_TYPE_ID_MAP = {
     "Return Stock Down": 222,
 }
 
-# Item Master options (tenant 711 — auto-computed attribute names)
-ITEM_ID_MAP = {
-    "Spinach Flexible Green Huge Droplet": 5,
-    "Cherry Flexible Green Huge Droplet": 6,
-    "Ginger Hollow Orange Minute Heart": 7,
-    "Ginger Fuzzy Ruby Teeny Heart": 9,
-    "Apple Stiff Blue Deep Heart": 12,
-    "Spinach Fuzzy Magenta Small Circle": 13,
-    "Banana Hollow Peach Enormous Crescent": 14,
-    "Apple Bumpy Charcoal Broad Ring": 15,
-    "Onion Silky Brown Teeny Hexagon": 16,
-    "Papaya Stiff Cream Micro Loop": 17,
-}
+# Fallback maps — used only when live FK resolution fails
+# These are tenant-specific; prefer live resolution via FkResolver
+ITEM_ID_MAP = {}
+QUALITY_PARAM_ID_MAP = {}
 
-# Quality Parameter options (tenant 711)
-QUALITY_PARAM_ID_MAP = {
-    "Bulk Density": 1,
-    "Particle Size": 2,
-    "Color Value": 3,
-    "Hardness": 4,
-    "Texture Score": 5,
-}
-
-# Items already used in CQP are discovered dynamically via the API at runtime.
-# No static CQP_USED_ITEM_IDS — the batch script fetches existing entries
-# and passes skip_item_ids to the payload generator.
+STEPPER_NAME = "Item Quality Parameter Details"
 
 
-# ── Data Pool ─────────────────────────────────────────────────────────
-# Each entry defines a complete CQP record:
-#   (item_name, transaction_type, revision_status, quality_params)
-#
-# quality_params is a list of tuples:
-#   (quality_parameter_name, min_value, max_value, rate_percentage, multiplier)
-#
-# The min_value, max_value, and multiplier are strings matching the pattern
-# ^\d+(\.\d+)?$ as required by the ERP validation.
-#
-# Items are chosen from ITEM_ID_MAP that are NOT in CQP_USED_ITEM_IDS,
-# ensuring no (item_ref_id, to_date) duplicate conflict with the sentinel
-# to_date=2099-12-30T18:30:00Z.
-
-COMMODITY_QUALITY_PARAMETER_API_DATA = [
-    ("Spinach Flexible Green Huge Droplet", "Purchase", "Rev-001", [
-        ("Bulk Density", "10", "15", True, "1.0"),
-        ("Particle Size", "0.5", "2.0", True, "0.5"),
-        ("Color Value", "70", "90", True, "2.0"),
-    ]),
-    ("Cherry Flexible Green Huge Droplet", "Purchase", "Rev-001", [
-        ("Bulk Density", "12", "18", True, "1.0"),
-        ("Hardness", "5", "8", True, "1.5"),
-    ]),
-    ("Ginger Hollow Orange Minute Heart", "Purchase", "Rev-001", [
-        ("Color Value", "60", "80", True, "2.0"),
-        ("Texture Score", "3", "7", True, "1.0"),
-        ("Particle Size", "1.0", "3.0", True, "0.5"),
-    ]),
-    ("Ginger Fuzzy Ruby Teeny Heart", "Sales", "Rev-001", [
-        ("Bulk Density", "8", "14", True, "1.0"),
-        ("Color Value", "65", "85", True, "2.0"),
-    ]),
-    ("Apple Stiff Blue Deep Heart", "Purchase", "Rev-001", [
-        ("Hardness", "4", "7", True, "1.5"),
-        ("Texture Score", "5", "9", True, "1.0"),
-    ]),
-    ("Spinach Fuzzy Magenta Small Circle", "Sales", "Rev-001", [
-        ("Bulk Density", "11", "16", True, "1.0"),
-        ("Particle Size", "0.5", "1.5", True, "0.5"),
-    ]),
-    ("Banana Hollow Peach Enormous Crescent", "Purchase", "Rev-001", [
-        ("Texture Score", "2", "6", True, "1.0"),
-        ("Color Value", "75", "95", True, "2.0"),
-        ("Hardness", "3", "6", True, "1.5"),
-    ]),
-    ("Apple Bumpy Charcoal Broad Ring", "Purchase", "Rev-001", [
-        ("Hardness", "5", "9", True, "1.5"),
-        ("Particle Size", "0.5", "2.0", True, "0.5"),
-    ]),
-    ("Onion Silky Brown Teeny Hexagon", "Sales", "Rev-001", [
-        ("Bulk Density", "9", "15", True, "1.0"),
-        ("Color Value", "60", "80", True, "2.0"),
-        ("Texture Score", "4", "8", True, "1.0"),
-    ]),
-    ("Papaya Stiff Cream Micro Loop", "Purchase", "Rev-001", [
-        ("Bulk Density", "10", "17", True, "1.0"),
-        ("Hardness", "6", "10", True, "1.5"),
-        ("Color Value", "70", "90", True, "2.0"),
-        ("Texture Score", "3", "7", True, "1.0"),
-    ]),
-]
+def _yesterday_1830z() -> str:
+    """Return yesterday at 18:30:00Z — midnight IST, used as from_date so ERP date filters pass."""
+    from datetime import datetime, timedelta, timezone
+    yesterday = datetime.now(timezone.utc).date() - timedelta(days=1)
+    return f"{yesterday}T18:30:00Z"
 
 
 def build_cqp_api_payload(
     item_ref_id: int,
     transaction_type: int,
     quality_params: list,
-    from_date: str = "2026-06-02T00:00:00Z",
     to_date: str = "2099-12-30T18:30:00Z",
     revision_status: str = None,
 ) -> dict:
-    """
-    Build a single API payload for Commodity Quality Parameter.
-
-    Args:
-        item_ref_id: FK ID for Item Name dropdown (e.g., 106 for Potato)
-        transaction_type: FK ID for Transaction Type dropdown (e.g., 154 for Purchase)
-        quality_params: List of detail row dicts, each with keys:
-            quality_type (int), min_quality_value (str), max_quality_value (str),
-            rate_percentage (bool), multiplier (str)
-        from_date: ISO datetime string (server auto-sets on create)
-        to_date: ISO datetime string (default sentinel: 2099-12-30T18:30:00Z)
-        revision_status: Optional revision label (str or None)
-
-    Returns:
-        dict: API payload with attribute_name set to "Commodity Quality Parameter"
-    """
     return {
         "id": "",
         "attribute_name": "Commodity Quality Parameter",
         "item_ref_id": item_ref_id,
         "transaction_type": transaction_type,
-        "from_date": from_date,
+        "from_date": _yesterday_1830z(),
         "to_date": to_date,
         "revision_status": revision_status,
         "details": [],
         "children": [
             {
-                "stepper_name": "Define Item Quality Parameter Details",
+                "stepper_name": STEPPER_NAME,
                 "is_stepper": True,
                 "details": quality_params,
                 "children": [],
@@ -519,110 +425,87 @@ def build_cqp_api_payload(
     }
 
 
+def _random_detail_rows(quality_param_ids: list) -> list:
+    """Pick 1–3 random quality params and generate random min/max/multiplier rows."""
+    n = random.randint(1, min(3, len(quality_param_ids)))
+    chosen = random.sample(quality_param_ids, n)
+    rows = []
+    for qp_id in chosen:
+        min_val = 1
+        max_val = 100
+        rows.append({
+            "quality_type": qp_id,
+            "min_quality_value": min_val,
+            "max_quality_value": max_val,
+            "rate_percentage": False,
+            "multiplier": 1,
+        })
+    return rows
+
+
 def generate_cqp_payloads(count: int = 10, offset: int = 0,
-                            skip_item_ids: set = None, fk_ids: dict = None) -> list:
+                           skip_item_ids: set = None, fk_ids: dict = None) -> list:
     """
     Generate N API payloads for Commodity Quality Parameter.
 
-    Resolves FK dropdown names to live ERP IDs via FkResolver results
-    (fk_ids), falling back to hardcoded ID maps if not available.
-    Skips items whose item_ref_id is in skip_item_ids (to avoid
-    duplicate (item_ref_id, to_date) constraint violations).
+    Fully dynamic — uses live FK IDs from fk_ids (resolved by FkResolver).
+    Transaction Type is always Purchase.
+    Each record gets 1–3 random quality parameter rows.
+    Skips item IDs already used in existing CQP entries.
 
     Args:
         count: Number of payloads to generate
-        offset: Start index in the data pool (to skip already-used entries)
-        skip_item_ids: Set of item_ref_id integers to skip. Typically
-                       populated by fetching existing CQP entries from
-                       the API at runtime.
-        fk_ids: Optional dict of resolved FK IDs, e.g.
-                {"item_ref_id": {"Sugarcane": 94, ...},
-                 "quality_type": {"Moisture Content": 1, ...}}
-
-    Returns:
-        list[dict]: List of API payloads ready for batch_create
+        offset: Ignored (kept for API compatibility)
+        skip_item_ids: Set of item_ref_id integers already in CQP
+        fk_ids: Resolved FK maps: {"item_ref_id": {name: id, ...},
+                                    "quality_type": {name: id, ...},
+                                    "transaction_type": {name: id, ...}}
     """
     fk_ids = fk_ids or {}
-    item_id_map = fk_ids.get("item_ref_id", ITEM_ID_MAP)
-    quality_param_id_map = fk_ids.get("quality_type", QUALITY_PARAM_ID_MAP)
+    item_id_map = fk_ids.get("item_ref_id") or ITEM_ID_MAP
+    quality_param_id_map = fk_ids.get("quality_type") or QUALITY_PARAM_ID_MAP
+    txn_type_map = fk_ids.get("transaction_type") or TRANSACTION_TYPE_ID_MAP
 
-    pool = COMMODITY_QUALITY_PARAMETER_API_DATA
-    payloads = []
+    # Always Purchase
+    purchase_id = txn_type_map.get("Purchase", 154)
 
+    # Available item IDs excluding already-used ones
     used_items = set(skip_item_ids or [])
+    available_item_ids = [
+        iid for iid in item_id_map.values() if iid not in used_items
+    ]
+    quality_param_ids = list(quality_param_id_map.values())
+
+    if not available_item_ids:
+        print("  WARNING: No available item IDs — all items already have CQP entries.")
+        return []
+    if not quality_param_ids:
+        print("  WARNING: No quality parameter IDs resolved. Cannot generate detail rows.")
+        return []
+
     if used_items:
-        print(f"  [DEDUP] Skipping {len(used_items)} already-used item IDs: "
-              f"{sorted(used_items)}")
+        print(f"  [DEDUP] Skipping {len(used_items)} already-used item IDs")
 
-    i = 0
-    scan_idx = offset
-    skipped = 0
+    # Shuffle so we don't always pick the same items in the same order
+    shuffled_items = available_item_ids[:]
+    random.shuffle(shuffled_items)
 
-    while len(payloads) < count and scan_idx < (offset + len(pool) * 3):
-        idx = scan_idx % len(pool)
-        entry = pool[idx]
-        scan_idx += 1
-
-        item_name, txn_type_name, rev_status, qp_tuples = entry
-
-        # Resolve FK codes to ERP IDs
-        item_id = item_id_map.get(item_name)
-        txn_type_id = TRANSACTION_TYPE_ID_MAP.get(txn_type_name)
-
-        if item_id is None:
-            print(f"  WARNING: Item '{item_name}' not found in ITEM_ID_MAP, skipping")
-            continue
-        if txn_type_id is None:
-            print(f"  WARNING: Transaction Type '{txn_type_name}' not found in TRANSACTION_TYPE_ID_MAP, skipping")
-            continue
-
-        # ── Skip items already used in CQP with default to_date ─────────
-        if item_id in used_items:
-            skipped += 1
-            continue
-
-        # Build detail rows from quality parameter tuples
-        detail_rows = []
-        for qp_name, min_val, max_val, rate_pct, mult in qp_tuples:
-            qp_id = quality_param_id_map.get(qp_name)
-            if qp_id is None:
-                print(f"  WARNING: Quality Parameter '{qp_name}' not found in QUALITY_PARAM_ID_MAP, skipping row")
-                continue
-            detail_rows.append({
-                "quality_type": qp_id,
-                "min_quality_value": min_val,
-                "max_quality_value": max_val,
-                "rate_percentage": rate_pct,
-                "multiplier": mult,
-            })
-
-        # Handle potential duplicate (item_ref_id, to_date) combos when wrapping
-        # Use a different to_date for wrapped entries
-        to_date = "2099-12-30T18:30:00Z"
-        if scan_idx > (offset + len(pool)):
-            wrap_count = (scan_idx - offset) // len(pool) + 1
-            # Shift the to_date by 1 year per wrap to avoid unique constraint violation
-            year = 2098 + wrap_count
-            to_date = f"{year}-12-30T18:30:00Z"
-            rev_status = f"{rev_status} (Batch {wrap_count})" if rev_status else f"Batch {wrap_count}"
-
+    payloads = []
+    for item_id in shuffled_items:
+        if len(payloads) >= count:
+            break
+        detail_rows = _random_detail_rows(quality_param_ids)
         payloads.append(
             build_cqp_api_payload(
                 item_ref_id=item_id,
-                transaction_type=txn_type_id,
+                transaction_type=purchase_id,
                 quality_params=detail_rows,
-                to_date=to_date,
-                revision_status=rev_status,
             )
         )
-        i += 1
-
-    if skipped:
-        print(f"  [DEDUP] Skipped {skipped} data pool entries with used item IDs")
 
     if len(payloads) < count:
-        print(f"  WARNING: Could only generate {len(payloads)} payloads "
-              f"(requested {count}). Data pool exhausted — add more items.")
+        print(f"  WARNING: Could only generate {len(payloads)}/{count} payloads "
+              f"— not enough unused items.")
 
     return payloads
 
@@ -699,9 +582,7 @@ FIELD_VALIDATION_RULES = {
     },
 }
 
-ITEM_NAMES = dict(ITEM_ID_MAP)
 TRANSACTION_TYPE_NAMES = dict(TRANSACTION_TYPE_ID_MAP)
-QUALITY_PARAM_NAMES = dict(QUALITY_PARAM_ID_MAP)
 
 SCREEN_NAME_FIELDS = {
     "item_ref_id": "Item Master",
@@ -709,12 +590,8 @@ SCREEN_NAME_FIELDS = {
 }
 
 DEFAULT_COMMODITY_QUALITY_PARAMETER_FK_IDS = {
-    "item_ref_id": ITEM_ID_MAP,
     "transaction_type": TRANSACTION_TYPE_ID_MAP,
-    "quality_type": QUALITY_PARAM_ID_MAP,
 }
-
-STEPPER_NAME = "Define Item Quality Parameter Details"
 
 
 def get_fk_screen_mapping():
@@ -722,18 +599,29 @@ def get_fk_screen_mapping():
     return {
         "item_ref_id": "Item Master",
         "quality_type": "Quality Parameter",
+        "transaction_type": "Transaction Type",
     }
 
 
-def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None, offset: int = 0, existing_entries: list = None) -> list:
-    """Generate a batch of unique Commodity Quality Parameter API payloads.
+def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None, offset: int = 0, existing_entries: list = None, config: dict = None) -> list:
+    fk_ids = dropdown_ids or {}
 
-    Args:
-        count: Number of payloads to generate.
-        prefix: Ignored for CQP (data pool provides item/param combinations).
-        dropdown_ids: Override specific FK ID pools.
+    # When fill_all=True: skip items that already have CQP entries,
+    # generate for all remaining items regardless of count.
+    if (config or {}).get("fill_all"):
+        # Collect used item IDs from existing listing entries
+        used_ids: set = set()
+        for entry in (existing_entries or []):
+            iid = entry.get("item_ref_id")
+            if iid is not None:
+                try:
+                    used_ids.add(int(iid))
+                except (ValueError, TypeError):
+                    pass
+        item_id_map = fk_ids.get("item_ref_id") or ITEM_ID_MAP
+        # Generate for every item not already present
+        available = [iid for iid in item_id_map.values() if iid not in used_ids]
+        fill_count = len(available)
+        return generate_cqp_payloads(count=fill_count, skip_item_ids=used_ids, fk_ids=fk_ids)
 
-    Returns:
-        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
-    """
     return generate_cqp_payloads(count=count, offset=offset, fk_ids=dropdown_ids)

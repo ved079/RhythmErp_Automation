@@ -196,26 +196,53 @@ def generate_batch_payloads(
     offset: int = 0,
     existing_entries: list = None,
 ) -> list:
-    """Standardized batch generator with optional FK ID override, offset, and duplicate avoidance.
-
-    Args:
-        existing_entries: List of existing entry dicts from ERP (each contains
-                         source_uom_code and target_uom_code). Pairs already
-                         present are skipped.
     """
-    # Build set of existing (source_uom_code, target_uom_code) pairs
-    existing_pairs = set()
-    if existing_entries:
-        for entry in existing_entries:
-            src = entry.get("source_uom_code")
-            tgt = entry.get("target_uom_code")
-            if src is not None and tgt is not None:
-                existing_pairs.add(f"{src}:{tgt}")
+    Generate UOM conversion payloads.
 
-    return generate_uom_conversion_api_payloads(
-        count=count, fk_ids=dropdown_ids, offset=offset,
-        existing_pairs=existing_pairs,
-    )
+    `count` = number of SOURCE UOMs to pick. For each chosen source,
+    entries are created to ALL other UOMs not already present in ERP.
+
+    count=1 → 1 source UOM → up to N-1 entries
+    count=2 → 2 source UOMs → up to 2×(N-1) entries
+    count=N → all sources  → full N×(N-1) matrix
+
+    Factor is always 1.
+    """
+    fk_ids = dropdown_ids or {}
+    src_map = fk_ids.get("source_uom_code", {})
+    tgt_map = fk_ids.get("target_uom_code", {})
+    merged = {**src_map, **tgt_map}
+    if not merged:
+        merged = UOM_IDS  # last-resort fallback
+    all_ids = list(set(merged.values()))
+
+    # Build set of existing (source_id, target_id) pairs to skip
+    existing_pairs = set()
+    for entry in (existing_entries or []):
+        src = entry.get("source_uom_code")
+        tgt = entry.get("target_uom_code")
+        if src is not None and tgt is not None:
+            existing_pairs.add(f"{src}:{tgt}")
+
+    # Pick `count` source UOMs (capped to available)
+    import random as _random
+    source_ids = _random.sample(all_ids, min(count, len(all_ids)))
+
+    payloads = []
+    for src_id in source_ids:
+        for tgt_id in all_ids:
+            if src_id == tgt_id:
+                continue
+            pair_key = f"{src_id}:{tgt_id}"
+            if pair_key in existing_pairs:
+                continue
+            payloads.append(build_uom_conversion_api_payload(
+                source_uom_code=src_id,
+                target_uom_code=tgt_id,
+                conversion_factor=1,
+            ))
+
+    return payloads
 
 
 # ──────────────────────────────────────────────

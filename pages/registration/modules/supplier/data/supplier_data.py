@@ -830,14 +830,18 @@ BANK_DOC_NAMES = {
 }
 
 # Fixed defaults (these never vary)
-DEFAULT_CURRENCY_REF_ID = 1   # INR
+DEFAULT_CURRENCY_REF_ID = 8   # INR
 DEFAULT_COUNTRY_REF_ID = 8    # India
+
+# GST registration defaults (seen in Additional Details stepper GET response, tenant 751)
+GST_REGISTRATION_TYPE_ID = 50    # default GST registration type
+GST_REGISTRATION_STATUS_ID = 1924  # default GST registration status
 
 # Backward-compatible DEFAULT_SUPPLIER_FK_IDS dict (uses first option from each pool)
 DEFAULT_SUPPLIER_FK_IDS = {
     "ownership_status_ref_id": 7,    # Private Limited Company
     "po_type_ref_id": 25,           # Domestic
-    "default_currency_ref_id": 1,    # INR
+    "default_currency_ref_id": 8,    # INR
     "payment_terms_ref_id": 26,     # 30 Days
     "delivery_terms_ref_id": 129,   # Delivery
     "mode_of_delivery_ref_id": 30,  # Truck
@@ -904,6 +908,7 @@ _ADDRESS_CHAINS = [
         "district_ref_id_id": 479,
         "sub_district_ref_id_id": 11462,
         "village_ref_id_id": 303411,
+        "pincode_ref_id_id": 2148,  # verified from tenant 751 GET response (id=103) — used for both shipping and billing rows
         "_verified": True,
     },
     {
@@ -920,6 +925,7 @@ _ADDRESS_CHAINS = [
         "district_ref_id_id": 811,
         "sub_district_ref_id_id": 14387,
         "village_ref_id_id": 503970,
+        "pincode_ref_id_id": 13124,  # verified from tenant 751 GET response
         "_verified": True,
     },
 ]
@@ -1051,6 +1057,9 @@ def build_supplier_api_payload(
         "office_no": step1_data.get("office_number", "") or None,
         "is_gst_set_off": step1_data.get("is_gst_set_off", True),
         "is_tds_applicable": step1_data.get("is_tds_applicable", False),
+        # GST registration fields — required by ERP (verified from GET response tenant 751)
+        "gst_registration_type": GST_REGISTRATION_TYPE_ID,
+        "gst_registration_status": GST_REGISTRATION_STATUS_ID,
         "details": [],
         "children": [],
     }
@@ -1082,10 +1091,11 @@ def build_supplier_api_payload(
             row["sub_district_ref_id_id"] = _fk("sub_district_ref_id_id")
         if _fk("village_ref_id_id") is not None:
             row["village_ref_id_id"] = _fk("village_ref_id_id")
+        # Pin code is a FK lookup (pincode_ref_id_id), NOT a raw integer field.
+        # Only include if the address chain provides a verified pincode FK ID.
+        if _fk("pincode_ref_id_id") is not None:
+            row["pincode_ref_id_id"] = _fk("pincode_ref_id_id")
         row["address"] = step2_data.get("address", "")
-        # API returns pin_code as integer (e.g., 141001) — send as int
-        pin = step2_data.get("pin_code", "")
-        row["pin_code"] = int(pin) if pin and pin.isdigit() else None
         row["gstin"] = step2_data.get("gstin", "") or None
         row["same_as_above"] = None  # API returns null, not False
         row["address2"] = None
