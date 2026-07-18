@@ -152,6 +152,72 @@ def batch_preview_endpoint(request: BatchCreateRequest):
     return {"payloads": payloads}
 
 
+@app.post("/api/batch-create/cqp-fill-preview")
+def cqp_fill_preview_endpoint(request: BatchCreateRequest):
+    """Return which items are missing CQP entries — used by Fill All Items preview."""
+    from common.erp_api_client import RhythmERPAPIClient
+    from common.fk_resolver import FkResolver
+
+    print(f"[CQP-PREVIEW] Request received — tenant={request.erp_tenant_id}")
+    client = RhythmERPAPIClient(tenant_id=request.erp_tenant_id)
+    try:
+        client.login_from_browser(token=request.erp_token, tenant_id=request.erp_tenant_id)
+        print(f"[CQP-PREVIEW] Auth OK")
+    except Exception as e:
+        print(f"[CQP-PREVIEW] Auth failed: {e}")
+        return {"error": str(e), "missing": [], "total_items": 0, "existing_count": 0}
+
+    try:
+        # Resolve all item IDs
+        resolver = FkResolver(client)
+        item_id_map = resolver.resolve("Item Master", parent_screen="Commodity Quality Parameter", field_key="item_ref_id") or {}
+        print(f"[CQP-PREVIEW] Resolved {len(item_id_map)} items from FK resolver")
+
+        # Reverse map: id → name
+        id_to_name = {v: k for k, v in item_id_map.items()}
+
+        # Fetch existing CQP entries
+        existing = client.list_entries("Commodity Quality Parameter", page_size=500)
+        existing_rows = existing.get("screenmatlistingdata_set", existing.get("results", []))
+        print(f"[CQP-PREVIEW] Found {len(existing_rows)} existing CQP listing rows")
+
+        # Get used item IDs by fetching each entry's detail
+        used_ids: set = set()
+        for row in existing_rows:
+            entry_id = row.get("id")
+            if entry_id:
+                detail = client.get_entry("Commodity Quality Parameter", entry_id)
+                if detail:
+                    iid = detail.get("item_ref_id")
+                    if iid is not None:
+                        try:
+                            used_ids.add(int(iid))
+                        except (ValueError, TypeError):
+                            pass
+
+        print(f"[CQP-PREVIEW] {len(used_ids)} used item IDs: {sorted(used_ids)}")
+
+        missing = [
+            {"id": iid, "name": id_to_name.get(iid, f"Item #{iid}")}
+            for iid in sorted(item_id_map.values())
+            if iid not in used_ids
+        ]
+        return {
+            "total_items": len(item_id_map),
+            "existing_count": len(used_ids),
+            "missing": missing,
+        }
+    except Exception as e:
+        import traceback
+        print(f"[CQP-PREVIEW] ERROR: {e}\n{traceback.format_exc()}")
+        return {"error": str(e), "missing": [], "total_items": 0, "existing_count": 0}
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
+
+
 @app.post("/api/batch-create/cbr-location-count")
 def cbr_location_count_endpoint(request: CbrTokenRequest):
     """Return the number of available Location options in the CBR screen schema."""

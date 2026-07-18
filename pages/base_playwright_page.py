@@ -17,6 +17,33 @@ class BasePlaywrightPage:
         self.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
         self.page.wait_for_selector("table#excel-table", timeout=5000)
 
+    def handle_submit_result(self, timeout=8000):
+        """Wait for swal2 after submit. Returns True on success, False on error.
+
+        Either way dismisses the alert. Caller should cancel + retry on False.
+        """
+        try:
+            self.page.wait_for_selector(".swal2-container", timeout=timeout)
+        except Exception:
+            return False  # no alert at all — likely inline validation error
+
+        # Detect error vs success by icon class
+        is_error = self.page.locator(".swal2-icon.swal2-error, .swal2-icon.swal2-warning").count() > 0
+        self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+        try:
+            self.page.wait_for_selector(".swal2-container", state="hidden", timeout=3000)
+        except Exception:
+            pass
+
+        if is_error:
+            return False
+
+        try:
+            self.page.wait_for_selector("table#excel-table", timeout=5000)
+        except Exception:
+            pass
+        return True
+
     def handle_validation_alert(self):
         self.page.wait_for_selector(".swal2-container", timeout=5000)
         self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")

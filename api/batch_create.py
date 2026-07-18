@@ -336,7 +336,8 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
     start = time.time()
     created = 0
     failed = 0
-    total = min(request.count, 500)
+    fill_all = (request.config or {}).get("fill_all", False)
+    total = 9999 if fill_all else min(request.count, 500)
     records = []
 
     yield _sse_event(LogEvent(
@@ -404,6 +405,8 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
     do_verify = workflow_cfg.get("verify", False)
     do_approve = workflow_cfg.get("approve", False)
 
+    skipped = 0
+
     for i, payload in enumerate(payloads):
         record_name = payload.get("name") or str(payload.get("attribute_name", ""))
         is_update = payload.get("id") and str(payload.get("id", "")).strip() not in ("", "0")
@@ -442,25 +445,47 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
                 except Exception as wf_err:
                     yield _sse_event(LogEvent(type="log", message=f"    -> #{record_id} workflow error: {wf_err}", timestamp=datetime.now(timezone.utc), run_id=run_id))
         else:
-            failed += 1
             error_detail = getattr(client, '_last_raw_response', None)
-            err_msg = f"API returned None"
-            if error_detail is not None:
-                err_msg = f"HTTP {error_detail.status_code}: {error_detail.text[:200]}"
-                if error_detail.status_code in (401, 403):
+            err_body = error_detail.text if error_detail is not None else ""
+            err_status = error_detail.status_code if error_detail is not None else 0
+
+            # Detect duplicate / already-exists errors → SKIPPED, not FAILED
+            is_duplicate = err_status == 400 and any(
+                kw in err_body.lower() for kw in ("duplicate", "already exist", "unique", "already present")
+            )
+
+            if is_duplicate:
+                skipped += 1
+                # Extract a friendly field value to show (e.g. uom_code)
+                skip_label = (
+                    payload.get("uom_code") or
+                    payload.get("name") or
+                    record_name
+                )
+                records.append({"name": record_name, "record_id": "-", "status": "skipped"})
+                yield _sse_event(LogEvent(
+                    type="log",
+                    message=f"  [{i+1}/{total}] SKIPPED  -  {skip_label} (already exists)",
+                    timestamp=datetime.now(timezone.utc),
+                    run_id=run_id,
+                ))
+            else:
+                failed += 1
+                if err_status in (401, 403):
                     yield _sse_event(LogEvent(
                         type="auth_error",
                         message="ERP token is invalid or expired. Please update your token.",
                         timestamp=datetime.now(timezone.utc),
                         run_id=run_id,
                     ))
-            records.append({"name": record_name, "record_id": "-", "status": "failed"})
-            yield _sse_event(LogEvent(
-                type="log",
-                message=f"  [{i+1}/{total}]  FAILED  -  {record_name}: {err_msg}",
-                timestamp=datetime.now(timezone.utc),
-                run_id=run_id,
-            ))
+                err_msg = f"HTTP {err_status}: {err_body[:200]}" if error_detail is not None else "API returned None"
+                records.append({"name": record_name, "record_id": "-", "status": "failed"})
+                yield _sse_event(LogEvent(
+                    type="log",
+                    message=f"  [{i+1}/{total}]  FAILED  -  {record_name}: {err_msg}",
+                    timestamp=datetime.now(timezone.utc),
+                    run_id=run_id,
+                ))
 
     elapsed = time.time() - start
 
@@ -475,13 +500,15 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
             "total": total,
             "created": created,
             "failed": failed,
+            "skipped": skipped,
             "elapsed_seconds": round(elapsed, 1),
             "records": records,
         }, f, indent=2, ensure_ascii=False)
 
+    skipped_part = f", {skipped} skipped" if skipped else ""
     yield _sse_event(LogEvent(
         type="run_end",
-        message=f"Batch create complete: {created} created, {failed} failed in {elapsed:.1f}s",
+        message=f"Batch create complete: {created} created{skipped_part}, {failed} failed in {elapsed:.1f}s",
         timestamp=datetime.now(timezone.utc),
         run_id=run_id,
     ))

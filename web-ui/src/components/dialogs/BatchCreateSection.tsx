@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Database, CheckCircle2, XCircle, Play, Info, ShieldCheck, BadgeCheck, ChevronRight, ChevronDown, History, Download, RefreshCw, RotateCcw, Loader2 } from 'lucide-react'
+import { Database, CheckCircle2, XCircle, Play, Info, ShieldCheck, BadgeCheck, ChevronRight, ChevronDown, History, Download, RefreshCw, RotateCcw, Loader2, ListChecks } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import { startBatchCreate, exportBatchExcel, fetchBatchHistory, type SSEEvent, type BatchRunSummary } from '@/lib/api'
 import { BatchCompleteDialog } from './BatchCompleteDialog'
@@ -99,6 +99,9 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
   const [cbrLocationCount, setCbrLocationCount] = useState<number | null>(null)
   const [cbrCountLoading, setCbrCountLoading] = useState(false)
+  const [cqpPreview, setCqpPreview] = useState<{ total_items: number; existing_count: number; missing: { id: number; name: string }[] } | null>(null)
+  const [cqpPreviewLoading, setCqpPreviewLoading] = useState(false)
+  const [showCqpConfirm, setShowCqpConfirm] = useState(false)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const startTimeRef = useRef<number>(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -163,7 +166,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [running])
 
-  const handleRun = useCallback(() => {
+  const handleRun = useCallback((fillAll = false) => {
     if (!target) return
     if (!erpToken) {
       onNeedsToken()
@@ -183,11 +186,13 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
       batchConfig = farmerConfig
     } else if (target.subModule === 'item_attribute') {
       batchConfig = { attr_number: attrNumber }
+    } else if (fillAll) {
+      batchConfig = { fill_all: true }
     }
     startBatchCreate(
       target.module,
       target.subModule,
-      count,
+      fillAll ? 9999 : count,
       erpToken,
       erpTenantId,
       (event: SSEEvent) => {
@@ -219,6 +224,29 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
       batchConfig,
     )
   }, [target, erpToken, erpTenantId, count, farmerConfig, onNeedsToken])
+
+  const handleFillAllPreview = useCallback(async () => {
+    if (!erpToken) { onNeedsToken(); return }
+    setCqpPreviewLoading(true)
+    setCqpPreview(null)
+    try {
+      const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] ?? ''
+      const res = await fetch('/api/proxy?path=batch-create/cqp-fill-preview', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': decodeURIComponent(csrfToken) },
+        body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId, module: 'commodity_settings', sub_module: 'commodity_quality_parameter', count: 9999 }),
+      })
+      const data = await res.json()
+      console.log('[CQP-PREVIEW] response:', data)
+      setCqpPreview({ total_items: data.total_items ?? 0, existing_count: data.existing_count ?? 0, missing: data.missing ?? [] })
+      setShowCqpConfirm(true)
+    } catch {
+      // silent
+    } finally {
+      setCqpPreviewLoading(false)
+    }
+  }, [erpToken, erpTenantId, onNeedsToken])
 
   const handleDownload = useCallback(async () => {
     if (!batchRunId) return
@@ -452,7 +480,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
             )}
 
             {/* Controls row */}
-            <div className="flex items-end gap-3">
+            <div className="flex items-end gap-3 flex-wrap">
               <div className="space-y-1 w-20">
                 <Label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Count</Label>
                 <Input
@@ -466,13 +494,24 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
                 />
               </div>
               <Button
-                onClick={handleRun}
+                onClick={() => handleRun(false)}
                 disabled={running}
                 className="h-8 text-[12px] bg-[#3F51B5] hover:bg-[#3949AB] cursor-pointer gap-1.5"
               >
                 {running ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
                 {running ? 'Creating...' : 'Create'}
               </Button>
+              {target.subModule === 'commodity_quality_parameter' && (
+                <Button
+                  onClick={handleFillAllPreview}
+                  disabled={running || cqpPreviewLoading}
+                  variant="outline"
+                  className="h-8 text-[12px] border-[#3F51B5]/40 text-[#3F51B5] dark:text-[#7986CB] hover:bg-[#3F51B5]/10 cursor-pointer gap-1.5"
+                >
+                  {cqpPreviewLoading ? <Loader2 className="size-3.5 animate-spin" /> : <ListChecks className="size-3.5" />}
+                  {cqpPreviewLoading ? 'Checking...' : 'Fill All Items'}
+                </Button>
+              )}
             </div>
 
             {/* Module-specific config */}
@@ -619,6 +658,44 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
                   <Button onClick={onClearToken} variant="outline" className="h-7 text-[11px] border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer">
                     Reset Token
                   </Button>
+                </div>
+              </div>
+            )}
+
+            {/* CQP Fill All confirmation dialog */}
+            {showCqpConfirm && cqpPreview && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-sm mx-4 p-5 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <ListChecks className="size-4 text-[#3F51B5]" />
+                    <span className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">Fill All Items</span>
+                  </div>
+                  <div className="text-[12px] text-gray-600 dark:text-gray-300 space-y-1">
+                    <p><span className="font-medium">{cqpPreview.total_items}</span> total items in ERP</p>
+                    <p><span className="font-medium text-emerald-600 dark:text-emerald-400">{cqpPreview.existing_count}</span> already have CQP entries</p>
+                    <p><span className="font-medium text-[#3F51B5] dark:text-[#7986CB]">{cqpPreview.missing.length}</span> missing — will be created</p>
+                  </div>
+                  {cqpPreview.missing.length > 0 ? (
+                    <div className="max-h-36 overflow-y-auto rounded-md border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-2 space-y-0.5">
+                      {cqpPreview.missing.map((item) => (
+                        <div key={item.id} className="text-[11px] text-gray-700 dark:text-gray-300 truncate">• {item.name}</div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[12px] text-emerald-600 dark:text-emerald-400 font-medium">All items already have CQP entries.</p>
+                  )}
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" onClick={() => setShowCqpConfirm(false)} className="h-8 text-[12px] cursor-pointer">Cancel</Button>
+                    {cqpPreview.missing.length > 0 && (
+                      <Button
+                        onClick={() => { setShowCqpConfirm(false); handleRun(true) }}
+                        className="h-8 text-[12px] bg-[#3F51B5] hover:bg-[#3949AB] cursor-pointer gap-1.5"
+                      >
+                        <Play className="size-3" />
+                        Create {cqpPreview.missing.length} entries
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

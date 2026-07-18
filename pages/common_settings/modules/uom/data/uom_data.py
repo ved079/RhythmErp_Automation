@@ -256,25 +256,25 @@ def generate_batch_payloads(
     offset: int = 0,
     existing_entries: list = None,
 ) -> list:
-    """Generate a batch of unique UOM API payloads.
+    """Generate a batch of unique UOM API payloads, skipping codes already in ERP."""
+    # Build set of codes already in ERP
+    existing_codes = set()
+    for entry in (existing_entries or []):
+        code = entry.get("uom_code")
+        if code:
+            existing_codes.add(str(code).strip().upper())
 
-    Standardized batch generator matching the pattern used across all
-    RhythmERP modules (Customer, Supplier, Company Onboarding, etc.).
-
-    Args:
-        count: Number of payloads to generate.
-        prefix: Ignored for UOM (realistic codes are used instead).
-        dropdown_ids: Not used for UOM (no FK dropdown fields).
-        offset: Ignored for UOM (codes are unique, not pool-based).
-        existing_entries: Ignored for UOM (dedup is by unique code per batch).
-
-    Returns:
-        List of JSON payloads ready for POST /core/dynamic-screen-wrapper/
-    """
     reset_uom_code_pool()
+    # Pre-seed the used pool with existing codes so generate_realistic_uom_data skips them
+    _used_uom_codes.update(existing_codes)
+
     payloads = []
-    for i in range(count):
-        payloads.append(
-            generate_uom_api_payload(prefix, dropdown_ids)
-        )
+    attempts = 0
+    max_attempts = count * 5
+    while len(payloads) < count and attempts < max_attempts:
+        attempts += 1
+        payload = generate_uom_api_payload(prefix, dropdown_ids)
+        code = payload.get("uom_code", "").strip().upper()
+        if code not in existing_codes:
+            payloads.append(payload)
     return payloads

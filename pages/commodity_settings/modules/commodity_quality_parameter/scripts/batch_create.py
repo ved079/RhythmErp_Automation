@@ -71,7 +71,6 @@ from common.fk_resolver import FkResolver
 from common.logger import log
 from pages.commodity_settings.modules.commodity_quality_parameter.data.commodity_quality_parameter_data import (
     generate_cqp_payloads,
-    COMMODITY_QUALITY_PARAMETER_API_DATA,
     TRANSACTION_TYPE_ID_MAP,
 )
 
@@ -81,6 +80,7 @@ SCREEN_NAME = "Commodity Quality Parameter"
 FK_SCREEN_MAP = {
     "item_ref_id": "Item Master",
     "quality_type": "Quality Parameter Master",
+    "transaction_type": "Transaction Type",
 }
 
 
@@ -291,7 +291,7 @@ def main():
     print(f"  Screen: {SCREEN_NAME}")
     print(f"  Entries to create: {count}")
     print(f"  Data pool offset: {offset}")
-    print(f"  Data pool size: {len(COMMODITY_QUALITY_PARAMETER_API_DATA)}")
+    print(f"  Mode: fully dynamic (live FK resolver)")
     if args.dry_run:
         print("  ** DRY-RUN MODE — no entries will be created **")
     print("=" * 70)
@@ -311,15 +311,13 @@ def main():
     dynamic_used_ids = fetch_used_item_ids_from_api(api)
 
     # ── Generate payloads (with dedup skip) ──────────────────────────
-    # Generate MORE payloads than needed so retry logic has spares
-    oversample = min(count * 3, len(COMMODITY_QUALITY_PARAMETER_API_DATA))
     print()
-    print(f"  Generating {oversample} candidate payloads (need {count} successful)...")
+    print(f"  Generating {count} candidate payloads...")
     print("-" * 70)
 
     try:
         payloads = generate_cqp_payloads(
-            count=oversample,
+            count=count,
             offset=offset,
             skip_item_ids=dynamic_used_ids,
             fk_ids=fk_ids,

@@ -417,7 +417,6 @@ ITEM_GROUP_OPTIONS = {
 
 ITEM_TYPE_OPTIONS = {
     "Farm": 113,
-    "Non Farm": 114,
 }
 
 ITEM_ATTRIBUTE1_OPTIONS = {
@@ -653,7 +652,7 @@ def build_item_master_api_payload(
     fk_fields = {
         "item_category":     _fk(category, "item_category"),
         "item_group":        _fk(group, "item_group"),
-        "item_type":         _fk(item_type, "item_type"),
+        "item_type":         113,  # locked to Farm only
         "item_attribute1":   _fk(attr1, "item_attribute1"),
         "item_attribute2":   _fk(attr2, "item_attribute2"),
         "item_attribute3":   _fk(attr3, "item_attribute3"),
