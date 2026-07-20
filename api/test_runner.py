@@ -41,11 +41,15 @@ logger = logging.getLogger(__name__)
 ALLOWED_MODULES = {
     "login_screens", "access", "company_onboarding",
     "common_settings", "commodity_settings", "registration",
+    "private_b2b",
 }
 
 ALLOWED_SUB_MODULES = {
     # access
     "entity_group_definition", "user_creation_screen", "role_creation_screen",
+    # purchase flows
+    "direct_pb_flow",
+    "po_qc_pb_flow",
     # common_settings
     "bank", "designation", "error_code_mst", "hsn_sac", "season",
     "tax_authority", "tax_rate", "uom", "uom_conversion", "vehicle_master",
@@ -73,6 +77,12 @@ def validate_module_path(module: str, sub_module: str = None) -> None:
 
 def build_pytest_path(module: str, sub_module: str = None) -> str:
     """Build the filesystem path to run pytest on."""
+    # Special cases: Purchase_Flow_Tests live in a non-standard nested path
+    if module == 'private_b2b' and sub_module in ('direct_pb_flow', 'po_qc_pb_flow'):
+        p = PROJECT_ROOT / "pages/private_b2b/modules/Purchase_Flow_Tests/test/playwright" / sub_module
+        if p.exists():
+            return str(p)
+
     if sub_module:
         test_dir = PROJECT_ROOT / "pages" / module / "modules" / sub_module / "test"
         if test_dir.exists():

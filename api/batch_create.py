@@ -4,6 +4,8 @@ import importlib
 import inspect
 import json
 import logging
+import subprocess
+import sys
 import time
 import uuid
 from datetime import datetime, timezone
@@ -54,6 +56,18 @@ MODULE_IMPORT_PATHS = {
         "commodity_base_rate": "pages.commodity_settings.modules.commodity_base_rate.data.cbr_data",
     },
 }
+
+
+# Modules that use a standalone CLI script instead of generate_batch_payloads.
+# Value is the path to the script relative to PROJECT_ROOT.
+_SCRIPT_PATHS: dict[str, dict[str, Path]] = {
+    "private_b2b": {
+        "direct_pb_flow": Path("pages/private_b2b/modules/Purchase_Flow_Tests/test/playwright/direct_pb_flow/scripts/batch_create.py"),
+        "po_qc_pb_flow": Path("pages/private_b2b/modules/Purchase_Flow_Tests/test/playwright/po_qc_pb_flow/scripts/batch_create.py"),
+    },
+}
+
+PROJECT_ROOT = Path(__file__).parent.parent
 
 
 def _sse_event(event: LogEvent) -> str:
@@ -228,9 +242,71 @@ def _build_payloads_only(request: BatchCreateRequest) -> list[dict]:
     return payloads
 
 
+def _run_script_stream(script_path: Path, request: BatchCreateRequest, run_id: str) -> Generator[str, None, None]:
+    """Run a standalone batch-create script as a subprocess and yield its stdout as SSE log events."""
+    args = [
+        sys.executable, str(PROJECT_ROOT / script_path),
+        "--token",  request.erp_token,
+        "--tenant", request.erp_tenant_id or "Eco Green Pvt Ltd",
+        "--count",  str(request.count),
+    ]
+    config = request.config or {}
+    if config.get("item_range"):
+        args += ["--item-range", config["item_range"]]
+    if config.get("items_per_pb"):
+        args += ["--items-per-pb", str(config["items_per_pb"])]
+    if config.get("items_per_chain"):
+        args += ["--items-per-chain", str(config["items_per_chain"])]
+    if config.get("supplier"):
+        args += ["--supplier", str(config["supplier"])]
+
+    yield _sse_event(LogEvent(
+        type="log", run_id=run_id,
+        message=f"Starting script: {script_path.name}  (count={request.count})",
+        timestamp=datetime.now(timezone.utc),
+    ))
+
+    try:
+        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, cwd=str(PROJECT_ROOT))
+        n_created = 0
+        n_failed = 0
+        for line in proc.stdout:
+            line = line.rstrip()
+            if not line:
+                continue
+            if line.startswith("  [") and "CREATED #" in line:
+                n_created += 1
+                yield _sse_event(LogEvent(type="created", run_id=run_id, message=line.strip(),
+                                          timestamp=datetime.now(timezone.utc)))
+            elif line.startswith("  [") and ("FAILED" in line or "ERROR" in line):
+                n_failed += 1
+                yield _sse_event(LogEvent(type="failed", run_id=run_id, message=line.strip(),
+                                          timestamp=datetime.now(timezone.utc)))
+            else:
+                yield _sse_event(LogEvent(type="log", run_id=run_id, message=line,
+                                          timestamp=datetime.now(timezone.utc)))
+        proc.wait()
+        yield _sse_event(LogEvent(
+            type="run_end", run_id=run_id,
+            message=f"{n_created} created, {n_failed} failed",
+            timestamp=datetime.now(timezone.utc),
+        ))
+    except Exception as e:
+        yield _sse_event(LogEvent(type="error", run_id=run_id, message=str(e),
+                                  timestamp=datetime.now(timezone.utc)))
+
+
 def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, None]:
     """Generate batch create progress as SSE events."""
     run_id = str(uuid.uuid4())[:8]
+
+    # Script-backed modules (standalone scripts with their own FK resolution)
+    script_path = _SCRIPT_PATHS.get(request.module, {}).get(request.sub_module)
+    if script_path:
+        yield from _run_script_stream(script_path, request, run_id)
+        return
+
     module_paths = MODULE_IMPORT_PATHS.get(request.module, {})
     data_path = module_paths.get(request.sub_module)
     if not data_path:

@@ -62,6 +62,8 @@ DISPLAY_NAMES = {
     "gate_pass": "Gate Pass",
     "quality_check": "Quality Check",
     "Purchase_Flow_Tests": "Purchase Flow Tests",
+    "direct_pb_flow": "Direct PB Flow",
+    "po_qc_pb_flow":  "PO → QC → PB Flow",
 }
 
 # Curated display names per test function for BA/QA readability.
@@ -248,9 +250,26 @@ def discover_sub_modules(base_path: str) -> list[SubModule]:
                 playwright_dir = os.path.join(test_dir, "playwright")
                 if os.path.isdir(playwright_dir):
                     for tf in sorted(os.listdir(playwright_dir)):
+                        tf_path = os.path.join(playwright_dir, tf)
                         if tf.startswith("test_") and tf.endswith(".py"):
+                            # Top-level playwright test file — attach to parent sub-module
                             test_files.append(f"playwright/{tf}")
-                            all_tests.extend(parse_test_functions(os.path.join(playwright_dir, tf), test_type="ui"))
+                            all_tests.extend(parse_test_functions(tf_path, test_type="ui"))
+                        elif os.path.isdir(tf_path) and not tf.startswith("_"):
+                            # Sub-directory inside playwright/ — becomes its own sub-module
+                            pw_sub_files = []
+                            pw_sub_tests = []
+                            for pw_tf in sorted(os.listdir(tf_path)):
+                                if pw_tf.startswith("test_") and pw_tf.endswith(".py"):
+                                    pw_sub_files.append(pw_tf)
+                                    pw_sub_tests.extend(parse_test_functions(os.path.join(tf_path, pw_tf), test_type="ui"))
+                            if pw_sub_files:
+                                sub_modules.append(SubModule(
+                                    name=tf,
+                                    display=get_display_name(tf),
+                                    test_files=pw_sub_files,
+                                    tests=pw_sub_tests,
+                                ))
             # Also check for test_*.py directly in sub_path
             for tf in sorted(os.listdir(sub_path)):
                 if tf.startswith("test_") and tf.endswith(".py") and tf not in test_files:
