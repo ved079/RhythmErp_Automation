@@ -464,7 +464,7 @@ export function TestRunnerTab({
             </button>
           </div>
         ) : undefined}
-        uiCredentialBadge={effectiveTab === 'ui' ? (
+        uiCredentialBadge={effectiveTab === 'ui' && currentModuleId !== 'direct-pb-flow' && currentModuleId !== 'po-qc-pb-flow' ? (
           <CredentialDropdown
             credentials={credentials}
             activeCredId={activeCredId}

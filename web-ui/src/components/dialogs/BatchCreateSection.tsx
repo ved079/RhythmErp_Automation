@@ -54,6 +54,8 @@ export const MODULE_TO_BATCH: Record<string, BatchTarget | null> = {
   'goods-receipt-note': { module: 'private_b2b', subModule: 'goods_receipt_note', label: 'Purchase → Goods Receipt Note' },
   'gate-pass':         { module: 'private_b2b', subModule: 'gate_pass', label: 'Purchase → Gate Pass' },
   'quality-check':     { module: 'private_b2b', subModule: 'quality_check', label: 'Purchase → Quality Check' },
+  'direct-pb-flow':    { module: 'private_b2b', subModule: 'direct_pb_flow',   label: 'Purchase Flows → Direct PB Flow' },
+  'po-qc-pb-flow':     { module: 'private_b2b', subModule: 'po_qc_pb_flow',   label: 'Purchase Flows → PO → QC → PB Flow' },
 }
 
 interface Props {
@@ -80,6 +82,8 @@ function labelForModule(module: string, subModule: string): string {
 export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsToken, onClearToken }: Props) {
   const [tab, setTab] = useState<'create' | 'history'>('create')
   const [count, setCount] = useState(10)
+  const [itemsPerPb, setItemsPerPb] = useState(20)
+  const [qtyPerChain, setQtyPerChain] = useState(24)
   const [running, setRunning] = useState(false)
   const [logs, setLogs] = useState<{ text: string; ts: Date; isErr: boolean; isDone: boolean }[]>([])
   const [created, setCreated] = useState(0)
@@ -186,6 +190,10 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
       batchConfig = farmerConfig
     } else if (target.subModule === 'item_attribute') {
       batchConfig = { attr_number: attrNumber }
+    } else if (target.subModule === 'direct_pb_flow') {
+      batchConfig = { item_range: '58-77', items_per_pb: itemsPerPb }
+    } else if (target.subModule === 'po_qc_pb_flow') {
+      batchConfig = { items_per_chain: qtyPerChain }
     } else if (fillAll) {
       batchConfig = { fill_all: true }
     }
@@ -223,7 +231,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
       undefined,
       batchConfig,
     )
-  }, [target, erpToken, erpTenantId, count, farmerConfig, onNeedsToken])
+  }, [target, erpToken, erpTenantId, count, itemsPerPb, qtyPerChain, farmerConfig, onNeedsToken])
 
   const handleFillAllPreview = useCallback(async () => {
     if (!erpToken) { onNeedsToken(); return }
@@ -493,6 +501,34 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
                   className="h-8 text-[12px]"
                 />
               </div>
+              {target.subModule === 'direct_pb_flow' && (
+                <div className="space-y-1 w-24">
+                  <Label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Items / PB</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={itemsPerPb}
+                    disabled={running}
+                    onChange={(e) => setItemsPerPb(Math.max(1, Math.min(20, parseInt(e.target.value) || 20)))}
+                    className="h-8 text-[12px]"
+                  />
+                </div>
+              )}
+              {target.subModule === 'po_qc_pb_flow' && (
+                <div className="space-y-1 w-24">
+                  <Label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Items / Chain</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10000}
+                    value={qtyPerChain}
+                    disabled={running}
+                    onChange={(e) => setQtyPerChain(Math.max(1, parseInt(e.target.value) || 100))}
+                    className="h-8 text-[12px]"
+                  />
+                </div>
+              )}
               <Button
                 onClick={() => handleRun(false)}
                 disabled={running}

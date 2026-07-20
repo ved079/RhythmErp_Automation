@@ -43,6 +43,8 @@ const FOLDER_TO_SIDEBAR_FALLBACK: Record<string, string> = {
   goods_receipt_note: 'goods-receipt-note',
   gate_pass: 'gate-pass',
   quality_check: 'quality-check',
+  direct_pb_flow: 'direct-pb-flow',
+  po_qc_pb_flow: 'po-qc-pb-flow',
 }
 
 const SIDEBAR_TO_FOLDER_FALLBACK: Record<string, { module: string; subModule: string | null }> = {
@@ -85,6 +87,8 @@ const SIDEBAR_TO_FOLDER_FALLBACK: Record<string, { module: string; subModule: st
   'goods-receipt-note': { module: 'private_b2b', subModule: 'goods_receipt_note' },
   'gate-pass': { module: 'private_b2b', subModule: 'gate_pass' },
   'quality-check': { module: 'private_b2b', subModule: 'quality_check' },
+  'direct-pb-flow':  { module: 'private_b2b', subModule: 'direct_pb_flow' },
+  'po-qc-pb-flow':   { module: 'private_b2b', subModule: 'po_qc_pb_flow' },
 }
 
 export function getCachedFolderToSidebarId(folderName: string): string {

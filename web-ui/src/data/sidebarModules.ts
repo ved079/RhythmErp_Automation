@@ -54,6 +54,15 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
           { id: 'purchase-booking', label: 'Purchase Booking', badge: '61 tests', badgeType: 'success' as const },
         ],
       },
+      {
+        id: 'purchase-flows',
+        label: 'Purchase Flows',
+        defaultExpanded: true,
+        children: [
+          { id: 'direct-pb-flow',  label: 'Direct PB Flow',      badge: '📝 No tests', badgeType: 'none' as const },
+          { id: 'po-qc-pb-flow',   label: 'PO → QC → PB Flow',   badge: '📝 No tests', badgeType: 'none' as const },
+        ],
+      },
     ],
   },
   {
