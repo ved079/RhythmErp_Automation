@@ -425,6 +425,33 @@ class TestPOValidations:
         ).count() > 0, f"Expected 'already added' mat-error for duplicate item '{item_name}'"
         self._cancel(po_page)
 
+    @pytest.mark.xfail(
+        reason="Tax Rate validation not yet enforced by ERP — form saves without selecting tax rate",
+        strict=True,
+    )
+    def test_gst_set_off_requires_tax_rate(self, logged_in_page):
+        """Enabling 'Is GST Set Off' and submitting without a Tax Rate must show
+        'This field is required' on the Tax Rate field.
+
+        Currently XFAIL: the ERP saves the record without requiring Tax Rate selection.
+        Remove xfail once server-side validation is added.
+        """
+        # Use _po_prefill_full so all header fields + Item Category + Item Name are filled
+        _po_prefill_full(logged_in_page)
+        logged_in_page.wait_for_timeout(1500)  # let rate auto-fill after item select
+        _val_fill_native(logged_in_page, "Quantity", "10")
+        # Toggle GST Set Off ON without selecting Tax Rate
+        logged_in_page.locator("app-slide-toggle-v2 div.slider").nth(0).click(force=True)
+        logged_in_page.wait_for_timeout(600)
+        # Submit without picking Tax Rate
+        _val_submit(logged_in_page)
+        assert logged_in_page.locator(
+            "xpath=//mat-label[contains(.,'Tax Rate')]"
+            "/ancestor::mat-form-field"
+            "//mat-error[contains(.,'This field is required')]"
+        ).count() > 0, "Expected 'This field is required' on Tax Rate when GST Set Off enabled"
+        _val_cancel(logged_in_page)
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # QC form validations
@@ -1332,4 +1359,308 @@ class TestPOQCPBValidationFlow:
             f"\n  PO = {integration_state['val_po_ref']}"
             f"\n  QC = {integration_state['val_qc_ref']}"
             f"\n  PB = {pb_ref_no}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Edit-lock flow
+# PO editable → QC created → PO locked
+# QC editable → PB created → QC locked
+# PB never has an active Edit option
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _open_row_menu(page, ref_no):
+    """Click the ⋮ button on the row that contains ref_no."""
+    page.locator(f"tr:has-text('{ref_no}')").first.locator(
+        "button.erp-row-trigger"
+    ).click(force=True)
+    page.wait_for_selector(".mat-mdc-menu-panel", timeout=8000)
+    page.wait_for_timeout(400)
+
+
+def _close_menu(page):
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
+
+
+def _edit_button_state(page):
+    """
+    Returns 'enabled', 'disabled', or 'absent' for the Edit item in the
+    currently open action menu.
+    """
+    edit_btn = page.locator(
+        ".mat-mdc-menu-panel button.mat-mdc-menu-item:has(.erp-menu-title:text-is('Edit'))"
+    ).first
+    if edit_btn.count() == 0:
+        return "absent"
+    if edit_btn.get_attribute("aria-disabled") == "true":
+        return "disabled"
+    return "enabled"
+
+
+@pytest.mark.po_qc_pb
+class TestEditLockFlow:
+    """
+    Verify record-lock rules enforced by the ERP:
+      - PO is editable after creation; Edit is disabled once a QC references it.
+      - QC is editable after creation; Edit is disabled once a PB references it.
+      - PB has no active Edit option (absent or disabled from the start).
+    """
+
+    def test_step1_create_po_edit_enabled(self, logged_in_page, integration_state):
+        """Create PO and confirm its Edit menu item is enabled."""
+        po = POPlaywrightPage(logged_in_page)
+        po.navigate_to_page()
+        _, row_dicts, supplier_name, _, po_ref_no = po.create_record_for_integration(
+            item_configs=[(50, 0, 0)],
+        )
+        assert po_ref_no, "PO ref must be non-empty"
+
+        integration_state["lock_supplier"] = supplier_name
+        integration_state["lock_po_ref"]   = po_ref_no
+        print(f"\n[LOCK] PO created: {po_ref_no}  supplier={supplier_name}")
+
+        po.navigate_to_page()
+        _open_row_menu(logged_in_page, po_ref_no)
+        state = _edit_button_state(logged_in_page)
+        _close_menu(logged_in_page)
+        assert state == "enabled", (
+            f"PO {po_ref_no} Edit should be enabled before any QC, got '{state}'"
+        )
+        print(f"[LOCK] PO Edit = {state} ✓")
+
+    def test_step2_create_qc_po_becomes_locked(self, logged_in_page, integration_state):
+        """Create QC against the PO; PO Edit must become disabled."""
+        if not integration_state.get("lock_po_ref"):
+            pytest.skip("PO not created in step 1")
+
+        supplier_name = integration_state["lock_supplier"]
+
+        qc = QCPlaywrightPage(logged_in_page)
+        qc.navigate_to_page()
+        qc.open_add_form()
+        qc.select_supplier_and_po(supplier_name)
+        qc._fill_nth(qc.NO_OF_BAGS, 0, "1")
+        qc.fill_qc_params_safe(row_index=0)
+        qc.page.locator(qc.SUBMIT_BTN).click()
+        ok = qc.handle_submit_result(timeout=10000)
+        assert ok, "QC submission failed"
+
+        qc.navigate_to_page()
+        qc_ref_no = qc.get_ref_no_of_first_row()
+        assert qc_ref_no, "QC ref must be non-empty"
+        integration_state["lock_qc_ref"] = qc_ref_no
+        print(f"\n[LOCK] QC created: {qc_ref_no}")
+
+        # Verify QC itself is editable right after creation
+        _open_row_menu(logged_in_page, qc_ref_no)
+        qc_state = _edit_button_state(logged_in_page)
+        _close_menu(logged_in_page)
+        assert qc_state == "enabled", (
+            f"QC {qc_ref_no} Edit should be enabled before any PB, got '{qc_state}'"
+        )
+        print(f"[LOCK] QC Edit = {qc_state} ✓")
+
+        # Verify PO is now locked
+        po = POPlaywrightPage(logged_in_page)
+        po.navigate_to_page()
+        _open_row_menu(logged_in_page, integration_state["lock_po_ref"])
+        po_state = _edit_button_state(logged_in_page)
+        _close_menu(logged_in_page)
+        assert po_state == "disabled", (
+            f"PO {integration_state['lock_po_ref']} Edit should be disabled after QC created, "
+            f"got '{po_state}'"
+        )
+        print(f"[LOCK] PO Edit = {po_state} (locked by QC) ✓")
+
+    def test_step3_create_pb_qc_becomes_locked_pb_not_editable(
+        self, logged_in_page, integration_state
+    ):
+        """Create PB against the QC; QC Edit must become disabled; PB must not be editable."""
+        if not integration_state.get("lock_qc_ref"):
+            pytest.skip("QC not created in step 2")
+
+        supplier_name = integration_state["lock_supplier"]
+
+        pb = PBPlaywrightPage(logged_in_page)
+        logged_in_page.goto(_PB_URL)
+        logged_in_page.reload()
+        logged_in_page.wait_for_selector(
+            "table.mat-mdc-table, div.empty-state", timeout=20000
+        )
+        logged_in_page.wait_for_timeout(1000)
+
+        pb.open_add_form()
+        pb.select_supplier_and_qc(supplier_name)
+        pb.open_qty_details_popup(0)
+        pb.fill_qty_details(no_of_bags=1, qty=50)
+        pb.click_done()
+        pb.page.wait_for_timeout(500)
+        pb.page.locator(pb.SUBMIT_BTN).click()
+        pb.handle_success_alert()
+
+        pb.navigate_to_page()
+        pb_ref_no = pb.get_ref_no_of_first_row()
+        assert pb_ref_no, "PB ref must be non-empty"
+        integration_state["lock_pb_ref"] = pb_ref_no
+        print(f"\n[LOCK] PB created: {pb_ref_no}")
+
+        # Verify PB has no active Edit (absent or disabled)
+        _open_row_menu(logged_in_page, pb_ref_no)
+        pb_state = _edit_button_state(logged_in_page)
+        _close_menu(logged_in_page)
+        assert pb_state in ("absent", "disabled"), (
+            f"PB {pb_ref_no} Edit should not be available, got '{pb_state}'"
+        )
+        print(f"[LOCK] PB Edit = {pb_state} (not editable) ✓")
+
+        # Verify QC is now locked
+        qc = QCPlaywrightPage(logged_in_page)
+        qc.navigate_to_page()
+        _open_row_menu(logged_in_page, integration_state["lock_qc_ref"])
+        qc_state = _edit_button_state(logged_in_page)
+        _close_menu(logged_in_page)
+        assert qc_state == "disabled", (
+            f"QC {integration_state['lock_qc_ref']} Edit should be disabled after PB created, "
+            f"got '{qc_state}'"
+        )
+        print(
+            f"[LOCK] QC Edit = {qc_state} (locked by PB) ✓"
+            f"\n[LOCK COMPLETE]"
+            f"\n  PO = {integration_state['lock_po_ref']} (locked)"
+            f"\n  QC = {integration_state['lock_qc_ref']} (locked)"
+            f"\n  PB = {integration_state['lock_pb_ref']} (never editable)"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PO View + Audit Trail
+# Create → View (verify ref + total amount) → History empty
+# → Edit (change qty) → History populated with 1 row showing the ref
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _open_row_action(page, ref_no, action_title):
+    """Open the ⋮ menu for ref_no row and click the named action item."""
+    page.locator(f"tr:has-text('{ref_no}')").first.locator(
+        "button.erp-row-trigger"
+    ).click(force=True)
+    page.wait_for_selector(".mat-mdc-menu-panel", timeout=8000)
+    page.wait_for_timeout(300)
+    page.locator(
+        f".mat-mdc-menu-panel button.mat-mdc-menu-item"
+        f":has(.erp-menu-title:text-is('{action_title}'))"
+    ).click(force=True)
+    page.wait_for_timeout(1500)
+
+
+def _close_popup(page):
+    page.locator(
+        "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Close')]"
+    ).first.click(force=True)
+    page.wait_for_timeout(600)
+
+
+@pytest.mark.po_qc_pb
+class TestPOViewHistoryAuditTrail:
+    """
+    PO View and audit-trail lifecycle:
+      step1: Create PO → open View popup → ref no and total amount visible
+      step2: Open History before any edit → must be empty (no-results)
+      step3: Edit PO (qty 10→20) → update
+      step4: Open History after edit → must have ≥1 row containing the PO ref no
+    """
+
+    def test_step1_create_and_view(self, logged_in_page, integration_state):
+        """Create PO, open View popup, verify ref no and total amount are shown."""
+        po = POPlaywrightPage(logged_in_page)
+        po.navigate_to_page()
+        total, row_dicts, supplier_name, _, po_ref_no = po.create_record_for_integration(
+            item_configs=[(10, 0, 0)],
+            enable_gst=False,
+        )
+        assert po_ref_no, "PO ref must be non-empty"
+        integration_state["audit_po_ref"]   = po_ref_no
+        integration_state["audit_po_total"] = total
+        print(f"\n[AUDIT] PO created: {po_ref_no}  total={total}")
+
+        po.navigate_to_page()
+        _open_row_action(logged_in_page, po_ref_no, "View")
+
+        assert logged_in_page.locator(f"text={po_ref_no}").count() > 0, (
+            f"View popup must show ref no {po_ref_no}"
+        )
+        print(f"[AUDIT] View — ref {po_ref_no} visible ✓")
+
+        # Verify total PO amount appears (formatted as integer or decimal)
+        total_int = str(int(total)) if total else None
+        if total_int:
+            assert logged_in_page.locator(f"text={total_int}").count() > 0, (
+                f"View popup must show total amount containing {total_int}"
+            )
+            print(f"[AUDIT] View — total amount {total_int} visible ✓")
+
+        _close_popup(logged_in_page)
+
+    def test_step2_history_before_edit_is_empty(self, logged_in_page, integration_state):
+        """History must be empty before any edits are made."""
+        if not integration_state.get("audit_po_ref"):
+            pytest.skip("PO not created in step 1")
+
+        po = POPlaywrightPage(logged_in_page)
+        po.navigate_to_page()
+        _open_row_action(logged_in_page, integration_state["audit_po_ref"], "History")
+        logged_in_page.wait_for_timeout(1000)
+
+        assert logged_in_page.locator("div.no-results").count() > 0, (
+            "History should show 'No results found' before any edits"
+        )
+        print("[AUDIT] History before edit = empty ✓")
+        _close_popup(logged_in_page)
+
+    def test_step3_edit_po_qty(self, logged_in_page, integration_state):
+        """Edit PO — change Quantity from 10 to 20 — and confirm update."""
+        if not integration_state.get("audit_po_ref"):
+            pytest.skip("PO not created in step 1")
+
+        po = POPlaywrightPage(logged_in_page)
+        po.navigate_to_page()
+        po.open_edit_form(row_index=0)
+        po._fill_number_nth(po.QUANTITY, 0, 20)
+        po.page.wait_for_timeout(500)
+        po.page.locator(po.UPDATE_BTN).click(force=True)
+        # Wait for form to close (listing reappears) rather than relying on swal2
+        po.page.wait_for_selector(
+            "table.mat-mdc-table, div.empty-state", timeout=15000
+        )
+        po.page.wait_for_timeout(500)
+        print(f"[AUDIT] PO {integration_state['audit_po_ref']} edited (qty 10→20) ✓")
+
+    def test_step4_history_after_edit_is_populated(self, logged_in_page, integration_state):
+        """After edit, History must have ≥1 row and show the PO ref no."""
+        if not integration_state.get("audit_po_ref"):
+            pytest.skip("PO not created in step 1")
+
+        po = POPlaywrightPage(logged_in_page)
+        po.navigate_to_page()
+        _open_row_action(logged_in_page, integration_state["audit_po_ref"], "History")
+        logged_in_page.wait_for_timeout(1500)
+
+        assert logged_in_page.locator("table.mat-mdc-table").count() > 0, (
+            "History must show a table after edit"
+        )
+        row_count = logged_in_page.locator("table.mat-mdc-table tbody tr").count()
+        assert row_count >= 1, f"Expected ≥1 history row after edit, got {row_count}"
+        print(f"[AUDIT] History after edit = {row_count} row(s) ✓")
+
+        assert logged_in_page.locator(
+            f"td:has-text('{integration_state['audit_po_ref']}')"
+        ).count() > 0, (
+            f"History table must contain ref no {integration_state['audit_po_ref']}"
+        )
+        print(f"[AUDIT] History contains ref {integration_state['audit_po_ref']} ✓")
+        _close_popup(logged_in_page)
+        print(
+            "[AUDIT COMPLETE]"
+            f"\n  PO = {integration_state['audit_po_ref']}"
+            "\n  View ✓  History-empty ✓  Edit ✓  History-populated ✓"
         )

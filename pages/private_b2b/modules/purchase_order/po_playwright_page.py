@@ -253,7 +253,8 @@ class POPlaywrightPage(BasePlaywrightPage):
         self._select_random_mat_option(self.DEPARTMENT)
         self._select_random_mat_option(self.DIVISION)
         self._select_mat_by_text(self.TYPE_OF_SALE, "B2B")
-        self._select_mat_by_text(self.PACKAGING_FORWARDING, "Nil")
+        if self.page.locator(self.PACKAGING_FORWARDING).count() > 0:
+            self._select_mat_by_text(self.PACKAGING_FORWARDING, "Nil")
 
     # ── Item row fill ───────────────────────────────────────────────────
 
@@ -285,6 +286,9 @@ class POPlaywrightPage(BasePlaywrightPage):
         so that row_index lines up with the nth visible Tax Rate dropdown.
         Returns (tax_rate_float, tax_amount_float).
         """
+        # Guard: GST toggle may have been removed from this ERP form version
+        if self.page.locator(self.GST_TOGGLE_SLIDER).count() == 0:
+            return (0.0, 0.0)
         toggle = self.page.locator(self.GST_TOGGLE_SLIDER).nth(row_index)
         toggle.scroll_into_view_if_needed()
         toggle.click(force=True)
@@ -468,7 +472,8 @@ class POPlaywrightPage(BasePlaywrightPage):
         self._select_random_mat_option(self.DEPARTMENT)
         self._select_random_mat_option(self.DIVISION)
         self._select_mat_by_text(self.TYPE_OF_SALE, "B2B")
-        self._select_mat_by_text(self.PACKAGING_FORWARDING, "Nil")
+        if self.page.locator(self.PACKAGING_FORWARDING).count() > 0:
+            self._select_mat_by_text(self.PACKAGING_FORWARDING, "Nil")
 
         return names, chosen_supplier, location
 
@@ -762,7 +767,9 @@ class POPlaywrightPage(BasePlaywrightPage):
         self._select_random_mat_option(self.DEPARTMENT)
         self._select_random_mat_option(self.DIVISION)
         self._select_mat_by_text(self.TYPE_OF_SALE, "B2B")
-        self._select_mat_by_text(self.PACKAGING_FORWARDING, "Nil")
+        # Packaging Forwarding was removed from the ERP form — skip if not present
+        if self.page.locator(self.PACKAGING_FORWARDING).count() > 0:
+            self._select_mat_by_text(self.PACKAGING_FORWARDING, "Nil")
         return supplier_name, location
 
     def create_record_for_integration(self, item_configs=None, all_items=False,
