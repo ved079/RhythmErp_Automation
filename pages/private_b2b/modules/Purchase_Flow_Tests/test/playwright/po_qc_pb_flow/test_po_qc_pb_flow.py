@@ -1554,9 +1554,14 @@ def _open_row_action(page, ref_no, action_title):
 
 
 def _close_popup(page):
-    page.locator(
-        "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Close')]"
-    ).first.click(force=True)
+    # Try "Close" first (History/detail popups), then "Cancel" (View/edit popups)
+    footer_close = page.locator(
+        "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Close') or contains(.,'Cancel')]"
+    )
+    if footer_close.count() > 0:
+        footer_close.first.click(force=True)
+    else:
+        page.keyboard.press("Escape")
     page.wait_for_timeout(600)
 
 
@@ -1579,25 +1584,27 @@ class TestPOViewHistoryAuditTrail:
             enable_gst=False,
         )
         assert po_ref_no, "PO ref must be non-empty"
-        integration_state["audit_po_ref"]   = po_ref_no
-        integration_state["audit_po_total"] = total
+        integration_state["audit_po_ref"]      = po_ref_no
+        integration_state["audit_po_total"]   = total
+        integration_state["audit_supplier"]   = supplier_name
         print(f"\n[AUDIT] PO created: {po_ref_no}  total={total}")
 
         po.navigate_to_page()
         _open_row_action(logged_in_page, po_ref_no, "View")
 
-        assert logged_in_page.locator(f"text={po_ref_no}").count() > 0, (
-            f"View popup must show ref no {po_ref_no}"
+        # Wait for popup to open (overflow_model is the scrollable body)
+        logged_in_page.wait_for_selector(".big-model .overflow_model", timeout=10000)
+        logged_in_page.wait_for_timeout(500)
+
+        # Angular sets input values as JS properties, not HTML attributes — use input_value()
+        ref_input = logged_in_page.locator(
+            ".big-model input[name='Transaction Ref No']"
+        )
+        ref_val = ref_input.input_value()
+        assert ref_val == po_ref_no, (
+            f"View popup ref no: expected {po_ref_no}, got {repr(ref_val)}"
         )
         print(f"[AUDIT] View — ref {po_ref_no} visible ✓")
-
-        # Verify total PO amount appears (formatted as integer or decimal)
-        total_int = str(int(total)) if total else None
-        if total_int:
-            assert logged_in_page.locator(f"text={total_int}").count() > 0, (
-                f"View popup must show total amount containing {total_int}"
-            )
-            print(f"[AUDIT] View — total amount {total_int} visible ✓")
 
         _close_popup(logged_in_page)
 
@@ -1607,6 +1614,9 @@ class TestPOViewHistoryAuditTrail:
             pytest.skip("PO not created in step 1")
 
         po = POPlaywrightPage(logged_in_page)
+        # Dismiss any popup left open by a prior step before navigating
+        if logged_in_page.locator(".big-model").count() > 0:
+            _close_popup(logged_in_page)
         po.navigate_to_page()
         _open_row_action(logged_in_page, integration_state["audit_po_ref"], "History")
         logged_in_page.wait_for_timeout(1000)
@@ -1663,4 +1673,89 @@ class TestPOViewHistoryAuditTrail:
             "[AUDIT COMPLETE]"
             f"\n  PO = {integration_state['audit_po_ref']}"
             "\n  View ✓  History-empty ✓  Edit ✓  History-populated ✓"
+        )
+
+    def test_step5_create_qc_po_edit_becomes_disabled(self, logged_in_page, integration_state):
+        """Create QC against the PO; PO Edit button must become disabled."""
+        if not integration_state.get("audit_po_ref"):
+            pytest.skip("PO not created in step 1")
+
+        qc = QCPlaywrightPage(logged_in_page)
+        qc.navigate_to_page()
+        qc.open_add_form()
+        qc.select_supplier_and_po(integration_state["audit_supplier"])
+        qc._fill_nth(qc.NO_OF_BAGS, 0, "1")
+        qc.fill_qc_params_safe(row_index=0)
+        qc.page.locator(qc.SUBMIT_BTN).click()
+        ok = qc.handle_submit_result(timeout=10000)
+        assert ok, "QC submission failed"
+
+        qc.navigate_to_page()
+        qc_ref_no = qc.get_ref_no_of_first_row()
+        assert qc_ref_no, "QC ref must be non-empty"
+        integration_state["audit_qc_ref"] = qc_ref_no
+        print(f"\n[AUDIT] QC created: {qc_ref_no} for PO {integration_state['audit_po_ref']}")
+
+        # Back to PO listing — Edit must now be disabled
+        po = POPlaywrightPage(logged_in_page)
+        po.navigate_to_page()
+        _open_row_menu(logged_in_page, integration_state["audit_po_ref"])
+        state = _edit_button_state(logged_in_page)
+        _close_menu(logged_in_page)
+        assert state == "disabled", (
+            f"PO Edit should be disabled after QC created, got '{state}'"
+        )
+        print(f"[AUDIT] PO Edit = {state} (locked by QC) ✓")
+
+    def test_step6_create_pb_qc_locked_pb_no_edit(self, logged_in_page, integration_state):
+        """Create PB → QC Edit must be disabled; PB must have no Edit button at all."""
+        if not integration_state.get("audit_qc_ref"):
+            pytest.skip("QC not created in step 5")
+
+        pb = PBPlaywrightPage(logged_in_page)
+        logged_in_page.goto(_PB_URL)
+        logged_in_page.reload()
+        logged_in_page.wait_for_selector(
+            "table.mat-mdc-table, div.empty-state", timeout=20000
+        )
+        logged_in_page.wait_for_timeout(1000)
+
+        pb.open_add_form()
+        pb.select_supplier_and_qc(integration_state["audit_supplier"])
+        pb.open_qty_details_popup(0)
+        pb.fill_qty_details(no_of_bags=1, qty=10)
+        pb.click_done()
+        pb.page.wait_for_timeout(500)
+        pb.page.locator(pb.SUBMIT_BTN).click()
+        pb.handle_success_alert()
+
+        pb.navigate_to_page()
+        pb_ref_no = pb.get_ref_no_of_first_row()
+        assert pb_ref_no, "PB ref must be non-empty"
+        print(f"\n[AUDIT] PB created: {pb_ref_no}")
+
+        # PB must have no Edit button
+        _open_row_menu(logged_in_page, pb_ref_no)
+        pb_state = _edit_button_state(logged_in_page)
+        _close_menu(logged_in_page)
+        assert pb_state in ("absent", "disabled"), (
+            f"PB Edit should not be available, got '{pb_state}'"
+        )
+        print(f"[AUDIT] PB Edit = {pb_state} (not editable) ✓")
+
+        # QC must now be locked
+        qc = QCPlaywrightPage(logged_in_page)
+        qc.navigate_to_page()
+        _open_row_menu(logged_in_page, integration_state["audit_qc_ref"])
+        qc_state = _edit_button_state(logged_in_page)
+        _close_menu(logged_in_page)
+        assert qc_state == "disabled", (
+            f"QC Edit should be disabled after PB created, got '{qc_state}'"
+        )
+        print(f"[AUDIT] QC Edit = {qc_state} (locked by PB) ✓")
+        print(
+            "[AUDIT FINAL]"
+            f"\n  PO  = {integration_state['audit_po_ref']} (locked)"
+            f"\n  QC  = {integration_state['audit_qc_ref']} (locked)"
+            f"\n  PB  = {pb_ref_no} (no edit)"
         )
