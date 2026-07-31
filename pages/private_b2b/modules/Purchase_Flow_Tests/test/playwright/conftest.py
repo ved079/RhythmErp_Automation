@@ -5,6 +5,8 @@ from playwright.sync_api import sync_playwright
 from pages.private_b2b.modules.purchase_order.po_playwright_page import POPlaywrightPage
 from pages.private_b2b.modules.gate_pass.gp_playwright_page import GPPlaywrightPage
 from pages.private_b2b.modules.goods_receipt_note.grn_playwright_page import GRNPlaywrightPage
+from pages.private_b2b.modules.quality_check.qc_playwright_page import QCPlaywrightPage
+from pages.private_b2b.modules.purchase_booking.pb_playwright_page import PBPlaywrightPage
 
 PROJECT_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..", "..", "..")
@@ -36,7 +38,7 @@ def browser(playwright_instance):
 @pytest.fixture(scope="class")
 def browser_context(browser):
     """Explicit browser context — required so multiple tabs can share the same session."""
-    ctx = browser.new_context()
+    ctx = browser.new_context(viewport={"width": 1366, "height": 768})
     yield ctx
     ctx.close()
 
@@ -119,6 +121,28 @@ def tab2_page(browser_context):
 @pytest.fixture(scope="function")
 def gp_page_tab2(tab2_page):
     p = GPPlaywrightPage(tab2_page)
+    p.navigate_to_page()
+    yield p
+    try:
+        p.close_popup()
+    except Exception:
+        pass
+
+
+@pytest.fixture(scope="function")
+def qc_page(logged_in_page):
+    p = QCPlaywrightPage(logged_in_page)
+    p.navigate_to_page()
+    yield p
+    try:
+        p.close_popup()
+    except Exception:
+        pass
+
+
+@pytest.fixture(scope="function")
+def pb_page(logged_in_page):
+    p = PBPlaywrightPage(logged_in_page)
     p.navigate_to_page()
     yield p
     try:

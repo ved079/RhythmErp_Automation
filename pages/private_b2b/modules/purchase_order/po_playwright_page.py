@@ -428,7 +428,7 @@ class POPlaywrightPage(BasePlaywrightPage):
     def get_all_item_names(self, supplier_name=None):
         """Open PO add form, read item names from dropdown, leave form open.
 
-        Selects supplier + Agri Produce, reads items, closes the dropdown panel,
+        Selects supplier + Beverages, reads items, closes the dropdown panel,
         then continues filling the rest of the header in-place.
         Returns (item_names, supplier_name, location).
         Capped at 4-6 items to keep PO size manageable.
@@ -439,7 +439,7 @@ class POPlaywrightPage(BasePlaywrightPage):
             chosen_supplier = supplier_name
         else:
             chosen_supplier = self._select_random_mat_option_text(self.SUPPLIER_NAME)
-        self._try_select_mat_by_text(self.PO_ITEM_TYPE, "Agri Produce")
+        self._try_select_mat_by_text(self.PO_ITEM_TYPE, "Beverages")
         self.page.wait_for_timeout(600)
 
         self.page.locator(self.ITEM_NAME).first.click(force=True)
@@ -749,7 +749,7 @@ class POPlaywrightPage(BasePlaywrightPage):
             supplier_name = forced_supplier
         else:
             supplier_name = self._select_random_mat_option_text(self.SUPPLIER_NAME)
-        self._try_select_mat_by_text(self.PO_ITEM_TYPE, "Agri Produce")
+        self._try_select_mat_by_text(self.PO_ITEM_TYPE, "Beverages")
         self._try_select_random_mat_option(self.PO_TYPE)
         self.page.wait_for_timeout(400)
         conv_rate_field = self.page.locator(self.CONVERSION_RATE)
@@ -863,8 +863,7 @@ class POPlaywrightPage(BasePlaywrightPage):
         """
         # Primary: hard refresh + search
         self.navigate_to_page()
-        self.page.reload()
-        self.page.wait_for_selector("table.mat-mdc-table", timeout=15000)
+        self.page.wait_for_selector("table.mat-mdc-table", state="attached", timeout=20000)
         self.page.wait_for_timeout(1000)
         self.search_po(ref_no)
         self.page.wait_for_timeout(2000)

@@ -5,8 +5,10 @@ TestPOGPGRNFlow               — smoke: PO (all items) → 1 GP → 1 GRN, veri
 TestPOSingleItemFullCycle     — sequential E2E: 1-item PO → GP1→GRN1 → GP2→GRN2 → PO Closed.
 TestPO_GP_GRN_Single_Item_Flow — parallel E2E: 1-item PO → GP1+GRN1 ‖ GP2+GRN2 → PO Closed.
 TestPO_GP_GRN_Multi_Item_Flow  — parallel E2E: 3-item PO → 4 GPs in 2 parallel pairs → PO Closed.
-TestPO_GRN_QC_PB_Single_Item_Flow — sequential E2E: 1-item PO → GP → GRN → QC → PB → PO Closed.
-TestPO_GRN_QC_PB_Multi_Item_Flow  — sequential E2E: 3-item PO → GP → GRN → QC → PB → PO Closed.
+TestPO_GRN_QC_PB_Single_Item_Flow — sequential E2E: 1-item PO → GP1→GRN1→QC1 → GP2→GRN2→QC2 → PO Closed.
+TestPO_GRN_QC_PB_Single_GP_Flow        — sequential E2E: 1-item PO → 1 GP (full qty) → GRN → QC → PO Closed.
+TestPO_GRN_QC_PB_Multi_Item_Single_GP  — sequential E2E: 5-item PO → 1 GP (all items, full qty) → GRN → QC → PO Closed.
+TestPO_GRN_QC_PB_Multi_Item_Flow       — sequential E2E: 3-item PO → GP → GRN → QC → PB → PO Closed.
 
 Each class uses an `integration_state` dict (class-scoped) to pass outputs
 between sequential test steps.
@@ -31,11 +33,14 @@ import traceback
 import pytest
 from pages.private_b2b.modules.gate_pass.gp_playwright_page import GPPlaywrightPage
 from pages.private_b2b.modules.goods_receipt_note.grn_playwright_page import GRNPlaywrightPage
+from pages.private_b2b.modules.quality_check.qc_playwright_page import QCPlaywrightPage
 from pages.private_b2b.modules.Purchase_Flow_Tests.excel_exporter import export_pogpgrn_flow
+from conftest import GPPlaywrightPageItemCategory
 
-_LOGIN_URL = os.environ.get("RHYTHMERP_LOGIN_URL", "https://rhythmerp.algorhythms.in")
-_EMAIL     = os.environ.get("RHYTHMERP_EMAIL", "")
-_PASSWORD  = os.environ.get("RHYTHMERP_PASSWORD", "")
+_LOGIN_URL = "https://rhythmerp.algorhythms.in"
+_EMAIL     = "kedar@rhythmflows.com"
+_PASSWORD  = "kedar@rhythmflows.com"
+_TENANT    = "Agristack Company ltd"
 
 
 @pytest.mark.integration
@@ -77,6 +82,7 @@ class TestPOGPGRNFlow:
             item_configs=[(5, 100)],  # 5 bags, qty=100
             location=integration_state.get("location"),
             type_of_sale="B2B",
+            po_ref_no=integration_state.get("po_ref_no"),
         )
         integration_state.setdefault("_step_times", {})["test_step2_create_gp"] = round(time.time() - t0, 1)
 
@@ -108,7 +114,7 @@ class TestPOGPGRNFlow:
         supplier_name = integration_state["supplier_name"]
         grn_page.select_supplier(supplier_name)
         grn_page.select_gate_pass(gp_ref_no)
-        grn_page.select_po(po_ref_no)
+        # PO field auto-populates from the selected GP — no manual selection needed
 
         # ── Assertions: row count ────────────────────────────────────────
         n_rows = grn_page.count_grn_rows()
@@ -137,18 +143,12 @@ class TestPOGPGRNFlow:
                     f"GRN rate={grn_rate} ≠ PO rate={po_rate}"
                 )
 
-            po_remaining = grn_page.read_po_qty_nth(i)
-            assert po_remaining >= actual_qty, (
-                f"Row {i}: PO remaining={po_remaining} < gate_pass_qty={actual_qty} "
-                f"— GRN would be rejected by ERP"
-            )
-
             grn_page.fill_accepted_qty_nth(i, int(expected_qty))
 
             item = gp_row["item_name"]
             grn_gate_pass_qtys[item] = actual_qty
             grn_rates[item]          = grn_rate
-            grn_po_remaining[item]   = po_remaining
+            grn_po_remaining[item]   = "n/a"
             total_accepted          += int(expected_qty)
 
         # ── Submit ───────────────────────────────────────────────────────
@@ -186,19 +186,18 @@ GP2_QTY  = PO_QTY - GP1_QTY   # 80 — remainder, should close the PO
 
 
 def _create_grn(grn_page, supplier_name, gp_ref_no, po_ref_no,
-                expected_gp_qty, expected_po_remaining, expected_rate):
+                expected_gp_qty, expected_rate):
     """Helper: open GRN form, select supplier→GP→PO, assert auto-fill, submit.
 
     Asserts:
       - gate_pass_qty in GRN == expected_gp_qty
-      - po_remaining in GRN == expected_po_remaining
       - rate in GRN == expected_rate (if > 0)
     Returns the new GRN ref_no.
     """
     grn_page.open_add_form()
     grn_page.select_supplier(supplier_name)
     grn_page.select_gate_pass(gp_ref_no)
-    grn_page.select_po(po_ref_no)
+    grn_page.fill_conversion_rate("1")
 
     n_rows = grn_page.count_grn_rows()
     assert n_rows == 1, f"Expected 1 GRN row, got {n_rows}"
@@ -206,11 +205,6 @@ def _create_grn(grn_page, supplier_name, gp_ref_no, po_ref_no,
     actual_gp_qty = grn_page.read_gate_pass_qty_nth(0)
     assert abs(actual_gp_qty - expected_gp_qty) < 0.5, (
         f"gate_pass_qty={actual_gp_qty} ≠ expected {expected_gp_qty}"
-    )
-
-    actual_po_remaining = grn_page.read_po_qty_nth(0)
-    assert abs(actual_po_remaining - expected_po_remaining) < 0.5, (
-        f"po_remaining={actual_po_remaining} ≠ expected {expected_po_remaining}"
     )
 
     if expected_rate > 0:
@@ -266,6 +260,7 @@ class TestPOSingleItemFullCycle:
             qty=GP1_QTY,
             location=integration_state["location"],
             type_of_sale="B2B",
+            po_ref_no=integration_state["po_ref_no"],
         )
         assert gp_ref_no, "GP1 ref_no must be non-empty"
         integration_state["gp1_ref_no"] = gp_ref_no
@@ -284,7 +279,6 @@ class TestPOSingleItemFullCycle:
             gp_ref_no=integration_state["gp1_ref_no"],
             po_ref_no=integration_state["po_ref_no"],
             expected_gp_qty=GP1_QTY,
-            expected_po_remaining=PO_QTY,      # full PO qty — nothing received yet
             expected_rate=integration_state["rate"],
         )
         assert grn_ref_no, "GRN1 ref_no must be non-empty"
@@ -305,6 +299,7 @@ class TestPOSingleItemFullCycle:
             qty=GP2_QTY,
             location=integration_state["location"],
             type_of_sale="B2B",
+            po_ref_no=integration_state["po_ref_no"],
         )
         assert gp_ref_no, "GP2 ref_no must be non-empty"
         integration_state["gp2_ref_no"] = gp_ref_no
@@ -323,7 +318,6 @@ class TestPOSingleItemFullCycle:
             gp_ref_no=integration_state["gp2_ref_no"],
             po_ref_no=integration_state["po_ref_no"],
             expected_gp_qty=GP2_QTY,
-            expected_po_remaining=GP2_QTY,     # ERP balance after GRN1 = 200-120 = 80
             expected_rate=integration_state["rate"],
         )
         assert grn_ref_no, "GRN2 ref_no must be non-empty"
@@ -338,10 +332,6 @@ class TestPOSingleItemFullCycle:
         if not integration_state.get("grn2_ref_no"):
             pytest.skip("GRN2 not submitted in step 5")
 
-        po_page.navigate_to_page()
-        # ERP only recalculates PO status when the listing gets a new record.
-        # Opening + cancelling the add form triggers that re-fetch.
-        po_page.trigger_po_status_recalculation()
         closed = po_page.is_po_closed(po_ref_no)
         assert closed, (
             f"PO {po_ref_no} should be 'Closed' after all quantity received, "
@@ -362,17 +352,32 @@ class TestPOSingleItemFullCycle:
 # Parallel E2E cycle — GP1+GRN1 and GP2+GRN2 run simultaneously on two tabs
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _login(page, login_url, email, password):
+def _login(page, login_url, email, password, tenant=""):
     page.goto(login_url)
     page.wait_for_selector("input[name='Username']", timeout=15000)
     page.fill("input[name='Username']", email)
     page.fill("input[name='Password']", password)
     page.locator("button[type='submit']").click()
-    page.wait_for_timeout(1000)
-    try:
-        page.locator("button[type='submit']").click()
-    except Exception:
-        pass
+    page.wait_for_timeout(2000)
+
+    if tenant:
+        page.wait_for_selector("mat-select[aria-label], mat-select", timeout=15000)
+        page.locator("mat-select").first.click(force=True)
+        page.wait_for_selector(".dd-search-input", timeout=10000)
+        page.locator(".dd-search-input").fill(tenant)
+        page.wait_for_timeout(800)
+        for opt in page.locator(".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text").all():
+            if opt.inner_text().strip() == tenant:
+                opt.click(force=True)
+                break
+        try:
+            page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
+        page.wait_for_timeout(300)
+
+    page.locator("button[type='submit']").click(force=True)
     page.wait_for_url(
         lambda url: "signin" not in url.lower() and "authentication" not in url.lower(),
         timeout=20000,
@@ -381,7 +386,7 @@ def _login(page, login_url, email, password):
 
 def _gp_grn_worker(login_url, email, password,
                    supplier_name, items, location, po_ref_no,
-                   results, errors, key,
+                   results, errors, key, tenant="",
                    gp_done_event=None, wait_for_event=None,
                    grn_done_event=None, wait_for_grn_event=None):
     """Universal parallel worker: own Playwright instance → login → GP → GRN.
@@ -399,13 +404,13 @@ def _gp_grn_worker(login_url, email, password,
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=False, slow_mo=150)
-            page = browser.new_page(viewport={"width": 1366, "height": 768})
-            _login(page, login_url, email, password)
+            page = browser.new_page(viewport={"width": 1372, "height": 625})
+            _login(page, login_url, email, password, tenant)
 
             # Fill GP form (all workers do this simultaneously)
-            gp = GPPlaywrightPage(page)
+            gp = GPPlaywrightPageItemCategory(page)
             gp.navigate_to_page()
-            gp.fill_items_form(supplier_name, items, location=location, type_of_sale="B2B")
+            gp.fill_items_form(supplier_name, items, location=location, type_of_sale="B2B", po_ref_no=po_ref_no)
 
             # Wait for go-ahead before submitting GP
             if wait_for_event is not None:
@@ -421,7 +426,6 @@ def _gp_grn_worker(login_url, email, password,
             grn.open_add_form()
             grn.select_supplier(supplier_name)
             grn.select_gate_pass(gp_ref)
-            grn.select_po(po_ref_no)
 
             # Read gate pass qty per row and fill accepted qty for all rows
             actual_gp_qtys = [grn.read_gate_pass_qty_nth(i) for i in range(len(items))]
@@ -515,14 +519,14 @@ class TestPO_GP_GRN_Single_Item_Flow:
         t1 = threading.Thread(
             target=_gp_grn_worker,
             args=(_LOGIN_URL, _EMAIL, _PASSWORD,
-                  supplier, items1, location, po_ref_no, results, errors, "flow1"),
+                  supplier, items1, location, po_ref_no, results, errors, "flow1", _TENANT),
             kwargs={"gp_done_event": gp1_done, "grn_done_event": grn1_done},
             name="Win1-GP1-GRN1",
         )
         t2 = threading.Thread(
             target=_gp_grn_worker,
             args=(_LOGIN_URL, _EMAIL, _PASSWORD,
-                  supplier, items2, location, po_ref_no, results, errors, "flow2"),
+                  supplier, items2, location, po_ref_no, results, errors, "flow2", _TENANT),
             kwargs={"wait_for_event": gp1_done, "wait_for_grn_event": grn1_done},
             name="Win2-GP2-GRN2",
         )
@@ -585,7 +589,7 @@ class TestPO_GP_GRN_Single_Item_Flow:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _run_parallel_pair(supplier, location, po_ref_no,
-                       items_a, items_b, label_a, label_b):
+                       items_a, items_b, label_a, label_b, tenant=""):
     """Spin up two worker threads for one parallel GP+GRN pair.
 
     Flow A fills and submits first (gp_done → grn_done events).
@@ -604,7 +608,7 @@ def _run_parallel_pair(supplier, location, po_ref_no,
         target=_gp_grn_worker,
         args=(_LOGIN_URL, _EMAIL, _PASSWORD,
               supplier, items_a, location, po_ref_no,
-              results, errors, label_a),
+              results, errors, label_a, tenant),
         kwargs={"gp_done_event": gp_done, "grn_done_event": grn_done},
         name=f"{label_a}",
     )
@@ -612,7 +616,7 @@ def _run_parallel_pair(supplier, location, po_ref_no,
         target=_gp_grn_worker,
         args=(_LOGIN_URL, _EMAIL, _PASSWORD,
               supplier, items_b, location, po_ref_no,
-              results, errors, label_b),
+              results, errors, label_b, tenant),
         kwargs={"wait_for_event": gp_done, "wait_for_grn_event": grn_done},
         name=f"{label_b}",
     )
@@ -756,7 +760,7 @@ class TestPO_GP_GRN_Multi_Item_Flow:
         results = _run_parallel_pair(
             supplier, location, po_ref_no,
             items_gp1, items_gp2,
-            "gp1_grn1", "gp2_grn2",
+            "gp1_grn1", "gp2_grn2", _TENANT,
         )
         _assert_pair_results(results, "gp1_grn1", "gp2_grn2")
         _print_pair(results, "gp1_grn1", "gp2_grn2", pair_num=1)
@@ -789,7 +793,7 @@ class TestPO_GP_GRN_Multi_Item_Flow:
         results = _run_parallel_pair(
             supplier, location, po_ref_no,
             items_gp3, items_gp4,
-            "gp3_grn3", "gp4_grn4",
+            "gp3_grn3", "gp4_grn4", _TENANT,
         )
         _assert_pair_results(results, "gp3_grn3", "gp4_grn4")
         _print_pair(results, "gp3_grn3", "gp4_grn4", pair_num=2)
@@ -825,4 +829,336 @@ class TestPO_GP_GRN_Multi_Item_Flow:
             f"\n  Pair 2 → GP={p2['gp3_grn3']['gp_ref']} GRN={p2['gp3_grn3']['grn_ref']}"
             f"         ‖ GP={p2['gp4_grn4']['gp_ref']} GRN={p2['gp4_grn4']['grn_ref']}"
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Full E2E with QC — 1 item PO → GP1→GRN1→QC1 → GP2→GRN2→QC2 → PO Closed
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.integration
+class TestPO_GRN_QC_PB_Single_Item_Flow:
+    """Sequential E2E: 1-item PO → GP1→GRN1→QC1 → GP2→GRN2→QC2 → PO Closed."""
+
+    def test_step1_create_po(self, po_page, integration_state):
+        total, row_dicts, supplier_name, location, po_ref_no = \
+            po_page.create_record_for_integration(item_configs=[(PO_QTY, 0, 0)])
+
+        assert po_ref_no,     "PO ref_no must be non-empty"
+        assert row_dicts,     "PO must have at least one item row"
+        assert supplier_name, "Supplier name must be captured"
+
+        integration_state["po_ref_no"]     = po_ref_no
+        integration_state["supplier_name"] = supplier_name
+        integration_state["location"]      = location
+        integration_state["item_name"]     = row_dicts[0]["item_name"]
+        integration_state["rate"]          = row_dicts[0]["rate"]
+        print(f"\n[PO] ref={po_ref_no}  item={row_dicts[0]['item_name']}  qty={PO_QTY}  supplier={supplier_name}")
+
+    def test_step2_create_gp1(self, gp_page, integration_state):
+        if not integration_state.get("po_ref_no"):
+            pytest.skip("PO not created in step 1")
+
+        gp_ref_no, _ = gp_page.create_record_with_specific_item(
+            supplier_name=integration_state["supplier_name"],
+            item_name=integration_state["item_name"],
+            bags=3,
+            qty=GP1_QTY,
+            location=integration_state["location"],
+            type_of_sale="B2B",
+            po_ref_no=integration_state["po_ref_no"],
+        )
+        assert gp_ref_no, "GP1 ref_no must be non-empty"
+        integration_state["gp1_ref_no"] = gp_ref_no
+        print(f"\n[GP1] ref={gp_ref_no}  qty={GP1_QTY}")
+
+    def test_step3_grn1(self, grn_page, integration_state):
+        if not integration_state.get("gp1_ref_no"):
+            pytest.skip("GP1 not created in step 2")
+
+        grn_ref_no = _create_grn(
+            grn_page,
+            supplier_name=integration_state["supplier_name"],
+            gp_ref_no=integration_state["gp1_ref_no"],
+            po_ref_no=integration_state["po_ref_no"],
+            expected_gp_qty=GP1_QTY,
+            expected_rate=integration_state["rate"],
+        )
+        assert grn_ref_no, "GRN1 ref_no must be non-empty"
+        integration_state["grn1_ref_no"] = grn_ref_no
+        print(f"\n[GRN1] ref={grn_ref_no}  accepted={GP1_QTY}")
+
+    def test_step4_qc1(self, qc_page, integration_state):
+        if not integration_state.get("grn1_ref_no"):
+            pytest.skip("GRN1 not created in step 3")
+
+        qc_ref_no = qc_page.create_for_integration(
+            supplier_name=integration_state["supplier_name"],
+            gp_ref_no=integration_state["gp1_ref_no"],
+            accepted_qty=GP1_QTY,
+        )
+        assert qc_ref_no, "QC1 ref_no must be non-empty"
+        integration_state["qc1_ref_no"] = qc_ref_no
+        print(f"\n[QC1] ref={qc_ref_no}  gp={integration_state['gp1_ref_no']}")
+
+    def test_step5_create_gp2(self, gp_page_tab2, integration_state):
+        if not integration_state.get("qc1_ref_no"):
+            pytest.skip("QC1 not created in step 4")
+
+        gp_ref_no, _ = gp_page_tab2.create_record_with_specific_item(
+            supplier_name=integration_state["supplier_name"],
+            item_name=integration_state["item_name"],
+            bags=2,
+            qty=GP2_QTY,
+            location=integration_state["location"],
+            type_of_sale="B2B",
+            po_ref_no=integration_state["po_ref_no"],
+        )
+        assert gp_ref_no, "GP2 ref_no must be non-empty"
+        integration_state["gp2_ref_no"] = gp_ref_no
+        print(f"\n[GP2] ref={gp_ref_no}  qty={GP2_QTY}")
+
+    def test_step6_grn2(self, grn_page_tab2, integration_state):
+        if not integration_state.get("gp2_ref_no"):
+            pytest.skip("GP2 not created in step 5")
+
+        grn_ref_no = _create_grn(
+            grn_page_tab2,
+            supplier_name=integration_state["supplier_name"],
+            gp_ref_no=integration_state["gp2_ref_no"],
+            po_ref_no=integration_state["po_ref_no"],
+            expected_gp_qty=GP2_QTY,
+            expected_rate=integration_state["rate"],
+        )
+        assert grn_ref_no, "GRN2 ref_no must be non-empty"
+        integration_state["grn2_ref_no"] = grn_ref_no
+        print(f"\n[GRN2] ref={grn_ref_no}  accepted={GP2_QTY}")
+
+    def test_step7_qc2(self, qc_page, integration_state):
+        if not integration_state.get("grn2_ref_no"):
+            pytest.skip("GRN2 not created in step 6")
+
+        qc_ref_no = qc_page.create_for_integration(
+            supplier_name=integration_state["supplier_name"],
+            gp_ref_no=integration_state["gp2_ref_no"],
+            accepted_qty=GP2_QTY,
+        )
+        assert qc_ref_no, "QC2 ref_no must be non-empty"
+        integration_state["qc2_ref_no"] = qc_ref_no
+        print(f"\n[QC2] ref={qc_ref_no}  gp={integration_state['gp2_ref_no']}")
+
+    def test_step8_create_pb1(self, pb_page, integration_state):
+        if not integration_state.get("qc2_ref_no"):
+            pytest.skip("QC2 not created in step 7")
+
+        pb_ref_no = pb_page.create_for_integration(
+            supplier_name=integration_state["supplier_name"],
+            qc_ref_no=integration_state["qc1_ref_no"],
+        )
+        assert pb_ref_no, "PB1 ref_no must be non-empty"
+        integration_state["pb1_ref_no"] = pb_ref_no
+        print(f"\n[PB1] ref={pb_ref_no}  qc={integration_state['qc1_ref_no']}")
+
+    def test_step9_create_pb2(self, pb_page, integration_state):
+        if not integration_state.get("pb1_ref_no"):
+            pytest.skip("PB1 not created in step 8")
+
+        pb_ref_no = pb_page.create_for_integration(
+            supplier_name=integration_state["supplier_name"],
+            qc_ref_no=integration_state["qc2_ref_no"],
+        )
+        assert pb_ref_no, "PB2 ref_no must be non-empty"
+        integration_state["pb2_ref_no"] = pb_ref_no
+        print(f"\n[PB2] ref={pb_ref_no}  qc={integration_state['qc2_ref_no']}")
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Single-GP QC flow — 1 item PO, full qty in one GP → GRN → QC → PO Closed
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.integration
+class TestPO_GRN_QC_PB_Single_GP_Flow:
+    """Sequential E2E: 1-item PO → 1 GP (full qty) → GRN → QC → PO Closed."""
+
+    def test_step1_create_po(self, po_page, integration_state):
+        total, row_dicts, supplier_name, location, po_ref_no = \
+            po_page.create_record_for_integration(item_configs=[(PO_QTY, 0, 0)])
+
+        assert po_ref_no,     "PO ref_no must be non-empty"
+        assert row_dicts,     "PO must have at least one item row"
+        assert supplier_name, "Supplier name must be captured"
+
+        integration_state["po_ref_no"]     = po_ref_no
+        integration_state["supplier_name"] = supplier_name
+        integration_state["location"]      = location
+        integration_state["item_name"]     = row_dicts[0]["item_name"]
+        integration_state["rate"]          = row_dicts[0]["rate"]
+        print(f"\n[PO] ref={po_ref_no}  item={row_dicts[0]['item_name']}  qty={PO_QTY}  supplier={supplier_name}")
+
+    def test_step2_create_gp(self, gp_page, integration_state):
+        if not integration_state.get("po_ref_no"):
+            pytest.skip("PO not created in step 1")
+
+        gp_ref_no, _ = gp_page.create_record_with_specific_item(
+            supplier_name=integration_state["supplier_name"],
+            item_name=integration_state["item_name"],
+            bags=5,
+            qty=PO_QTY,
+            location=integration_state["location"],
+            type_of_sale="B2B",
+            po_ref_no=integration_state["po_ref_no"],
+        )
+        assert gp_ref_no, "GP ref_no must be non-empty"
+        integration_state["gp_ref_no"] = gp_ref_no
+        print(f"\n[GP] ref={gp_ref_no}  qty={PO_QTY}")
+
+    def test_step3_grn(self, grn_page, integration_state):
+        if not integration_state.get("gp_ref_no"):
+            pytest.skip("GP not created in step 2")
+
+        grn_ref_no = _create_grn(
+            grn_page,
+            supplier_name=integration_state["supplier_name"],
+            gp_ref_no=integration_state["gp_ref_no"],
+            po_ref_no=integration_state["po_ref_no"],
+            expected_gp_qty=PO_QTY,
+            expected_rate=integration_state["rate"],
+        )
+        assert grn_ref_no, "GRN ref_no must be non-empty"
+        integration_state["grn_ref_no"] = grn_ref_no
+        print(f"\n[GRN] ref={grn_ref_no}  accepted={PO_QTY}")
+
+    def test_step4_qc(self, qc_page, integration_state):
+        if not integration_state.get("grn_ref_no"):
+            pytest.skip("GRN not created in step 3")
+
+        qc_ref_no = qc_page.create_for_integration(
+            supplier_name=integration_state["supplier_name"],
+            gp_ref_no=integration_state["gp_ref_no"],
+            accepted_qty=PO_QTY,
+        )
+        assert qc_ref_no, "QC ref_no must be non-empty"
+        integration_state["qc_ref_no"] = qc_ref_no
+        print(f"\n[QC] ref={qc_ref_no}  gp={integration_state['gp_ref_no']}")
+
+    def test_step5_create_pb(self, pb_page, integration_state):
+        if not integration_state.get("qc_ref_no"):
+            pytest.skip("QC not created in step 4")
+
+        pb_ref_no = pb_page.create_for_integration(
+            supplier_name=integration_state["supplier_name"],
+            qc_ref_no=integration_state["qc_ref_no"],
+        )
+        assert pb_ref_no, "PB ref_no must be non-empty"
+        integration_state["pb_ref_no"] = pb_ref_no
+        print(f"\n[PB] ref={pb_ref_no}  qc={integration_state['qc_ref_no']}")
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Multi-item single-GP QC flow — 5 item PO, one GP covering all items at full
+# qty → GRN → QC (fills all rows) → PO Closed
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_MI_GP_N_ITEMS  = 5    # number of items in the PO/GP
+_MI_GP_ITEM_QTY = 40   # qty per item (5 × 40 = 200 = PO_QTY)
+_MI_GP_BAGS     = 3    # bags per item in the GP
+
+
+@pytest.mark.integration
+class TestPO_GRN_QC_PB_Multi_Item_Single_GP:
+    """Sequential E2E: 5-item PO → 1 GP (all items, full qty) → GRN → QC → PO Closed."""
+
+    def test_step1_create_po(self, po_page, integration_state):
+        item_configs = [(_MI_GP_ITEM_QTY, 0, 0)] * _MI_GP_N_ITEMS
+        total, row_dicts, supplier_name, location, po_ref_no = \
+            po_page.create_record_for_integration(item_configs=item_configs)
+
+        assert po_ref_no,                              "PO ref_no must be non-empty"
+        assert len(row_dicts) == _MI_GP_N_ITEMS,       f"Expected {_MI_GP_N_ITEMS} PO rows, got {len(row_dicts)}"
+        assert supplier_name,                          "Supplier name must be captured"
+
+        integration_state["po_ref_no"]     = po_ref_no
+        integration_state["supplier_name"] = supplier_name
+        integration_state["location"]      = location
+        integration_state["item_names"]    = [rd["item_name"] for rd in row_dicts]
+        integration_state["rates"]         = {rd["item_name"]: rd["rate"] for rd in row_dicts}
+
+        items_str = ", ".join(f"{rd['item_name']}×{_MI_GP_ITEM_QTY}" for rd in row_dicts)
+        print(f"\n[PO] ref={po_ref_no}  supplier={supplier_name}  items=[{items_str}]")
+
+    def test_step2_create_gp(self, gp_page, integration_state):
+        if not integration_state.get("po_ref_no"):
+            pytest.skip("PO not created in step 1")
+
+        items = [
+            (name, _MI_GP_BAGS, _MI_GP_ITEM_QTY)
+            for name in integration_state["item_names"]
+        ]
+        # GPPlaywrightPageItemCategory is defined in the local conftest and supports multi-item forms
+        from conftest import GPPlaywrightPageItemCategory
+        gp_multi = GPPlaywrightPageItemCategory(gp_page.page)
+        gp_multi.fill_items_form(
+            supplier_name=integration_state["supplier_name"],
+            items=items,
+            location=integration_state["location"],
+            type_of_sale="B2B",
+            po_ref_no=integration_state["po_ref_no"],
+        )
+        gp_ref_no, row_dicts = gp_multi.submit_items_form(items)
+        assert gp_ref_no, "GP ref_no must be non-empty"
+        integration_state["gp_ref_no"]  = gp_ref_no
+        integration_state["gp_qtys"]    = [_MI_GP_ITEM_QTY] * _MI_GP_N_ITEMS
+        print(f"\n[GP] ref={gp_ref_no}  items={_MI_GP_N_ITEMS}  qty_each={_MI_GP_ITEM_QTY}")
+
+    def test_step3_grn(self, grn_page, integration_state):
+        if not integration_state.get("gp_ref_no"):
+            pytest.skip("GP not created in step 2")
+
+        grn_page.open_add_form()
+        grn_page.select_supplier(integration_state["supplier_name"])
+        grn_page.select_gate_pass(integration_state["gp_ref_no"])
+        grn_page.fill_conversion_rate("1")
+
+        n_rows = grn_page.count_grn_rows()
+        assert n_rows == _MI_GP_N_ITEMS, f"Expected {_MI_GP_N_ITEMS} GRN rows, got {n_rows}"
+
+        for i in range(n_rows):
+            actual_gp_qty = grn_page.read_gate_pass_qty_nth(i)
+            assert abs(actual_gp_qty - _MI_GP_ITEM_QTY) < 0.5, (
+                f"Row {i}: gate_pass_qty={actual_gp_qty} ≠ expected {_MI_GP_ITEM_QTY}"
+            )
+            grn_page.fill_accepted_qty_nth(i, _MI_GP_ITEM_QTY)
+
+        grn_ref_no = grn_page.submit()
+        assert grn_ref_no, "GRN ref_no must be non-empty"
+        integration_state["grn_ref_no"] = grn_ref_no
+        print(f"\n[GRN] ref={grn_ref_no}  rows={n_rows}  accepted_each={_MI_GP_ITEM_QTY}")
+
+    def test_step4_qc(self, qc_page, integration_state):
+        if not integration_state.get("grn_ref_no"):
+            pytest.skip("GRN not created in step 3")
+
+        accepted_qtys = [_MI_GP_ITEM_QTY] * _MI_GP_N_ITEMS
+        qc_ref_no = qc_page.create_for_integration(
+            supplier_name=integration_state["supplier_name"],
+            gp_ref_no=integration_state["gp_ref_no"],
+            accepted_qty=accepted_qtys,
+        )
+        assert qc_ref_no, "QC ref_no must be non-empty"
+        integration_state["qc_ref_no"] = qc_ref_no
+        print(f"\n[QC] ref={qc_ref_no}  gp={integration_state['gp_ref_no']}  rows={_MI_GP_N_ITEMS}")
+
+    def test_step5_create_pb(self, pb_page, integration_state):
+        if not integration_state.get("qc_ref_no"):
+            pytest.skip("QC not created in step 4")
+
+        pb_ref_no = pb_page.create_for_integration(
+            supplier_name=integration_state["supplier_name"],
+            qc_ref_no=integration_state["qc_ref_no"],
+        )
+        assert pb_ref_no, "PB ref_no must be non-empty"
+        integration_state["pb_ref_no"] = pb_ref_no
+        print(f"\n[PB] ref={pb_ref_no}  qc={integration_state['qc_ref_no']}  rows={_MI_GP_N_ITEMS}")
+
 

@@ -18,6 +18,9 @@ class GRNPlaywrightPage(BasePlaywrightPage):
     RATE_INPUT          = "xpath=//mat-form-field[.//input[@placeholder='Rate']]//input"
     ACCEPTED_QTY_INPUT  = "xpath=//mat-form-field[.//input[@placeholder='Accepted Quantity']]//input"
 
+    # Header field — required on Agristack tenant
+    CONVERSION_RATE_INPUT = "xpath=//input[@placeholder='Conversion Rate']"
+
     # Buttons
     ADD_BTN    = "button.erp-add-btn"
     SUBMIT_BTN = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
@@ -27,7 +30,22 @@ class GRNPlaywrightPage(BasePlaywrightPage):
     REF_NO_COL = "td.cdk-column-transaction_ref_no"
 
     def handle_success_alert(self):
-        self.page.wait_for_selector(".swal2-container", timeout=8000)
+        try:
+            self.page.wait_for_selector(".swal2-container", timeout=8000)
+        except Exception:
+            return
+
+        title = self.page.locator("#swal2-title").inner_text().strip()
+        message = self.page.locator("#swal2-html-container").inner_text().strip()
+
+        if "Validation" in title or "Failed" in title or "Error" in title:
+            self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
+            try:
+                self.page.wait_for_selector(".swal2-container", state="hidden", timeout=5000)
+            except Exception:
+                pass
+            raise RuntimeError(f"GRN creation failed — {title}: {message}")
+
         self.page.evaluate("document.querySelector('.swal2-confirm')?.click()")
         try:
             self.page.wait_for_selector(".swal2-container", state="hidden", timeout=10000)
@@ -137,6 +155,7 @@ class GRNPlaywrightPage(BasePlaywrightPage):
                     XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
                 const el = result.snapshotItem(idx);
                 if (!el) return;
+                el.focus();
                 const setter = Object.getOwnPropertyDescriptor(
                     window.HTMLInputElement.prototype, 'value').set;
                 setter.call(el, val);
@@ -147,12 +166,58 @@ class GRNPlaywrightPage(BasePlaywrightPage):
         """, [self.ACCEPTED_QTY_INPUT.replace("xpath=", ""), row_index, str(qty)])
         self.page.wait_for_timeout(400)
 
+        for attempt in range(3):
+            actual = self.read_accepted_qty_nth(row_index)
+            if abs(actual - float(qty)) < 0.5:
+                return
+            self.page.evaluate("""
+                ([xpath, idx, val]) => {
+                    const result = document.evaluate(xpath, document, null,
+                        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    const el = result.snapshotItem(idx);
+                    if (!el) return;
+                    const setter = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value').set;
+                    setter.call(el, val);
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    el.dispatchEvent(new Event('change', {bubbles: true}));
+                }
+            """, [self.ACCEPTED_QTY_INPUT.replace("xpath=", ""), row_index, str(qty)])
+            self.page.wait_for_timeout(500)
+
+    def read_accepted_qty_nth(self, row_index=0):
+        return self._read_input_nth(self.ACCEPTED_QTY_INPUT, row_index)
+
+    def fill_conversion_rate(self, rate="1"):
+        locator = self.page.locator(self.CONVERSION_RATE_INPUT)
+        locator.click(force=True)
+        locator.fill(str(rate))
+        locator.press("Tab")
+        self.page.wait_for_timeout(300)
+
     def submit(self):
         """Submit the GRN form, dismiss success alert, and return the new GRN ref number."""
         self.page.locator(self.SUBMIT_BTN).click()
         self.handle_success_alert()
         self.navigate_to_page()
         return self.page.locator(self.REF_NO_COL).first.inner_text().strip()
+
+    def is_closed(self, ref_no):
+        self.navigate_to_page()
+        search_btn = self.page.locator("button[mattooltip='Search']")
+        search_input = self.page.locator("#erpSearchInput")
+        if search_btn.count() > 0:
+            search_btn.click()
+            self.page.wait_for_timeout(400)
+            search_input.fill(ref_no)
+            search_btn.click()
+            self.page.wait_for_timeout(2000)
+        for row in self.page.locator("tr.mat-mdc-row").all():
+            ref_cell = row.locator("td.cdk-column-transaction_ref_no")
+            if ref_cell.count() > 0 and ref_no in ref_cell.inner_text():
+                status = row.locator("td.cdk-column-booking_status")
+                return status.count() > 0 and "Closed" in status.inner_text()
+        return False
 
     def close_popup(self):
         try:
