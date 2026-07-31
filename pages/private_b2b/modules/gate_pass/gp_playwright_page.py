@@ -25,6 +25,7 @@ class GPPlaywrightPage(BasePlaywrightPage):
 
     # Item grid fields
     ITEM_NAME  = "xpath=//mat-form-field[.//mat-label[contains(.,'Item Name')]]//mat-select"
+    HSN_SAC_NO = "xpath=//mat-form-field[.//mat-label[contains(.,'HSN SAC No')]]//mat-select"
     NO_OF_BAGS = "xpath=//mat-form-field[.//mat-label[contains(.,'NO. of Bags')]]//input"
     QUANTITY   = "xpath=//mat-form-field[.//mat-label[contains(.,'Quantity')]]//input"
 
@@ -441,14 +442,16 @@ class GPPlaywrightPage(BasePlaywrightPage):
                 self.page.wait_for_timeout(1000)
             self._select_item_by_name_nth(i, item_name)
             self.page.wait_for_timeout(800)
-            # Angular quirk: row 2+ don't fire selectionChange on first select.
-            # Nudge: select row 0's item on this row (creates duplicate warning →
-            # wakes Angular), then re-select the correct item.
+            # Fallback: if HSN SAC No is still empty Angular didn't register the selection.
+            # Nudge with row 0's item (triggers duplicate warning → wakes change detection)
+            # then re-select the correct item.
             if i > 0 and row0_item and row0_item != item_name:
-                self._select_item_by_name_nth(i, row0_item)
-                self.page.wait_for_timeout(600)
-                self._select_item_by_name_nth(i, item_name)
-                self.page.wait_for_timeout(600)
+                hsn_text = self.page.locator(self.HSN_SAC_NO).nth(i).inner_text().strip()
+                if not hsn_text:
+                    self._select_item_by_name_nth(i, row0_item)
+                    self.page.wait_for_timeout(600)
+                    self._select_item_by_name_nth(i, item_name)
+                    self.page.wait_for_timeout(600)
             self._fill_number_nth(self.NO_OF_BAGS, i, bags)
             self._fill_number_nth(self.QUANTITY, i, qty)
             self.page.wait_for_timeout(400)
@@ -464,7 +467,7 @@ class GPPlaywrightPage(BasePlaywrightPage):
         return ref_no, row_dicts
 
     def create_record_with_specific_item(self, supplier_name, item_name, bags, qty,
-                                         location=None, type_of_sale="B2B"):
+                                         location=None, type_of_sale="B2B", po_ref_no=None):
         """Convenience wrapper for a single-item GP. Returns (ref_no, [row_dict])."""
         items = [(item_name, bags, qty)]
         self.fill_items_form(supplier_name, items, location=location, type_of_sale=type_of_sale)
@@ -504,6 +507,23 @@ class GPPlaywrightPage(BasePlaywrightPage):
 
         ref_no = self.get_ref_no_of_first_row()
         return ref_no, row_dicts
+
+    def is_closed(self, ref_no):
+        self.navigate_to_page()
+        search_btn = self.page.locator("button[mattooltip='Search']")
+        search_input = self.page.locator("#erpSearchInput")
+        if search_btn.count() > 0:
+            search_btn.click()
+            self.page.wait_for_timeout(400)
+            search_input.fill(ref_no)
+            search_btn.click()
+            self.page.wait_for_timeout(2000)
+        for row in self.page.locator("tr.mat-mdc-row").all():
+            ref_cell = row.locator("td.cdk-column-transaction_ref_no")
+            if ref_cell.count() > 0 and ref_no in ref_cell.inner_text():
+                status = row.locator("td.cdk-column-booking_status")
+                return status.count() > 0 and "Closed" in status.inner_text()
+        return False
 
     def close_popup(self):
         try:

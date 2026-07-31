@@ -17,7 +17,7 @@ SUPPLIER_NAMES = {
     10: "Om Maurya Oil Mills & Bros",
 }
 
-ITEM_TYPE_IDS = [113, 114]
+ITEM_TYPE_IDS = [1, 2, 3]
 
 DIVISION_IDS = [1, 2]
 DEPARTMENT_IDS = [1, 2]
@@ -56,7 +56,7 @@ QUALITY_PARAMETER_NAMES = {
 
 DEFAULT_FK_IDS = {
     "supplier_ref_id": 1,
-    "item_type_ref_id": 113,
+    "item_type_ref_id": 1,
     "gate_pass_ref_id_id": 505,
     "grn_ref_id_id": 146,
     "base_currency": 8,
@@ -68,6 +68,7 @@ DEFAULT_FK_IDS = {
     "item_ref_id": 5,
     "hsn_sac_no": 2,
     "uom": 4,
+    "alternate_uom": 1,
 }
 
 
@@ -83,7 +84,7 @@ def compute_expected_results(payload: dict) -> dict:
     lines = payload.get("qc_details", [])
     computed_lines = []
     for line in lines:
-        aqty = float(line.get("accepted_qty", 0))
+        aqty = float(line.get("alternate_accepted_qty", 0))
         net = float(line.get("net_rate", 0))
         amount = compute_line_amount(aqty, net)
         computed_lines.append({"amount": amount})
@@ -126,20 +127,31 @@ def generate_random_fk_ids() -> dict:
         "item_ref_id": random.choice(ITEM_IDS),
         "hsn_sac_no": random.choice(HSN_SAC_IDS),
         "uom": random.choice(UOM_IDS),
+        "alternate_uom": 1,
     }
 
 
-def _default_quality_details(item_ref_id: int, hsn_sac_no: int, uom: int) -> List[dict]:
+def _default_qc_parameter_details() -> List[dict]:
     return [
-        {"item_quality_parameter_ref_id": 1, "actual_value": 1},
-        {"item_quality_parameter_ref_id": 2, "actual_value": 1},
-        {"item_quality_parameter_ref_id": 3, "actual_value": 1},
+        {"item_quality_parameter_ref_id": 1, "actual_value": 0},
+    ]
+
+
+def _default_qc_bags_details(no_of_bags: int, empty_bag_weight: float) -> List[dict]:
+    weight_per_bag = round(empty_bag_weight / no_of_bags, 4) if no_of_bags else 0.0
+    return [
+        {
+            "type_of_bags_ref_id": 1,
+            "quantity_of_bags": no_of_bags,
+            "weight_of_bags": weight_per_bag,
+            "total_weight_of_bags": empty_bag_weight,
+        }
     ]
 
 
 def build_qc_payload(
     supplier_ref_id: int = 1,
-    item_type_ref_id: int = 113,
+    item_type_ref_id: int = 1,
     gate_pass_ref_id_id: int = 505,
     grn_ref_id_id: int = 146,
     po_ref_id_id: int = None,
@@ -151,35 +163,39 @@ def build_qc_payload(
     parameter5: int = 1,
     parameter6: int = 1,
     transaction_date: str = None,
-    additional_details: dict = None,
+    vehicle_no: str = None,
+    driver_name: str = None,
+    remark: str = None,
     items: List[dict] = None,
 ) -> dict:
     if transaction_date is None:
         transaction_date = date.today().isoformat()
 
-    if additional_details is None:
-        additional_details = {
-            "vehicle_number": "MH14KK2533",
-            "driver_name": "Test Driver",
-            "remark": None,
-        }
-
     if items is None:
+        no_of_bags = 1
+        empty_bag_weight = 0.4
         items = [
             {
                 "item_ref_id": 5,
-                "no_of_bags": 1,
+                "no_of_bags": no_of_bags,
                 "grn_qty": 66.0,
-                "accepted_qty": 66.0,
-                "rejected_qty": 0.0,
+                "alternate_accepted_qty": 66.0,
+                "alternate_rejected_qty": 0.0,
+                "empty_bag_weight": empty_bag_weight,
                 "base_rate": 20.0,
-                "deduction_percent": None,
-                "deduction_rate": None,
-                "qc_rate": None,
+                "is_rate_weight_deduction": False,
+                "deduction_percent": 0.0,
+                "qc_deduction_rate": 0.0,
+                "deduction_weight": 0.0,
                 "net_rate": 20.0,
+                "discount_rate": None,
+                "c_d_deduction": 0.0,
+                "alternate_uom": 1,
                 "uom": 4,
+                "uom_conversion": 0.001,
                 "hsn_sac_no": 2,
-                "details": _default_quality_details(5, 2, 4),
+                "qc_parameter_details": _default_qc_parameter_details(),
+                "qc_bags_details": _default_qc_bags_details(no_of_bags, empty_bag_weight),
             }
         ]
 
@@ -198,7 +214,9 @@ def build_qc_payload(
         "parameter2": parameter2,
         "parameter5": parameter5,
         "parameter6": parameter6,
-        "qc_additional_details": additional_details,
+        "vehicle_no": vehicle_no,
+        "driver_name": driver_name,
+        "qc_additional_details": {"remark": remark},
         "qc_details": items,
     }
     return payload
@@ -212,24 +230,33 @@ def generate_qc_payload(fk_overrides: dict = None, item_overrides: List[dict] = 
     num_items = random.randint(1, 3)
     items = []
     for i in range(num_items):
-        qty = float(random.randint(10, 100))
+        grn_qty = float(random.randint(10, 100))
+        rejected = float(random.randint(0, 4))
+        accepted = grn_qty - rejected
         rate = float(random.randint(10, 500))
+        no_of_bags = random.randint(1, 10)
+        empty_bag_weight = round(no_of_bags * 0.4, 2)
         item = {
             "item_ref_id": fks["item_ref_id"],
-            "no_of_bags": random.randint(1, 10),
-            "grn_qty": qty,
-            "accepted_qty": qty,
-            "rejected_qty": 0.0,
+            "no_of_bags": no_of_bags,
+            "grn_qty": grn_qty,
+            "alternate_accepted_qty": accepted,
+            "alternate_rejected_qty": rejected,
+            "empty_bag_weight": empty_bag_weight,
             "base_rate": rate,
-            "deduction_percent": None,
-            "deduction_rate": None,
-            "qc_rate": None,
+            "is_rate_weight_deduction": False,
+            "deduction_percent": 0.0,
+            "qc_deduction_rate": 0.0,
+            "deduction_weight": 0.0,
             "net_rate": rate,
+            "discount_rate": None,
+            "c_d_deduction": 0.0,
+            "alternate_uom": fks.get("alternate_uom", 1),
             "uom": fks["uom"],
+            "uom_conversion": 0.001,
             "hsn_sac_no": fks["hsn_sac_no"],
-            "details": _default_quality_details(
-                fks["item_ref_id"], fks["hsn_sac_no"], fks["uom"]
-            ),
+            "qc_parameter_details": _default_qc_parameter_details(),
+            "qc_bags_details": _default_qc_bags_details(no_of_bags, empty_bag_weight),
         }
         if item_overrides and i < len(item_overrides):
             item.update(item_overrides[i])
@@ -248,6 +275,9 @@ def generate_qc_payload(fk_overrides: dict = None, item_overrides: List[dict] = 
         parameter2=fks["parameter2"],
         parameter5=fks["parameter5"],
         parameter6=fks["parameter6"],
+        vehicle_no=None,
+        driver_name=None,
+        remark=None,
         items=items,
     )
 

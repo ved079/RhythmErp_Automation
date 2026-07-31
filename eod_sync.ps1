@@ -107,6 +107,12 @@ foreach ($remote in $remotes) {
     Write-Host "  Remote: $remote" -ForegroundColor Cyan
     Write-Host "  ------------------------------" -ForegroundColor DarkGray
 
+    # Refresh remote-tracking refs before checking what branches actually exist.
+    # Without this, a brand-new or recently-changed remote can show false SKIPs
+    # because the local cache of refs/remotes/<remote>/* is stale or empty.
+    Write-Host "    (refreshing $remote refs...)" -ForegroundColor DarkGray
+    git fetch $remote --quiet 2>$null
+
     foreach ($branch in $targetBranches) {
 
         $trackingRef = "refs/remotes/$remote/$branch"
