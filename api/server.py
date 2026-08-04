@@ -351,6 +351,89 @@ class MasterDataRequest(BaseModel):
     erp_tenant_id: str = "681"
 
 
+def _resolve_tax_rates(client) -> dict:
+    """Return ``{hsn_str: [float tax_rates]}`` from the Tax Rate screen.
+
+    Header-level entry details carry flat ``details[]`` rows with
+    ``hsn_sac_number`` + ``tax_rate``. Fetched per-header (threaded) so a
+    tenant with many rate headers stays fast. Missing/unparseable rates are
+    skipped.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    try:
+        resp = client.list_entries("Tax Rate", page_size=500)
+    except Exception:
+        return {}
+    headers = resp.get("screenmatlistingdata_set") or resp.get("results") or []
+
+    def _fetch(header):
+        out = {}
+        hid = header.get("id")
+        if hid is None:
+            return out
+        try:
+            det = client.get_entry("Tax Rate", hid)
+        except Exception:
+            return out
+        if not det:
+            return out
+        for child in (det.get("children") or []):
+            for row in (child.get("details") or []):
+                hsn = row.get("hsn_sac_number")
+                rate = row.get("tax_rate")
+                if hsn is None or rate is None:
+                    continue
+                try:
+                    out.setdefault(str(hsn).strip(), []).append(float(rate))
+                except (TypeError, ValueError):
+                    continue
+        return out
+
+    result: dict = {}
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for hsn_map in ex.map(_fetch, headers):
+            for hsn, rates in hsn_map.items():
+                result.setdefault(hsn, [])
+                result[hsn].extend(rates)
+    return result
+
+
+def _enrich_item_categories(client, items: list, with_tax_rates: bool = False) -> list:
+    """Attach ``item_category`` (and optionally ``tax_rates``) to Item Master rows.
+
+    The Item Master *listing* only returns id/name/code/uom/status — the
+    category FK (and HSN) live on the full entry. Fetching every item's detail
+    is threaded so it stays fast on larger tenants. Items whose detail cannot
+    be fetched are kept as-is (they just won't match a category filter).
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    tax_rates = _resolve_tax_rates(client) if with_tax_rates else {}
+
+    def _fetch(item_row):
+        iid = item_row.get("id")
+        if iid is None:
+            return item_row
+        try:
+            det = client.get_entry("Item Master", iid)
+        except Exception:
+            return item_row
+        if det is None:
+            return item_row
+        out = dict(item_row)
+        out["item_category"] = det.get("item_category")
+        if with_tax_rates:
+            hsn = det.get("hsn_sac_code")
+            if hsn is not None:
+                out["hsn_sac_code"] = hsn
+                out["tax_rates"] = tax_rates.get(str(hsn).strip(), [])
+        return out
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        return list(ex.map(_fetch, items))
+
+
 @app.post("/api/master-data")
 def master_data_endpoint(request: MasterDataRequest):
     """List entries from any ERP master-data screen."""
@@ -372,7 +455,65 @@ def master_data_endpoint(request: MasterDataRequest):
     if result is None:
         raise HTTPException(status_code=502, detail=f"ERP returned no data for '{request.screen}' — check token/tenant")
     items = result.get("screenmatlistingdata_set") or result.get("results") or []
+    if request.screen == "Item Master":
+        items = _enrich_item_categories(client, items, with_tax_rates=True)
     return {"items": items, "total": len(items)}
+
+
+class ItemCategoriesRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str = "681"
+
+
+@app.post("/api/item-categories")
+def item_categories_endpoint(request: ItemCategoriesRequest):
+    """List Item Categories with live item counts, sorted by count descending.
+
+    The ERP PO screen filters the Item dropdown by the selected Item Category,
+    so the chain must pick items inside one category. This returns every
+    category plus how many Item Master entries belong to it, letting the UI
+    default to the most-populated category and filter items accordingly.
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(PROJECT_ROOT))
+    from common.erp_api_client import RhythmERPAPIClient
+
+    client = RhythmERPAPIClient()
+    try:
+        client.login_from_browser(token=request.erp_token, tenant_id=request.erp_tenant_id)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"ERP auth failed: {e}")
+
+    def _list(screen: str) -> list:
+        try:
+            result = client.list_entries(screen, page_size=500)
+            return result.get("screenmatlistingdata_set") or result.get("results") or []
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"ERP '{screen}' request failed: {e}")
+
+    cats = _list("Item Category")
+    items = _list("Item Master")
+    items = _enrich_item_categories(client, items)
+
+    counts: dict = {}
+    for it in items:
+        cid = it.get("item_category")
+        if cid is None:
+            continue
+        counts[cid] = counts.get(cid, 0) + 1
+
+    out = []
+    for c in cats:
+        cid = c.get("id")
+        if cid is None:
+            continue
+        out.append({
+            "id": int(cid),
+            "name": c.get("item_code") or c.get("name") or f"Category {cid}",
+            "item_count": int(counts.get(cid, 0)),
+        })
+    out.sort(key=lambda x: x["item_count"], reverse=True)
+    return {"categories": out, "total": len(out)}
 
 
 # ================================================================

@@ -123,6 +123,18 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
                 kwargs["item_ref_id"] = request.item_ref_id
             if request.item_ref_ids:
                 kwargs["item_ref_ids"] = request.item_ref_ids
+            if request.item_category_id:
+                kwargs["item_category_id"] = request.item_category_id
+            kwargs["require_tax_rate"] = request.require_tax_rate
+            yield _sse_event(LogEvent(
+                type="log",
+                message=(
+                    f"Config: category_id={request.item_category_id or '(auto-pick)'}, "
+                    f"tax_rate={'ON' if request.require_tax_rate else 'OFF'}, "
+                    f"items={list(request.item_ref_ids) if request.item_ref_ids else request.item_ref_id}"
+                ),
+                timestamp=datetime.now(timezone.utc),
+            ))
             result = chain.run(**kwargs)
             elapsed = time.time() - chain_start
             po = result.get("po") or {}

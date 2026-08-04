@@ -96,18 +96,23 @@ def build_gp_payload(
     agent_ref_id: int = None,
     parameter1: int = 1,
     parameter2: int = 1,
-    parameter5: int = 25,
+    parameter5: int = 1,
     parameter6: int = 1,
     distance: float = 50.0,
     vehicle_no: str = "MH14KK2533",
     driver_name: str = "Test Driver",
     driver_contact_no: int = 9000000000,
+    transporter_name: str = None,
+    supplier_bill_date: str = None,
+    e_way_bill_no: str = None,
+    bill_of_entry_number: str = None,
     transaction_date: str = None,
     in_time: str = None,
     out_time: str = None,
     remark: str = None,
     grn_check: bool = False,
     qc_check: bool = False,
+    po_ref_id_id: int = None,
     items: List[dict] = None,
 ) -> dict:
     if transaction_date is None:
@@ -126,15 +131,25 @@ def build_gp_payload(
             }
         ]
 
+    gate_pass_details = [
+        {
+            "item_ref_id": it["item_ref_id"],
+            "no_of_bags": it.get("no_of_bags"),
+            "alternate_quantity": it.get("alternate_quantity", it.get("quantity")),
+            "base_uom": it.get("base_uom"),
+            "alternate_uom": it.get("alternate_uom"),
+            "uom_conversion": it.get("uom_conversion", 1.0),
+            "hsn_sac_no": it.get("hsn_sac_no"),
+        }
+        for it in items
+    ]
+
     payload = {
         "transaction_date": transaction_date,
         "supplier_ref_id": supplier_ref_id,
         "supplier_ref_type": "Supplier",
         "item_type_ref_id": item_type_ref_id,
         "delivery_type": delivery_type,
-        "driver_name": driver_name,
-        "driver_contact_no": driver_contact_no,
-        "vehicle_no": vehicle_no,
         "in_time": in_time,
         "distance": distance,
         "parameter1": parameter1,
@@ -143,15 +158,33 @@ def build_gp_payload(
         "parameter6": parameter6,
         "grn_check": grn_check,
         "qc_check": qc_check,
-        "gate_pass_details": items,
+        "gate_pass_details": gate_pass_details,
     }
 
+    # Linked PO (PO -> GP -> GRN -> QC -> PB flow). Omitted in the standalone
+    # GP -> GRN -> QC -> PB flow where no PO was created.
+    if po_ref_id_id is not None:
+        payload["po_ref_id_id"] = po_ref_id_id
     if agent_ref_id is not None:
         payload["agent_ref_id"] = agent_ref_id
-    if out_time is not None:
-        payload["out_time"] = out_time
-    if remark is not None:
-        payload["remark"] = remark
+
+    # Stored-record shape: driver/vehicle/transporter/etc live under
+    # additional_details, not at the top level. Only non-null values are sent.
+    additional_details = {}
+    for key, val in (
+        ("vehicle_no", vehicle_no),
+        ("driver_name", driver_name),
+        ("driver_contact_no", driver_contact_no),
+        ("transporter_name", transporter_name),
+        ("supplier_bill_date", supplier_bill_date),
+        ("e_way_bill_no", e_way_bill_no),
+        ("bill_of_entry_number", bill_of_entry_number),
+        ("out_time", out_time),
+        ("remark", remark),
+    ):
+        if val is not None:
+            additional_details[key] = val
+    payload["additional_details"] = additional_details
 
     return payload
 

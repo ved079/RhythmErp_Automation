@@ -213,11 +213,27 @@ class QCPlaywrightPage(BasePlaywrightPage):
         self.navigate_to_page()
         return self.page.locator(self.REF_NO_COL).first.inner_text().strip()
 
+    def _read_row_item_names(self):
+        """Read item name from each QC row via the Item Name mat-select span."""
+        return self.page.evaluate("""
+            () => {
+                const rows = document.querySelectorAll(
+                    'mat-form-field mat-label'
+                );
+                const itemFields = [...document.querySelectorAll('mat-form-field')]
+                    .filter(f => f.querySelector('mat-label')?.textContent.trim() === 'Item Name');
+                return itemFields.map(f =>
+                    f.querySelector('.mat-mdc-select-min-line')?.textContent.trim() ?? ''
+                );
+            }
+        """)
+
     def create_for_integration(self, supplier_name, gp_ref_no, accepted_qty=1):
         """Full QC creation for the integration flow. Returns QC ref_no.
 
-        accepted_qty: int for single-item GP, or list[int] for multi-item GP.
-        Each element corresponds to one qc_details row (same order as GP items).
+        accepted_qty: int for single-item GP, or dict {item_name: qty} / list[int] for multi-item.
+        When a dict is passed, each row's accepted qty is looked up by item name so ERP row
+        ordering doesn't matter.
         """
         final_rate = random.randint(100, 5000)
         self.open_add_form()
@@ -229,8 +245,13 @@ class QCPlaywrightPage(BasePlaywrightPage):
         self.fill_discount_rate(1)
         self.fill_final_rate(final_rate)
 
-        # Multi-item: accepted_qty is a list; single-item: wrap in list
-        qty_list = accepted_qty if isinstance(accepted_qty, (list, tuple)) else [accepted_qty]
+        if isinstance(accepted_qty, dict):
+            # Map by item name — safe against ERP row reordering
+            row_names = self._read_row_item_names()
+            qty_list  = [accepted_qty.get(name, 1) for name in row_names]
+        else:
+            qty_list = accepted_qty if isinstance(accepted_qty, (list, tuple)) else [accepted_qty]
+
         for i, qty in enumerate(qty_list):
             self.fill_accepted_qty_nth(i, qty)
             self.fill_quality_parameters(actual_value=1, row=i)

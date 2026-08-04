@@ -171,6 +171,8 @@ class PurchaseChainRequest(BaseModel):
     num_items: int = 2                   # items per document
     item_ref_id: int = 5                 # item ref ID (fallback if item_ref_ids not set)
     item_ref_ids: Optional[list[int]] = None  # per-row item IDs (overrides item_ref_id)
+    item_category_id: Optional[int] = None   # restrict items to this category (None = auto-pick biggest)
+    require_tax_rate: bool = True        # True = only items whose HSN has a tax rate; False = all items (rate 0.0 when none)
     delay: float = 0.3                   # delay between API calls
     erp_token: str                       # Bearer token for ERP API
     erp_tenant_id: str = "681"           # ERP tenant ID

@@ -147,6 +147,18 @@ class GRNPlaywrightPage(BasePlaywrightPage):
     def read_rate_nth(self, row_index=0):
         return self._read_input_nth(self.RATE_INPUT, row_index)
 
+    def read_row_item_names(self):
+        """Return list of item names from each GRN row via the Item Name mat-select."""
+        return self.page.evaluate("""
+            () => {
+                const itemFields = [...document.querySelectorAll('mat-form-field')]
+                    .filter(f => f.querySelector('mat-label')?.textContent.trim() === 'Item Name');
+                return itemFields.map(f =>
+                    f.querySelector('.mat-mdc-select-min-line')?.textContent.trim() ?? ''
+                );
+            }
+        """)
+
     def fill_accepted_qty_nth(self, row_index, qty):
         """Fill the Accepted Quantity field (the only editable field in GRN rows)."""
         self.page.evaluate("""

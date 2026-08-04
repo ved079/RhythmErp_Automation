@@ -11,8 +11,10 @@ Usage:
 import argparse
 import json
 import os
+import random
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from typing import Dict, List, Optional
 
@@ -31,7 +33,6 @@ from pages.private_b2b.modules.purchase_order.data.purchase_order_data import (
     PO_TYPE_NAMES,
     PAYMENT_TERMS_NAMES,
     DELIVERY_TERMS_NAMES,
-    PACKING_FORWARDING_NAMES,
     CURRENCY_NAMES as PO_CURRENCY_NAMES,
     DEPARTMENT_NAMES,
     DIVISION_NAMES,
@@ -101,8 +102,39 @@ def _generate_chain_items(
     uom: int = 3,
     base_uom: int = 4,
     alternate_uom: int = 4,
+    item_data: Optional[List[dict]] = None,
 ) -> List[dict]:
+    """Build generic chain items (PO/GP/GRN/QC share this shape).
+
+    When *item_data* is given (per-item data resolved from Item Master, each
+    dict with item_ref_id/hsn_sac_no/alternate_uom/base_uom/uom/uom_conversion),
+    each line uses that item's real HSN/UOM instead of the tenant scalars.
+    """
     today = date.today().isoformat()
+    if item_data:
+        items = []
+        for i, data in enumerate(item_data):
+            qty = 10.0 * (i + 1)
+            rate = 100.0 * (i + 1)
+            items.append({
+                "item_ref_id": data["item_ref_id"],
+                "hsn_sac_no": data["hsn_sac_no"],
+                "uom": data.get("uom", data["alternate_uom"]),
+                "base_uom": data.get("base_uom", data["alternate_uom"]),
+                "alternate_uom": data.get("alternate_uom", data["uom"]),
+                "uom_conversion": data.get("uom_conversion", 1.0),
+                "alternate_quantity": str(qty),
+                "quantity": qty,
+                "rate": rate,
+                "tax_rate": data.get("tax_rate", 0.0),
+                "no_of_bags": int(qty),
+                "expected_delivery_date": today,
+                "received_qty": qty,
+                "accepted_qty": qty,
+                "rejected_qty": 0.0,
+            })
+        return items
+
     ids = item_ref_ids if item_ref_ids else [item_ref_id]
     items = []
     for i in range(num_items):
@@ -114,9 +146,11 @@ def _generate_chain_items(
             "uom": uom,
             "base_uom": base_uom,
             "alternate_uom": alternate_uom,
-            "alternate_quantity": "1",
+            "uom_conversion": 1.0,
+            "alternate_quantity": str(qty),
             "quantity": qty,
             "rate": rate,
+            "tax_rate": 0.0,
             "no_of_bags": int(qty),
             "expected_delivery_date": today,
             "received_qty": qty,
@@ -126,20 +160,49 @@ def _generate_chain_items(
     return items
 
 
-def _po_items_from(items: List[dict]) -> List[dict]:
-    return [
-        {
+def _po_items_from(items: List[dict], gst_type: str = "IGST") -> List[dict]:
+    """Map generic chain items to PO line shape (mirrors the stored record).
+
+    Real PO line field set (tenant 686, /purchase_order/3242/):
+      item_ref_id, hsn_sac_no, alternate_uom, uom, uom_conversion,
+      alternate_quantity, rate, gst_type, tax_rate, txn_currency_amount_detail,
+      txn_currency_tax_amount_details, total_amount, expected_delivery_date
+    (no ``quantity``, no ``is_gst_set_off``)
+
+    Field semantics (known-good flow):
+      alternate_uom = item primary UOM (e.g. MT)
+      uom           = item base UOM (e.g. KG)
+    Computed fields the ERP expects pre-filled:
+      txn_currency_amount_detail      = rate × alternate_quantity
+      txn_currency_tax_amount_details = that × tax_rate / 100
+      total_amount                    = amount + tax
+
+    ``tax_rate`` is resolved per item (HSN-based) before this is called and
+    carried on the item dict — items without a configured rate use 0.0.
+    """
+    out = []
+    for it in items:
+        rate = it["rate"]
+        tax_rate = float(it.get("tax_rate") or 0.0)
+        alt_qty = float(it.get("alternate_quantity") or it["quantity"])
+        amount = round(rate * alt_qty, 6)
+        tax = round(amount * tax_rate / 100.0, 6)
+        out.append({
             "item_ref_id": it["item_ref_id"],
             "hsn_sac_no": it["hsn_sac_no"],
-            "uom": it["uom"],
-            "alternate_uom": it.get("alternate_uom"),
+            "uom": it.get("base_uom", it["uom"]),
+            "alternate_uom": it.get("alternate_uom", it["uom"]),
+            "uom_conversion": it.get("uom_conversion", 1.0),
             "alternate_quantity": it.get("alternate_quantity", "1"),
-            "quantity": it["quantity"],
-            "rate": it["rate"],
+            "rate": rate,
+            "gst_type": gst_type,
+            "tax_rate": tax_rate,
+            "txn_currency_amount_detail": amount,
+            "txn_currency_tax_amount_details": tax,
+            "total_amount": round(amount + tax, 6),
             "expected_delivery_date": it["expected_delivery_date"],
-        }
-        for it in items
-    ]
+        })
+    return out
 
 
 def _gp_items_from(items: List[dict]) -> List[dict]:
@@ -264,6 +327,17 @@ class PurchaseChain:
 
         self.results: List[dict] = []
         self._context: Optional[ChainContext] = None  # discovered lazily
+        # Per-entity resolution caches (keyed by ERP id) — avoids repeated GETs
+        # across chains in one run.
+        self._supplier_cache: Dict[int, dict] = {}
+        self._item_cache: Dict[int, Optional[dict]] = {}
+        # Tenant PO header defaults, sniffed from an existing PO (schema 404s).
+        self._po_defaults: Optional[dict] = None
+        # Item-category resolution (ERP PO dropdown is category-scoped).
+        self._categories: Optional[List[dict]] = None  # [{id, name, item_count}] desc
+        self._item_category_map: Dict[int, int] = {}  # item_ref_id -> item_category
+        # HSN -> available tax rates, flattened from the Tax Rate screen.
+        self._tax_rates: Optional[Dict[str, List[float]]] = None
 
     def get_context(self) -> ChainContext:
         """Return the tenant context, discovering it on first call."""
@@ -271,12 +345,312 @@ class PurchaseChain:
             self._context = ChainContextDiscoverer(self.client).discover()
         return self._context
 
+    # ------------------------------------------------------------------
+    # Per-entity resolution helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _err_detail(api_utils, payload: dict = None) -> str:
+        """Human-readable failure detail from the last API call."""
+        resp = getattr(api_utils, "_last_response", None)
+        status = getattr(api_utils, "_last_status", None)
+        body = ""
+        if resp is not None:
+            try:
+                body = resp.text[:400]
+            except Exception:
+                body = "<unreadable response>"
+        detail = f"HTTP {status}; body: {body or 'no response'}"
+        if payload is not None:
+            detail += f" | sent: {json.dumps(payload, default=str)[:600]}"
+        return detail
+
+    def _resolve_supplier_details(self, supplier_ref_id: int) -> dict:
+        """Resolve supplier-specific addresses/terms from the Supplier detail record.
+
+        ship_from / bill_from MUST come from the chosen supplier — the generic
+        first-dropdown values can point at another supplier's address and cause
+        an HTTP 500 on PO create. Raises a clear error when the supplier has no
+        registered address so we never send a bogus FK silently.
+        """
+        if supplier_ref_id in self._supplier_cache:
+            return self._supplier_cache[supplier_ref_id]
+
+        detail = None
+        for attempt in range(4):
+            detail = self.client.get_entry("Supplier", supplier_ref_id)
+            if detail:
+                break
+            log.warning(
+                f"  Supplier detail fetch failed for #{supplier_ref_id} "
+                f"(attempt {attempt + 1}/4) — retrying"
+            )
+            time.sleep(0.4 * (attempt + 1))
+        if not detail:
+            raise RuntimeError(
+                f"Supplier #{supplier_ref_id} not found in ERP — cannot create PO."
+            )
+
+        out = {
+            "id": supplier_ref_id,
+            "ship_from": None,
+            "bill_from": None,
+            "payment_terms": None,
+            "delivery_terms": None,
+            # Per-supplier PO header values (the PO screen schema 404s, so the
+            # generic ctx dropdowns are unusable — these come from the supplier).
+            "txn_currency": detail.get("default_currency_ref_id"),
+            "po_type": detail.get("po_type_ref_id"),
+            "tax_registration_status": "Registered",
+        }
+        for stepper in (detail.get("children") or []):
+            name = (stepper.get("stepper_name") or "").lower()
+            if "address" in name:
+                addr_list = stepper.get("details") or []
+                if len(addr_list) >= 1 and addr_list[0].get("id"):
+                    out["ship_from"] = int(addr_list[0]["id"])
+                if len(addr_list) >= 2 and addr_list[1].get("id"):
+                    out["bill_from"] = int(addr_list[1]["id"])
+            elif "additional" in name:
+                if stepper.get("payment_terms_ref_id"):
+                    out["payment_terms"] = int(stepper["payment_terms_ref_id"])
+                if stepper.get("delivery_terms_ref_id"):
+                    out["delivery_terms"] = int(stepper["delivery_terms_ref_id"])
+
+        missing = [k for k in ("ship_from", "bill_from") if out[k] is None]
+        if missing:
+            raise RuntimeError(
+                f"Supplier #{supplier_ref_id} has no {', '.join(missing)} address in ERP "
+                f"— cannot create PO. Pick a supplier with a registered address."
+            )
+
+        log.info(f"  Supplier #{supplier_ref_id} resolved: {out}")
+        self._supplier_cache[supplier_ref_id] = out
+        return out
+
+    def _resolve_item_detail(self, item_ref_id: int) -> Optional[dict]:
+        """Resolve an item's own HSN / UOM / base UOM / conversion from Item Master.
+
+        Returns None when the item does not exist. An item is only usable for a
+        PO when it carries a HSN, a primary UOM and a base UOM — callers decide.
+        """
+        if item_ref_id in self._item_cache:
+            return self._item_cache[item_ref_id]
+
+        detail = self.client.get_entry("Item Master", item_ref_id)
+        if not detail:
+            self._item_cache[item_ref_id] = None
+            return None
+
+        hsn = detail.get("hsn_sac_code")
+        primary_uom = detail.get("uom")        # item's primary UOM (e.g. MT)
+        base_uom = detail.get("base_uom")      # item's base/weight UOM (e.g. KG)
+        conv = 1.0
+        try:
+            conv = float(detail.get("base_uom_conversion") or 1.0)
+        except (TypeError, ValueError):
+            conv = 1.0
+
+        out = {
+            "item_ref_id": item_ref_id,
+            "item_category": detail.get("item_category"),
+            "hsn_sac_no": hsn,
+            "alternate_uom": primary_uom,
+            "base_uom": base_uom,
+            "uom": primary_uom,     # generic chain item keeps primary as `uom`
+            "uom_conversion": conv,
+        }
+        self._item_cache[item_ref_id] = out
+        return out
+
+    def _sniff_po_defaults(self) -> dict:
+        """Sniff tenant-level PO header defaults from an existing PO, if any.
+
+        The PO screen schema 404s (`/core/dynamic-screen/Purchase Order/`), so
+        generic dropdown discovery is unusable for po_item_type / base_currency
+        / parameters. A real stored PO is the ground truth for the tenant; we
+        read one (first page) and reuse its header values. Returns {} if there
+        is no existing PO (callers fall back to ctx).
+        """
+        if self._po_defaults is not None:
+            return self._po_defaults
+        self._po_defaults = {}
+        try:
+            listing = self.po_api.list_pos(page_size=3)
+        except Exception as e:
+            log.warning(f"  Could not list POs for sniffing: {e}")
+            return self._po_defaults
+        if not listing:
+            return self._po_defaults
+
+        # list_pos returns {"rows": [...]} for the procure-to-pay list.
+        rows = listing.get("rows") or listing.get("screenmatlistingdata_set") or []
+        if not rows:
+            return self._po_defaults
+        po_id = rows[0].get("id")
+        if not po_id:
+            return self._po_defaults
+
+        entry = self.po_api.get_po(po_id)
+        if not entry:
+            return self._po_defaults
+        for key in (
+            "po_item_type", "po_type", "base_currency", "txn_currency",
+            "parameter1", "parameter2", "parameter5", "parameter6",
+        ):
+            val = entry.get(key)
+            if val not in (None, ""):
+                self._po_defaults[key] = val
+        log.info(
+            f"  Sniffed tenant PO defaults from existing PO #{po_id}: "
+            f"{self._po_defaults}"
+        )
+        return self._po_defaults
+
+    def _resolve_item_categories(self) -> List[dict]:
+        """Return Item Categories with item counts, sorted count desc.
+
+        The ERP PO screen filters the Item dropdown by the selected Item
+        Category, so PO items must come from one category. This lists the
+        Item Category screen plus Item Master and groups item counts by
+        ``item_category`` (the FK). The Item Master *listing* does not expose
+        ``item_category`` (only id/name/code/uom/status), so each item's full
+        detail is fetched to read the FK. Cached per PurchaseChain instance.
+        """
+        if self._categories is not None:
+            return self._categories
+        self._categories = []
+        try:
+            cat_resp = self.client.list_entries("Item Category", page_size=500)
+            item_resp = self.client.list_entries("Item Master", page_size=500)
+        except Exception as e:
+            log.warning(f"  Could not list categories/items for category resolution: {e}")
+            return self._categories
+
+        cats = (cat_resp or {}).get("screenmatlistingdata_set") or (cat_resp or {}).get("results") or []
+        items = (item_resp or {}).get("screenmatlistingdata_set") or (item_resp or {}).get("results") or []
+
+        # Item Master listing lacks item_category — fetch each item's detail
+        # (the field lives on the full entry) so counts and the item->category
+        # map are accurate. Threaded to stay fast on larger tenants.
+        def _fetch_category(item_row):
+            iid = item_row.get("id")
+            try:
+                det = self.client.get_entry("Item Master", iid)
+                return iid, None if det is None else det.get("item_category")
+            except Exception:
+                return iid, None
+
+        counts: Dict[int, int] = {}
+        if items:
+            with ThreadPoolExecutor(max_workers=8) as ex:
+                for iid, cid in ex.map(_fetch_category, items):
+                    if iid is None or cid is None:
+                        continue
+                    counts[cid] = counts.get(cid, 0) + 1
+                    self._item_category_map[iid] = cid
+
+        for c in cats:
+            cid = c.get("id")
+            if cid is None:
+                continue
+            self._categories.append({
+                "id": int(cid),
+                "name": c.get("item_code") or c.get("name") or f"Category {cid}",
+                "item_count": int(counts.get(cid, 0)),
+            })
+        self._categories.sort(key=lambda x: x["item_count"], reverse=True)
+        log.info(
+            f"  Resolved {len(self._categories)} item categories "
+            f"({len(self._item_category_map)} items mapped); "
+            f"top: {self._categories[0] if self._categories else 'none'}"
+        )
+        return self._categories
+
+    def _resolve_item_category(self, item_category_id: Optional[int]) -> Optional[dict]:
+        """Validate a requested category, or auto-pick the most-populated one.
+
+        Returns the chosen category dict ({id, name, item_count}) or None when
+        no category exists in the ERP. Raises RuntimeError if an explicitly
+        requested category id does not exist.
+        """
+        cats = self._resolve_item_categories()
+        if not cats:
+            return None
+        if item_category_id is not None:
+            for c in cats:
+                if c["id"] == int(item_category_id):
+                    return c
+            raise RuntimeError(
+                f"Item Category #{item_category_id} not found in ERP — "
+                f"pick a valid category id."
+            )
+        log.info(f"  Auto-picking most-populated item category: {cats[0]}")
+        return cats[0]
+
+    def _resolve_tax_rates(self) -> Dict[str, List[float]]:
+        """Return ``{hsn: [tax_rate, ...]}`` flattened from the Tax Rate screen.
+
+        Rates live per-header: ``get_entry("Tax Rate", id)`` returns a flat
+        ``children[0].details[]`` list of rows with ``hsn_sac_number`` +
+        ``tax_rate``. All headers are read (threaded) and merged by HSN so an
+        HSN with multiple rate rows yields multiple candidates. Cached per
+        PurchaseChain instance.
+        """
+        if self._tax_rates is not None:
+            return self._tax_rates
+        self._tax_rates = {}
+        try:
+            resp = self.client.list_entries("Tax Rate", page_size=500)
+        except Exception as e:
+            log.warning(f"  Could not list Tax Rate entries: {e}")
+            return self._tax_rates
+
+        headers = (resp or {}).get("screenmatlistingdata_set") or (resp or {}).get("results") or []
+
+        def _fetch(header):
+            out: Dict[str, List[float]] = {}
+            hid = header.get("id")
+            if hid is None:
+                return out
+            try:
+                det = self.client.get_entry("Tax Rate", hid)
+            except Exception:
+                return out
+            if not det:
+                return out
+            for child in (det.get("children") or []):
+                for row in (child.get("details") or []):
+                    hsn = row.get("hsn_sac_number")
+                    rate = row.get("tax_rate")
+                    if hsn is None or rate is None:
+                        continue
+                    try:
+                        out.setdefault(str(hsn).strip(), []).append(float(rate))
+                    except (TypeError, ValueError):
+                        continue
+            return out
+
+        if headers:
+            with ThreadPoolExecutor(max_workers=8) as ex:
+                for hsn_map in ex.map(_fetch, headers):
+                    for hsn, rates in hsn_map.items():
+                        self._tax_rates.setdefault(hsn, [])
+                        self._tax_rates[hsn].extend(rates)
+        log.info(
+            f"  Resolved tax rates for {len(self._tax_rates)} HSN(s) "
+            f"from {len(headers)} Tax Rate header(s)"
+        )
+        return self._tax_rates
+
     def run(
         self,
         supplier_ref_id: int = None,
         num_items: int = 1,
         item_ref_id: int = None,
         item_ref_ids: Optional[List[int]] = None,
+        item_category_id: int = None,
+        require_tax_rate: bool = True,
         hsn_sac_no: int = None,
         po_overrides: dict = None,
         gp_overrides: dict = None,
@@ -291,6 +665,15 @@ class PurchaseChain:
         If *ctx* is not given, the context is discovered automatically from
         the ERP API (tenant-safe). Explicit arguments take precedence over
         the discovered context so existing callers are not broken.
+
+        ``item_category_id`` restricts PO items to one Item Category (the ERP
+        PO Item dropdown is category-scoped). When None, the most-populated
+        category is auto-picked.
+
+        ``require_tax_rate`` gates the PO item set: True keeps only items whose
+        HSN has at least one tax rate in the Tax Rate screen (each line gets a
+        random one of its rates); False keeps every item — those without a rate
+        are sent with ``tax_rate=0.0``.
 
         Returns:
             dict with keys ``po``, ``gp``, ``grn``, ``qc`` containing API response data.
@@ -307,15 +690,89 @@ class PurchaseChain:
         eff_item      = item_ref_id     if item_ref_id     is not None else ctx.item_ref_id
         eff_hsn       = hsn_sac_no      if hsn_sac_no      is not None else ctx.hsn_sac_no
 
-        items = _generate_chain_items(
-            num_items=num_items,
-            item_ref_id=eff_item,
-            item_ref_ids=item_ref_ids,
-            hsn_sac_no=eff_hsn,
-            uom=ctx.alternate_uom,
-            base_uom=ctx.base_uom,
-            alternate_uom=ctx.alternate_uom,
+        # Resolve supplier-specific addresses/terms — the generic ctx dropdown
+        # values can belong to a different supplier and cause an HTTP 500 on PO
+        # create. Raises a clear error if the chosen supplier has no address.
+        supplier_det = None
+        if "PO" in docs:
+            supplier_det = self._resolve_supplier_details(eff_supplier)
+
+        # Resolve item category — the ERP PO Item dropdown is scoped to one
+        # category, so PO items must belong to it. Auto-pick the most-populated
+        # category when the caller did not choose one.
+        category = self._resolve_item_category(item_category_id)
+        if category is None:
+            raise RuntimeError(
+                "No Item Categories found in ERP — cannot pick PO items. "
+                "Add an Item Category and some Items first."
+            )
+        cat_id = int(category["id"])
+        log.info(
+            f"  Using Item Category #{cat_id} ({category['name']}) — "
+            f"po_item_type={cat_id} ({'requested' if item_category_id is not None else 'auto-picked'})"
         )
+
+        # Resolve per-item data (real HSN / UOM / conversion) for the chosen
+        # items so PO lines are valid for ANY tenant. Items without HSN/UOM data
+        # raise a clear error instead of silently reusing tenant scalars. Items
+        # outside the chosen category are rejected.
+        if item_ref_ids:
+            base_ids = list(item_ref_ids)
+        else:
+            base_ids = [iid for iid, cid in self._item_category_map.items() if cid == cat_id]
+            if not base_ids:
+                raise RuntimeError(
+                    f"Item Category #{cat_id} ({category['name']}) has no items in ERP "
+                    f"— cannot pick PO items. Pick a category that has items."
+                )
+            if eff_item in base_ids:
+                base_ids = [eff_item]
+        num = max(1, num_items)
+
+        # HSN -> available tax rates. When Tax Rate is ON, items whose HSN has
+        # no rate are skipped (each PO line picks a random one of its rates);
+        # when OFF, every item is kept and rate-less ones get 0.0.
+        tax_rates = self._resolve_tax_rates()
+        item_data = []
+        skipped_no_rate = []
+        idx = 0
+        guard = 0
+        max_iter = max(num * 4, len(base_ids) * 4, 16)
+        while len(item_data) < num and guard < max_iter:
+            iid = base_ids[idx % len(base_ids)]
+            idx += 1
+            guard += 1
+            det = self._resolve_item_detail(iid)
+            if det is None or not det.get("hsn_sac_no") or not det.get("alternate_uom") or not det.get("base_uom"):
+                raise RuntimeError(
+                    f"Item #{iid} is missing HSN/UOM data in Item Master — cannot create PO. "
+                    f"Pick an item with HSN, primary UOM and base UOM configured."
+                )
+            det_cat = det.get("item_category")
+            if det_cat is not None and det_cat != cat_id:
+                raise RuntimeError(
+                    f"Item #{iid} belongs to category #{det_cat}, not #{cat_id} "
+                    f"({category['name']}) — pick items within the selected category."
+                )
+            hsn = str(det.get("hsn_sac_no") or "").strip()
+            rates = tax_rates.get(hsn, [])
+            if require_tax_rate and not rates:
+                skipped_no_rate.append(iid)
+                continue
+            det["tax_rate"] = float(random.choice(rates)) if rates else 0.0
+            item_data.append(det)
+        if skipped_no_rate:
+            log.info(
+                f"  Tax Rate ON — skipped {len(skipped_no_rate)} item(s) with no "
+                f"tax rate: {sorted(set(skipped_no_rate))}"
+            )
+        if not item_data:
+            raise RuntimeError(
+                f"No items in Item Category #{cat_id} ({category['name']}) have a tax "
+                f"rate — turn Tax Rate OFF or pick a category whose HSNs are mapped "
+                f"in the Tax Rate screen."
+            )
+        items = _generate_chain_items(num_items=len(item_data), item_data=item_data)
 
         po_id = po_ref = po_data = po_payload = po_entry = None
         gp_id = gp_ref = gp_data = gp_payload = None
@@ -327,13 +784,18 @@ class PurchaseChain:
         # 1. Purchase Order
         # ---------------------------------------------------------------
         if "PO" in docs:
-            po_payload = self._build_po_payload(eff_supplier, items, po_overrides, ctx=ctx)
+            po_overrides = dict(po_overrides or {})
+            po_defaults = self._sniff_po_defaults()
+            po_payload = self._build_po_payload(
+                eff_supplier, items, po_overrides, ctx=ctx,
+                supplier_det=supplier_det, po_defaults=po_defaults,
+                item_category_id=cat_id,
+            )
             po_data = self.po_api.create_po(po_payload)
             po_id = po_data.get("id") or po_data.get("entry_id") if po_data else None
             if not po_data or not po_id:
                 raise RuntimeError(
-                    f"PO creation failed (HTTP {self.po_api._last_status}); "
-                    f"response: {po_data}"
+                    f"PO creation failed ({self._err_detail(self.po_api, po_payload)})"
                 )
             po_ref = po_data.get("transaction_ref_no", str(po_id))
             log.info(f"  PO created: ID={po_id}, ref={po_ref}")
@@ -368,7 +830,10 @@ class PurchaseChain:
         # 2. Gate Pass
         # ---------------------------------------------------------------
         if "GP" in docs:
-            gp_payload = self._build_gp_payload(eff_supplier, items, gp_overrides, ctx=ctx)
+            gp_payload = self._build_gp_payload(
+                eff_supplier, items, gp_overrides, ctx=ctx,
+                po_id=po_id, item_category_id=cat_id,
+            )
             gp_data = self.gp_api.create_gp(gp_payload)
             gp_id = gp_data.get("id") or gp_data.get("entry_id") if gp_data else None
             if not gp_data or not gp_id:
@@ -474,59 +939,80 @@ class PurchaseChain:
         items: List[dict],
         overrides: dict = None,
         ctx: Optional[ChainContext] = None,
+        supplier_det: dict = None,
+        po_defaults: dict = None,
+        item_category_id: int = None,
     ) -> dict:
+        """Build a PO payload aligned to the stored-record shape.
+
+        Ground truth (tenant 686, GET /procure_to_pay/purchase_order/3242/):
+          - supplier_payment_terms / supplier_delivery_terms are TOP-LEVEL
+          - supplier_details holds ONLY supplier_ship_from / supplier_bill_from
+          - no packing_forwarding_ref_id
+          - po_type / txn_currency are per-supplier; tax_registration_status = "Registered"
+        """
         from pages.private_b2b.modules.purchase_order.data.purchase_order_data import build_po_payload
         po_items = _po_items_from(items)
-        overrides = overrides or {}
-        if ctx:
-            return build_po_payload(
-                supplier_ref_id=supplier_ref_id,
-                items=po_items,
-                po_item_type=ctx.item_type_ref_id,
-                po_type=ctx.po_type,
-                txn_currency=ctx.txn_currency,
-                base_currency=ctx.base_currency,
-                parameter1=ctx.parameter1,
-                parameter2=ctx.parameter2,
-                parameter5=ctx.parameter5,
-                parameter6=ctx.parameter6,
-                supplier_details={
-                    "supplier_payment_terms": ctx.payment_terms,
-                    "supplier_delivery_terms": ctx.delivery_terms,
-                    "packing_forwarding_ref_id": ctx.packing_forwarding,
-                    "supplier_ship_from": ctx.supplier_ship_from,
-                    "supplier_bill_from": ctx.supplier_bill_from,
-                },
-                **overrides,
-            )
-        # Legacy path — no context (uses data-file defaults)
-        import random
-        from pages.private_b2b.modules.purchase_order.data.purchase_order_data import (
-            PO_TYPE_IDS, CURRENCY_IDS, DIVISION_IDS, DEPARTMENT_IDS,
-            TYPE_OF_SALE_IDS, LOCATION_IDS,
-            PAYMENT_TERMS_IDS, DELIVERY_TERMS_IDS, PACKING_FORWARDING_IDS,
-            SUPPLIER_SHIP_FROM_IDS, SUPPLIER_BILL_FROM_IDS,
-        )
-        return build_po_payload(
+        overrides = dict(overrides or {})
+        supplier_det = supplier_det or {}
+        po_defaults = po_defaults or {}
+
+        # Resolve per-supplier PO header values. Fallback chain:
+        #   supplier_det -> sniffed po_defaults -> ctx -> legacy default.
+        def _pick(det_key, po_key, ctx_key, fb):
+            v = supplier_det.get(det_key)
+            if v in (None, ""):
+                v = po_defaults.get(po_key)
+            if v in (None, ""):
+                v = getattr(ctx, ctx_key, None) if ctx else None
+            if v in (None, ""):
+                v = fb
+            return v
+
+        po_type       = _pick("po_type",       "po_type",       "po_type",       25)
+        txn_currency  = _pick("txn_currency",  "txn_currency",  "txn_currency",  1)
+        base_currency = _pick(None, "base_currency", "base_currency", 1)
+        payment_terms = _pick("payment_terms", None, "payment_terms", None)
+        delivery_terms = _pick("delivery_terms", None, "delivery_terms", None)
+        ship_from     = _pick("ship_from",     None, "supplier_ship_from", None)
+        bill_from     = _pick("bill_from",     None, "supplier_bill_from", None)
+        tax_reg = supplier_det.get("tax_registration_status") or "Registered"
+
+        # supplier_details carries ONLY ship_from / bill_from (stored shape).
+        supplier_details = {
+            "supplier_ship_from": ship_from,
+            "supplier_bill_from": bill_from,
+        }
+        # Merge caller-supplied nested overrides per-key (no duplicate kwarg).
+        user_sd = overrides.pop("supplier_details", None) or {}
+        if isinstance(user_sd, dict):
+            for k, v in user_sd.items():
+                if v is not None:
+                    supplier_details[k] = v
+
+        kwargs = dict(
             supplier_ref_id=supplier_ref_id,
             items=po_items,
-            po_item_type=113,
-            po_type=random.choice(PO_TYPE_IDS),
-            txn_currency=random.choice(CURRENCY_IDS),
-            base_currency=random.choice(CURRENCY_IDS),
-            parameter1=random.choice(DIVISION_IDS),
-            parameter2=random.choice(DEPARTMENT_IDS),
-            parameter5=2,
-            parameter6=1,
-            supplier_details={
-                "supplier_payment_terms": random.choice(PAYMENT_TERMS_IDS),
-                "supplier_delivery_terms": random.choice(DELIVERY_TERMS_IDS),
-                "packing_forwarding_ref_id": random.choice(PACKING_FORWARDING_IDS),
-                "supplier_ship_from": random.choice(SUPPLIER_SHIP_FROM_IDS),
-                "supplier_bill_from": random.choice(SUPPLIER_BILL_FROM_IDS),
-            },
-            **overrides,
+            # po_item_type holds the selected Item Category id (stored shape).
+            # Fall back to sniffed/legacy only when no category was resolved.
+            po_item_type=overrides.pop("po_item_type", item_category_id or _pick(None, "po_item_type", "item_type_ref_id", 113)),
+            po_type=overrides.pop("po_type", po_type),
+            txn_currency=overrides.pop("txn_currency", txn_currency),
+            base_currency=overrides.pop("base_currency", base_currency),
+            parameter1=overrides.pop("parameter1", _pick(None, "parameter1", "parameter1", 1)),
+            parameter2=overrides.pop("parameter2", _pick(None, "parameter2", "parameter2", 1)),
+            parameter5=overrides.pop("parameter5", _pick(None, "parameter5", "parameter5", 1)),
+            parameter6=overrides.pop("parameter6", _pick(None, "parameter6", "parameter6", 1)),
+            supplier_details=supplier_details,
+            supplier_payment_terms=overrides.pop("supplier_payment_terms", payment_terms),
+            supplier_delivery_terms=overrides.pop("supplier_delivery_terms", delivery_terms),
+            tax_registration_status=overrides.pop("tax_registration_status", tax_reg),
+            item_category=overrides.pop("item_category", item_category_id),
         )
+        payload = build_po_payload(**kwargs)
+        # Apply any remaining caller overrides directly to the final dict.
+        payload.update(overrides)
+        return payload
 
     @staticmethod
     def _build_gp_payload(
@@ -534,39 +1020,47 @@ class PurchaseChain:
         items: List[dict],
         overrides: dict = None,
         ctx: Optional[ChainContext] = None,
+        po_id: int = None,
+        item_category_id: int = None,
     ) -> dict:
+        """Build a GP payload aligned to the stored-record shape.
+
+        Ground truth (tenant 686, GP 1526):
+          - po_ref_id_id links the PO created in the same chain (omitted in the
+            standalone GP -> GRN -> QC -> PB flow).
+          - item_type_ref_id holds the selected Item Category id (like po_item_type),
+            NOT the Farm/Non-Farm 113/114 value.
+          - driver / vehicle / transporter live under additional_details.
+        """
         from pages.private_b2b.modules.gate_pass.data.gate_pass_data import build_gp_payload
         gp_items = _gp_items_from(items)
-        overrides = overrides or {}
-        if ctx:
-            return build_gp_payload(
-                supplier_ref_id=supplier_ref_id,
-                items=gp_items,
-                item_type_ref_id=ctx.item_type_ref_id,
-                delivery_type=ctx.delivery_type,
-                parameter1=ctx.parameter1,
-                parameter2=ctx.parameter2,
-                parameter5=ctx.parameter5,
-                parameter6=ctx.parameter6,
-                grn_check=True,
-                qc_check=True,
-                **overrides,
-            )
-        import random
-        from pages.private_b2b.modules.gate_pass.data.gate_pass_data import (
-            ITEM_TYPE_IDS, DIVISION_IDS, DEPARTMENT_IDS, DELIVERY_TYPE_IDS,
-        )
-        return build_gp_payload(
+        overrides = dict(overrides or {})
+
+        def _pick(key, ctx_key, fb):
+            v = overrides.pop(key, None)
+            if v is None:
+                v = getattr(ctx, ctx_key, None) if ctx else None
+            if v is None:
+                v = fb
+            return v
+
+        kwargs = dict(
             supplier_ref_id=supplier_ref_id,
             items=gp_items,
-            item_type_ref_id=random.choice(ITEM_TYPE_IDS),
-            delivery_type=random.choice(DELIVERY_TYPE_IDS),
-            parameter1=random.choice(DIVISION_IDS),
-            parameter2=random.choice(DEPARTMENT_IDS),
-            grn_check=True,
-            qc_check=True,
-            **overrides,
+            # item_type_ref_id = selected Item Category id first (stored shape).
+            # Fall back to ctx/legacy only when no category was resolved.
+            item_type_ref_id=overrides.pop("item_type_ref_id", item_category_id or _pick(None, "item_type_ref_id", 113)),
+            delivery_type=_pick("delivery_type", "delivery_type", 29),
+            parameter1=_pick("parameter1", "parameter1", 1),
+            parameter2=_pick("parameter2", "parameter2", 1),
+            parameter5=_pick("parameter5", "parameter5", 1),
+            parameter6=_pick("parameter6", "parameter6", 1),
+            grn_check=overrides.pop("grn_check", True),
+            qc_check=overrides.pop("qc_check", True),
         )
+        if po_id is not None:
+            kwargs["po_ref_id_id"] = overrides.pop("po_ref_id_id", po_id)
+        return build_gp_payload(**kwargs)
 
     @staticmethod
     def _build_grn_payload(
@@ -740,9 +1234,9 @@ def print_chain_details(results):
         print(f"   Conv Rate:     {_val(pp.get('conversion_rate'))}")
         print(f"   Trans Date:    {_val(pp.get('transaction_date'))}")
         sd = pp.get("supplier_details") or {}
-        print(f"   Payment Terms: {_name(PAYMENT_TERMS_NAMES, sd.get('supplier_payment_terms'))}")
-        print(f"   Deliv. Terms:  {_name(DELIVERY_TERMS_NAMES, sd.get('supplier_delivery_terms'))}")
-        print(f"   Pack & Forw:   {_name(PACKING_FORWARDING_NAMES, sd.get('packing_forwarding_ref_id'))}")
+        print(f"   Payment Terms: {_name(PAYMENT_TERMS_NAMES, pp.get('supplier_payment_terms'))}")
+        print(f"   Deliv. Terms:  {_name(DELIVERY_TERMS_NAMES, pp.get('supplier_delivery_terms'))}")
+        print(f"   Pack & Forw:   {_val(pp.get('packing_forwarding_ref_id'))}")
         print(f"   Ship From:     {_val(sd.get('supplier_ship_from'))}")
         print(f"   Bill From:     {_val(sd.get('supplier_bill_from'))}")
 

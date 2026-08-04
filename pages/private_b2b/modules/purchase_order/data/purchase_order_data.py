@@ -116,6 +116,10 @@ def build_po_payload(
     transaction_date: str = None,
     additional_details: dict = None,
     supplier_details: dict = None,
+    supplier_payment_terms: int = None,
+    supplier_delivery_terms: int = None,
+    tax_registration_status: str = None,
+    item_category: int = None,
 ) -> dict:
     if transaction_date is None:
         transaction_date = date.today().isoformat()
@@ -130,14 +134,24 @@ def build_po_payload(
             "remark": None,
         }
 
+    # supplier_payment_terms / supplier_delivery_terms live TOP-LEVEL in the
+    # stored record; supplier_details only carries ship_from / bill_from.
+    # Kept backward-compatible: when no top-level terms are given, the old
+    # nested shape is emitted so existing callers/tests are unchanged.
     if supplier_details is None:
-        supplier_details = {
-            "supplier_payment_terms": random.choice(PAYMENT_TERMS_IDS),
-            "supplier_delivery_terms": random.choice(DELIVERY_TERMS_IDS),
-            "packing_forwarding_ref_id": PACKING_FORWARDING_NILL,
-            "supplier_ship_from": random.choice(SUPPLIER_SHIP_FROM_IDS),
-            "supplier_bill_from": random.choice(SUPPLIER_BILL_FROM_IDS),
-        }
+        if supplier_payment_terms is not None or supplier_delivery_terms is not None:
+            supplier_details = {
+                "supplier_ship_from": random.choice(SUPPLIER_SHIP_FROM_IDS),
+                "supplier_bill_from": random.choice(SUPPLIER_BILL_FROM_IDS),
+            }
+        else:
+            supplier_details = {
+                "supplier_payment_terms": random.choice(PAYMENT_TERMS_IDS),
+                "supplier_delivery_terms": random.choice(DELIVERY_TERMS_IDS),
+                "packing_forwarding_ref_id": PACKING_FORWARDING_NILL,
+                "supplier_ship_from": random.choice(SUPPLIER_SHIP_FROM_IDS),
+                "supplier_bill_from": random.choice(SUPPLIER_BILL_FROM_IDS),
+            }
 
     if items is None:
         items = [
@@ -153,7 +167,7 @@ def build_po_payload(
             }
         ]
 
-    return {
+    payload = {
         "transaction_date": transaction_date,
         "supplier_ref_id": supplier_ref_id,
         "supplier_ref_type": "Supplier",
@@ -172,6 +186,17 @@ def build_po_payload(
         "supplier_details": supplier_details,
         "purchasing_order_items_details": items,
     }
+    # Stored-record shape: payment/delivery terms and tax registration sit at
+    # the top level (only added when provided — keeps old callers unchanged).
+    if supplier_payment_terms is not None:
+        payload["supplier_payment_terms"] = supplier_payment_terms
+    if supplier_delivery_terms is not None:
+        payload["supplier_delivery_terms"] = supplier_delivery_terms
+    if tax_registration_status is not None:
+        payload["tax_registration_status"] = tax_registration_status
+    if item_category is not None:
+        payload["item_category"] = item_category
+    return payload
 
 
 def build_po_item(

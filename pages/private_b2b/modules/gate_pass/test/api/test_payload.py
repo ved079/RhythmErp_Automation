@@ -34,7 +34,7 @@ class TestPayloadStructure:
         payload = build_gp_payload()
         assert "supplier_ref_id" in payload
         assert "item_type_ref_id" in payload
-        assert "driver_name" in payload
+        assert "driver_name" in payload["additional_details"]
         assert "in_time" in payload
         assert "distance" in payload
         assert "gate_pass_details" in payload
@@ -53,14 +53,16 @@ class TestPayloadStructure:
             remark="Test remark",
             grn_check=True,
             qc_check=True,
+            po_ref_id_id=123,
         )
         assert payload["agent_ref_id"] == 15
         assert payload["delivery_type"] == 29
         assert payload["parameter2"] == 2
-        assert payload["vehicle_no"] == "MH12AB1234"
-        assert payload["driver_contact_no"] == 9876543210
+        assert payload["additional_details"]["vehicle_no"] == "MH12AB1234"
+        assert payload["additional_details"]["driver_contact_no"] == 9876543210
         assert payload["grn_check"] is True
         assert payload["qc_check"] is True
+        assert payload["po_ref_id_id"] == 123
 
     @pytest.mark.api
     def test_GP_P03_gate_pass_details_structure(self):
@@ -72,8 +74,9 @@ class TestPayloadStructure:
         details = payload["gate_pass_details"]
         assert len(details) == 1
         assert details[0]["item_ref_id"] == 5
-        assert details[0]["quantity"] == 100.0
+        assert details[0]["alternate_quantity"] == 100.0
         assert details[0]["no_of_bags"] == 10.0
+        assert details[0]["uom_conversion"] == 1.0
 
     @pytest.mark.api
     def test_GP_P04_supplier_ref_type(self):
@@ -88,7 +91,7 @@ class TestGeneratePayload:
         log.info("GP-G01: Generated payload has all mandatory keys")
         payload = generate_gp_payload()
         assert "supplier_ref_id" in payload
-        assert "driver_name" in payload
+        assert "driver_name" in payload["additional_details"]
         assert "distance" in payload
         assert "in_time" in payload
         assert "gate_pass_details" in payload
