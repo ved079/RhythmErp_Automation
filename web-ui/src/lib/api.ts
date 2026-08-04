@@ -363,6 +363,8 @@ export async function startPurchaseChain(
   onDone: () => void,
   onError: (err: Error) => void,
   documents?: string[],
+  itemCategoryId?: number,
+  requireTaxRate?: boolean,
 ) {
   try {
     const res = await fetch(`${PROXY}?path=purchase-chain`, withCsrf({
@@ -373,6 +375,8 @@ export async function startPurchaseChain(
         supplier_ref_id: supplierRefId,
         num_items: numItems,
         item_ref_ids: itemRefIds,
+        item_category_id: itemCategoryId ?? null,
+        require_tax_rate: requireTaxRate ?? true,
         delay: 0.3,
         erp_token: erpToken,
         erp_tenant_id: erpTenantId,
@@ -637,6 +641,15 @@ export async function exportBatchExcel(runId: string): Promise<void> {
 export interface MasterDataItem {
   id: number
   name: string
+  item_category?: number
+  hsn_sac_code?: number | string
+  tax_rates?: number[]
+}
+
+export interface ItemCategory {
+  id: number
+  name: string
+  item_count: number
 }
 
 /**
@@ -659,6 +672,26 @@ export async function fetchMasterData(
   if (!res.ok) throw new Error(`Master data fetch failed: HTTP ${res.status}`);
   const data = await res.json();
   return data.items || [];
+}
+
+/**
+ * Fetch Item Categories with live item counts, sorted by count descending.
+ */
+export async function fetchItemCategories(
+  erpToken: string,
+  erpTenantId: string,
+): Promise<ItemCategory[]> {
+  const res = await fetch(`${PROXY}?path=item-categories`, withCsrf({
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      erp_token: erpToken,
+      erp_tenant_id: erpTenantId,
+    }),
+  }));
+  if (!res.ok) throw new Error(`Item categories fetch failed: HTTP ${res.status}`);
+  const data = await res.json();
+  return data.categories || [];
 }
 
 

@@ -107,6 +107,18 @@ class PBPlaywrightPage(BasePlaywrightPage):
         field.press("Tab")
         self.page.wait_for_timeout(300)
 
+    def read_row_item_names(self):
+        """Return list of item names from each PB row via the Item Name mat-select."""
+        return self.page.evaluate("""
+            () => {
+                const itemFields = [...document.querySelectorAll('mat-form-field')]
+                    .filter(f => f.querySelector('mat-label')?.textContent.trim() === 'Item Name');
+                return itemFields.map(f =>
+                    f.querySelector('.mat-mdc-select-min-line')?.textContent.trim() ?? ''
+                );
+            }
+        """)
+
     def count_pb_rows(self):
         return self.page.locator(
             "xpath=//mat-form-field[.//mat-label[text()='Labour Charges']]//input"

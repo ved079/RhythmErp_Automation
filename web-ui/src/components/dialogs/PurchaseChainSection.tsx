@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Package, CheckCircle2, XCircle, Play, Key, RefreshCw, RotateCcw, Loader2 } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
-import { startPurchaseChain, fetchMasterData, type SSEEvent, type MasterDataItem } from '@/lib/api'
+import { startPurchaseChain, fetchMasterData, fetchItemCategories, type SSEEvent, type MasterDataItem, type ItemCategory } from '@/lib/api'
 
 interface Props {
   erpToken: string
@@ -19,6 +19,28 @@ interface Props {
 
 function formatTime(d: Date): string {
   return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+}
+
+/**
+ * Items selectable for the PO: restricted to one category (falling back to all
+ * when no category matches) and, when Tax Rate is ON, only items whose HSN has
+ * at least one configured tax rate. Unlike the category fallback, the tax-rate
+ * filter never falls back to rate-less items — ON means only items with rates.
+ */
+function poolFor(
+  items: MasterDataItem[],
+  categoryId: number | null,
+  requireTaxRate: boolean,
+): MasterDataItem[] {
+  let pool = items
+  if (categoryId != null) {
+    const filtered = items.filter((i) => i.item_category === categoryId)
+    if (filtered.length > 0) pool = filtered
+  }
+  if (requireTaxRate) {
+    pool = pool.filter((i) => (i.tax_rates?.length ?? 0) > 0)
+  }
+  return pool
 }
 
 export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onClearToken }: Props) {
@@ -33,12 +55,16 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [failed, setFailed] = useState(0)
   const [suppliers, setSuppliers] = useState<MasterDataItem[]>([])
   const [items, setItems] = useState<MasterDataItem[]>([])
+  const [categories, setCategories] = useState<ItemCategory[]>([])
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
+  const [requireTaxRate, setRequireTaxRate] = useState(true)
+  const [flow, setFlow] = useState<'po' | 'gp'>('po')
   const [loadingData, setLoadingData] = useState(false)
   const [dataError, setDataError] = useState('')
   const [localToken, setLocalToken] = useState('')
   const [localTenantId, setLocalTenantId] = useState('')
   const [showTokenInput, setShowTokenInput] = useState(false)
-  const [activeMenu, setActiveMenu] = useState<{type: 'supplier' | 'item' | number; pos: {top: number; left: number; width: number}} | null>(null)
+  const [activeMenu, setActiveMenu] = useState<{type: 'supplier' | 'category' | 'item' | number; pos: {top: number; left: number; width: number}} | null>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const tokenSectionRef = useRef<HTMLDivElement>(null)
   const startTimeRef = useRef<number>(0)
@@ -46,6 +72,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [elapsed, setElapsed] = useState(0)
   const fetchedRef = useRef(false)
   const supplierBtnRef = useRef<HTMLButtonElement>(null)
+  const categoryBtnRef = useRef<HTMLButtonElement>(null)
   const itemBtnRef = useRef<HTMLButtonElement>(null)
   const rowBtnRefs = useRef<(HTMLButtonElement | null)[]>([])
 
@@ -72,7 +99,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     }
   }, [showTokenInput])
 
-  // Fetch suppliers and items when credentials are available
+  // Fetch suppliers, items and item categories when credentials are available
   const loadMasterData = useCallback(async () => {
     const token = erpToken || localToken
     const tenant = localTenantId || erpTenantId
@@ -81,15 +108,20 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     setLoadingData(true)
     setDataError('')
     try {
-      const [supRes, itemRes] = await Promise.all([
+      const [supRes, itemRes, catRes] = await Promise.all([
         fetchMasterData('Supplier', token, tenant),
         fetchMasterData('Item Master', token, tenant),
+        fetchItemCategories(token, tenant),
       ])
       setSuppliers(supRes)
       setItems(itemRes)
+      setCategories(catRes)
+      const defaultCat = catRes.find((c) => c.item_count > 0) ?? catRes[0] ?? null
+      setSelectedCategoryId(defaultCat ? defaultCat.id : null)
+      const usable = poolFor(itemRes, defaultCat ? defaultCat.id : null, flow === 'gp' ? false : requireTaxRate)
       if (supRes.length > 0 && supplier === null) setSupplier(supRes[0].id)
-      if (itemRes.length > 0 && itemIds.length === 0) {
-        setItemIds(itemRes.slice(0, numItems).map(i => i.id))
+      if (usable.length > 0 && itemIds.length === 0) {
+        setItemIds(usable.slice(0, numItems).map(i => i.id))
       }
       fetchedRef.current = true
     } catch (err) {
@@ -97,7 +129,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     } finally {
       setLoadingData(false)
     }
-  }, [erpToken, localToken, localTenantId, erpTenantId])
+  }, [erpToken, localToken, localTenantId, erpTenantId, requireTaxRate, flow])
 
   const handleDone = useCallback(() => {
     setShowTokenInput(false)
@@ -107,6 +139,19 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       loadMasterData()
     }
   }, [erpToken, localToken, localTenantId, erpTenantId, loadMasterData])
+
+  // Document order for the selected flow: full chain starts with PO,
+  // standalone GP starts directly at the Gate Pass.
+  const docOrder = React.useMemo(
+    () => (flow === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']),
+    [flow],
+  )
+
+  // Documents actually enabled for the run (order for the selected flow ∩ set).
+  const activeDocs = React.useMemo(
+    () => docOrder.filter((d) => enabledDocs.has(d)),
+    [docOrder, enabledDocs],
+  )
 
   const handleStart = useCallback(() => {
     const token = erpToken || localToken
@@ -120,6 +165,8 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     setCreated(0)
     setFailed(0)
     setElapsed(0)
+
+    const activeTaxRate = flow === 'gp' ? false : requireTaxRate
 
     startPurchaseChain(
       count,
@@ -146,16 +193,45 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         setLogs((prev) => [...prev, { text: `Error: ${err.message}`, ts: new Date(), isErr: true, isDone: false }])
         setRunning(false)
       },
-      Array.from(enabledDocs),
+      activeDocs,
+      selectedCategoryId ?? undefined,
+      activeTaxRate,
     )
-  }, [count, supplier, numItems, itemIds, erpToken, localToken, localTenantId, erpTenantId, enabledDocs])
+  }, [count, supplier, numItems, itemIds, erpToken, localToken, localTenantId, erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow])
 
   const handleStop = useCallback(() => {
     setRunning(false)
     setLogs((prev) => [...prev, { text: 'Stopped by user', ts: new Date(), isErr: true, isDone: false }])
   }, [])
 
+  // Items selectable for the PO (category-scoped + tax-rate filter).
+  // Standalone GP flow has no tax-rate concept, so the filter is skipped.
+  const catItems = React.useMemo(
+    () => poolFor(items, selectedCategoryId, flow === 'gp' ? false : requireTaxRate),
+    [items, selectedCategoryId, requireTaxRate, flow],
+  )
+
+  // When the Tax Rate toggle flips, re-reset the selected rows to the pool.
+  const resetItemsFromPool = useCallback((pool: MasterDataItem[], count: number) => {
+    if (pool.length === 0) { setItemIds([]); return }
+    setItemIds(pool.slice(0, Math.max(1, count)).map((i) => i.id))
+  }, [])
+
+  // On category change: auto-reset the selected item rows to the category's items.
+  const handleCategorySelect = (id: number) => {
+    setSelectedCategoryId(id)
+    resetItemsFromPool(poolFor(items, id, requireTaxRate), numItems)
+    setActiveMenu(null)
+  }
+
+  useEffect(() => {
+    if (fetchedRef.current) {
+      resetItemsFromPool(catItems, numItems)
+    }
+  }, [requireTaxRate, selectedCategoryId, flow])
+
   const selectedSupplier = suppliers.find((s) => s.id === supplier)
+  const selectedCategory = categories.find((c) => c.id === selectedCategoryId)
 
   return (
     <div className="flex flex-col h-full min-h-0 gap-4">
@@ -179,10 +255,36 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           )}
         </div>
 
-        {/* Document selector */}
+        {/* Flow selector */}
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">Flow:</span>
+          {([
+            { id: 'po', label: 'PO → GP → GRN → QC → PB' },
+            { id: 'gp', label: 'GP → GRN → QC → PB' },
+          ] as const).map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => {
+                setFlow(f.id)
+                setEnabledDocs(new Set(f.id === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
+              }}
+              disabled={running}
+              className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                flow === f.id
+                  ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
+                  : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Document selector — full chain (PO first) or standalone GP */}
         <div className="flex items-center gap-2 mb-4">
           <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">Create:</span>
-          {(['PO', 'GP', 'GRN', 'QC', 'PB'] as const).map((doc, idx, arr) => {
+          {docOrder.map((doc, idx, arr) => {
             const on = enabledDocs.has(doc)
             const toggle = () => {
               setEnabledDocs(prev => {
@@ -221,6 +323,42 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           })}
         </div>
 
+        {/* Tax Rate filter — full chain only */}
+        {flow === 'po' && (
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">Tax Rate:</span>
+          <button
+            type="button"
+            onClick={() => setRequireTaxRate(true)}
+            disabled={running}
+            className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
+              requireTaxRate
+                ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
+                : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
+            }`}
+          >
+            ON
+          </button>
+          <button
+            type="button"
+            onClick={() => setRequireTaxRate(false)}
+            disabled={running}
+            className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
+              !requireTaxRate
+                ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
+                : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
+            }`}
+          >
+            OFF
+          </button>
+          <span className="text-[10px] text-gray-400 dark:text-gray-500">
+            {requireTaxRate
+              ? 'Only items with a tax rate (per HSN); each PO line gets a random rate'
+              : 'All items shown; items without a tax rate are sent with 0.0'}
+          </span>
+        </div>
+        )}
+
         {dataError && (
           <div className="mb-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-[11px] text-red-600 dark:text-red-400">
             {dataError}
@@ -228,6 +366,31 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         )}
 
         <div className="grid grid-cols-4 gap-4 mb-4">
+          {/* Item Category selector */}
+          <div className="relative">
+            <Label className="text-[11px] text-gray-500 dark:text-gray-400 mb-1 block">Item Category</Label>
+            {loadingData && categories.length === 0 ? (
+              <div className="h-9 flex items-center text-[12px] text-gray-400 dark:text-gray-500 gap-1.5">
+                <Loader2 className="size-3 animate-spin" />
+                Loading...
+              </div>
+            ) : (
+              <button
+                ref={categoryBtnRef}
+                type="button"
+                onClick={() => {
+                  if (activeMenu?.type === 'category') { setActiveMenu(null); return }
+                  const r = categoryBtnRef.current?.getBoundingClientRect()
+                  if (r) setActiveMenu({ type: 'category', pos: { top: r.bottom + 4, left: r.left, width: r.width } })
+                }}
+                className="w-full px-3 py-2 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
+              >
+                <span className="truncate">{selectedCategory ? `${selectedCategory.name} (${selectedCategory.item_count})` : 'Select category...'}</span>
+                <svg className={`size-3 text-gray-400 transition-transform shrink-0 ${activeMenu?.type === 'category' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+            )}
+          </div>
+
           {/* Supplier selector */}
           <div className="relative">
             <Label className="text-[11px] text-gray-500 dark:text-gray-400 mb-1 block">Supplier</Label>
@@ -278,7 +441,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                   }}
                   className="w-full px-3 py-2 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
                 >
-                  <span className="truncate">{items.find(i => i.id === itemIds[0])?.name ?? 'Select item...'}</span>
+                  <span className="truncate">{catItems.find(i => i.id === itemIds[0])?.name ?? 'Select item...'}</span>
                   <svg className={`size-3 text-gray-400 transition-transform shrink-0 ${activeMenu?.type === 'item' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                 </button>
               </>
@@ -303,40 +466,40 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           <div>
             <div className="flex items-center justify-between mb-1">
               <Label className="text-[11px] text-gray-500 dark:text-gray-400">Items / Doc</Label>
-              {items.length > 1 && (
+              {catItems.length > 1 && (
                 <button
                   type="button"
                   onClick={() => {
-                    setNumItems(items.length)
-                    setItemIds(items.map(i => i.id))
+                    setNumItems(catItems.length)
+                    setItemIds(catItems.map(i => i.id))
                   }}
                   className="text-[10px] text-[#3F51B5] dark:text-[#7986CB] hover:underline cursor-pointer"
                 >
-                  All {items.length}
+                  All {catItems.length}
                 </button>
               )}
             </div>
             <Input
               type="number"
               min={1}
-              max={items.length > 0 ? items.length : 20}
+              max={catItems.length > 0 ? catItems.length : 20}
               value={numItems}
               onChange={(e) => {
-                const max = items.length > 0 ? items.length : 20
+                const max = catItems.length > 0 ? catItems.length : 20
                 const v = Math.max(1, Math.min(max, parseInt(e.target.value) || 1))
                 setNumItems(v)
                 setItemIds((prev) => {
                   if (prev.length === v) return prev
-                  if (prev.length === 0 && items.length > 0) {
-                    const max = items.length
-                    return items.slice(0, Math.min(v, max)).map(i => i.id)
+                  if (prev.length === 0 && catItems.length > 0) {
+                    const max = catItems.length
+                    return catItems.slice(0, Math.min(v, max)).map(i => i.id)
                   }
                   if (prev.length < v) {
                     const used = new Set(prev)
-                    const available = items.filter(i => !used.has(i.id)).map(i => i.id)
-                    const fill = []
+                    const available = catItems.filter(i => !used.has(i.id)).map(i => i.id)
+                    const fill: number[] = []
                     for (let idx = 0; fill.length < v - prev.length; idx++) {
-                      fill.push(available[idx % available.length] ?? prev[prev.length - 1] ?? items[0].id)
+                      fill.push(available[idx % available.length] ?? prev[prev.length - 1] ?? catItems[0].id)
                     }
                     return [...prev, ...fill]
                   }
@@ -349,7 +512,13 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           </div>
         </div>
 
-        {numItems > 1 && items.length > 0 && (
+        {requireTaxRate && catItems.length === 0 && items.length > 0 && (
+          <div className="mb-3 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-[11px] text-amber-600 dark:text-amber-400">
+            No items in this category have a tax rate. Toggle Tax Rate OFF to list all items.
+          </div>
+        )}
+
+        {numItems > 1 && catItems.length > 0 && (
           <div className="mb-4">
             <Label className="text-[11px] text-gray-500 dark:text-gray-400 mb-1.5 block">Items per row</Label>
             <div className={`grid gap-2 ${numItems > 8 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'} ${numItems > 6 ? 'max-h-52 overflow-y-auto pr-1' : ''}`}>
@@ -366,7 +535,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                     }}
                     className="w-full px-2.5 py-1.5 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
                   >
-                    <span className="truncate">{items.find(i => i.id === itemIds[idx])?.name ?? 'Select...'}</span>
+                    <span className="truncate">{catItems.find(i => i.id === itemIds[idx])?.name ?? 'Select...'}</span>
                     <svg className={`size-3 text-gray-400 transition-transform shrink-0 ${activeMenu?.type === idx ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                   </button>
                 </div>
@@ -419,7 +588,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
               className="h-8 text-[12px] gap-1.5 cursor-pointer"
             >
               <Play className="size-3.5" />
-              Run {count > 1 ? `${count}×` : ''} {Array.from(enabledDocs).join(' → ')}
+              Run {count > 1 ? `${count}×` : ''} {activeDocs.join(' → ')}
             </Button>
           ) : (
             <Button
@@ -444,7 +613,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           )}
           {(erpToken || localToken) && (
             <button
-              onClick={() => { setLocalToken(''); setLocalTenantId(''); setSuppliers([]); setItems([]); setSupplier(null); setItemIds([]); fetchedRef.current = false; onClearToken() }}
+              onClick={() => { setLocalToken(''); setLocalTenantId(''); setSuppliers([]); setItems([]); setCategories([]); setSelectedCategoryId(null); setSupplier(null); setItemIds([]); fetchedRef.current = false; onClearToken() }}
               className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 hover:text-red-500 dark:hover:text-red-400 transition-colors cursor-pointer"
               title="Clear token"
             >
@@ -503,15 +672,17 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-48 overflow-y-auto"
             style={{ top: activeMenu.pos.top, left: activeMenu.pos.left, width: activeMenu.pos.width }}
           >
-            {(activeMenu.type === 'supplier' ? suppliers : items).length === 0 ? (
+            {(activeMenu.type === 'supplier' ? suppliers : activeMenu.type === 'category' ? categories : catItems).length === 0 ? (
               <div className="px-3 py-2 text-[12px] text-gray-400 dark:text-gray-500">No data loaded</div>
             ) : (
-              (activeMenu.type === 'supplier' ? suppliers : items).map((i) => {
+              (activeMenu.type === 'supplier' ? suppliers : activeMenu.type === 'category' ? categories : catItems).map((i) => {
                 const selected = activeMenu.type === 'supplier'
                   ? i.id === supplier
-                  : activeMenu.type === 'item'
-                    ? i.id === itemIds[0]
-                    : i.id === itemIds[activeMenu.type as number]
+                  : activeMenu.type === 'category'
+                    ? i.id === selectedCategoryId
+                    : activeMenu.type === 'item'
+                      ? i.id === itemIds[0]
+                      : i.id === itemIds[activeMenu.type as number]
                 return (
                   <button
                     key={i.id}
@@ -519,6 +690,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                     onClick={() => {
                       if (activeMenu.type === 'supplier') {
                         setSupplier(i.id)
+                      } else if (activeMenu.type === 'category') {
+                        handleCategorySelect(i.id)
+                        return
                       } else if (activeMenu.type === 'item') {
                         setItemIds([i.id])
                       } else {
@@ -528,7 +702,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                     }}
                     className={`w-full px-3 py-1.5 text-[12px] text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer ${selected ? 'bg-[#3F51B5]/10 dark:bg-[#3F51B5]/20 text-[#3F51B5] dark:text-[#7986CB] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
                   >
-                    {i.name}
+                    {activeMenu.type === 'category' && 'item_count' in i ? `${i.name} (${i.item_count})` : i.name}
                   </button>
                 )
               })
