@@ -116,6 +116,17 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
                 ctx=ctx,
                 documents=request.documents,
             )
+            if request.multi_gate_pass:
+                kwargs["multi_gate_pass"] = True
+                kwargs["gp_count"] = max(1, request.gp_count)
+                yield _sse_event(LogEvent(
+                    type="log",
+                    message=(
+                        f"Multi Gate Pass ON — one PO split across "
+                        f"{max(1, request.gp_count)} gate passes (each GP → its own GRN)"
+                    ),
+                    timestamp=datetime.now(timezone.utc),
+                ))
             # Only pass explicit overrides if the caller set them intentionally
             if request.supplier_ref_id and request.supplier_ref_id != 1:
                 kwargs["supplier_ref_id"] = request.supplier_ref_id
@@ -144,8 +155,14 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
             pb = result.get("pb") or {}
             parts = []
             if po.get("id"): parts.append(f"PO {po['id']}")
-            if gp.get("id"): parts.append(f"GP {gp['id']}")
-            if grn.get("id"): parts.append(f"GRN {grn['id']}")
+            gps = result.get("gps") or ([gp] if gp else [])
+            grns = result.get("grns") or ([grn] if grn else [])
+            if len(gps) > 1:
+                parts.append(f"{len(gps)}×GP ({', '.join(str(g['id']) for g in gps)})")
+                parts.append(f"{len(grns)}×GRN ({', '.join(str(g['id']) for g in grns)})")
+            else:
+                if gp.get("id"): parts.append(f"GP {gp['id']}")
+                if grn.get("id"): parts.append(f"GRN {grn['id']}")
             if qc.get("id"): parts.append(f"QC {qc['id']}")
             if pb.get("id"): parts.append(f"PB {pb['id']}")
             yield _sse_event(LogEvent(

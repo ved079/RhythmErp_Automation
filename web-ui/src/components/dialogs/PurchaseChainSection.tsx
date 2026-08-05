@@ -59,6 +59,8 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
   const [requireTaxRate, setRequireTaxRate] = useState(true)
   const [flow, setFlow] = useState<'po' | 'gp'>('po')
+  const [multiGatePass, setMultiGatePass] = useState(false)
+  const [gpCount, setGpCount] = useState(2)
   const [loadingData, setLoadingData] = useState(false)
   const [dataError, setDataError] = useState('')
   const [localToken, setLocalToken] = useState('')
@@ -196,8 +198,10 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       activeDocs,
       selectedCategoryId ?? undefined,
       activeTaxRate,
+      multiGatePass,
+      gpCount,
     )
-  }, [count, supplier, numItems, itemIds, erpToken, localToken, localTenantId, erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow])
+  }, [count, supplier, numItems, itemIds, erpToken, localToken, localTenantId, erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow, multiGatePass, gpCount])
 
   const handleStop = useCallback(() => {
     setRunning(false)
@@ -267,6 +271,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
               type="button"
               onClick={() => {
                 setFlow(f.id)
+                setMultiGatePass(false)
                 setEnabledDocs(new Set(f.id === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
               }}
               disabled={running}
@@ -323,9 +328,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           })}
         </div>
 
-        {/* Tax Rate filter — full chain only */}
+        {/* Tax Rate + Multi Gate Pass toggles — one row (full chain only) */}
         {flow === 'po' && (
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
           <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">Tax Rate:</span>
           <button
             type="button"
@@ -352,10 +357,64 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             OFF
           </button>
           <span className="text-[10px] text-gray-400 dark:text-gray-500">
-            {requireTaxRate
-              ? 'Only items with a tax rate (per HSN); each PO line gets a random rate'
-              : 'All items shown; items without a tax rate are sent with 0.0'}
+            {requireTaxRate ? 'Items with a tax rate only' : 'All items (0.0 rate when none)'}
           </span>
+
+          <span className="mx-1 h-4 w-px bg-gray-300 dark:bg-gray-600 shrink-0" />
+
+          <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">Multi Gate Pass?</span>
+          <button
+            type="button"
+            onClick={() => {
+              const next = !multiGatePass
+              setMultiGatePass(next)
+              setEnabledDocs(next
+                ? new Set(['PO', 'GP', 'GRN'])
+                : new Set(['PO', 'GP', 'GRN', 'QC', 'PB']))
+            }}
+            disabled={running}
+            className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
+              multiGatePass
+                ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
+                : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
+            }`}
+          >
+            ON
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMultiGatePass(false)
+              setEnabledDocs(new Set(['PO', 'GP', 'GRN', 'QC', 'PB']))
+            }}
+            disabled={running}
+            className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
+              !multiGatePass
+                ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
+                : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
+            }`}
+          >
+            OFF
+          </button>
+          {multiGatePass && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">GPs:</span>
+              <Input
+                type="number"
+                min={2}
+                max={10}
+                value={gpCount}
+                onChange={(e) => setGpCount(Math.max(2, Math.min(10, parseInt(e.target.value) || 2)))}
+                className="h-8 w-14 text-[12px]"
+                disabled={running}
+              />
+            </div>
+          )}
+          {multiGatePass && (
+            <span className="text-[10px] text-gray-400 dark:text-gray-500">
+              Split PO across gate passes — each GP gets its own GRN
+            </span>
+          )}
         </div>
         )}
 
