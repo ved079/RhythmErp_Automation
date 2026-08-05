@@ -94,6 +94,23 @@ def _supplier_name(sid: int) -> str:
 # ---------------------------------------------------------------------------
 # Item generator — produces items that work across PO / GP / GRN
 # ---------------------------------------------------------------------------
+# Realistic pseudo-random ranges for auto-generated lines (single source of
+# truth for the generated quantities/rates; adjust ranges freely). These stay
+# dynamic — a fresh value is drawn per item per run, never baked per item.
+_QTY_MIN = 500
+_QTY_MAX = 2000
+_RATE_MIN = 500.0
+_RATE_MAX = 6000.0
+
+
+def _rand_qty() -> float:
+    return float(random.randint(_QTY_MIN, _QTY_MAX))
+
+
+def _rand_rate() -> float:
+    return round(random.uniform(_RATE_MIN, _RATE_MAX), 2)
+
+
 def _generate_chain_items(
     num_items: int = 2,
     item_ref_id: int = 5,
@@ -114,8 +131,8 @@ def _generate_chain_items(
     if item_data:
         items = []
         for i, data in enumerate(item_data):
-            qty = 10.0 * (i + 1)
-            rate = 100.0 * (i + 1)
+            qty = _rand_qty()
+            rate = _rand_rate()
             items.append({
                 "item_ref_id": data["item_ref_id"],
                 "hsn_sac_no": data["hsn_sac_no"],
@@ -138,8 +155,8 @@ def _generate_chain_items(
     ids = item_ref_ids if item_ref_ids else [item_ref_id]
     items = []
     for i in range(num_items):
-        qty = 10.0 * (i + 1)
-        rate = 100.0 * (i + 1)
+        qty = _rand_qty()
+        rate = _rand_rate()
         items.append({
             "item_ref_id": ids[i % len(ids)],
             "hsn_sac_no": hsn_sac_no,
@@ -220,21 +237,57 @@ def _gp_items_from(items: List[dict]) -> List[dict]:
     ]
 
 
-def _grn_items_from(items: List[dict]) -> List[dict]:
+def _split_items_across_gps(items: List[dict], gp_count: int) -> List[List[dict]]:
+    """Evenly split each item's quantity across *gp_count* gate passes.
+
+    Every GP receives an equal share of each item; an item's remainder (if any)
+    goes to the last GP. GPs left with zero quantity for every item are dropped.
+    """
+    n = max(1, int(gp_count))
+    plans: List[List[dict]] = [[] for _ in range(n)]
+    for it in items:
+        total = float(it.get("quantity", 0) or 0)
+        base = int(total // n)
+        rem = int(total % n)
+        for g in range(n):
+            qty = float(base + (rem if g == n - 1 else 0))
+            if qty <= 0:
+                continue
+            row = dict(it)
+            row.update({
+                "quantity": qty,
+                "alternate_quantity": str(qty),
+                "received_qty": qty,
+                "accepted_qty": qty,
+                "rejected_qty": 0.0,
+                "no_of_bags": max(1, int(qty)),
+            })
+            plans[g].append(row)
+    return [p for p in plans if p]
+
+
+def _grn_items_from(
+    items: List[dict],
+    po_quantity_by_item: Optional[dict] = None,
+    balance_by_item: Optional[dict] = None,
+) -> List[dict]:
+    po_qty = po_quantity_by_item or {}
+    bal = balance_by_item or {}
     return [
         {
             "item_ref_id": it["item_ref_id"],
             "hsn_sac_no": it["hsn_sac_no"],
             "uom": it.get("base_uom", it["uom"]),
             "alternate_uom": it.get("alternate_uom", it["uom"]),
-            "uom_conversion": 1.0,
+            "uom_conversion": it.get("uom_conversion", 1.0),
             "alternate_received_qty": it["quantity"],
             "alternate_accepted_qty": it["accepted_qty"],
             "alternate_rejected_qty": it["rejected_qty"],
             "rate": it["rate"],
             "no_of_bags": it["no_of_bags"],
             "gate_pass_quantity": it["quantity"],
-            "po_quantity": None,
+            "po_quantity": float(po_qty.get(it["item_ref_id"], it["quantity"])),
+            "po_balance_quantity": float(bal.get(it["item_ref_id"], it["quantity"])),
         }
         for it in items
     ]
@@ -659,6 +712,8 @@ class PurchaseChain:
         pb_overrides: dict = None,
         ctx: Optional[ChainContext] = None,
         documents: Optional[List[str]] = None,
+        multi_gate_pass: bool = False,
+        gp_count: int = 2,
     ) -> dict:
         """Execute one full PO -> GP -> GRN -> QC chain.
 
@@ -675,6 +730,11 @@ class PurchaseChain:
         random one of its rates); False keeps every item — those without a rate
         are sent with ``tax_rate=0.0``.
 
+        ``multi_gate_pass`` + ``gp_count`` enable partial fulfillment: the PO is
+        created once with each item's full quantity, then the quantity is split
+        evenly across ``gp_count`` gate passes. Each GP gets its own GRN. Only
+        supported for the PO -> GP -> GRN document set.
+
         Returns:
             dict with keys ``po``, ``gp``, ``grn``, ``qc`` containing API response data.
         """
@@ -684,6 +744,19 @@ class PurchaseChain:
 
         # Which documents to create — default to full chain
         docs = set(d.upper() for d in documents) if documents else {"PO", "GP", "GRN", "QC"}
+
+        if multi_gate_pass:
+            if "PO" not in docs:
+                raise RuntimeError(
+                    "Multi Gate Pass requires a Purchase Order — "
+                    "use the PO → GP → GRN flow."
+                )
+            unsupported = ({"QC", "PB"} & docs)
+            if unsupported:
+                raise RuntimeError(
+                    "Multi Gate Pass supports PO → GP → GRN only — "
+                    f"not yet supported with {', '.join(sorted(unsupported))}."
+                )
 
         # Explicit args override discovered values
         eff_supplier  = supplier_ref_id if supplier_ref_id is not None else ctx.supplier_ref_id
@@ -827,43 +900,61 @@ class PurchaseChain:
                 time.sleep(self.delay)
 
         # ---------------------------------------------------------------
-        # 2. Gate Pass
+        # 2. Gate Pass + 3. GRN  (one delivery per plan row; multi-gate-pass splits)
         # ---------------------------------------------------------------
-        if "GP" in docs:
-            gp_payload = self._build_gp_payload(
-                eff_supplier, items, gp_overrides, ctx=ctx,
-                po_id=po_id, item_category_id=cat_id,
-            )
-            gp_data = self.gp_api.create_gp(gp_payload)
-            gp_id = gp_data.get("id") or gp_data.get("entry_id") if gp_data else None
-            if not gp_data or not gp_id:
-                raise RuntimeError(
-                    f"GP creation failed (HTTP {self.gp_api._last_status}); "
-                    f"response: {gp_data}"
+        delivery_plans = _split_items_across_gps(items, gp_count) if multi_gate_pass else [items]
+        gps = []
+        grns = []
+        po_quantity_by_item = {it["item_ref_id"]: it["quantity"] for it in items}
+        received_so_far: dict = {}
+        for gi, gp_items in enumerate(delivery_plans, start=1):
+            if "GP" in docs:
+                gp_payload = self._build_gp_payload(
+                    eff_supplier, gp_items, gp_overrides, ctx=ctx,
+                    po_id=po_id, item_category_id=cat_id,
                 )
-            gp_ref = gp_data.get("transaction_ref_no", str(gp_id))
-            log.info(f"  GP created: ID={gp_id}, ref={gp_ref}")
-            if self.delay:
-                time.sleep(self.delay)
+                gp_data = self.gp_api.create_gp(gp_payload)
+                gp_id = gp_data.get("id") or gp_data.get("entry_id") if gp_data else None
+                if not gp_data or not gp_id:
+                    raise RuntimeError(
+                        f"GP {gi} creation failed (HTTP {self.gp_api._last_status}); "
+                        f"response: {gp_data}"
+                    )
+                gp_ref = gp_data.get("transaction_ref_no", str(gp_id))
+                gps.append({"id": gp_id, "ref": gp_ref, "data": gp_data, "payload": gp_payload})
+                log.info(f"  GP {gi}/{len(delivery_plans)} created: ID={gp_id}, ref={gp_ref}")
+                if self.delay:
+                    time.sleep(self.delay)
 
-        # ---------------------------------------------------------------
-        # 3. GRN
-        # ---------------------------------------------------------------
-        if "GRN" in docs:
-            grn_payload = self._build_grn_payload(
-                eff_supplier, po_id, gp_id, items, grn_overrides, ctx=ctx
-            )
-            grn_data = self.grn_api.create_grn(grn_payload)
-            grn_id = grn_data.get("id") or grn_data.get("entry_id") if grn_data else None
-            if not grn_data or not grn_id:
-                raise RuntimeError(
-                    f"GRN creation failed (HTTP {self.grn_api._last_status}); "
-                    f"response: {grn_data}"
+            if "GRN" in docs:
+                # po_quantity = full PO line qty (constant); po_balance_quantity =
+                # running balance minus quantities already received in earlier GRNs.
+                balance_by_item = {
+                    it["item_ref_id"]: po_quantity_by_item.get(it["item_ref_id"], it["quantity"])
+                                    - received_so_far.get(it["item_ref_id"], 0.0)
+                    for it in gp_items
+                }
+                grn_payload = self._build_grn_payload(
+                    eff_supplier, po_id, gp_id, gp_items, grn_overrides, ctx=ctx,
+                    po_quantity_by_item=po_quantity_by_item,
+                    balance_by_item=balance_by_item,
                 )
-            grn_ref = grn_data.get("transaction_ref_no", str(grn_id))
-            log.info(f"  GRN created: ID={grn_id}, ref={grn_ref}")
-            if self.delay:
-                time.sleep(self.delay)
+                grn_data = self.grn_api.create_grn(grn_payload)
+                grn_id = grn_data.get("id") or grn_data.get("entry_id") if grn_data else None
+                if not grn_data or not grn_id:
+                    raise RuntimeError(
+                        f"GRN {gi} creation failed (HTTP {self.grn_api._last_status}); "
+                        f"response: {grn_data}"
+                    )
+                grn_ref = grn_data.get("transaction_ref_no", str(grn_id))
+                grns.append({"id": grn_id, "ref": grn_ref, "data": grn_data, "payload": grn_payload})
+                log.info(f"  GRN {gi}/{len(delivery_plans)} created: ID={grn_id}, ref={grn_ref}")
+                for it in gp_items:
+                    received_so_far[it["item_ref_id"]] = (
+                        received_so_far.get(it["item_ref_id"], 0.0) + it["quantity"]
+                    )
+                if self.delay:
+                    time.sleep(self.delay)
 
         # ---------------------------------------------------------------
         # 4. Quality Check
@@ -905,11 +996,15 @@ class PurchaseChain:
             pb_ref = pb_data.get("transaction_ref_no", str(pb_id))
             log.info(f"  PB created: ID={pb_id}, ref={pb_ref}")
 
+        last_gp = gps[-1] if gps else None
+        last_grn = grns[-1] if grns else None
         result = {
             "po": {"id": po_id, "ref": po_ref, "data": po_data, "payload": po_payload,
                    "fetched": po_entry} if po_id else None,
-            "gp": {"id": gp_id, "ref": gp_ref, "data": gp_data, "payload": gp_payload} if gp_id else None,
-            "grn": {"id": grn_id, "ref": grn_ref, "data": grn_data, "payload": grn_payload} if grn_id else None,
+            "gp": last_gp,
+            "grn": last_grn,
+            "gps": gps,
+            "grns": grns,
             "qc": {"id": qc_id, "ref": qc_ref, "data": qc_data, "payload": qc_payload} if qc_id else None,
             "pb": {"id": pb_id, "ref": pb_ref, "data": pb_data, "payload": pb_payload} if pb_id else None,
         }
@@ -1070,20 +1165,23 @@ class PurchaseChain:
         items: List[dict],
         overrides: dict = None,
         ctx: Optional[ChainContext] = None,
+        po_quantity_by_item: Optional[dict] = None,
+        balance_by_item: Optional[dict] = None,
     ) -> dict:
         from pages.private_b2b.modules.goods_receipt_note.data.goods_receipt_note_data import build_grn_payload
-        grn_items = _grn_items_from(items)
+        grn_items = _grn_items_from(items, po_quantity_by_item, balance_by_item)
         overrides = overrides or {}
         if ctx:
             return build_grn_payload(
                 supplier_ref_id=supplier_ref_id,
                 gate_pass_ref_id_id=gp_id,
-                po_ref_id_id=None,
+                po_ref_id_id=po_id,
                 items=grn_items,
                 parameter1=ctx.parameter1,
                 parameter2=ctx.parameter2,
                 parameter5=ctx.parameter5,
                 parameter6=ctx.parameter6,
+                additional_details={},
                 **overrides,
             )
         import random
@@ -1093,12 +1191,13 @@ class PurchaseChain:
         return build_grn_payload(
             supplier_ref_id=supplier_ref_id,
             gate_pass_ref_id_id=gp_id,
-            po_ref_id_id=None,
+            po_ref_id_id=po_id,
             items=grn_items,
             parameter1=random.choice(DIVISION_IDS),
             parameter2=random.choice(DEPARTMENT_IDS),
             parameter5=random.choice(TYPE_OF_SALE_IDS),
             parameter6=random.choice(LOCATION_IDS),
+            additional_details={},
             **overrides,
         )
 

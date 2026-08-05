@@ -365,6 +365,8 @@ export async function startPurchaseChain(
   documents?: string[],
   itemCategoryId?: number,
   requireTaxRate?: boolean,
+  multiGatePass?: boolean,
+  gpCount?: number,
 ) {
   try {
     const res = await fetch(`${PROXY}?path=purchase-chain`, withCsrf({
@@ -381,6 +383,8 @@ export async function startPurchaseChain(
         erp_token: erpToken,
         erp_tenant_id: erpTenantId,
         documents: documents ?? ["PO", "GP", "GRN", "QC"],
+        multi_gate_pass: multiGatePass ?? false,
+        gp_count: gpCount ?? 2,
       }),
     }));
 
