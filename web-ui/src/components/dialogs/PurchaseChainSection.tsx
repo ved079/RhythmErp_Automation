@@ -303,6 +303,10 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                   const prereqs = arr.slice(0, idx + 1)
                   prereqs.forEach(d => next.add(d))
                 }
+                // PB is not supported with multi-gate-pass (each GP has its own GRN/QC)
+                if (multiGatePass) {
+                  next.delete('PB')
+                }
                 return next
               })
             }
@@ -369,7 +373,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
               const next = !multiGatePass
               setMultiGatePass(next)
               setEnabledDocs(next
-                ? new Set(['PO', 'GP', 'GRN'])
+                ? new Set(['PO', 'GP', 'GRN', 'QC'])
                 : new Set(['PO', 'GP', 'GRN', 'QC', 'PB']))
             }}
             disabled={running}
@@ -412,7 +416,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           )}
           {multiGatePass && (
             <span className="text-[10px] text-gray-400 dark:text-gray-500">
-              Split PO across gate passes — each GP gets its own GRN
+              Split PO across gate passes — each GP gets its own GRN &amp; QC
             </span>
           )}
         </div>

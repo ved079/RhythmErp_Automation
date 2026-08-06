@@ -123,7 +123,7 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
                     type="log",
                     message=(
                         f"Multi Gate Pass ON — one PO split across "
-                        f"{max(1, request.gp_count)} gate passes (each GP → its own GRN)"
+                        f"{max(1, request.gp_count)} gate passes (each GP → its own GRN & QC)"
                     ),
                     timestamp=datetime.now(timezone.utc),
                 ))
@@ -157,13 +157,16 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
             if po.get("id"): parts.append(f"PO {po['id']}")
             gps = result.get("gps") or ([gp] if gp else [])
             grns = result.get("grns") or ([grn] if grn else [])
+            qcs = result.get("qcs") or ([qc] if qc else [])
             if len(gps) > 1:
                 parts.append(f"{len(gps)}×GP ({', '.join(str(g['id']) for g in gps)})")
                 parts.append(f"{len(grns)}×GRN ({', '.join(str(g['id']) for g in grns)})")
+                if qcs:
+                    parts.append(f"{len(qcs)}×QC ({', '.join(str(q['id']) for q in qcs)})")
             else:
                 if gp.get("id"): parts.append(f"GP {gp['id']}")
                 if grn.get("id"): parts.append(f"GRN {grn['id']}")
-            if qc.get("id"): parts.append(f"QC {qc['id']}")
+                if qc.get("id"): parts.append(f"QC {qc['id']}")
             if pb.get("id"): parts.append(f"PB {pb['id']}")
             yield _sse_event(LogEvent(
                 type="log",

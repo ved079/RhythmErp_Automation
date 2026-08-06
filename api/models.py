@@ -177,7 +177,7 @@ class PurchaseChainRequest(BaseModel):
     erp_token: str                       # Bearer token for ERP API
     erp_tenant_id: str = "681"           # ERP tenant ID
     documents: list[str] = ["PO", "GP", "GRN", "QC"]  # which documents to create
-    multi_gate_pass: bool = False        # split one PO across multiple GPs (each GP -> its own GRN)
+    multi_gate_pass: bool = False        # split one PO across multiple GPs (each GP -> its own GRN and QC)
     gp_count: int = 2                    # number of gate passes when multi_gate_pass is True
 
 

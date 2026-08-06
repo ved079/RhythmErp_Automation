@@ -231,29 +231,27 @@ class QCPlaywrightPage(BasePlaywrightPage):
     def create_for_integration(self, supplier_name, gp_ref_no, accepted_qty=1):
         """Full QC creation for the integration flow. Returns QC ref_no.
 
-        accepted_qty: int for single-item GP, or dict {item_name: qty} / list[int] for multi-item.
-        When a dict is passed, each row's accepted qty is looked up by item name so ERP row
-        ordering doesn't matter.
+        accepted_qty: int, list[int], or dict {item_name: qty}.
+        All editable fields are per-row (no header-level rate/qty fields).
         """
-        final_rate = random.randint(100, 5000)
         self.open_add_form()
         self.select_supplier(supplier_name)
         self.select_item_category("Raw Materia")
         self.select_gate_pass(gp_ref_no)
         self.fill_conversion_rate(1)
-        self.fill_empty_bag_weight(1)
-        self.fill_discount_rate(1)
-        self.fill_final_rate(final_rate)
 
         if isinstance(accepted_qty, dict):
-            # Map by item name — safe against ERP row reordering
             row_names = self._read_row_item_names()
             qty_list  = [accepted_qty.get(name, 1) for name in row_names]
         else:
             qty_list = accepted_qty if isinstance(accepted_qty, (list, tuple)) else [accepted_qty]
 
         for i, qty in enumerate(qty_list):
-            self.fill_accepted_qty_nth(i, qty)
+            self._js_fill_by_placeholder("Empty Bag Weight (KG)", 1, nth=i)
+            self._js_fill_by_placeholder("Net Qty", qty, nth=i)
+            self._js_fill_by_placeholder("Deduction Rate", random.randint(1, 50), nth=i)
+            self._js_fill_by_placeholder("Discount Rate", random.randint(1, 5), nth=i)
+            self.page.wait_for_timeout(300)
             self.fill_quality_parameters(actual_value=1, row=i)
             self.fill_bags_parameter(no_of_bags=1, per_bag_weight=1, row=i)
 

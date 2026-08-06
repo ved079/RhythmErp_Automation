@@ -42,6 +42,7 @@ class POPlaywrightPage(BasePlaywrightPage):
     GST_TOGGLE_SLIDER = "app-slide-toggle-v2 div.slider"
     TAX_RATE_SELECT   = "xpath=//mat-select[.//span[contains(@class,'mat-mdc-select-placeholder') and contains(.,'Select tax rate')]]"
     TAX_AMOUNT_INPUT  = "xpath=//mat-form-field[.//input[@placeholder='Tax Amount']]//input"
+    GST_TYPE_SELECT   = "xpath=//mat-form-field[.//mat-label[text()='GST Type']]//mat-select"
 
     # Table columns
     REF_NO_COL          = "td.cdk-column-transaction_ref_no"
@@ -279,6 +280,32 @@ class POPlaywrightPage(BasePlaywrightPage):
         """, [selector.replace("xpath=", ""), row_index, str(value)])
         self.page.wait_for_timeout(400)
 
+    _GST_TYPES = ["IGST", "CGST + SGST"]
+
+    def _select_gst_type_nth(self, row_index):
+        """Pick a random GST type (IGST or CGST + SGST) for the nth item row."""
+        gst_selects = self.page.locator(self.GST_TYPE_SELECT)
+        if gst_selects.count() == 0:
+            return
+        chosen = random.choice(self._GST_TYPES)
+        gst_selects.nth(row_index).click(force=True)
+        self.page.wait_for_selector(".mat-mdc-select-panel", timeout=6000)
+        search = self.page.locator(".mat-mdc-select-panel input.dd-search-input")
+        if search.count() > 0:
+            search.fill(chosen)
+            self.page.wait_for_timeout(800)
+        for opt in self.page.locator(
+            ".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"
+        ).all():
+            if opt.inner_text().strip() == chosen:
+                opt.click(force=True)
+                break
+        try:
+            self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            pass
+        self.page.wait_for_timeout(400)
+
     def _enable_gst_nth(self, row_index):
         """Toggle 'Is GST Set Off' ON for row_index and pick a random Tax Rate.
 
@@ -376,6 +403,9 @@ class POPlaywrightPage(BasePlaywrightPage):
             rate = float(_random.randint(500, 5000))
             self._fill_number_nth(self.RATE, row_index, int(rate))
             self.page.wait_for_timeout(600)
+
+        # Select GST type (IGST or CGST + SGST) randomly for this row
+        self._select_gst_type_nth(row_index)
 
         # Fill quantity → triggers Transaction Amount calculation
         self._fill_number_nth(self.QUANTITY, row_index, qty)

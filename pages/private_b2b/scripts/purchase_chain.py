@@ -10,6 +10,7 @@ Usage:
 
 import argparse
 import json
+import math
 import os
 import random
 import sys
@@ -109,6 +110,77 @@ def _rand_qty() -> float:
 
 def _rand_rate() -> float:
     return round(random.uniform(_RATE_MIN, _RATE_MAX), 2)
+
+
+# Realistic ranges for QC "user inputs" (empty bag weight / deduction /
+# discount). The manual QC 1345 used 0–12 kg bags, 2–3% deductions, 0–5%
+# discounts; these stay dynamic per run.
+_EMPTY_BAG_MIN = 0.0
+_EMPTY_BAG_MAX = 12.0
+_DEDUCTION_MIN = 0.0
+_DEDUCTION_MAX = 5.0
+_DISCOUNT_MIN = 0.0
+_DISCOUNT_MAX = 5.0
+
+
+def _rand_empty_bag_weight() -> float:
+    return round(random.uniform(_EMPTY_BAG_MIN, _EMPTY_BAG_MAX), 2)
+
+
+def _rand_deduction_percent() -> float:
+    return round(random.uniform(_DEDUCTION_MIN, _DEDUCTION_MAX), 2)
+
+
+def _rand_discount_rate() -> float:
+    return round(random.uniform(_DISCOUNT_MIN, _DISCOUNT_MAX), 2)
+
+
+def _compute_qc_line_fields(
+    base_rate: float,
+    grn_qty: float,
+    empty_bag_weight: float,
+    deduction_percent: float,
+    discount_rate: float,
+) -> dict:
+    """Derive every stored QC line field from the manual QC 1345 math.
+
+    Verified against QC 1345 / 1346 lines:
+      total_amount            = base_rate × grn_qty
+      empty_bags_txn_amount   = empty_bag_weight × base_rate
+      alternate_accepted_qty  = grn_qty − empty_bag_weight
+      qc_deduction_rate       = base_rate × deduction_percent / 100
+      deduction_weight        = grn_qty × deduction_percent / 100
+      qc_deduction_amount     = total_amount × deduction_percent / 100
+      subtotal                = total_amount − empty_bags − qc_deduction_amount
+      c_d_deduction           = subtotal × discount_rate / 100   (None when 0)
+      txn_currency_amount     = subtotal − c_d_deduction
+      rate                    = txn_currency_amount / alternate_accepted_qty
+      quantity_deduction      = ceil(deduction_weight)
+    """
+    total_amount = round(base_rate * grn_qty, 6)
+    empty_bags_txn_amount = round(empty_bag_weight * base_rate, 6)
+    accepted_qty = grn_qty - empty_bag_weight
+    qc_deduction_rate = round(base_rate * deduction_percent / 100.0, 6)
+    deduction_weight = round(grn_qty * deduction_percent / 100.0, 6)
+    qc_deduction_amount = round(total_amount * deduction_percent / 100.0, 6)
+
+    subtotal = total_amount - empty_bags_txn_amount - qc_deduction_amount
+    c_d_deduction = round(subtotal * discount_rate / 100.0, 6) if discount_rate else None
+    txn_currency_amount = round(subtotal - (c_d_deduction or 0.0), 6)
+    rate = round(txn_currency_amount / accepted_qty, 6) if accepted_qty else 0.0
+
+    return {
+        "total_amount": total_amount,
+        "empty_bags_txn_amount": empty_bags_txn_amount,
+        "alternate_accepted_qty": accepted_qty,
+        "qc_deduction_rate": qc_deduction_rate,
+        "deduction_weight": deduction_weight,
+        "qc_deduction_amount": qc_deduction_amount,
+        "c_d_deduction": c_d_deduction,
+        "txn_currency_amount": txn_currency_amount,
+        "rate": rate,
+        "quantity_deduction": math.ceil(deduction_weight),
+    }
 
 
 def _generate_chain_items(
@@ -293,7 +365,14 @@ def _grn_items_from(
     ]
 
 
-def _qc_items_from(items: List[dict], ctx=None) -> List[dict]:
+def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = None) -> List[dict]:
+    """Build QC line items matching the manual QC 1345 stored shape.
+
+    Every derived amount is computed here (ERP does NOT auto-patch on POST).
+    The per-parameter ``actual_value`` comes from the item's Commodity Quality
+    Parameter config (the lowest rate = min_quality_value); when an item has no
+    CQP entry, the discovered/generic quality parameters are used instead.
+    """
     quality_details = (
         ctx.quality_parameters if ctx and ctx.quality_parameters
         else [
@@ -302,26 +381,64 @@ def _qc_items_from(items: List[dict], ctx=None) -> List[dict]:
             {"item_quality_parameter_ref_id": 3, "actual_value": 1},
         ]
     )
-    return [
-        {
-            "item_ref_id": it["item_ref_id"],
-            "no_of_bags": it["no_of_bags"],
-            "grn_qty": it["accepted_qty"],
-            "alternate_accepted_qty": it["accepted_qty"],
-            "alternate_rejected_qty": it["rejected_qty"],
-            "base_rate": it["rate"],
-            "deduction_percent": 0.0,
-            "deduction_rate": None,
-            "rate": it["rate"],
-            "net_rate": it["rate"],
+    cqp_by_item = cqp_by_item or {}
+
+    def _param_details(item_id: int) -> List[dict]:
+        cqp = cqp_by_item.get(item_id)
+        if cqp:
+            return [
+                {"item_quality_parameter_ref_id": p["quality_type"], "actual_value": p["min_quality_value"]}
+                for p in cqp
+                if p.get("quality_type") is not None
+            ]
+        return list(quality_details)
+
+    out = []
+    for it in items:
+        empty_bag_weight = _rand_empty_bag_weight()
+        deduction_percent = _rand_deduction_percent()
+        discount_rate = _rand_discount_rate()
+        computed = _compute_qc_line_fields(
+            it["rate"], it["accepted_qty"], empty_bag_weight, deduction_percent, discount_rate
+        )
+        item_id = it["item_ref_id"]
+        out.append({
+            "item_ref_id": item_id,
+            "is_rate_weight_deduction": False,
             "alternate_uom": it.get("uom", ctx.alternate_uom if ctx else 3),
             "uom": it.get("base_uom", ctx.base_uom if ctx else 4),
             "hsn_sac_no": it["hsn_sac_no"],
+            "base_rate": it["rate"],
+            "grn_qty": it["accepted_qty"],
+            "alternate_rejected_qty": it["rejected_qty"],
+            "total_amount": computed["total_amount"],
+            "no_of_bags": it["no_of_bags"],
+            "empty_bag_weight": empty_bag_weight,
+            "empty_bags_txn_amount": computed["empty_bags_txn_amount"],
+            "alternate_accepted_qty": computed["alternate_accepted_qty"],
+            "deduction_percent": deduction_percent,
+            "qc_deduction_rate": computed["qc_deduction_rate"],
+            "deduction_weight": computed["deduction_weight"],
+            "qc_deduction_amount": computed["qc_deduction_amount"],
+            "discount_rate": discount_rate,
+            "c_d_deduction": computed["c_d_deduction"],
+            "txn_currency_amount": computed["txn_currency_amount"],
+            "rate": computed["rate"],
             "uom_conversion": 1.0,
-            "details": quality_details,
-        }
-        for it in items
-    ]
+            "qc_parameter_details": [
+                {**p, "allowable_percent": 0.0, "quantity_deduction": computed["quantity_deduction"]}
+                for p in _param_details(item_id)
+            ],
+            "qc_bags_details": [
+                {
+                    "type_of_bags_ref_id": 1,
+                    "quantity_of_bags": 1,
+                    "weight_of_bags": 1.0,
+                    "total_weight_of_bags": 1.0,
+                }
+            ],
+        })
+    return out
 
 
 def _pb_items_from(items: List[dict], ctx=None) -> List[dict]:
@@ -391,6 +508,9 @@ class PurchaseChain:
         self._item_category_map: Dict[int, int] = {}  # item_ref_id -> item_category
         # HSN -> available tax rates, flattened from the Tax Rate screen.
         self._tax_rates: Optional[Dict[str, List[float]]] = None
+        # Item -> Commodity Quality Parameter config (item_ref_id -> [{quality_type,
+        # min_quality_value, max_quality_value, rate_percentage, multiplier}]).
+        self._cqp_cache: Dict[int, List[dict]] = {}
 
     def get_context(self) -> ChainContext:
         """Return the tenant context, discovering it on first call."""
@@ -515,6 +635,53 @@ class PurchaseChain:
         }
         self._item_cache[item_ref_id] = out
         return out
+
+    def _resolve_cqp_params(self, item_ref_id: int) -> List[dict]:
+        """Return the item's Commodity Quality Parameter rows.
+
+        Each CQP entry maps one item to one or more quality parameters; the
+        QC line's per-parameter ``actual_value`` is the lowest rate
+        (``min_quality_value``) from this config. Returns [] when the item has
+        no CQP entry (caller falls back to generic/discovered parameters).
+        """
+        if item_ref_id in self._cqp_cache:
+            return self._cqp_cache[item_ref_id]
+
+        params: List[dict] = []
+        try:
+            resp = self.client.list_entries("Commodity Quality Parameter", page=1, page_size=500)
+            rows = (resp or {}).get("screenmatlistingdata_set") or []
+            for row in rows:
+                entry_id = row.get("id")
+                if not entry_id:
+                    continue
+                detail = self.client.get_entry("Commodity Quality Parameter", entry_id)
+                if not detail:
+                    continue
+                if detail.get("item_ref_id") != item_ref_id:
+                    continue
+                children = detail.get("children") or []
+                for child in children:
+                    for p in (child.get("details") or []):
+                        if p.get("quality_type") is None:
+                            continue
+                        params.append({
+                            "quality_type": p.get("quality_type"),
+                            "min_quality_value": p.get("min_quality_value", 1),
+                            "max_quality_value": p.get("max_quality_value", 100),
+                            "rate_percentage": p.get("rate_percentage"),
+                            "multiplier": p.get("multiplier"),
+                        })
+                break
+            log.info(
+                f"[Discovery] CQP for item #{item_ref_id}: "
+                f"{[p['quality_type'] for p in params]}"
+            )
+        except Exception as e:
+            log.warning(f"[Discovery] CQP resolve error for item #{item_ref_id}: {e}")
+
+        self._cqp_cache[item_ref_id] = params
+        return params
 
     def _sniff_po_defaults(self) -> dict:
         """Sniff tenant-level PO header defaults from an existing PO, if any.
@@ -732,8 +899,8 @@ class PurchaseChain:
 
         ``multi_gate_pass`` + ``gp_count`` enable partial fulfillment: the PO is
         created once with each item's full quantity, then the quantity is split
-        evenly across ``gp_count`` gate passes. Each GP gets its own GRN. Only
-        supported for the PO -> GP -> GRN document set.
+        evenly across ``gp_count`` gate passes. Each GP gets its own GRN and QC.
+        Purchase Booking is not yet supported in multi-gate-pass mode.
 
         Returns:
             dict with keys ``po``, ``gp``, ``grn``, ``qc`` containing API response data.
@@ -749,13 +916,14 @@ class PurchaseChain:
             if "PO" not in docs:
                 raise RuntimeError(
                     "Multi Gate Pass requires a Purchase Order — "
-                    "use the PO → GP → GRN flow."
+                    "use the PO → GP → GRN → QC flow."
                 )
-            unsupported = ({"QC", "PB"} & docs)
+            unsupported = ({"PB"} & docs)
             if unsupported:
                 raise RuntimeError(
-                    "Multi Gate Pass supports PO → GP → GRN only — "
-                    f"not yet supported with {', '.join(sorted(unsupported))}."
+                    "Multi Gate Pass supports PO → GP → GRN → QC — "
+                    f"Purchase Booking is not yet supported with multi-gate-pass "
+                    f"(requested: {', '.join(sorted(unsupported))})."
                 )
 
         # Explicit args override discovered values
@@ -900,11 +1068,14 @@ class PurchaseChain:
                 time.sleep(self.delay)
 
         # ---------------------------------------------------------------
-        # 2. Gate Pass + 3. GRN  (one delivery per plan row; multi-gate-pass splits)
+        # 2. Gate Pass + 3. GRN + 4. QC
+        #    (one delivery per plan row; multi-gate-pass splits and gives
+        #    each GP→GRN pair its own QC)
         # ---------------------------------------------------------------
         delivery_plans = _split_items_across_gps(items, gp_count) if multi_gate_pass else [items]
         gps = []
         grns = []
+        qcs = []
         po_quantity_by_item = {it["item_ref_id"]: it["quantity"] for it in items}
         received_so_far: dict = {}
         for gi, gp_items in enumerate(delivery_plans, start=1):
@@ -956,24 +1127,24 @@ class PurchaseChain:
                 if self.delay:
                     time.sleep(self.delay)
 
-        # ---------------------------------------------------------------
-        # 4. Quality Check
-        # ---------------------------------------------------------------
-        if "QC" in docs:
-            qc_payload = self._build_qc_payload(
-                eff_supplier, po_id, gp_id, grn_id, items, qc_overrides, ctx=ctx
-            )
-            qc_data = self.qc_api.create_qc(qc_payload)
-            qc_id = qc_data.get("id") or qc_data.get("entry_id") if qc_data else None
-            if not qc_data or not qc_id:
-                raise RuntimeError(
-                    f"QC creation failed (HTTP {self.qc_api._last_status}); "
-                    f"response: {qc_data}"
+            if "QC" in docs:
+                cqp_by_item = {it["item_ref_id"]: self._resolve_cqp_params(it["item_ref_id"]) for it in gp_items}
+                qc_payload = self._build_qc_payload(
+                    eff_supplier, po_id, gp_id, grn_id, gp_items, qc_overrides, ctx=ctx,
+                    cqp_by_item=cqp_by_item,
                 )
-            qc_ref = qc_data.get("transaction_ref_no", str(qc_id))
-            log.info(f"  QC created: ID={qc_id}, ref={qc_ref}")
-            if self.delay:
-                time.sleep(self.delay)
+                qc_data = self.qc_api.create_qc(qc_payload)
+                qc_id = qc_data.get("id") or qc_data.get("entry_id") if qc_data else None
+                if not qc_data or not qc_id:
+                    raise RuntimeError(
+                        f"QC {gi} creation failed (HTTP {self.qc_api._last_status}); "
+                        f"response: {qc_data}"
+                    )
+                qc_ref = qc_data.get("transaction_ref_no", str(qc_id))
+                qcs.append({"id": qc_id, "ref": qc_ref, "data": qc_data, "payload": qc_payload})
+                log.info(f"  QC {gi}/{len(delivery_plans)} created: ID={qc_id}, ref={qc_ref}")
+                if self.delay:
+                    time.sleep(self.delay)
 
         # ---------------------------------------------------------------
         # 5. Purchase Booking
@@ -998,6 +1169,7 @@ class PurchaseChain:
 
         last_gp = gps[-1] if gps else None
         last_grn = grns[-1] if grns else None
+        last_qc = qcs[-1] if qcs else None
         result = {
             "po": {"id": po_id, "ref": po_ref, "data": po_data, "payload": po_payload,
                    "fetched": po_entry} if po_id else None,
@@ -1005,7 +1177,8 @@ class PurchaseChain:
             "grn": last_grn,
             "gps": gps,
             "grns": grns,
-            "qc": {"id": qc_id, "ref": qc_ref, "data": qc_data, "payload": qc_payload} if qc_id else None,
+            "qc": last_qc,
+            "qcs": qcs,
             "pb": {"id": pb_id, "ref": pb_ref, "data": pb_data, "payload": pb_payload} if pb_id else None,
         }
         self.results.append(result)
@@ -1210,10 +1383,13 @@ class PurchaseChain:
         items: List[dict],
         overrides: dict = None,
         ctx: Optional[ChainContext] = None,
+        cqp_by_item: Optional[dict] = None,
     ) -> dict:
         from pages.private_b2b.modules.quality_check.data.quality_check_data import build_qc_payload
-        qc_items = _qc_items_from(items, ctx=ctx)
+        qc_items = _qc_items_from(items, ctx=ctx, cqp_by_item=cqp_by_item or {})
         overrides = overrides or {}
+        total_txn = round(sum(float(l.get("txn_currency_amount") or 0.0) for l in qc_items), 6)
+        header_extra = {"total_txn_currency_amount": total_txn}
         if ctx:
             return build_qc_payload(
                 supplier_ref_id=supplier_ref_id,
@@ -1228,6 +1404,7 @@ class PurchaseChain:
                 parameter2=ctx.parameter2,
                 parameter5=ctx.parameter5,
                 parameter6=ctx.parameter6,
+                **header_extra,
                 **overrides,
             )
         return build_qc_payload(
@@ -1236,6 +1413,7 @@ class PurchaseChain:
             grn_ref_id_id=grn_id,
             po_ref_id_id=po_id,
             items=qc_items,
+            **header_extra,
             **overrides,
         )
 
