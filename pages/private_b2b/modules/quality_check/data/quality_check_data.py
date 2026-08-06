@@ -167,6 +167,7 @@ def build_qc_payload(
     driver_name: str = None,
     remark: str = None,
     items: List[dict] = None,
+    total_txn_currency_amount: float = None,
 ) -> dict:
     if transaction_date is None:
         transaction_date = date.today().isoformat()
@@ -219,6 +220,8 @@ def build_qc_payload(
         "qc_additional_details": {"remark": remark},
         "qc_details": items,
     }
+    if total_txn_currency_amount is not None:
+        payload["total_txn_currency_amount"] = total_txn_currency_amount
     return payload
 
 

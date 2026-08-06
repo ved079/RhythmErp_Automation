@@ -39,6 +39,10 @@ class PBPlaywrightPage(BasePlaywrightPage):
     QC_SELECT       = "xpath=//mat-form-field[.//mat-label[contains(.,'QC')]]//mat-select"
     CONVERSION_RATE = "xpath=//mat-form-field[.//mat-label[contains(.,'Conversion Rate')]]//input"
 
+    GST_TOGGLE_SLIDER = "app-slide-toggle-v2 div.slider"
+    TAX_RATE_SELECT   = "xpath=//mat-select[.//span[contains(@class,'mat-mdc-select-placeholder') and contains(.,'Select tax rate')]]"
+    GST_TYPE_SELECT   = "xpath=//mat-form-field[.//mat-label[text()='GST Type']]//mat-select"
+
     ADD_BTN    = "button.erp-add-btn"
     SUBMIT_BTN = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Submit')]"
     CANCEL_BTN = "xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]"
@@ -124,10 +128,63 @@ class PBPlaywrightPage(BasePlaywrightPage):
             "xpath=//mat-form-field[.//mat-label[text()='Labour Charges']]//input"
         ).count()
 
+    _GST_TYPES = ["IGST", "CGST + SGST"]
+
+    def _fill_row_gst(self, row_index):
+        """Toggle IS GST Off ON, pick a random tax rate, pick a random GST type."""
+        sliders = self.page.locator(self.GST_TOGGLE_SLIDER)
+        if sliders.count() == 0:
+            return
+        slider = sliders.nth(row_index)
+        slider.scroll_into_view_if_needed()
+        slider.click(force=True)
+        self.page.wait_for_timeout(1200)
+
+        # Tax rate
+        tax_selects = self.page.locator(self.TAX_RATE_SELECT)
+        if tax_selects.count() > 0:
+            tax_selects.nth(row_index).click(force=True)
+            self.page.wait_for_selector(".mat-mdc-select-panel", timeout=6000)
+            opts = self.page.locator(
+                ".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"
+            ).all()
+            if opts:
+                import random as _r
+                _r.choice(opts).click(force=True)
+            try:
+                self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+            except Exception:
+                pass
+            self.page.wait_for_timeout(500)
+
+        # GST type
+        gst_selects = self.page.locator(self.GST_TYPE_SELECT)
+        if gst_selects.count() > 0:
+            import random as _r
+            chosen = _r.choice(self._GST_TYPES)
+            gst_selects.nth(row_index).click(force=True)
+            self.page.wait_for_selector(".mat-mdc-select-panel", timeout=6000)
+            search = self.page.locator(".mat-mdc-select-panel input.dd-search-input")
+            if search.count() > 0:
+                search.fill(chosen)
+                self.page.wait_for_timeout(600)
+            for opt in self.page.locator(
+                ".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"
+            ).all():
+                if opt.inner_text().strip() == chosen:
+                    opt.click(force=True)
+                    break
+            try:
+                self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+            except Exception:
+                pass
+            self.page.wait_for_timeout(400)
+
     def fill_row(self, row_idx):
         for label, value_fn in _ROW_FIELDS:
             self.page.evaluate(_JS_FILL_ROW_FIELD, [label, row_idx, value_fn()])
             self.page.wait_for_timeout(150)
+        self._fill_row_gst(row_idx)
 
     def submit(self):
         self.page.locator(self.SUBMIT_BTN).click()
