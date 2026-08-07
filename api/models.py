@@ -125,6 +125,9 @@ class LogEvent(BaseModel):
     duration: Optional[float] = None
     timestamp: datetime
     run_id: Optional[str] = None         # batch run ID for Excel export
+    created: Optional[int] = None        # run_end: successful chains
+    failed: Optional[int] = None         # run_end: failed chains
+    total: Optional[int] = None          # run_end: total chains
 
 
 # --- Batch Data Creation ---

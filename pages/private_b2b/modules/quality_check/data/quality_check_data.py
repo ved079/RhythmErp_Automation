@@ -137,11 +137,57 @@ def _default_qc_parameter_details() -> List[dict]:
     ]
 
 
-def _default_qc_bags_details(no_of_bags: int, empty_bag_weight: float) -> List[dict]:
+def resolve_bags_type_id(client, create_if_missing: bool = False) -> Optional[int]:
+    """Resolve a valid 'Packages' (bag type) FK ID for the QC bags detail row.
+
+    ``qc_bags_details[].type_of_bags_ref_id`` is an FK to the Packages screen
+    (e.g. ``{id: 3, name: "Joot Bags"}``). Hardcoding ``1`` breaks tenants
+    whose bag types don't start at 1 — so resolve live, preferring a
+    jute/joot bag, then any option. When the screen is empty/unresolvable and
+    ``create_if_missing`` is True, a default 'Joot Bags' entry is created so
+    the QC step never POSTs a made-up ID. Returns None when still unresolvable.
+    """
+    try:
+        from common.fk_resolver import FkResolver
+        resolver = FkResolver(client)
+        pkg_map = resolver.resolve(
+            "Packages", parent_screen="Quality Check", field_key="type_of_bags_ref_id"
+        ) or {}
+        if not pkg_map:
+            pkg_map = resolver.resolve("Packages") or {}
+        for key, val in pkg_map.items():
+            k = str(key).strip().lower()
+            if "joot" in k or "jute" in k:
+                return int(val)
+        if pkg_map:
+            return int(list(pkg_map.values())[0])
+        if not create_if_missing:
+            return None
+    except Exception:
+        if not create_if_missing:
+            return None
+    # Packages screen is empty (or resolution threw) — create a default entry.
+    try:
+        payload = {
+            "id": "",
+            "attribute_name": "Packages",
+            "name": "Joot Bags",
+            "details": [],
+            "children": [],
+        }
+        result = client.create_entry(payload)
+        if result and result.get("id"):
+            return int(result["id"])
+    except Exception:
+        return None
+    return None
+
+
+def _default_qc_bags_details(no_of_bags: int, empty_bag_weight: float, type_of_bags_ref_id: int = 1) -> List[dict]:
     weight_per_bag = round(empty_bag_weight / no_of_bags, 4) if no_of_bags else 0.0
     return [
         {
-            "type_of_bags_ref_id": 1,
+            "type_of_bags_ref_id": type_of_bags_ref_id,
             "quantity_of_bags": no_of_bags,
             "weight_of_bags": weight_per_bag,
             "total_weight_of_bags": empty_bag_weight,

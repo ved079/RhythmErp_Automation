@@ -196,4 +196,7 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
         type="run_end",
         message=f"Done — {created} chains created, {failed} failed ({total_elapsed:.1f}s)",
         timestamp=datetime.now(timezone.utc),
+        created=created,
+        failed=failed,
+        total=total_chains,
     ))

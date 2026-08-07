@@ -373,13 +373,15 @@ def _grn_items_from(
     ]
 
 
-def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = None) -> List[dict]:
+def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = None,
+                   bags_type_id: int = 1) -> List[dict]:
     """Build QC line items matching the manual QC 1345 stored shape.
 
     Every derived amount is computed here (ERP does NOT auto-patch on POST).
     The per-parameter ``actual_value`` comes from the item's Commodity Quality
     Parameter config (the lowest rate = min_quality_value); when an item has no
     CQP entry, the discovered/generic quality parameters are used instead.
+    ``bags_type_id`` is the resolved Packages (bag type) FK — never hardcoded.
     """
     quality_details = (
         ctx.quality_parameters if ctx and ctx.quality_parameters
@@ -439,7 +441,7 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
             ],
             "qc_bags_details": [
                 {
-                    "type_of_bags_ref_id": 1,
+                    "type_of_bags_ref_id": bags_type_id,
                     "quantity_of_bags": 1,
                     "weight_of_bags": 1.0,
                     "total_weight_of_bags": 1.0,
@@ -592,6 +594,28 @@ class PurchaseChain:
         # Item -> Commodity Quality Parameter config (item_ref_id -> [{quality_type,
         # min_quality_value, max_quality_value, rate_percentage, multiplier}]).
         self._cqp_cache: Dict[int, List[dict]] = {}
+        # Resolved Packages (bag type) FK for the QC bags detail row.
+        self._bags_type_id: Optional[int] = None
+
+    def _resolve_bags_type_id(self) -> int:
+        """Return a valid Packages (bag type) FK for QC bags details.
+
+        Hardcoding type_of_bags_ref_id=1 breaks tenants whose bag types don't
+        start at 1. Resolved live and cached; when the tenant has no Packages
+        entries, a default 'Joot Bags' entry is auto-created and its ID used.
+        """
+        if self._bags_type_id is not None:
+            return self._bags_type_id
+        from pages.private_b2b.modules.quality_check.data.quality_check_data import resolve_bags_type_id
+        bags_type_id = resolve_bags_type_id(self.client, create_if_missing=True)
+        if bags_type_id is None:
+            raise RuntimeError(
+                "Could not resolve or auto-create a 'Packages' (bag type) FK "
+                "for the QC bags detail row — refusing to POST QC with a "
+                "guessed bag type."
+            )
+        self._bags_type_id = bags_type_id
+        return bags_type_id
 
     def get_context(self) -> ChainContext:
         """Return the tenant context, discovering it on first call."""
@@ -1269,6 +1293,7 @@ class PurchaseChain:
                 qc_payload = self._build_qc_payload(
                     eff_supplier, po_id, gp_id, grn_id, gp_items, qc_overrides, ctx=ctx,
                     cqp_by_item=cqp_by_item,
+                    bags_type_id=self._resolve_bags_type_id(),
                 )
                 qc_data = self.qc_api.create_qc(qc_payload)
                 qc_id = qc_data.get("id") or qc_data.get("entry_id") if qc_data else None
@@ -1524,9 +1549,10 @@ class PurchaseChain:
         overrides: dict = None,
         ctx: Optional[ChainContext] = None,
         cqp_by_item: Optional[dict] = None,
+        bags_type_id: int = 1,
     ) -> dict:
         from pages.private_b2b.modules.quality_check.data.quality_check_data import build_qc_payload
-        qc_items = _qc_items_from(items, ctx=ctx, cqp_by_item=cqp_by_item or {})
+        qc_items = _qc_items_from(items, ctx=ctx, cqp_by_item=cqp_by_item or {}, bags_type_id=bags_type_id)
         overrides = overrides or {}
         total_txn = round(sum(float(l.get("txn_currency_amount") or 0.0) for l in qc_items), 6)
         header_extra = {"total_txn_currency_amount": total_txn}
