@@ -70,6 +70,8 @@ from pages.private_b2b.modules.purchase_booking.utils.api_purchase_booking_utils
 )
 from pages.private_b2b.scripts.chain_context import ChainContext, ChainContextDiscoverer
 
+from dataclasses import replace
+
 
 # ---------------------------------------------------------------------------
 # Supplier lookup
@@ -590,6 +592,26 @@ class PurchaseChain:
         if self._context is None:
             self._context = ChainContextDiscoverer(self.client).discover()
         return self._context
+
+    def get_context_for_supplier(self, supplier_ref_id: int) -> ChainContext:
+        """Return the tenant context with supplier-scoped fields re-resolved.
+
+        Clones the shared context and overlays the chosen supplier's own
+        addresses + payment terms (Option A: per-chain suppliers use their own
+        terms instead of the default supplier's). Supplier details are cached
+        per id, so repeated calls for the same supplier are cheap.
+        """
+        ctx = self.get_context()
+        det = self._resolve_supplier_details(supplier_ref_id)
+        pb_terms = det.get("payment_terms") or ctx.pb_payment_terms
+        return replace(
+            ctx,
+            supplier_ref_id=supplier_ref_id,
+            supplier_ship_from=det.get("ship_from") or ctx.supplier_ship_from,
+            supplier_bill_from=det.get("bill_from") or ctx.supplier_bill_from,
+            payment_terms=det.get("payment_terms") or ctx.payment_terms,
+            pb_payment_terms=pb_terms,
+        )
 
     # ------------------------------------------------------------------
     # Per-entity resolution helpers

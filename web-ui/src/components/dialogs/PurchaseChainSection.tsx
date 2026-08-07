@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Package, CheckCircle2, XCircle, Play, Key, RefreshCw, RotateCcw, Loader2 } from 'lucide-react'
+import { CheckCircle2, XCircle, Play, Key, RefreshCw, RotateCcw, Loader2 } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import { startPurchaseChain, fetchMasterData, fetchItemCategories, type SSEEvent, type MasterDataItem, type ItemCategory } from '@/lib/api'
 
@@ -45,6 +45,7 @@ function poolFor(
 
 export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onClearToken }: Props) {
   const [count, setCount] = useState(1)
+  const [chainSuppliers, setChainSuppliers] = useState<(number | null)[]>([])
   const [enabledDocs, setEnabledDocs] = useState<Set<string>>(new Set(['PO', 'GP', 'GRN', 'QC', 'PB']))
   const [supplier, setSupplier] = useState<number | null>(null)
   const [numItems, setNumItems] = useState(2)
@@ -66,7 +67,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [localToken, setLocalToken] = useState('')
   const [localTenantId, setLocalTenantId] = useState('')
   const [showTokenInput, setShowTokenInput] = useState(false)
-  const [activeMenu, setActiveMenu] = useState<{type: 'supplier' | 'category' | 'item' | number; pos: {top: number; left: number; width: number}} | null>(null)
+  const [activeMenu, setActiveMenu] = useState<{type: 'supplier' | 'category' | 'item' | number | `chainSup:${number}`; pos: {top: number; left: number; width: number}} | null>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const tokenSectionRef = useRef<HTMLDivElement>(null)
   const startTimeRef = useRef<number>(0)
@@ -77,6 +78,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const categoryBtnRef = useRef<HTMLButtonElement>(null)
   const itemBtnRef = useRef<HTMLButtonElement>(null)
   const rowBtnRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const chainSupBtnRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   useEffect(() => {
     if (running) {
@@ -200,8 +202,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       activeTaxRate,
       multiGatePass,
       gpCount,
+      count > 1 ? chainSuppliers.filter((s): s is number => s != null) : [],
     )
-  }, [count, supplier, numItems, itemIds, erpToken, localToken, localTenantId, erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow, multiGatePass, gpCount])
+  }, [count, supplier, numItems, itemIds, erpToken, localToken, localTenantId, erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow, multiGatePass, gpCount, chainSuppliers])
 
   const handleStop = useCallback(() => {
     setRunning(false)
@@ -242,30 +245,26 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       {/* Controls panel */}
       <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col min-h-0 max-h-[80%] shrink-0">
         <div className="p-4 pb-0 overflow-y-auto flex-1 min-h-0">
-          <div className="flex items-center gap-2 mb-4">
-          <Package className="size-4 text-[#3F51B5]" />
-          <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">Purchase Chain</h3>
-          <span className="text-[11px] text-gray-400 dark:text-gray-500">One Click Chain</span>
           {(erpToken || localToken) && (
-            <button
-              onClick={loadMasterData}
-              disabled={loadingData}
-              className="ml-auto text-[11px] text-[#3F51B5] dark:text-[#7986CB] hover:text-[#3949AB] dark:hover:text-[#9FA8DA] flex items-center gap-1 transition-colors cursor-pointer"
-              title="Refresh data from ERP"
-            >
-              <RotateCcw className={`size-3 ${loadingData ? 'animate-spin' : ''}`} />
-              {loadingData ? 'Loading...' : 'Refresh'}
-            </button>
+            <div className="flex justify-end mb-4">
+              <button
+                onClick={loadMasterData}
+                disabled={loadingData}
+                className="text-[11px] text-[#3F51B5] dark:text-[#7986CB] hover:text-[#3949AB] dark:hover:text-[#9FA8DA] flex items-center gap-1 transition-colors cursor-pointer"
+                title="Refresh data from ERP"
+              >
+                <RotateCcw className={`size-3 ${loadingData ? 'animate-spin' : ''}`} />
+                {loadingData ? 'Loading...' : 'Refresh'}
+              </button>
+            </div>
           )}
-        </div>
 
-        {/* Flow selector */}
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">Flow:</span>
+        {/* Flow selector — header bar */}
+        <div className="grid grid-cols-2 border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden mb-4">
           {([
             { id: 'po', label: 'PO → GP → GRN → QC → PB' },
             { id: 'gp', label: 'GP → GRN → QC → PB' },
-          ] as const).map((f) => (
+          ] as const).map((f, i) => (
             <button
               key={f.id}
               type="button"
@@ -275,94 +274,95 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                 setEnabledDocs(new Set(f.id === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
               }}
               disabled={running}
-              className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
+              className={`px-3 py-1.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer disabled:cursor-not-allowed text-center ${
                 flow === f.id
-                  ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
-                  : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
-              }`}
+                  ? 'bg-gray-100 dark:bg-gray-800 border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB]'
+                  : 'bg-gray-100/60 dark:bg-gray-800/50 border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+              } ${i > 0 ? 'border-l border-gray-300 dark:border-gray-600' : ''}`}
             >
               {f.label}
             </button>
           ))}
         </div>
 
-        {/* Document selector — full chain (PO first) or standalone GP */}
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">Create:</span>
-          {docOrder.map((doc, idx, arr) => {
-            const on = enabledDocs.has(doc)
-            const toggle = () => {
-              setEnabledDocs(prev => {
-                const next = new Set(prev)
-                if (on) {
-                  // disabling: also disable all that depend on this doc
-                  const deps = arr.slice(idx)
-                  deps.forEach(d => next.delete(d))
-                } else {
-                  // enabling: also enable all prerequisites
-                  const prereqs = arr.slice(0, idx + 1)
-                  prereqs.forEach(d => next.add(d))
-                }
-                return next
-              })
-            }
-            return (
-              <React.Fragment key={doc}>
-                <button
-                  type="button"
-                  onClick={toggle}
-                  disabled={running}
-                  className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
-                    on
-                      ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
-                      : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
-                  }`}
-                >
-                  {doc}
-                </button>
-                {idx < arr.length - 1 && (
-                  <span className={`text-[11px] ${enabledDocs.has(arr[idx + 1]) ? 'text-[#3F51B5]' : 'text-gray-300 dark:text-gray-600'}`}>→</span>
-                )}
-              </React.Fragment>
-            )
-          })}
-        </div>
+        {/* Document selector + toggles panel */}
+        <div className="border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100/60 dark:bg-gray-800/50 px-3 py-2 mb-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] text-gray-700 dark:text-gray-300 shrink-0">Create:</span>
+            {docOrder.map((doc, idx, arr) => {
+              const on = enabledDocs.has(doc)
+              const toggle = () => {
+                setEnabledDocs(prev => {
+                  const next = new Set(prev)
+                  if (on) {
+                    // disabling: also disable all that depend on this doc
+                    const deps = arr.slice(idx)
+                    deps.forEach(d => next.delete(d))
+                  } else {
+                    // enabling: also enable all prerequisites
+                    const prereqs = arr.slice(0, idx + 1)
+                    prereqs.forEach(d => next.add(d))
+                  }
+                  return next
+                })
+              }
+              return (
+                <React.Fragment key={doc}>
+                  <button
+                    type="button"
+                    onClick={toggle}
+                    disabled={running}
+                    className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                      on
+                        ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
+                        : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
+                    }`}
+                  >
+                    {doc}
+                  </button>
+                  {idx < arr.length - 1 && (
+                    <span className={`text-[11px] ${enabledDocs.has(arr[idx + 1]) ? 'text-[#3F51B5]' : 'text-gray-400 dark:text-gray-600'}`}>→</span>
+                  )}
+                </React.Fragment>
+              )
+            })}
+            <span className="text-[10px] text-gray-600 dark:text-gray-400">(click docs to customize the flow)</span>
+          </div>
 
-        {/* Tax Rate + Multi Gate Pass toggles — one row (full chain only) */}
-        {flow === 'po' && (
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">Tax Rate:</span>
-          <button
-            type="button"
-            onClick={() => setRequireTaxRate(true)}
-            disabled={running}
-            className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
-              requireTaxRate
-                ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
-                : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
-            }`}
-          >
-            ON
-          </button>
-          <button
-            type="button"
-            onClick={() => setRequireTaxRate(false)}
-            disabled={running}
-            className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
-              !requireTaxRate
-                ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
-                : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
-            }`}
-          >
-            OFF
-          </button>
-          <span className="text-[10px] text-gray-400 dark:text-gray-500">
-            {requireTaxRate ? 'Items with a tax rate only' : 'All items (0.0 rate when none)'}
-          </span>
+          {flow === 'po' && (
+          <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600 flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] text-gray-700 dark:text-gray-300 shrink-0">Tax Rate:</span>
+            <button
+              type="button"
+              onClick={() => setRequireTaxRate(true)}
+              disabled={running}
+              className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                requireTaxRate
+                  ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
+                  : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
+              }`}
+            >
+              ON
+            </button>
+            <button
+              type="button"
+              onClick={() => setRequireTaxRate(false)}
+              disabled={running}
+              className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                !requireTaxRate
+                  ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
+                  : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
+              }`}
+            >
+              OFF
+            </button>
+            <span className="text-[10px] text-gray-600 dark:text-gray-400">
+              {requireTaxRate ? 'Items with a tax rate only' : 'All items (0.0 rate when none)'}
+            </span>
 
           <span className="mx-1 h-4 w-px bg-gray-300 dark:bg-gray-600 shrink-0" />
 
-          <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">Multi Gate Pass?</span>
+          <span className="text-[11px] text-gray-700 dark:text-gray-300 shrink-0">Multi Gate Pass?</span>
           <button
             type="button"
             onClick={() => {
@@ -376,7 +376,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
               multiGatePass
                 ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
-                : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
+                : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
             }`}
           >
             ON
@@ -391,14 +391,14 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
               !multiGatePass
                 ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
-                : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
+                : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
             }`}
           >
             OFF
           </button>
           {multiGatePass && (
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">GPs:</span>
+              <span className="text-[11px] text-gray-700 dark:text-gray-300 shrink-0">GPs:</span>
               <Input
                 type="number"
                 min={2}
@@ -411,12 +411,13 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             </div>
           )}
           {multiGatePass && (
-            <span className="text-[10px] text-gray-400 dark:text-gray-500">
+            <span className="text-[10px] text-gray-600 dark:text-gray-400">
               Split PO across gate passes — each GP gets its own GRN, QC &amp; PB
             </span>
           )}
+          </div>
+          )}
         </div>
-        )}
 
         {dataError && (
           <div className="mb-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-[11px] text-red-600 dark:text-red-400">
@@ -427,9 +428,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         <div className="grid grid-cols-4 gap-4 mb-4">
           {/* Item Category selector */}
           <div className="relative">
-            <Label className="text-[11px] text-gray-500 dark:text-gray-400 mb-1 block">Item Category</Label>
+            <Label className="text-[11px] text-gray-700 dark:text-gray-300 mb-1 block">Item Category</Label>
             {loadingData && categories.length === 0 ? (
-              <div className="h-9 flex items-center text-[12px] text-gray-400 dark:text-gray-500 gap-1.5">
+              <div className="h-9 flex items-center text-[12px] text-gray-600 dark:text-gray-400 gap-1.5">
                 <Loader2 className="size-3 animate-spin" />
                 Loading...
               </div>
@@ -445,16 +446,16 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                 className="w-full px-3 py-2 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
               >
                 <span className="truncate">{selectedCategory ? `${selectedCategory.name} (${selectedCategory.item_count})` : 'Select category...'}</span>
-                <svg className={`size-3 text-gray-400 transition-transform shrink-0 ${activeMenu?.type === 'category' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                <svg className={`size-3 text-gray-500 transition-transform shrink-0 ${activeMenu?.type === 'category' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
               </button>
             )}
           </div>
 
           {/* Supplier selector */}
           <div className="relative">
-            <Label className="text-[11px] text-gray-500 dark:text-gray-400 mb-1 block">Supplier</Label>
+            <Label className="text-[11px] text-gray-700 dark:text-gray-300 mb-1 block">Supplier</Label>
             {loadingData && suppliers.length === 0 ? (
-              <div className="h-9 flex items-center text-[12px] text-gray-400 dark:text-gray-500 gap-1.5">
+              <div className="h-9 flex items-center text-[12px] text-gray-600 dark:text-gray-400 gap-1.5">
                 <Loader2 className="size-3 animate-spin" />
                 Loading...
               </div>
@@ -471,19 +472,54 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                   className="w-full px-3 py-2 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
                 >
                   <span className="truncate">{selectedSupplier ? selectedSupplier.name : 'Select supplier...'}</span>
-                  <svg className={`size-3 text-gray-400 transition-transform shrink-0 ${activeMenu?.type === 'supplier' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                  <svg className={`size-3 text-gray-500 transition-transform shrink-0 ${activeMenu?.type === 'supplier' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                 </button>
               </>
             )}
           </div>
 
-          {/* Item selector — per-row when numItems > 1 */}
+          {/* Item selector + Chains — Chains sits where the item label used to be */}
           <div className={`relative ${numItems > 1 ? 'col-span-1' : ''}`}>
-            <Label className="text-[11px] text-gray-500 dark:text-gray-400 mb-1 block">
-              Item{numItems > 1 ? ' (each row)' : ''}
-            </Label>
+            <Label className="text-[11px] text-gray-700 dark:text-gray-300 mb-1 block">Chains</Label>
+            <Input
+              type="number"
+              min={1}
+              max={50}
+              value={count}
+              onChange={(e) => {
+                const v = Math.max(1, Math.min(50, parseInt(e.target.value) || 1))
+                setCount(v)
+                setChainSuppliers((prev) => {
+                  if (prev.length === v) return prev
+                  const next = prev.slice(0, v)
+                  // Auto-fill every unselected slot with the next supplier
+                  // (distinct until the list is exhausted, then cycling) so the
+                  // user doesn't have to pick each chain's supplier by hand.
+                  const ids = suppliers.map((s) => s.id)
+                  if (ids.length === 0) return next
+                  const used = new Set(next.filter((x): x is number => x != null))
+                  let k = 0
+                  for (let i = 0; i < v; i++) {
+                    if (next[i] != null) continue
+                    let id = ids[k % ids.length]
+                    let tries = 0
+                    while (used.has(id) && tries < ids.length) {
+                      k++
+                      id = ids[k % ids.length]
+                      tries++
+                    }
+                    k++
+                    used.add(id)
+                    next[i] = id
+                  }
+                  return next
+                })
+              }}
+              className="h-9 text-[12px] mb-3"
+              disabled={running}
+            />
             {loadingData && items.length === 0 ? (
-              <div className="h-9 flex items-center text-[12px] text-gray-400 dark:text-gray-500 gap-1.5">
+              <div className="h-9 flex items-center text-[12px] text-gray-600 dark:text-gray-400 gap-1.5">
                 <Loader2 className="size-3 animate-spin" />
                 Loading...
               </div>
@@ -501,30 +537,16 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                   className="w-full px-3 py-2 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
                 >
                   <span className="truncate">{catItems.find(i => i.id === itemIds[0])?.name ?? 'Select item...'}</span>
-                  <svg className={`size-3 text-gray-400 transition-transform shrink-0 ${activeMenu?.type === 'item' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                  <svg className={`size-3 text-gray-500 transition-transform shrink-0 ${activeMenu?.type === 'item' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                 </button>
               </>
             ) : null}
           </div>
 
-          {/* Number of chains */}
-          <div>
-            <Label className="text-[11px] text-gray-500 dark:text-gray-400 mb-1 block">Chains</Label>
-            <Input
-              type="number"
-              min={1}
-              max={50}
-              value={count}
-              onChange={(e) => setCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
-              className="h-9 text-[12px]"
-              disabled={running}
-            />
-          </div>
-
           {/* Items per chain */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <Label className="text-[11px] text-gray-500 dark:text-gray-400">Items / Doc</Label>
+              <Label className="text-[11px] text-gray-700 dark:text-gray-300">Items / Doc</Label>
               {catItems.length > 1 && (
                 <button
                   type="button"
@@ -571,6 +593,41 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           </div>
         </div>
 
+        {/* Per-chain supplier selection — only when running multiple chains */}
+        {count > 1 && (
+          <div className="mb-4">
+            <Label className="text-[11px] text-gray-700 dark:text-gray-300 mb-1.5 block">
+              Chain Suppliers
+            </Label>
+            <div className={`grid gap-2 ${count > 6 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'} ${count > 6 ? 'max-h-52 overflow-y-auto pr-1' : ''}`}>
+              {chainSuppliers.map((chainSup, idx) => (
+                <div key={idx}>
+                  <Label className="text-[10px] text-gray-600 dark:text-gray-400 mb-0.5 block">
+                    Chain {idx + 1}
+                  </Label>
+                  <button
+                    type="button"
+                    ref={(el) => { chainSupBtnRefs.current[idx] = el }}
+                    onClick={() => {
+                      if (activeMenu?.type === `chainSup:${idx}`) { setActiveMenu(null); return }
+                      const r = chainSupBtnRefs.current[idx]?.getBoundingClientRect()
+                      if (r) setActiveMenu({ type: `chainSup:${idx}` as never, pos: { top: r.bottom + 4, left: r.left, width: Math.max(r.width, 200) } })
+                    }}
+                    className="w-full px-2.5 py-1.5 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
+                  >
+                    <span className="truncate">
+                      {chainSup != null
+                        ? (suppliers.find(s => s.id === chainSup)?.name ?? `Supplier ${chainSup}`)
+                        : 'Select supplier...'}
+                    </span>
+                    <svg className={`size-3 text-gray-500 transition-transform shrink-0 ${activeMenu?.type === `chainSup:${idx}` ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {requireTaxRate && catItems.length === 0 && items.length > 0 && (
           <div className="mb-3 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-[11px] text-amber-600 dark:text-amber-400">
             No items in this category have a tax rate. Toggle Tax Rate OFF to list all items.
@@ -579,11 +636,11 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
 
         {numItems > 1 && catItems.length > 0 && (
           <div className="mb-4">
-            <Label className="text-[11px] text-gray-500 dark:text-gray-400 mb-1.5 block">Items per row</Label>
+            <Label className="text-[11px] text-gray-700 dark:text-gray-300 mb-1.5 block">Items per row</Label>
             <div className={`grid gap-2 ${numItems > 8 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'} ${numItems > 6 ? 'max-h-52 overflow-y-auto pr-1' : ''}`}>
               {Array.from({ length: numItems }).map((_, idx) => (
                 <div key={idx}>
-                  <Label className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5 block">Row {idx + 1}</Label>
+                  <Label className="text-[10px] text-gray-600 dark:text-gray-400 mb-0.5 block">Row {idx + 1}</Label>
                   <button
                     type="button"
                     ref={(el) => { rowBtnRefs.current[idx] = el }}
@@ -595,7 +652,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                     className="w-full px-2.5 py-1.5 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
                   >
                     <span className="truncate">{catItems.find(i => i.id === itemIds[idx])?.name ?? 'Select...'}</span>
-                    <svg className={`size-3 text-gray-400 transition-transform shrink-0 ${activeMenu?.type === idx ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    <svg className={`size-3 text-gray-500 transition-transform shrink-0 ${activeMenu?.type === idx ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                   </button>
                 </div>
               ))}
@@ -692,9 +749,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       {/* Logs panel */}
       <div className="flex-1 min-h-0 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-900/50">
         <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shrink-0">
-          <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400">
+          <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">
             Console Output
-            {logs.length > 0 && <span className="ml-2 text-gray-400 dark:text-gray-500">({logs.length} lines)</span>}
+            {logs.length > 0 && <span className="ml-2 text-gray-600 dark:text-gray-400">({logs.length} lines)</span>}
           </span>
           {created + failed > 0 && (
             <span className="text-[11px]">
@@ -706,14 +763,14 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         <ScrollArea className="h-full">
           <div className="p-3 font-mono text-[12px] leading-relaxed">
             {logs.length === 0 && !running && (
-              <p className="text-gray-400 dark:text-gray-500 italic">Configure and click "Run" to start the purchase chain.</p>
+              <p className="text-gray-600 dark:text-gray-400 italic">Configure and click "Run" to start the purchase chain.</p>
             )}
             {logs.length === 0 && running && (
               <p className="text-[#3F51B5] dark:text-[#7986CB] animate-pulse">Starting...</p>
             )}
             {logs.map((log, i) => (
               <div key={i} className={`flex gap-2 ${log.isErr ? 'text-red-500 dark:text-red-400' : log.isDone ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-gray-700 dark:text-gray-200'}`}>
-                <span className="text-gray-400 dark:text-gray-500 shrink-0 w-16">[{formatTime(log.ts)}]</span>
+                <span className="text-gray-600 dark:text-gray-400 shrink-0 w-16">[{formatTime(log.ts)}]</span>
                 <span className="whitespace-pre-wrap break-all">{log.text}</span>
               </div>
             ))}
@@ -731,41 +788,55 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-48 overflow-y-auto"
             style={{ top: activeMenu.pos.top, left: activeMenu.pos.left, width: activeMenu.pos.width }}
           >
-            {(activeMenu.type === 'supplier' ? suppliers : activeMenu.type === 'category' ? categories : catItems).length === 0 ? (
-              <div className="px-3 py-2 text-[12px] text-gray-400 dark:text-gray-500">No data loaded</div>
-            ) : (
-              (activeMenu.type === 'supplier' ? suppliers : activeMenu.type === 'category' ? categories : catItems).map((i) => {
-                const selected = activeMenu.type === 'supplier'
-                  ? i.id === supplier
-                  : activeMenu.type === 'category'
-                    ? i.id === selectedCategoryId
-                    : activeMenu.type === 'item'
-                      ? i.id === itemIds[0]
-                      : i.id === itemIds[activeMenu.type as number]
-                return (
-                  <button
-                    key={i.id}
-                    type="button"
-                    onClick={() => {
-                      if (activeMenu.type === 'supplier') {
-                        setSupplier(i.id)
-                      } else if (activeMenu.type === 'category') {
-                        handleCategorySelect(i.id)
-                        return
-                      } else if (activeMenu.type === 'item') {
-                        setItemIds([i.id])
-                      } else {
-                        setItemIds((prev) => { const next = [...prev]; next[activeMenu.type as number] = i.id; return next })
-                      }
-                      setActiveMenu(null)
-                    }}
-                    className={`w-full px-3 py-1.5 text-[12px] text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer ${selected ? 'bg-[#3F51B5]/10 dark:bg-[#3F51B5]/20 text-[#3F51B5] dark:text-[#7986CB] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
-                  >
-                    {activeMenu.type === 'category' && 'item_count' in i ? `${i.name} (${i.item_count})` : i.name}
-                  </button>
-                )
-              })
-            )}
+            {(() => {
+              const list = activeMenu.type === 'supplier' || typeof activeMenu.type === 'string' && activeMenu.type.startsWith('chainSup:')
+                ? suppliers
+                : activeMenu.type === 'category'
+                  ? categories
+                  : catItems
+              return list.length === 0 ? (
+                <div className="px-3 py-2 text-[12px] text-gray-600 dark:text-gray-400">No data loaded</div>
+              ) : (
+                list.map((i) => {
+                  const mType = activeMenu.type
+                  const isChainSup = typeof mType === 'string' && mType.startsWith('chainSup:')
+                  const chainIdx = isChainSup ? parseInt((mType as string).split(':')[1]) : -1
+                  const selected = isChainSup
+                    ? i.id === chainSuppliers[chainIdx]
+                    : activeMenu.type === 'supplier'
+                      ? i.id === supplier
+                      : activeMenu.type === 'category'
+                        ? i.id === selectedCategoryId
+                        : activeMenu.type === 'item'
+                          ? i.id === itemIds[0]
+                          : i.id === itemIds[activeMenu.type as number]
+                  return (
+                    <button
+                      key={i.id}
+                      type="button"
+                      onClick={() => {
+                        if (isChainSup) {
+                          setChainSuppliers((prev) => { const next = [...prev]; next[chainIdx] = i.id; return next })
+                        } else if (activeMenu.type === 'supplier') {
+                          setSupplier(i.id)
+                        } else if (activeMenu.type === 'category') {
+                          handleCategorySelect(i.id)
+                          return
+                        } else if (activeMenu.type === 'item') {
+                          setItemIds([i.id])
+                        } else {
+                          setItemIds((prev) => { const next = [...prev]; next[activeMenu.type as number] = i.id; return next })
+                        }
+                        setActiveMenu(null)
+                      }}
+                      className={`w-full px-3 py-1.5 text-[12px] text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer ${selected ? 'bg-[#3F51B5]/10 dark:bg-[#3F51B5]/20 text-[#3F51B5] dark:text-[#7986CB] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
+                    >
+                      {activeMenu.type === 'category' && 'item_count' in i ? `${i.name} (${i.item_count})` : i.name}
+                    </button>
+                  )
+                })
+              )
+            })()}
           </div>
         </>,
         document.body

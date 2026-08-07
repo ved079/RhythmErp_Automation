@@ -104,18 +104,26 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
 
     for i in range(total_chains):
         chain_start = time.time()
+        # Per-chain supplier (Q2/Option A): refresh the supplier-scoped context
+        # so each chain uses its own supplier's addresses + payment terms.
+        if request.supplier_ref_ids and len(request.supplier_ref_ids) == total_chains:
+            chain_supplier = request.supplier_ref_ids[i]
+        else:
+            chain_supplier = request.supplier_ref_id
         yield _sse_event(LogEvent(
             type="log",
-            message=f"Chain [{i + 1}/{total_chains}] — creating {docs_label}...",
+            message=f"Chain [{i + 1}/{total_chains}] — supplier={chain_supplier}",
             timestamp=datetime.now(timezone.utc),
         ))
 
         try:
             kwargs = dict(
                 num_items=request.num_items,
-                ctx=ctx,
                 documents=request.documents,
             )
+            # Option A: per-supplier context so addresses + payment terms are
+            # resolved for the chain's own supplier, not the default one.
+            kwargs["ctx"] = chain.get_context_for_supplier(chain_supplier)
             if request.multi_gate_pass:
                 kwargs["multi_gate_pass"] = True
                 kwargs["gp_count"] = max(1, request.gp_count)
@@ -128,8 +136,8 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
                     timestamp=datetime.now(timezone.utc),
                 ))
             # Only pass explicit overrides if the caller set them intentionally
-            if request.supplier_ref_id and request.supplier_ref_id != 1:
-                kwargs["supplier_ref_id"] = request.supplier_ref_id
+            if chain_supplier and chain_supplier != 1:
+                kwargs["supplier_ref_id"] = chain_supplier
             if request.item_ref_id and request.item_ref_id != 5:
                 kwargs["item_ref_id"] = request.item_ref_id
             if request.item_ref_ids:
