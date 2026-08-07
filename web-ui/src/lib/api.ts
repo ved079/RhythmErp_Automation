@@ -700,4 +700,62 @@ export async function fetchItemCategories(
   return data.categories || [];
 }
 
+/**
+ * Fetch the set of Item Master IDs that have a Commodity Quality Parameter
+ * (CQP) entry configured. The QC step 500s on items without a CQP entry, so
+ * the Purchase Chain UI restricts item selection to this set.
+ */
+export async function fetchItemsWithCqp(
+  erpToken: string,
+  erpTenantId: string,
+): Promise<number[]> {
+  const res = await fetch(`${PROXY}?path=items-with-cqp`, withCsrf({
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      erp_token: erpToken,
+      erp_tenant_id: erpTenantId,
+    }),
+  }));
+  if (!res.ok) throw new Error(`Items-with-CQP fetch failed: HTTP ${res.status}`);
+  const data = await res.json();
+  return data.item_ids || [];
+}
+
+export interface CqpFillResult {
+  created: { id: number; entry_id?: number }[]
+  skipped: { id: number; reason?: string }[]
+  failed: { id: number; reason?: string }[]
+  total: number
+}
+
+/**
+ * Create Commodity Quality Parameter (CQP) entries for the given item IDs.
+ * The QC step 500s on items without a CQP entry, so the UI calls this to
+ * auto-fill any missing entries before a run.
+ */
+export async function fillCqpItems(
+  erpToken: string,
+  erpTenantId: string,
+  itemIds: number[],
+): Promise<CqpFillResult> {
+  const res = await fetch(`${PROXY}?path=cqp-fill`, withCsrf({
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      erp_token: erpToken,
+      erp_tenant_id: erpTenantId,
+      item_ids: itemIds,
+    }),
+  }));
+  if (!res.ok) throw new Error(`CQP fill failed: HTTP ${res.status}`);
+  const data = await res.json();
+  return {
+    created: data.created || [],
+    skipped: data.skipped || [],
+    failed: data.failed || [],
+    total: data.total ?? itemIds.length,
+  };
+}
+
 

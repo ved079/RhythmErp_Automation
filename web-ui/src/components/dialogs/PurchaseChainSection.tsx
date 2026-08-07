@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { CheckCircle2, XCircle, Play, Key, RefreshCw, RotateCcw, Loader2 } from 'lucide-react'
+import { CheckCircle2, XCircle, Play, Key, RefreshCw, Loader2, X, AlertTriangle, Wand2 } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
-import { startPurchaseChain, fetchMasterData, fetchItemCategories, type SSEEvent, type MasterDataItem, type ItemCategory } from '@/lib/api'
+import { startPurchaseChain, fetchMasterData, fetchItemCategories, fetchItemsWithCqp, fillCqpItems, type SSEEvent, type MasterDataItem, type ItemCategory } from '@/lib/api'
 
 interface Props {
   erpToken: string
@@ -26,11 +26,16 @@ function formatTime(d: Date): string {
  * when no category matches) and, when Tax Rate is ON, only items whose HSN has
  * at least one configured tax rate. Unlike the category fallback, the tax-rate
  * filter never falls back to rate-less items — ON means only items with rates.
+ *
+ * When a non-empty CQP whitelist is provided (item IDs that have a Commodity
+ * Quality Parameter entry), items outside it are excluded — the QC step 500s
+ * on items without a CQP entry.
  */
 function poolFor(
   items: MasterDataItem[],
   categoryId: number | null,
   requireTaxRate: boolean,
+  cqpItemIds: number[] | null,
 ): MasterDataItem[] {
   let pool = items
   if (categoryId != null) {
@@ -39,6 +44,10 @@ function poolFor(
   }
   if (requireTaxRate) {
     pool = pool.filter((i) => (i.tax_rates?.length ?? 0) > 0)
+  }
+  if (cqpItemIds && cqpItemIds.length > 0) {
+    const cqpSet = new Set(cqpItemIds)
+    pool = pool.filter((i) => cqpSet.has(i.id))
   }
   return pool
 }
@@ -56,6 +65,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [failed, setFailed] = useState(0)
   const [suppliers, setSuppliers] = useState<MasterDataItem[]>([])
   const [items, setItems] = useState<MasterDataItem[]>([])
+  const [cqpItemIds, setCqpItemIds] = useState<number[] | null>(null)
+  const [fillingCqp, setFillingCqp] = useState(false)
+  const [cqpFillLog, setCqpFillLog] = useState('')
   const [categories, setCategories] = useState<ItemCategory[]>([])
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
   const [requireTaxRate, setRequireTaxRate] = useState(true)
@@ -67,6 +79,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [localToken, setLocalToken] = useState('')
   const [localTenantId, setLocalTenantId] = useState('')
   const [showTokenInput, setShowTokenInput] = useState(false)
+  const [showLogs, setShowLogs] = useState(true)
   const [activeMenu, setActiveMenu] = useState<{type: 'supplier' | 'category' | 'item' | number | `chainSup:${number}`; pos: {top: number; left: number; width: number}} | null>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const tokenSectionRef = useRef<HTMLDivElement>(null)
@@ -112,17 +125,19 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     setLoadingData(true)
     setDataError('')
     try {
-      const [supRes, itemRes, catRes] = await Promise.all([
+      const [supRes, itemRes, catRes, cqpRes] = await Promise.all([
         fetchMasterData('Supplier', token, tenant),
         fetchMasterData('Item Master', token, tenant),
         fetchItemCategories(token, tenant),
+        fetchItemsWithCqp(token, tenant),
       ])
       setSuppliers(supRes)
       setItems(itemRes)
       setCategories(catRes)
+      setCqpItemIds(cqpRes)
       const defaultCat = catRes.find((c) => c.item_count > 0) ?? catRes[0] ?? null
       setSelectedCategoryId(defaultCat ? defaultCat.id : null)
-      const usable = poolFor(itemRes, defaultCat ? defaultCat.id : null, flow === 'gp' ? false : requireTaxRate)
+      const usable = poolFor(itemRes, defaultCat ? defaultCat.id : null, flow === 'gp' ? false : requireTaxRate, cqpRes)
       if (supRes.length > 0 && supplier === null) setSupplier(supRes[0].id)
       if (usable.length > 0 && itemIds.length === 0) {
         setItemIds(usable.slice(0, numItems).map(i => i.id))
@@ -214,9 +229,45 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   // Items selectable for the PO (category-scoped + tax-rate filter).
   // Standalone GP flow has no tax-rate concept, so the filter is skipped.
   const catItems = React.useMemo(
-    () => poolFor(items, selectedCategoryId, flow === 'gp' ? false : requireTaxRate),
-    [items, selectedCategoryId, requireTaxRate, flow],
+    () => poolFor(items, selectedCategoryId, flow === 'gp' ? false : requireTaxRate, cqpItemIds),
+    [items, selectedCategoryId, requireTaxRate, flow, cqpItemIds],
   )
+
+  // Items in the selected category that lack a CQP entry — the QC step 500s on
+  // those, so we surface them so the user can auto-fill before running.
+  const missingCqpItems = React.useMemo(() => {
+    if (cqpItemIds == null) return []
+    const cqpSet = new Set(cqpItemIds)
+    const categoryPool = poolFor(items, selectedCategoryId, false, null)
+    return categoryPool.filter((i) => !cqpSet.has(i.id))
+  }, [items, selectedCategoryId, cqpItemIds])
+
+  const handleCqpFill = useCallback(async () => {
+    const token = erpToken || localToken
+    const tenant = localTenantId || erpTenantId
+    if (!token || !tenant || missingCqpItems.length === 0) return
+    setFillingCqp(true)
+    setCqpFillLog('')
+    try {
+      const ids = missingCqpItems.map((i) => i.id)
+      const res = await fillCqpItems(token, tenant, ids)
+      const created = res.created.length
+      const failed = res.failed.length
+      const skipped = res.skipped.length
+      setCqpFillLog(
+        `CQP auto-fill: ${created} created, ${skipped} already had entries, ${failed} failed.`,
+      )
+      if (created > 0) {
+        // Refresh the CQP set so the newly-filled items enter the item pool.
+        const fresh = await fetchItemsWithCqp(token, tenant)
+        setCqpItemIds(fresh)
+      }
+    } catch (err) {
+      setCqpFillLog(`CQP auto-fill failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setFillingCqp(false)
+    }
+  }, [erpToken, localToken, localTenantId, erpTenantId, missingCqpItems])
 
   // When the Tax Rate toggle flips, re-reset the selected rows to the pool.
   const resetItemsFromPool = useCallback((pool: MasterDataItem[], count: number) => {
@@ -227,7 +278,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   // On category change: auto-reset the selected item rows to the category's items.
   const handleCategorySelect = (id: number) => {
     setSelectedCategoryId(id)
-    resetItemsFromPool(poolFor(items, id, requireTaxRate), numItems)
+    resetItemsFromPool(poolFor(items, id, requireTaxRate, cqpItemIds), numItems)
     setActiveMenu(null)
   }
 
@@ -243,24 +294,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   return (
     <div className="flex flex-col h-full min-h-0 gap-4">
       {/* Controls panel */}
-      <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col min-h-0 max-h-[80%] shrink-0">
-        <div className="p-4 pb-0 overflow-y-auto flex-1 min-h-0">
-          {(erpToken || localToken) && (
-            <div className="flex justify-end mb-4">
-              <button
-                onClick={loadMasterData}
-                disabled={loadingData}
-                className="text-[11px] text-[#3F51B5] dark:text-[#7986CB] hover:text-[#3949AB] dark:hover:text-[#9FA8DA] flex items-center gap-1 transition-colors cursor-pointer"
-                title="Refresh data from ERP"
-              >
-                <RotateCcw className={`size-3 ${loadingData ? 'animate-spin' : ''}`} />
-                {loadingData ? 'Loading...' : 'Refresh'}
-              </button>
-            </div>
-          )}
-
-        {/* Flow selector — header bar */}
-        <div className="grid grid-cols-2 border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden mb-4">
+      <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col min-h-0 flex-1 overflow-hidden">
+        {/* Flow selector — pinned to the top of the panel */}
+        <div className="grid grid-cols-2 border-b border-gray-300 dark:border-gray-600 shrink-0">
           {([
             { id: 'po', label: 'PO → GP → GRN → QC → PB' },
             { id: 'gp', label: 'GP → GRN → QC → PB' },
@@ -274,148 +310,151 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                 setEnabledDocs(new Set(f.id === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
               }}
               disabled={running}
-              className={`px-3 py-1.5 text-[11px] font-medium border-b-2 transition-colors cursor-pointer disabled:cursor-not-allowed text-center ${
+              className={`px-3 py-2 text-[11px] font-medium border-b-2 transition-colors cursor-pointer disabled:cursor-not-allowed text-center ${
                 flow === f.id
-                  ? 'bg-gray-100 dark:bg-gray-800 border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB]'
-                  : 'bg-gray-100/60 dark:bg-gray-800/50 border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                  ? 'bg-white dark:bg-gray-900 border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB]'
+                  : 'bg-gray-50 dark:bg-gray-800/50 border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
               } ${i > 0 ? 'border-l border-gray-300 dark:border-gray-600' : ''}`}
             >
               {f.label}
             </button>
           ))}
         </div>
+        <div className="p-4 pb-0 overflow-y-auto flex-1 min-h-0">
 
-        {/* Document selector + toggles panel */}
-        <div className="border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100/60 dark:bg-gray-800/50 px-3 py-2 mb-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] text-gray-700 dark:text-gray-300 shrink-0">Create:</span>
-            {docOrder.map((doc, idx, arr) => {
-              const on = enabledDocs.has(doc)
-              const toggle = () => {
-                setEnabledDocs(prev => {
-                  const next = new Set(prev)
-                  if (on) {
-                    // disabling: also disable all that depend on this doc
-                    const deps = arr.slice(idx)
-                    deps.forEach(d => next.delete(d))
-                  } else {
-                    // enabling: also enable all prerequisites
-                    const prereqs = arr.slice(0, idx + 1)
-                    prereqs.forEach(d => next.add(d))
-                  }
-                  return next
-                })
-              }
-              return (
-                <React.Fragment key={doc}>
-                  <button
-                    type="button"
-                    onClick={toggle}
-                    disabled={running}
-                    className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
-                      on
-                        ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
-                        : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
-                    }`}
-                  >
-                    {doc}
-                  </button>
-                  {idx < arr.length - 1 && (
-                    <span className={`text-[11px] ${enabledDocs.has(arr[idx + 1]) ? 'text-[#3F51B5]' : 'text-gray-400 dark:text-gray-600'}`}>→</span>
-                  )}
-                </React.Fragment>
-              )
-            })}
-            <span className="text-[10px] text-gray-600 dark:text-gray-400">(click docs to customize the flow)</span>
+        {/* Document selector + toggles — equally spaced row */}
+        <div className="border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100/60 dark:bg-gray-800/50 px-3 py-2 mb-4 grid grid-cols-[1.2fr_1fr_1.3fr] gap-1.5 items-start">
+          <div className="flex flex-col gap-0.5 items-center" title="Click a document to customize the flow">
+            <div className="flex items-center gap-1.5 flex-wrap justify-center">
+              <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">Create:</span>
+              {docOrder.map((doc, idx, arr) => {
+                const on = enabledDocs.has(doc)
+                const toggle = () => {
+                  setEnabledDocs(prev => {
+                    const next = new Set(prev)
+                    if (on) {
+                      // disabling: also disable all that depend on this doc
+                      const deps = arr.slice(idx)
+                      deps.forEach(d => next.delete(d))
+                    } else {
+                      // enabling: also enable all prerequisites
+                      const prereqs = arr.slice(0, idx + 1)
+                      prereqs.forEach(d => next.add(d))
+                    }
+                    return next
+                  })
+                }
+                return (
+                  <React.Fragment key={doc}>
+                    <button
+                      type="button"
+                      onClick={toggle}
+                      disabled={running}
+                      className={`px-2 py-1 rounded text-[11px] font-semibold border transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                        on
+                          ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
+                          : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
+                      }`}
+                    >
+                      {doc}
+                    </button>
+                    {idx < arr.length - 1 && (
+                      <span className={`text-[11px] ${enabledDocs.has(arr[idx + 1]) ? 'text-[#3F51B5]' : 'text-gray-400 dark:text-gray-600'}`}>→</span>
+                    )}
+                  </React.Fragment>
+                )
+              })}
+            </div>
+            <span className="text-[10px] text-gray-600 dark:text-gray-400">Click a document to customize the flow</span>
           </div>
 
           {flow === 'po' && (
-          <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600 flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] text-gray-700 dark:text-gray-300 shrink-0">Tax Rate:</span>
-            <button
-              type="button"
-              onClick={() => setRequireTaxRate(true)}
-              disabled={running}
-              className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
-                requireTaxRate
-                  ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
-                  : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
-              }`}
-            >
-              ON
-            </button>
-            <button
-              type="button"
-              onClick={() => setRequireTaxRate(false)}
-              disabled={running}
-              className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
-                !requireTaxRate
-                  ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
-                  : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
-              }`}
-            >
-              OFF
-            </button>
+          <>
+
+          <div className="flex flex-col gap-0.5 items-center">
+            <div className="flex items-center gap-1.5 flex-wrap justify-center">
+              <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">Tax:</span>
+              <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
+                <button
+                  type="button"
+                  onClick={() => setRequireTaxRate(true)}
+                  disabled={running}
+                  className={`px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                    requireTaxRate ? 'bg-[#3F51B5] text-white' : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  ON
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRequireTaxRate(false)}
+                  disabled={running}
+                  className={`px-2.5 py-1 text-[11px] font-semibold border-l border-gray-300 dark:border-gray-600 transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                    !requireTaxRate ? 'bg-[#3F51B5] text-white' : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  OFF
+                </button>
+              </div>
+            </div>
             <span className="text-[10px] text-gray-600 dark:text-gray-400">
               {requireTaxRate ? 'Items with a tax rate only' : 'All items (0.0 rate when none)'}
             </span>
-
-          <span className="mx-1 h-4 w-px bg-gray-300 dark:bg-gray-600 shrink-0" />
-
-          <span className="text-[11px] text-gray-700 dark:text-gray-300 shrink-0">Multi Gate Pass?</span>
-          <button
-            type="button"
-            onClick={() => {
-              const next = !multiGatePass
-              setMultiGatePass(next)
-              setEnabledDocs(next
-                ? new Set(['PO', 'GP', 'GRN', 'QC', 'PB'])
-                : new Set(['PO', 'GP', 'GRN', 'QC', 'PB']))
-            }}
-            disabled={running}
-            className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
-              multiGatePass
-                ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
-                : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
-            }`}
-          >
-            ON
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMultiGatePass(false)
-              setEnabledDocs(new Set(['PO', 'GP', 'GRN', 'QC', 'PB']))
-            }}
-            disabled={running}
-            className={`px-3 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer disabled:cursor-not-allowed ${
-              !multiGatePass
-                ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
-                : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
-            }`}
-          >
-            OFF
-          </button>
-          {multiGatePass && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-gray-700 dark:text-gray-300 shrink-0">GPs:</span>
-              <Input
-                type="number"
-                min={2}
-                max={10}
-                value={gpCount}
-                onChange={(e) => setGpCount(Math.max(2, Math.min(10, parseInt(e.target.value) || 2)))}
-                className="h-8 w-14 text-[12px]"
-                disabled={running}
-              />
-            </div>
-          )}
-          {multiGatePass && (
-            <span className="text-[10px] text-gray-600 dark:text-gray-400">
-              Split PO across gate passes — each GP gets its own GRN, QC &amp; PB
-            </span>
-          )}
           </div>
+
+          <div className="flex flex-col gap-0.5 items-center">
+            <div className="flex items-center gap-1.5 flex-wrap justify-center">
+              <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">Multi GP:</span>
+              <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMultiGatePass(true)
+                    setEnabledDocs(new Set(['PO', 'GP', 'GRN', 'QC', 'PB']))
+                  }}
+                  disabled={running}
+                  className={`px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                    multiGatePass ? 'bg-[#3F51B5] text-white' : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  ON
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMultiGatePass(false)
+                    setEnabledDocs(new Set(['PO', 'GP', 'GRN', 'QC', 'PB']))
+                  }}
+                  disabled={running}
+                  className={`px-2.5 py-1 text-[11px] font-semibold border-l border-gray-300 dark:border-gray-600 transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                    !multiGatePass ? 'bg-[#3F51B5] text-white' : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  OFF
+                </button>
+              </div>
+              {multiGatePass && (
+                <div className="flex items-center gap-1">
+                  <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">GPs:</span>
+                  <Input
+                    type="number"
+                    min={2}
+                    max={10}
+                    value={gpCount}
+                    onChange={(e) => setGpCount(Math.max(2, Math.min(10, parseInt(e.target.value) || 2)))}
+                    className="h-7 w-12 text-[12px] px-1.5"
+                    disabled={running}
+                  />
+                </div>
+              )}
+            </div>
+            <span className="text-[10px] text-gray-600 dark:text-gray-400">
+              {multiGatePass
+                ? 'Split PO — each GP gets its own GRN, QC & PB'
+                : 'One gate pass for the whole PO'}
+            </span>
+          </div>
+          </>
           )}
         </div>
 
@@ -425,7 +464,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           </div>
         )}
 
-        <div className="grid grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-2 gap-4 mb-4">
           {/* Item Category selector */}
           <div className="relative">
             <Label className="text-[11px] text-gray-700 dark:text-gray-300 mb-1 block">Item Category</Label>
@@ -469,7 +508,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                     const r = supplierBtnRef.current?.getBoundingClientRect()
                     if (r) setActiveMenu({ type: 'supplier', pos: { top: r.bottom + 4, left: r.left, width: r.width } })
                   }}
-                  className="w-full px-3 py-2 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
+                className="h-9 w-full px-3 py-0 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
                 >
                   <span className="truncate">{selectedSupplier ? selectedSupplier.name : 'Select supplier...'}</span>
                   <svg className={`size-3 text-gray-500 transition-transform shrink-0 ${activeMenu?.type === 'supplier' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -477,47 +516,56 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
               </>
             )}
           </div>
+        </div>
 
-          {/* Item selector + Chains — Chains sits where the item label used to be */}
-          <div className={`relative ${numItems > 1 ? 'col-span-1' : ''}`}>
-            <Label className="text-[11px] text-gray-700 dark:text-gray-300 mb-1 block">Chains</Label>
-            <Input
-              type="number"
-              min={1}
-              max={50}
-              value={count}
-              onChange={(e) => {
-                const v = Math.max(1, Math.min(50, parseInt(e.target.value) || 1))
-                setCount(v)
-                setChainSuppliers((prev) => {
-                  if (prev.length === v) return prev
-                  const next = prev.slice(0, v)
-                  // Auto-fill every unselected slot with the next supplier
-                  // (distinct until the list is exhausted, then cycling) so the
-                  // user doesn't have to pick each chain's supplier by hand.
-                  const ids = suppliers.map((s) => s.id)
-                  if (ids.length === 0) return next
-                  const used = new Set(next.filter((x): x is number => x != null))
-                  let k = 0
-                  for (let i = 0; i < v; i++) {
-                    if (next[i] != null) continue
-                    let id = ids[k % ids.length]
-                    let tries = 0
-                    while (used.has(id) && tries < ids.length) {
-                      k++
-                      id = ids[k % ids.length]
-                      tries++
+        {/* Chains — own row */}
+        <div className="mb-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex flex-col gap-0.5">
+              <Label className="text-[10px] text-gray-600 dark:text-gray-400 block">Chains</Label>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={count}
+                onChange={(e) => {
+                  const v = Math.max(1, Math.min(50, parseInt(e.target.value) || 1))
+                  setCount(v)
+                  setChainSuppliers((prev) => {
+                    if (prev.length === v) return prev
+                    const next = prev.slice(0, v)
+                    // Auto-fill every unselected slot with the next supplier
+                    // (distinct until the list is exhausted, then cycling) so the
+                    // user doesn't have to pick each chain's supplier by hand.
+                    const ids = suppliers.map((s) => s.id)
+                    if (ids.length === 0) {
+                      // No suppliers loaded yet (e.g. token not set) — pad with
+                      // nulls so the per-chain blocks still render.
+                      while (next.length < v) next.push(null)
+                      return next
                     }
-                    k++
-                    used.add(id)
-                    next[i] = id
-                  }
-                  return next
-                })
-              }}
-              className="h-9 text-[12px] mb-3"
-              disabled={running}
-            />
+                    const used = new Set(next.filter((x): x is number => x != null))
+                    let k = 0
+                    for (let i = 0; i < v; i++) {
+                      if (next[i] != null) continue
+                      let id = ids[k % ids.length]
+                      let tries = 0
+                      while (used.has(id) && tries < ids.length) {
+                        k++
+                        id = ids[k % ids.length]
+                        tries++
+                      }
+                      k++
+                      used.add(id)
+                      next[i] = id
+                    }
+                    return next
+                  })
+                }}
+                className="h-9 text-[12px] w-24"
+                disabled={running}
+              />
+            </div>
             {loadingData && items.length === 0 ? (
               <div className="h-9 flex items-center text-[12px] text-gray-600 dark:text-gray-400 gap-1.5">
                 <Loader2 className="size-3 animate-spin" />
@@ -525,7 +573,8 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
               </div>
             ) : numItems === 1 ? (
               /* Single dropdown */
-              <>
+              <div className="flex flex-col gap-0.5">
+                <Label className="text-[10px] text-gray-600 dark:text-gray-400 block">Item</Label>
                 <button
                   ref={itemBtnRef}
                   type="button"
@@ -534,129 +583,115 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                     const r = itemBtnRef.current?.getBoundingClientRect()
                     if (r) setActiveMenu({ type: 'item', pos: { top: r.bottom + 4, left: r.left, width: r.width } })
                   }}
-                  className="w-full px-3 py-2 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
+                  className="h-9 w-full px-3 py-0 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
                 >
                   <span className="truncate">{catItems.find(i => i.id === itemIds[0])?.name ?? 'Select item...'}</span>
                   <svg className={`size-3 text-gray-500 transition-transform shrink-0 ${activeMenu?.type === 'item' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                 </button>
-              </>
+              </div>
             ) : null}
-          </div>
-
-          {/* Items per chain */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <Label className="text-[11px] text-gray-700 dark:text-gray-300">Items / Doc</Label>
-              {catItems.length > 1 && (
+            {count > 1 && chainSuppliers.map((chainSup, idx) => (
+              <div key={idx} className="flex flex-col gap-0.5">
+                <Label className="text-[10px] text-gray-600 dark:text-gray-400 block">Chain {idx + 1}</Label>
                 <button
                   type="button"
+                  ref={(el) => { chainSupBtnRefs.current[idx] = el }}
                   onClick={() => {
-                    setNumItems(catItems.length)
-                    setItemIds(catItems.map(i => i.id))
+                    if (activeMenu?.type === `chainSup:${idx}`) { setActiveMenu(null); return }
+                    const r = chainSupBtnRefs.current[idx]?.getBoundingClientRect()
+                    if (r) setActiveMenu({ type: `chainSup:${idx}` as never, pos: { top: r.bottom + 4, left: r.left, width: Math.max(r.width, 200) } })
                   }}
-                  className="text-[10px] text-[#3F51B5] dark:text-[#7986CB] hover:underline cursor-pointer"
+                  className="h-9 w-40 px-2.5 py-0 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
                 >
-                  All {catItems.length}
+                  <span className="truncate">
+                    {chainSup != null
+                      ? (suppliers.find(s => s.id === chainSup)?.name ?? `Supplier ${chainSup}`)
+                      : 'Select supplier...'}
+                  </span>
+                  <svg className={`size-3 text-gray-500 transition-transform shrink-0 ${activeMenu?.type === `chainSup:${idx}` ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                 </button>
-              )}
-            </div>
-            <Input
-              type="number"
-              min={1}
-              max={catItems.length > 0 ? catItems.length : 20}
-              value={numItems}
-              onChange={(e) => {
-                const max = catItems.length > 0 ? catItems.length : 20
-                const v = Math.max(1, Math.min(max, parseInt(e.target.value) || 1))
-                setNumItems(v)
-                setItemIds((prev) => {
-                  if (prev.length === v) return prev
-                  if (prev.length === 0 && catItems.length > 0) {
-                    const max = catItems.length
-                    return catItems.slice(0, Math.min(v, max)).map(i => i.id)
-                  }
-                  if (prev.length < v) {
-                    const used = new Set(prev)
-                    const available = catItems.filter(i => !used.has(i.id)).map(i => i.id)
-                    const fill: number[] = []
-                    for (let idx = 0; fill.length < v - prev.length; idx++) {
-                      fill.push(available[idx % available.length] ?? prev[prev.length - 1] ?? catItems[0].id)
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Items per doc — own row */}
+        <div className="mb-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex flex-col gap-0.5">
+              <Label className="text-[10px] text-gray-600 dark:text-gray-400 block">Items / Doc</Label>
+              <Input
+                type="number"
+                min={1}
+                max={catItems.length > 0 ? catItems.length : 20}
+                value={numItems}
+                onChange={(e) => {
+                  const max = catItems.length > 0 ? catItems.length : 20
+                  const v = Math.max(1, Math.min(max, parseInt(e.target.value) || 1))
+                  setNumItems(v)
+                  setItemIds((prev) => {
+                    if (prev.length === v) return prev
+                    if (prev.length === 0 && catItems.length > 0) {
+                      const max = catItems.length
+                      return catItems.slice(0, Math.min(v, max)).map(i => i.id)
                     }
-                    return [...prev, ...fill]
-                  }
-                  return prev.slice(0, v)
-                })
-              }}
-              className="h-9 text-[12px]"
-              disabled={running}
-            />
+                    if (prev.length < v) {
+                      const used = new Set(prev)
+                      const available = catItems.filter(i => !used.has(i.id)).map(i => i.id)
+                      if (available.length === 0) {
+                        // No loaded items yet (e.g. token not set) — keep rows empty.
+                        return prev
+                      }
+                      const fill: number[] = []
+                      for (let idx = 0; fill.length < v - prev.length; idx++) {
+                        fill.push(available[idx % available.length] ?? prev[prev.length - 1] ?? catItems[0].id)
+                      }
+                      return [...prev, ...fill]
+                    }
+                    return prev.slice(0, v)
+                  })
+                }}
+                className="h-9 text-[12px] w-24"
+                disabled={running}
+              />
+            </div>
+            {catItems.length > 1 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setNumItems(catItems.length)
+                  setItemIds(catItems.map(i => i.id))
+                }}
+                className="mt-4 self-start text-[10px] text-[#3F51B5] dark:text-[#7986CB] hover:underline cursor-pointer"
+              >
+                All {catItems.length}
+              </button>
+            )}
+            {numItems > 1 && Array.from({ length: numItems }).map((_, idx) => (
+              <div key={idx} className="flex flex-col gap-0.5">
+                <Label className="text-[10px] text-gray-600 dark:text-gray-400 block">Item {idx + 1}</Label>
+                <button
+                  type="button"
+                  ref={(el) => { rowBtnRefs.current[idx] = el }}
+                  onClick={() => {
+                    if (activeMenu?.type === idx) { setActiveMenu(null); return }
+                    const r = rowBtnRefs.current[idx]?.getBoundingClientRect()
+                    if (r) setActiveMenu({ type: idx, pos: { top: r.bottom + 4, left: r.left, width: Math.max(r.width, 200) } })
+                  }}
+                  className="h-9 w-40 px-2.5 py-0 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
+                >
+                  <span className="truncate">{catItems.find(i => i.id === itemIds[idx])?.name ?? 'Select...'}</span>
+                  <svg className={`size-3 text-gray-500 transition-transform shrink-0 ${activeMenu?.type === idx ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                </button>
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Per-chain supplier selection — only when running multiple chains */}
-        {count > 1 && (
-          <div className="mb-4">
-            <Label className="text-[11px] text-gray-700 dark:text-gray-300 mb-1.5 block">
-              Chain Suppliers
-            </Label>
-            <div className={`grid gap-2 ${count > 6 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'} ${count > 6 ? 'max-h-52 overflow-y-auto pr-1' : ''}`}>
-              {chainSuppliers.map((chainSup, idx) => (
-                <div key={idx}>
-                  <Label className="text-[10px] text-gray-600 dark:text-gray-400 mb-0.5 block">
-                    Chain {idx + 1}
-                  </Label>
-                  <button
-                    type="button"
-                    ref={(el) => { chainSupBtnRefs.current[idx] = el }}
-                    onClick={() => {
-                      if (activeMenu?.type === `chainSup:${idx}`) { setActiveMenu(null); return }
-                      const r = chainSupBtnRefs.current[idx]?.getBoundingClientRect()
-                      if (r) setActiveMenu({ type: `chainSup:${idx}` as never, pos: { top: r.bottom + 4, left: r.left, width: Math.max(r.width, 200) } })
-                    }}
-                    className="w-full px-2.5 py-1.5 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
-                  >
-                    <span className="truncate">
-                      {chainSup != null
-                        ? (suppliers.find(s => s.id === chainSup)?.name ?? `Supplier ${chainSup}`)
-                        : 'Select supplier...'}
-                    </span>
-                    <svg className={`size-3 text-gray-500 transition-transform shrink-0 ${activeMenu?.type === `chainSup:${idx}` ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {requireTaxRate && catItems.length === 0 && items.length > 0 && (
           <div className="mb-3 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-[11px] text-amber-600 dark:text-amber-400">
             No items in this category have a tax rate. Toggle Tax Rate OFF to list all items.
-          </div>
-        )}
-
-        {numItems > 1 && catItems.length > 0 && (
-          <div className="mb-4">
-            <Label className="text-[11px] text-gray-700 dark:text-gray-300 mb-1.5 block">Items per row</Label>
-            <div className={`grid gap-2 ${numItems > 8 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'} ${numItems > 6 ? 'max-h-52 overflow-y-auto pr-1' : ''}`}>
-              {Array.from({ length: numItems }).map((_, idx) => (
-                <div key={idx}>
-                  <Label className="text-[10px] text-gray-600 dark:text-gray-400 mb-0.5 block">Row {idx + 1}</Label>
-                  <button
-                    type="button"
-                    ref={(el) => { rowBtnRefs.current[idx] = el }}
-                    onClick={() => {
-                      if (activeMenu?.type === idx) { setActiveMenu(null); return }
-                      const r = rowBtnRefs.current[idx]?.getBoundingClientRect()
-                      if (r) setActiveMenu({ type: idx, pos: { top: r.bottom + 4, left: r.left, width: Math.max(r.width, 200) } })
-                    }}
-                    className="w-full px-2.5 py-1.5 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
-                  >
-                    <span className="truncate">{catItems.find(i => i.id === itemIds[idx])?.name ?? 'Select...'}</span>
-                    <svg className={`size-3 text-gray-500 transition-transform shrink-0 ${activeMenu?.type === idx ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                  </button>
-                </div>
-              ))}
-            </div>
           </div>
         )}
 
@@ -696,7 +731,28 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         </div>{/* end scrollable area */}
 
         {/* Sticky bottom bar */}
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700 shrink-0 flex items-center gap-2">
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700 shrink-0 flex flex-col gap-2">
+          {missingCqpItems.length > 0 && !running && (
+            <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg px-3 py-2">
+              <AlertTriangle className="size-4 text-amber-500 dark:text-amber-400 shrink-0" />
+              <span className="text-[12px] text-amber-700 dark:text-amber-300 flex-1">
+                {missingCqpItems.length} item{missingCqpItems.length !== 1 ? 's' : ''} in this category have no QC parameters — the QC step will fail without them.
+              </span>
+              <Button
+                onClick={handleCqpFill}
+                disabled={fillingCqp || !(erpToken || localToken)}
+                size="sm"
+                className="h-7 text-[11px] gap-1 cursor-pointer bg-amber-500 hover:bg-amber-600 text-white"
+              >
+                {fillingCqp ? <Loader2 className="size-3 animate-spin" /> : <Wand2 className="size-3" />}
+                {fillingCqp ? 'Filling...' : 'Auto-fill now'}
+              </Button>
+            </div>
+          )}
+          {cqpFillLog && (
+            <p className="text-[11px] text-gray-500 dark:text-gray-400">{cqpFillLog}</p>
+          )}
+          <div className="flex items-center gap-2">
           {!running ? (
             <Button
               onClick={handleStart}
@@ -743,42 +799,65 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
               Running... {elapsed}s
             </span>
           )}
+          <button
+            onClick={() => setShowLogs(v => !v)}
+            className={`ml-auto text-[11px] px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${showLogs ? 'bg-[#3F51B5]/10 border-[#3F51B5]/40 text-[#3F51B5] dark:text-[#7986CB]' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}`}
+            title="Toggle console popup"
+          >
+            Console
+            {logs.length > 0 && <span className="ml-1 text-gray-500 dark:text-gray-400">({logs.length})</span>}
+          </button>
+          </div>
         </div>
       </div>
 
-      {/* Logs panel */}
-      <div className="flex-1 min-h-0 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-900/50">
-        <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shrink-0">
-          <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">
-            Console Output
-            {logs.length > 0 && <span className="ml-2 text-gray-600 dark:text-gray-400">({logs.length} lines)</span>}
-          </span>
-          {created + failed > 0 && (
-            <span className="text-[11px]">
-              <span className="text-emerald-600 dark:text-emerald-400">{created} created</span>
-              {failed > 0 && <span className="text-red-500 dark:text-red-400 ml-2">{failed} failed</span>}
-            </span>
-          )}
-        </div>
-        <ScrollArea className="h-full">
-          <div className="p-3 font-mono text-[12px] leading-relaxed">
-            {logs.length === 0 && !running && (
-              <p className="text-gray-600 dark:text-gray-400 italic">Configure and click "Run" to start the purchase chain.</p>
-            )}
-            {logs.length === 0 && running && (
-              <p className="text-[#3F51B5] dark:text-[#7986CB] animate-pulse">Starting...</p>
-            )}
-            {logs.map((log, i) => (
-              <div key={i} className={`flex gap-2 ${log.isErr ? 'text-red-500 dark:text-red-400' : log.isDone ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-gray-700 dark:text-gray-200'}`}>
-                <span className="text-gray-600 dark:text-gray-400 shrink-0 w-16">[{formatTime(log.ts)}]</span>
-                <span className="whitespace-pre-wrap break-all">{log.text}</span>
+      {/* Logs popup — shown when user opts in */}
+      {showLogs && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60">
+          <div className="flex flex-col w-[90vw] max-w-3xl h-[75vh] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shrink-0">
+              <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">
+                Console Output
+                {logs.length > 0 && <span className="ml-2 text-gray-600 dark:text-gray-400">({logs.length} lines)</span>}
+              </span>
+              <div className="flex items-center gap-2">
+                {created + failed > 0 && (
+                  <span className="text-[11px]">
+                    <span className="text-emerald-600 dark:text-emerald-400">{created} created</span>
+                    {failed > 0 && <span className="text-red-500 dark:text-red-400 ml-2">{failed} failed</span>}
+                  </span>
+                )}
+                <button
+                  onClick={() => setShowLogs(false)}
+                  className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                  title="Close logs"
+                >
+                  <X className="size-4" />
+                </button>
               </div>
-            ))}
-            {running && <div className="text-[#3F51B5] dark:text-[#7986CB] animate-pulse">▌</div>}
-            <div ref={logsEndRef} />
+            </div>
+            <ScrollArea className="flex-1 min-h-0">
+              <div className="p-3 font-mono text-[12px] leading-relaxed">
+                {logs.length === 0 && !running && (
+                  <p className="text-gray-600 dark:text-gray-400 italic">Configure and click "Run" to start the purchase chain.</p>
+                )}
+                {logs.length === 0 && running && (
+                  <p className="text-[#3F51B5] dark:text-[#7986CB] animate-pulse">Starting...</p>
+                )}
+                {logs.map((log, i) => (
+                  <div key={i} className={`flex gap-2 ${log.isErr ? 'text-red-500 dark:text-red-400' : log.isDone ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-gray-700 dark:text-gray-200'}`}>
+                    <span className="text-gray-600 dark:text-gray-400 shrink-0 w-16">[{formatTime(log.ts)}]</span>
+                    <span className="whitespace-pre-wrap break-all">{log.text}</span>
+                  </div>
+                ))}
+                {running && <div className="text-[#3F51B5] dark:text-[#7986CB] animate-pulse">▌</div>}
+                <div ref={logsEndRef} />
+              </div>
+            </ScrollArea>
           </div>
-        </ScrollArea>
-      </div>
+        </div>,
+        document.body
+      )}
 
       {/* Floating dropdown menu via portal */}
       {activeMenu && typeof document !== 'undefined' && createPortal(

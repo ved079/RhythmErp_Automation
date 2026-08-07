@@ -516,6 +516,227 @@ def item_categories_endpoint(request: ItemCategoriesRequest):
     return {"categories": out, "total": len(out)}
 
 
+class ItemsWithCqpRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str = "681"
+
+
+@app.post("/api/items-with-cqp")
+def items_with_cqp_endpoint(request: ItemsWithCqpRequest):
+    """Return the set of Item Master IDs that have a Commodity Quality
+    Parameter (CQP) entry configured.
+
+    A QC line references ``item_quality_parameter_ref_id`` per item; when an
+    item has no CQP entry the ERP 500s on QC creation. The Purchase Chain UI
+    uses this list to show only items that can survive a QC step.
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(PROJECT_ROOT))
+    from common.erp_api_client import RhythmERPAPIClient
+    from pages.commodity_settings.modules.commodity_quality_parameter.data.commodity_quality_parameter_data import (
+        cqp_entry_is_active,
+        cqp_transaction_type_is,
+        resolve_purchase_transaction_type_id,
+    )
+
+    client = RhythmERPAPIClient()
+    try:
+        client.login_from_browser(token=request.erp_token, tenant_id=request.erp_tenant_id)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"ERP auth failed: {e}")
+
+    try:
+        existing = client.list_entries("Commodity Quality Parameter", page_size=500)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"ERP request failed: {e}")
+
+    purchase_id = resolve_purchase_transaction_type_id(client)
+
+    rows = existing.get("screenmatlistingdata_set") or existing.get("results") or []
+
+    # An item is only "usable in QC" when it has a CQP entry with transaction
+    # type Purchase AND a from_date strictly BEFORE today. A CQP created today
+    # (from_date == today) or with a non-Purchase type (e.g. Spot) is not
+    # applied by the QC screen, so it does not count.
+    used_ids: set = set()
+    for row in rows:
+        entry_id = row.get("id")
+        if not entry_id:
+            continue
+        try:
+            detail = client.get_entry("Commodity Quality Parameter", entry_id)
+        except Exception:
+            continue
+        if not detail:
+            continue
+        iid = detail.get("item_ref_id")
+        if iid is None:
+            continue
+        if purchase_id is not None and not cqp_transaction_type_is(detail.get("transaction_type"), purchase_id):
+            continue
+        if not cqp_entry_is_active(detail.get("from_date")):
+            continue
+        try:
+            used_ids.add(int(iid))
+        except (ValueError, TypeError):
+            pass
+
+    return {"item_ids": sorted(used_ids), "total": len(used_ids)}
+
+
+class CqpFillRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str = "681"
+    item_ids: list[int] = []
+
+
+@app.post("/api/cqp-fill")
+def cqp_fill_endpoint(request: CqpFillRequest):
+    """Create Commodity Quality Parameter (CQP) entries for the given item IDs.
+
+    The Purchase Chain UI calls this when the selected category contains items
+    with no CQP entry — without one, the QC step 500s. Reuses the same payload
+    builder as the standalone CQP batch script (transaction_type=Purchase,
+    1–3 random quality params per item). Entries already present are skipped.
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(PROJECT_ROOT))
+    from common.erp_api_client import RhythmERPAPIClient
+    from pages.commodity_settings.modules.commodity_quality_parameter.data.commodity_quality_parameter_data import (
+        build_cqp_api_payload,
+        cqp_entry_is_active,
+        resolve_purchase_transaction_type_id,
+    )
+
+    client = RhythmERPAPIClient()
+    try:
+        client.login_from_browser(token=request.erp_token, tenant_id=request.erp_tenant_id)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"ERP auth failed: {e}")
+
+    item_ids = [int(i) for i in request.item_ids if i is not None]
+    if not item_ids:
+        return {"created": [], "skipped": [], "failed": [], "total": 0}
+
+    # Resolve FK dropdowns: transaction_type (Purchase) + quality params.
+    try:
+        purchase_id = resolve_purchase_transaction_type_id(client)
+        if purchase_id is None:
+            client.close()
+            raise HTTPException(
+                status_code=502,
+                detail="Could not resolve 'Purchase' transaction type for CQP — refusing to create with an arbitrary transaction type",
+            )
+        from common.fk_resolver import FkResolver
+        resolver = FkResolver(client)
+        qp_map = resolver.resolve("Quality Parameter", parent_screen="Commodity Quality Parameter", field_key="quality_type") or {}
+        # Fallbacks if live resolution came up short.
+        if not qp_map:
+            qp_map = resolver.resolve("Quality Parameter Master") or {}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
+        client.close()
+        raise HTTPException(status_code=502, detail=f"CQP FK resolution failed: {e}")
+
+    if not qp_map:
+        client.close()
+        raise HTTPException(
+            status_code=502,
+            detail="Could not resolve CQP FKs (quality_type) for this tenant",
+        )
+
+    quality_param_ids = list(qp_map.values())
+
+    def _detail_rows(n: int = 3) -> list:
+        import random as _r
+        chosen = _r.sample(quality_param_ids, min(n, len(quality_param_ids)))
+        return [
+            {
+                "quality_type": qp_id,
+                "min_quality_value": 1,
+                "max_quality_value": 100,
+                "rate_percentage": False,
+                "multiplier": 1,
+            }
+            for qp_id in chosen
+        ]
+
+    # Which items already have a USABLE CQP entry? Only entries whose from_date
+    # is strictly before today count — a CQP created today (from_date == today)
+    # is not applied by the QC screen until tomorrow. Items with only an
+    # inactive entry get a replacement (different to_date) so the unique
+    # constraint on (item_ref_id, to_date) is not violated.
+    active_items: set = set()
+    inactive_items: dict = {}  # item_ref_id -> existing entry's to_date
+    try:
+        existing = client.list_entries("Commodity Quality Parameter", page_size=500)
+        for row in existing.get("screenmatlistingdata_set") or existing.get("results") or []:
+            eid = row.get("id")
+            if not eid:
+                continue
+            try:
+                det = client.get_entry("Commodity Quality Parameter", eid)
+            except Exception:
+                continue
+            if not det or det.get("item_ref_id") is None:
+                continue
+            try:
+                iid = int(det["item_ref_id"])
+            except (ValueError, TypeError):
+                continue
+            # Only a Purchase CQP can be referenced by the QC step. An entry
+            # with any other transaction type (e.g. Spot) is not usable.
+            is_purchase = cqp_transaction_type_is(det.get("transaction_type"), purchase_id)
+            if is_purchase and cqp_entry_is_active(det.get("from_date")):
+                active_items.add(iid)
+            elif iid not in inactive_items:
+                inactive_items[iid] = det.get("to_date")
+    except Exception:
+        pass
+
+    created = []
+    skipped = []
+    failed = []
+    for iid in item_ids:
+        if iid in active_items:
+            skipped.append({"id": iid, "reason": "already has active CQP entry"})
+            continue
+        # Replacement entry: existing inactive CQP already occupies to_date
+        # 2099-12-30T18:30:00Z, so use a different to_date to dodge the
+        # (item_ref_id, to_date) unique constraint.
+        to_date = "2099-12-31T18:30:00Z" if iid in inactive_items else "2099-12-30T18:30:00Z"
+        payload = build_cqp_api_payload(
+            item_ref_id=iid,
+            transaction_type=purchase_id,
+            quality_params=_detail_rows(),
+            to_date=to_date,
+        )
+        try:
+            result = client.create_entry(payload)
+        except Exception as e:
+            failed.append({"id": iid, "reason": str(e)})
+            continue
+        if result is not None:
+            active_items.add(iid)
+            created.append({"id": iid, "entry_id": result.get("id")})
+        else:
+            resp = getattr(client, "_last_raw_response", None)
+            body = ""
+            if resp is not None:
+                try:
+                    body = resp.text[:200]
+                except Exception:
+                    body = "<unreadable>"
+            failed.append({"id": iid, "reason": f"HTTP {getattr(resp, 'status_code', '?')}: {body or 'no response'}"})
+
+    try:
+        client.close()
+    except Exception:
+        pass
+    return {"created": created, "skipped": skipped, "failed": failed, "total": len(item_ids)}
+
+
 # ================================================================
 # HEALTH ENDPOINT
 # ================================================================

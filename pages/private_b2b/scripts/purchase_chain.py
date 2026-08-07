@@ -70,6 +70,12 @@ from pages.private_b2b.modules.purchase_booking.utils.api_purchase_booking_utils
 )
 from pages.private_b2b.scripts.chain_context import ChainContext, ChainContextDiscoverer
 
+from pages.commodity_settings.modules.commodity_quality_parameter.data.commodity_quality_parameter_data import (
+    cqp_entry_is_active,
+    cqp_transaction_type_is,
+    resolve_purchase_transaction_type_id,
+)
+
 from dataclasses import replace
 
 
@@ -746,6 +752,9 @@ class PurchaseChain:
         try:
             resp = self.client.list_entries("Commodity Quality Parameter", page=1, page_size=500)
             rows = (resp or {}).get("screenmatlistingdata_set") or []
+            if not hasattr(self, "_cqp_purchase_id"):
+                self._cqp_purchase_id = resolve_purchase_transaction_type_id(self.client)
+            purchase_id = self._cqp_purchase_id
             for row in rows:
                 entry_id = row.get("id")
                 if not entry_id:
@@ -754,6 +763,25 @@ class PurchaseChain:
                 if not detail:
                     continue
                 if detail.get("item_ref_id") != item_ref_id:
+                    continue
+                # Only entries with transaction type Purchase are referenced by
+                # the QC step — a CQP with any other type (e.g. Spot) is not
+                # usable here.
+                if purchase_id is not None and not cqp_transaction_type_is(detail.get("transaction_type"), purchase_id):
+                    log.info(
+                        f"[Discovery] CQP for item #{item_ref_id} skipped: "
+                        f"transaction_type={detail.get('transaction_type')} is not Purchase"
+                    )
+                    continue
+                # Only entries whose from_date is strictly BEFORE today are
+                # applied by the QC screen. A CQP created today (from_date ==
+                # today) is not picked up until tomorrow, so it does not count
+                # as a usable CQP here.
+                if not cqp_entry_is_active(detail.get("from_date")):
+                    log.info(
+                        f"[Discovery] CQP for item #{item_ref_id} skipped: "
+                        f"from_date={detail.get('from_date')} is not before today"
+                    )
                     continue
                 children = detail.get("children") or []
                 for child in children:
@@ -1065,6 +1093,7 @@ class PurchaseChain:
         tax_rates = self._resolve_tax_rates()
         item_data = []
         skipped_no_rate = []
+        skipped_no_cqp = []
         idx = 0
         guard = 0
         max_iter = max(num * 4, len(base_ids) * 4, 16)
@@ -1089,6 +1118,12 @@ class PurchaseChain:
             if require_tax_rate and not rates:
                 skipped_no_rate.append(iid)
                 continue
+            # The QC step 500s on items without a Commodity Quality Parameter
+            # entry (item_quality_parameter_ref_id=null). Skip those items so we
+            # never POST a QC payload guaranteed to fail server-side.
+            if "QC" in docs and not self._resolve_cqp_params(iid):
+                skipped_no_cqp.append(iid)
+                continue
             det["tax_rate"] = float(random.choice(rates)) if rates else 0.0
             item_data.append(det)
         if skipped_no_rate:
@@ -1096,11 +1131,23 @@ class PurchaseChain:
                 f"  Tax Rate ON — skipped {len(skipped_no_rate)} item(s) with no "
                 f"tax rate: {sorted(set(skipped_no_rate))}"
             )
+        if skipped_no_cqp:
+            log.info(
+                f"  QC in flow — skipped {len(skipped_no_cqp)} item(s) with no CQP "
+                f"entry: {sorted(set(skipped_no_cqp))}"
+            )
         if not item_data:
+            reasons = []
+            if require_tax_rate and skipped_no_rate:
+                reasons.append("no tax rate")
+            if "QC" in docs and skipped_no_cqp:
+                reasons.append("no CQP (Commodity Quality Parameter) entry")
             raise RuntimeError(
-                f"No items in Item Category #{cat_id} ({category['name']}) have a tax "
-                f"rate — turn Tax Rate OFF or pick a category whose HSNs are mapped "
-                f"in the Tax Rate screen."
+                f"No usable items in Item Category #{cat_id} ({category['name']}) — "
+                f"{'; '.join(reasons) if reasons else 'category empty'}. "
+                f"Pick a category with items that have a tax rate"
+                + (" and a CQP entry configured" if "QC" in docs else "")
+                + "."
             )
         items = _generate_chain_items(num_items=len(item_data), item_data=item_data)
 
@@ -1227,8 +1274,7 @@ class PurchaseChain:
                 qc_id = qc_data.get("id") or qc_data.get("entry_id") if qc_data else None
                 if not qc_data or not qc_id:
                     raise RuntimeError(
-                        f"QC {gi} creation failed (HTTP {self.qc_api._last_status}); "
-                        f"response: {qc_data}"
+                        f"QC {gi} creation failed ({self._err_detail(self.qc_api, qc_payload)})"
                     )
                 qc_ref = qc_data.get("transaction_ref_no", str(qc_id))
                 qcs.append({"id": qc_id, "ref": qc_ref, "data": qc_data, "payload": qc_payload})
