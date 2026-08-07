@@ -458,6 +458,79 @@ def _pb_items_from(items: List[dict], ctx=None) -> List[dict]:
     ]
 
 
+# Realistic ranges for PB "user inputs" (labour / transport / round off).
+_LABOUR_MIN = 10.0
+_LABOUR_MAX = 300.0
+_TRANSPORT_MIN = 0.0
+_TRANSPORT_MAX = 500.0
+
+
+def _rand_labour_charges() -> float:
+    return round(random.uniform(_LABOUR_MIN, _LABOUR_MAX), 2)
+
+
+def _rand_transport_charges() -> float:
+    return round(random.uniform(_TRANSPORT_MIN, _TRANSPORT_MAX), 2)
+
+
+def _rand_round_off() -> float:
+    return round(random.uniform(0.0, 1.0), 3)
+
+
+def _pb_items_from_qc(qc_items: List[dict], items: List[dict] = None, ctx=None) -> List[dict]:
+    """Build PB lines mirroring the in-flow QC lines (manual PB 2480 shape).
+
+    Each QC line already carries base_rate / grn_qty / no_of_bags /
+    empty_bag_weight / empty_bags_txn_amount / alternate_accepted_qty /
+    discount_rate / c_d_deduction / txn_currency_amount. PB reuses those and
+    adds PB-specific inputs (labour / GST / round off). GST is only applied
+    when is_gst_set_off is True; gst_type follows tax_rate (25 → CGST+SGST,
+    5 → IGST). amount_detail = QC txn_currency_amount − labour_charges.
+    """
+    from pages.private_b2b.modules.purchase_booking.data.purchase_booking_data import (
+        build_pb_line,
+        gst_type_for_rate,
+    )
+
+    tax_by_item = {it["item_ref_id"]: float(it.get("tax_rate") or 0.0) for it in (items or [])}
+
+    def _q4(v):
+        # ERP caps PB quantity fields at 4 decimal places.
+        return round(float(v or 0.0), 4)
+
+    out = []
+    for qc in qc_items:
+        labour = _rand_labour_charges()
+        amount_detail = round(float(qc["txn_currency_amount"] or 0.0) - labour, 6)
+        is_gst_set_off = random.choice([True, False])
+        tax_rate = tax_by_item.get(qc["item_ref_id"], 0.0)
+        gst_type = gst_type_for_rate(tax_rate)
+        out.append(build_pb_line(
+            item_ref_id=qc["item_ref_id"],
+            hsn_sac_no=qc["hsn_sac_no"],
+            alternate_uom=qc.get("alternate_uom", ctx.alternate_uom if ctx else 3),
+            uom=qc.get("uom", ctx.base_uom if ctx else 4),
+            base_rate=qc["base_rate"],
+            alternate_qty=_q4(qc["grn_qty"]),
+            no_of_bags=qc["no_of_bags"],
+            empty_bag_weight=_q4(qc["empty_bag_weight"]),
+            empty_bags_txn_amount=_q4(qc["empty_bags_txn_amount"]),
+            alternate_net_qty=_q4(qc["alternate_accepted_qty"]),
+            discount_percentage=_q4(qc["discount_rate"]),
+            discount_amount=qc.get("c_d_deduction"),
+            amount_detail=amount_detail,
+            labour_charges=labour,
+            transport=None,
+            is_gst_set_off=is_gst_set_off,
+            tax_rate=tax_rate,
+            gst_type=gst_type,
+            uom_conversion=qc.get("uom_conversion", 1.0),
+            round_of_credit_amount=_rand_round_off(),
+            round_of_debit_amount=_rand_round_off(),
+        ))
+    return out
+
+
 # ---------------------------------------------------------------------------
 # PurchaseChain class
 # ---------------------------------------------------------------------------
@@ -899,11 +972,12 @@ class PurchaseChain:
 
         ``multi_gate_pass`` + ``gp_count`` enable partial fulfillment: the PO is
         created once with each item's full quantity, then the quantity is split
-        evenly across ``gp_count`` gate passes. Each GP gets its own GRN and QC.
-        Purchase Booking is not yet supported in multi-gate-pass mode.
+        evenly across ``gp_count`` gate passes. Each GP gets its own GRN, QC and
+        Purchase Booking (per-GP PB mirrors the per-GP QC).
 
         Returns:
-            dict with keys ``po``, ``gp``, ``grn``, ``qc`` containing API response data.
+            dict with keys ``po``, ``gp``, ``grn``, ``qc``, ``pb`` (single-flow
+            last entries) plus ``gps``/``grns``/``qcs``/``pbs`` lists.
         """
         # Resolve context — discover once per PurchaseChain instance
         if ctx is None:
@@ -917,13 +991,6 @@ class PurchaseChain:
                 raise RuntimeError(
                     "Multi Gate Pass requires a Purchase Order — "
                     "use the PO → GP → GRN → QC flow."
-                )
-            unsupported = ({"PB"} & docs)
-            if unsupported:
-                raise RuntimeError(
-                    "Multi Gate Pass supports PO → GP → GRN → QC — "
-                    f"Purchase Booking is not yet supported with multi-gate-pass "
-                    f"(requested: {', '.join(sorted(unsupported))})."
                 )
 
         # Explicit args override discovered values
@@ -1076,6 +1143,7 @@ class PurchaseChain:
         gps = []
         grns = []
         qcs = []
+        pbs = []
         po_quantity_by_item = {it["item_ref_id"]: it["quantity"] for it in items}
         received_so_far: dict = {}
         for gi, gp_items in enumerate(delivery_plans, start=1):
@@ -1146,30 +1214,33 @@ class PurchaseChain:
                 if self.delay:
                     time.sleep(self.delay)
 
-        # ---------------------------------------------------------------
-        # 5. Purchase Booking
-        # ---------------------------------------------------------------
-        if "PB" in docs:
-            pb_payload = self._build_pb_payload(
-                eff_supplier, qc_id, grn_id, po_id, items, pb_overrides, ctx=ctx
-            )
-            log.info(f"  PB payload (first 800 chars): {json.dumps(pb_payload, default=str)[:800]}")
-            pb_data = self.pb_api.create_pb(pb_payload)
-            pb_id = pb_data.get("id") or pb_data.get("entry_id") if pb_data else None
-            if not pb_data or not pb_id:
-                _pb_resp = self.pb_api._last_response
-                _pb_body = _pb_resp.text[:400] if _pb_resp is not None else "no response"
-                _sent = json.dumps(pb_payload, default=str)[:600]
-                raise RuntimeError(
-                    f"PB creation failed (HTTP {self.pb_api._last_status}); "
-                    f"body: {_pb_body} | sent: {_sent}"
+            if "PB" in docs:
+                pb_qc_items = (qc_payload or {}).get("qc_details") or []
+                pb_payload = self._build_pb_payload(
+                    eff_supplier, qc_id, grn_id, po_id, gp_items, pb_overrides, ctx=ctx,
+                    qc_items=pb_qc_items,
                 )
-            pb_ref = pb_data.get("transaction_ref_no", str(pb_id))
-            log.info(f"  PB created: ID={pb_id}, ref={pb_ref}")
+                log.info(f"  PB {gi}/{len(delivery_plans)} payload (first 800 chars): {json.dumps(pb_payload, default=str)[:800]}")
+                pb_data = self.pb_api.create_pb(pb_payload)
+                pb_id = pb_data.get("id") or pb_data.get("entry_id") if pb_data else None
+                if not pb_data or not pb_id:
+                    _pb_resp = self.pb_api._last_response
+                    _pb_body = _pb_resp.text[:400] if _pb_resp is not None else "no response"
+                    _sent = json.dumps(pb_payload, default=str)[:600]
+                    raise RuntimeError(
+                        f"PB {gi} creation failed (HTTP {self.pb_api._last_status}); "
+                        f"body: {_pb_body} | sent: {_sent}"
+                    )
+                pb_ref = pb_data.get("transaction_ref_no", str(pb_id))
+                pbs.append({"id": pb_id, "ref": pb_ref, "data": pb_data, "payload": pb_payload})
+                log.info(f"  PB {gi}/{len(delivery_plans)} created: ID={pb_id}, ref={pb_ref}")
+                if self.delay:
+                    time.sleep(self.delay)
 
         last_gp = gps[-1] if gps else None
         last_grn = grns[-1] if grns else None
         last_qc = qcs[-1] if qcs else None
+        last_pb = pbs[-1] if pbs else None
         result = {
             "po": {"id": po_id, "ref": po_ref, "data": po_data, "payload": po_payload,
                    "fetched": po_entry} if po_id else None,
@@ -1179,7 +1250,8 @@ class PurchaseChain:
             "grns": grns,
             "qc": last_qc,
             "qcs": qcs,
-            "pb": {"id": pb_id, "ref": pb_ref, "data": pb_data, "payload": pb_payload} if pb_id else None,
+            "pb": last_pb,
+            "pbs": pbs,
         }
         self.results.append(result)
         return result
@@ -1426,11 +1498,20 @@ class PurchaseChain:
         items: List[dict],
         overrides: dict = None,
         ctx: Optional[ChainContext] = None,
+        qc_items: Optional[List[dict]] = None,
     ) -> dict:
         from pages.private_b2b.modules.purchase_booking.data.purchase_booking_data import build_pb_payload
-        pb_items = _pb_items_from(items, ctx=ctx)
+        if qc_items:
+            pb_items = _pb_items_from_qc(qc_items, items=items, ctx=ctx)
+        else:
+            pb_items = _pb_items_from(items, ctx=ctx)
         overrides = overrides or {}
         supplier_ref_type = ctx.supplier_ref_type if ctx else "Supplier"
+        header_extra = {
+            "transportation_charges": _rand_transport_charges(),
+            "round_off_credit_amount": _rand_round_off(),
+            "round_off_debit_amount": _rand_round_off(),
+        }
         if ctx:
             return build_pb_payload(
                 supplier_ref_id=supplier_ref_id,
@@ -1446,6 +1527,7 @@ class PurchaseChain:
                 qc_ref_id=qc_id,
                 grn_ref_id=grn_id,
                 po_ref_id=po_id,
+                **header_extra,
                 **overrides,
             )
         return build_pb_payload(
@@ -1455,6 +1537,7 @@ class PurchaseChain:
             qc_ref_id=qc_id,
             grn_ref_id=grn_id,
             po_ref_id=po_id,
+            **header_extra,
             **overrides,
         )
 

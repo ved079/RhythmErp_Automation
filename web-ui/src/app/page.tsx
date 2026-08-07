@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNotificationsSocket } from '@/hooks/use-notifications-socket'
