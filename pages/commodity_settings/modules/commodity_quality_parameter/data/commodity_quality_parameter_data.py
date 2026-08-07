@@ -27,6 +27,7 @@ Transaction Type Options (8):
 
 import random
 from datetime import datetime, timedelta
+from typing import Optional
 
 
 # ──────────────────────────────────────────────
@@ -391,17 +392,88 @@ QUALITY_PARAM_ID_MAP = {}
 STEPPER_NAME = "Item Quality Parameter Details"
 
 
-def _yesterday_1830z() -> str:
-    """Return yesterday at 18:30:00Z — midnight IST, used as from_date so ERP date filters pass."""
+def _safe_from_date() -> str:
+    """Return a from_date strictly before today (two days back at 18:30:00Z).
+
+    The ERP applies a CQP to the QC screen only when its from_date is before
+    the current date — an entry created today (from_date == today) is not
+    picked up until tomorrow. Using a two-day-old from_date guarantees the
+    QC step applies it immediately, regardless of timezone.
+    """
     from datetime import datetime, timedelta, timezone
-    yesterday = datetime.now(timezone.utc).date() - timedelta(days=1)
-    return f"{yesterday}T18:30:00Z"
+    day = datetime.now(timezone.utc).date() - timedelta(days=2)
+    return f"{day}T18:30:00Z"
+
+
+def cqp_entry_is_active(from_date_value) -> bool:
+    """True when a CQP entry's from_date is strictly before today.
+
+    The QC step 500s / silently misses items whose CQP was created today
+    (from_date == today) because the ERP only applies it from tomorrow.
+    Any unparsable or missing from_date is treated as inactive so callers
+    can re-create the entry with a safe earlier date.
+    """
+    if not from_date_value:
+        return False
+    try:
+        from dateutil import parser as _du_parser
+        from datetime import datetime, timezone
+        dt = _du_parser.parse(str(from_date_value))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.date() < datetime.now(timezone.utc).date()
+    except Exception:
+        return False
+
+
+def cqp_transaction_type_is(value, expected_id) -> bool:
+    """True when a CQP entry's transaction_type matches the expected FK ID.
+
+    ERP details can return the FK as an int or a numeric string — normalise
+    both before comparing so a wrong transaction type (e.g. Spot) is never
+    mistaken for Purchase.
+    """
+    if value is None or expected_id is None:
+        return False
+    try:
+        return int(value) == int(expected_id)
+    except (ValueError, TypeError):
+        return False
+
+
+def resolve_purchase_transaction_type_id(client) -> Optional[int]:
+    """Resolve the 'Purchase' transaction type ID for CQP, case-insensitively.
+
+    Returns None when it cannot be determined. Callers must refuse to create
+    CQPs with an arbitrary transaction type — a wrong one (e.g. 'Spot') makes
+    the QC step unable to reference the entry.
+    """
+    try:
+        from common.fk_resolver import FkResolver
+        resolver = FkResolver(client)
+        txn_map = resolver.resolve(
+            "Transaction Type",
+            parent_screen="Commodity Quality Parameter",
+            field_key="transaction_type",
+        ) or {}
+        for key, val in txn_map.items():
+            if str(key).strip().lower() == "purchase":
+                return int(val)
+        txn_id = client.find_dropdown_id(
+            "Commodity Quality Parameter", "transaction_type", "Purchase"
+        )
+        if txn_id is not None:
+            return int(txn_id)
+    except Exception:
+        return None
+    return TRANSACTION_TYPE_ID_MAP.get("Purchase")
 
 
 def build_cqp_api_payload(
     item_ref_id: int,
     transaction_type: int,
     quality_params: list,
+    from_date: str = None,
     to_date: str = "2099-12-30T18:30:00Z",
     revision_status: str = None,
 ) -> dict:
@@ -410,7 +482,7 @@ def build_cqp_api_payload(
         "attribute_name": "Commodity Quality Parameter",
         "item_ref_id": item_ref_id,
         "transaction_type": transaction_type,
-        "from_date": _yesterday_1830z(),
+        "from_date": from_date or _safe_from_date(),
         "to_date": to_date,
         "revision_status": revision_status,
         "details": [],
