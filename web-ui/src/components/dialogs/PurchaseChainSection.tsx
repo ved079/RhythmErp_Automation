@@ -68,6 +68,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [cqpItemIds, setCqpItemIds] = useState<number[] | null>(null)
   const [fillingCqp, setFillingCqp] = useState(false)
   const [cqpFillLog, setCqpFillLog] = useState('')
+  const [runSummary, setRunSummary] = useState<{ created: number; failed: number; total: number; elapsed: string } | null>(null)
   const [categories, setCategories] = useState<ItemCategory[]>([])
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
   const [requireTaxRate, setRequireTaxRate] = useState(true)
@@ -79,7 +80,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [localToken, setLocalToken] = useState('')
   const [localTenantId, setLocalTenantId] = useState('')
   const [showTokenInput, setShowTokenInput] = useState(false)
-  const [showLogs, setShowLogs] = useState(true)
+  const [showLogs, setShowLogs] = useState(false)
   const [activeMenu, setActiveMenu] = useState<{type: 'supplier' | 'category' | 'item' | number | `chainSup:${number}`; pos: {top: number; left: number; width: number}} | null>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const tokenSectionRef = useRef<HTMLDivElement>(null)
@@ -203,6 +204,14 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         }])
         if (event.type === 'run_end') {
           setRunning(false)
+          setCreated(event.created ?? created)
+          setFailed(event.failed ?? failed)
+          setRunSummary({
+            created: event.created ?? created,
+            failed: event.failed ?? failed,
+            total: event.total ?? count,
+            elapsed: elapsed.toFixed(1),
+          })
         }
       },
       () => {
@@ -918,6 +927,54 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             })()}
           </div>
         </>,
+        document.body
+      )}
+
+      {/* Run completion popup */}
+      {runSummary && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60">
+          <div className="flex flex-col w-[90vw] max-w-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden">
+            <div className={`px-5 py-4 border-b border-gray-200 dark:border-gray-600/40 flex items-center gap-3 ${runSummary.failed > 0 ? 'bg-red-50 dark:bg-red-900/15' : 'bg-green-50 dark:bg-green-900/15'}`}>
+              <div className={`size-10 rounded-full flex items-center justify-center shrink-0 ${runSummary.failed > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30'}`}>
+                {runSummary.failed > 0
+                  ? <XCircle className="size-5 text-red-600 dark:text-red-400" />
+                  : <CheckCircle2 className="size-5 text-green-600 dark:text-green-400" />}
+              </div>
+              <div className="min-w-0">
+                <h3 className={`text-[15px] font-semibold ${runSummary.failed > 0 ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'}`}>
+                  {runSummary.failed > 0 ? 'Run Finished with Errors' : 'Run Complete'}
+                </h3>
+                <p className="text-[12px] text-gray-500 dark:text-gray-400 truncate">
+                  {runSummary.created} of {runSummary.total} chain{runSummary.total !== 1 ? 's' : ''} created · {runSummary.elapsed}s
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 border-b border-gray-200 dark:border-gray-600/40">
+              <div className="px-4 py-3 text-center border-r border-gray-200 dark:border-gray-600/40">
+                <div className="text-[11px] text-gray-500 dark:text-gray-400">Created</div>
+                <div className="text-[18px] font-bold text-green-600 dark:text-green-400">{runSummary.created}</div>
+              </div>
+              <div className="px-4 py-3 text-center border-r border-gray-200 dark:border-gray-600/40">
+                <div className="text-[11px] text-gray-500 dark:text-gray-400">Failed</div>
+                <div className={`text-[18px] font-bold ${runSummary.failed > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400'}`}>{runSummary.failed}</div>
+              </div>
+              <div className="px-4 py-3 text-center">
+                <div className="text-[11px] text-gray-500 dark:text-gray-400">Total</div>
+                <div className="text-[18px] font-bold text-gray-700 dark:text-gray-200">{runSummary.total}</div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-4 py-3">
+              <Button
+                onClick={() => setRunSummary(null)}
+                size="sm"
+                className="h-8 text-[12px] gap-1.5 cursor-pointer bg-[#2D3FC7] hover:bg-[#3F51B5] text-white"
+              >
+                <CheckCircle2 className="size-3.5" />
+                Done
+              </Button>
+            </div>
+          </div>
+        </div>,
         document.body
       )}
     </div>

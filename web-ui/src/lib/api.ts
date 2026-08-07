@@ -163,6 +163,8 @@ export interface SSEEvent {
   passed?: number;
   failed?: number;
   duration_ms?: number;
+  created?: number;
+  total?: number;
 }
 
 /**
