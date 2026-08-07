@@ -21,9 +21,12 @@ async function isBackendRunning(): Promise<boolean> {
     return backendAlive;
   }
 
+  // Give the backend enough time to cold-start. Render's free tier sleeps and
+  // can take 30-60s to wake, so a short health-check timeout would mark a
+  // waking backend as "dead" and produce false 502s on every cold start.
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
+    const timeout = setTimeout(() => controller.abort(), 25_000);
     const res = await fetch(`${API_BASE}/api/health`, {
       signal: controller.signal,
       cache: "no-store",
@@ -54,19 +57,15 @@ async function proxyRequest(req: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // Quick-reject if backend is down (skip for SSE streams)
+  // Quick-reject if backend is down (skip for SSE streams). A failed health
+  // check is NOT a hard block: a cold-starting backend can still serve the
+  // actual request (which has a longer timeout), so we log and fall through
+  // rather than returning a false 502.
   const isStreamPath = path.startsWith("runs/start") || path.startsWith("batch-create");
   if (!isHealthCheck && !isStreamPath) {
     const alive = await isBackendRunning();
     if (!alive) {
-      return NextResponse.json(
-        {
-          error: "Automation engine is not running",
-          detail: "The FastAPI backend is not reachable. Please start it and try again.",
-          targetUrl,
-        },
-        { status: 502 }
-      );
+      console.warn(`[Proxy] Backend health check failed for ${path}, attempting request anyway`);
     }
   }
 
@@ -86,9 +85,10 @@ async function proxyRequest(req: NextRequest) {
 
     const body = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : undefined;
 
-    // Shorter timeout for regular calls (10s), long for streams (10min)
+    // Longer timeout for regular calls (45s — absorbs Render cold starts),
+    // very long for streams (10min)
     const isStreamRequest = isStreamPath || path.startsWith("screenshot") || path.startsWith("batch-create")
-    const timeoutMs = isStreamRequest ? 600_000 : 10_000;
+    const timeoutMs = isStreamRequest ? 600_000 : 45_000;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -138,7 +138,7 @@ async function proxyRequest(req: NextRequest) {
     if (err instanceof Error) {
       message = err.message;
       if (err.name === "AbortError") {
-        message = isStreamPath ? "Request timed out (10 min limit)" : "Request timed out (10s limit)";
+        message = isStreamPath ? "Request timed out (10 min limit)" : "Request timed out (45s limit)";
       } else if ("cause" in err && err.cause) {
         message += ` | cause: ${JSON.stringify(err.cause)}`;
       }
