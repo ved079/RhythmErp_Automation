@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -48,11 +48,11 @@ export function SystemHealthSection({
                 </div>
                 <div>
                   <p className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">API Connectivity</p>
-                  <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Backend API status</p>
+                  <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Poppins']">Backend API status</p>
                 </div>
                 <span className={`ml-auto w-3 h-3 rounded-full ${statusColor(apiOk)}`} />
               </div>
-              <p className="text-xs font-['Manrope'] text-[#545454] dark:text-gray-300">
+              <p className="text-xs font-['Poppins'] text-[#545454] dark:text-gray-300">
                 {apiOk ? 'API is reachable and responding' : 'API connection failed'}
               </p>
             </div>
@@ -64,11 +64,11 @@ export function SystemHealthSection({
                 </div>
                 <div>
                   <p className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Database</p>
-                  <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">SQLite record counts</p>
+                  <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Poppins']">SQLite record counts</p>
                 </div>
                 <span className={`ml-auto w-3 h-3 rounded-full ${statusColor(dbOk)}`} />
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs font-['Manrope']">
+              <div className="grid grid-cols-2 gap-2 text-xs font-['Poppins']">
                 <span className="text-[#888] dark:text-gray-400">Users: <strong className="text-[#333] dark:text-gray-100">{dbStats.users ?? '—'}</strong></span>
                 <span className="text-[#888] dark:text-gray-400">Runs: <strong className="text-[#333] dark:text-gray-100">{dbStats.runs ?? '—'}</strong></span>
                 <span className="text-[#888] dark:text-gray-400">Bugs: <strong className="text-[#333] dark:text-gray-100">{dbStats.bugs ?? '—'}</strong></span>
@@ -85,7 +85,7 @@ export function SystemHealthSection({
                 </div>
                 <div>
                   <p className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Disk Usage</p>
-                  <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Database file size</p>
+                  <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Poppins']">Database file size</p>
                 </div>
                 <span className={`ml-auto w-3 h-3 rounded-full ${statusColor(true)}`} />
               </div>
@@ -99,18 +99,18 @@ export function SystemHealthSection({
                 </div>
                 <div>
                   <p className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Last Run</p>
-                  <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Most recent test run</p>
+                  <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Poppins']">Most recent test run</p>
                 </div>
                 <span className={`ml-auto w-3 h-3 rounded-full ${statusColor(lastRunOk, !lastRun && !lastRunOk)}`} />
               </div>
               {lastRun ? (
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-[#333] dark:text-gray-100 font-['Manrope']">{lastRun.moduleName}</p>
+                  <p className="text-xs font-medium text-[#333] dark:text-gray-100 font-['Poppins']">{lastRun.moduleName}</p>
                   <Badge className={`text-[10px] border-0 ${lastRun.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : lastRun.status === 'failed' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'}`}>{lastRun.status}</Badge>
-                  <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">{lastRun.completedAt ? new Date(lastRun.completedAt).toLocaleString() : 'In progress'}</p>
+                  <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Poppins']">{lastRun.completedAt ? new Date(lastRun.completedAt).toLocaleString() : 'In progress'}</p>
                 </div>
               ) : (
-                <p className="text-xs text-[#888] dark:text-gray-400 font-['Manrope']">No runs yet</p>
+                <p className="text-xs text-[#888] dark:text-gray-400 font-['Poppins']">No runs yet</p>
               )}
             </div>
 
@@ -121,12 +121,12 @@ export function SystemHealthSection({
                 </div>
                 <div>
                   <p className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Uptime</p>
-                  <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Since page loaded</p>
+                  <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Poppins']">Since page loaded</p>
                 </div>
                 <span className="ml-auto w-3 h-3 rounded-full bg-green-500" />
               </div>
               <p className="text-2xl font-bold font-['Poppins'] text-[#333] dark:text-gray-100">{formatUptime(uptimeSeconds)}</p>
-              <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Server: {formatUptime(serverUptime)}</p>
+              <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Poppins']">Server: {formatUptime(serverUptime)}</p>
             </div>
 
             <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
@@ -136,16 +136,16 @@ export function SystemHealthSection({
                 </div>
                 <div>
                   <p className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Modules & Tests</p>
-                  <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Active counts</p>
+                  <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Poppins']">Active counts</p>
                 </div>
                 <span className={`ml-auto w-3 h-3 rounded-full ${statusColor(activeModules > 0)}`} />
               </div>
               <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-['Manrope']">
+                <div className="flex items-center justify-between text-xs font-['Poppins']">
                   <span className="text-[#888] dark:text-gray-400">Active Modules</span>
                   <strong className="text-[#333] dark:text-gray-100">{activeModules}</strong>
                 </div>
-                <div className="flex items-center justify-between text-xs font-['Manrope']">
+                <div className="flex items-center justify-between text-xs font-['Poppins']">
                   <span className="text-[#888] dark:text-gray-400">Total Test Cases</span>
                   <strong className="text-[#333] dark:text-gray-100">{totalTestCases}</strong>
                 </div>

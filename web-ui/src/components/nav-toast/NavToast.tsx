@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
@@ -57,11 +57,11 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           />
           {parent && (
             <>
-              <span className="text-[#495584] text-[11px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#495584] text-[11px] font-['Poppins'] font-medium">{parent}</span>
               <span className="text-[#2E7D32]/30 text-[10px]">/</span>
             </>
           )}
-          <span className="text-[#1B4332] text-[13px] font-['Manrope'] font-bold relative z-10">{label}</span>
+          <span className="text-[#1B4332] text-[13px] font-['Poppins'] font-bold relative z-10">{label}</span>
         </div>
       </div>
     )
@@ -89,13 +89,13 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           <div className="w-2 h-2 rounded-full shrink-0" style={{ background: 'linear-gradient(135deg, #4CAF50, #2E7D32)' }} />
           {parent && (
             <>
-              <span className="text-[#495584] text-[11px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#495584] text-[11px] font-['Poppins'] font-medium">{parent}</span>
               <svg width="8" height="8" viewBox="0 0 8 8" className="shrink-0 opacity-40">
                 <path d="M3 1.5L5.5 4L3 6.5" stroke="#1B4332" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </>
           )}
-          <span className="text-[#1B4332] text-[13px] font-['Manrope'] font-bold relative z-10">{label}</span>
+          <span className="text-[#1B4332] text-[13px] font-['Poppins'] font-bold relative z-10">{label}</span>
         </div>
       </div>
     )
@@ -120,11 +120,11 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           </div>
           {parent && (
             <>
-              <span className="text-[#495584] text-[10px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#495584] text-[10px] font-['Poppins'] font-medium">{parent}</span>
               <span className="text-[#2E7D32]/25 text-[10px]">·</span>
             </>
           )}
-          <span className="text-[#1B4332] text-[12px] font-['Manrope'] font-bold">{label}</span>
+          <span className="text-[#1B4332] text-[12px] font-['Poppins'] font-bold">{label}</span>
         </div>
       </div>
     )
@@ -153,13 +153,13 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: 'linear-gradient(135deg, #4CAF50, #2E7D32)' }} />
           {parent && (
             <>
-              <span className="text-[#495584] text-[12px] font-['Manrope'] font-semibold">{parent}</span>
+              <span className="text-[#495584] text-[12px] font-['Poppins'] font-semibold">{parent}</span>
               <svg width="10" height="10" viewBox="0 0 8 8" className="shrink-0 opacity-50">
                 <path d="M3 1.5L5.5 4L3 6.5" stroke="#1B4332" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </>
           )}
-          <span className="text-[#1B4332] text-[14px] font-['Manrope'] font-bold relative z-10">{label}</span>
+          <span className="text-[#1B4332] text-[14px] font-['Poppins'] font-bold relative z-10">{label}</span>
         </div>
       </div>
     )
@@ -185,11 +185,11 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           <div className="flex items-center gap-1.5 px-3 py-1.5" style={{ background: 'linear-gradient(135deg, #DFF3E3, #FFFFFF)' }}>
             {parent && (
               <>
-                <span className="text-[#495584] text-[10px] font-['Manrope'] font-medium">{parent}</span>
+                <span className="text-[#495584] text-[10px] font-['Poppins'] font-medium">{parent}</span>
                 <span className="text-[#2E7D32]/30 text-[8px]">/</span>
               </>
             )}
-            <span className="text-[#1B4332] text-[12px] font-['Manrope'] font-bold">{label}</span>
+            <span className="text-[#1B4332] text-[12px] font-['Poppins'] font-bold">{label}</span>
           </div>
         </div>
       </div>
@@ -218,13 +218,13 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           </div>
           {parent && (
             <>
-              <span className="text-[#495584] text-[11px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#495584] text-[11px] font-['Poppins'] font-medium">{parent}</span>
               <svg width="8" height="8" viewBox="0 0 8 8" className="shrink-0 opacity-40">
                 <path d="M3 1.5L5.5 4L3 6.5" stroke="#1B4332" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </>
           )}
-          <span className="text-[#1B4332] text-[12px] font-['Manrope'] font-bold">{label}</span>
+          <span className="text-[#1B4332] text-[12px] font-['Poppins'] font-bold">{label}</span>
         </div>
       </div>
     )
@@ -249,11 +249,11 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           </div>
           {parent && (
             <>
-              <span className="text-[#495584] text-[11px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#495584] text-[11px] font-['Poppins'] font-medium">{parent}</span>
               <span className="text-[#2E7D32]/30 text-[10px]">/</span>
             </>
           )}
-          <span className="text-[#1B4332] text-[13px] font-['Manrope'] font-bold">{label}</span>
+          <span className="text-[#1B4332] text-[13px] font-['Poppins'] font-bold">{label}</span>
           {/* Trailing ghost logos */}
           <img src="/agdi-logo-new.webp" alt="" className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 opacity-[0.06] object-contain pointer-events-none" />
           <img src="/agdi-logo-new.webp" alt="" className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 opacity-[0.04] object-contain pointer-events-none" />
@@ -284,13 +284,13 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           <div className="w-2 h-2 rounded-full shrink-0 animate-pulse" style={{ background: '#4CAF50' }} />
           {parent && (
             <>
-              <span className="text-[#C8E6C9] text-[11px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#C8E6C9] text-[11px] font-['Poppins'] font-medium">{parent}</span>
               <svg width="8" height="8" viewBox="0 0 8 8" className="shrink-0 opacity-50">
                 <path d="M3 1.5L5.5 4L3 6.5" stroke="#C8E6C9" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </>
           )}
-          <span className="text-white text-[12px] font-['Manrope'] font-bold relative z-10">{label}</span>
+          <span className="text-white text-[12px] font-['Poppins'] font-bold relative z-10">{label}</span>
         </div>
       </div>
     )
@@ -314,11 +314,11 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           </div>
           {parent && (
             <>
-              <span className="text-[#495584] text-[11px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#495584] text-[11px] font-['Poppins'] font-medium">{parent}</span>
               <span className="text-[#2E7D32]/30 text-[10px]">/</span>
             </>
           )}
-          <span className="text-[#1B4332] text-[13px] font-['Manrope'] font-bold">{label}</span>
+          <span className="text-[#1B4332] text-[13px] font-['Poppins'] font-bold">{label}</span>
         </div>
       </div>
     )
@@ -340,11 +340,11 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           <img src="/agdi-logo-new.webp" alt="" className="w-5 h-5 object-contain opacity-70 shrink-0" />
           {parent && (
             <>
-              <span className="text-[#495584] text-[10px] font-['Manrope'] font-semibold uppercase tracking-[0.2em]">{parent}</span>
+              <span className="text-[#495584] text-[10px] font-['Poppins'] font-semibold uppercase tracking-[0.2em]">{parent}</span>
               <span className="text-[#2E7D32]/20">→</span>
             </>
           )}
-          <span className="text-[#1B4332] text-[12px] font-['Manrope'] font-bold tracking-wide">{label}</span>
+          <span className="text-[#1B4332] text-[12px] font-['Poppins'] font-bold tracking-wide">{label}</span>
         </div>
       </div>
     )
@@ -369,11 +369,11 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           </div>
           {parent && (
             <>
-              <span className="text-[#495584] text-[11px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#495584] text-[11px] font-['Poppins'] font-medium">{parent}</span>
               <span className="text-[#2E7D32]/25 text-[10px]">›</span>
             </>
           )}
-          <span className="text-[#1B4332] text-[13px] font-['Manrope'] font-bold">{label}</span>
+          <span className="text-[#1B4332] text-[13px] font-['Poppins'] font-bold">{label}</span>
         </div>
       </div>
     )
@@ -398,13 +398,13 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           <div className="w-2 h-2 rounded-full shrink-0" style={{ background: 'linear-gradient(135deg, #4CAF50, #2E7D32)' }} />
           {parent && (
             <>
-              <span className="text-[#495584] text-[11px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#495584] text-[11px] font-['Poppins'] font-medium">{parent}</span>
               <svg width="8" height="8" viewBox="0 0 8 8" className="shrink-0 opacity-40">
                 <path d="M3 1.5L5.5 4L3 6.5" stroke="#1B4332" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </>
           )}
-          <span className="text-[#1B4332] text-[12px] font-['Manrope'] font-bold relative z-10">{label}</span>
+          <span className="text-[#1B4332] text-[12px] font-['Poppins'] font-bold relative z-10">{label}</span>
         </div>
       </div>
     )
@@ -426,7 +426,7 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           }}
         >
           <img src="/agdi-logo-new.webp" alt="" className="w-3 h-3 object-contain brightness-0 invert opacity-80 shrink-0" />
-          <span className="text-white text-[10px] font-['Manrope'] font-bold tracking-wide">{parent ? `${parent} / ` : ''}{label}</span>
+          <span className="text-white text-[10px] font-['Poppins'] font-bold tracking-wide">{parent ? `${parent} / ` : ''}{label}</span>
         </div>
       </div>
     )
@@ -450,8 +450,8 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
             <img src="/agdi-logo-new.webp" alt="" className="w-3.5 h-3.5 object-contain brightness-0 invert opacity-90" />
           </div>
           <div className="flex flex-col">
-            {parent && <span className="text-[#495584] text-[9px] font-['Manrope'] font-medium uppercase tracking-wider leading-tight">{parent}</span>}
-            <span className="text-[#1B4332] text-[12px] font-['Manrope'] font-bold leading-tight">{label}</span>
+            {parent && <span className="text-[#495584] text-[9px] font-['Poppins'] font-medium uppercase tracking-wider leading-tight">{parent}</span>}
+            <span className="text-[#1B4332] text-[12px] font-['Poppins'] font-bold leading-tight">{label}</span>
           </div>
         </div>
       </div>
@@ -475,11 +475,11 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
             <img src="/agdi-logo-new.webp" alt="" className="w-4 h-4 object-contain opacity-70 shrink-0" />
             {parent && (
               <>
-                <span className="text-[#495584] text-[10px] font-['Manrope'] font-medium">{parent}</span>
+                <span className="text-[#495584] text-[10px] font-['Poppins'] font-medium">{parent}</span>
                 <span className="text-[#2E7D32]/30 text-[8px]">›</span>
               </>
             )}
-            <span className="text-[#1B4332] text-[12px] font-['Manrope'] font-bold">{label}</span>
+            <span className="text-[#1B4332] text-[12px] font-['Poppins'] font-bold">{label}</span>
           </div>
           {/* Arrow pointing down */}
           <div className="w-3 h-3 -mt-1.5 rotate-45" style={{ background: '#DFF3E3', borderRight: '2px solid #2E7D32', borderBottom: '2px solid #2E7D32' }} />
@@ -509,11 +509,11 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           </div>
           {parent && (
             <>
-              <span className="text-[#C8E6C9] text-[11px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#C8E6C9] text-[11px] font-['Poppins'] font-medium">{parent}</span>
               <span className="text-[#4CAF50]/40 text-[10px]">/</span>
             </>
           )}
-          <span className="text-white text-[13px] font-['Manrope'] font-semibold">{label}</span>
+          <span className="text-white text-[13px] font-['Poppins'] font-semibold">{label}</span>
         </div>
       </div>
     )
@@ -542,11 +542,11 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           <img src="/agdi-logo-new.webp" alt="" className="w-4 h-4 object-contain brightness-0 invert opacity-70 shrink-0" />
           {parent && (
             <>
-              <span className="text-[#C8E6C9] text-[11px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#C8E6C9] text-[11px] font-['Poppins'] font-medium">{parent}</span>
               <span className="text-[#4CAF50]/40">/</span>
             </>
           )}
-          <span className="text-white text-[13px] font-['Manrope'] font-semibold">{label}</span>
+          <span className="text-white text-[13px] font-['Poppins'] font-semibold">{label}</span>
         </div>
         <style>{`@keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }`}</style>
       </div>
@@ -574,8 +574,8 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
             <img src="/agdi-logo-new.webp" alt="" className="w-5 h-5 object-contain brightness-0 invert opacity-90" />
           </div>
           <div className="flex flex-col">
-            {parent && <span className="text-[#495584] text-[9px] font-['Manrope'] font-medium uppercase tracking-wider">{parent}</span>}
-            <span className="text-[#1B4332] text-[13px] font-['Manrope'] font-bold">{label}</span>
+            {parent && <span className="text-[#495584] text-[9px] font-['Poppins'] font-medium uppercase tracking-wider">{parent}</span>}
+            <span className="text-[#1B4332] text-[13px] font-['Poppins'] font-bold">{label}</span>
           </div>
         </div>
       </div>
@@ -600,11 +600,11 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           <img src="/agdi-logo-new.webp" alt="" className="w-4 h-4 object-contain opacity-70 shrink-0" />
           {parent && (
             <>
-              <span className="text-[#495584] text-[11px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#495584] text-[11px] font-['Poppins'] font-medium">{parent}</span>
               <span className="text-[#2E7D32]/25 text-[10px]">→</span>
             </>
           )}
-          <span className="text-[#1B4332] text-[12px] font-['Manrope'] font-bold">{label}</span>
+          <span className="text-[#1B4332] text-[12px] font-['Poppins'] font-bold">{label}</span>
         </div>
         <style>{`@keyframes morph { 0% { border-radius: 30px 60px 30px 60px; } 100% { border-radius: 60px 30px 60px 30px; } }`}</style>
       </div>
@@ -641,11 +641,11 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           />
           {parent && (
             <>
-              <span className="text-[#495584] text-[11px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#495584] text-[11px] font-['Poppins'] font-medium">{parent}</span>
               <span className="text-[#2E7D32]/30 text-[10px]">/</span>
             </>
           )}
-          <span className="text-[#1B4332] text-[13px] font-['Manrope'] font-bold relative z-10">{label}</span>
+          <span className="text-[#1B4332] text-[13px] font-['Poppins'] font-bold relative z-10">{label}</span>
         </div>
       </div>
     )
@@ -674,13 +674,13 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           </div>
           {parent && (
             <>
-              <span className="text-[#495584] text-[11px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#495584] text-[11px] font-['Poppins'] font-medium">{parent}</span>
               <svg width="8" height="8" viewBox="0 0 8 8" className="shrink-0 opacity-50">
                 <path d="M3 1.5L5.5 4L3 6.5" stroke="#1B4332" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </>
           )}
-          <span className="text-[#1B4332] text-[13px] font-['Manrope'] font-semibold">{label}</span>
+          <span className="text-[#1B4332] text-[13px] font-['Poppins'] font-semibold">{label}</span>
         </div>
       </div>
     )
@@ -709,13 +709,13 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           </div>
           {parent && (
             <>
-              <span className="text-[#495584] text-[11px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#495584] text-[11px] font-['Poppins'] font-medium">{parent}</span>
               <svg width="8" height="8" viewBox="0 0 8 8" className="shrink-0 opacity-50">
                 <path d="M3 1.5L5.5 4L3 6.5" stroke="#3F51B5" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </>
           )}
-          <span className="text-[#1B4332] text-[13px] font-['Manrope'] font-semibold">{label}</span>
+          <span className="text-[#1B4332] text-[13px] font-['Poppins'] font-semibold">{label}</span>
         </div>
       </div>
     )
@@ -744,13 +744,13 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           </div>
           {parent && (
             <>
-              <span className="text-[#495584] text-[11px] font-['Manrope'] font-medium">{parent}</span>
+              <span className="text-[#495584] text-[11px] font-['Poppins'] font-medium">{parent}</span>
               <svg width="8" height="8" viewBox="0 0 8 8" className="shrink-0 opacity-50">
                 <path d="M3 1.5L5.5 4L3 6.5" stroke="#6777EF" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </>
           )}
-          <span className="text-[#1B4332] text-[13px] font-['Manrope'] font-semibold">{label}</span>
+          <span className="text-[#1B4332] text-[13px] font-['Poppins'] font-semibold">{label}</span>
         </div>
       </div>
     )
@@ -799,13 +799,13 @@ function NavToast({ label, parent }: { label: string; parent?: string | null }) 
           </svg>
           {parent && (
             <>
-              <span className="text-[11px] font-['Manrope'] font-medium" style={{ color: isDark ? darkParentText : lightParentText }}>{parent}</span>
+              <span className="text-[11px] font-['Poppins'] font-medium" style={{ color: isDark ? darkParentText : lightParentText }}>{parent}</span>
               <svg width="8" height="8" viewBox="0 0 8 8" className="shrink-0" style={{ opacity: isDark ? 0.4 : 0.4 }}>
                 <path d="M3 1.5L5.5 4L3 6.5" stroke={isDark ? darkSepColor : lightSepColor} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </>
           )}
-          <span className="text-[13px] font-['Manrope'] font-semibold" style={{ color: isDark ? darkLabelText : lightLabelText }}>{label}</span>
+          <span className="text-[13px] font-['Poppins'] font-semibold" style={{ color: isDark ? darkLabelText : lightLabelText }}>{label}</span>
         </div>
       </div>
     )

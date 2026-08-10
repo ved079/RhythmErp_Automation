@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useMemo } from 'react'
 import {
@@ -89,7 +89,7 @@ export function TestUserVisibilityDialog({
             <EyeOff className="size-4 text-orange-500" />
             Hide Test For Users
           </DialogTitle>
-          <DialogDescription className="font-['Manrope'] text-xs text-[#888]">
+          <DialogDescription className="font-['Poppins'] text-xs text-[#888]">
             Select users to hide &ldquo;{testDisplayName}&rdquo; from their test runner.
           </DialogDescription>
         </DialogHeader>
@@ -100,7 +100,7 @@ export function TestUserVisibilityDialog({
             placeholder="Search users..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="pl-9 h-9 text-sm font-['Manrope']"
+            className="pl-9 h-9 text-sm font-['Poppins']"
           />
         </div>
 
@@ -108,7 +108,7 @@ export function TestUserVisibilityDialog({
           {loading ? (
             <div className="flex justify-center py-8"><Spinner size={20} /></div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-8 text-xs text-[#888] dark:text-gray-400 font-['Manrope']">No users found</div>
+            <div className="text-center py-8 text-xs text-[#888] dark:text-gray-400 font-['Poppins']">No users found</div>
           ) : (
             filtered.map(u => (
               <label
@@ -120,8 +120,8 @@ export function TestUserVisibilityDialog({
                   onCheckedChange={() => toggle(u.id)}
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-['Manrope'] text-[#333] dark:text-gray-100 truncate">{u.name}</div>
-                  <div className="text-[11px] font-['Manrope'] text-[#888] truncate">{u.email}</div>
+                  <div className="text-[13px] font-['Poppins'] text-[#333] dark:text-gray-100 truncate">{u.name}</div>
+                  <div className="text-[11px] font-['Poppins'] text-[#888] truncate">{u.email}</div>
                 </div>
                 {selected.has(u.id) && (
                   <Badge variant="outline" className="text-[10px] text-orange-600 border-orange-200 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-800 shrink-0">
@@ -133,7 +133,7 @@ export function TestUserVisibilityDialog({
           )}
         </div>
 
-        <div className="flex items-center justify-between text-[11px] text-[#888] font-['Manrope']">
+        <div className="flex items-center justify-between text-[11px] text-[#888] font-['Poppins']">
           <span>{selected.size} of {users.length} users hidden</span>
           <Button
             variant="ghost"
@@ -146,10 +146,10 @@ export function TestUserVisibilityDialog({
         </div>
 
         <DialogFooter className="gap-1.5">
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer font-['Manrope'] text-xs">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer font-['Poppins'] text-xs">
             Cancel
           </Button>
-          <Button onClick={handleSave} className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto'] cursor-pointer">
+          <Button onClick={handleSave} className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Poppins'] cursor-pointer">
             Save
           </Button>
         </DialogFooter>

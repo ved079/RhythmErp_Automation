@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
 import {
@@ -213,7 +213,7 @@ export function TestVisibilitySection() {
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-6 border border-gray-100 dark:border-gray-700 text-center">
           <EyeOff className="size-8 mx-auto mb-2 text-[#888]" />
-          <p className="text-sm text-[#888] font-['Manrope']">No test overrides yet. Click &quot;Sync from Backend&quot; to discover tests, then hide or rename them.</p>
+          <p className="text-sm text-[#888] font-['Poppins']">No test overrides yet. Click &quot;Sync from Backend&quot; to discover tests, then hide or rename them.</p>
         </div>
       </div>
     )
@@ -243,7 +243,7 @@ export function TestVisibilitySection() {
         <div className="flex items-center gap-3 min-w-0">
           <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 whitespace-nowrap">Test Visibility</h2>
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs font-['Manrope'] shrink-0">{Object.keys(overrides).length} overrides</Badge>
+            <Badge variant="outline" className="text-xs font-['Poppins'] shrink-0">{Object.keys(overrides).length} overrides</Badge>
             {totalDisabled > 0 && <Badge variant="outline" className="text-xs text-red-600 border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 shrink-0">{totalDisabled} disabled</Badge>}
             {totalHidden > 0 && <Badge variant="outline" className="text-xs text-orange-600 border-orange-200 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-800 shrink-0">{totalHidden} hidden</Badge>}
           </div>
@@ -256,7 +256,7 @@ export function TestVisibilitySection() {
                 value={testVisibilitySearch}
                 onChange={e => setTestVisibilitySearch(e.target.value)}
                 placeholder="Search tests..."
-                className="h-8 pl-8 pr-3 text-[12px] font-['Manrope'] w-48"
+                className="h-8 pl-8 pr-3 text-[12px] font-['Poppins'] w-48"
               />
             </div>
           )}
@@ -268,7 +268,7 @@ export function TestVisibilitySection() {
       </div>
 
       {selectedVisModule && (
-        <div className="flex items-center flex-wrap gap-0.5 text-[12px] font-['Manrope'] bg-gray-50 dark:bg-gray-800/50 rounded-lg px-2.5 py-1.5 border border-gray-100 dark:border-gray-700/50">
+        <div className="flex items-center flex-wrap gap-0.5 text-[12px] font-['Poppins'] bg-gray-50 dark:bg-gray-800/50 rounded-lg px-2.5 py-1.5 border border-gray-100 dark:border-gray-700/50">
           <button onClick={() => { setSelectedVisModule(''); setSelectedVisSubModule(''); setVisSelectedTests(new Set()); setTestVisibilitySearch(''); setVisSelectedType(null); setVisActionMode(null) }}
             className="flex items-center gap-1 px-2 py-1 rounded-md text-[#888] hover:text-white hover:bg-[#3F51B5] transition-all">
             <FolderTree className="size-3.5" />
@@ -326,7 +326,7 @@ export function TestVisibilitySection() {
 
       {!selectedVisModule ? (
         <>
-          <p className="text-[13px] text-[#888] font-['Manrope']">Select a module to manage test visibility</p>
+          <p className="text-[13px] text-[#888] font-['Poppins']">Select a module to manage test visibility</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {moduleOptions.map(mo => {
               const mod = modulesTree.find(x => x.name === mo.value)
@@ -343,12 +343,12 @@ export function TestVisibilitySection() {
                     </div>
                     <span className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 group-hover:text-[#3F51B5] transition-colors">{mod.display}</span>
                   </div>
-                  <div className="flex items-center gap-2.5 text-[11px] font-['Manrope']">
+                  <div className="flex items-center gap-2.5 text-[11px] font-['Poppins']">
                     <span className="text-[#888]">{modTotal} test{modTotal !== 1 ? 's' : ''}</span>
                     {modDisabled > 0 && <span className="text-red-500 font-medium">{modDisabled} off</span>}
                     {modHidden > 0 && <span className="text-orange-500 font-medium">{modHidden} hid</span>}
                   </div>
-                  <div className="mt-1.5 text-[10px] text-[#999] font-['Manrope']">{mod.sub_modules.length} sub-module{mod.sub_modules.length !== 1 ? 's' : ''}</div>
+                  <div className="mt-1.5 text-[10px] text-[#999] font-['Poppins']">{mod.sub_modules.length} sub-module{mod.sub_modules.length !== 1 ? 's' : ''}</div>
                 </button>
               )
             })}
@@ -356,7 +356,7 @@ export function TestVisibilitySection() {
         </>
       ) : !selectedVisSubModule ? (
         <>
-          <p className="text-[13px] text-[#888] font-['Manrope']">Select a sub-module in <span className="font-semibold text-[#333] dark:text-gray-100">{selectedMod?.display}</span></p>
+          <p className="text-[13px] text-[#888] font-['Poppins']">Select a sub-module in <span className="font-semibold text-[#333] dark:text-gray-100">{selectedMod?.display}</span></p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {activeSubModules.map(sm => {
               const smDisabled = sm.tests.filter(t => overrides[t.name]?.disabled).length
@@ -370,7 +370,7 @@ export function TestVisibilitySection() {
                     </div>
                     <span className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 group-hover:text-[#3F51B5] transition-colors">{sm.display}</span>
                   </div>
-                  <div className="flex items-center gap-2.5 text-[11px] font-['Manrope']">
+                  <div className="flex items-center gap-2.5 text-[11px] font-['Poppins']">
                     <span className="text-[#888]">{sm.tests.length} test{sm.tests.length !== 1 ? 's' : ''}</span>
                     {smDisabled > 0 && <span className="text-red-500 font-medium">{smDisabled} off</span>}
                     {smHidden > 0 && <span className="text-orange-500 font-medium">{smHidden} hid</span>}
@@ -384,13 +384,13 @@ export function TestVisibilitySection() {
                 <List className="size-4 text-[#3F51B5] dark:text-[#7986CB]" />
                 <span className="text-sm font-semibold font-['Poppins'] text-[#3F51B5] dark:text-[#7986CB]">Load All Sub-modules</span>
               </div>
-              <p className="text-[11px] text-[#888] font-['Manrope'] mt-1">{selectedModTests.length} tests total</p>
+              <p className="text-[11px] text-[#888] font-['Poppins'] mt-1">{selectedModTests.length} tests total</p>
             </button>
           </div>
         </>
       ) : visSelectedType === null ? (
         <div className="space-y-3">
-          <p className="text-[13px] text-[#888] font-['Manrope']">Select test type to view in <span className="font-semibold text-[#333] dark:text-gray-100">{selectedMod?.display} &rsaquo; {selectedVisSubModule === '__all__' ? 'All sub-modules' : selectedMod?.sub_modules.find(s => s.name === selectedVisSubModule)?.display}</span></p>
+          <p className="text-[13px] text-[#888] font-['Poppins']">Select test type to view in <span className="font-semibold text-[#333] dark:text-gray-100">{selectedMod?.display} &rsaquo; {selectedVisSubModule === '__all__' ? 'All sub-modules' : selectedMod?.sub_modules.find(s => s.name === selectedVisSubModule)?.display}</span></p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {(['all', 'ui', 'api'] as const).filter(type => {
               if (type === 'all') return true
@@ -405,7 +405,7 @@ export function TestVisibilitySection() {
                 <div className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 group-hover:text-[#3F51B5] transition-colors">
                   {type === 'all' ? 'All Tests' : type === 'ui' ? 'UI Tests' : 'API Tests'}
                 </div>
-                <div className="text-[11px] text-[#888] font-['Manrope'] mt-1.5">
+                <div className="text-[11px] text-[#888] font-['Poppins'] mt-1.5">
                   {type === 'all'
                     ? `${selectedModTests.length} tests total`
                     : `${selectedModTests.filter(t => (t.type || 'ui') === type).length} ${type.toUpperCase()} tests`
@@ -418,11 +418,11 @@ export function TestVisibilitySection() {
       ) : !selectedMod ? (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 border border-gray-100 dark:border-gray-700 text-center">
           <AlertTriangle className="size-10 text-orange-500 mx-auto mb-2" />
-          <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">Module data not loaded. Sync from backend first.</p>
+          <p className="text-sm text-[#888] dark:text-gray-400 font-['Poppins']">Module data not loaded. Sync from backend first.</p>
         </div>
       ) : visActionMode === null ? (
         <div className="space-y-3">
-          <p className="text-[13px] text-[#888] font-['Manrope']">What would you like to do with <span className="font-semibold text-[#333] dark:text-gray-100">{selectedMod?.display} &rsaquo; {selectedVisSubModule === '__all__' ? 'All sub-modules' : selectedMod?.sub_modules.find(s => s.name === selectedVisSubModule)?.display} &rsaquo; {visSelectedType === 'all' ? 'All' : visSelectedType?.toUpperCase()} tests</span></p>
+          <p className="text-[13px] text-[#888] font-['Poppins']">What would you like to do with <span className="font-semibold text-[#333] dark:text-gray-100">{selectedMod?.display} &rsaquo; {selectedVisSubModule === '__all__' ? 'All sub-modules' : selectedMod?.sub_modules.find(s => s.name === selectedVisSubModule)?.display} &rsaquo; {visSelectedType === 'all' ? 'All' : visSelectedType?.toUpperCase()} tests</span></p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button onClick={() => setVisActionMode('name')}
               className="text-left bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 hover:shadow-md hover:border-[#3F51B5]/40 dark:hover:border-[#7986CB]/40 transition-all cursor-pointer group">
@@ -432,8 +432,8 @@ export function TestVisibilitySection() {
                 </div>
                 <div className="min-w-0">
                   <div className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 group-hover:text-[#3F51B5] transition-colors">Change Name</div>
-                  <p className="text-[12px] text-[#888] font-['Manrope'] mt-1 leading-relaxed">Rename display names of tests. Click any test card to edit.</p>
-                  <div className="flex items-center gap-3 mt-2 text-[11px] font-['Manrope']">
+                  <p className="text-[12px] text-[#888] font-['Poppins'] mt-1 leading-relaxed">Rename display names of tests. Click any test card to edit.</p>
+                  <div className="flex items-center gap-3 mt-2 text-[11px] font-['Poppins']">
                     <span className="text-[#888]">{selectedModTests.length} tests</span>
                     <span className="text-[#3F51B5] font-medium">{Object.keys(overrides).length} renamed</span>
                   </div>
@@ -448,8 +448,8 @@ export function TestVisibilitySection() {
                 </div>
                 <div className="min-w-0">
                   <div className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100 group-hover:text-[#3F51B5] transition-colors">Change Visibility</div>
-                  <p className="text-[12px] text-[#888] font-['Manrope'] mt-1 leading-relaxed">Enable or disable tests and control per-user visibility.</p>
-                  <div className="flex items-center gap-3 mt-2 text-[11px] font-['Manrope']">
+                  <p className="text-[12px] text-[#888] font-['Poppins'] mt-1 leading-relaxed">Enable or disable tests and control per-user visibility.</p>
+                  <div className="flex items-center gap-3 mt-2 text-[11px] font-['Poppins']">
                     <span className="text-[#888]">{selectedModTests.length} tests</span>
                     {totalDisabled > 0 && <span className="text-red-500 font-medium">{totalDisabled} disabled</span>}
                     {totalHidden > 0 && <span className="text-orange-500 font-medium">{totalHidden} hidden</span>}
@@ -462,17 +462,17 @@ export function TestVisibilitySection() {
       ) : !selectedMod ? (
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-8 border border-gray-100 dark:border-gray-700 text-center">
           <AlertTriangle className="size-10 text-orange-500 mx-auto mb-2" />
-          <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">Module data not loaded. Sync from backend first.</p>
+          <p className="text-sm text-[#888] dark:text-gray-400 font-['Poppins']">Module data not loaded. Sync from backend first.</p>
         </div>
       ) : visActionMode === 'name' ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-[#E8EAF6] to-transparent dark:from-[#1A237E]/20 dark:to-transparent rounded-xl border border-gray-100 dark:border-gray-700">
             <div className="flex items-center gap-3">
               <span className="text-sm font-semibold font-['Poppins'] text-[#3F51B5] dark:text-[#7986CB]">Rename Tests</span>
-              <span className="text-[11px] text-[#888] font-['Manrope']">{selectedMod.display} &rsaquo; {visSelectedType === 'all' ? 'All' : visSelectedType?.toUpperCase()}</span>
+              <span className="text-[11px] text-[#888] font-['Poppins']">{selectedMod.display} &rsaquo; {visSelectedType === 'all' ? 'All' : visSelectedType?.toUpperCase()}</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-[#888] font-['Manrope']">raw</span>
+              <span className="text-[10px] text-[#888] font-['Poppins']">raw</span>
               <Switch checked={showRawNames} onCheckedChange={(val) => { setShowRawNames(val); localStorage.setItem('showRawNames', String(val)) }} className="shrink-0 scale-75" />
             </div>
           </div>
@@ -484,8 +484,8 @@ export function TestVisibilitySection() {
               <div key={subKey} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-50 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/50">
                   <Pencil className="size-3.5 text-[#888]" />
-                  <span className="text-xs font-semibold font-['Manrope'] text-[#555] dark:text-gray-300">{sub.display}</span>
-                  <span className="text-[11px] text-[#888] font-['Manrope']">— {filteredTests.length} test{filteredTests.length !== 1 ? 's' : ''}</span>
+                  <span className="text-xs font-semibold font-['Poppins'] text-[#555] dark:text-gray-300">{sub.display}</span>
+                  <span className="text-[11px] text-[#888] font-['Poppins']">— {filteredTests.length} test{filteredTests.length !== 1 ? 's' : ''}</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 p-3">
                   {filteredTests.map(t => {
@@ -500,9 +500,9 @@ export function TestVisibilitySection() {
                         <div className="flex items-start gap-2 px-3 pt-3 pb-2">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className={`text-[13px] font-['Manrope'] leading-tight block truncate text-[#333] dark:text-gray-100 group-hover:text-[#3F51B5] transition-colors ${hasCustomName ? 'font-semibold' : ''}`}>{displayName}</span>
+                              <span className={`text-[13px] font-['Poppins'] leading-tight block truncate text-[#333] dark:text-gray-100 group-hover:text-[#3F51B5] transition-colors ${hasCustomName ? 'font-semibold' : ''}`}>{displayName}</span>
                               {hasCustomName && (
-                                <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-[#3F51B5]/30 text-[#3F51B5] dark:text-[#7986CB] shrink-0 font-['Manrope']">edited</Badge>
+                                <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-[#3F51B5]/30 text-[#3F51B5] dark:text-[#7986CB] shrink-0 font-['Poppins']">edited</Badge>
                               )}
                             </div>
                             <div className="flex items-center gap-1.5 mt-1.5">
@@ -532,16 +532,16 @@ export function TestVisibilitySection() {
           <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-[#E8EAF6] to-transparent dark:from-[#1A237E]/20 dark:to-transparent rounded-xl border border-gray-100 dark:border-gray-700">
             <div className="flex items-center gap-3">
               <span className="text-sm font-semibold font-['Poppins'] text-[#3F51B5] dark:text-[#7986CB]">{selectedMod.display}</span>
-              <span className="text-[11px] text-[#888] font-['Manrope']">{selectedModTests.length} test{selectedModTests.length !== 1 ? 's' : ''}</span>
+              <span className="text-[11px] text-[#888] font-['Poppins']">{selectedModTests.length} test{selectedModTests.length !== 1 ? 's' : ''}</span>
               {selectedModTests.filter(t => overrides[t.name]?.disabled).length > 0 && (
-                <span className="text-[11px] text-red-500 font-medium font-['Manrope']">{selectedModTests.filter(t => overrides[t.name]?.disabled).length} disabled</span>
+                <span className="text-[11px] text-red-500 font-medium font-['Poppins']">{selectedModTests.filter(t => overrides[t.name]?.disabled).length} disabled</span>
               )}
               {selectedModTests.filter(t => (exclusionCounts[t.name] || 0) > 0).length > 0 && (
-                <span className="text-[11px] text-orange-500 font-medium font-['Manrope']">{selectedModTests.filter(t => (exclusionCounts[t.name] || 0) > 0).length} hidden</span>
+                <span className="text-[11px] text-orange-500 font-medium font-['Poppins']">{selectedModTests.filter(t => (exclusionCounts[t.name] || 0) > 0).length} hidden</span>
               )}
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-[#888] font-['Manrope']">Toggle all</span>
+              <span className="text-[11px] text-[#888] font-['Poppins']">Toggle all</span>
               <Switch checked={!allSelectedDisabled} onCheckedChange={() => { batchUpdate(selectedModTests.map(t => ({ testName: t.name, disabled: !allSelectedDisabled }))) }}
                 disabled={batchActionLoading} className="shrink-0 scale-75" />
             </div>
@@ -569,10 +569,10 @@ export function TestVisibilitySection() {
                         setVisSelectedTests(prev => { const n = new Set(prev); filteredTests.forEach(t => n.add(t.name)); return n })
                       }
                     }} className="shrink-0" />
-                  <span className="text-xs font-semibold font-['Manrope'] text-[#555] dark:text-gray-300">{sub.display}</span>
-                  <span className="text-[11px] text-[#888] font-['Manrope']">— {filteredTests.length} test{filteredTests.length !== 1 ? 's' : ''}</span>
-                  {subDisabled > 0 && <span className="text-[11px] text-red-500 font-medium font-['Manrope']">{subDisabled} off</span>}
-                  {subHidden > 0 && <span className="text-[11px] text-orange-500 font-medium font-['Manrope']">{subHidden} hid</span>}
+                  <span className="text-xs font-semibold font-['Poppins'] text-[#555] dark:text-gray-300">{sub.display}</span>
+                  <span className="text-[11px] text-[#888] font-['Poppins']">— {filteredTests.length} test{filteredTests.length !== 1 ? 's' : ''}</span>
+                  {subDisabled > 0 && <span className="text-[11px] text-red-500 font-medium font-['Poppins']">{subDisabled} off</span>}
+                  {subHidden > 0 && <span className="text-[11px] text-orange-500 font-medium font-['Poppins']">{subHidden} hid</span>}
                 </div>
                 {!visCollapsedSubs.has(subKey) && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 p-3">
@@ -594,7 +594,7 @@ export function TestVisibilitySection() {
                             <Checkbox checked={visSelectedTests.has(t.name)} onCheckedChange={() => toggleTestSelection(t.name)}
                               onClick={e => e.stopPropagation()} className="mt-0.5 shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <span className="text-[13px] font-['Manrope'] leading-tight block truncate text-[#333] dark:text-gray-100">{displayName}</span>
+                              <span className="text-[13px] font-['Poppins'] leading-tight block truncate text-[#333] dark:text-gray-100">{displayName}</span>
                               <div className="flex items-center gap-1.5 mt-1.5">
                                 <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
                                   testType === 'api'
@@ -626,27 +626,27 @@ export function TestVisibilitySection() {
 
       {visSelectedTests.size > 0 && selectedVisModule && selectedMod && visActionMode === 'visibility' && (
         <div className="sticky bottom-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-300 dark:border-gray-500/70 px-4 py-3 flex items-center justify-between z-10 backdrop-blur-sm bg-white/95 dark:bg-gray-800/95">
-          <span className="text-sm font-semibold font-['Manrope'] text-[#333] dark:text-gray-100">{visSelectedTests.size} test{visSelectedTests.size !== 1 ? 's' : ''} selected</span>
+          <span className="text-sm font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">{visSelectedTests.size} test{visSelectedTests.size !== 1 ? 's' : ''} selected</span>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" disabled={batchActionLoading}
               onClick={() => batchUpdate(Array.from(visSelectedTests).map(n => ({ testName: n, disabled: true })))}
-              className="h-8 text-xs font-['Roboto']">
+              className="h-8 text-xs font-['Poppins']">
               {batchActionLoading ? <Spinner size={12} /> : <XCircle className="size-3 mr-1" />}
               Disable
             </Button>
             <Button size="sm" variant="outline" disabled={batchActionLoading}
               onClick={() => batchUpdate(Array.from(visSelectedTests).map(n => ({ testName: n, disabled: false })))}
-              className="h-8 text-xs font-['Roboto']">
+              className="h-8 text-xs font-['Poppins']">
               {batchActionLoading ? <Spinner size={12} /> : <CheckCircle2 className="size-3 mr-1" />}
               Enable
             </Button>
             <Button size="sm" variant="outline" disabled={batchActionLoading}
               onClick={() => batchUpdate(Array.from(visSelectedTests).map(n => ({ testName: n, displayName: null, disabled: false })))}
-              className="h-8 text-xs text-red-600 font-['Roboto']">
+              className="h-8 text-xs text-red-600 font-['Poppins']">
               <RotateCcw className="size-3 mr-1" />
               Reset
             </Button>
-            <Button size="sm" variant="default" className="h-8 text-xs bg-[#2D3FC7] hover:bg-[#3F51B5] font-['Roboto']"
+            <Button size="sm" variant="default" className="h-8 text-xs bg-[#2D3FC7] hover:bg-[#3F51B5] font-['Poppins']"
               onClick={() => {
                 const first = selectedModTests.find(t => t.name === Array.from(visSelectedTests)[0])
                 setVisibilityDialogTest({ testName: Array.from(visSelectedTests)[0], displayName: first ? (overrides[first.name]?.displayName || first.display_name) : '' })
@@ -655,7 +655,7 @@ export function TestVisibilitySection() {
               <EyeOff className="size-3 mr-1" />
               Hide for Users
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setVisSelectedTests(new Set())} className="h-8 text-xs font-['Roboto'] text-[#888]">
+            <Button size="sm" variant="ghost" onClick={() => setVisSelectedTests(new Set())} className="h-8 text-xs font-['Poppins'] text-[#888]">
               Clear
             </Button>
           </div>
@@ -681,7 +681,7 @@ export function TestVisibilitySection() {
                 <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100 text-base">
                   {visActionMode === 'name' ? 'Rename Test' : 'Test Visibility'}
                 </DialogTitle>
-                <p className="text-[11px] font-['Manrope'] text-[#888] mt-0.5 font-mono truncate max-w-[360px]">{visDetailTest?.testName || ''}</p>
+                <p className="text-[11px] font-['Poppins'] text-[#888] mt-0.5 font-mono truncate max-w-[360px]">{visDetailTest?.testName || ''}</p>
               </div>
             </div>
           </DialogHeader>
@@ -689,11 +689,11 @@ export function TestVisibilitySection() {
           {visActionMode === 'name' && visDetailTest && (
             <div className="space-y-4 py-1">
               <div>
-                <label className="text-xs font-medium font-['Manrope'] text-[#555] dark:text-gray-300 mb-1.5 block">Display Name</label>
+                <label className="text-xs font-medium font-['Poppins'] text-[#555] dark:text-gray-300 mb-1.5 block">Display Name</label>
                 <div className="relative">
                   <Input value={editingNameValue} onChange={e => setEditingNameValue(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') handleDetailRename(); if (e.key === 'Escape') setVisDetailOpen(false) }}
-                    className="h-10 text-[13px] font-['Manrope'] pr-20" autoFocus placeholder="Enter display name..." />
+                    className="h-10 text-[13px] font-['Poppins'] pr-20" autoFocus placeholder="Enter display name..." />
                   <div className="absolute right-2 top-1/2 -translate-y-1/2">
                     <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
                       visDetailTest.testType === 'api'
@@ -704,11 +704,11 @@ export function TestVisibilitySection() {
                 </div>
               </div>
               <div className="flex items-center gap-2 pt-1">
-                <Button onClick={handleDetailRename} className="h-9 text-xs bg-[#2D3FC7] hover:bg-[#3F51B5] font-['Roboto'] flex-1">
+                <Button onClick={handleDetailRename} className="h-9 text-xs bg-[#2D3FC7] hover:bg-[#3F51B5] font-['Poppins'] flex-1">
                   <Save className="size-3.5 mr-1.5" />Save Name
                 </Button>
                 <Button variant="outline" onClick={() => { saveOverride(visDetailTest.testName, { displayName: null }); setVisDetailOpen(false) }}
-                  className="h-9 text-xs font-['Roboto'] text-red-600 flex-1">
+                  className="h-9 text-xs font-['Poppins'] text-red-600 flex-1">
                   <RotateCcw className="size-3 mr-1.5" />Revert
                 </Button>
               </div>
@@ -720,12 +720,12 @@ export function TestVisibilitySection() {
               <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className={`w-2 h-2 rounded-full ${visDetailTest.disabled ? 'bg-red-400' : 'bg-green-400'}`} />
-                  <span className="text-sm font-['Manrope'] text-[#333] dark:text-gray-100">Test Status</span>
+                  <span className="text-sm font-['Poppins'] text-[#333] dark:text-gray-100">Test Status</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Switch checked={!visDetailTest.disabled}
                     onCheckedChange={v => { saveOverride(visDetailTest.testName, { disabled: !v }); setVisDetailTest(prev => prev ? { ...prev, disabled: !v } : null) }} />
-                  <span className={`text-xs font-medium font-['Manrope'] ${visDetailTest.disabled ? 'text-red-500' : 'text-green-600'}`}>
+                  <span className={`text-xs font-medium font-['Poppins'] ${visDetailTest.disabled ? 'text-red-500' : 'text-green-600'}`}>
                     {visDetailTest.disabled ? 'Disabled' : 'Enabled'}
                   </span>
                 </div>
@@ -735,19 +735,19 @@ export function TestVisibilitySection() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <EyeOff className="size-3.5 text-[#888]" />
-                    <span className="text-xs font-['Manrope'] text-[#555] dark:text-gray-300">Hidden from users</span>
+                    <span className="text-xs font-['Poppins'] text-[#555] dark:text-gray-300">Hidden from users</span>
                   </div>
-                  <span className="text-xs font-semibold font-['Manrope'] text-orange-600">{visDetailTest.excluded} user{visDetailTest.excluded !== 1 ? 's' : ''}</span>
+                  <span className="text-xs font-semibold font-['Poppins'] text-orange-600">{visDetailTest.excluded} user{visDetailTest.excluded !== 1 ? 's' : ''}</span>
                 </div>
                 <Button variant="outline" onClick={() => { setVisibilityDialogTest({ testName: visDetailTest.testName, displayName: visDetailTest.displayName }); setVisibilityDialogOpen(true) }}
-                  className="w-full h-8 text-xs font-['Roboto'] justify-center">
+                  className="w-full h-8 text-xs font-['Poppins'] justify-center">
                   <EyeOff className="size-3 mr-1.5" />
                   {visDetailTest.excluded > 0 ? 'Manage Hidden Users' : 'Hide from Users'}
                 </Button>
               </div>
 
               <Button variant="outline" onClick={() => { saveOverride(visDetailTest.testName, { displayName: null, disabled: false }); setVisDetailOpen(false) }}
-                className="w-full h-9 text-xs font-['Roboto'] text-red-600 justify-center">
+                className="w-full h-9 text-xs font-['Poppins'] text-red-600 justify-center">
                 <RotateCcw className="size-3.5 mr-1.5" />Revert to Defaults
               </Button>
             </div>

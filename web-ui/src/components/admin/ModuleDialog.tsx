@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -56,23 +56,23 @@ export function ModuleDialog({ open, onOpenChange, editingModule, onSave, allMod
       <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100">{editingModule ? 'Edit Module' : 'Add Module'}</DialogTitle>
-          <DialogDescription className="font-['Manrope'] text-[#888]">
+          <DialogDescription className="font-['Poppins'] text-[#888]">
             {editingModule ? 'Update module configuration.' : 'Create a new test module.'}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Name (slug) <span className="text-red-500">*</span></Label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. registration-farmer" className="h-9 text-sm font-['Manrope']" />
+              <Label className="text-xs font-['Poppins']">Name (slug) <span className="text-red-500">*</span></Label>
+              <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. registration-farmer" className="h-9 text-sm font-['Poppins']" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Label (display) <span className="text-red-500">*</span></Label>
-              <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Farmer" className="h-9 text-sm font-['Manrope']" />
+              <Label className="text-xs font-['Poppins']">Label (display) <span className="text-red-500">*</span></Label>
+              <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Farmer" className="h-9 text-sm font-['Poppins']" />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-['Manrope']">Parent Module</Label>
+            <Label className="text-xs font-['Poppins']">Parent Module</Label>
             <Select value={parentId} onValueChange={setParentId}>
               <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="None (Top-level)" /></SelectTrigger>
               <SelectContent>
@@ -84,12 +84,12 @@ export function ModuleDialog({ open, onOpenChange, editingModule, onSave, allMod
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-['Manrope']">Description</Label>
-            <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Brief description of this module..." className="min-h-[60px] text-sm font-['Manrope']" />
+            <Label className="text-xs font-['Poppins']">Description</Label>
+            <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Brief description of this module..." className="min-h-[60px] text-sm font-['Poppins']" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Status</Label>
+              <Label className="text-xs font-['Poppins']">Status</Label>
               <Select value={status} onValueChange={setStatus}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -100,15 +100,15 @@ export function ModuleDialog({ open, onOpenChange, editingModule, onSave, allMod
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Sort Order</Label>
-              <Input type="number" value={sortOrder} onChange={e => setSortOrder(e.target.value)} className="h-9 text-sm font-['Manrope']" />
+              <Label className="text-xs font-['Poppins']">Sort Order</Label>
+              <Input type="number" value={sortOrder} onChange={e => setSortOrder(e.target.value)} className="h-9 text-sm font-['Poppins']" />
             </div>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="font-['Roboto']">Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="font-['Poppins']">Cancel</Button>
           <Button onClick={handleSave} disabled={!name.trim() || !label.trim()}
-            className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto']">
+            className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Poppins']">
             {editingModule ? 'Update' : 'Create'}
           </Button>
         </DialogFooter>

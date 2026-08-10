@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState, useCallback } from 'react'
 import Image from 'next/image'
@@ -64,7 +64,7 @@ function MaterialOutlinedField({
 
         <div className="relative flex-1 h-full">
           <label
-            className={`absolute left-0 transition-all duration-150 pointer-events-none font-['Manrope',sans-serif] z-10 ${
+            className={`absolute left-0 transition-all duration-150 pointer-events-none font-['Poppins',sans-serif] z-10 ${
               floatLabel
                 ? 'top-0 text-[12px] leading-none px-[4px] ' + (focused ? 'text-[rgba(63,81,181,0.87)]' : 'text-[rgba(0,0,0,0.6)] dark:text-gray-400') + ' bg-white dark:bg-gray-800 -translate-y-1/2'
                 : 'top-[16px] text-[16px] text-[rgba(0,0,0,0.6)] dark:text-gray-400 bg-transparent'
@@ -80,7 +80,7 @@ function MaterialOutlinedField({
             onBlur={() => setFocused(false)}
             autoFocus={autoFocus}
             required={required}
-            className="w-full h-full bg-transparent text-[16px] text-[rgba(0,0,0,0.87)] dark:text-gray-100 font-['Manrope',sans-serif] outline-none border-none placeholder-transparent leading-[56px]"
+            className="w-full h-full bg-transparent text-[16px] text-[rgba(0,0,0,0.87)] dark:text-gray-100 font-['Poppins',sans-serif] outline-none border-none placeholder-transparent leading-[56px]"
           />
         </div>
 
@@ -254,7 +254,7 @@ function ForgotPasswordPage({ onBackToLogin }: { onBackToLogin: () => void }) {
               {/* Heading */}
               <div className="text-center">
                 <motion.h4
-                  className="text-[20px] font-bold text-[#212529] dark:text-gray-100 font-['Manrope',sans-serif] mt-[24px] mb-2"
+                  className="text-[20px] font-bold text-[#212529] dark:text-gray-100 font-['Poppins',sans-serif] mt-[24px] mb-2"
                   initial={{ y: 15, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.35, duration: 0.5, ease: 'easeOut' }}
@@ -262,7 +262,7 @@ function ForgotPasswordPage({ onBackToLogin }: { onBackToLogin: () => void }) {
                   Forgot Password
                 </motion.h4>
                 <motion.p
-                  className="text-[13px] font-medium text-[#919AA3] dark:text-gray-400 font-['Manrope',sans-serif]"
+                  className="text-[13px] font-medium text-[#919AA3] dark:text-gray-400 font-['Poppins',sans-serif]"
                   initial={{ y: 10, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.5, duration: 0.5, ease: 'easeOut' }}
@@ -321,7 +321,7 @@ function ForgotPasswordPage({ onBackToLogin }: { onBackToLogin: () => void }) {
                     <Button
                       type="submit"
                       disabled={loading}
-                      className="h-[36px] min-w-[74px] px-6 bg-[#3F51B5] hover:bg-[#3949AB] text-white text-[14px] font-medium tracking-[1.25px] rounded-[4px] cursor-pointer transition-colors duration-150 font-['Roboto',sans-serif] normal-case"
+                      className="h-[36px] min-w-[74px] px-6 bg-[#3F51B5] hover:bg-[#3949AB] text-white text-[14px] font-medium tracking-[1.25px] rounded-[4px] cursor-pointer transition-colors duration-150 font-['Poppins',sans-serif] normal-case"
                     >
                       {loading ? (
                         <>
@@ -366,7 +366,7 @@ function ForgotPasswordPage({ onBackToLogin }: { onBackToLogin: () => void }) {
               {/* Heading */}
               <div className="text-center">
                 <motion.h4
-                  className="text-[20px] font-bold text-[#212529] dark:text-gray-100 font-['Manrope',sans-serif] mt-[24px] mb-2"
+                  className="text-[20px] font-bold text-[#212529] dark:text-gray-100 font-['Poppins',sans-serif] mt-[24px] mb-2"
                   initial={{ y: 15, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.15, duration: 0.5, ease: 'easeOut' }}
@@ -374,7 +374,7 @@ function ForgotPasswordPage({ onBackToLogin }: { onBackToLogin: () => void }) {
                   Reset Password
                 </motion.h4>
                 <motion.p
-                  className="text-[13px] font-medium text-[#919AA3] dark:text-gray-400 font-['Manrope',sans-serif]"
+                  className="text-[13px] font-medium text-[#919AA3] dark:text-gray-400 font-['Poppins',sans-serif]"
                   initial={{ y: 10, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.25, duration: 0.5, ease: 'easeOut' }}
@@ -467,7 +467,7 @@ function ForgotPasswordPage({ onBackToLogin }: { onBackToLogin: () => void }) {
                     <Button
                       type="submit"
                       disabled={loading}
-                      className="h-[36px] min-w-[74px] px-6 bg-[#3F51B5] hover:bg-[#3949AB] text-white text-[14px] font-medium tracking-[1.25px] rounded-[4px] cursor-pointer transition-colors duration-150 font-['Roboto',sans-serif] normal-case"
+                      className="h-[36px] min-w-[74px] px-6 bg-[#3F51B5] hover:bg-[#3949AB] text-white text-[14px] font-medium tracking-[1.25px] rounded-[4px] cursor-pointer transition-colors duration-150 font-['Poppins',sans-serif] normal-case"
                     >
                       {loading ? (
                         <>
@@ -531,7 +531,7 @@ function ForgotPasswordPage({ onBackToLogin }: { onBackToLogin: () => void }) {
                 </motion.div>
 
                 <motion.h4
-                  className="text-[20px] font-bold text-[#212529] dark:text-gray-100 font-['Manrope',sans-serif] mb-2"
+                  className="text-[20px] font-bold text-[#212529] dark:text-gray-100 font-['Poppins',sans-serif] mb-2"
                   initial={{ y: 15, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.35, duration: 0.5, ease: 'easeOut' }}
@@ -539,7 +539,7 @@ function ForgotPasswordPage({ onBackToLogin }: { onBackToLogin: () => void }) {
                   Password Reset Successful!
                 </motion.h4>
                 <motion.p
-                  className="text-[13px] font-medium text-[#919AA3] dark:text-gray-400 font-['Manrope',sans-serif]"
+                  className="text-[13px] font-medium text-[#919AA3] dark:text-gray-400 font-['Poppins',sans-serif]"
                   initial={{ y: 10, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.5, duration: 0.5, ease: 'easeOut' }}
@@ -558,7 +558,7 @@ function ForgotPasswordPage({ onBackToLogin }: { onBackToLogin: () => void }) {
                 <Button
                   type="button"
                   onClick={onBackToLogin}
-                  className="h-[36px] min-w-[74px] px-6 bg-[#3F51B5] hover:bg-[#3949AB] text-white text-[14px] font-medium tracking-[1.25px] rounded-[4px] cursor-pointer transition-colors duration-150 font-['Roboto',sans-serif] normal-case"
+                  className="h-[36px] min-w-[74px] px-6 bg-[#3F51B5] hover:bg-[#3949AB] text-white text-[14px] font-medium tracking-[1.25px] rounded-[4px] cursor-pointer transition-colors duration-150 font-['Poppins',sans-serif] normal-case"
                 >
                   Back to Login
                 </Button>
@@ -656,7 +656,7 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
                 {/* Heading */}
                 <div className="text-center">
                   <motion.h4
-                    className="text-[20px] font-bold text-[#212529] dark:text-gray-100 font-['Manrope',sans-serif] mt-[24px] mb-2"
+                    className="text-[20px] font-bold text-[#212529] dark:text-gray-100 font-['Poppins',sans-serif] mt-[24px] mb-2"
                     initial={{ y: 15, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ delay: 0.35, duration: 0.5, ease: 'easeOut' }}
@@ -664,7 +664,7 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
                     Welcome Back !
                   </motion.h4>
                   <motion.p
-                    className="text-[13px] font-medium text-[#919AA3] dark:text-gray-400 font-['Manrope',sans-serif]"
+                    className="text-[13px] font-medium text-[#919AA3] dark:text-gray-400 font-['Poppins',sans-serif]"
                     initial={{ y: 10, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ delay: 0.5, duration: 0.5, ease: 'easeOut' }}
@@ -757,7 +757,7 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
                       <Button
                         type="submit"
                         disabled={loading}
-                        className="h-[36px] min-w-[74px] px-6 bg-[#3F51B5] hover:bg-[#3949AB] text-white text-[14px] font-medium tracking-[1.25px] rounded-[4px] cursor-pointer transition-colors duration-150 font-['Roboto',sans-serif] normal-case"
+                        className="h-[36px] min-w-[74px] px-6 bg-[#3F51B5] hover:bg-[#3949AB] text-white text-[14px] font-medium tracking-[1.25px] rounded-[4px] cursor-pointer transition-colors duration-150 font-['Poppins',sans-serif] normal-case"
                       >
                         {loading ? (
                           <>

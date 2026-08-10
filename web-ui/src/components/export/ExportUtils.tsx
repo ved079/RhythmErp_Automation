@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState, useCallback } from 'react'
 import {
@@ -727,7 +727,7 @@ export function exportReportToPDF(
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Manrope', 'Poppins', sans-serif; color: #1a1a2e; line-height: 1.6; background: #fff; }
+    body { font-family: 'Poppins', sans-serif; color: #1a1a2e; line-height: 1.6; background: #fff; }
     .page { max-width: 900px; margin: 0 auto; padding: 40px; }
     .header { background: ${ERP_BLUE_HEX}; color: #fff; padding: 32px 40px; border-radius: 12px; margin-bottom: 32px; display: flex; align-items: center; justify-content: space-between; }
     .header h1 { font-family: 'Poppins', sans-serif; font-size: 24px; font-weight: 700; margin-bottom: 4px; }

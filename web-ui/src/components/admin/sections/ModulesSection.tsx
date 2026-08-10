@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -43,11 +43,11 @@ export function ModulesSection({
         <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Modules</h2>
         <div className="flex gap-2">
           <Button onClick={onSeed}
-            className="bg-[#00897B] hover:bg-[#00695C] text-white font-['Roboto'] text-xs h-8">
+            className="bg-[#00897B] hover:bg-[#00695C] text-white font-['Poppins'] text-xs h-8">
             <Database className="size-3.5 mr-1" /> Seed Defaults
           </Button>
           <Button onClick={onAdd}
-            className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto'] text-xs h-8">
+            className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Poppins'] text-xs h-8">
             <Plus className="size-3.5 mr-1" /> Add Module
           </Button>
         </div>
@@ -60,7 +60,7 @@ export function ModulesSection({
           </div>
           <div>
             <p className="text-lg font-bold font-['Poppins'] text-[#333] dark:text-gray-100">{activeCount}</p>
-            <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Active</p>
+            <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Poppins']">Active</p>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700 flex items-center gap-3">
@@ -69,7 +69,7 @@ export function ModulesSection({
           </div>
           <div>
             <p className="text-lg font-bold font-['Poppins'] text-[#333] dark:text-gray-100">{draftCount}</p>
-            <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Draft</p>
+            <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Poppins']">Draft</p>
           </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700 flex items-center gap-3">
@@ -78,7 +78,7 @@ export function ModulesSection({
           </div>
           <div>
             <p className="text-lg font-bold font-['Poppins'] text-[#333] dark:text-gray-100">{disabledCount}</p>
-            <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">Disabled</p>
+            <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Poppins']">Disabled</p>
           </div>
         </div>
       </div>
@@ -88,8 +88,8 @@ export function ModulesSection({
       ) : modules.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 border border-gray-100 dark:border-gray-700 text-center">
           <FolderTree className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
-          <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No modules configured</p>
-          <p className="text-xs text-[#888] dark:text-gray-400 font-['Manrope'] mt-1">Click &quot;Seed Defaults&quot; to create default modules, or add one manually.</p>
+          <p className="text-sm text-[#888] dark:text-gray-400 font-['Poppins']">No modules configured</p>
+          <p className="text-xs text-[#888] dark:text-gray-400 font-['Poppins'] mt-1">Click &quot;Seed Defaults&quot; to create default modules, or add one manually.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -104,7 +104,7 @@ export function ModulesSection({
                       <span className="text-sm font-semibold font-['Poppins'] text-[#3F51B5] dark:text-[#7986CB]">{parent.label}</span>
                       <Badge className={`text-[9px] border-0 ${statusBadge(parent.status)}`}>{parent.status}</Badge>
                     </div>
-                    {parent.description && <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope'] mt-0.5 truncate">{parent.description}</p>}
+                    {parent.description && <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Poppins'] mt-0.5 truncate">{parent.description}</p>}
                   </div>
                   <Badge variant="outline" className="text-[10px]">{parent.testCount} tests</Badge>
                   <div className="flex gap-1">
@@ -126,10 +126,10 @@ export function ModulesSection({
                         <ChevronRight className="size-3 text-[#888] dark:text-gray-400" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-['Manrope'] text-[#333] dark:text-gray-100">{child.label}</span>
+                            <span className="text-xs font-['Poppins'] text-[#333] dark:text-gray-100">{child.label}</span>
                             <Badge className={`text-[8px] border-0 px-1 py-0 ${statusBadge(child.status)}`}>{child.status}</Badge>
                           </div>
-                          {child.description && <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope'] truncate">{child.description}</p>}
+                          {child.description && <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Poppins'] truncate">{child.description}</p>}
                         </div>
                         <Badge variant="outline" className="text-[9px]">{child.testCount} tests</Badge>
                         <div className="flex gap-1">
@@ -162,7 +162,7 @@ export function ModulesSection({
                     <ChevronRight className="size-3 text-[#888] dark:text-gray-400" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-['Manrope'] text-[#333] dark:text-gray-100">{child.label}</span>
+                        <span className="text-xs font-['Poppins'] text-[#333] dark:text-gray-100">{child.label}</span>
                         <Badge className={`text-[8px] border-0 px-1 py-0 ${statusBadge(child.status)}`}>{child.status}</Badge>
                       </div>
                     </div>

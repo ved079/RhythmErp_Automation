@@ -59,7 +59,7 @@ export function filterSidebarByAccess(modules: SidebarModule[], user: AuthUser):
   if (access.includes('all')) return modules
 
   // Always-visible module IDs
-  const alwaysVisible = new Set(['dashboard', 'my-tickets', 'credentials'])
+  const alwaysVisible = new Set(['dashboard', 'my-tickets'])
 
   function filterItems(items: SidebarModule[]): SidebarModule[] {
     return items

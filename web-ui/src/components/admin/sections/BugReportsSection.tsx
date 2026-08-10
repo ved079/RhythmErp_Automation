@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState, useMemo } from 'react'
 import {
@@ -142,7 +142,7 @@ export function BugReportsSection({
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-[#888]" />
                 <Input placeholder="Search bugs..." value={bugSearch} onChange={e => setBugSearch(e.target.value)}
-                  className="h-8 pl-8 pr-3 text-xs font-['Manrope'] w-48" />
+                  className="h-8 pl-8 pr-3 text-xs font-['Poppins'] w-48" />
               </div>
               <Select value={bugModuleFilter} onValueChange={setBugModuleFilter}>
                 <SelectTrigger className="h-8 text-xs w-32"><SelectValue placeholder="Module" /></SelectTrigger>
@@ -171,7 +171,7 @@ export function BugReportsSection({
           <div className="flex gap-1.5 flex-wrap bg-gray-50 dark:bg-gray-800/50 rounded-xl p-1 border border-gray-100 dark:border-gray-700/50">
             {tabs.map(tab => (
               <button key={tab.id} onClick={() => setBugStatusFilter(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-['Manrope'] font-medium transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-['Poppins'] font-medium transition-all cursor-pointer ${
                   bugStatusFilter === tab.id
                     ? 'bg-white dark:bg-gray-700 text-[#3F51B5] dark:text-[#7986CB] shadow-sm'
                     : 'text-[#888] dark:text-gray-400 hover:text-[#333] dark:hover:text-gray-100'
@@ -189,7 +189,7 @@ export function BugReportsSection({
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <Inbox className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
-              <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No bug reports found</p>
+              <p className="text-sm text-[#888] dark:text-gray-400 font-['Poppins']">No bug reports found</p>
             </div>
           </div>
         ) : (
@@ -257,7 +257,7 @@ export function BugReportsSection({
             const sla = getSLAStatus(bug.priority, bug.createdAt, bug.status)
             const sc = statusConfig[bug.status] || statusConfig.open
             return (
-              <div className="font-['Manrope']">
+              <div className="font-['Poppins']">
                 <div className="flex items-start justify-between gap-4 mb-5">
                   <div>
                     <div className="flex items-center gap-2.5 mb-1">
@@ -305,7 +305,7 @@ export function BugReportsSection({
                       const colors = statusConfig[s]
                       return (
                         <button key={s} onClick={() => { if (s !== bug.status) setPendingBugStatus(prev => ({ ...prev, [bug.id]: s })) }}
-                          className={`text-xs font-['Manrope'] px-3 py-1.5 rounded-lg border transition-all cursor-pointer ${
+                          className={`text-xs font-['Poppins'] px-3 py-1.5 rounded-lg border transition-all cursor-pointer ${
                             isCurrent
                               ? `${colors.bg} ${colors.text} border-transparent font-semibold`
                               : isPending
@@ -323,11 +323,11 @@ export function BugReportsSection({
                         handleBugStatusChange(bug.id, pendingBugStatus[bug.id] as BugReport['status'])
                         setPendingBugStatus(prev => { const n = { ...prev }; delete n[bug.id]; return n })
                       }}
-                        className="text-xs font-['Manrope'] px-4 py-1.5 rounded-lg bg-[#3F51B5] text-white hover:bg-[#2D3FC7] font-medium transition-colors">
+                        className="text-xs font-['Poppins'] px-4 py-1.5 rounded-lg bg-[#3F51B5] text-white hover:bg-[#2D3FC7] font-medium transition-colors">
                         <Check className="size-3.5 inline mr-1.5" />Confirm & Update
                       </button>
                       <button onClick={() => setPendingBugStatus(prev => { const n = { ...prev }; delete n[bug.id]; return n })}
-                        className="text-xs font-['Manrope'] px-3 py-1.5 rounded-lg text-[#888] hover:text-[#555] hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                        className="text-xs font-['Poppins'] px-3 py-1.5 rounded-lg text-[#888] hover:text-[#555] hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                         Cancel
                       </button>
                       <span className="text-[10px] text-[#aaa]">Status will change from <strong>{bug.status}</strong> to <strong>{pendingBugStatus[bug.id]}</strong></span>
@@ -346,7 +346,7 @@ export function BugReportsSection({
                               <span className="text-xs font-semibold text-[#3F51B5]">{r.authorName.charAt(0).toUpperCase()}</span>
                             </div>
                           )}
-                          <div className={`max-w-[75%] rounded-xl px-3.5 py-2.5 text-sm font-['Manrope'] ${
+                          <div className={`max-w-[75%] rounded-xl px-3.5 py-2.5 text-sm font-['Poppins'] ${
                             r.authorRole === 'admin'
                               ? 'bg-[#3F51B5] text-white rounded-br-sm'
                               : 'bg-gray-100 dark:bg-gray-700 text-[#333] dark:text-gray-100 rounded-bl-sm'
@@ -373,7 +373,7 @@ export function BugReportsSection({
                     <Input placeholder="Type a reply..." value={bugReplyText[bug.id] || ''}
                       onChange={e => setBugReplyText(prev => ({ ...prev, [bug.id]: e.target.value }))}
                       onKeyDown={e => { if (e.key === 'Enter') handleBugReply(bug.id) }}
-                      className="h-10 text-sm font-['Manrope']" />
+                      className="h-10 text-sm font-['Poppins']" />
                     <Button size="sm" onClick={() => handleBugReply(bug.id)}
                       className="h-10 w-10 p-0 bg-[#3F51B5] hover:bg-[#2D3FC7] text-white shrink-0">
                       <Send className="size-4" />

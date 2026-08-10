@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
@@ -74,7 +74,7 @@ export function SettingsSection() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Settings</h2>
-        <Button variant="outline" onClick={handleSeedSettings} className="text-xs h-8 font-['Roboto']">
+        <Button variant="outline" onClick={handleSeedSettings} className="text-xs h-8 font-['Poppins']">
           <RotateCcw className="size-3.5 mr-1" /> Reset to Defaults
         </Button>
       </div>
@@ -83,7 +83,7 @@ export function SettingsSection() {
       ) : settings.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 border border-gray-100 dark:border-gray-700 text-center">
           <SettingsIcon className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
-          <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No settings loaded</p>
+          <p className="text-sm text-[#888] dark:text-gray-400 font-['Poppins']">No settings loaded</p>
         </div>
       ) : (
         <div className="space-y-6">
@@ -96,15 +96,15 @@ export function SettingsSection() {
                 {settings.filter(s => s.category === cat).map(s => (
                   <div key={s.id} className="flex items-center gap-4 px-5 py-4">
                     <div className="flex-1 min-w-0">
-                      <Label className="text-xs font-medium text-[#333] dark:text-gray-100 font-['Manrope']">{s.label}</Label>
-                      <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope'] mt-0.5">{s.description}</p>
+                      <Label className="text-xs font-medium text-[#333] dark:text-gray-100 font-['Poppins']">{s.label}</Label>
+                      <p className="text-[10px] text-[#888] dark:text-gray-400 font-['Poppins'] mt-0.5">{s.description}</p>
                     </div>
                     <div className="w-48 shrink-0">
                       {s.type === 'boolean' ? (
                         <div className="flex items-center gap-2">
                           <Switch checked={getLocalValue(s) === 'true'}
                             onCheckedChange={v => setLocalValue(s.id, String(v))} />
-                          <span className="text-[10px] text-[#888] dark:text-gray-400 font-['Manrope']">{getLocalValue(s) === 'true' ? 'On' : 'Off'}</span>
+                          <span className="text-[10px] text-[#888] dark:text-gray-400 font-['Poppins']">{getLocalValue(s) === 'true' ? 'On' : 'Off'}</span>
                         </div>
                       ) : s.type === 'select' ? (
                         <Select value={getLocalValue(s)} onValueChange={v => setLocalValue(s.id, v)}>
@@ -115,12 +115,12 @@ export function SettingsSection() {
                         </Select>
                       ) : (
                         <Input type={s.type} value={getLocalValue(s)} onChange={e => setLocalValue(s.id, e.target.value)}
-                          className="h-8 text-xs font-['Manrope']" />
+                          className="h-8 text-xs font-['Poppins']" />
                       )}
                     </div>
                     <Button size="sm" onClick={() => { handleSaveSetting(s, getLocalValue(s)); setDirtyMap(prev => { const n = { ...prev }; delete n[s.id]; return n }) }}
                       disabled={getLocalValue(s) === s.value}
-                      className="h-7 text-[10px] bg-[#3F51B5] hover:bg-[#2D3FC7] text-white font-['Roboto']">
+                      className="h-7 text-[10px] bg-[#3F51B5] hover:bg-[#2D3FC7] text-white font-['Poppins']">
                       <Save className="size-3 mr-1" /> Save
                     </Button>
                   </div>

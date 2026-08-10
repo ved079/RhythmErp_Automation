@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -25,7 +25,7 @@ export function EnvironmentsSection({
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Environments</h2>
         <Button onClick={onAdd}
-          className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto'] text-xs h-8">
+          className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Poppins'] text-xs h-8">
           <Plus className="size-3.5 mr-1" /> Add Environment
         </Button>
       </div>
@@ -34,7 +34,7 @@ export function EnvironmentsSection({
       ) : environments.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 border border-gray-100 dark:border-gray-700 text-center">
           <Globe className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
-          <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No environments configured</p>
+          <p className="text-sm text-[#888] dark:text-gray-400 font-['Poppins']">No environments configured</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -49,17 +49,17 @@ export function EnvironmentsSection({
                   {env.status}
                 </Badge>
               </div>
-              <div className="space-y-1 text-xs font-['Manrope']">
+              <div className="space-y-1 text-xs font-['Poppins']">
                 <p className="text-[#545454] dark:text-gray-300"><span className="text-[#888] dark:text-gray-400">URL:</span> {env.baseUrl}</p>
                 <p className="text-[#545454] dark:text-gray-300"><span className="text-[#888] dark:text-gray-400">Browser:</span> {env.browser}</p>
                 {env.lastUsed && <p className="text-[#545454] dark:text-gray-300"><span className="text-[#888] dark:text-gray-400">Last used:</span> {env.lastUsed}</p>}
               </div>
               <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-                <Button size="sm" variant="outline" className="h-7 text-[10px] font-['Roboto']"
+                <Button size="sm" variant="outline" className="h-7 text-[10px] font-['Poppins']"
                   onClick={() => onEdit(env)}><Pencil className="size-3 mr-1" /> Edit</Button>
-                <Button size="sm" variant="outline" className="h-7 text-[10px] font-['Roboto']"
+                <Button size="sm" variant="outline" className="h-7 text-[10px] font-['Poppins']"
                   onClick={() => onToggle(env)}>{env.status === 'active' ? 'Deactivate' : 'Activate'}</Button>
-                <Button size="sm" variant="ghost" className="h-7 text-[10px] text-[#F44336] hover:text-[#D32F2F] hover:bg-red-50 dark:hover:bg-red-900/20 font-['Roboto']"
+                <Button size="sm" variant="ghost" className="h-7 text-[10px] text-[#F44336] hover:text-[#D32F2F] hover:bg-red-50 dark:hover:bg-red-900/20 font-['Poppins']"
                   onClick={() => onDelete({ type: 'environment', id: env.id, label: env.name })}><Trash2 className="size-3" /></Button>
               </div>
             </div>

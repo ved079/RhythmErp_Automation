@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { CheckCircle2, XCircle, Play, Key, RefreshCw, Loader2, X, AlertTriangle, Wand2 } from 'lucide-react'
+import { CheckCircle2, XCircle, Play, Key, RefreshCw, Loader2, X, AlertTriangle, Wand2, Search } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import { startPurchaseChain, fetchMasterData, fetchItemCategories, fetchItemsWithCqp, fillCqpItems, type SSEEvent, type MasterDataItem, type ItemCategory } from '@/lib/api'
 
@@ -72,7 +72,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [categories, setCategories] = useState<ItemCategory[]>([])
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
   const [requireTaxRate, setRequireTaxRate] = useState(true)
-  const [flow, setFlow] = useState<'po' | 'gp'>('po')
+  const [flow, setFlow] = useState<'po' | 'gp' | 'so'>('po')
   const [multiGatePass, setMultiGatePass] = useState(false)
   const [gpCount, setGpCount] = useState(2)
   const [loadingData, setLoadingData] = useState(false)
@@ -82,6 +82,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [showTokenInput, setShowTokenInput] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
   const [activeMenu, setActiveMenu] = useState<{type: 'supplier' | 'category' | 'item' | number | `chainSup:${number}`; pos: {top: number; left: number; width: number}} | null>(null)
+  const [dropdownSearch, setDropdownSearch] = useState('')
   const logsEndRef = useRef<HTMLDivElement>(null)
   const tokenSectionRef = useRef<HTMLDivElement>(null)
   const startTimeRef = useRef<number>(0)
@@ -163,7 +164,12 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   // Document order for the selected flow: full chain starts with PO,
   // standalone GP starts directly at the Gate Pass.
   const docOrder = React.useMemo(
-    () => (flow === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']),
+    () =>
+      flow === 'gp'
+        ? ['GP', 'GRN', 'QC', 'PB']
+        : flow === 'so'
+          ? ['PO', 'GP', 'GRN', 'QC', 'SO', 'PB']
+          : ['PO', 'GP', 'GRN', 'QC', 'PB'],
     [flow],
   )
 
@@ -300,14 +306,37 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const selectedSupplier = suppliers.find((s) => s.id === supplier)
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId)
 
+  // Clamp the floating dropdown within the viewport so it never renders off-screen.
+  const dropdownPos = React.useMemo(() => {
+    if (!activeMenu) return null
+    const POS_MARGIN = 8
+    const MAX_H = 192 // matches max-h-48
+    const MIN_W = 200
+    const WANT_W = 260 // prefer a wider panel so long names stay readable
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 0
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 0
+
+    // Always open below the button; cap height so it never overflows the viewport.
+    const top = activeMenu.pos.top
+    const maxHeight = Math.min(MAX_H, vh - top - POS_MARGIN)
+
+    // Anchor the panel to the trigger button (same left edge). Widen it if the
+    // viewport has room to the right; only fall back to the right edge when there
+    // genuinely isn't enough space to keep it attached.
+    const left = activeMenu.pos.left
+    const width = activeMenu.pos.width
+    return { top, left, width, maxHeight }
+  }, [activeMenu])
+
   return (
     <div className="flex flex-col h-full min-h-0 gap-4">
       {/* Controls panel */}
       <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col min-h-0 flex-1 overflow-hidden">
         {/* Flow selector — pinned to the top of the panel */}
-        <div className="grid grid-cols-2 border-b border-gray-300 dark:border-gray-600 shrink-0">
+        <div className="grid grid-cols-3 border-b border-gray-300 dark:border-gray-600 shrink-0" data-tour="pc-flow">
           {([
             { id: 'po', label: 'PO → GP → GRN → QC → PB' },
+            { id: 'so', label: 'PO → GP → GRN → QC → SO → PB' },
             { id: 'gp', label: 'GP → GRN → QC → PB' },
           ] as const).map((f, i) => (
             <button
@@ -316,7 +345,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
               onClick={() => {
                 setFlow(f.id)
                 setMultiGatePass(false)
-                setEnabledDocs(new Set(f.id === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
+                setEnabledDocs(new Set(f.id === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO', 'PB'] : f.id === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
               }}
               disabled={running}
               className={`px-3 py-2 text-[11px] font-medium border-b-2 transition-colors cursor-pointer disabled:cursor-not-allowed text-center ${
@@ -332,7 +361,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         <div className="p-4 pb-0 overflow-y-auto flex-1 min-h-0">
 
         {/* Document selector + toggles — equally spaced row */}
-        <div className="border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100/60 dark:bg-gray-800/50 px-3 py-2 mb-4 grid grid-cols-[1.2fr_1fr_1.3fr] gap-1.5 items-start">
+        <div className="border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100/60 dark:bg-gray-800/50 px-3 py-2 mb-4 grid grid-cols-[1.2fr_1fr_1.3fr] gap-1.5 items-start" data-tour="pc-docs">
           <div className="flex flex-col gap-0.5 items-center" title="Click a document to customize the flow">
             <div className="flex items-center gap-1.5 flex-wrap justify-center">
               <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">Create:</span>
@@ -377,10 +406,10 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             <span className="text-[10px] text-gray-600 dark:text-gray-400">Click a document to customize the flow</span>
           </div>
 
-          {flow === 'po' && (
+          {flow !== 'gp' && (
           <>
 
-          <div className="flex flex-col gap-0.5 items-center">
+          <div className="flex flex-col gap-0.5 items-center" data-tour="pc-tax">
             <div className="flex items-center gap-1.5 flex-wrap justify-center">
               <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">Tax:</span>
               <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
@@ -411,7 +440,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             </span>
           </div>
 
-          <div className="flex flex-col gap-0.5 items-center">
+          <div className="flex flex-col gap-0.5 items-center" data-tour="pc-multigp">
             <div className="flex items-center gap-1.5 flex-wrap justify-center">
               <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">Multi GP:</span>
               <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
@@ -475,7 +504,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
 
         <div className="grid grid-cols-2 gap-4 mb-4">
           {/* Item Category selector */}
-          <div className="relative">
+          <div className="relative" data-tour="pc-category">
             <Label className="text-[11px] text-gray-700 dark:text-gray-300 mb-1 block">Item Category</Label>
             {loadingData && categories.length === 0 ? (
               <div className="h-9 flex items-center text-[12px] text-gray-600 dark:text-gray-400 gap-1.5">
@@ -500,7 +529,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           </div>
 
           {/* Supplier selector */}
-          <div className="relative">
+          <div className="relative" data-tour="pc-supplier">
             <Label className="text-[11px] text-gray-700 dark:text-gray-300 mb-1 block">Supplier</Label>
             {loadingData && suppliers.length === 0 ? (
               <div className="h-9 flex items-center text-[12px] text-gray-600 dark:text-gray-400 gap-1.5">
@@ -530,7 +559,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         {/* Chains — own row */}
         <div className="mb-4">
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-0.5" data-tour="pc-chains">
               <Label className="text-[10px] text-gray-600 dark:text-gray-400 block">Chains</Label>
               <Input
                 type="number"
@@ -610,7 +639,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                     const r = chainSupBtnRefs.current[idx]?.getBoundingClientRect()
                     if (r) setActiveMenu({ type: `chainSup:${idx}` as never, pos: { top: r.bottom + 4, left: r.left, width: Math.max(r.width, 200) } })
                   }}
-                  className="h-9 w-40 px-2.5 py-0 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
+                  className="h-9 w-56 px-2.5 py-0 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
                 >
                   <span className="truncate">
                     {chainSup != null
@@ -627,7 +656,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         {/* Items per doc — own row */}
         <div className="mb-4">
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-0.5" data-tour="pc-items">
               <Label className="text-[10px] text-gray-600 dark:text-gray-400 block">Items / Doc</Label>
               <Input
                 type="number"
@@ -687,7 +716,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                     const r = rowBtnRefs.current[idx]?.getBoundingClientRect()
                     if (r) setActiveMenu({ type: idx, pos: { top: r.bottom + 4, left: r.left, width: Math.max(r.width, 200) } })
                   }}
-                  className="h-9 w-40 px-2.5 py-0 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
+                  className="h-9 w-56 px-2.5 py-0 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
                 >
                   <span className="truncate">{catItems.find(i => i.id === itemIds[idx])?.name ?? 'Select...'}</span>
                   <svg className={`size-3 text-gray-500 transition-transform shrink-0 ${activeMenu?.type === idx ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -767,6 +796,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
               onClick={handleStart}
               disabled={running || supplier === null || itemIds.length === 0 || loadingData}
               className="h-8 text-[12px] gap-1.5 cursor-pointer"
+              data-tour="pc-run"
             >
               <Play className="size-3.5" />
               Run {count > 1 ? `${count}×` : ''} {activeDocs.join(' → ')}
@@ -787,6 +817,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
               variant="outline"
               size="sm"
               className="h-8 text-[12px] gap-1.5 cursor-pointer"
+              data-tour="pc-token"
             >
               <Key className="size-3" />
               Set Token
@@ -812,6 +843,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             onClick={() => setShowLogs(v => !v)}
             className={`ml-auto text-[11px] px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${showLogs ? 'bg-[#3F51B5]/10 border-[#3F51B5]/40 text-[#3F51B5] dark:text-[#7986CB]' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}`}
             title="Toggle console popup"
+            data-tour="pc-console"
           >
             Console
             {logs.length > 0 && <span className="ml-1 text-gray-500 dark:text-gray-400">({logs.length})</span>}
@@ -871,21 +903,36 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       {/* Floating dropdown menu via portal */}
       {activeMenu && typeof document !== 'undefined' && createPortal(
         <>
-          <div className="fixed inset-0 z-50" onClick={() => setActiveMenu(null)} />
+          <div className="fixed inset-0 z-50" onClick={() => { setActiveMenu(null); setDropdownSearch('') }} />
           <div
-            className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-48 overflow-y-auto"
-            style={{ top: activeMenu.pos.top, left: activeMenu.pos.left, width: activeMenu.pos.width }}
+            className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg"
+            style={dropdownPos ?? { top: activeMenu.pos.top, left: activeMenu.pos.left, width: activeMenu.pos.width, maxHeight: 192 }}
           >
-            {(() => {
-              const list = activeMenu.type === 'supplier' || typeof activeMenu.type === 'string' && activeMenu.type.startsWith('chainSup:')
-                ? suppliers
-                : activeMenu.type === 'category'
-                  ? categories
-                  : catItems
-              return list.length === 0 ? (
-                <div className="px-3 py-2 text-[12px] text-gray-600 dark:text-gray-400">No data loaded</div>
-              ) : (
-                list.map((i) => {
+            <div className="px-2 py-1.5 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
+              <div className="flex items-center gap-1.5 rounded bg-gray-100 dark:bg-gray-700/50 px-2 py-1">
+                <Search className="size-3.5 text-gray-400" />
+                <input
+                  autoFocus
+                  value={dropdownSearch}
+                  onChange={(e) => setDropdownSearch(e.target.value)}
+                  placeholder="Search…"
+                  className="flex-1 bg-transparent outline-none text-[12px] text-gray-700 dark:text-gray-200 placeholder:text-gray-400"
+                />
+              </div>
+            </div>
+            <div className="overflow-y-auto" style={{ maxHeight: (dropdownPos?.maxHeight ?? 192) - 36 }}>
+              {(() => {
+                const list = activeMenu.type === 'supplier' || typeof activeMenu.type === 'string' && activeMenu.type.startsWith('chainSup:')
+                  ? suppliers
+                  : activeMenu.type === 'category'
+                    ? categories
+                    : catItems
+                const q = dropdownSearch.trim().toLowerCase()
+                const filtered = q ? list.filter((i) => i.name.toLowerCase().includes(q)) : list
+                return filtered.length === 0 ? (
+                  <div className="px-3 py-2 text-[12px] text-gray-600 dark:text-gray-400">No results found</div>
+                ) : (
+                  filtered.map((i) => {
                   const mType = activeMenu.type
                   const isChainSup = typeof mType === 'string' && mType.startsWith('chainSup:')
                   const chainIdx = isChainSup ? parseInt((mType as string).split(':')[1]) : -1
@@ -916,6 +963,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                           setItemIds((prev) => { const next = [...prev]; next[activeMenu.type as number] = i.id; return next })
                         }
                         setActiveMenu(null)
+                        setDropdownSearch('')
                       }}
                       className={`w-full px-3 py-1.5 text-[12px] text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer ${selected ? 'bg-[#3F51B5]/10 dark:bg-[#3F51B5]/20 text-[#3F51B5] dark:text-[#7986CB] font-medium' : 'text-gray-700 dark:text-gray-200'}`}
                     >
@@ -925,6 +973,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                 })
               )
             })()}
+            </div>
           </div>
         </>,
         document.body

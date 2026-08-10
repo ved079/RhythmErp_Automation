@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React from 'react'
 import Image from 'next/image'
@@ -74,7 +74,7 @@ export default function AdminPage() {
           <Separator orientation="vertical" className="h-5" />
           <div className="flex items-center gap-2">
             <Image src="/agdi-logo-new.webp" width={70} height={28} className="object-contain" alt="agDi Logo" />
-            <span className="text-[#888888] dark:text-gray-500 text-[13px] font-['Manrope'] ml-1">Admin Panel</span>
+            <span className="text-[#888888] dark:text-gray-500 text-[13px] font-['Poppins'] ml-1">Admin Panel</span>
           </div>
           <Badge className="bg-[#6777EF] text-white text-[10px] font-semibold px-1.5 py-0 ml-1 border-0">ADMIN</Badge>
         </div>
@@ -257,13 +257,13 @@ export default function AdminPage() {
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100">Confirm Delete</DialogTitle>
-            <DialogDescription className="font-['Manrope'] text-[#888]">
+            <DialogDescription className="font-['Poppins'] text-[#888]">
               Are you sure you want to delete <strong>{s.deleteTarget?.label}</strong>? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => s.setDeleteDialogOpen(false)} className="font-['Roboto']">Cancel</Button>
-            <Button onClick={s.handleDelete} className="bg-[#F44336] hover:bg-[#D32F2F] text-white font-['Roboto']">Delete</Button>
+            <Button variant="outline" onClick={() => s.setDeleteDialogOpen(false)} className="font-['Poppins']">Cancel</Button>
+            <Button onClick={s.handleDelete} className="bg-[#F44336] hover:bg-[#D32F2F] text-white font-['Poppins']">Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
