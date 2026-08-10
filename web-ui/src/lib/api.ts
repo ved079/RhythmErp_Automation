@@ -370,6 +370,7 @@ export async function startPurchaseChain(
   multiGatePass?: boolean,
   gpCount?: number,
   supplierRefIds?: number[],
+  qcDiscount?: boolean,
 ) {
   try {
     const res = await fetch(`${PROXY}?path=purchase-chain`, withCsrf({
@@ -389,6 +390,7 @@ export async function startPurchaseChain(
         multi_gate_pass: multiGatePass ?? false,
         gp_count: gpCount ?? 2,
         supplier_ref_ids: supplierRefIds?.length ? supplierRefIds : undefined,
+        qc_discount: qcDiscount ?? false,
       }),
     }));
 
