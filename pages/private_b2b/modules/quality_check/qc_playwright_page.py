@@ -46,6 +46,8 @@ class QCPlaywrightPage(BasePlaywrightPage):
     # Bags Parameter popup opener
     BAGS_PARAM_BTN = "button[data-sd-details-opener='qc_details[0].qc_bags_details']"
 
+    RATE_WEIGHT_TOGGLE = ".switch-wrapper.compact .slider"
+
     # Shared Done button (inside whichever popup is open)
     POPUP_DONE_BTN = "xpath=//div[contains(@class,'popup-content')]//button[contains(@class,'btn-save')]"
 
@@ -123,6 +125,56 @@ class QCPlaywrightPage(BasePlaywrightPage):
         self.page.evaluate(_JS_SET_VALUE_NTH, [placeholder, nth, str(value)])
         self.page.wait_for_timeout(200)
 
+    def _click_fill_by_placeholder(self, placeholder, value, nth=0):
+        """Fill an input via real click+type+Tab (for Angular reactive fields that ignore JS setter)."""
+        inputs = self.page.locator(f"input[placeholder='{placeholder}']")
+        el = inputs.nth(nth)
+        el.scroll_into_view_if_needed()
+        el.click(force=True)
+        el.fill(str(value))
+        el.press("Tab")
+        self.page.wait_for_timeout(300)
+
+    def _read_row_calc_fields(self, nth=0):
+        """Read readonly calculation fields for a QC row by index."""
+        def _read_ph(ph):
+            els = self.page.locator(f"input[placeholder='{ph}']")
+            if els.count() > nth:
+                raw = els.nth(nth).input_value()
+                try:
+                    return float(raw.replace(",", "").strip())
+                except Exception:
+                    return 0.0
+            return 0.0
+
+        return {
+            "base_rate":           _read_ph("Base Rate"),
+            "qc_deduction_amount": _read_ph("QC Deduction Amount"),
+            "transaction_amount":  _read_ph("Transaction Amount"),
+        }
+
+    def open_qc_record(self, ref_no):
+        """Find a QC by ref_no in the list, click more_vert → View to open it."""
+        self.navigate_to_page()
+        self.page.wait_for_selector("tr.mat-mdc-row", timeout=15000)
+
+        for row in self.page.locator("tr.mat-mdc-row").all():
+            ref_cell = row.locator("td.cdk-column-transaction_ref_no")
+            if ref_cell.count() > 0 and ref_no in ref_cell.inner_text():
+                trigger = row.locator("button.erp-row-trigger")
+                trigger.scroll_into_view_if_needed()
+                trigger.click(force=True)
+                self.page.wait_for_selector(".mat-mdc-menu-panel", timeout=5000)
+                # Click the View menu item (visibility icon)
+                for item in self.page.locator(".mat-mdc-menu-panel button.erp-menu-item").all():
+                    if "View" in item.inner_text():
+                        item.click(force=True)
+                        break
+                break
+
+        self.page.wait_for_selector(".popup-content, [data-sd-section-path]", timeout=15000)
+        self.page.wait_for_timeout(1500)
+
     def select_supplier(self, supplier_name):
         self._select_mat_by_text(self.SUPPLIER_NAME, supplier_name)
 
@@ -152,8 +204,11 @@ class QCPlaywrightPage(BasePlaywrightPage):
         """Open QC Parameter popup for row N, fill all Actual Value inputs via JS, click Done."""
         btn_sel = f"button[data-sd-details-opener='qc_details[{row}].qc_parameter_details']"
         section_sel = f"[data-sd-section-path='qc_details[{row}].qc_parameter_details']"
-        self.page.locator(btn_sel).first.click(force=True)
-        self.page.wait_for_selector(section_sel, timeout=10000)
+        btn = self.page.locator(btn_sel).first
+        btn.scroll_into_view_if_needed()
+        self.page.wait_for_timeout(300)
+        btn.click(force=True)
+        self.page.wait_for_selector(section_sel, timeout=15000)
         self.page.wait_for_timeout(500)
 
         count = self.page.locator("input[placeholder='Actual Value']").count()
@@ -167,13 +222,16 @@ class QCPlaywrightPage(BasePlaywrightPage):
         """Open Bags Parameter popup for row N, fill fields, click Done."""
         btn_sel = f"button[data-sd-details-opener='qc_details[{row}].qc_bags_details']"
         section_sel = f"[data-sd-section-path='qc_details[{row}].qc_bags_details']"
-        self.page.locator(btn_sel).first.click(force=True)
-        self.page.wait_for_selector(section_sel, timeout=10000)
+        btn = self.page.locator(btn_sel).first
+        btn.scroll_into_view_if_needed()
+        self.page.wait_for_timeout(300)
+        btn.click(force=True)
+        self.page.wait_for_selector(section_sel, timeout=15000)
         self.page.wait_for_timeout(500)
 
         self.page.locator(self.BAGS_TYPE_SELECT).first.click(force=True)
         self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
-        self.page.locator(".mat-mdc-select-panel mat-option").first.click(force=True)
+        self.page.locator(".mat-mdc-select-panel mat-option:not(.dd-clear-option)").first.click(force=True)
         try:
             self.page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
         except Exception:
@@ -228,11 +286,17 @@ class QCPlaywrightPage(BasePlaywrightPage):
             }
         """)
 
-    def create_for_integration(self, supplier_name, gp_ref_no, accepted_qty=1):
-        """Full QC creation for the integration flow. Returns QC ref_no.
+    def create_for_integration(self, supplier_name, gp_ref_no, accepted_qty=1,
+                               weight_mode_rows=None):
+        """Full QC creation for the integration flow.
 
-        accepted_qty: int, list[int], or dict {item_name: qty}.
-        All editable fields are per-row (no header-level rate/qty fields).
+        Returns (qc_ref_no, row_data_list) where each row_data dict contains:
+          use_weight_mode, deduction_weight, discount_rate, net_qty,
+          base_rate, qc_deduction_amount, transaction_amount (all read pre-submit).
+
+        accepted_qty:     int, list[int], or dict {item_name: qty}.
+        weight_mode_rows: list of row indices to set Weight mode (toggle ON).
+                          None = random per row.
         """
         self.open_add_form()
         self.select_supplier(supplier_name)
@@ -246,16 +310,58 @@ class QCPlaywrightPage(BasePlaywrightPage):
         else:
             qty_list = accepted_qty if isinstance(accepted_qty, (list, tuple)) else [accepted_qty]
 
+        row_data_list = []
+
         for i, qty in enumerate(qty_list):
-            self._js_fill_by_placeholder("Empty Bag Weight (KG)", 1, nth=i)
+            if weight_mode_rows is None:
+                use_weight_mode = random.choice([True, False])
+            else:
+                use_weight_mode = i in weight_mode_rows
+
+            if use_weight_mode:
+                slider = self.page.locator(self.RATE_WEIGHT_TOGGLE).nth(i)
+                slider.scroll_into_view_if_needed()
+                slider.click(force=True)
+                self.page.wait_for_timeout(500)
+
+            dr = random.randint(1, 5)
             self._js_fill_by_placeholder("Net Qty", qty, nth=i)
-            self._js_fill_by_placeholder("Deduction Rate", random.randint(1, 50), nth=i)
-            self._js_fill_by_placeholder("Discount Rate", random.randint(1, 5), nth=i)
+            self._js_fill_by_placeholder("Discount Rate", dr, nth=i)
             self.page.wait_for_timeout(300)
             self.fill_quality_parameters(actual_value=1, row=i)
+
             self.fill_bags_parameter(no_of_bags=1, per_bag_weight=1, row=i)
 
-        return self.submit()
+            dw = None
+            if use_weight_mode:
+                dw = random.randint(1, 20)
+                self._click_fill_by_placeholder("QC Deduction Weight", dw, nth=i)
+
+            row_data_list.append({
+                "use_weight_mode":  use_weight_mode,
+                "deduction_weight": dw,
+                "discount_rate":    dr,
+                "net_qty":          qty,
+            })
+
+        # Pre-submit: read computed readonly fields and assert Weight-mode formula
+        for i, rd in enumerate(row_data_list):
+            calc = self._read_row_calc_fields(nth=i)
+            rd.update(calc)
+            if rd["use_weight_mode"] and rd["deduction_weight"] is not None:
+                expected = round(rd["deduction_weight"] * rd["base_rate"], 2)
+                actual   = rd["qc_deduction_amount"]
+                assert abs(actual - expected) < 1.0, (
+                    f"[PRE-SUBMIT] Row {i} QC Deduction Amount: "
+                    f"expected {expected} (dw={rd['deduction_weight']} × rate={rd['base_rate']}), "
+                    f"got {actual}"
+                )
+                print(f"  [PRE-SUBMIT] row {i} Weight: dw={rd['deduction_weight']} × rate={rd['base_rate']} = {expected} ✓")
+            else:
+                print(f"  [PRE-SUBMIT] row {i} Rate: qc_deduction_amount={rd['qc_deduction_amount']} (auto-calc)")
+
+        ref_no = self.submit()
+        return ref_no, row_data_list
 
     def is_closed(self, ref_no):
         self.navigate_to_page()

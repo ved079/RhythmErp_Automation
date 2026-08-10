@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -30,21 +30,21 @@ export function EnvDialog({ open, onOpenChange, editingEnv, onSave }: {
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100">{editingEnv ? 'Edit Environment' : 'Add Environment'}</DialogTitle>
-          <DialogDescription className="font-['Manrope'] text-[#888]">
+          <DialogDescription className="font-['Poppins'] text-[#888]">
             {editingEnv ? 'Update environment configuration.' : 'Configure a new test environment.'}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label className="text-xs font-['Manrope']">Name</Label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Staging" className="h-9 text-sm font-['Manrope']" />
+            <Label className="text-xs font-['Poppins']">Name</Label>
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Staging" className="h-9 text-sm font-['Poppins']" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-['Manrope']">Base URL</Label>
-            <Input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="https://staging.rhythmerp.com" className="h-9 text-sm font-['Manrope']" />
+            <Label className="text-xs font-['Poppins']">Base URL</Label>
+            <Input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="https://staging.rhythmerp.com" className="h-9 text-sm font-['Poppins']" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-['Manrope']">Browser</Label>
+            <Label className="text-xs font-['Poppins']">Browser</Label>
             <Select value={browser} onValueChange={setBrowser}>
               <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -56,7 +56,7 @@ export function EnvDialog({ open, onOpenChange, editingEnv, onSave }: {
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-['Manrope']">Color</Label>
+            <Label className="text-xs font-['Poppins']">Color</Label>
             <div className="flex gap-2">
               {['bg-green-500', 'bg-blue-500', 'bg-orange-500', 'bg-red-500', 'bg-purple-500', 'bg-teal-500'].map(c => (
                 <button key={c} onClick={() => setColor(c)}
@@ -66,9 +66,9 @@ export function EnvDialog({ open, onOpenChange, editingEnv, onSave }: {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="font-['Roboto']">Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="font-['Poppins']">Cancel</Button>
           <Button onClick={() => onSave({ name, baseUrl, browser, color })} disabled={!name || !baseUrl}
-            className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto']">
+            className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Poppins']">
             {editingEnv ? 'Update' : 'Create'}
           </Button>
         </DialogFooter>

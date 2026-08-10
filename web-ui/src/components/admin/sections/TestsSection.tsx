@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
@@ -60,14 +60,14 @@ export function TestsSection({
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Test Management</h2>
-        <Badge variant="outline" className="text-xs font-['Manrope']">{filteredTests.length} tests</Badge>
+        <Badge variant="outline" className="text-xs font-['Poppins']">{filteredTests.length} tests</Badge>
       </div>
       <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 size-4 text-[#888]" />
             <Input placeholder="Search tests..." value={testSearch} onChange={e => { setTestSearch(e.target.value); setTestPage(1) }}
-              className="pl-9 h-9 text-sm font-['Manrope']" />
+              className="pl-9 h-9 text-sm font-['Poppins']" />
           </div>
           <Select value={testStatusFilter} onValueChange={v => { setTestStatusFilter(v); setTestPage(1) }}>
             <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
@@ -100,15 +100,15 @@ export function TestsSection({
         {!testsLoaded ? (
           <div className="flex justify-center py-12"><Spinner size={24} /></div>
         ) : filteredTests.length === 0 ? (
-          <div className="text-center py-12 text-[#888] dark:text-gray-400 font-['Manrope'] text-sm">No tests found</div>
+          <div className="text-center py-12 text-[#888] dark:text-gray-400 font-['Poppins'] text-sm">No tests found</div>
         ) : (
           <>
             <div className="space-y-1 p-3">
               {paged.map(t => (
                 <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white dark:bg-gray-800/20 border border-gray-100 dark:border-gray-700/40 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
                   <span className="text-[11px] font-mono text-[#545454] dark:text-gray-400 w-12 shrink-0">{t.id}</span>
-                  <span className="flex-1 text-[13px] font-['Manrope'] text-[#333] dark:text-gray-100 truncate">{t.description}</span>
-                  <span className="text-[11px] font-['Manrope'] text-[#545454] dark:text-gray-400 shrink-0">{t.moduleName}</span>
+                  <span className="flex-1 text-[13px] font-['Poppins'] text-[#333] dark:text-gray-100 truncate">{t.description}</span>
+                  <span className="text-[11px] font-['Poppins'] text-[#545454] dark:text-gray-400 shrink-0">{t.moduleName}</span>
                   <Badge variant="outline" className="text-[10px] shrink-0">{t.status}</Badge>
                   <Badge className={`text-[10px] border-0 shrink-0 ${priorityConfig[t.priority]?.color || ''}`}>{priorityConfig[t.priority]?.label || t.priority}</Badge>
                   <span className="shrink-0">
@@ -120,12 +120,12 @@ export function TestsSection({
               ))}
             </div>
             <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-700">
-              <span className="text-xs text-[#888] dark:text-gray-400 font-['Manrope']">
+              <span className="text-xs text-[#888] dark:text-gray-400 font-['Poppins']">
                 Showing {(testPage - 1) * perPage + 1}–{Math.min(testPage * perPage, filteredTests.length)} of {filteredTests.length}
               </span>
               <div className="flex gap-1">
                 <Button size="sm" variant="outline" disabled={testPage <= 1} onClick={() => setTestPage(p => p - 1)} className="h-7 text-xs"><ChevronLeft className="size-3" /></Button>
-                <span className="flex items-center px-2 text-xs text-[#545454] dark:text-gray-300 font-['Manrope']">{testPage} / {totalPages}</span>
+                <span className="flex items-center px-2 text-xs text-[#545454] dark:text-gray-300 font-['Poppins']">{testPage} / {totalPages}</span>
                 <Button size="sm" variant="outline" disabled={testPage >= totalPages} onClick={() => setTestPage(p => p + 1)} className="h-7 text-xs"><ChevronRight className="size-3" /></Button>
               </div>
             </div>

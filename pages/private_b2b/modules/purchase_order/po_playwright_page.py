@@ -118,7 +118,7 @@ class POPlaywrightPage(BasePlaywrightPage):
     def _select_random_mat_option(self, selector):
         self.page.locator(selector).first.click(force=True)
         self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
-        options = self.page.locator(".mat-mdc-select-panel mat-option").all()
+        options = self.page.locator(".mat-mdc-select-panel mat-option:not(.dd-clear-option)").all()
         if options:
             random.choice(options).click(force=True)
         try:
@@ -134,7 +134,7 @@ class POPlaywrightPage(BasePlaywrightPage):
             self.page.wait_for_selector(".mat-mdc-select-panel", timeout=3000)
         except Exception:
             return  # field is auto-fetched / disabled — skip
-        options = self.page.locator(".mat-mdc-select-panel mat-option").all()
+        options = self.page.locator(".mat-mdc-select-panel mat-option:not(.dd-clear-option)").all()
         if options:
             random.choice(options).click(force=True)
         try:
@@ -198,7 +198,7 @@ class POPlaywrightPage(BasePlaywrightPage):
         """
         self.page.locator(selector).nth(row_index).click(force=True)
         self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
-        options = self.page.locator(".mat-mdc-select-panel mat-option").all()
+        options = self.page.locator(".mat-mdc-select-panel mat-option:not(.dd-clear-option)").all()
         if exclude_texts:
             options = [o for o in options if o.inner_text().strip() not in exclude_texts]
         if not options:
@@ -757,7 +757,7 @@ class POPlaywrightPage(BasePlaywrightPage):
         self.page.locator(selector).first.click(force=True)
         self.page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
         options = self.page.locator(
-            ".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"
+            ".mat-mdc-select-panel mat-option:not(.dd-clear-option) span.mdc-list-item__primary-text"
         ).all()
         chosen_text = ""
         if options:

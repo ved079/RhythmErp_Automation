@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -85,7 +85,7 @@ export function OverviewSection({
               </div>
               <div>
                 <p className="text-2xl font-bold font-['Poppins'] text-[#333] dark:text-gray-100">{c.value}</p>
-                <p className="text-xs text-[#888] dark:text-gray-400 font-['Manrope']">{c.label}</p>
+                <p className="text-xs text-[#888] dark:text-gray-400 font-['Poppins']">{c.label}</p>
               </div>
             </div>
           ))}
@@ -106,10 +106,10 @@ export function OverviewSection({
                   strokeDasharray={`${failPct * 3.77} ${377 - failPct * 3.77}`}
                   strokeDashoffset={94.25 - passPct * 3.77} strokeLinecap="round" className="transition-all duration-700" />
                 <text x="80" y="72" textAnchor="middle" className="fill-[#333] dark:fill-gray-100 text-2xl font-bold font-['Poppins']">{stats.passRate}%</text>
-                <text x="80" y="92" textAnchor="middle" className="fill-[#888] dark:fill-gray-400 text-xs font-['Manrope']">Pass Rate</text>
+                <text x="80" y="92" textAnchor="middle" className="fill-[#888] dark:fill-gray-400 text-xs font-['Poppins']">Pass Rate</text>
               </svg>
             </div>
-            <div className="flex justify-center gap-4 mt-3 text-xs font-['Manrope']">
+            <div className="flex justify-center gap-4 mt-3 text-xs font-['Poppins']">
               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#4CAF50]" />Passed {passCount}</span>
               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#F44336]" />Failed {failCount}</span>
               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-gray-600" />Not Run {notRunCount}</span>
@@ -165,7 +165,7 @@ export function OverviewSection({
           {auditLog.length > 0 ? (
             <div className="space-y-2">
               {auditLog.slice(0, 5).map(a => (
-                <div key={a.id} className="flex items-center gap-3 p-2 rounded-lg bg-[#F1F2F7] dark:bg-gray-700/50 text-xs font-['Manrope']">
+                <div key={a.id} className="flex items-center gap-3 p-2 rounded-lg bg-[#F1F2F7] dark:bg-gray-700/50 text-xs font-['Poppins']">
                   <Badge className={`text-[9px] px-1.5 py-0 border-0 ${a.action === 'create' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : a.action === 'delete' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'}`}>{a.action}</Badge>
                   <span className="text-[#333] dark:text-gray-100">{a.userName}</span>
                   <span className="text-[#888] dark:text-gray-400">{a.targetLabel}</span>
@@ -183,7 +183,7 @@ export function OverviewSection({
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100">Customize Widgets</DialogTitle>
-            <DialogDescription className="font-['Manrope'] text-[#888]">
+            <DialogDescription className="font-['Poppins'] text-[#888]">
               Toggle which overview widgets are visible.
             </DialogDescription>
           </DialogHeader>
@@ -191,12 +191,12 @@ export function OverviewSection({
             {allWidgets.map(w => (
               <div key={w.id} className="flex items-center gap-3 p-2 rounded-lg bg-[#F1F2F7] dark:bg-gray-700/50">
                 <Checkbox checked={!hiddenWidgets.has(w.id)} onCheckedChange={() => toggleWidgetVisibility(w.id)} />
-                <span className="text-sm font-['Manrope'] text-[#333] dark:text-gray-100">{w.label}</span>
+                <span className="text-sm font-['Poppins'] text-[#333] dark:text-gray-100">{w.label}</span>
               </div>
             ))}
           </div>
           <DialogFooter>
-            <Button onClick={() => setWidgetDialogOpen(false)} className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto']">Done</Button>
+            <Button onClick={() => setWidgetDialogOpen(false)} className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Poppins']">Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

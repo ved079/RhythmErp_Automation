@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
@@ -69,6 +69,10 @@ export function UserDialog({ open, onOpenChange, editingUser, onSave, allModules
         }
       }
     }
+    result.push({
+      id: 'concurrency-testing', name: 'concurrency-testing', label: 'Concurrency Testing',
+      parentId: undefined, parentLabel: undefined,
+    })
     return result
   }, [])
 
@@ -77,30 +81,30 @@ export function UserDialog({ open, onOpenChange, editingUser, onSave, allModules
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100">{editingUser ? 'Edit User' : 'Add User'}</DialogTitle>
-          <DialogDescription className="font-['Manrope'] text-[#888]">
+          <DialogDescription className="font-['Poppins'] text-[#888]">
             {editingUser ? 'Update user details and permissions.' : 'Create a new user account.'}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Name</Label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="Full Name" className="h-9 text-sm font-['Manrope']" />
+              <Label className="text-xs font-['Poppins']">Name</Label>
+              <Input value={name} onChange={e => setName(e.target.value)} placeholder="Full Name" className="h-9 text-sm font-['Poppins']" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Email</Label>
-              <Input value={email} onChange={e => setEmail(e.target.value)} placeholder="email@example.com" type="email" className="h-9 text-sm font-['Manrope']" />
+              <Label className="text-xs font-['Poppins']">Email</Label>
+              <Input value={email} onChange={e => setEmail(e.target.value)} placeholder="email@example.com" type="email" className="h-9 text-sm font-['Poppins']" />
             </div>
           </div>
           {!editingUser && (
             <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Password</Label>
-              <Input value={password} onChange={e => setPassword(e.target.value)} placeholder="changeme" type="password" className="h-9 text-sm font-['Manrope']" />
+              <Label className="text-xs font-['Poppins']">Password</Label>
+              <Input value={password} onChange={e => setPassword(e.target.value)} placeholder="changeme" type="password" className="h-9 text-sm font-['Poppins']" />
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Role</Label>
+              <Label className="text-xs font-['Poppins']">Role</Label>
               <Select value={role} onValueChange={setRole}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -112,7 +116,7 @@ export function UserDialog({ open, onOpenChange, editingUser, onSave, allModules
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-['Manrope']">Status</Label>
+              <Label className="text-xs font-['Poppins']">Status</Label>
               <Select value={status} onValueChange={setStatus}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -123,11 +127,11 @@ export function UserDialog({ open, onOpenChange, editingUser, onSave, allModules
             </div>
           </div>
           <div className="space-y-2">
-            <Label className="text-xs font-['Manrope']">Module Access</Label>
+            <Label className="text-xs font-['Poppins']">Module Access</Label>
             <Button
               type="button"
               variant="outline"
-              className="w-full justify-start text-left h-auto min-h-[36px] py-2 px-3 font-['Manrope'] text-xs"
+              className="w-full justify-start text-left h-auto min-h-[36px] py-2 px-3 font-['Poppins'] text-xs"
               onClick={() => setModulePickerOpen(true)}
             >
               <Shield className="size-4 mr-2 shrink-0 text-[#2E7D32]" />
@@ -140,10 +144,10 @@ export function UserDialog({ open, onOpenChange, editingUser, onSave, allModules
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="font-['Roboto']">Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="font-['Poppins']">Cancel</Button>
           <Button onClick={() => onSave({ name, email, password: password || undefined, role: role as AdminUser['role'], status: status as AdminUser['status'], moduleAccess })}
             disabled={!name || !email}
-            className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto']">
+            className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Poppins']">
             {editingUser ? 'Update' : 'Create'}
           </Button>
         </DialogFooter>

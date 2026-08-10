@@ -158,6 +158,120 @@ const FULL_TOUR_STEPS: DriveStep[] = [
   },
 ]
 
+// ─── Purchase Chain Guide (Full Purchase Flow screen) ──────
+const PURCHASE_CHAIN_GUIDE: DriveStep[] = [
+  {
+    element: '[data-tour="pc-flow"]',
+    popover: {
+      title: 'Choose Your Flow',
+      description:
+        'Pick which document chain this screen will create. "PO → GP → GRN → QC → PB" runs the full purchase chain starting from a Purchase Order. "GP → GRN → QC → PB" starts directly at the Gate Pass.',
+      side: 'bottom' as const,
+      align: 'start' as const,
+    },
+  },
+  {
+    element: '[data-tour="pc-docs"]',
+    popover: {
+      title: 'Documents in the Chain',
+      description:
+        'These are the steps of your chain: PO, GP, GRN, QC and PB. Click any document to include or exclude it — disabling one also disables everything that comes after it, and enabling one turns its prerequisites back on.',
+      side: 'bottom' as const,
+      align: 'start' as const,
+    },
+  },
+  {
+    element: '[data-tour="pc-tax"]',
+    popover: {
+      title: 'Tax Rate Filter (PO flow)',
+      description:
+        'Keep Tax ON to only use items that have a tax rate configured — records that need a rate won\'t fail. Turn it OFF to allow every item in the category (those without a rate get 0.0).',
+      side: 'bottom' as const,
+      align: 'start' as const,
+    },
+  },
+  {
+    element: '[data-tour="pc-multigp"]',
+    popover: {
+      title: 'Multi Gate Pass (PO flow)',
+      description:
+        'By default one Gate Pass covers the whole PO. Switch Multi GP ON and set a "GPs" count to split the PO into multiple gate passes, each getting its own GRN, QC and Purchase Booking.',
+      side: 'bottom' as const,
+      align: 'start' as const,
+    },
+  },
+  {
+    element: '[data-tour="pc-category"]',
+    popover: {
+      title: 'Item Category',
+      description:
+        'Choose which item category this chain uses. The screen auto-picks the first category that has items. Switching category resets the selected items to that category\'s pool.',
+      side: 'bottom' as const,
+      align: 'start' as const,
+    },
+  },
+  {
+    element: '[data-tour="pc-supplier"]',
+    popover: {
+      title: 'Supplier',
+      description:
+        'The supplier every document in the chain is created for. For multi-chain runs, each chain can have its own supplier via the "Chain N" pickers that appear when you increase Chains.',
+      side: 'bottom' as const,
+      align: 'start' as const,
+    },
+  },
+  {
+    element: '[data-tour="pc-chains"]',
+    popover: {
+      title: 'Chains',
+      description:
+        'How many independent purchase chains to create in one run. Set 1 for a single chain, or go higher — each additional chain gets its own supplier and generates its own set of documents.',
+      side: 'bottom' as const,
+      align: 'start' as const,
+    },
+  },
+  {
+    element: '[data-tour="pc-items"]',
+    popover: {
+      title: 'Items per Document',
+      description:
+        'How many items each document line carries. Increase this to add more item rows, or use "All N" to load every item from the selected category.',
+      side: 'bottom' as const,
+      align: 'start' as const,
+    },
+  },
+  {
+    element: '[data-tour="pc-token"]',
+    popover: {
+      title: 'ERP Token',
+      description:
+        'The screen talks to the ERP on your behalf, so it needs a Bearer token and tenant ID. If none is set, click "Set Token" to paste them — or select a saved credential from the Credentials screen.',
+      side: 'top' as const,
+      align: 'start' as const,
+    },
+  },
+  {
+    element: '[data-tour="pc-run"]',
+    popover: {
+      title: 'Run the Chain',
+      description:
+        'Once you\'ve picked a supplier, items and token, click Run to start creating documents in order. The button shows what it will create, e.g. "Run 3× PO → GP → GRN → QC → PB". While running you can Stop it anytime.',
+      side: 'top' as const,
+      align: 'center' as const,
+    },
+  },
+  {
+    element: '[data-tour="pc-console"]',
+    popover: {
+      title: 'Console Logs',
+      description:
+        'Open the Console to watch the screen-by-screen progress in real time — what was created, what failed and why. When a run finishes you\'ll also get a summary with created / failed / elapsed.',
+      side: 'top' as const,
+      align: 'end' as const,
+    },
+  },
+]
+
 // ─── Quick Tour Step Templates (per tab) ─────────────────────
 // Only what's on screen right now — no sidebar, no dark mode, no notifications.
 const QUICK_TOUR_STEPS: Record<string, DriveStep[]> = {
@@ -282,6 +396,11 @@ function buildTourSteps(selectedModule: string, activeTab: string): DriveStep[] 
   // Dashboard → full tour
   if (selectedModule === 'dashboard') {
     return filterVisibleSteps(FULL_TOUR_STEPS)
+  }
+
+  // Full Purchase Flow → purchase chain guide
+  if (selectedModule === 'full-purchase-flow') {
+    return filterVisibleSteps(PURCHASE_CHAIN_GUIDE)
   }
 
   // Module page → quick tour for the current tab

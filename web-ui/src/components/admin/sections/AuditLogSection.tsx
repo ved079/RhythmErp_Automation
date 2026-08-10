@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
@@ -62,14 +62,14 @@ export function AuditLogSection({
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Audit Log</h2>
-        <Badge variant="outline" className="text-xs font-['Manrope']">{filteredAuditLog.length} entries</Badge>
+        <Badge variant="outline" className="text-xs font-['Poppins']">{filteredAuditLog.length} entries</Badge>
       </div>
       <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-4 border border-gray-100 dark:border-gray-700">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 size-4 text-[#888]" />
             <Input placeholder="Search user, target, details..." value={auditSearch} onChange={e => { setAuditSearch(e.target.value); setAuditPage(1) }}
-              className="pl-9 h-9 text-sm font-['Manrope']" />
+              className="pl-9 h-9 text-sm font-['Poppins']" />
           </div>
           <Select value={auditActionFilter} onValueChange={v => { setAuditActionFilter(v); setAuditPage(1) }}>
             <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Action" /></SelectTrigger>
@@ -91,7 +91,7 @@ export function AuditLogSection({
               {uniqueAuditUsers.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button variant="outline" className="h-9 text-xs font-['Roboto']" onClick={() => { setAuditSearch(''); setAuditActionFilter('all'); setAuditUserFilter('all'); setAuditPage(1) }}>
+          <Button variant="outline" className="h-9 text-xs font-['Poppins']" onClick={() => { setAuditSearch(''); setAuditActionFilter('all'); setAuditUserFilter('all'); setAuditPage(1) }}>
             <RotateCcw className="size-3 mr-1" /> Clear Filters
           </Button>
         </div>
@@ -101,33 +101,33 @@ export function AuditLogSection({
       ) : filteredAuditLog.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm p-12 border border-gray-100 dark:border-gray-700 text-center">
           <FileText className="size-10 text-[#888] dark:text-gray-500 mx-auto mb-2" />
-          <p className="text-sm text-[#888] dark:text-gray-400 font-['Manrope']">No audit entries match your filters</p>
+          <p className="text-sm text-[#888] dark:text-gray-400 font-['Poppins']">No audit entries match your filters</p>
         </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-[14px] shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <div className="space-y-1 p-3">
             {paged.map(a => (
               <div key={a.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white dark:bg-gray-800/20 border border-gray-100 dark:border-gray-700/40 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
-                <span className="text-[10px] font-['Manrope'] text-[#888] dark:text-gray-400 shrink-0 w-32">
+                <span className="text-[10px] font-['Poppins'] text-[#888] dark:text-gray-400 shrink-0 w-32">
                   {new Date(a.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </span>
-                <span className="text-xs font-['Manrope'] text-[#333] dark:text-gray-100 shrink-0 w-28 truncate">{a.userName}</span>
+                <span className="text-xs font-['Poppins'] text-[#333] dark:text-gray-100 shrink-0 w-28 truncate">{a.userName}</span>
                 <Badge className={`text-[9px] border-0 shrink-0 ${actionColor(a.action)}`}>{a.action.replace('_', ' ')}</Badge>
-                <div className="text-xs font-['Manrope'] min-w-0 flex-1">
+                <div className="text-xs font-['Poppins'] min-w-0 flex-1">
                   <span className="text-[#888] dark:text-gray-400">{a.targetType}</span>
                   <span className="text-[#333] dark:text-gray-100 ml-1">{a.targetLabel}</span>
                 </div>
-                <span className="text-[10px] font-['Manrope'] text-[#545454] dark:text-gray-300 max-w-[200px] truncate shrink-0">{a.details}</span>
+                <span className="text-[10px] font-['Poppins'] text-[#545454] dark:text-gray-300 max-w-[200px] truncate shrink-0">{a.details}</span>
               </div>
             ))}
           </div>
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-700">
-            <span className="text-xs text-[#888] dark:text-gray-400 font-['Manrope']">
+            <span className="text-xs text-[#888] dark:text-gray-400 font-['Poppins']">
               Showing {(auditPage - 1) * perPage + 1}–{Math.min(auditPage * perPage, filteredAuditLog.length)} of {filteredAuditLog.length}
             </span>
             <div className="flex gap-1">
               <Button size="sm" variant="outline" disabled={auditPage <= 1} onClick={() => setAuditPage(p => p - 1)} className="h-7 text-xs"><ChevronLeft className="size-3" /></Button>
-              <span className="flex items-center px-2 text-xs text-[#545454] dark:text-gray-300 font-['Manrope']">{auditPage} / {totalPages}</span>
+              <span className="flex items-center px-2 text-xs text-[#545454] dark:text-gray-300 font-['Poppins']">{auditPage} / {totalPages}</span>
               <Button size="sm" variant="outline" disabled={auditPage >= totalPages} onClick={() => setAuditPage(p => p + 1)} className="h-7 text-xs"><ChevronRight className="size-3" /></Button>
             </div>
           </div>

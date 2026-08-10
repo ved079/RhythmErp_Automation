@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -51,7 +51,7 @@ export function UsersSection({
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold font-['Poppins'] text-[#333] dark:text-gray-100">Users</h2>
         <Button onClick={onAdd}
-          className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Roboto'] text-xs h-8">
+          className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Poppins'] text-xs h-8">
           <Plus className="size-3.5 mr-1" /> Add User
         </Button>
       </div>
@@ -60,19 +60,19 @@ export function UsersSection({
           <span className="text-xs font-semibold font-['Poppins'] text-[#3F51B5] dark:text-[#7986CB]">
             {selectedUserIds.size} selected
           </span>
-          <Button size="sm" className="h-7 text-[10px] bg-green-600 hover:bg-green-700 text-white font-['Roboto']"
+          <Button size="sm" className="h-7 text-[10px] bg-green-600 hover:bg-green-700 text-white font-['Poppins']"
             onClick={() => { setBulkActionType('activate'); setBulkActionConfirmOpen(true) }}>
             <CheckCircle2 className="size-3 mr-1" /> Activate
           </Button>
-          <Button size="sm" className="h-7 text-[10px] bg-orange-500 hover:bg-orange-600 text-white font-['Roboto']"
+          <Button size="sm" className="h-7 text-[10px] bg-orange-500 hover:bg-orange-600 text-white font-['Poppins']"
             onClick={() => { setBulkActionType('deactivate'); setBulkActionConfirmOpen(true) }}>
             <XCircle className="size-3 mr-1" /> Deactivate
           </Button>
-          <Button size="sm" className="h-7 text-[10px] bg-[#F44336] hover:bg-[#D32F2F] text-white font-['Roboto']"
+          <Button size="sm" className="h-7 text-[10px] bg-[#F44336] hover:bg-[#D32F2F] text-white font-['Poppins']"
             onClick={() => { setBulkActionType('delete'); setBulkActionConfirmOpen(true) }}>
             <Trash2 className="size-3 mr-1" /> Delete
           </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-[10px] font-['Roboto'] text-[#888]"
+          <Button size="sm" variant="ghost" className="h-7 text-[10px] font-['Poppins'] text-[#888]"
             onClick={onClearSelection}>
             Clear
           </Button>
@@ -100,10 +100,10 @@ export function UsersSection({
                 </div>
                 <Badge className={`text-[10px] border-0 shrink-0 ${roleConfig[u.role]?.color || ''}`}>{roleConfig[u.role]?.label || u.role}</Badge>
                 <Badge className={`text-[10px] border-0 shrink-0 ${u.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>{u.status}</Badge>
-                <span className="text-[10px] font-['Manrope'] text-[#545454] dark:text-gray-300 shrink-0">
+                <span className="text-[10px] font-['Poppins'] text-[#545454] dark:text-gray-300 shrink-0">
                   {u.moduleAccess.includes('all') ? 'All modules' : `${u.moduleAccess.length} modules`}
                 </span>
-                <span className="text-[10px] font-['Manrope'] text-[#888] dark:text-gray-400 shrink-0">{u.lastLogin || '—'}</span>
+                <span className="text-[10px] font-['Poppins'] text-[#888] dark:text-gray-400 shrink-0">{u.lastLogin || '—'}</span>
                 <div className="flex gap-1 shrink-0">
                   <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => onEdit(u)}><Pencil className="size-3 text-[#3F51B5]" /></Button>
                   <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => onResetPassword(u)} title="Reset password"><Key className="size-3 text-[#F57C00]" /></Button>
@@ -119,15 +119,15 @@ export function UsersSection({
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100">Confirm Bulk Action</DialogTitle>
-            <DialogDescription className="font-['Manrope'] text-[#888]">
+            <DialogDescription className="font-['Poppins'] text-[#888]">
               Are you sure you want to {bulkActionType === 'activate' ? 'activate' : bulkActionType === 'deactivate' ? 'deactivate' : 'delete'} <strong>{selectedUserIds.size} user(s)</strong>?
               {bulkActionType === 'delete' && ' This action cannot be undone.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkActionConfirmOpen(false)} className="font-['Roboto']">Cancel</Button>
+            <Button variant="outline" onClick={() => setBulkActionConfirmOpen(false)} className="font-['Poppins']">Cancel</Button>
             <Button onClick={onBulkAction}
-              className={`text-white font-['Roboto'] ${bulkActionType === 'delete' ? 'bg-[#F44336] hover:bg-[#D32F2F]' : bulkActionType === 'deactivate' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}>
+              className={`text-white font-['Poppins'] ${bulkActionType === 'delete' ? 'bg-[#F44336] hover:bg-[#D32F2F]' : bulkActionType === 'deactivate' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}>
               {bulkActionType === 'activate' ? 'Activate' : bulkActionType === 'deactivate' ? 'Deactivate' : 'Delete'}
             </Button>
           </DialogFooter>

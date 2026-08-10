@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useMemo, useCallback } from 'react'
 import {
@@ -18,6 +18,8 @@ import {
   Settings,
   Building2,
   Key,
+  Handshake,
+  FileText,
   Search,
   X,
   Check,
@@ -191,6 +193,20 @@ export function ModuleAccessPicker({
       parentGroupId: 'access',
     },
     {
+      id: 'document-only',
+      label: 'Document',
+      description: `${getAllDescendantIds(allModules, 'document').length} modules`,
+      icon: <FileText className="size-4" style={{ color: COLORS.primary }} />,
+      parentGroupId: 'document',
+    },
+    {
+      id: 'private-b2b-only',
+      label: 'Private B2B',
+      description: `${getAllDescendantIds(allModules, 'private-b2b').length} modules`,
+      icon: <Handshake className="size-4" style={{ color: COLORS.primary }} />,
+      parentGroupId: 'private-b2b',
+    },
+    {
       id: 'company-onboarding',
       label: 'Company Onboarding',
       description: `${getAllDescendantIds(allModules, 'company-onboarding').length || 1} module`,
@@ -328,12 +344,12 @@ export function ModuleAccessPicker({
             <Shield className="size-5 text-[#2E7D32]" />
             Module Access
             {userName && (
-              <span className="font-['Manrope'] font-normal text-sm text-[#666]">
+              <span className="font-['Poppins'] font-normal text-sm text-[#666]">
                 — {userName}
               </span>
             )}
           </DialogTitle>
-          <DialogDescription className="font-['Manrope'] text-xs text-[#888]">
+          <DialogDescription className="font-['Poppins'] text-xs text-[#888]">
             Choose preset access levels or pick individual modules.
           </DialogDescription>
         </DialogHeader>
@@ -373,7 +389,7 @@ export function ModuleAccessPicker({
                           {preset.label}
                         </span>
                       </div>
-                      <span className="font-['Manrope'] text-[10px] text-[#777]">
+                      <span className="font-['Poppins'] text-[10px] text-[#777]">
                         {preset.description}
                       </span>
                       {isActive && (
@@ -396,12 +412,12 @@ export function ModuleAccessPicker({
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     placeholder="Search modules..."
-                    className="h-8 pl-8 text-xs font-['Manrope'] border-[#A5D6A7]"
+                    className="h-8 pl-8 text-xs font-['Poppins'] border-[#A5D6A7]"
                   />
                 </div>
                 <Badge
                   variant="secondary"
-                  className="font-['Manrope'] text-[10px] shrink-0 px-2 py-0.5 bg-[#E8F5E9] text-[#1B5E20]"
+                  className="font-['Poppins'] text-[10px] shrink-0 px-2 py-0.5 bg-[#E8F5E9] text-[#1B5E20]"
                 >
                   {selectedCount} selected
                 </Badge>
@@ -414,7 +430,7 @@ export function ModuleAccessPicker({
                     <Badge
                       key={tag.id}
                       variant="secondary"
-                      className="font-['Manrope'] text-[10px] pl-2 pr-1 py-0.5 flex items-center gap-1 bg-[#E8F8E9] text-[#1B5E20] border border-[#C8E6C9]"
+                      className="font-['Poppins'] text-[10px] pl-2 pr-1 py-0.5 flex items-center gap-1 bg-[#E8F8E9] text-[#1B5E20] border border-[#C8E6C9]"
                     >
                       {tag.label}
                       <button
@@ -435,10 +451,10 @@ export function ModuleAccessPicker({
             {isFullAccess ? (
               <div className="rounded-lg p-4 text-center bg-[#E8F5E9] border border-[#A5D6A7]">
                 <Shield className="size-6 text-[#2E7D32] mx-auto mb-1" />
-                <p className="font-['Manrope'] text-xs text-[#1B5E20] font-medium">
+                <p className="font-['Poppins'] text-xs text-[#1B5E20] font-medium">
                   Full access granted — all {totalModuleCount} modules selected.
                 </p>
-                <p className="font-['Manrope'] text-[10px] text-[#777] mt-0.5">
+                <p className="font-['Poppins'] text-[10px] text-[#777] mt-0.5">
                   Click any preset or deselect &quot;all&quot; tag to pick individual modules.
                 </p>
               </div>
@@ -470,14 +486,14 @@ export function ModuleAccessPicker({
             type="button"
             variant="outline"
             onClick={handleCancel}
-            className="font-['Roboto'] text-xs h-8"
+            className="font-['Poppins'] text-xs h-8"
           >
             Cancel
           </Button>
           <Button
             type="button"
             onClick={handleApply}
-            className="font-['Roboto'] text-xs h-8 text-white bg-[#2E7D32] hover:bg-[#1B5E20]"
+            className="font-['Poppins'] text-xs h-8 text-white bg-[#2E7D32] hover:bg-[#1B5E20]"
           >
             Apply ({selectedCount} module{selectedCount !== 1 ? 's' : ''})
           </Button>
@@ -574,7 +590,7 @@ function ModuleTreeNode({
   if (filteredNodes.length === 0) {
     return (
       <div className="px-4 py-6 text-center">
-        <p className="font-['Manrope'] text-xs text-[#999]">
+        <p className="font-['Poppins'] text-xs text-[#999]">
           {searchQuery ? 'No modules match your search.' : 'No modules available.'}
         </p>
       </div>
@@ -604,16 +620,25 @@ function ModuleTreeNode({
                 }`}
                 style={{ paddingLeft: `${16 + depth * 20}px` }}
               >
-                <button
-                  type="button"
+                <span
+                  role="button"
+                  tabIndex={0}
                   onClick={(e) => { e.stopPropagation(); toggleExpand(node.id) }}
-                  className="p-0.5 rounded hover:bg-[#C8E6C9] dark:hover:bg-green-800/30 cursor-pointer"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      toggleExpand(node.id)
+                    }
+                  }}
+                  className="p-0.5 rounded hover:bg-[#C8E6C9] dark:hover:bg-green-800/30 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2E7D32]"
                   aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                  aria-expanded={isExpanded}
                 >
                   <ChevronRight
-                    className={`size-3.5 text-[#2E7D32] transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+                    className={`size-3.5 text-[#2E7D32] transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''} pointer-events-none`}
                   />
-                </button>
+                </span>
 
                 {/* Checkbox indicator */}
                 <div className={`size-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
@@ -635,7 +660,7 @@ function ModuleTreeNode({
                   {node.label}
                 </span>
 
-                <span className="font-['Manrope'] text-[10px] text-[#999] shrink-0">
+                <span className="font-['Poppins'] text-[10px] text-[#999] shrink-0">
                   {selectedInGroup}/{groupDescendantIds.length}
                 </span>
               </button>
@@ -688,7 +713,7 @@ function ModuleTreeNode({
               {isSelected && <Check className="size-2 text-white" />}
             </div>
 
-            <span className={`font-['Manrope'] text-xs flex-1 ${
+            <span className={`font-['Poppins'] text-xs flex-1 ${
               isSelected ? 'text-[#1B5E20] font-medium' : 'text-[#555] dark:text-gray-300'
             }`}>
               {node.label}

@@ -722,6 +722,7 @@ export default function Home() {
             <ScrollArea className="flex-1 min-h-0" data-tour="sidebar-modules">
               <div className="py-2 px-2">
                 {sidebarModules.map((mod) => (<SidebarModuleItem key={mod.id} module={mod} activeId={selectedModule} onSelect={handleSelectModule} expandedIds={expandedIds} toggleExpand={toggleExpand} justExpandedId={justExpandedId} />))}
+                {(user.role === 'admin' || user.role === 'qa_lead' || (user.moduleAccess ?? []).includes('concurrency-testing')) && (
                 <button
                   onClick={() => { setActiveTab('concurrency'); setSelectedModule('dashboard') }}
                   className={`w-full flex items-center text-[14px] transition-all duration-200 cursor-pointer text-left font-['Poppins'] px-[15px] py-[7px] rounded-[5px] ${
@@ -733,6 +734,7 @@ export default function Home() {
                   <Zap className="size-[18px] shrink-0 mr-[10px] text-[#6b7280]" />
                   <span className="truncate flex-1">Concurrency Testing</span>
                 </button>
+                )}
               </div>
             </ScrollArea>
             <div className="relative shrink-0 overflow-hidden" style={{ height: 99 }}><Image src="/agri2.png" alt="" fill className="object-cover" sizes="280px" style={{ objectPosition: 'center 25%' }} /></div>
@@ -786,6 +788,16 @@ export default function Home() {
                     <Package className="size-4 text-[#3F51B5]" />
                     <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">Purchase Chain</h3>
                   </div>
+                  <button
+                    type="button"
+                    onClick={startAppTour}
+                    data-tour="pc-help"
+                    title="Guide: how this screen works"
+                    className="ml-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold text-[#3F51B5] hover:text-[#3949AB] hover:bg-[#3F51B5]/10 dark:hover:bg-[#3F51B5]/20 cursor-pointer"
+                  >
+                    <HelpCircle className="size-3.5" />
+                    Need help?
+                  </button>
                   <div className="flex-1" />
                   <span className="text-[12px] text-gray-400 dark:text-gray-500">Module: <span className="text-gray-600 dark:text-gray-300 font-medium">Full Purchase Flow</span></span>
                 </div>
