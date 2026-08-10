@@ -183,6 +183,7 @@ class PurchaseChainRequest(BaseModel):
     multi_gate_pass: bool = False        # split one PO across multiple GPs (each GP -> its own GRN and QC)
     gp_count: int = 2                    # number of gate passes when multi_gate_pass is True
     supplier_ref_ids: Optional[list[int]] = None  # per-chain suppliers (chain i uses supplier_ref_ids[i]); falls back to supplier_ref_id
+    qc_discount: bool = True             # False = skip discount in QC (discount_rate=0)
 
 
 # --- Concurrency Testing ---

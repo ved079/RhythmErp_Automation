@@ -374,7 +374,7 @@ def _grn_items_from(
 
 
 def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = None,
-                   bags_type_id: int = 1) -> List[dict]:
+                   bags_type_id: int = 1, qc_discount: bool = True) -> List[dict]:
     """Build QC line items matching the manual QC 1345 stored shape.
 
     Every derived amount is computed here (ERP does NOT auto-patch on POST).
@@ -407,7 +407,7 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
     for it in items:
         empty_bag_weight = _rand_empty_bag_weight()
         deduction_percent = _rand_deduction_percent()
-        discount_rate = _rand_discount_rate()
+        discount_rate = _rand_discount_rate() if qc_discount else 0.0
         computed = _compute_qc_line_fields(
             it["rate"], it["accepted_qty"], empty_bag_weight, deduction_percent, discount_rate
         )
@@ -1028,6 +1028,7 @@ class PurchaseChain:
         documents: Optional[List[str]] = None,
         multi_gate_pass: bool = False,
         gp_count: int = 2,
+        qc_discount: bool = True,
     ) -> dict:
         """Execute one full PO -> GP -> GRN -> QC chain.
 
@@ -1294,6 +1295,7 @@ class PurchaseChain:
                     eff_supplier, po_id, gp_id, grn_id, gp_items, qc_overrides, ctx=ctx,
                     cqp_by_item=cqp_by_item,
                     bags_type_id=self._resolve_bags_type_id(),
+                    qc_discount=qc_discount,
                 )
                 qc_data = self.qc_api.create_qc(qc_payload)
                 qc_id = qc_data.get("id") or qc_data.get("entry_id") if qc_data else None
@@ -1550,9 +1552,10 @@ class PurchaseChain:
         ctx: Optional[ChainContext] = None,
         cqp_by_item: Optional[dict] = None,
         bags_type_id: int = 1,
+        qc_discount: bool = True,
     ) -> dict:
         from pages.private_b2b.modules.quality_check.data.quality_check_data import build_qc_payload
-        qc_items = _qc_items_from(items, ctx=ctx, cqp_by_item=cqp_by_item or {}, bags_type_id=bags_type_id)
+        qc_items = _qc_items_from(items, ctx=ctx, cqp_by_item=cqp_by_item or {}, bags_type_id=bags_type_id, qc_discount=qc_discount)
         overrides = overrides or {}
         total_txn = round(sum(float(l.get("txn_currency_amount") or 0.0) for l in qc_items), 6)
         header_extra = {"total_txn_currency_amount": total_txn}

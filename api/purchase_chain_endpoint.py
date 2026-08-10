@@ -135,6 +135,7 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
                     ),
                     timestamp=datetime.now(timezone.utc),
                 ))
+            kwargs["qc_discount"] = request.qc_discount
             # Only pass explicit overrides if the caller set them intentionally
             if chain_supplier and chain_supplier != 1:
                 kwargs["supplier_ref_id"] = chain_supplier

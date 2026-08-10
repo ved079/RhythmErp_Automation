@@ -75,6 +75,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [flow, setFlow] = useState<'po' | 'gp' | 'so'>('po')
   const [multiGatePass, setMultiGatePass] = useState(false)
   const [gpCount, setGpCount] = useState(2)
+  const [qcDiscount, setQcDiscount] = useState(false)
   const [loadingData, setLoadingData] = useState(false)
   const [dataError, setDataError] = useState('')
   const [localToken, setLocalToken] = useState('')
@@ -233,8 +234,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       multiGatePass,
       gpCount,
       count > 1 ? chainSuppliers.filter((s): s is number => s != null) : [],
+      qcDiscount,
     )
-  }, [count, supplier, numItems, itemIds, erpToken, localToken, localTenantId, erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow, multiGatePass, gpCount, chainSuppliers])
+  }, [count, supplier, numItems, itemIds, erpToken, localToken, localTenantId, erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow, multiGatePass, gpCount, chainSuppliers, qcDiscount])
 
   const handleStop = useCallback(() => {
     setRunning(false)
@@ -345,7 +347,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
               onClick={() => {
                 setFlow(f.id)
                 setMultiGatePass(false)
-                setEnabledDocs(new Set(f.id === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO', 'PB'] : f.id === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
+                setEnabledDocs(new Set(f.id === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO'] : f.id === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
               }}
               disabled={running}
               className={`px-3 py-2 text-[11px] font-medium border-b-2 transition-colors cursor-pointer disabled:cursor-not-allowed text-center ${
@@ -361,7 +363,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         <div className="p-4 pb-0 overflow-y-auto flex-1 min-h-0">
 
         {/* Document selector + toggles — equally spaced row */}
-        <div className="border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100/60 dark:bg-gray-800/50 px-3 py-2 mb-4 grid grid-cols-[1.2fr_1fr_1.3fr] gap-1.5 items-start" data-tour="pc-docs">
+        <div className="border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100/60 dark:bg-gray-800/50 px-3 py-2 mb-4 flex flex-wrap gap-x-4 gap-y-2 items-start justify-between" data-tour="pc-docs">
           <div className="flex flex-col gap-0.5 items-center" title="Click a document to customize the flow">
             <div className="flex items-center gap-1.5 flex-wrap justify-center">
               <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">Create:</span>
@@ -440,6 +442,39 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             </span>
           </div>
 
+          {enabledDocs.has('QC') && (
+          <div className="flex flex-col gap-0.5 items-center" data-tour="pc-qcdiscount">
+            <div className="flex items-center gap-1.5 flex-wrap justify-center">
+              <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">QC Discount:</span>
+              <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
+                <button
+                  type="button"
+                  onClick={() => setQcDiscount(true)}
+                  disabled={running}
+                  className={`px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                    qcDiscount ? 'bg-[#3F51B5] text-white' : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  ON
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQcDiscount(false)}
+                  disabled={running}
+                  className={`px-2.5 py-1 text-[11px] font-semibold border-l border-gray-300 dark:border-gray-600 transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                    !qcDiscount ? 'bg-[#3F51B5] text-white' : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  OFF
+                </button>
+              </div>
+            </div>
+            <span className="text-[10px] text-gray-600 dark:text-gray-400">
+              {qcDiscount ? 'Random discount on QC lines' : 'No discount filled in QC'}
+            </span>
+          </div>
+          )}
+
           <div className="flex flex-col gap-0.5 items-center" data-tour="pc-multigp">
             <div className="flex items-center gap-1.5 flex-wrap justify-center">
               <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">Multi GP:</span>
@@ -448,7 +483,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                   type="button"
                   onClick={() => {
                     setMultiGatePass(true)
-                    setEnabledDocs(new Set(['PO', 'GP', 'GRN', 'QC', 'PB']))
+                    setEnabledDocs(new Set(flow === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
                   }}
                   disabled={running}
                   className={`px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed ${
@@ -461,7 +496,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                   type="button"
                   onClick={() => {
                     setMultiGatePass(false)
-                    setEnabledDocs(new Set(['PO', 'GP', 'GRN', 'QC', 'PB']))
+                    setEnabledDocs(new Set(flow === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
                   }}
                   disabled={running}
                   className={`px-2.5 py-1 text-[11px] font-semibold border-l border-gray-300 dark:border-gray-600 transition-colors cursor-pointer disabled:cursor-not-allowed ${
