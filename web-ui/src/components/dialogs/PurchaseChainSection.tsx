@@ -15,6 +15,7 @@ interface Props {
   erpTenantId: string
   onNeedsToken: () => void
   onClearToken: () => void
+  userId?: string
 }
 
 function formatTime(d: Date): string {
@@ -52,7 +53,7 @@ function poolFor(
   return pool
 }
 
-export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onClearToken }: Props) {
+export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onClearToken, userId }: Props) {
   const [count, setCount] = useState(1)
   const [chainSuppliers, setChainSuppliers] = useState<(number | null)[]>([])
   const [enabledDocs, setEnabledDocs] = useState<Set<string>>(new Set(['PO', 'GP', 'GRN', 'QC', 'PB']))
@@ -92,15 +93,16 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const startTimeRef = useRef<number>(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [elapsed, setElapsed] = useState(0)
-  // On mount: restore starred flow from localStorage and auto-select it.
+  // On mount (or when userId changes): restore this user's starred flow from localStorage.
   useEffect(() => {
-    const saved = localStorage.getItem('pc_starred_flow') as 'po' | 'gp' | 'so' | null
+    const key = userId ? `pc_starred_flow:${userId}` : 'pc_starred_flow'
+    const saved = localStorage.getItem(key) as 'po' | 'gp' | 'so' | null
     if (saved) {
       setStarredFlow(saved)
       setFlow(saved)
       setEnabledDocs(new Set(saved === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO'] : saved === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
     }
-  }, [])
+  }, [userId])
 
   const fetchedRef = useRef(false)
   const supplierBtnRef = useRef<HTMLButtonElement>(null)
@@ -396,10 +398,11 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                 title={starredFlow === f.id ? 'Remove default' : 'Set as default flow'}
                 onClick={(e) => {
                   e.stopPropagation()
+                  const key = userId ? `pc_starred_flow:${userId}` : 'pc_starred_flow'
                   const next = starredFlow === f.id ? null : f.id
                   setStarredFlow(next)
-                  if (next) localStorage.setItem('pc_starred_flow', next)
-                  else localStorage.removeItem('pc_starred_flow')
+                  if (next) localStorage.setItem(key, next)
+                  else localStorage.removeItem(key)
                 }}
                 className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded transition-colors cursor-pointer"
               >

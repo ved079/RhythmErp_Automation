@@ -808,6 +808,7 @@ export default function Home() {
                   erpTenantId={erpTenantId || '681'}
                   onNeedsToken={() => setSelectedModule('credentials')}
                   onClearToken={onClearToken}
+                  userId={user?.id}
                 />
               </div>
             </div>
