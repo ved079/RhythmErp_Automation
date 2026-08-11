@@ -68,6 +68,9 @@ from pages.private_b2b.modules.quality_check.utils.api_quality_check_utils impor
 from pages.private_b2b.modules.purchase_booking.utils.api_purchase_booking_utils import (
     PBAPIUtils,
 )
+from pages.private_b2b.modules.sales_order.utils.api_sales_order_utils import (
+    SOAPIUtils,
+)
 from pages.private_b2b.scripts.chain_context import ChainContext, ChainContextDiscoverer
 
 from pages.commodity_settings.modules.commodity_quality_parameter.data.commodity_quality_parameter_data import (
@@ -541,6 +544,53 @@ def _pb_items_from_qc(qc_items: List[dict], items: List[dict] = None, ctx=None) 
     return out
 
 
+def _so_items_from_qc(qc_items: List[dict], ctx=None, tax_rates: Optional[Dict[str, List[float]]] = None) -> List[dict]:
+    """Build Sales Order lines mirroring the in-flow QC lines.
+
+    Quantity/rate come straight from the QC line (user decision #3): quantity =
+    QC accepted qty, rate = QC base rate. Tax rate is picked at random from the
+    available HSN tax rates (falling back to a sensible default when unknown) —
+    the SO screen has no auto-patch, so every amount is computed here.
+    """
+    from pages.private_b2b.modules.sales_order.data.sales_order_data import build_so_line
+
+    def _q(v):
+        return round(float(v or 0.0), 6)
+
+    out = []
+    for qc in qc_items:
+        tax_rate = _random_so_tax_rate(qc.get("item_ref_id"), qc.get("hsn_sac_no"), tax_rates)
+        out.append(build_so_line(
+            item_ref_id=qc["item_ref_id"],
+            hsn_sac_no=qc["hsn_sac_no"],
+            quantity=_q(qc.get("alternate_accepted_qty") or qc.get("grn_qty") or 0.0),
+            rate=_q(qc.get("base_rate") or qc.get("rate") or 0.0),
+            tax_rate=tax_rate,
+            uom=qc.get("uom", ctx.base_uom if ctx else None),
+            alternate_uom=qc.get("alternate_uom", ctx.alternate_uom if ctx else None),
+            uom_conversion=qc.get("uom_conversion", 1.0),
+            expected_delivery_date=qc.get("transaction_date") or date.today().isoformat(),
+        ))
+    return out
+
+
+def _random_so_tax_rate(item_ref_id: int, hsn_sac_no=None,
+                        tax_rates: Optional[Dict[str, List[float]]] = None) -> float:
+    """Pick a random tax rate for an SO line.
+
+    Uses the chain's HSN -> tax-rates map when available (same source the PO
+    item filter uses); otherwise defaults to 5.0 (IGST, per the manual SO).
+    """
+    rates = None
+    if tax_rates:
+        rates = tax_rates.get(str(hsn_sac_no)) if hsn_sac_no is not None else None
+        if not rates:
+            rates = tax_rates.get(str(item_ref_id))
+    if rates:
+        return float(random.choice(list(rates)))
+    return 5.0
+
+
 # ---------------------------------------------------------------------------
 # PurchaseChain class
 # ---------------------------------------------------------------------------
@@ -577,6 +627,7 @@ class PurchaseChain:
         self.grn_api = GRNAPIUtils(self.client)
         self.qc_api = QCAPIUtils(self.client)
         self.pb_api = PBAPIUtils(self.client)
+        self.so_api = SOAPIUtils(self.client)
 
         self.results: List[dict] = []
         self._context: Optional[ChainContext] = None  # discovered lazily
@@ -596,6 +647,11 @@ class PurchaseChain:
         self._cqp_cache: Dict[int, List[dict]] = {}
         # Resolved Packages (bag type) FK for the QC bags detail row.
         self._bags_type_id: Optional[int] = None
+        # Sales Order header FKs — resolved once and cached per instance.
+        self._customer_cache: Dict[int, dict] = {}
+        self._customer_ref_id: Optional[int] = None
+        self._so_type_id: Optional[int] = None
+        self._supply_type_id: Optional[int] = None
 
     def _resolve_bags_type_id(self) -> int:
         """Return a valid Packages (bag type) FK for QC bags details.
@@ -616,6 +672,68 @@ class PurchaseChain:
             )
         self._bags_type_id = bags_type_id
         return bags_type_id
+
+    def _resolve_customer_ref_id(self) -> int:
+        """Return a valid Customer FK for the Sales Order header.
+
+        The SO screen's customer dropdown is populated from the Customers
+        screen. Resolved live from the customer list and cached; raises a clear
+        error when the tenant has no customers (so we never guess an FK).
+        """
+        if self._customer_ref_id is not None:
+            return self._customer_ref_id
+        from pages.private_b2b.modules.sales_order.data.sales_order_data import (
+            resolve_customer_ref_id,
+        )
+        customer_ref_id = resolve_customer_ref_id(self.client)
+        if customer_ref_id is None:
+            raise RuntimeError(
+                "No Customers found in ERP — cannot create a Sales Order. "
+                "Add a Customer first."
+            )
+        self._customer_ref_id = customer_ref_id
+        return customer_ref_id
+
+    def _resolve_customer_details(self, customer_ref_id: int) -> dict:
+        """Resolve the customer's own billing/shipping addresses + terms.
+
+        Same reasoning as ``_resolve_supplier_details``: the generic dropdown
+        values can belong to another party and cause an HTTP 500 on SO create.
+        Uses the SO module's extract_customer_details() so the output keys match
+        the SO payload builder exactly.
+        """
+        if customer_ref_id in self._customer_cache:
+            return self._customer_cache[customer_ref_id]
+
+        from pages.private_b2b.modules.sales_order.data.sales_order_data import (
+            extract_customer_details,
+        )
+        detail = self.client.get_entry("Customer", customer_ref_id)
+        out = extract_customer_details(detail)
+
+        log.info(f"  Customer #{customer_ref_id} resolved: {out}")
+        self._customer_cache[customer_ref_id] = out
+        return out
+
+    def _resolve_so_type_id(self) -> int:
+        """Return a valid Sales Order Type FK (resolved by label, 'Commission')."""
+        if self._so_type_id is not None:
+            return self._so_type_id
+        from pages.private_b2b.modules.sales_order.data.sales_order_data import (
+            resolve_so_type_id,
+        )
+        self._so_type_id = resolve_so_type_id(self.client) or 1
+        return self._so_type_id
+
+    def _resolve_supply_type_id(self) -> int:
+        """Return a valid Supply Type FK (resolved by label, 'Both')."""
+        if self._supply_type_id is not None:
+            return self._supply_type_id
+        from pages.private_b2b.modules.sales_order.data.sales_order_data import (
+            resolve_supply_type_id,
+        )
+        self._supply_type_id = resolve_supply_type_id(self.client) or 2
+        return self._supply_type_id
 
     def get_context(self) -> ChainContext:
         """Return the tenant context, discovering it on first call."""
@@ -1024,10 +1142,12 @@ class PurchaseChain:
         grn_overrides: dict = None,
         qc_overrides: dict = None,
         pb_overrides: dict = None,
+        so_overrides: dict = None,
         ctx: Optional[ChainContext] = None,
         documents: Optional[List[str]] = None,
         multi_gate_pass: bool = False,
         gp_count: int = 2,
+        customer_ref_id: int = None,
         qc_discount: bool = True,
     ) -> dict:
         """Execute one full PO -> GP -> GRN -> QC chain.
@@ -1181,6 +1301,16 @@ class PurchaseChain:
         grn_id = grn_ref = grn_data = grn_payload = None
         qc_id = qc_ref = qc_data = qc_payload = None
         pb_id = pb_ref = pb_data = pb_payload = None
+        so_id = so_ref = so_data = so_payload = None
+
+        # Sales Order header inputs — resolved once per chain (per-GP lines are
+        # built from each GP's own QC, but the customer/type/terms are shared).
+        so_customer = customer_ref_id if customer_ref_id is not None else (getattr(ctx, "customer_ref_id", None) if ctx else None)
+        if so_customer is None:
+            so_customer = self._resolve_customer_ref_id()
+        so_customer_details = self._resolve_customer_details(so_customer)
+        so_type_id = self._resolve_so_type_id()
+        so_supply_id = self._resolve_supply_type_id()
 
         # ---------------------------------------------------------------
         # 1. Purchase Order
@@ -1238,6 +1368,7 @@ class PurchaseChain:
         grns = []
         qcs = []
         pbs = []
+        sos = []
         po_quantity_by_item = {it["item_ref_id"]: it["quantity"] for it in items}
         received_so_far: dict = {}
         for gi, gp_items in enumerate(delivery_plans, start=1):
@@ -1309,6 +1440,34 @@ class PurchaseChain:
                 if self.delay:
                     time.sleep(self.delay)
 
+            if "SO" in docs:
+                so_qc_items = (qc_payload or {}).get("qc_details") or []
+                so_payload = self._build_so_payload(
+                    so_customer,
+                    qc_items=so_qc_items,
+                    overrides=so_overrides,
+                    ctx=ctx,
+                    so_type_ref_id=so_type_id,
+                    supply_type_ref_id=so_supply_id,
+                    customer_details=so_customer_details,
+                )
+                log.info(f"  SO {gi}/{len(delivery_plans)} payload (first 800 chars): {json.dumps(so_payload, default=str)[:800]}")
+                so_data = self.so_api.create_so(so_payload)
+                so_id = so_data.get("id") or so_data.get("entry_id") if so_data else None
+                if not so_data or not so_id:
+                    _so_resp = self.so_api._last_response
+                    _so_body = _so_resp.text[:400] if _so_resp is not None else "no response"
+                    _sent = json.dumps(so_payload, default=str)[:600]
+                    raise RuntimeError(
+                        f"SO {gi} creation failed (HTTP {self.so_api._last_status}); "
+                        f"body: {_so_body} | sent: {_sent}"
+                    )
+                so_ref = so_data.get("transaction_ref_no", str(so_id))
+                sos.append({"id": so_id, "ref": so_ref, "data": so_data, "payload": so_payload})
+                log.info(f"  SO {gi}/{len(delivery_plans)} created: ID={so_id}, ref={so_ref}")
+                if self.delay:
+                    time.sleep(self.delay)
+
             if "PB" in docs:
                 pb_qc_items = (qc_payload or {}).get("qc_details") or []
                 pb_payload = self._build_pb_payload(
@@ -1336,6 +1495,7 @@ class PurchaseChain:
         last_grn = grns[-1] if grns else None
         last_qc = qcs[-1] if qcs else None
         last_pb = pbs[-1] if pbs else None
+        last_so = sos[-1] if sos else None
         result = {
             "po": {"id": po_id, "ref": po_ref, "data": po_data, "payload": po_payload,
                    "fetched": po_entry} if po_id else None,
@@ -1347,6 +1507,8 @@ class PurchaseChain:
             "qcs": qcs,
             "pb": last_pb,
             "pbs": pbs,
+            "so": last_so,
+            "sos": sos,
         }
         self.results.append(result)
         return result
@@ -1637,6 +1799,40 @@ class PurchaseChain:
             **header_extra,
             **overrides,
         )
+
+    def _build_so_payload(
+        self,
+        customer_ref_id: int,
+        qc_items: List[dict],
+        overrides: dict = None,
+        ctx: Optional[ChainContext] = None,
+        so_type_ref_id: int = None,
+        supply_type_ref_id: int = None,
+        customer_details: Optional[dict] = None,
+    ) -> dict:
+        from pages.private_b2b.modules.sales_order.data.sales_order_data import build_so_payload
+        tax_rates = self._resolve_tax_rates()
+        so_items = _so_items_from_qc(qc_items, ctx=ctx, tax_rates=tax_rates)
+        overrides = overrides or {}
+        kwargs = {
+            "customer_ref_id": customer_ref_id,
+            "items": so_items,
+            "so_type_ref_id": so_type_ref_id,
+            "supply_type_ref_id": supply_type_ref_id,
+            "customer_details": customer_details,
+        }
+        if ctx:
+            kwargs.update({
+                "txn_currency": ctx.txn_currency,
+                "base_currency": ctx.base_currency,
+                "conversion_rate": getattr(ctx, "conversion_rate", 1.0),
+                "parameter1": ctx.parameter1,
+                "parameter2": ctx.parameter2,
+                "parameter5": ctx.parameter5,
+                "parameter6": ctx.parameter6,
+            })
+        kwargs.update(overrides)
+        return build_so_payload(**kwargs)
 
 
 # ---------------------------------------------------------------------------

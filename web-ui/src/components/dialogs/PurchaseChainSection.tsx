@@ -65,6 +65,8 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [failed, setFailed] = useState(0)
   const [suppliers, setSuppliers] = useState<MasterDataItem[]>([])
   const [items, setItems] = useState<MasterDataItem[]>([])
+  const [customers, setCustomers] = useState<MasterDataItem[]>([])
+  const [customer, setCustomer] = useState<number | null>(null)
   const [cqpItemIds, setCqpItemIds] = useState<number[] | null>(null)
   const [fillingCqp, setFillingCqp] = useState(false)
   const [cqpFillLog, setCqpFillLog] = useState('')
@@ -82,7 +84,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [localTenantId, setLocalTenantId] = useState('')
   const [showTokenInput, setShowTokenInput] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
-  const [activeMenu, setActiveMenu] = useState<{type: 'supplier' | 'category' | 'item' | number | `chainSup:${number}`; pos: {top: number; left: number; width: number}} | null>(null)
+  const [activeMenu, setActiveMenu] = useState<{type: 'supplier' | 'category' | 'customer' | 'item' | number | `chainSup:${number}`; pos: {top: number; left: number; width: number}} | null>(null)
   const [dropdownSearch, setDropdownSearch] = useState('')
   const logsEndRef = useRef<HTMLDivElement>(null)
   const tokenSectionRef = useRef<HTMLDivElement>(null)
@@ -93,6 +95,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const supplierBtnRef = useRef<HTMLButtonElement>(null)
   const categoryBtnRef = useRef<HTMLButtonElement>(null)
   const itemBtnRef = useRef<HTMLButtonElement>(null)
+  const customerBtnRef = useRef<HTMLButtonElement>(null)
   const rowBtnRefs = useRef<(HTMLButtonElement | null)[]>([])
   const chainSupBtnRefs = useRef<(HTMLButtonElement | null)[]>([])
 
@@ -144,6 +147,17 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       if (supRes.length > 0 && supplier === null) setSupplier(supRes[0].id)
       if (usable.length > 0 && itemIds.length === 0) {
         setItemIds(usable.slice(0, numItems).map(i => i.id))
+      }
+      // Customers drive the Sales Order header — fetch on SO flow so the
+      // dropdown is populated before the user hits Run.
+      if (flow === 'so') {
+        try {
+          const custRes = await fetchMasterData('Customer', token, tenant)
+          setCustomers(custRes)
+          if (customer === null && custRes.length > 0) setCustomer(custRes[0].id)
+        } catch {
+          setCustomers([])
+        }
       }
       fetchedRef.current = true
     } catch (err) {
@@ -235,8 +249,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       gpCount,
       count > 1 ? chainSuppliers.filter((s): s is number => s != null) : [],
       qcDiscount,
+      flow === 'so' && enabledDocs.has('SO') ? customer : null,
     )
-  }, [count, supplier, numItems, itemIds, erpToken, localToken, localTenantId, erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow, multiGatePass, gpCount, chainSuppliers, qcDiscount])
+  }, [count, supplier, numItems, itemIds, erpToken, localToken, localTenantId, erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow, multiGatePass, gpCount, chainSuppliers, qcDiscount, customer, enabledDocs])
 
   const handleStop = useCallback(() => {
     setRunning(false)
@@ -590,6 +605,42 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             )}
           </div>
         </div>
+
+        {flow === 'so' && enabledDocs.has('SO') && (
+        <div className="mb-4">
+          {/* Customer selector — SO header customer; only relevant for the SO flow */}
+          <div className="relative max-w-full sm:max-w-xs" data-tour="pc-customer">
+            <Label className="text-[11px] text-gray-700 dark:text-gray-300 mb-1 block">Customer (SO)</Label>
+            {loadingData && customers.length === 0 ? (
+              <div className="h-9 flex items-center text-[12px] text-gray-600 dark:text-gray-400 gap-1.5">
+                <Loader2 className="size-3 animate-spin" />
+                Loading...
+              </div>
+            ) : (
+              <button
+                ref={customerBtnRef}
+                type="button"
+                onClick={() => {
+                  if (activeMenu?.type === 'customer') { setActiveMenu(null); return }
+                  const r = customerBtnRef.current?.getBoundingClientRect()
+                  if (r) setActiveMenu({ type: 'customer', pos: { top: r.bottom + 4, left: r.left, width: r.width } })
+                }}
+                className="h-9 w-full px-3 py-0 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
+              >
+                <span className="truncate">
+                  {customer != null
+                    ? (customers.find((c) => c.id === customer)?.name ?? `Customer ${customer}`)
+                    : customers.length > 0 ? 'Select customer...' : 'No customers found'}
+                </span>
+                <svg className={`size-3 text-gray-500 transition-transform shrink-0 ${activeMenu?.type === 'customer' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+            )}
+            {customers.length === 0 && !loadingData && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">No Customers in ERP — SO will fail. Add a Customer first.</p>
+            )}
+          </div>
+        </div>
+        )}
 
         {/* Chains — own row */}
         <div className="mb-4">
@@ -959,9 +1010,11 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
               {(() => {
                 const list = activeMenu.type === 'supplier' || typeof activeMenu.type === 'string' && activeMenu.type.startsWith('chainSup:')
                   ? suppliers
-                  : activeMenu.type === 'category'
-                    ? categories
-                    : catItems
+                  : activeMenu.type === 'customer'
+                    ? customers
+                    : activeMenu.type === 'category'
+                      ? categories
+                      : catItems
                 const q = dropdownSearch.trim().toLowerCase()
                 const filtered = q ? list.filter((i) => i.name.toLowerCase().includes(q)) : list
                 return filtered.length === 0 ? (
@@ -975,11 +1028,13 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                     ? i.id === chainSuppliers[chainIdx]
                     : activeMenu.type === 'supplier'
                       ? i.id === supplier
-                      : activeMenu.type === 'category'
-                        ? i.id === selectedCategoryId
-                        : activeMenu.type === 'item'
-                          ? i.id === itemIds[0]
-                          : i.id === itemIds[activeMenu.type as number]
+                      : activeMenu.type === 'customer'
+                        ? i.id === customer
+                        : activeMenu.type === 'category'
+                          ? i.id === selectedCategoryId
+                          : activeMenu.type === 'item'
+                            ? i.id === itemIds[0]
+                            : i.id === itemIds[activeMenu.type as number]
                   return (
                     <button
                       key={i.id}
@@ -989,6 +1044,8 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                           setChainSuppliers((prev) => { const next = [...prev]; next[chainIdx] = i.id; return next })
                         } else if (activeMenu.type === 'supplier') {
                           setSupplier(i.id)
+                        } else if (activeMenu.type === 'customer') {
+                          setCustomer(i.id)
                         } else if (activeMenu.type === 'category') {
                           handleCategorySelect(i.id)
                           return
