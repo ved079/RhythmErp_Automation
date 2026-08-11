@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { CheckCircle2, XCircle, Play, Key, RefreshCw, Loader2, X, AlertTriangle, Wand2, Search } from 'lucide-react'
+import { CheckCircle2, XCircle, Play, Key, RefreshCw, Loader2, X, AlertTriangle, Wand2, Search, Star } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import { startPurchaseChain, fetchMasterData, fetchItemCategories, fetchItemsWithCqp, fillCqpItems, type SSEEvent, type MasterDataItem, type ItemCategory } from '@/lib/api'
 
@@ -74,6 +74,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [categories, setCategories] = useState<ItemCategory[]>([])
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
   const [requireTaxRate, setRequireTaxRate] = useState(true)
+  const [starredFlow, setStarredFlow] = useState<'po' | 'gp' | 'so' | null>(null)
   const [flow, setFlow] = useState<'po' | 'gp' | 'so'>('po')
   const [multiGatePass, setMultiGatePass] = useState(false)
   const [gpCount, setGpCount] = useState(2)
@@ -91,6 +92,16 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const startTimeRef = useRef<number>(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [elapsed, setElapsed] = useState(0)
+  // On mount: restore starred flow from localStorage and auto-select it.
+  useEffect(() => {
+    const saved = localStorage.getItem('pc_starred_flow') as 'po' | 'gp' | 'so' | null
+    if (saved) {
+      setStarredFlow(saved)
+      setFlow(saved)
+      setEnabledDocs(new Set(saved === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO'] : saved === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
+    }
+  }, [])
+
   const fetchedRef = useRef(false)
   const supplierBtnRef = useRef<HTMLButtonElement>(null)
   const categoryBtnRef = useRef<HTMLButtonElement>(null)
@@ -356,23 +367,51 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             { id: 'so', label: 'PO → GP → GRN → QC → SO → PB' },
             { id: 'gp', label: 'GP → GRN → QC → PB' },
           ] as const).map((f, i) => (
-            <button
+            <div
               key={f.id}
-              type="button"
-              onClick={() => {
-                setFlow(f.id)
-                setMultiGatePass(false)
-                setEnabledDocs(new Set(f.id === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO'] : f.id === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
-              }}
-              disabled={running}
-              className={`px-3 py-2 text-[11px] font-medium border-b-2 transition-colors cursor-pointer disabled:cursor-not-allowed text-center ${
+              className={`relative flex items-center justify-center border-b-2 transition-colors ${
                 flow === f.id
-                  ? 'bg-white dark:bg-gray-900 border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB]'
-                  : 'bg-gray-50 dark:bg-gray-800/50 border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                  ? 'bg-white dark:bg-gray-900 border-[#3F51B5]'
+                  : 'bg-gray-50 dark:bg-gray-800/50 border-transparent'
               } ${i > 0 ? 'border-l border-gray-300 dark:border-gray-600' : ''}`}
             >
-              {f.label}
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFlow(f.id)
+                  setMultiGatePass(false)
+                  setEnabledDocs(new Set(f.id === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO'] : f.id === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
+                }}
+                disabled={running}
+                className={`flex-1 px-3 pl-2 pr-7 py-2 text-[11px] font-medium transition-colors cursor-pointer disabled:cursor-not-allowed text-center ${
+                  flow === f.id
+                    ? 'text-[#3F51B5] dark:text-[#7986CB]'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                }`}
+              >
+                {f.label}
+              </button>
+              <button
+                type="button"
+                title={starredFlow === f.id ? 'Remove default' : 'Set as default flow'}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const next = starredFlow === f.id ? null : f.id
+                  setStarredFlow(next)
+                  if (next) localStorage.setItem('pc_starred_flow', next)
+                  else localStorage.removeItem('pc_starred_flow')
+                }}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded transition-colors cursor-pointer"
+              >
+                <Star
+                  className={`size-3 transition-colors ${
+                    starredFlow === f.id
+                      ? 'fill-amber-400 text-amber-400'
+                      : 'text-gray-300 dark:text-gray-600 hover:text-amber-400'
+                  }`}
+                />
+              </button>
+            </div>
           ))}
         </div>
         <div className="p-4 pb-0 overflow-y-auto flex-1 min-h-0">
