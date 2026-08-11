@@ -182,12 +182,12 @@ export default function Home() {
         if (credForm.isDefault || erpCredentials.length === 0) setActiveCredId(data.credential.id)
         setCredForm({ name: '', email: '', password: '', tenantUrl: 'https://rhythmerp.algorhythms.in', isDefault: false })
         setCredFormOpen(false)
-        toast.success(`Credential "${credForm.name}" saved`)
+        toast.success('Credential saved', { description: `"${credForm.name}" is ready to use for ERP connections.` })
       } else {
-        toast.error('Failed to save credential')
+        toast.error('Save failed', { description: 'Could not save the credential. Please try again.' })
       }
     } catch {
-      toast.error('Failed to save credential')
+      toast.error('Save failed', { description: 'A network error occurred. Please try again.' })
     } finally {
       setCredSaving(false)
     }
@@ -215,9 +215,9 @@ export default function Home() {
       if (data.password) credPasswords.current[id] = data.password
       if (data.isDefault) setErpCredentials(prev => prev.map(c => ({ ...c, isDefault: c.id === id, ...(c.id === id ? data : {}) })))
       else setErpCredentials(prev => prev.map(c => c.id === id ? { ...c, ...data } : c))
-      toast.success('Credential updated')
+      toast.success('Credential updated', { description: 'Your changes have been saved.' })
     } else {
-      toast.error('Failed to update credential')
+      toast.error('Update failed', { description: 'Could not update the credential. Please try again.' })
     }
   }, [])
 

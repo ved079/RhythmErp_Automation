@@ -78,9 +78,9 @@ export function useTestRun(params: UseTestRunParams) {
       else if (selectedOnly) testsToRun = tests.filter((t) => testChecks.has(t.id))
       else testsToRun = tests.filter((t) => t.status === 'pending' || t.status === 'failed')
       if (testType) testsToRun = testsToRun.filter((t) => (testType === 'ui' ? (!t.testType || t.testType === 'ui') : t.testType === 'api'))
-      if (testsToRun.length === 0) { toast.info('No tests to run'); return }
+      if (testsToRun.length === 0) { toast.info('No tests to run', { description: 'All tests are already passing or none are selected.' }); return }
       const mapping = getCachedSidebarToFolderMapping(selectedModule)
-      if (!mapping) { toast.error('Cannot determine module path for: ' + selectedModule); return }
+      if (!mapping) { toast.error('Module not found', { description: `Cannot determine module path for: ${selectedModule}` }); return }
       setTests((prev) => prev.map((t) => testsToRun.some((r) => r.id === t.id) ? { ...t, status: (t.id === testsToRun[0].id ? 'running' as const : 'pending' as const), duration: '' } : t))
       setIsRunning(true); setRunningProgress('Starting tests...'); setConsoleLogs([])
       const testNames = testsToRun.map((t) => t.id)
@@ -126,7 +126,7 @@ export function useTestRun(params: UseTestRunParams) {
                         setAutoReportedTestIds((prev) => { const next = new Set(prev); next.add(testId); return next })
                       } else {
                         setAutoReportedTestIds((prev) => { const next = new Set(prev); next.add(testId); return next })
-                        toast.info(`Bug auto-reported for: ${event.test_name}`, { duration: 4000 })
+                        toast.info('Bug auto-reported', { description: `A bug report was created for: ${event.test_name}`, duration: 4000 })
                       }
                       loadBugReports()
                     }
@@ -138,7 +138,7 @@ export function useTestRun(params: UseTestRunParams) {
           else if (event.type === 'error') { toast.error('Run error', { description: event.message, duration: 8000 }); setConsoleLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ERROR: ${event.message}`]) }
         },
         (summary: RunCompletionSummary) => {
-          setIsRunning(false); setRunningProgress(''); toast.success('Test run finished!')
+          setIsRunning(false); setRunningProgress(''); toast.success('Test run finished', { description: 'All tests have completed.' })
           const svTotal = summary.total
           if (svTotal > 0) {
             const { subModuleName, moduleName } = (() => {
@@ -180,8 +180,8 @@ export function useTestRun(params: UseTestRunParams) {
   const handleStopRun = useCallback(async () => {
     const runId = currentRunIdRef.current
     if (runId) {
-      try { await stopRun(runId); toast.success('Run stopped') }
-      catch (err) { toast.error('Failed to stop run', { description: err instanceof Error ? err.message : 'Unknown error' }) }
+      try { await stopRun(runId); toast.success('Run stopped', { description: 'The test run was cancelled successfully.' }) }
+      catch (err) { toast.error('Stop failed', { description: err instanceof Error ? err.message : 'Could not stop the run.' }) }
     }
     setIsRunning(false)
   }, [])

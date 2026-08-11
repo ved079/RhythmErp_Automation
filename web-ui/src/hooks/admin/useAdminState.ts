@@ -391,7 +391,7 @@ export function useAdminState(): AdminState {
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to update') }
         const updated = await res.json()
         setEnvironments(prev => prev.map(e => e.id === editingEnv.id ? { ...e, ...updated } : e))
-        toast.success('Environment updated')
+        toast.success('Environment updated', { description: `"${envData.name}" was saved successfully.` })
       } else {
         const res = await fetch('/api/admin/environments', withCsrf({
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -400,9 +400,9 @@ export function useAdminState(): AdminState {
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to create') }
         const created = await res.json()
         setEnvironments(prev => [...prev, { ...envData, id: created.id, name: created.name, baseUrl: created.baseUrl, browser: created.browser, status: created.status, color: created.color, lastUsed: created.lastUsed } as Environment])
-        toast.success('Environment created')
+        toast.success('Environment created', { description: `"${envData.name}" is now available for test runs.` })
       }
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Operation failed') }
+    } catch (err) { toast.error('Operation failed', { description: err instanceof Error ? err.message : 'Something went wrong. Please try again.' }) }
     finally { setEnvDialogOpen(false); setEditingEnv(null) }
   }, [editingEnv])
 
@@ -415,8 +415,8 @@ export function useAdminState(): AdminState {
       }))
       if (!res.ok) throw new Error('Failed to toggle')
       setEnvironments(prev => prev.map(e => e.id === env.id ? { ...e, status: newStatus } : e))
-      toast.success(`Environment ${newStatus}`)
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
+      toast.success(`Environment ${newStatus === 'active' ? 'activated' : 'deactivated'}`, { description: `"${env.name}" is now ${newStatus}.` })
+    } catch (err) { toast.error('Toggle failed', { description: err instanceof Error ? err.message : 'Could not update environment status.' }) }
   }, [])
 
   // User CRUD
@@ -430,7 +430,7 @@ export function useAdminState(): AdminState {
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed') }
         const updated = await res.json()
         setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, name: updated.name, email: updated.email, role: updated.role, status: updated.status, moduleAccess: updated.moduleAccess } : u))
-        toast.success('User updated')
+        toast.success('User updated', { description: `${userData.name} (${userData.email}) was saved successfully.` })
       } else {
         const res = await fetch('/api/admin/users', withCsrf({
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -439,9 +439,9 @@ export function useAdminState(): AdminState {
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed') }
         const created = await res.json()
         setUsers(prev => [...prev, { id: created.id, email: created.email, name: created.name, role: created.role, status: created.status || 'active', moduleAccess: created.moduleAccess || userData.moduleAccess || [] } as AdminUser])
-        toast.success('User created')
+        toast.success('User created', { description: `${userData.name} (${userData.email}) can now log in.` })
       }
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
+    } catch (err) { toast.error('Action failed', { description: err instanceof Error ? err.message : 'Something went wrong. Please try again.' }) }
     finally { setUserDialogOpen(false); setEditingUser(null) }
   }, [editingUser])
 
@@ -449,10 +449,10 @@ export function useAdminState(): AdminState {
     try {
       const res = await fetch(`/api/admin/users/${userId}/reset-password`, withCsrf({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) }))
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to reset password') }
-      toast.success(`Password reset to: ${password}`)
+      toast.success('Password reset', { description: 'The new password has been set. Share it securely with the user.' })
       setResetPasswordDialogOpen(false)
       setResetPasswordUser(null)
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
+    } catch (err) { toast.error('Reset failed', { description: err instanceof Error ? err.message : 'Could not reset the password.' }) }
   }, [])
 
   const handleDelete = useCallback(async () => {
@@ -462,26 +462,26 @@ export function useAdminState(): AdminState {
         const res = await fetch(`/api/admin/users/${deleteTarget.id}`, withCsrf({ method: 'DELETE' }))
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
         setUsers(prev => prev.filter(u => u.id !== deleteTarget.id))
-        toast.success('User deleted')
+        toast.success('User deleted', { description: `"${deleteTarget.name}" has been permanently removed.` })
       } else if (deleteTarget.type === 'environment') {
         const res = await fetch(`/api/admin/environments/${deleteTarget.id}`, withCsrf({ method: 'DELETE' }))
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
         setEnvironments(prev => prev.filter(e => e.id !== deleteTarget.id))
-        toast.success('Environment deleted')
+        toast.success('Environment deleted', { description: `"${deleteTarget.name}" has been removed.` })
       } else if (deleteTarget.type === 'module') {
         const res = await fetch(`/api/admin/modules/${deleteTarget.id}`, withCsrf({ method: 'DELETE' }))
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
         setModules(prev => prev.filter(m => m.id !== deleteTarget.id))
-        toast.success('Module deleted')
+        toast.success('Module deleted', { description: `"${deleteTarget.name}" has been removed.` })
       }
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
+    } catch (err) { toast.error('Delete failed', { description: err instanceof Error ? err.message : 'Could not delete the item.' }) }
     finally { setDeleteDialogOpen(false); setDeleteTarget(null) }
   }, [deleteTarget])
 
   const handleBugStatusChange = useCallback(async (id: string, status: BugReport['status']) => {
     const result = await updateBugReportStatus(id, status)
-    if (result) { setBugReports(prev => prev.map(b => b.id === id ? result : b)); toast.success(`Status changed to ${status}`) }
-    else toast.error('Failed to update status')
+    if (result) { setBugReports(prev => prev.map(b => b.id === id ? result : b)); toast.success('Bug status updated', { description: `Status changed to "${status}".` }) }
+    else toast.error('Update failed', { description: 'Could not change the bug report status.' })
   }, [])
 
   const handleBugReply = useCallback(async (reportId: string) => {
@@ -491,8 +491,8 @@ export function useAdminState(): AdminState {
     if (result) {
       setBugReports(prev => prev.map(b => b.id === reportId ? result : b))
       setBugReplyText(prev => ({ ...prev, [reportId]: '' }))
-      toast.success('Reply added')
-    } else toast.error('Failed to add reply')
+      toast.success('Reply sent', { description: 'Your reply has been added to the bug report.' })
+    } else toast.error('Reply failed', { description: 'Could not send the reply. Please try again.' })
   }, [bugReplyText, user])
 
   const handleMarkBugRead = useCallback(async (id: string) => {
@@ -514,7 +514,7 @@ export function useAdminState(): AdminState {
           }),
         }))
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to update') }
-        toast.success('Module updated')
+        toast.success('Module updated', { description: `"${moduleData.label}" has been saved.` })
         loadModules()
       } else {
         const res = await fetch('/api/admin/modules', withCsrf({
@@ -527,10 +527,10 @@ export function useAdminState(): AdminState {
           }),
         }))
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to create') }
-        toast.success('Module created')
+        toast.success('Module created', { description: `"${moduleData.label}" is now visible in the sidebar.` })
         loadModules()
       }
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Operation failed') }
+    } catch (err) { toast.error('Operation failed', { description: err instanceof Error ? err.message : 'Something went wrong. Please try again.' }) }
     finally { setModuleDialogOpen(false); setEditingModule(null) }
   }, [editingModule, loadModules])
 
@@ -539,8 +539,8 @@ export function useAdminState(): AdminState {
       const res = await fetch(`/api/admin/modules/${moduleId}`, withCsrf({ method: 'DELETE' }))
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to delete') }
       setModules(prev => prev.filter(m => m.id !== moduleId))
-      toast.success('Module deleted')
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
+      toast.success('Module deleted', { description: 'The module has been permanently removed.' })
+    } catch (err) { toast.error('Delete failed', { description: err instanceof Error ? err.message : 'Could not delete the module.' }) }
   }, [])
 
   const handleSeedModules = useCallback(async () => {
@@ -548,9 +548,9 @@ export function useAdminState(): AdminState {
       const res = await fetch('/api/admin/modules/seed', withCsrf({ method: 'POST' }))
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Failed to seed') }
       const data = await res.json()
-      toast.success(`Modules seeded: ${data.created || 0} created, ${data.updated || 0} updated`)
+      toast.success('Modules synced', { description: `${data.created || 0} created, ${data.updated || 0} updated from the backend.` })
       loadModules()
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
+    } catch (err) { toast.error('Sync failed', { description: err instanceof Error ? err.message : 'Could not seed modules.' }) }
   }, [loadModules])
 
   const handleToggleModuleStatus = useCallback(async (mod: AdminModule) => {
@@ -563,8 +563,8 @@ export function useAdminState(): AdminState {
       }))
       if (!res.ok) throw new Error('Failed to toggle status')
       setModules(prev => prev.map(m => m.id === mod.id ? { ...m, status: newStatus } : m))
-      toast.success(`Module status changed to ${newStatus}`)
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
+      toast.success('Module status updated', { description: `"${mod.label}" is now set to ${newStatus}.` })
+    } catch (err) { toast.error('Status update failed', { description: err instanceof Error ? err.message : 'Could not update the module status.' }) }
   }, [])
 
   // Bulk user action handlers
@@ -575,15 +575,15 @@ export function useAdminState(): AdminState {
       if (bulkActionType === 'activate') {
         await Promise.all(ids.map(id => fetch(`/api/admin/users/${id}`, withCsrf({ method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'active' }) }))))
         setUsers(prev => prev.map(u => ids.includes(u.id) ? { ...u, status: 'active' as const } : u))
-        toast.success(`${ids.length} user(s) activated`)
+        toast.success(`${ids.length} user${ids.length !== 1 ? 's' : ''} activated`, { description: 'Selected accounts can now log in.' })
       } else if (bulkActionType === 'deactivate') {
         await Promise.all(ids.map(id => fetch(`/api/admin/users/${id}`, withCsrf({ method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'inactive' }) }))))
         setUsers(prev => prev.map(u => ids.includes(u.id) ? { ...u, status: 'inactive' as const } : u))
-        toast.success(`${ids.length} user(s) deactivated`)
+        toast.success(`${ids.length} user${ids.length !== 1 ? 's' : ''} deactivated`, { description: 'Selected accounts have been suspended.' })
       } else if (bulkActionType === 'delete') {
         await Promise.all(ids.map(id => fetch(`/api/admin/users/${id}`, withCsrf({ method: 'DELETE' }))))
         setUsers(prev => prev.filter(u => !ids.includes(u.id)))
-        toast.success(`${ids.length} user(s) deleted`)
+        toast.success(`${ids.length} user${ids.length !== 1 ? 's' : ''} deleted`, { description: 'Selected accounts have been permanently removed.' })
       }
       setSelectedUserIds(new Set())
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Bulk action failed') }

@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select'
 import { ModuleAccessPicker, type ModuleItem } from '@/components/admin/ModuleAccessPicker'
 import { ALL_SIDEBAR_MODULES } from '@/data/sidebarModules'
-import { Shield } from 'lucide-react'
+import { Shield, Eye, EyeOff, Check, X } from 'lucide-react'
 
 interface AdminModule {
   id: string; name: string; label: string; parentId?: string; parentLabel?: string
@@ -38,6 +38,19 @@ export function UserDialog({ open, onOpenChange, editingUser, onSave, allModules
   const [status, setStatus] = useState<string>(editingUser?.status || 'active')
   const [moduleAccess, setModuleAccess] = useState<string[]>(editingUser?.moduleAccess || [])
   const [modulePickerOpen, setModulePickerOpen] = useState(false)
+  const [showPassword, setShowPassword] = useState(true)
+
+  const passwordChecks = useMemo(() => ({
+    length:   password.length >= 8,
+    upper:    /[A-Z]/.test(password),
+    lower:    /[a-z]/.test(password),
+    number:   /[0-9]/.test(password),
+    special:  /[^A-Za-z0-9]/.test(password),
+  }), [password])
+
+  const strengthScore = Object.values(passwordChecks).filter(Boolean).length
+  const strengthLabel = ['', 'Weak', 'Weak', 'Fair', 'Good', 'Strong'][strengthScore]
+  const strengthColor = ['', '#ef4444', '#ef4444', '#f97316', '#3b82f6', '#22c55e'][strengthScore]
 
   const pickerModules: ModuleItem[] = useMemo(() => {
     const result: ModuleItem[] = []
@@ -85,7 +98,7 @@ export function UserDialog({ open, onOpenChange, editingUser, onSave, allModules
             {editingUser ? 'Update user details and permissions.' : 'Create a new user account.'}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
+        <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs font-['Poppins']">Name</Label>
@@ -99,7 +112,57 @@ export function UserDialog({ open, onOpenChange, editingUser, onSave, allModules
           {!editingUser && (
             <div className="space-y-1.5">
               <Label className="text-xs font-['Poppins']">Password</Label>
-              <Input value={password} onChange={e => setPassword(e.target.value)} placeholder="changeme" type="password" className="h-9 text-sm font-['Poppins']" />
+              <div className="relative">
+                <Input value={password} onChange={e => setPassword(e.target.value)} placeholder="changeme" type={showPassword ? 'text' : 'password'} className="h-9 text-sm font-['Poppins'] pr-9" />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+
+              {/* Strength meter — only shown once user starts typing */}
+              {password.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  {/* Bar */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1 flex-1">
+                      {[1,2,3,4,5].map(i => (
+                        <div
+                          key={i}
+                          className="h-1.5 flex-1 rounded-full transition-colors duration-300"
+                          style={{ backgroundColor: i <= strengthScore ? strengthColor : '#e5e7eb' }}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-[11px] font-medium font-['Poppins'] w-10 text-right" style={{ color: strengthColor }}>
+                      {strengthLabel}
+                    </span>
+                  </div>
+
+                  {/* Checklist */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                    {([
+                      { key: 'length',  label: 'Min 8 characters' },
+                      { key: 'upper',   label: 'Uppercase letter' },
+                      { key: 'lower',   label: 'Lowercase letter' },
+                      { key: 'number',  label: 'Number' },
+                      { key: 'special', label: 'Special character' },
+                    ] as const).map(({ key, label }) => (
+                      <div key={key} className="flex items-center gap-1.5">
+                        {passwordChecks[key]
+                          ? <Check className="size-3 text-green-500 shrink-0" />
+                          : <X className="size-3 text-gray-300 dark:text-gray-600 shrink-0" />}
+                        <span className={`text-[11px] font-['Poppins'] ${passwordChecks[key] ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                          {label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
@@ -146,7 +209,7 @@ export function UserDialog({ open, onOpenChange, editingUser, onSave, allModules
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} className="font-['Poppins']">Cancel</Button>
           <Button onClick={() => onSave({ name, email, password: password || undefined, role: role as AdminUser['role'], status: status as AdminUser['status'], moduleAccess })}
-            disabled={!name || !email}
+            disabled={!name || !email || (!editingUser && !passwordChecks.length)}
             className="bg-[#2D3FC7] hover:bg-[#3F51B5] text-white font-['Poppins']">
             {editingUser ? 'Update' : 'Create'}
           </Button>

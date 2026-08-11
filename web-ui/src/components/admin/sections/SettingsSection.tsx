@@ -45,8 +45,8 @@ export function SettingsSection() {
       }))
       if (!res.ok) throw new Error('Failed to save')
       setSettings(prev => prev.map(s => s.id === setting.id ? { ...s, value: newValue } : s))
-      toast.success('Setting saved')
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
+      toast.success('Setting saved', { description: `"${setting.key}" has been updated.` })
+    } catch (err) { toast.error('Save failed', { description: err instanceof Error ? err.message : 'Could not save the setting.' }) }
   }
 
   const handleSeedSettings = async () => {
@@ -55,8 +55,8 @@ export function SettingsSection() {
       if (!res.ok) throw new Error('Failed to reset')
       const data = await res.json()
       setSettings(data.settings || [])
-      toast.success('Settings reset to defaults')
-    } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed') }
+      toast.success('Settings reset', { description: 'All settings have been restored to their defaults.' })
+    } catch (err) { toast.error('Reset failed', { description: err instanceof Error ? err.message : 'Could not reset settings.' }) }
   }
 
   // Track only locally-modified (unsaved) values

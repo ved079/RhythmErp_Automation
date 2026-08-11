@@ -94,7 +94,7 @@ export function MyTicketsTab({
       }
       setReplyText('')
     } catch {
-      toast.error('Failed to send reply')
+      toast.error('Reply failed', { description: 'Could not send your reply. Please try again.' })
     } finally {
       setSendingReply(false)
     }
@@ -107,10 +107,11 @@ export function MyTicketsTab({
       if (updated) {
         setSelectedTicket(updated)
         setAllReports((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
-        toast.success(`Status updated to ${newStatus === 'in-progress' ? 'In Progress' : newStatus === 'fixed' ? 'Fixed' : 'Open'}`)
+        const label = newStatus === 'in-progress' ? 'In Progress' : newStatus === 'fixed' ? 'Fixed' : 'Open'
+        toast.success('Status updated', { description: `Ticket is now marked as "${label}".` })
       }
     } catch {
-      toast.error('Failed to update status')
+      toast.error('Update failed', { description: 'Could not change the ticket status. Please try again.' })
     }
   }, [selectedTicket])
 

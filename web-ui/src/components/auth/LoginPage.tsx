@@ -181,7 +181,7 @@ function ForgotPasswordPage({ onBackToLogin }: { onBackToLogin: () => void }) {
           return
         }
 
-        toast.success('Password reset successful!')
+        toast.success('Password reset', { description: 'Your new password is active. You can now log in.' })
         setStep(3)
       } catch {
         setError('Network error. Please try again.')
@@ -582,7 +582,14 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
     typeof window !== 'undefined' && window.location.hash === '#forget-password'
   )
 
-  // Sync hash ↔ view on mount and on browser back/forward
+  // On mount: normalize hash to #sign-in (clears any app hash like #full-purchase-flow).
+  useEffect(() => {
+    if (window.location.hash !== '#forget-password') {
+      window.history.replaceState(null, '', '#sign-in')
+    }
+  }, [])
+
+  // Sync hash ↔ view on browser back/forward
   useEffect(() => {
     const onHashChange = () => {
       setForgotPassword(window.location.hash === '#forget-password')

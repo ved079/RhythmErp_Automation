@@ -45,15 +45,15 @@ export function UserProfileDialog({
 
   const handleChangePassword = useCallback(async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
-      toast.error('Please fill in all password fields')
+      toast.error('Missing fields', { description: 'Please fill in all password fields before saving.' })
       return
     }
     if (newPassword !== confirmPassword) {
-      toast.error('New passwords do not match')
+      toast.error('Passwords do not match', { description: 'Your new password and confirmation do not match.' })
       return
     }
     if (newPassword.length < 6) {
-      toast.error('New password must be at least 6 characters')
+      toast.error('Password too short', { description: 'New password must be at least 6 characters.' })
       return
     }
     setChangingPassword(true)
@@ -68,15 +68,15 @@ export function UserProfileDialog({
       }))
       const data = await res.json()
       if (!res.ok) {
-        toast.error(data.error || 'Failed to change password')
+        toast.error('Password change failed', { description: data.error || 'Could not update your password.' })
         return
       }
-      toast.success('Password changed successfully')
+      toast.success('Password changed', { description: 'Your new password is active. Use it next time you log in.' })
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
     } catch {
-      toast.error('Network error. Please try again.')
+      toast.error('Network error', { description: 'Could not reach the server. Please try again.' })
     } finally {
       setChangingPassword(false)
     }
