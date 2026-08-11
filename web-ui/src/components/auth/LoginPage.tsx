@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -578,7 +578,18 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [forgotPassword, setForgotPassword] = useState(false)
+  const [forgotPassword, setForgotPassword] = useState(() =>
+    typeof window !== 'undefined' && window.location.hash === '#forget-password'
+  )
+
+  // Sync hash ↔ view on mount and on browser back/forward
+  useEffect(() => {
+    const onHashChange = () => {
+      setForgotPassword(window.location.hash === '#forget-password')
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -624,7 +635,7 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
               exit={{ opacity: 0, x: 20 }}
               transition={{ duration: 0.3 }}
             >
-              <ForgotPasswordPage onBackToLogin={() => setForgotPassword(false)} />
+              <ForgotPasswordPage onBackToLogin={() => { window.location.hash = '#sign-in' }} />
             </motion.div>
           ) : (
             <motion.div
@@ -740,7 +751,7 @@ export function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void }) {
                       <div />
                       <button
                         type="button"
-                        onClick={() => setForgotPassword(true)}
+                        onClick={() => { window.location.hash = '#forget-password' }}
                         className="text-[13px] font-medium text-[#555555] dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-indigo-400 font-['Poppins',sans-serif] no-underline cursor-pointer bg-transparent border-none"
                       >
                         Forgot Password?
