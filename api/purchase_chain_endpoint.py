@@ -136,6 +136,8 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
                     timestamp=datetime.now(timezone.utc),
                 ))
             kwargs["qc_discount"] = request.qc_discount
+            if request.customer_ref_id is not None:
+                kwargs["customer_ref_id"] = request.customer_ref_id
             # Only pass explicit overrides if the caller set them intentionally
             if chain_supplier and chain_supplier != 1:
                 kwargs["supplier_ref_id"] = chain_supplier
@@ -162,6 +164,7 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
             grn = result.get("grn") or {}
             qc = result.get("qc") or {}
             pb = result.get("pb") or {}
+            so = result.get("so") or {}
             parts = []
             if po.get("id"): parts.append(f"PO {po['id']}")
             gps = result.get("gps") or ([gp] if gp else [])
@@ -177,6 +180,7 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
                 if grn.get("id"): parts.append(f"GRN {grn['id']}")
                 if qc.get("id"): parts.append(f"QC {qc['id']}")
             if pb.get("id"): parts.append(f"PB {pb['id']}")
+            if so.get("id"): parts.append(f"SO {so['id']}")
             yield _sse_event(LogEvent(
                 type="log",
                 message=f"Chain [{i + 1}] OK — {' → '.join(parts)} ({elapsed:.1f}s)",
