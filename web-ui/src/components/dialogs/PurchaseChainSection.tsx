@@ -90,6 +90,8 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [dropdownSearch, setDropdownSearch] = useState('')
   const logsEndRef = useRef<HTMLDivElement>(null)
   const tokenSectionRef = useRef<HTMLDivElement>(null)
+  const tokenErrorRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const startTimeRef = useRef<number>(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -134,6 +136,24 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       tokenSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
   }, [showTokenInput])
+
+  // Scroll the token error banner into view within the scrollable container
+  useEffect(() => {
+    if (!localToken) return
+    const t = localToken.startsWith('Bearer ') ? localToken.slice(7) : localToken
+    const isInvalid = !(t.startsWith('eyJ') && t.split('.').length === 3 && t.length > 100)
+    if (isInvalid) {
+      requestAnimationFrame(() => {
+        if (!tokenErrorRef.current || !scrollContainerRef.current) return
+        const container = scrollContainerRef.current
+        const el = tokenErrorRef.current
+        const containerRect = container.getBoundingClientRect()
+        const elRect = el.getBoundingClientRect()
+        const offset = elRect.top - containerRect.top + container.scrollTop - container.clientHeight / 2 + el.offsetHeight / 2
+        container.scrollTo({ top: offset, behavior: 'smooth' })
+      })
+    }
+  }, [localToken])
 
   // Fetch suppliers, items and item categories when credentials are available
   const loadMasterData = useCallback(async () => {
@@ -373,7 +393,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
               key={f.id}
               className={`relative flex items-center justify-center border-b-2 transition-colors ${
                 flow === f.id
-                  ? 'bg-white dark:bg-gray-900 border-[#3F51B5]'
+                  ? 'bg-white dark:bg-gray-900 border-[#3F51B5] shadow-sm'
                   : 'bg-gray-50 dark:bg-gray-800/50 border-transparent'
               } ${i > 0 ? 'border-l border-gray-300 dark:border-gray-600' : ''}`}
             >
@@ -417,10 +437,10 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             </div>
           ))}
         </div>
-        <div className="p-4 pb-0 overflow-y-auto flex-1 min-h-0">
+        <div ref={scrollContainerRef} className="p-4 pb-0 overflow-y-auto flex-1 min-h-0">
 
         {/* Document selector + toggles — equally spaced row */}
-        <div className="border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100/60 dark:bg-gray-800/50 px-3 py-2 mb-4 flex flex-wrap gap-x-4 gap-y-2 items-start justify-between" data-tour="pc-docs">
+        <div className="border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100/60 dark:bg-gray-800/50 px-3 py-2 mb-4 flex flex-wrap gap-x-4 gap-y-2 items-start justify-between shadow-md" data-tour="pc-docs">
           <div className="flex flex-col gap-0.5 items-center" title="Click a document to customize the flow">
             <div className="flex items-center gap-1.5 flex-wrap justify-center">
               <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">Create:</span>
@@ -471,7 +491,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           <div className="flex flex-col gap-0.5 items-center" data-tour="pc-tax">
             <div className="flex items-center gap-1.5 flex-wrap justify-center">
               <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">Tax:</span>
-              <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
+              <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600 shadow-sm">
                 <button
                   type="button"
                   onClick={() => setRequireTaxRate(true)}
@@ -503,7 +523,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           <div className="flex flex-col gap-0.5 items-center" data-tour="pc-qcdiscount">
             <div className="flex items-center gap-1.5 flex-wrap justify-center">
               <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">QC Discount:</span>
-              <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
+              <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600 shadow-sm">
                 <button
                   type="button"
                   onClick={() => setQcDiscount(true)}
@@ -535,7 +555,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           <div className="flex flex-col gap-0.5 items-center" data-tour="pc-multigp">
             <div className="flex items-center gap-1.5 flex-wrap justify-center">
               <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">Multi GP:</span>
-              <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
+              <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600 shadow-sm">
                 <button
                   type="button"
                   onClick={() => {
@@ -871,9 +891,44 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                 value={localToken}
                 onChange={(e) => setLocalToken(e.target.value)}
                 placeholder="Paste your Bearer token here..."
-                className="h-9 text-[12px] flex-1"
+                className={`h-9 text-[12px] flex-1 ${
+                  localToken && (localToken.startsWith('Bearer ') ? localToken.slice(7) : localToken).startsWith('eyJ') && localToken.split('.').length === 3 && localToken.length > 100
+                    ? 'border-green-400'
+                    : localToken ? 'border-red-400' : ''
+                }`}
               />
             </div>
+            {/* Token validation warning */}
+            {(() => {
+              if (!localToken) return null
+              const t = localToken.startsWith('Bearer ') ? localToken.slice(7) : localToken
+              const isValid = t.startsWith('eyJ') && t.split('.').length === 3 && t.length > 100
+              if (isValid) return (
+                <p className="text-[11px] text-green-600 dark:text-green-400 flex items-center gap-1 mb-2">
+                  <span className="inline-block size-2 rounded-full bg-green-500" />
+                  Token looks valid
+                </p>
+              )
+              return (
+                <div ref={tokenErrorRef} className="mb-2 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-2.5 space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <AlertTriangle className="size-3 text-red-500 shrink-0" />
+                    <span className="text-[11px] font-semibold text-red-600 dark:text-red-400">
+                      {!t.startsWith('eyJ') ? 'Token must start with eyJ…' : 'Token format looks incorrect'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-red-500 dark:text-red-400">
+                    Copy from DevTools → Network → any request → Authorization header. Remove the "Bearer " prefix.
+                  </p>
+                  <div className="rounded bg-gray-900 p-2 space-y-1">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wider">Should look like</p>
+                    <p className="text-[10px] text-yellow-300 break-all leading-relaxed">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.<span className="text-blue-300">eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiw…</span>.<span className="text-pink-300">SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV</span></p>
+                    <p className="text-[10px] text-gray-500">3 dot-separated parts · starts with eyJ · 200+ chars</p>
+                  </div>
+                </div>
+              )
+            })()}
+
             <div className="flex items-center gap-2">
               <Input
                 type="text"

@@ -51,7 +51,7 @@ export function ScheduleRunsTab({ userName, sidebarModules }: { userName: string
             await updateScheduledRun(run.id, { lastRunAt: new Date().toISOString(), enabled: false })
             await addNotification({ type: 'run_complete', title: 'Scheduled run completed', message: `Scheduled run for ${run.moduleName} completed (mock)` })
             setRuns(await getScheduledRuns())
-            toast.success(`Scheduled run for ${run.moduleName} completed!`)
+            toast.success('Scheduled run completed', { description: `${run.moduleName} finished successfully.` })
           }
         } else {
           const h = Math.floor(diff / 3600000)
@@ -103,13 +103,13 @@ export function ScheduleRunsTab({ userName, sidebarModules }: { userName: string
     })
     setRuns(await getScheduledRuns())
     setShowForm(false)
-    toast.success(`Scheduled run created for ${modName}`)
+    toast.success('Schedule created', { description: `${modName} will run as scheduled.` })
   }, [moduleId, frequency, scheduledDate, scheduledTime, weeklyDay, testSelection, userName, sidebarModules])
 
   const handleDelete = useCallback(async (id: string) => {
     await deleteScheduledRun(id)
     setRuns(await getScheduledRuns())
-    toast.success('Schedule deleted')
+    toast.success('Schedule deleted', { description: 'The scheduled run has been removed.' })
   }, [])
 
   const handleToggle = useCallback(async (id: string, enabled: boolean) => {

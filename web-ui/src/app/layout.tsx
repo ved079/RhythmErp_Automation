@@ -46,7 +46,20 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <QueryProvider><ErrorBoundary>{children}</ErrorBoundary></QueryProvider>
-          <Toaster position="top-right" richColors />
+          <Toaster
+            position="bottom-right"
+            richColors
+            closeButton
+            duration={3500}
+            toastOptions={{
+              classNames: {
+                toast: "font-['Poppins'] text-[13px] rounded-xl shadow-lg border",
+                title: "font-semibold",
+                description: "text-[12px] opacity-80",
+                closeButton: "rounded-full",
+              },
+            }}
+          />
         </ThemeProvider>
       </body>
     </html>

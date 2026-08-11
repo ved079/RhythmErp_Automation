@@ -85,7 +85,7 @@ export function TestVisibilitySection() {
     setSyncingTests(true)
     try {
       const res = await fetch('/api/proxy?path=modules')
-      if (!res.ok) { toast.error('Failed to fetch modules from backend'); return }
+      if (!res.ok) { toast.error('Sync failed', { description: 'Could not fetch modules from the backend.' }); return }
       const data = await res.json()
       const modules: { name: string; sub_modules: { name: string; tests: { name: string; display_name?: string }[] }[] }[] = data.modules || []
       const testNames: { name: string; displayName: string }[] = []
@@ -96,7 +96,7 @@ export function TestVisibilitySection() {
           }
         }
       }
-      if (testNames.length === 0) { toast.error('No tests found in backend'); return }
+      if (testNames.length === 0) { toast.error('No tests found', { description: 'The backend returned no tests. Check if the execution engine is running.' }); return }
       setModulesTree(modules as any)
       let upserted = 0
       for (const t of testNames) {
@@ -107,10 +107,10 @@ export function TestVisibilitySection() {
         }))
         if (r.ok) upserted++
       }
-      toast.success(`Synced ${upserted} tests from backend`)
+      toast.success('Tests synced', { description: `${upserted} test${upserted !== 1 ? 's' : ''} updated from the backend.` })
       loadOverrides()
     } catch (e) {
-      toast.error('Sync failed: ' + (e instanceof Error ? e.message : 'Unknown error'))
+      toast.error('Sync failed', { description: e instanceof Error ? e.message : 'An unknown error occurred.' })
     } finally {
       setSyncingTests(false)
     }
@@ -146,12 +146,12 @@ export function TestVisibilitySection() {
       if (res.ok) {
         setVisSelectedTests(new Set())
         loadOverrides()
-        toast.success(`Updated ${updates.length} test${updates.length !== 1 ? 's' : ''}`)
+        toast.success('Tests updated', { description: `${updates.length} test${updates.length !== 1 ? 's' : ''} were updated successfully.` })
       } else {
-        toast.error('Batch update failed')
+        toast.error('Batch update failed', { description: 'Could not apply changes to the selected tests.' })
       }
     } catch {
-      toast.error('Batch update failed')
+      toast.error('Batch update failed', { description: 'A network error occurred. Please try again.' })
     } finally {
       setBatchActionLoading(false)
     }

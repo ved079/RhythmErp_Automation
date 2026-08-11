@@ -62,7 +62,7 @@ export function TicketChat({
       }
       setMessage('')
     } catch {
-      toast.error('Failed to send message')
+      toast.error('Message failed', { description: 'Could not send your message. Please try again.' })
     } finally {
       setSending(false)
     }

@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
-import { Key, Eye, EyeOff, X } from 'lucide-react'
+import React, { useState, useMemo } from 'react'
+import { Key, Eye, EyeOff, AlertTriangle, Copy } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 
@@ -14,8 +14,18 @@ interface Props {
   setErpTenantId: (id: string) => void
 }
 
+function validateToken(raw: string): 'empty' | 'valid' | 'bad_prefix' | 'bad_format' {
+  if (!raw.trim()) return 'empty'
+  const token = raw.startsWith('Bearer ') ? raw.slice(7) : raw
+  if (!token.startsWith('eyJ')) return 'bad_prefix'
+  const parts = token.split('.')
+  if (parts.length !== 3 || token.length < 100) return 'bad_format'
+  return 'valid'
+}
+
 export function SetTokenDialog({ open, onClose, erpToken, setErpToken, erpTenantId, setErpTenantId }: Props) {
   const [showToken, setShowToken] = useState(false)
+  const tokenStatus = useMemo(() => validateToken(erpToken), [erpToken])
 
   const INPUT = 'w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-[12px] bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#3F51B5]/50'
 
@@ -43,7 +53,7 @@ export function SetTokenDialog({ open, onClose, erpToken, setErpToken, erpTenant
                 value={erpToken}
                 onChange={e => setErpToken(e.target.value)}
                 placeholder="Bearer eyJ..."
-                className={`pr-8 ${INPUT}`}
+                className={`pr-8 ${INPUT} ${tokenStatus === 'valid' ? 'border-green-400 dark:border-green-600' : tokenStatus !== 'empty' ? 'border-red-400 dark:border-red-600' : ''}`}
               />
               <button
                 type="button"
@@ -54,6 +64,41 @@ export function SetTokenDialog({ open, onClose, erpToken, setErpToken, erpTenant
                 {showToken ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
               </button>
             </div>
+
+            {/* Token validation warning */}
+            {tokenStatus !== 'empty' && tokenStatus !== 'valid' && (
+              <div className="mt-2 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="size-3.5 text-red-500 shrink-0" />
+                  <span className="text-[12px] font-semibold text-red-600 dark:text-red-400">
+                    {tokenStatus === 'bad_prefix' ? 'Token must start with eyJ…' : 'Token format looks incorrect'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-red-500 dark:text-red-400 leading-relaxed">
+                  {tokenStatus === 'bad_prefix'
+                    ? 'Copy the token from the Authorization header in DevTools — not the full "Bearer eyJ…" line, just the part after "Bearer ".'
+                    : 'The token appears too short or is missing parts. A valid JWT has 3 dot-separated sections.'}
+                </p>
+                {/* Visual example */}
+                <div className="rounded-md bg-gray-900 dark:bg-gray-950 p-2.5 space-y-1.5">
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Should look like</p>
+                  <div className="flex items-start gap-2">
+                    <span className="text-[10px] text-gray-500 shrink-0 w-20">Authorization</span>
+                    <span className="text-[10px] text-emerald-400 break-all leading-relaxed">
+                      Bearer <span className="text-yellow-300">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9</span>.<span className="text-blue-300">eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjox…</span>.<span className="text-pink-300">SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c</span>
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-gray-500 mt-1">3 parts separated by dots · starts with <code className="text-yellow-300">eyJ</code> · 200+ characters</p>
+                </div>
+              </div>
+            )}
+
+            {tokenStatus === 'valid' && (
+              <p className="mt-1.5 text-[11px] text-green-600 dark:text-green-400 flex items-center gap-1">
+                <span className="inline-block size-2 rounded-full bg-green-500" />
+                Token looks valid
+              </p>
+            )}
           </div>
           <div>
             <label className="text-[11px] text-gray-400 dark:text-gray-500 mb-1 block">Tenant ID</label>
