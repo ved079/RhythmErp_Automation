@@ -399,30 +399,62 @@ def _resolve_tax_rates(client) -> dict:
     return result
 
 
-def _filter_registered_suppliers(client, items: list) -> list:
-    """Keep only suppliers with gst_registration_status set in their detail record.
-
-    Fetches each supplier's detail in parallel and drops any whose
-    'Additional Details' stepper has gst_registration_status == null.
-    """
+def _filter_party_by_additional_details(client, screen: str, items: list, required_keys: list) -> list:
+    """Keep only parties whose 'Additional Details' stepper has all required_keys set."""
     from concurrent.futures import ThreadPoolExecutor
 
-    def _has_gst(item):
+    def _is_complete(item):
         try:
-            detail = client.get_entry("Supplier", item["id"])
+            detail = client.get_entry(screen, item["id"])
             for child in (detail or {}).get("children") or []:
                 if child.get("stepper_name") == "Additional Details":
-                    return (
-                        child.get("gst_registration_status") is not None
-                        and child.get("payment_terms_ref_id") is not None
-                        and child.get("delivery_terms_ref_id") is not None
-                    )
+                    return all(child.get(k) is not None for k in required_keys)
         except Exception:
             pass
         return False
 
     with ThreadPoolExecutor(max_workers=8) as ex:
-        results = list(ex.map(_has_gst, items))
+        results = list(ex.map(_is_complete, items))
+    return [item for item, keep in zip(items, results) if keep]
+
+
+def _filter_registered_suppliers(client, items: list) -> list:
+    return _filter_party_by_additional_details(
+        client, "Supplier", items,
+        ["gst_registration_status", "payment_terms_ref_id", "delivery_terms_ref_id"],
+    )
+
+
+def _filter_valid_customers(client, items: list) -> list:
+    """Keep only customers with all SO-required fields set."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _is_complete(item):
+        try:
+            detail = client.get_entry("Customer", item["id"])
+            children = (detail or {}).get("children") or []
+            has_bill = has_ship = has_terms = False
+            for child in children:
+                stepper = child.get("stepper_name") or ""
+                if "Address" in stepper:
+                    for row in child.get("details") or []:
+                        addr_type = str(row.get("address_type") or "").strip()
+                        if addr_type == "42" and row.get("id"):
+                            has_bill = True
+                        elif addr_type == "43" and row.get("id"):
+                            has_ship = True
+                elif "Additional" in stepper:
+                    has_terms = all(
+                        child.get(k) is not None
+                        for k in ("payment_terms_ref_id", "delivery_terms_ref_id", "mode_of_delivery_ref_id")
+                    )
+            return has_bill and has_ship and has_terms
+        except Exception:
+            pass
+        return False
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        results = list(ex.map(_is_complete, items))
     return [item for item, keep in zip(items, results) if keep]
 
 
@@ -486,6 +518,8 @@ def master_data_endpoint(request: MasterDataRequest):
         items = _enrich_item_categories(client, items, with_tax_rates=True)
     if request.screen == "Supplier":
         items = _filter_registered_suppliers(client, items)
+    if request.screen == "Customer":
+        items = _filter_valid_customers(client, items)
     return {"items": items, "total": len(items)}
 
 

@@ -984,7 +984,6 @@ export default function Home() {
           </div>
         </>
       )}
-      <button onClick={() => setConsoleOpen(o => !o)} className="fixed bottom-4 right-4 z-50 bg-[#1a1a2e] text-green-400 hover:bg-[#252540] transition-colors rounded-lg px-3 py-2 flex items-center gap-2 shadow-lg border border-gray-700 cursor-pointer"><Terminal className="size-3.5" /><span className="text-[12px] font-medium">Console</span><span className="bg-green-500/20 text-green-400 text-[10px] px-1.5 py-0.5 rounded-full">{tr.consoleLogs.length}</span></button>
       <CompletionSummaryModal open={tr.completionModalOpen} onClose={() => tr.setCompletionModalOpen(false)} passedCount={tr.completionStats.passed} failedCount={tr.completionStats.failed} totalDuration={tr.completionStats.duration} moduleName={tr.completionStats.moduleName} subModuleName={tr.completionStats.subModuleName} failedTests={tr.completionStats.failedTests} onViewResults={handleViewResults} onRerunFailed={handleCompletionRerunFailed} onNewRun={handleNewRun} onReportTest={handleQuickReport} />
       <ReportToAdminDialog open={d.reportDialogOpen} onClose={() => d.setReportDialogOpen(false)} testId={d.reportingTest?.id || ''} testDescription={d.reportingTest?.name || ''} error={d.reportingTest?.error} moduleName={modulePath.name} userName={user?.name || ''} userEmail={user?.email || ''} />
       {user && <UserProfileDialog open={d.profileDialogOpen} onClose={() => d.setProfileDialogOpen(false)} user={user} />}
@@ -996,6 +995,7 @@ export default function Home() {
       {d.screenshotCompareOpen && <ScreenshotCompare left={d.compareScreenshots[0]} right={d.compareScreenshots[1]} onClose={() => d.setScreenshotCompareOpen(false)} />}
       <footer className="shrink-0 border-t border-gray-300 dark:border-gray-500/70 bg-white dark:bg-gray-900 px-4 py-1.5 flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500"><Copyright className="size-3" /><span>2026 AgDi Solutions Pvt. Ltd. All rights reserved.</span></div>
+        <button onClick={() => setConsoleOpen(o => !o)} className="flex items-center gap-1.5 text-[10px] text-gray-700 dark:text-gray-600 hover:text-gray-900 dark:hover:text-gray-300 transition-colors cursor-pointer"><Terminal className="size-3" /><span>Console</span>{tr.consoleLogs.length > 0 && <span className="bg-green-500/20 text-green-500 dark:text-green-400 text-[9px] px-1 py-0.5 rounded-full">{tr.consoleLogs.length}</span>}</button>
         <div className="flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-500"><span className="flex items-center gap-1">Version 1.0.0</span><a href="https://rhythmerp.algorhythms.in" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-[#3F51B5] dark:hover:text-[#7986CB] transition-colors cursor-pointer"><HelpCircle className="size-3" />Help<ExternalLink className="size-2.5" /></a></div>
       </footer>
     </div>
