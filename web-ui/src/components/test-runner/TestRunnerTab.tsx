@@ -348,6 +348,7 @@ export function TestRunnerTab({
   activeCredId,
   onSelectCred,
   onOpenCredentialsScreen,
+  allowedTabs,
 }: {
   tests: TestItem[]
   testChecks: Set<string>
@@ -368,12 +369,21 @@ export function TestRunnerTab({
   activeCredId?: string | null
   onSelectCred?: (credId: string) => void
   onOpenCredentialsScreen?: () => void
+  allowedTabs?: ('ui' | 'api' | 'batch')[] | null
 }) {
-  const [activeTab, setActiveTab] = useState<'ui' | 'api' | 'batch'>('ui')
-
   const uiTests = tests.filter((t) => !t.testType || t.testType === 'ui')
   const apiTests = tests.filter((t) => t.testType === 'api')
   const hasApi = apiTests.length > 0
+
+  // Tabs restricted by admin; null = no restriction
+  const tabAllowed = (t: 'ui' | 'api' | 'batch') =>
+    !allowedTabs || allowedTabs.includes(t)
+
+  const defaultTab: 'ui' | 'api' | 'batch' =
+    tabAllowed('ui') ? 'ui' : tabAllowed('batch') ? 'batch' : 'api'
+
+  const [activeTab, setActiveTab] = useState<'ui' | 'api' | 'batch'>(defaultTab)
+
   const isBatch = activeTab === 'batch'
   const effectiveTab = isBatch ? 'batch' : (hasApi ? activeTab : 'ui')
   const visibleTests = !isBatch ? (effectiveTab === 'ui' ? uiTests : apiTests) : []
@@ -390,7 +400,7 @@ export function TestRunnerTab({
 
   const tabSwitcher = (
     <div className="flex items-center gap-0 px-4 py-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
-      {(['ui', ...(hasApi ? ['api'] : []), 'batch'] as const).map((t) => (
+      {(['ui', ...(hasApi ? (['api'] as const) : []), 'batch'] as const).filter(tabAllowed).map((t) => (
         <button
           key={t}
           type="button"

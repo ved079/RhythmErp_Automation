@@ -1177,7 +1177,17 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           )}
           {(erpToken || localToken) && (
             <button
-              onClick={() => { setLocalToken(''); setLocalTenantId(''); setSuppliers([]); setItems([]); setCategories([]); setSelectedCategoryId(null); setSupplier(null); setItemIds([]); fetchedRef.current = false; onClearToken() }}
+              onClick={() => {
+                setLocalToken(''); setLocalTenantId('')
+                setSuppliers([]); setItems([]); setCategories([])
+                setSelectedCategoryId(null); setSupplier(null); setItemIds([])
+                setCount(1); setChainSuppliers([]); setSameSupplier(false)
+                setNumItems(2); setCustomer(null); setCustomers([])
+                setLogs([]); setCreated(0); setFailed(0); setRunSummary(null); setShowLogs(false)
+                setCqpItemIds(null); setCqpFillLog('')
+                fetchedRef.current = false
+                onClearToken()
+              }}
               className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 hover:text-red-500 dark:hover:text-red-400 transition-colors cursor-pointer"
               title="Clear token"
             >

@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { fetchModules, syncModulesToDB, fetchScreenshot, type ApiModule } from '@/lib/api'
 import { ALL_SIDEBAR_MODULES } from '@/data/sidebarModules'
 import { initialTests, type TestClassGroup, type TestPriority, type TestSpecItem } from '@/data/testSpecGroups'
-import { buildSidebarModules, filterSidebarByAccess } from '@/lib/sidebar-helpers'
+import { buildSidebarModules, filterSidebarByAccess, getAllowedTabsForModule } from '@/lib/sidebar-helpers'
 import { getTestsForSidebarModule } from '@/lib/test-helpers'
 import NavToast from '@/components/nav-toast/NavToast'
 import {
@@ -368,6 +368,7 @@ export default function Home() {
     pd.loadVisibility()
   }, [pd.loadVisibility])
 
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const handleLogout = useCallback(async () => {
     await fetch('/api/auth/logout', withCsrf({ method: 'POST' })); setUser(null)
   }, [])
@@ -588,12 +589,14 @@ export default function Home() {
   const userInitials = user.name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
   const isReadOnly = user?.role === 'viewer' || user?.role === 'client'
   const canRunTests = !isReadOnly
+  const moduleTabs = user?.role === 'admin' ? null : getAllowedTabsForModule(user?.moduleAccess ?? [], selectedModule)
+  const isBatchOnly = moduleTabs !== null && moduleTabs.length === 1 && moduleTabs[0] === 'batch'
   const tabs = [
     ...(canRunTests ? [{ id: 'test-runner',    label: 'Test Runner',    icon: FlaskConical }] : []),
-    ...(canRunTests ? [{ id: 'live-execution', label: 'Live Execution', icon: Monitor }] : []),
-    {                   id: 'results',         label: 'Results',        icon: BarChart2 },
-    {                   id: 'screenshots',     label: 'Screenshots',    icon: Camera },
-    ...(canRunTests ? [{ id: 'schedule',       label: 'Schedule',       icon: CalendarClock }] : []),
+    ...(!isBatchOnly && canRunTests ? [{ id: 'live-execution', label: 'Live Execution', icon: Monitor }] : []),
+    ...(!isBatchOnly ? [{ id: 'results',       label: 'Results',        icon: BarChart2 }] : []),
+    ...(!isBatchOnly ? [{ id: 'screenshots',   label: 'Screenshots',    icon: Camera }] : []),
+    ...(!isBatchOnly && canRunTests ? [{ id: 'schedule',       label: 'Schedule',       icon: CalendarClock }] : []),
   ]
 
   return (
@@ -711,7 +714,7 @@ export default function Home() {
           <Separator orientation="vertical" className="h-5 mx-0.5" />
           <div className="flex items-center gap-2" data-tour="user-menu">
             <button onClick={() => d.setProfileDialogOpen(true)} className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"><Avatar className="size-7"><AvatarFallback className="bg-[#3F51B5] text-white text-xs font-semibold">{userInitials}</AvatarFallback></Avatar><div className="hidden sm:flex flex-col"><span className="text-[12px] text-[#333333] dark:text-gray-200 font-medium max-w-[120px] truncate leading-tight">{user.name}</span><span className="text-[10px] text-[#888888] dark:text-gray-500 leading-tight">{user.role}</span></div></button>
-            <Button variant="ghost" size="icon" onClick={handleLogout} data-tour="logout-btn" className="size-7 text-[#888888] hover:text-red-500 cursor-pointer" title="Sign out"><LogOut className="size-3.5" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => setLogoutConfirmOpen(true)} data-tour="logout-btn" className="size-7 text-[#888888] hover:text-red-500 cursor-pointer" title="Sign out"><LogOut className="size-3.5" /></Button>
           </div>
         </div>
       </header>
@@ -848,7 +851,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="flex-1 overflow-hidden min-h-0">
-                {activeTab === 'test-runner' && <div data-tour="test-runner" className="h-full"><TestRunnerTab tests={tr.tests} testChecks={tr.testChecks} toggleTestCheck={toggleTestCheck} isRunning={tr.isRunning} totalFailed={failedCount} onRun={(selectedOnly, testType) => { tr.runTests(selectedOnly, undefined, testType); setActiveTab('live-execution') }} onRunByPriority={tr.runByPriority} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds); setActiveTab('live-execution') } }} erpToken={erpToken} erpTenantId={erpTenantId} currentModuleId={selectedModule} onOpenCredentials={onOpenCredentials} onClearToken={onClearToken} showRawNames={showRawNames} credentials={erpCredentials} activeCredId={activeCredId} onSelectCred={(id) => setActiveCredId(id)} onOpenCredentialsScreen={() => setSelectedModule('credentials')} /></div>}
+                {activeTab === 'test-runner' && <div data-tour="test-runner" className="h-full"><TestRunnerTab tests={tr.tests} testChecks={tr.testChecks} toggleTestCheck={toggleTestCheck} isRunning={tr.isRunning} totalFailed={failedCount} onRun={(selectedOnly, testType) => { tr.runTests(selectedOnly, undefined, testType); setActiveTab('live-execution') }} onRunByPriority={tr.runByPriority} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds); setActiveTab('live-execution') } }} erpToken={erpToken} erpTenantId={erpTenantId} currentModuleId={selectedModule} onOpenCredentials={onOpenCredentials} onClearToken={onClearToken} showRawNames={showRawNames} credentials={erpCredentials} activeCredId={activeCredId} onSelectCred={(id) => setActiveCredId(id)} onOpenCredentialsScreen={() => setSelectedModule('credentials')} allowedTabs={user?.role === 'admin' ? null : getAllowedTabsForModule(user?.moduleAccess ?? [], selectedModule)} /></div>}
                 {activeTab === 'live-execution' && <div data-tour="live-execution" className="h-full"><LiveExecutionTab tests={tr.tests} testGroups={tr.currentTestGroups} isRunning={tr.isRunning} runningProgress={tr.runningProgress} consoleLogs={tr.consoleLogs} showRawNames={showRawNames} onStop={tr.handleStopRun} onBack={() => setActiveTab('test-runner')} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds) } }} onScreenshotCaptured={(entry) => { tr.setScreenshotEntries((prev) => { if (prev.length >= 50) return [entry, ...prev.slice(0, 49)]; return [entry, ...prev] }) }} /></div>}
                 {activeTab === 'results' && <div data-tour="results" className="h-full"><ResultsTab tests={tr.tests} passedCount={passedCount} failedCount={failedCount} totalCount={tr.tests.length} runHistory={pd.runHistory} bugReportsList={pd.bugReportsList} onRunDetail={(run) => { d.setSelectedRunForDetail(run); d.setRunDetailDialogOpen(true) }} onCompareRuns={() => d.setRunComparisonOpen(true)} onViewAllRuns={() => d.setRunHistoryOpen(true)} onReportTest={handleQuickReport} testGroups={tr.currentTestGroups} moduleHealth={moduleHealth} moduleName={modulePath.name} currentModuleId={selectedModule} isRunning={tr.isRunning} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds); setActiveTab('live-execution') } }} /></div>}
                 {activeTab === 'screenshots' && (
@@ -988,6 +991,18 @@ export default function Home() {
       <ReportToAdminDialog open={d.reportDialogOpen} onClose={() => d.setReportDialogOpen(false)} testId={d.reportingTest?.id || ''} testDescription={d.reportingTest?.name || ''} error={d.reportingTest?.error} moduleName={modulePath.name} userName={user?.name || ''} userEmail={user?.email || ''} />
       {user && <UserProfileDialog open={d.profileDialogOpen} onClose={() => d.setProfileDialogOpen(false)} user={user} />}
       <SetTokenDialog open={tokenDialogOpen} onClose={() => setTokenDialogOpen(false)} erpToken={erpToken} setErpToken={setErpToken} erpTenantId={erpTenantId} setErpTenantId={setErpTenantId} />
+      <Dialog open={logoutConfirmOpen} onOpenChange={setLogoutConfirmOpen}>
+        <DialogContent className="sm:max-w-[360px]">
+          <DialogHeader>
+            <DialogTitle className="font-['Poppins'] text-[#333] dark:text-gray-100 flex items-center gap-2"><LogOut className="size-4 text-red-500" />Sign out</DialogTitle>
+            <DialogDescription className="font-['Poppins'] text-[#888]">Are you sure you want to sign out?</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setLogoutConfirmOpen(false)} className="font-['Poppins'] text-xs">Cancel</Button>
+            <Button onClick={() => { setLogoutConfirmOpen(false); handleLogout() }} className="font-['Poppins'] text-xs bg-red-500 hover:bg-red-600 text-white">Sign out</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <RunDetailDialog open={d.runDetailDialogOpen} onClose={() => { d.setRunDetailDialogOpen(false); d.setSelectedRunForDetail(null) }} run={d.selectedRunForDetail} visibilityData={pd.visibilityData} showRawNames={showRawNames} onReportTest={handleQuickReport} />
       <RunComparisonDialog open={d.runComparisonOpen} onClose={() => d.setRunComparisonOpen(false)} runHistory={pd.runHistory} currentModuleId={selectedModule} />
       <RunHistoryDialog open={d.runHistoryOpen} onClose={() => d.setRunHistoryOpen(false)} runHistory={pd.runHistory} sidebarModules={sidebarModules} currentModuleId={selectedModule} onRunDetail={(run) => { d.setSelectedRunForDetail(run); d.setRunDetailDialogOpen(true) }} />

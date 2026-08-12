@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useMemo, useCallback } from 'react'
 import {
@@ -11,7 +11,6 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
 import {
   Shield,
   Zap,
@@ -24,6 +23,11 @@ import {
   X,
   Check,
   ChevronRight,
+  Users,
+  LayoutGrid,
+  Monitor,
+  Code2,
+  Package,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -44,458 +48,424 @@ export interface ModuleAccessPickerProps {
   userName?: string
 }
 
-// ─── Preset Definition ────────────────────────────────────────
 interface Preset {
   id: string
   label: string
-  description: string
   icon: React.ReactNode
-  /** A parent module ID — we resolve all descendant leaf IDs at runtime */
   parentGroupId: string | null
-  /** If set, these exact IDs are used instead of parentGroupId resolution */
   exactIds?: string[]
 }
 
-// ─── Color tokens ─────────────────────────────────────────────
-const COLORS = {
-  primary: '#2E7D32',
-  light: '#E8F5E9',
-  dark: '#1B5E20',
-  border: '#A5D6A7',
-  hover: '#C8E6C9',
-  selected: '#66BB6A',
-  chip: '#F1F8E9',
-  chipBorder: '#C8E6C9',
-  chipHover: '#DCEDC8',
-} as const
+const TAB_CONFIG: { key: 'ui' | 'api' | 'batch'; label: string; icon: React.ReactNode; color: string }[] = [
+  { key: 'ui',    label: 'UI Tests',     icon: <Monitor className="size-2.5" />,  color: '#1565C0' },
+  { key: 'api',   label: 'API Tests',    icon: <Code2 className="size-2.5" />,    color: '#6A1B9A' },
+  { key: 'batch', label: 'Batch Create', icon: <Package className="size-2.5" />,  color: '#E65100' },
+]
+const ALL_TABS: ('ui' | 'api' | 'batch')[] = ['ui', 'api', 'batch']
 
-// ─── Helper: get ALL descendant module IDs (not just direct children) ──
+function parseEntry(entry: string): { id: string; tabs: ('ui' | 'api' | 'batch')[] | null } {
+  const [id, suffix] = entry.split('|')
+  if (!suffix) return { id, tabs: null }
+  const tabs = suffix.split(',').filter(t => ['ui', 'api', 'batch'].includes(t)) as ('ui' | 'api' | 'batch')[]
+  return { id, tabs: tabs.length === 3 ? null : tabs }
+}
+
+function buildEntry(id: string, tabs: ('ui' | 'api' | 'batch')[] | null): string {
+  if (!tabs || tabs.length === 3) return id
+  return `${id}|${tabs.join(',')}`
+}
+
 function getAllDescendantIds(modules: ModuleItem[], parentId: string): string[] {
   const ids: string[] = []
-  const directChildren = modules.filter(m => m.parentId === parentId)
-  for (const child of directChildren) {
-    // Check if this child itself has children
-    const grandChildren = modules.filter(m => m.parentId === child.id)
-    if (grandChildren.length > 0) {
-      // It's a sub-group, recurse
-      ids.push(...getAllDescendantIds(modules, child.id))
-    } else {
-      // It's a leaf module, add it
-      ids.push(child.id)
-    }
+  for (const child of modules.filter(m => m.parentId === parentId)) {
+    const hasChildren = modules.some(m => m.parentId === child.id)
+    if (hasChildren) ids.push(...getAllDescendantIds(modules, child.id))
+    else ids.push(child.id)
   }
   return ids
 }
 
-// ─── Helper: resolve preset to actual module IDs ──────────
 function resolvePresetIds(preset: Preset, allModules: ModuleItem[]): string[] {
   if (preset.exactIds) return preset.exactIds
-  if (preset.parentGroupId) {
-    return getAllDescendantIds(allModules, preset.parentGroupId)
-  }
+  if (preset.parentGroupId) return getAllDescendantIds(allModules, preset.parentGroupId)
   return []
 }
 
-// ─── Component ────────────────────────────────────────────────
-export function ModuleAccessPicker({
-  open,
-  onOpenChange,
-  value,
-  onChange,
-  allModules,
-  userName,
-}: ModuleAccessPickerProps) {
+// ─── Tree types ───────────────────────────────────────────────
+interface TreeNode { id: string; label: string; isGroup: boolean; children: TreeNode[] }
+
+function buildTreeChildren(groupId: string, allModules: ModuleItem[], parentIds: Set<string>): TreeNode[] {
+  return allModules.filter(m => m.parentId === groupId).map(child => {
+    if (parentIds.has(child.id)) {
+      return { id: child.id, label: child.label, isGroup: true, children: buildTreeChildren(child.id, allModules, parentIds) }
+    }
+    return { id: child.id, label: child.label, isGroup: false, children: [] }
+  })
+}
+
+// ─── Main Component ───────────────────────────────────────────
+export function ModuleAccessPicker({ open, onOpenChange, value, onChange, allModules, userName }: ModuleAccessPickerProps) {
   const [localValue, setLocalValue] = useState<string[]>(value)
   const [searchQuery, setSearchQuery] = useState('')
+  const [tabOverrides, setTabOverrides] = useState<Record<string, ('ui' | 'api' | 'batch')[] | null>>(() => {
+    const o: Record<string, ('ui' | 'api' | 'batch')[] | null> = {}
+    for (const e of value) { const { id, tabs } = parseEntry(e); if (tabs) o[id] = tabs }
+    return o
+  })
 
-  // Sync local value when dialog opens
-  const handleOpenChange = useCallback(
-    (nextOpen: boolean) => {
-      if (nextOpen) {
-        setLocalValue(value)
-        setSearchQuery('')
-      }
-      onOpenChange(nextOpen)
-    },
-    [value, onOpenChange]
-  )
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    if (nextOpen) {
+      setLocalValue(value)
+      setSearchQuery('')
+      const o: Record<string, ('ui' | 'api' | 'batch')[] | null> = {}
+      for (const e of value) { const { id, tabs } = parseEntry(e); if (tabs) o[id] = tabs }
+      setTabOverrides(o)
+    }
+    onOpenChange(nextOpen)
+  }, [value, onOpenChange])
 
-  // ─── Build tree structure from flat module list ──────────
-  // "Groups" = modules that have children (parentId references them)
-  // "Leaves" = modules that have no children referencing them
-  const parentIds = useMemo(
-    () => new Set(allModules.filter(m => m.parentId).map(m => m.parentId!)),
-    [allModules]
-  )
-
-  // Top-level groups: have children but no parentId themselves
-  const topGroups = useMemo(
-    () => allModules.filter(m => !m.parentId && parentIds.has(m.id)),
-    [allModules, parentIds]
-  )
-
-  // All leaf modules (no children reference them) — includes standalone
-  const allLeaves = useMemo(
-    () => allModules.filter(m => !parentIds.has(m.id)),
-    [allModules, parentIds]
-  )
-
-  // Standalone modules: no parentId AND no children (not a group, not a child)
-  const standaloneModules = useMemo(
-    () => allModules.filter(m => !m.parentId && !parentIds.has(m.id)),
-    [allModules, parentIds]
-  )
-
-  // All selectable module IDs (leaves + standalone, no duplicates)
-  const allSelectableIds = useMemo(
-    () => allLeaves.map(m => m.id),
-    [allLeaves]
-  )
-
+  const parentIds = useMemo(() => new Set(allModules.filter(m => m.parentId).map(m => m.parentId!)), [allModules])
+  const topGroups = useMemo(() => allModules.filter(m => !m.parentId && parentIds.has(m.id)), [allModules, parentIds])
+  const allLeaves = useMemo(() => allModules.filter(m => !parentIds.has(m.id)), [allModules, parentIds])
+  const standaloneModules = useMemo(() => allModules.filter(m => !m.parentId && !parentIds.has(m.id)), [allModules, parentIds])
+  const allSelectableIds = useMemo(() => allLeaves.map(m => m.id), [allLeaves])
   const totalModuleCount = allLeaves.length
 
-  // ─── Presets (resolved dynamically) ──────────────────────
   const presets: Preset[] = useMemo(() => [
-    {
-      id: 'full-access',
-      label: 'Full Access',
-      description: `All ${totalModuleCount} modules`,
-      icon: <Shield className="size-4" style={{ color: COLORS.primary }} />,
-      parentGroupId: null,
-      exactIds: ['all'],
-    },
-    {
-      id: 'registration-only',
-      label: 'Registration',
-      description: `${getAllDescendantIds(allModules, 'registration').length} modules`,
-      icon: <Zap className="size-4" style={{ color: COLORS.primary }} />,
-      parentGroupId: 'registration',
-    },
-    {
-      id: 'common-settings-only',
-      label: 'Common Settings',
-      description: `${getAllDescendantIds(allModules, 'common-settings').length} modules`,
-      icon: <Settings className="size-4" style={{ color: COLORS.primary }} />,
-      parentGroupId: 'common-settings',
-    },
-    {
-      id: 'commodity-settings-only',
-      label: 'Commodity Settings',
-      description: `${getAllDescendantIds(allModules, 'commodity-settings').length} modules`,
-      icon: <Building2 className="size-4" style={{ color: COLORS.primary }} />,
-      parentGroupId: 'commodity-settings',
-    },
-    {
-      id: 'access-only',
-      label: 'Access',
-      description: `${getAllDescendantIds(allModules, 'access').length} modules`,
-      icon: <Key className="size-4" style={{ color: COLORS.primary }} />,
-      parentGroupId: 'access',
-    },
-    {
-      id: 'document-only',
-      label: 'Document',
-      description: `${getAllDescendantIds(allModules, 'document').length} modules`,
-      icon: <FileText className="size-4" style={{ color: COLORS.primary }} />,
-      parentGroupId: 'document',
-    },
-    {
-      id: 'private-b2b-only',
-      label: 'Private B2B',
-      description: `${getAllDescendantIds(allModules, 'private-b2b').length} modules`,
-      icon: <Handshake className="size-4" style={{ color: COLORS.primary }} />,
-      parentGroupId: 'private-b2b',
-    },
-    {
-      id: 'company-onboarding',
-      label: 'Company Onboarding',
-      description: `${getAllDescendantIds(allModules, 'company-onboarding').length || 1} module`,
-      icon: <Building2 className="size-4" style={{ color: COLORS.primary }} />,
-      parentGroupId: null,
-      exactIds: ['company-onboarding'],
-    },
-  ], [allModules, totalModuleCount])
+    { id: 'full-access', label: 'Full Access', icon: <Shield className="size-3.5" />, parentGroupId: null, exactIds: ['all'] },
+    { id: 'registration', label: 'Registration', icon: <Users className="size-3.5" />, parentGroupId: 'registration' },
+    { id: 'common-settings', label: 'Common Settings', icon: <Settings className="size-3.5" />, parentGroupId: 'common-settings' },
+    { id: 'commodity-settings', label: 'Commodity Settings', icon: <Building2 className="size-3.5" />, parentGroupId: 'commodity-settings' },
+    { id: 'access', label: 'Access', icon: <Key className="size-3.5" />, parentGroupId: 'access' },
+    { id: 'document', label: 'Document', icon: <FileText className="size-3.5" />, parentGroupId: 'document' },
+    { id: 'private-b2b', label: 'Private B2B', icon: <Handshake className="size-3.5" />, parentGroupId: 'private-b2b' },
+    { id: 'company-onboarding', label: 'Company Onboarding', icon: <Building2 className="size-3.5" />, parentGroupId: null, exactIds: ['company-onboarding'] },
+  ], [])
 
-  // ─── Selection logic ─────────────────────────────────────
   const isFullAccess = localValue.includes('all')
-
-  const removeModule = useCallback((modId: string) => {
-    setLocalValue(prev => prev.filter(m => m !== modId))
-  }, [])
 
   const toggleModule = useCallback((modId: string) => {
     setLocalValue(prev => {
-      if (prev.includes('all')) {
-        // Convert "all" to explicit list and deselect the clicked module
-        return allSelectableIds.filter(id => id !== modId)
-      }
-      if (prev.includes(modId)) return prev.filter(m => m !== modId)
+      if (prev.includes('all')) return allSelectableIds.filter(id => id !== modId)
+      const ids = prev.map(e => e.split('|')[0])
+      if (ids.includes(modId)) return prev.filter(e => e.split('|')[0] !== modId)
       return [...prev, modId]
     })
   }, [allSelectableIds])
 
   const togglePreset = useCallback((preset: Preset) => {
-    // Full Access is a special toggle
     if (preset.id === 'full-access') {
-      setLocalValue(prev => {
-        if (prev.includes('all')) return [] // Deselect all
-        return ['all'] // Select all
-      })
+      setLocalValue(prev => prev.includes('all') ? [] : ['all'])
       return
     }
-
     const presetIds = resolvePresetIds(preset, allModules)
-    if (presetIds.length === 0) return // nothing to toggle
-
+    if (!presetIds.length) return
     setLocalValue(prev => {
-      // If "all" is selected, convert to explicit list and deselect this preset's modules
-      if (prev.includes('all')) {
-        return allSelectableIds.filter(id => !presetIds.includes(id))
-      }
-
-      // Check if ALL preset modules are already selected → deselect them
-      const allPresetSelected = presetIds.every(id => prev.includes(id))
-      if (allPresetSelected) {
-        return prev.filter(id => !presetIds.includes(id))
-      }
-
-      // Otherwise, ADD this preset's modules to the current selection (keep existing)
-      const toAdd = presetIds.filter(id => !prev.includes(id))
-      return [...prev, ...toAdd]
+      if (prev.includes('all')) return allSelectableIds.filter(id => !presetIds.includes(id))
+      const prevIds = prev.map(e => e.split('|')[0])
+      const allPresetSelected = presetIds.every(id => prevIds.includes(id))
+      if (allPresetSelected) return prev.filter(e => !presetIds.includes(e.split('|')[0]))
+      return [...prev, ...presetIds.filter(id => !prevIds.includes(id))]
     })
   }, [allModules, allSelectableIds])
 
   const toggleGroup = useCallback((groupId: string) => {
     setLocalValue(prev => {
       const groupIds = getAllDescendantIds(allModules, groupId)
-      if (groupIds.length === 0) return prev
-      const allSelected = groupIds.every(id => prev.includes(id))
-      if (prev.includes('all')) {
-        // Switch from "all" to explicit: deselect this group
-        return allSelectableIds.filter(id => !groupIds.includes(id))
-      }
-      if (allSelected) {
-        // Deselect all in group
-        return prev.filter(id => !groupIds.includes(id))
-      }
-      // Select all in group
-      const toAdd = groupIds.filter(id => !prev.includes(id))
-      return [...prev, ...toAdd]
+      if (!groupIds.length) return prev
+      const prevIds = prev.map(e => e.split('|')[0])
+      if (prev.includes('all')) return allSelectableIds.filter(id => !groupIds.includes(id))
+      if (groupIds.every(id => prevIds.includes(id))) return prev.filter(e => !groupIds.includes(e.split('|')[0]))
+      return [...prev, ...groupIds.filter(id => !prevIds.includes(id))]
     })
   }, [allModules, allSelectableIds])
 
-  // ─── Selected set for checking ───────────────────────────
   const selectedSet = useMemo(() => {
     if (isFullAccess) return new Set(allSelectableIds)
-    return new Set(localValue)
+    return new Set(localValue.map(e => e.split('|')[0]))
   }, [isFullAccess, localValue, allSelectableIds])
 
-  const selectedCount = isFullAccess ? totalModuleCount : localValue.filter(id => id !== 'all').length
+  const selectedCount = isFullAccess ? totalModuleCount : localValue.filter(e => e !== 'all').length
 
-  // ─── Build selected tags ────────────────────────────────
-  const selectedTags = useMemo(() => {
-    if (isFullAccess) return [{ id: 'all', label: 'Full Access — All Modules' }]
-    return localValue.map(id => {
-      const mod = allModules.find(m => m.id === id)
-      return { id, label: mod?.label || id }
-    })
-  }, [isFullAccess, localValue, allModules])
-
-  // ─── Build tree for the module list ─────────────────────
   const moduleTree = useMemo(() => {
     const nodes: TreeNode[] = []
-
-    // Top-level groups (Registration, Common Settings, etc.)
     for (const group of topGroups) {
-      const children = buildTreeChildren(group.id, allModules, parentIds)
-      nodes.push({ id: group.id, label: group.label, isGroup: true, children })
+      nodes.push({ id: group.id, label: group.label, isGroup: true, children: buildTreeChildren(group.id, allModules, parentIds) })
     }
-
-    // Standalone modules
     for (const mod of standaloneModules) {
       nodes.push({ id: mod.id, label: mod.label, isGroup: false, children: [] })
     }
-
     return nodes
   }, [topGroups, standaloneModules, allModules, parentIds])
 
-  // ─── Apply / Cancel ────────────────────────────────────
+  // Selected modules grouped by parent for the right panel
+  const selectedModulesList = useMemo(() => {
+    if (isFullAccess) return []
+    return localValue.map(rawId => {
+      const id = rawId.split('|')[0]
+      const mod = allModules.find(m => m.id === id)
+      return { id, label: mod?.label || id, parentLabel: mod?.parentLabel }
+    })
+  }, [isFullAccess, localValue, allModules])
+
+  // Group selected modules by parent for display
+  const groupedSelected = useMemo(() => {
+    const groups: Record<string, { id: string; label: string; parentLabel: string | undefined }[]> = {}
+    for (const mod of selectedModulesList) {
+      const key = mod.parentLabel || '—'
+      if (!groups[key]) groups[key] = []
+      groups[key].push(mod)
+    }
+    return groups
+  }, [selectedModulesList])
+
   const handleApply = useCallback(() => {
-    onChange(localValue)
+    const serialized = localValue.includes('all')
+      ? localValue
+      : localValue.map(e => { const id = e.split('|')[0]; return buildEntry(id, tabOverrides[id] ?? null) })
+    onChange(serialized)
     onOpenChange(false)
-  }, [localValue, onChange, onOpenChange])
+  }, [localValue, tabOverrides, onChange, onOpenChange])
 
   const handleCancel = useCallback(() => {
-    // Reset to original value and close
     setLocalValue(value)
     setSearchQuery('')
+    const o: Record<string, ('ui' | 'api' | 'batch')[] | null> = {}
+    for (const e of value) { const { id, tabs } = parseEntry(e); if (tabs) o[id] = tabs }
+    setTabOverrides(o)
     onOpenChange(false)
   }, [value, onOpenChange])
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        className="sm:max-w-[640px] max-h-[85vh] p-0 gap-0 flex flex-col"
-        showCloseButton={false}
-      >
-        {/* Header */}
-        <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-gray-100 dark:border-gray-700">
-          <DialogTitle className="font-['Poppins'] text-base flex items-center gap-2 text-[#1B5E20]">
-            <Shield className="size-5 text-[#2E7D32]" />
-            Module Access
-            {userName && (
-              <span className="font-['Poppins'] font-normal text-sm text-[#666]">
-                — {userName}
-              </span>
-            )}
-          </DialogTitle>
-          <DialogDescription className="font-['Poppins'] text-xs text-[#888]">
-            Choose preset access levels or pick individual modules.
-          </DialogDescription>
+      <DialogContent className="sm:max-w-[820px] max-h-[88vh] p-0 gap-0 flex flex-col" showCloseButton={false}>
+
+        {/* ── Header ── */}
+        <DialogHeader className="px-6 pt-5 pb-4 shrink-0 border-b border-gray-300 dark:border-gray-600">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="size-8 rounded-lg bg-[#E8F5E9] flex items-center justify-center">
+                <Shield className="size-4 text-[#2E7D32]" />
+              </div>
+              <div>
+                <DialogTitle className="font-['Poppins'] text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-1.5">
+                  Module Access
+                  {userName && <span className="font-normal text-gray-500 dark:text-gray-400">— {userName}</span>}
+                </DialogTitle>
+                <DialogDescription className="font-['Poppins'] text-[11px] text-gray-400 mt-0.5">
+                  Select modules on the left, configure tab access on the right.
+                </DialogDescription>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 bg-[#E8F5E9] dark:bg-green-900/30 rounded-lg px-3 py-1.5">
+              <span className="font-['Poppins'] text-lg font-bold text-[#2E7D32]">{selectedCount}</span>
+              <span className="font-['Poppins'] text-[10px] text-[#2E7D32] font-medium">modules<br/>selected</span>
+            </div>
+          </div>
+
+          {/* ── Presets Row ── */}
+          <div className="flex items-center gap-1.5 flex-wrap mt-3">
+            <span className="font-['Poppins'] text-[10px] font-semibold uppercase tracking-wider text-gray-400 mr-1 shrink-0">Presets:</span>
+            {presets.map(preset => {
+              const resolvedIds = resolvePresetIds(preset, allModules)
+              const isActive = preset.id === 'full-access'
+                ? isFullAccess
+                : !isFullAccess && resolvedIds.length > 0 && resolvedIds.every(id => selectedSet.has(id))
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => togglePreset(preset)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium font-['Poppins'] border transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-[#2E7D32] border-[#2E7D32] text-white'
+                      : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-500 text-gray-600 dark:text-gray-300 hover:border-[#A5D6A7] hover:bg-[#F1F8E9] dark:hover:bg-green-900/20'
+                  }`}
+                >
+                  {preset.icon}
+                  {preset.label}
+                  {isActive && <X className="size-2.5 ml-0.5" />}
+                </button>
+              )
+            })}
+          </div>
         </DialogHeader>
 
-        {/* Scrollable Body */}
-        <div className="flex-1 overflow-y-auto min-h-0 overscroll-contain">
-          <div className="px-6 py-4 space-y-5">
-            {/* ── Preset Cards ── */}
-            <div>
-              <span className="font-['Poppins'] text-[11px] font-semibold uppercase tracking-wider text-[#2E7D32] mb-2 block">
-                Quick Presets
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                {presets.map(preset => {
-                  const resolvedIds = resolvePresetIds(preset, allModules)
-                  const isFullAccessPreset = preset.id === 'full-access'
-                  const isActive = isFullAccessPreset
-                    ? isFullAccess
-                    : !isFullAccess &&
-                      resolvedIds.length > 0 &&
-                      resolvedIds.every(id => selectedSet.has(id))
+        {/* ── Two-column body ── */}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
 
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => togglePreset(preset)}
-                      className={`group relative text-left rounded-lg border p-2.5 transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2E7D32] ${
-                        isActive
-                          ? 'border-[#2E7D32] bg-[#E8F5E9]'
-                          : 'border-[#A5D6A7] hover:bg-[#C8E6C9]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        {preset.icon}
-                        <span className="font-['Poppins'] text-[11px] font-semibold text-[#1B5E20]">
-                          {preset.label}
-                        </span>
-                      </div>
-                      <span className="font-['Poppins'] text-[10px] text-[#777]">
-                        {preset.description}
-                      </span>
-                      {isActive && (
-                        <div className="absolute top-1.5 right-1.5 rounded-full size-4 flex items-center justify-center bg-[#2E7D32]">
-                          <Check className="size-2.5 text-white" />
-                        </div>
-                      )}
-                    </button>
-                  )
-                })}
+          {/* LEFT: Module tree */}
+          <div className="w-[30%] flex flex-col border-r border-gray-300 dark:border-gray-600 overflow-y-auto min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            {/* Search */}
+            <div className="px-4 pt-3 pb-2 shrink-0 sticky top-0 bg-white dark:bg-gray-950 z-10">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-gray-400" />
+                <Input
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search modules…"
+                  className="h-8 pl-8 text-xs font-['Poppins'] border-gray-200 dark:border-gray-500"
+                />
+                {searchQuery && (
+                  <button type="button" onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <X className="size-3.5" />
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* ── Search + Selected Tags ── */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-[#999]" />
-                  <Input
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="Search modules..."
-                    className="h-8 pl-8 text-xs font-['Poppins'] border-[#A5D6A7]"
-                  />
+            {/* Tree */}
+            {isFullAccess ? (
+              <div className="flex flex-col items-center justify-center p-6 text-center">
+                <div className="size-12 rounded-full bg-[#E8F5E9] flex items-center justify-center mb-3">
+                  <Shield className="size-6 text-[#2E7D32]" />
                 </div>
-                <Badge
-                  variant="secondary"
-                  className="font-['Poppins'] text-[10px] shrink-0 px-2 py-0.5 bg-[#E8F5E9] text-[#1B5E20]"
-                >
-                  {selectedCount} selected
-                </Badge>
+                <p className="font-['Poppins'] text-sm font-semibold text-[#1B5E20]">Full Access</p>
+                <p className="font-['Poppins'] text-[11px] text-gray-400 mt-1">All {totalModuleCount} modules selected. Click the preset again to deselect.</p>
               </div>
+            ) : (
+              <TreePanel
+                nodes={moduleTree}
+                selectedSet={selectedSet}
+                onToggleModule={toggleModule}
+                onToggleGroup={toggleGroup}
+                allModules={allModules}
+                searchQuery={searchQuery}
+                depth={0}
+              />
+            )}
+          </div>
 
-              {/* Selected tags */}
-              {selectedTags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 min-h-[24px] max-h-[72px] overflow-y-auto">
-                  {selectedTags.map(tag => (
-                    <Badge
-                      key={tag.id}
-                      variant="secondary"
-                      className="font-['Poppins'] text-[10px] pl-2 pr-1 py-0.5 flex items-center gap-1 bg-[#E8F8E9] text-[#1B5E20] border border-[#C8E6C9]"
-                    >
-                      {tag.label}
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); removeModule(tag.id) }}
-                        className="rounded-full p-0.5 transition-colors hover:bg-[#C8E6C9] focus:outline-none"
-                        aria-label={`Remove ${tag.label}`}
-                      >
-                        <X className="size-2.5 text-[#2E7D32]" />
-                      </button>
-                    </Badge>
+          {/* RIGHT: Access config */}
+          <div className="w-[70%] flex flex-col min-h-0">
+            <div className="px-4 pt-3 pb-2 shrink-0 border-b border-gray-300 dark:border-gray-600">
+              <div className="flex items-center gap-1.5">
+                <LayoutGrid className="size-3.5 text-[#2E7D32]" />
+                <span className="font-['Poppins'] text-[11px] font-semibold text-gray-700 dark:text-gray-300">Tab Access per Module</span>
+              </div>
+              <p className="font-['Poppins'] text-[10px] text-gray-400 mt-0.5">Toggle which tabs each module exposes to the user.</p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+              {isFullAccess ? (
+                <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+                  <Shield className="size-5 text-[#A5D6A7] mb-2" />
+                  <p className="font-['Poppins'] text-[11px] text-gray-400">Full access — all tabs enabled for all modules.</p>
+                </div>
+              ) : selectedModulesList.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+                  <div className="size-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-2">
+                    <LayoutGrid className="size-4 text-gray-400" />
+                  </div>
+                  <p className="font-['Poppins'] text-xs text-gray-400">No modules selected yet.</p>
+                  <p className="font-['Poppins'] text-[10px] text-gray-300 dark:text-gray-600 mt-0.5">Pick modules from the left panel.</p>
+                </div>
+              ) : (
+                <div className="divide-y-2 divide-gray-300 dark:divide-gray-500">
+                  {Object.entries(groupedSelected).map(([groupLabel, mods]) => (
+                    <div key={groupLabel}>
+                      {/* Group label */}
+                      <div className="px-4 py-1.5 bg-gray-50/70 dark:bg-gray-800/40">
+                        <span className="font-['Poppins'] text-[10px] font-semibold uppercase tracking-wider text-gray-400">{groupLabel}</span>
+                      </div>
+                      {mods.map(mod => {
+                        const allowedTabs = tabOverrides[mod.id] ?? null
+                        const toggleTab = (tab: 'ui' | 'api' | 'batch') => {
+                          const current = allowedTabs ?? ALL_TABS
+                          const next = current.includes(tab) ? current.filter(t => t !== tab) : [...current, tab]
+                          setTabOverrides(prev => ({ ...prev, [mod.id]: next.length === 3 ? null : next.length === 0 ? ['ui'] : next }))
+                        }
+                        return (
+                          <div key={mod.id} className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 group border-b border-gray-300 dark:border-gray-600 last:border-b-0">
+                            <div className="flex-1 min-w-0">
+                              <span className="font-['Poppins'] text-xs text-gray-700 dark:text-gray-300 truncate block">{mod.label}</span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {TAB_CONFIG.map(({ key, label, icon, color }) => {
+                                const active = !allowedTabs || allowedTabs.includes(key)
+                                return (
+                                  <button
+                                    key={key}
+                                    type="button"
+                                    title={label}
+                                    onClick={() => toggleTab(key)}
+                                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium font-['Poppins'] border transition-all cursor-pointer`}
+                                    style={active
+                                      ? { backgroundColor: color, borderColor: color, color: 'white' }
+                                      : { backgroundColor: 'transparent', borderColor: '#e5e7eb', color: '#9ca3af' }
+                                    }
+                                  >
+                                    {icon}
+                                    <span className="hidden xl:inline">{label}</span>
+                                  </button>
+                                )
+                              })}
+                              <button
+                                type="button"
+                                onClick={() => toggleModule(mod.id)}
+                                className="ml-1 p-0.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:text-gray-500 dark:hover:text-red-400 dark:hover:bg-red-900/20 transition-colors"
+                                title="Remove module"
+                              >
+                                <X className="size-3" />
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* ── Module Tree ── */}
-            {isFullAccess ? (
-              <div className="rounded-lg p-4 text-center bg-[#E8F5E9] border border-[#A5D6A7]">
-                <Shield className="size-6 text-[#2E7D32] mx-auto mb-1" />
-                <p className="font-['Poppins'] text-xs text-[#1B5E20] font-medium">
-                  Full access granted — all {totalModuleCount} modules selected.
-                </p>
-                <p className="font-['Poppins'] text-[10px] text-[#777] mt-0.5">
-                  Click any preset or deselect &quot;all&quot; tag to pick individual modules.
-                </p>
-              </div>
-            ) : (
-              <div>
-                <span className="font-['Poppins'] text-[11px] font-semibold uppercase tracking-wider text-[#2E7D32] mb-2 block">
-                  All Modules
-                </span>
-                <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden max-h-[280px] overflow-y-auto">
-                  <ModuleTreeNode
-                    nodes={moduleTree}
-                    selectedSet={selectedSet}
-                    onToggleModule={toggleModule}
-                    onToggleGroup={toggleGroup}
-                    allModules={allModules}
-                    parentIds={parentIds}
-                    searchQuery={searchQuery}
-                    depth={0}
-                  />
+            {/* Quick-set all tabs */}
+            {!isFullAccess && selectedModulesList.length > 0 && (
+              <div className="px-4 py-2.5 border-t border-gray-300 dark:border-gray-600 shrink-0 bg-gray-50/50 dark:bg-gray-900/30">
+                <div className="flex items-center gap-2">
+                  <span className="font-['Poppins'] text-[10px] text-gray-400 shrink-0">Set all:</span>
+                  {TAB_CONFIG.map(({ key, label, icon, color }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        // Toggle: if all selected have this tab, remove from all; else add to all
+                        const allHave = selectedModulesList.every(m => {
+                          const t = tabOverrides[m.id] ?? null
+                          return !t || t.includes(key)
+                        })
+                        setTabOverrides(prev => {
+                          const next = { ...prev }
+                          selectedModulesList.forEach(m => {
+                            const current = next[m.id] ?? ALL_TABS
+                            const updated = allHave
+                              ? current.filter(t => t !== key)
+                              : [...new Set([...current, key])] as ('ui'|'api'|'batch')[]
+                            next[m.id] = updated.length === 3 ? null : updated.length === 0 ? ['ui'] : updated
+                          })
+                          return next
+                        })
+                      }}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium font-['Poppins'] border transition-all cursor-pointer border-gray-200 dark:border-gray-500 text-gray-500 hover:text-white"
+                      style={{ '--hover-color': color } as React.CSSProperties}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = color; (e.currentTarget as HTMLButtonElement).style.borderColor = color; (e.currentTarget as HTMLButtonElement).style.color = 'white' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = ''; (e.currentTarget as HTMLButtonElement).style.borderColor = ''; (e.currentTarget as HTMLButtonElement).style.color = '' }}
+                    >
+                      {icon} {label}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Footer — pinned at bottom */}
-        <DialogFooter className="px-6 py-3 border-t border-gray-100 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-900">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleCancel}
-            className="font-['Poppins'] text-xs h-8"
-          >
+        {/* ── Footer ── */}
+        <DialogFooter className="px-4 py-2 border-t border-gray-300 dark:border-gray-600 shrink-0 bg-white dark:bg-gray-950 flex items-center justify-between">
+          <Button type="button" variant="outline" onClick={handleCancel} className="font-['Poppins'] text-[11px] h-7 px-3">
             Cancel
           </Button>
-          <Button
-            type="button"
-            onClick={handleApply}
-            className="font-['Poppins'] text-xs h-8 text-white bg-[#2E7D32] hover:bg-[#1B5E20]"
-          >
-            Apply ({selectedCount} module{selectedCount !== 1 ? 's' : ''})
+          <Button type="button" onClick={handleApply} className="font-['Poppins'] text-[11px] h-7 px-3 text-white bg-[#2E7D32] hover:bg-[#1B5E20]">
+            Apply — {selectedCount} module{selectedCount !== 1 ? 's' : ''}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -503,96 +473,39 @@ export function ModuleAccessPicker({
   )
 }
 
-// ─── Tree Node Interface ─────────────────────────────────
-interface TreeNode {
-  id: string
-  label: string
-  isGroup: boolean
-  children: TreeNode[]
-}
-
-// ─── Helper: Build children tree for a group ──────────────
-function buildTreeChildren(
-  groupId: string,
-  allModules: ModuleItem[],
-  parentIds: Set<string>
-): TreeNode[] {
-  const children: TreeNode[] = []
-  const directChildren = allModules.filter(m => m.parentId === groupId)
-
-  for (const child of directChildren) {
-    if (parentIds.has(child.id)) {
-      // It's a sub-group, recurse
-      const subChildren = buildTreeChildren(child.id, allModules, parentIds)
-      children.push({ id: child.id, label: child.label, isGroup: true, children: subChildren })
-    } else {
-      children.push({ id: child.id, label: child.label, isGroup: false, children: [] })
-    }
-  }
-
-  return children
-}
-
-// ─── Recursive Tree Node Component ───────────────────────
-function ModuleTreeNode({
-  nodes,
-  selectedSet,
-  onToggleModule,
-  onToggleGroup,
-  allModules,
-  parentIds,
-  searchQuery,
-  depth,
+// ─── Tree Panel (left column) ─────────────────────────────────
+function TreePanel({
+  nodes, selectedSet, onToggleModule, onToggleGroup, allModules, searchQuery, depth,
 }: {
   nodes: TreeNode[]
   selectedSet: Set<string>
   onToggleModule: (id: string) => void
   onToggleGroup: (id: string) => void
   allModules: ModuleItem[]
-  parentIds: Set<string>
   searchQuery: string
   depth: number
 }) {
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
-    // Auto-expand all groups by default
-    const ids = new Set<string>()
-    function collectGroupIds(nodes: TreeNode[]) {
-      for (const n of nodes) {
-        if (n.isGroup) { ids.add(n.id); collectGroupIds(n.children) }
-      }
-    }
-    collectGroupIds(nodes)
-    return ids
-  })
+  const parentIds = useMemo(() => new Set(allModules.filter(m => m.parentId).map(m => m.parentId!)), [allModules])
+
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   const toggleExpand = useCallback((id: string) => {
-    setExpandedGroups(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+    setExpandedGroups(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
   }, [])
 
-  // Filter by search
   const filteredNodes = useMemo(() => {
     if (!searchQuery.trim()) return nodes
-    const q = searchQuery.toLowerCase().trim()
-
-    function matchesSearch(node: TreeNode): boolean {
-      if (node.label.toLowerCase().includes(q) || node.id.toLowerCase().includes(q)) return true
-      return node.children.some(c => matchesSearch(c))
+    const q = searchQuery.toLowerCase()
+    function matches(n: TreeNode): boolean {
+      return n.label.toLowerCase().includes(q) || n.id.toLowerCase().includes(q) || n.children.some(matches)
     }
-
-    return nodes.filter(n => matchesSearch(n))
+    return nodes.filter(matches)
   }, [nodes, searchQuery])
 
-  if (filteredNodes.length === 0) {
+  if (!filteredNodes.length) {
     return (
-      <div className="px-4 py-6 text-center">
-        <p className="font-['Poppins'] text-xs text-[#999]">
-          {searchQuery ? 'No modules match your search.' : 'No modules available.'}
-        </p>
+      <div className="px-4 py-8 text-center">
+        <p className="font-['Poppins'] text-xs text-gray-400">{searchQuery ? 'No modules match.' : 'No modules available.'}</p>
       </div>
     )
   }
@@ -602,78 +515,53 @@ function ModuleTreeNode({
       {filteredNodes.map(node => {
         if (node.isGroup) {
           const isExpanded = expandedGroups.has(node.id)
-          const groupDescendantIds = getAllDescendantIds(allModules, node.id)
-          const allSelected = groupDescendantIds.length > 0 && groupDescendantIds.every(id => selectedSet.has(id))
-          const someSelected = groupDescendantIds.some(id => selectedSet.has(id))
-          const selectedInGroup = groupDescendantIds.filter(id => selectedSet.has(id)).length
+          const groupIds = getAllDescendantIds(allModules, node.id)
+          const allSel = groupIds.length > 0 && groupIds.every(id => selectedSet.has(id))
+          const someSel = groupIds.some(id => selectedSet.has(id))
+          const selCount = groupIds.filter(id => selectedSet.has(id)).length
 
           return (
             <div key={node.id}>
-              {/* Group Header — clickable to select/deselect whole group */}
               <button
                 type="button"
                 onClick={() => onToggleGroup(node.id)}
-                className={`w-full flex items-center gap-2 px-4 py-2 text-left transition-colors cursor-pointer border-b border-gray-100 dark:border-gray-700/50 ${
+                className={`w-full flex items-center gap-2 py-2 text-left transition-colors cursor-pointer border-b border-gray-300 dark:border-gray-600 ${
                   depth === 0
-                    ? 'bg-[#F1F8E9] dark:bg-green-900/20 hover:bg-[#DCEDC8] dark:hover:bg-green-900/30'
-                    : 'bg-gray-50 dark:bg-gray-800/50 hover:bg-[#F1F8E9] dark:hover:bg-green-900/10'
+                    ? 'bg-gray-50 dark:bg-gray-900/40 hover:bg-[#F1F8E9] dark:hover:bg-green-900/10'
+                    : 'hover:bg-[#F9FBE7] dark:hover:bg-green-900/10'
                 }`}
-                style={{ paddingLeft: `${16 + depth * 20}px` }}
+                style={{ paddingLeft: `${12 + depth * 16}px`, paddingRight: '12px' }}
               >
                 <span
                   role="button"
                   tabIndex={0}
-                  onClick={(e) => { e.stopPropagation(); toggleExpand(node.id) }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      toggleExpand(node.id)
-                    }
-                  }}
-                  className="p-0.5 rounded hover:bg-[#C8E6C9] dark:hover:bg-green-800/30 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2E7D32]"
+                  onClick={e => { e.stopPropagation(); toggleExpand(node.id) }}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleExpand(node.id) } }}
+                  className="p-0.5 rounded hover:bg-[#C8E6C9] cursor-pointer focus:outline-none"
                   aria-label={isExpanded ? 'Collapse' : 'Expand'}
-                  aria-expanded={isExpanded}
                 >
-                  <ChevronRight
-                    className={`size-3.5 text-[#2E7D32] transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''} pointer-events-none`}
-                  />
+                  <ChevronRight className={`size-3.5 text-[#2E7D32] transition-transform ${isExpanded ? 'rotate-90' : ''} pointer-events-none`} />
                 </span>
-
-                {/* Checkbox indicator */}
-                <div className={`size-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
-                  allSelected
-                    ? 'bg-[#2E7D32] border-[#2E7D32]'
-                    : someSelected
-                      ? 'bg-[#66BB6A] border-[#2E7D32]'
-                      : 'border-gray-300 dark:border-gray-600'
+                <div className={`size-3.5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                  allSel ? 'bg-[#2E7D32] border-[#2E7D32]' : someSel ? 'bg-[#66BB6A] border-[#2E7D32]' : 'border-gray-300 dark:border-gray-600'
                 }`}>
-                  {allSelected && <Check className="size-2.5 text-white" />}
-                  {someSelected && !allSelected && (
-                    <div className="size-1.5 rounded-sm bg-white" />
-                  )}
+                  {allSel && <Check className="size-2 text-white" />}
+                  {someSel && !allSel && <div className="size-1.5 rounded-sm bg-white" />}
                 </div>
-
-                <span className={`font-['Poppins'] text-xs font-semibold flex-1 ${
-                  depth === 0 ? 'text-[#1B5E20]' : 'text-[#2E7D32]'
-                }`}>
+                <span className={`font-['Poppins'] text-xs font-semibold flex-1 ${depth === 0 ? 'text-gray-800 dark:text-gray-200' : 'text-[#2E7D32]'}`}>
                   {node.label}
                 </span>
-
-                <span className="font-['Poppins'] text-[10px] text-[#999] shrink-0">
-                  {selectedInGroup}/{groupDescendantIds.length}
+                <span className={`font-['Poppins'] text-[10px] shrink-0 tabular-nums ${selCount > 0 ? 'text-[#2E7D32] font-medium' : 'text-gray-400'}`}>
+                  {selCount}/{groupIds.length}
                 </span>
               </button>
-
-              {/* Children */}
               {isExpanded && (
-                <ModuleTreeNode
+                <TreePanel
                   nodes={node.children}
                   selectedSet={selectedSet}
                   onToggleModule={onToggleModule}
                   onToggleGroup={onToggleGroup}
                   allModules={allModules}
-                  parentIds={parentIds}
                   searchQuery={searchQuery}
                   depth={depth + 1}
                 />
@@ -682,40 +570,29 @@ function ModuleTreeNode({
           )
         }
 
-        // Leaf module
-        const isSelected = selectedSet.has(node.id)
-        // Apply search filter
+        // Leaf
         if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase().trim()
-          if (!node.label.toLowerCase().includes(q) && !node.id.toLowerCase().includes(q)) {
-            return null
-          }
+          const q = searchQuery.toLowerCase()
+          if (!node.label.toLowerCase().includes(q) && !node.id.toLowerCase().includes(q)) return null
         }
 
+        const isSelected = selectedSet.has(node.id)
         return (
           <button
             key={node.id}
             type="button"
             onClick={() => onToggleModule(node.id)}
-            className={`w-full flex items-center gap-2 px-4 py-1.5 text-left transition-colors cursor-pointer border-b border-gray-50 dark:border-gray-800 ${
-              isSelected
-                ? 'bg-[#E8F5E9] dark:bg-green-900/20'
-                : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+            className={`w-full flex items-center gap-2 py-1.5 text-left transition-colors cursor-pointer border-b border-gray-300 dark:border-gray-600 ${
+              isSelected ? 'bg-[#E8F5E9] dark:bg-green-900/15 hover:bg-[#DCEDC8]' : 'hover:bg-gray-50 dark:hover:bg-gray-800/30'
             }`}
-            style={{ paddingLeft: `${16 + depth * 20 + 24}px` }}
+            style={{ paddingLeft: `${12 + depth * 16 + 22}px`, paddingRight: '12px' }}
           >
-            {/* Checkbox */}
             <div className={`size-3.5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
-              isSelected
-                ? 'bg-[#2E7D32] border-[#2E7D32]'
-                : 'border-gray-300 dark:border-gray-600'
+              isSelected ? 'bg-[#2E7D32] border-[#2E7D32]' : 'border-gray-300 dark:border-gray-600'
             }`}>
               {isSelected && <Check className="size-2 text-white" />}
             </div>
-
-            <span className={`font-['Poppins'] text-xs flex-1 ${
-              isSelected ? 'text-[#1B5E20] font-medium' : 'text-[#555] dark:text-gray-300'
-            }`}>
+            <span className={`font-['Poppins'] text-xs flex-1 ${isSelected ? 'text-[#1B5E20] font-medium dark:text-green-300' : 'text-gray-600 dark:text-gray-400'}`}>
               {node.label}
             </span>
           </button>

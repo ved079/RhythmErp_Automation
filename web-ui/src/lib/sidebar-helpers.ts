@@ -58,6 +58,9 @@ export function filterSidebarByAccess(modules: SidebarModule[], user: AuthUser):
   // Legacy support: ['all'] means full access
   if (access.includes('all')) return modules
 
+  // Strip tab suffix from entries like "module-id|ui,batch" → "module-id"
+  const accessIds = access.map(e => e.split('|')[0])
+
   // Always-visible module IDs
   const alwaysVisible = new Set(['dashboard', 'my-tickets'])
 
@@ -66,10 +69,10 @@ export function filterSidebarByAccess(modules: SidebarModule[], user: AuthUser):
       .filter(item => {
         if (alwaysVisible.has(item.id)) return true
         // Check if this module ID or any of its children are in the access list
-        if (access.includes(item.id)) return true
+        if (accessIds.includes(item.id)) return true
         if (item.children) {
           const visibleChildren = item.children.filter(c =>
-            alwaysVisible.has(c.id) || access.includes(c.id) || (c.children && c.children.some(gc => access.includes(gc.id)))
+            alwaysVisible.has(c.id) || accessIds.includes(c.id) || (c.children && c.children.some(gc => accessIds.includes(gc.id)))
           )
           if (visibleChildren.length > 0) return true
         }
@@ -84,4 +87,22 @@ export function filterSidebarByAccess(modules: SidebarModule[], user: AuthUser):
   }
 
   return filterItems(modules)
+}
+
+/**
+ * Parse moduleAccess entries to get allowed tabs for a specific module.
+ * Entry format: "module-id" (all tabs) or "module-id|ui,api,batch" (specific tabs).
+ * Returns null if all tabs are allowed, otherwise an array of allowed tab keys.
+ */
+export function getAllowedTabsForModule(
+  moduleAccess: string[],
+  moduleId: string,
+): ('ui' | 'api' | 'batch')[] | null {
+  if (moduleAccess.includes('all')) return null
+  const entry = moduleAccess.find(e => e.split('|')[0] === moduleId)
+  if (!entry) return null // no entry = no restriction (admin handled upstream)
+  const parts = entry.split('|')
+  if (parts.length < 2) return null // no suffix = all tabs
+  const tabs = parts[1].split(',').filter(t => ['ui', 'api', 'batch'].includes(t)) as ('ui' | 'api' | 'batch')[]
+  return tabs.length > 0 ? tabs : null
 }
