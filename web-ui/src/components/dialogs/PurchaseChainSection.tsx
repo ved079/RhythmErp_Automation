@@ -22,6 +22,154 @@ function formatTime(d: Date): string {
   return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 }
 
+const DOC_COLORS: Record<string, string> = {
+  PO:  'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+  GP:  'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  GRN: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
+  QC:  'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  PB:  'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
+  SO:  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+}
+
+function DocPill({ label, id }: { label: string; id?: string }) {
+  const cls = DOC_COLORS[label] ?? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${cls}`}>
+      {label}{id && <span className="font-normal opacity-70">#{id}</span>}
+    </span>
+  )
+}
+
+function DocChain({ raw }: { raw: string }) {
+  // "PO 3614 → GP 2196 → GRN 1850 → QC 1890 → SO 434"
+  const parts = raw.split(/\s*→\s*/)
+  return (
+    <span className="inline-flex items-center gap-1 flex-wrap">
+      {parts.map((p, i) => {
+        const [label, id] = p.trim().split(' ')
+        return (
+          <React.Fragment key={i}>
+            {i > 0 && <span className="text-gray-400 dark:text-gray-500 text-[10px]">→</span>}
+            <DocPill label={label} id={id} />
+          </React.Fragment>
+        )
+      })}
+    </span>
+  )
+}
+
+function renderLogLine(log: { text: string; ts: Date; isErr: boolean; isDone: boolean }) {
+  const t = log.text
+
+  // Error
+  if (log.isErr) {
+    return (
+      <div className="flex gap-2 items-start text-red-500 dark:text-red-400">
+        <span className="text-gray-400 dark:text-gray-500 shrink-0 w-16 text-[10px]">[{formatTime(log.ts)}]</span>
+        <span className="flex items-center gap-1.5"><span className="text-[11px]">✕</span><span className="whitespace-pre-wrap break-all text-[11px]">{t}</span></span>
+      </div>
+    )
+  }
+
+  // Done summary  "Done — 2 chains created, 0 failed (25.9s)"
+  if (log.isDone || t.startsWith('Done —')) {
+    const m = t.match(/(\d+) chains? created.*?(\d+) failed.*?\(([\d.]+s)\)/)
+    return (
+      <div className="flex gap-2 items-start text-emerald-600 dark:text-emerald-400 font-semibold">
+        <span className="text-gray-400 dark:text-gray-500 shrink-0 w-16 text-[10px]">[{formatTime(log.ts)}]</span>
+        {m ? (
+          <span className="flex items-center gap-2 flex-wrap text-[11px]">
+            <span>✓ Done</span>
+            <span className="font-normal text-gray-500 dark:text-gray-400">—</span>
+            <span className="text-emerald-600 dark:text-emerald-400">{m[1]} created</span>
+            {parseInt(m[2]) > 0 && <span className="text-red-500">{m[2]} failed</span>}
+            <span className="font-normal text-gray-400 dark:text-gray-500">{m[3]}</span>
+          </span>
+        ) : (
+          <span className="text-[11px]">{t}</span>
+        )}
+      </div>
+    )
+  }
+
+  // Chain OK  "Chain [1] OK — PO 3614 → GP 2196 → ..."
+  const chainOk = t.match(/^Chain \[(\d+)\] OK — (.+?) \(([\d.]+s)\)$/)
+  if (chainOk) {
+    return (
+      <div className="flex gap-2 items-start">
+        <span className="text-gray-400 dark:text-gray-500 shrink-0 w-16 text-[10px]">[{formatTime(log.ts)}]</span>
+        <span className="flex items-center gap-2 flex-wrap">
+          <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold">Chain {chainOk[1]} ✓</span>
+          <DocChain raw={chainOk[2]} />
+          <span className="text-gray-400 dark:text-gray-500 text-[10px]">{chainOk[3]}</span>
+        </span>
+      </div>
+    )
+  }
+
+  // Chain FAILED  "Chain [1] FAILED — ..."
+  const chainFail = t.match(/^Chain \[(\d+)\] FAILED/)
+  if (chainFail) {
+    return (
+      <div className="flex gap-2 items-start text-red-500 dark:text-red-400">
+        <span className="text-gray-400 dark:text-gray-500 shrink-0 w-16 text-[10px]">[{formatTime(log.ts)}]</span>
+        <span className="text-[11px]">Chain {chainFail[1]} ✕ — {t.replace(/^Chain \[\d+\] FAILED — ?/, '')}</span>
+      </div>
+    )
+  }
+
+  // Chain header  "Chain [1/2] — supplier=2543"
+  const chainHdr = t.match(/^Chain \[(\d+)\/(\d+)\]/)
+  if (chainHdr) {
+    return (
+      <div className="flex gap-2 items-start">
+        <span className="text-gray-400 dark:text-gray-500 shrink-0 w-16 text-[10px]">[{formatTime(log.ts)}]</span>
+        <span className="text-[#3F51B5] dark:text-[#7986CB] font-semibold text-[11px]">
+          Chain {chainHdr[1]} / {chainHdr[2]}
+        </span>
+      </div>
+    )
+  }
+
+  // Documents to create  "Documents to create: PO → GP → GRN → QC → SO"
+  const docsLine = t.match(/^Documents to create: (.+)$/)
+  if (docsLine) {
+    return (
+      <div className="flex gap-2 items-start">
+        <span className="text-gray-400 dark:text-gray-500 shrink-0 w-16 text-[10px]">[{formatTime(log.ts)}]</span>
+        <span className="flex items-center gap-1.5 flex-wrap text-[10px] text-gray-500 dark:text-gray-400">
+          Flow: <DocChain raw={docsLine[1].replace(/→/g, '→').replace(/\s+/g, ' ')} />
+        </span>
+      </div>
+    )
+  }
+
+  // Starting  "Starting N purchase chain(s) — ..."
+  if (t.startsWith('Starting ')) {
+    const m = t.match(/Starting (\d+) purchase chain/)
+    return (
+      <div className="flex gap-2 items-start">
+        <span className="text-gray-400 dark:text-gray-500 shrink-0 w-16 text-[10px]">[{formatTime(log.ts)}]</span>
+        <span className="text-[#3F51B5] dark:text-[#7986CB] font-semibold text-[11px]">
+          Starting {m ? `${m[1]} chain${parseInt(m[1]) > 1 ? 's' : ''}` : ''}…
+        </span>
+      </div>
+    )
+  }
+
+  // Suppress noisy technical lines
+  if (t.startsWith('Discovering') || t.startsWith('Discovery complete') || t.startsWith('Config:')) {
+    return null
+  }
+
+  return (
+    <div className="flex gap-2 items-start">
+      <span className="text-gray-400 dark:text-gray-500 shrink-0 w-16 text-[10px]">[{formatTime(log.ts)}]</span>
+      <span className="whitespace-pre-wrap break-all text-[11px] text-gray-700 dark:text-gray-200">{t}</span>
+    </div>
+  )
+}
+
 /**
  * Items selectable for the PO: restricted to one category (falling back to all
  * when no category matches) and, when Tax Rate is ON, only items whose HSN has
@@ -56,6 +204,7 @@ function poolFor(
 export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onClearToken, userId }: Props) {
   const [count, setCount] = useState(1)
   const [chainSuppliers, setChainSuppliers] = useState<(number | null)[]>([])
+  const [sameSupplier, setSameSupplier] = useState(false)
   const [enabledDocs, setEnabledDocs] = useState<Set<string>>(new Set(['PO', 'GP', 'GRN', 'QC', 'PB']))
   const [supplier, setSupplier] = useState<number | null>(null)
   const [numItems, setNumItems] = useState(2)
@@ -239,6 +388,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     setCreated(0)
     setFailed(0)
     setElapsed(0)
+    setShowLogs(true)
 
     const activeTaxRate = flow === 'gp' ? false : requireTaxRate
 
@@ -379,7 +529,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   }, [activeMenu])
 
   return (
-    <div className="flex flex-col h-full min-h-0 gap-4">
+    <div className="relative flex flex-col h-full min-h-0 gap-4">
       {/* Controls panel */}
       <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col min-h-0 flex-1 overflow-hidden">
         {/* Flow selector — pinned to the top of the panel */}
@@ -609,8 +759,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         </div>
 
         {dataError && (
-          <div className="mb-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-[11px] text-red-600 dark:text-red-400">
-            {dataError}
+          <div className="mb-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-[11px] text-red-600 dark:text-red-400 space-y-1">
+            <p>{dataError}</p>
+            <p className="text-red-500 dark:text-red-400">Try a hard refresh <kbd className="px-1 py-0.5 rounded bg-red-100 dark:bg-red-900/40 font-mono text-[10px]">Ctrl+Shift+R</kbd> and re-enter your token — the ERP session may have expired.</p>
           </div>
         )}
 
@@ -707,6 +858,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         {/* Chains — own row */}
         <div className="mb-4">
           <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-end gap-2">
             <div className="flex flex-col gap-0.5" data-tour="pc-chains">
               <Label className="text-[10px] text-gray-600 dark:text-gray-400 block">Chains</Label>
               <Input
@@ -720,14 +872,13 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                   setChainSuppliers((prev) => {
                     if (prev.length === v) return prev
                     const next = prev.slice(0, v)
-                    // Auto-fill every unselected slot with the next supplier
-                    // (distinct until the list is exhausted, then cycling) so the
-                    // user doesn't have to pick each chain's supplier by hand.
                     const ids = suppliers.map((s) => s.id)
                     if (ids.length === 0) {
-                      // No suppliers loaded yet (e.g. token not set) — pad with
-                      // nulls so the per-chain blocks still render.
                       while (next.length < v) next.push(null)
+                      return next
+                    }
+                    if (sameSupplier) {
+                      while (next.length < v) next.push(supplier ?? ids[0])
                       return next
                     }
                     const used = new Set(next.filter((x): x is number => x != null))
@@ -736,14 +887,8 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                       if (next[i] != null) continue
                       let id = ids[k % ids.length]
                       let tries = 0
-                      while (used.has(id) && tries < ids.length) {
-                        k++
-                        id = ids[k % ids.length]
-                        tries++
-                      }
-                      k++
-                      used.add(id)
-                      next[i] = id
+                      while (used.has(id) && tries < ids.length) { k++; id = ids[k % ids.length]; tries++ }
+                      k++; used.add(id); next[i] = id
                     }
                     return next
                   })
@@ -752,30 +897,36 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                 disabled={running}
               />
             </div>
-            {loadingData && items.length === 0 ? (
+            <div className="flex flex-col gap-0.5">
+              <button
+                type="button"
+                disabled={running}
+                onClick={() => {
+                  const next = !sameSupplier
+                  setSameSupplier(next)
+                  if (next && supplier != null) {
+                    setChainSuppliers(Array(count).fill(supplier))
+                  } else if (!next && suppliers.length > 0) {
+                    const ids = suppliers.map((s) => s.id)
+                    setChainSuppliers(Array.from({ length: count }, (_, i) => ids[i % ids.length]))
+                  }
+                }}
+                className={`h-9 px-3 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                  sameSupplier
+                    ? 'bg-[#3F51B5] border-[#3F51B5] text-white'
+                    : 'bg-transparent border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                Same Supplier
+              </button>
+            </div>
+            </div>
+            {loadingData && items.length === 0 && (
               <div className="h-9 flex items-center text-[12px] text-gray-600 dark:text-gray-400 gap-1.5">
                 <Loader2 className="size-3 animate-spin" />
                 Loading...
               </div>
-            ) : numItems === 1 ? (
-              /* Single dropdown */
-              <div className="flex flex-col gap-0.5">
-                <Label className="text-[10px] text-gray-600 dark:text-gray-400 block">Item</Label>
-                <button
-                  ref={itemBtnRef}
-                  type="button"
-                  onClick={() => {
-                    if (activeMenu?.type === 'item') { setActiveMenu(null); return }
-                    const r = itemBtnRef.current?.getBoundingClientRect()
-                    if (r) setActiveMenu({ type: 'item', pos: { top: r.bottom + 4, left: r.left, width: r.width } })
-                  }}
-                  className="h-9 w-full px-3 py-0 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
-                >
-                  <span className="truncate">{catItems.find(i => i.id === itemIds[0])?.name ?? 'Select item...'}</span>
-                  <svg className={`size-3 text-gray-500 transition-transform shrink-0 ${activeMenu?.type === 'item' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                </button>
-              </div>
-            ) : null}
+            )}
             {count > 1 && chainSuppliers.map((chainSup, idx) => (
               <div key={idx} className="flex flex-col gap-0.5">
                 <Label className="text-[10px] text-gray-600 dark:text-gray-400 block">Chain {idx + 1}</Label>
@@ -852,6 +1003,24 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
               >
                 All {catItems.length}
               </button>
+            )}
+            {numItems === 1 && (
+              <div className="flex flex-col gap-0.5">
+                <Label className="text-[10px] text-gray-600 dark:text-gray-400 block">Item</Label>
+                <button
+                  ref={itemBtnRef}
+                  type="button"
+                  onClick={() => {
+                    if (activeMenu?.type === 'item') { setActiveMenu(null); return }
+                    const r = itemBtnRef.current?.getBoundingClientRect()
+                    if (r) setActiveMenu({ type: 'item', pos: { top: r.bottom + 4, left: r.left, width: r.width } })
+                  }}
+                  className="h-9 w-full px-3 py-0 text-[12px] text-left bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center justify-between"
+                >
+                  <span className="truncate">{catItems.find(i => i.id === itemIds[0])?.name ?? 'Select item...'}</span>
+                  <svg className={`size-3 text-gray-500 transition-transform shrink-0 ${activeMenu?.type === 'item' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                </button>
+              </div>
             )}
             {numItems > 1 && Array.from({ length: numItems }).map((_, idx) => (
               <div key={idx} className="flex flex-col gap-0.5">
@@ -1035,52 +1204,46 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         </div>
       </div>
 
-      {/* Logs popup — shown when user opts in */}
-      {showLogs && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60">
-          <div className="flex flex-col w-[90vw] max-w-3xl h-[75vh] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shrink-0">
-              <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">
-                Console Output
-                {logs.length > 0 && <span className="ml-2 text-gray-600 dark:text-gray-400">({logs.length} lines)</span>}
+      {/* Floating live log panel — appears on run start, dismissed with results popup */}
+      {showLogs && (
+        <div className="absolute bottom-4 right-4 z-40 flex flex-col w-[300px] h-[220px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-3 py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shrink-0">
+            <div className="flex items-center gap-2">
+              {running
+                ? <span className="size-2 rounded-full bg-[#3F51B5] animate-pulse shrink-0" />
+                : <span className="size-2 rounded-full bg-emerald-500 shrink-0" />}
+              <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300">
+                {running ? 'Running…' : 'Complete'}
               </span>
-              <div className="flex items-center gap-2">
-                {created + failed > 0 && (
-                  <span className="text-[11px]">
-                    <span className="text-emerald-600 dark:text-emerald-400">{created} created</span>
-                    {failed > 0 && <span className="text-red-500 dark:text-red-400 ml-2">{failed} failed</span>}
-                  </span>
-                )}
-                <button
-                  onClick={() => setShowLogs(false)}
-                  className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors cursor-pointer"
-                  title="Close logs"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
+              {created + failed > 0 && (
+                <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                  · <span className="text-emerald-600 dark:text-emerald-400">{created} ✓</span>
+                  {failed > 0 && <span className="text-red-500 dark:text-red-400 ml-1">{failed} ✕</span>}
+                </span>
+              )}
             </div>
-            <ScrollArea className="flex-1 min-h-0">
-              <div className="p-3 font-mono text-[12px] leading-relaxed">
-                {logs.length === 0 && !running && (
-                  <p className="text-gray-600 dark:text-gray-400 italic">Configure and click "Run" to start the purchase chain.</p>
-                )}
-                {logs.length === 0 && running && (
-                  <p className="text-[#3F51B5] dark:text-[#7986CB] animate-pulse">Starting...</p>
-                )}
-                {logs.map((log, i) => (
-                  <div key={i} className={`flex gap-2 ${log.isErr ? 'text-red-500 dark:text-red-400' : log.isDone ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-gray-700 dark:text-gray-200'}`}>
-                    <span className="text-gray-600 dark:text-gray-400 shrink-0 w-16">[{formatTime(log.ts)}]</span>
-                    <span className="whitespace-pre-wrap break-all">{log.text}</span>
-                  </div>
-                ))}
-                {running && <div className="text-[#3F51B5] dark:text-[#7986CB] animate-pulse">▌</div>}
-                <div ref={logsEndRef} />
-              </div>
-            </ScrollArea>
+            <button
+              onClick={() => setShowLogs(false)}
+              className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors cursor-pointer"
+            >
+              <X className="size-3.5" />
+            </button>
           </div>
-        </div>,
-        document.body
+          {/* Log body */}
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="p-3 font-mono text-[11px] leading-relaxed space-y-1">
+              {logs.length === 0 && running && (
+                <p className="text-[#3F51B5] dark:text-[#7986CB] animate-pulse">Starting...</p>
+              )}
+              {logs.map((log, i) => (
+                <div key={i}>{renderLogLine(log)}</div>
+              ))}
+              {running && <div className="text-[#3F51B5] dark:text-[#7986CB] animate-pulse mt-1">▌</div>}
+              <div ref={logsEndRef} />
+            </div>
+          </ScrollArea>
+        </div>
       )}
 
       {/* Floating dropdown menu via portal */}
@@ -1203,7 +1366,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             </div>
             <div className="flex items-center justify-end gap-2 px-4 py-3">
               <Button
-                onClick={() => setRunSummary(null)}
+                onClick={() => { setRunSummary(null); setShowLogs(false) }}
                 size="sm"
                 className="h-8 text-[12px] gap-1.5 cursor-pointer bg-[#2D3FC7] hover:bg-[#3F51B5] text-white"
               >
