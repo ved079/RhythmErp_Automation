@@ -8,7 +8,6 @@ export const db =
   globalForPrisma.prisma ??
   new PrismaClient({
     log: ['warn', 'error'],
-    // Neon PostgreSQL connection pooling: reuse connection in dev
     datasources: {
       db: {
         url: process.env.DATABASE_URL,
