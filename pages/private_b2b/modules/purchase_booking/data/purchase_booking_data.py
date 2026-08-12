@@ -41,18 +41,17 @@ from typing import List, Optional
 # ── GST type helpers ─────────────────────────────────────────────────────────
 
 def gst_type_for_rate(tax_rate: float) -> Optional[str]:
-    """Map a tax rate to the ERP's gst_type (matches manual PB 2480).
+    """Map a non-zero tax rate to a GST type.
 
-    tax_rate 25  → "CGST + SGST" (split 12.5 / 12.5)
-    tax_rate 5   → "IGST" (single 5%)
-    anything else → None (no GST)
+    Any non-zero rate randomly gets IGST or CGST+SGST (both are valid ERP
+    options; the split is inter-state vs intra-state, which we randomise for
+    automation). Zero / None → None (no GST applied).
     """
+    import random
     rate = round(float(tax_rate or 0.0), 4)
-    if rate == 25.0:
-        return "CGST + SGST"
-    if rate == 5.0:
-        return "IGST"
-    return None
+    if rate == 0.0:
+        return None
+    return random.choice(["IGST", "CGST + SGST"])
 
 
 def _split_gst(amount: float, tax_rate: float, gst_type: Optional[str]) -> dict:
@@ -258,6 +257,7 @@ def build_pb_payload(
     transportation_charges: int = 0,
     remark: Optional[str] = None,
     transaction_date: Optional[str] = None,
+    tax_registration_status: str = "Registered",
 ) -> dict:
     """
     Build a complete Purchase Booking payload ready to POST.
@@ -302,6 +302,7 @@ def build_pb_payload(
         "transaction_date": transaction_date,
         "transaction_ref_no": "",
         "supplier_ref_id": supplier_ref_id,
+        "tax_registration_status": tax_registration_status,
         "supplier_ref_type": supplier_ref_type,
         # Django FK write fields use the _id_id convention (same as GRN/QC)
         "qc_ref_id_id": qc_ref_id,
