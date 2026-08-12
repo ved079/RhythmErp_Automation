@@ -515,8 +515,8 @@ def _pb_items_from_qc(qc_items: List[dict], items: List[dict] = None, ctx=None) 
     for qc in qc_items:
         labour = _rand_labour_charges()
         amount_detail = round(float(qc["txn_currency_amount"] or 0.0) - labour, 6)
-        is_gst_set_off = random.choice([True, False])
         tax_rate = tax_by_item.get(qc["item_ref_id"], 0.0)
+        is_gst_set_off = tax_rate > 0.0
         gst_type = gst_type_for_rate(tax_rate)
         out.append(build_pb_line(
             item_ref_id=qc["item_ref_id"],

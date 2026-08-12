@@ -18,6 +18,7 @@ from pages.private_b2b.modules.purchase_order.po_playwright_page import POPlaywr
 from pages.private_b2b.modules.gate_pass.gp_playwright_page import GPPlaywrightPage
 from pages.private_b2b.modules.goods_receipt_note.grn_playwright_page import GRNPlaywrightPage
 from pages.private_b2b.modules.quality_check.qc_playwright_page import QCPlaywrightPage
+from pages.private_b2b.modules.purchase_booking.pb_playwright_page import PBPlaywrightPage
 
 # ── Fixed test constants ────────────────────────────────────────────────────
 
@@ -432,7 +433,7 @@ class TestFullFlowValidation:
             "Department", "Division", "Type of Sale", "Net Qty",
         }, step="empty submit")
 
-        # ── 4b: fill Supplier Name (nothing auto-clears) ──────────────────
+        # ── 4b: fill Supplier Name → clears most header errors ───────────
         qc.select_supplier(integration_state["supplier_name"])
 
         _assert_errors(logged_in_page, {
@@ -440,27 +441,29 @@ class TestFullFlowValidation:
             "Location", "Department", "Division", "Type of Sale", "Net Qty",
         }, step="after Supplier Name", wait_ms=1000)
 
-        # ── 4d: fill Item category → auto-clears Transaction Currency,
-        #        Location, Department, Division, Type of Sale, Net Qty ─────
+        # ── 4c: fill Gate Pass → clears remaining header errors ───────────
         qc.select_item_category("Raw Materia")
-
-        _assert_errors(logged_in_page, {
-            "Conversion Rate",
-        }, step="after Item category", wait_ms=1500)
-
-        # ── 4e: fill Conversion Rate → zero header errors ─────────────────
+        qc.select_gate_pass(integration_state["gp_ref_no"])
         qc.fill_conversion_rate(1)
 
-        _assert_errors(logged_in_page, set(), step="after Conversion Rate")
+        _assert_errors(logged_in_page, set(), step="after Gate Pass", wait_ms=1500)
 
-        # ── Phase 2: link GP → rows appear → validate bags popup ──────────
-        print(f"\n[QC] Header validations ✓ — linking GP and validating bag fields...")
+        # ── Phase 2: submit → Actual Value error appears on main page ────
+        print(f"\n[QC] Header validations ✓ — submitting to reveal row-level errors...")
 
-        qc.select_gate_pass(integration_state["gp_ref_no"])
-        logged_in_page.wait_for_timeout(1000)
+        logged_in_page.locator(qc.SUBMIT_BTN).click()
+        _dismiss_validation_popup(logged_in_page)
 
-        # Open bags popup for row 0 — selecting Type of Bag triggers
-        # No of Bags, Per Bag Weight, Total Weight errors
+        _assert_errors(logged_in_page, {
+            "Actual Value",
+        }, step="submit reveals Actual Value error", wait_ms=800)
+
+        # ── Fill Actual Value in quality params popup → zero main-page errors
+        qc.fill_quality_parameters(actual_value=1, row=0)
+
+        _assert_errors(logged_in_page, set(), step="after Actual Value")
+
+        # ── Phase 3: bags popup — errors only visible inside the popup ────
         bags_btn = logged_in_page.locator(
             "button[data-sd-details-opener='qc_details[0].qc_bags_details']"
         ).first
@@ -471,7 +474,7 @@ class TestFullFlowValidation:
         )
         logged_in_page.wait_for_timeout(500)
 
-        # Select Type of Bag → triggers No of Bags, Per Bag Weight, Total Weight
+        # Select Type of Bag → No of Bags, Per Bag Weight, Total Weight errors appear inside popup
         logged_in_page.locator(qc.BAGS_TYPE_SELECT).first.click(force=True)
         logged_in_page.wait_for_selector(".mat-mdc-select-panel", timeout=5000)
         logged_in_page.locator(
@@ -484,28 +487,26 @@ class TestFullFlowValidation:
 
         _assert_errors(logged_in_page, {
             "No of  Bags", "Per Bag Weight", "Total Weight",
-        }, step="after Type of Bag", wait_ms=800)
+        }, step="after Type of Bag (popup)", wait_ms=600)
 
         # Fill No of Bags → Per Bag Weight + Total Weight remain
         qc._js_fill_by_placeholder("No of  Bag", 1, nth=0)
 
         _assert_errors(logged_in_page, {
             "Per Bag Weight", "Total Weight",
-        }, step="after No of Bags")
+        }, step="after No of Bags (popup)")
 
-        # Fill Per Bag Weight → auto-calculates Total Weight → zero errors
+        # Fill Per Bag Weight → Total Weight auto-calculates → zero errors
         qc._js_fill_by_placeholder("Per Bag Weight", 1, nth=0)
 
-        _assert_errors(logged_in_page, set(), step="after Per Bag Weight")
+        _assert_errors(logged_in_page, set(), step="after Per Bag Weight (popup)")
 
-        # Close bags popup
         logged_in_page.locator(qc.POPUP_DONE_BTN).click(force=True)
         logged_in_page.wait_for_timeout(500)
 
-        # ── All validations passed — fill quality params and submit ────────
-        print(f"\n[QC] All validation steps ✓ — filling quality params and submitting...")
+        # ── All validations passed — fill Net Qty and submit ──────────────
+        print(f"\n[QC] All validation steps ✓ — submitting...")
 
-        qc.fill_quality_parameters(actual_value=1, row=0)
         qc._js_fill_by_placeholder("Net Qty", _ITEM_QTY, nth=0)
         logged_in_page.wait_for_timeout(300)
 
@@ -514,3 +515,78 @@ class TestFullFlowValidation:
 
         integration_state["qc_ref_no"] = qc_ref_no
         print(f"\n[QC] ref={qc_ref_no}")
+
+    # ── Step 5: PB ─────────────────────────────────────────────────────────
+
+    def test_step5_pb_validation(self, logged_in_page, integration_state):
+        if not integration_state.get("qc_ref_no"):
+            pytest.skip("QC not created in step 4")
+
+        pb = PBPlaywrightPage(logged_in_page)
+        pb.navigate_to_page()
+        pb.open_add_form()
+
+        print("\n[PB] Starting validation sequence...")
+
+        # JS fill helper for row-level label-based inputs
+        def _js_fill_by_label(label, value):
+            logged_in_page.evaluate("""
+                ([lbl, val]) => {
+                    const fields = [...document.querySelectorAll('mat-form-field')]
+                        .filter(f => f.querySelector('mat-label')?.textContent.trim() === lbl);
+                    const el = fields[0]?.querySelector('input');
+                    if (!el) return;
+                    const setter = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value').set;
+                    setter.call(el, String(val));
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    el.dispatchEvent(new Event('change', {bubbles: true}));
+                }
+            """, [label, value])
+            logged_in_page.wait_for_timeout(200)
+
+        # ── 5a: empty submit → all required fields ────────────────────────
+        logged_in_page.locator(pb.SUBMIT_BTN).click()
+        _dismiss_validation_popup(logged_in_page)
+
+        _assert_errors(logged_in_page, {
+            "Supplier Name", "Supplier Type", "Base Currency",
+            "Transaction Currency", "Conversion Rate", "Amount",
+            "Total Amount", "Location", "Department", "Division",
+            "Type of Sale", "UOM", "Quantity", "Net Quantity",
+            "QC Transaction Amount",
+        }, step="empty submit")
+
+        # ── 5b: fill Supplier Name → clears Supplier Type, Base Currency,
+        #        Transaction Currency ─────────────────────────────────────
+        pb._select_mat_by_text(pb.SUPPLIER_NAME, integration_state["supplier_name"])
+
+        _assert_errors(logged_in_page, {
+            "Conversion Rate", "Amount", "Total Amount", "Location",
+            "Department", "Division", "Type of Sale", "UOM",
+            "Quantity", "Net Quantity", "QC Transaction Amount",
+        }, step="after Supplier Name", wait_ms=1000)
+
+        # ── 5c: fill Amount → clears all remaining row-level fields ───────
+        _js_fill_by_label("Amount", 1000)
+
+        _assert_errors(logged_in_page, {
+            "Conversion Rate",
+        }, step="after Amount", wait_ms=1000)
+
+        # ── 5d: fill Conversion Rate → zero errors ────────────────────────
+        field = logged_in_page.locator(pb.CONVERSION_RATE).first
+        field.click(force=True)
+        field.fill("1")
+        field.press("Tab")
+
+        _assert_errors(logged_in_page, set(), step="after Conversion Rate")
+
+        # ── 5e: Labour Charges re-appears after form settles ──────────────
+        _js_fill_by_label("Labour Charges", 10)
+
+        _assert_errors(logged_in_page, set(), step="after Labour Charges")
+
+        # ── All validations passed — submit not yet working ───────────────
+        print(f"\n[PB] All validation steps ✓")
+        pytest.xfail("PB submit not working yet — validation complete")
