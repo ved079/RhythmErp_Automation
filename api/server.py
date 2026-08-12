@@ -399,6 +399,33 @@ def _resolve_tax_rates(client) -> dict:
     return result
 
 
+def _filter_registered_suppliers(client, items: list) -> list:
+    """Keep only suppliers with gst_registration_status set in their detail record.
+
+    Fetches each supplier's detail in parallel and drops any whose
+    'Additional Details' stepper has gst_registration_status == null.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _has_gst(item):
+        try:
+            detail = client.get_entry("Supplier", item["id"])
+            for child in (detail or {}).get("children") or []:
+                if child.get("stepper_name") == "Additional Details":
+                    return (
+                        child.get("gst_registration_status") is not None
+                        and child.get("payment_terms_ref_id") is not None
+                        and child.get("delivery_terms_ref_id") is not None
+                    )
+        except Exception:
+            pass
+        return False
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        results = list(ex.map(_has_gst, items))
+    return [item for item, keep in zip(items, results) if keep]
+
+
 def _enrich_item_categories(client, items: list, with_tax_rates: bool = False) -> list:
     """Attach ``item_category`` (and optionally ``tax_rates``) to Item Master rows.
 
@@ -457,6 +484,8 @@ def master_data_endpoint(request: MasterDataRequest):
     items = result.get("screenmatlistingdata_set") or result.get("results") or []
     if request.screen == "Item Master":
         items = _enrich_item_categories(client, items, with_tax_rates=True)
+    if request.screen == "Supplier":
+        items = _filter_registered_suppliers(client, items)
     return {"items": items, "total": len(items)}
 
 
