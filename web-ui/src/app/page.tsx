@@ -620,6 +620,25 @@ export default function Home() {
           <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)} data-tour="sidebar-toggle" className={`size-8 cursor-pointer shrink-0 transition-all duration-200 ${sidebarOpen ? 'text-[#888888] hover:text-[#333333] hover:bg-gray-100 dark:hover:bg-gray-800' : 'text-[#3F51B5] hover:text-[#3949AB] hover:bg-[#3F51B5]/10 dark:hover:bg-[#3F51B5]/20'}`} title="Toggle sidebar (Ctrl+B)"><Menu className={`size-[18px] transition-transform duration-200 ${sidebarOpen ? '' : 'rotate-90'}`} /></Button>
           <Separator orientation="vertical" className="h-5" />
           <div className="flex items-center gap-2"><Image src="/agdi-logo-new.webp" alt="AgDi Automation" width={70} height={28} className="object-contain" /><span className="text-[#888888] dark:text-gray-500 text-[13px]">Automation Runner</span></div>
+          {selectedModule !== 'dashboard' && (() => {
+            let modLabel = ''
+            for (const m of sidebarModules) {
+              if (m.id === selectedModule) { modLabel = m.label; break }
+              for (const c of m.children ?? []) {
+                if (c.id === selectedModule) { modLabel = c.label; break }
+                for (const g of c.children ?? []) { if (g.id === selectedModule) { modLabel = g.label; break } }
+              }
+            }
+            const TAB_LABELS: Record<string, string> = { 'test-runner': 'UI Tests', 'live-execution': 'Live Execution', 'results': 'Results', 'screenshots': 'Screenshots', 'schedule': 'Schedule', 'batch-create': 'Batch Create', 'concurrency': 'Concurrency', 'api-tests': 'API Tests' }
+            return (
+              <div className="hidden md:flex items-center gap-1 text-[12px]">
+                <Separator orientation="vertical" className="h-4 mx-1" />
+                <span className="text-[#888888] dark:text-gray-500">{modLabel || selectedModule}</span>
+                <ChevronRight className="size-3 text-[#bbb] dark:text-gray-600" />
+                <span className="text-[#333333] dark:text-gray-200 font-medium">{TAB_LABELS[activeTab] ?? activeTab}</span>
+              </div>
+            )
+          })()}
           <div className="hidden md:flex items-center ml-4 bg-[#F5F5F5] dark:bg-gray-800 rounded-md px-3 py-1.5 gap-2 w-64"><Search className="size-3.5 text-[#888888] dark:text-gray-400" /><input type="text" placeholder="Search modules..." className="bg-transparent text-[13px] text-[#333333] dark:text-gray-200 placeholder:text-[#888888] dark:placeholder:text-gray-500 outline-none flex-1" onFocus={() => d.setQuickSwitcherOpen(true)} readOnly /></div>
         </div>
         <div className="flex items-center gap-1.5">

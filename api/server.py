@@ -613,6 +613,9 @@ def items_with_cqp_endpoint(request: ItemsWithCqpRequest):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"ERP request failed: {e}")
 
+    if existing is None:
+        raise HTTPException(status_code=502, detail="ERP returned no data for Commodity Quality Parameter — token may be invalid or expired")
+
     purchase_id = resolve_purchase_transaction_type_id(client)
 
     rows = existing.get("screenmatlistingdata_set") or existing.get("results") or []

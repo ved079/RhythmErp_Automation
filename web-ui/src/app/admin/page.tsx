@@ -2,7 +2,7 @@
 
 import React from 'react'
 import Image from 'next/image'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { useAdminState } from '@/hooks/admin/useAdminState'
 import { SystemHealthSection } from '@/components/admin/sections/SystemHealthSection'
@@ -31,16 +31,29 @@ import {
 import {
   LayoutDashboard, ClipboardList, FolderTree, EyeOff, Inbox,
   Globe, Settings, Users as UsersIcon, Activity, FileText,
-  ChevronLeft, LogOut, Menu, Sun, Moon, Home, Shield,
+  ChevronLeft, LogOut, Menu, Sun, Moon, Home, Shield, ChevronRight,
 } from 'lucide-react'
 import LoadingCard from '@/components/ui/LoadingCard'
 
 export default function AdminPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { theme, setTheme } = useTheme()
   const isDark = theme === 'dark'
 
   const s = useAdminState()
+
+  // Sync section from URL on mount — must be before early returns
+  React.useEffect(() => {
+    const section = searchParams.get('section')
+    if (section) s.setActiveSection(section)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update URL when section changes — must be before early returns
+  const handleSectionChange = React.useCallback((id: string) => {
+    s.setActiveSection(id)
+    router.replace(`/admin?section=${id}`, { scroll: false })
+  }, [s, router])
 
   if (s.authLoading) {
     return <LoadingCard />
@@ -77,6 +90,14 @@ export default function AdminPage() {
             <span className="text-[#888888] dark:text-gray-500 text-[13px] font-['Poppins'] ml-1">Admin Panel</span>
           </div>
           <Badge className="bg-[#6777EF] text-white text-[10px] font-semibold px-1.5 py-0 ml-1 border-0">ADMIN</Badge>
+          <Separator orientation="vertical" className="h-4 mx-2" />
+          <div className="flex items-center gap-1 text-[12px] font-['Poppins']">
+            <span className="text-[#888888] dark:text-gray-500">Admin</span>
+            <ChevronRight className="size-3 text-[#bbb] dark:text-gray-600" />
+            <span className="text-[#333333] dark:text-gray-200 font-medium">
+              {sidebarItems.find(i => i.id === s.activeSection)?.label ?? 'Overview'}
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => setTheme(isDark ? 'light' : 'dark')}
@@ -127,7 +148,7 @@ export default function AdminPage() {
                   const isActive = s.activeSection === item.id
                   const badgeCount = item.id === 'bug-reports' ? s.adminUnreadChats : 0
                   return (
-                    <button key={item.id} onClick={() => s.setActiveSection(item.id)}
+                    <button key={item.id} onClick={() => handleSectionChange(item.id)}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-['Poppins'] transition-all duration-150 cursor-pointer mb-0.5 ${
                         isActive
                           ? 'bg-gradient-to-r from-[#DFF3E3] via-[#C8E6C9] to-[#B7E4C7] dark:bg-[#1B4332]/25 text-[#1B4332] dark:text-green-300 font-semibold shadow-[rgba(34,197,94,0.25)_2px_0px_4px_inset,rgba(34,197,94,0.15)_0px_2px_6px] rounded-[5px]'
