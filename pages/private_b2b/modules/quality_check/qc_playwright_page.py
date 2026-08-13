@@ -360,6 +360,11 @@ class QCPlaywrightPage(BasePlaywrightPage):
             else:
                 print(f"  [PRE-SUBMIT] row {i} Rate: qc_deduction_amount={rd['qc_deduction_amount']} (auto-calc)")
 
+        ans = input("\n[QC] Ready to submit — inspect the form. Submit? (y/n): ").strip().lower()
+        if ans != "y":
+            print("  [QC] Skipped by user.")
+            return None, row_data_list
+
         ref_no = self.submit()
         return ref_no, row_data_list
 
