@@ -1,51 +1,107 @@
+"""
+create_companies.py
+-------------------
+Logs into the local ERP via Playwright, grabs the Bearer token automatically,
+then uses the API to batch-create Company Onboarding records.
+"""
+
+from playwright.sync_api import sync_playwright
 from pages.company_onboarding.data.company_onboarding_data import generate_batch_payloads
 from common.erp_api_client import RhythmERPAPIClient
 
-print("\nSelect environment:")
-print("  1. Deployed  (https://rhythmerp.algorhythms.in)")
-print("  2. Local dev (http://localhost:8000)")
-print("  3. Custom URL")
-env_choice = input("Enter 1 / 2 / 3: ").strip()
+LOGIN_URL = 'http://localhost:4200'
+CORE_URL  = 'http://localhost:8001'
 
-if env_choice == '2':
-    base_url = 'http://localhost:8001'
-    api_endpoint = '/core/dynamic-screen-wrapper/'
-elif env_choice == '3':
-    base_url = input("Enter base URL: ").strip().rstrip('/')
-    api_endpoint = '/core/dynamic-screen-wrapper/'
-else:
-    base_url = 'https://rhythmerp.algorhythms.in'
-    api_endpoint = '/core/dynamic-screen-wrapper/'
+print("\n=== Company Onboarding Batch Creator ===\n")
 
-print(f"\nUsing: {base_url}{api_endpoint}\n")
+is_multi    = input("Multi-tenant login? (y/n): ").strip().lower() == 'y'
+email       = input("Email: ").strip()
+password    = input("Password: ").strip()
+tenant_name = input("Tenant name (as in dropdown): ").strip() if is_multi else None
+tenant_id   = input("Tenant ID: ").strip()
+count       = int(input("How many companies to create? ").strip())
 
-token = input("Paste your ERP token: ").strip()
-tenant_id = input("Paste your tenant ID: ").strip()
-count = int(input("How many companies to create? ").strip())
+print("\nOpening browser and logging in...")
 
-client = RhythmERPAPIClient(username='', password='', tenant_id=tenant_id)
-client.BASE_URL = base_url
-client.API_ENDPOINT = api_endpoint
-client.login_from_browser(token=token, tenant_id=tenant_id)
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=False, slow_mo=200)
+    page = browser.new_page()
 
-print("\nDiscovering Company Onboarding structure from your environment...")
-structure = client.discover_structure('Company Onboarding')
-if not structure:
-    print("ERROR: Could not find any existing Company Onboarding records.")
-    print("Please create at least one company manually in your ERP first, then re-run.")
+    page.goto(f"{LOGIN_URL}/#/authentication/signin")
+    page.wait_for_selector("input[name='Username']", timeout=15000)
+    page.fill("input[name='Username']", email)
+    page.fill("input[name='Password']", password)
+    page.locator("button[type='submit']").click()
+    page.wait_for_timeout(2000)
+
+    if is_multi and tenant_name:
+        page.wait_for_selector("mat-select", timeout=15000)
+        page.locator("mat-select").first.click(force=True)
+        page.wait_for_selector(".dd-search-input", timeout=10000)
+        page.locator(".dd-search-input").fill(tenant_name)
+        page.wait_for_timeout(800)
+        for opt in page.locator(".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text").all():
+            if opt.inner_text().strip() == tenant_name:
+                opt.click(force=True)
+                break
+        try:
+            page.wait_for_selector(".mat-mdc-select-panel", state="hidden", timeout=3000)
+        except Exception:
+            page.keyboard.press("Escape")
+        page.wait_for_timeout(300)
+
+    page.locator("button[type='submit']").click(force=True)
+    page.wait_for_url(
+        lambda url: "signin" not in url.lower() and "authentication" not in url.lower(),
+        timeout=20000,
+    )
+    print("  Logged in successfully.")
+
+    print("  Capturing access token from network...")
+    captured = {}
+
+    def handle_request(request):
+        auth = request.headers.get('authorization', '')
+        if auth.startswith('Bearer ') and 'token' not in captured:
+            captured['token'] = auth.replace('Bearer ', '')
+
+    page.on('request', handle_request)
+    page.wait_for_timeout(1500)
+    page.reload()
+    page.wait_for_timeout(4000)
+    token = captured.get('token')
+
+    browser.close()
+
+if not token:
+    print("\nERROR: Could not capture token. Try again.")
     exit(1)
 
-print(f"  Found: {structure.get('name')} (id={structure.get('id')}, parent_id={structure.get('parent_id')})")
+print(f"  Token captured: {token[:30]}...")
 
-enriched = [structure]
-payloads = generate_batch_payloads(count=count, existing_entries=enriched)
+client = RhythmERPAPIClient(username='', password='', tenant_id=tenant_id)
+client.BASE_URL = CORE_URL
+client.login_from_browser(token=token, tenant_id=tenant_id)
 
-print(f"\nCreating {count} companies...\n")
+print("\nDiscovering Company Onboarding structure...")
+structure = client.discover_structure('Company Onboarding')
+if not structure:
+    print("\nERROR: No existing Company Onboarding records found.")
+    print("Create at least one company manually in your ERP first, then re-run.")
+    exit(1)
+
+print(f"  Found: {structure.get('name')} (parent_id={structure.get('parent_id')})\n")
+
+payloads = generate_batch_payloads(count=count, existing_entries=[structure])
+
+print(f"Creating {count} companies...\n")
 for p in payloads:
     result = client.create_entry(p)
     if result:
         print(f"  CREATED #{result.get('id')} - {p['name']}")
     else:
         resp = getattr(client, '_last_raw_response', None)
-        err = resp.text[:200] if resp else 'no response'
-        print(f"  FAILED - {p['name']}: {err}")
+        if resp is not None:
+            print(f"  FAILED  - {p['name']}: HTTP {resp.status_code} — {resp.text[:500]}")
+        else:
+            print(f"  FAILED  - {p['name']}: connection error (no response)")
