@@ -58,6 +58,17 @@ def _rand_tenant_code() -> int:
     return random.randint(10000000, 99999999)
 
 
+def enrich_existing_entries(client, existing_entries: list) -> list:
+    """Fetch full detail for the first listing row so sniffing can read nested children."""
+    if not existing_entries:
+        return existing_entries
+    first = existing_entries[0]
+    if "children" in first:
+        return existing_entries  # already enriched
+    detail = client.get_entry("Company Onboarding", first["id"])
+    return [detail] + list(existing_entries[1:]) if detail else existing_entries
+
+
 def _sniff_from_existing(existing_entries: list) -> dict:
     """Extract tenant-specific FK IDs from the first existing company record."""
     sniffed = {}
