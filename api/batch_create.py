@@ -44,6 +44,9 @@ MODULE_IMPORT_PATHS = {
         "uom_conversion": "pages.common_settings.modules.uom_conversion.data.uom_conversion_data",
         "vehicle_master": "pages.common_settings.modules.vehicle_master.data.vehicle_master_data",
     },
+    "company_onboarding": {
+        "company_onboarding": "pages.company_onboarding.data.company_onboarding_data",
+    },
     "commodity_settings": {
         "item_category": "pages.commodity_settings.modules.item_category.data.item_category_data",
         "item_group": "pages.commodity_settings.modules.item_group.data.item_group_data",
@@ -102,6 +105,7 @@ _SCREEN_NAME_MAP: dict[str, str] = {
     "quality_parameter_master": "Quality Parameter Master",
     "commodity_quality_parameter": "Commodity Quality Parameter",
     "commodity_base_rate": "Commodity Base Rate",
+    "company_onboarding": "Company Onboarding",
 }
 
 

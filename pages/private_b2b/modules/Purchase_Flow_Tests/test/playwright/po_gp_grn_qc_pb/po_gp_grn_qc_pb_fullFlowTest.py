@@ -1407,6 +1407,232 @@ class TestQCWeightToggle:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# TestGRNQuantityExceedsPOError
+# ══════════════════════════════════════════════════════════════════════════════
+
+_EXCEED_PO_QTY  = 1000   # PO qty = GP qty (no mismatch at GP level)
+_EXCEED_GP_QTY  = 1000
+_EXCEED_GP_BAGS = 2
+_EXCEED_GRN_QTY = 1001   # one over PO balance → triggers backend rejection
+
+_EXCEED_ERROR_TEXT = "GRN quantity should be less than PO quantity. Please Update PO quantity!"
+
+
+@pytest.mark.integration
+class TestGRNQuantityExceedsPOError:
+    """PO=1000, GP=1000 (matched), but GRN accepted qty=1001 → toast error.
+
+    The ERP rejects a GRN whose accepted quantity exceeds the linked PO's
+    alternate balance, even when GP qty matches PO qty perfectly.
+    Expected toast (css: div.swal2-popup.swal2-toast):
+        "GRN quantity should be less than PO quantity. Please Update PO quantity!"
+    """
+
+    def test_step1_create_po(self, po_page, integration_state):
+        total, row_dicts, supplier_name, location, po_ref_no = \
+            po_page.create_record_for_integration(item_configs=[(_EXCEED_PO_QTY, 0, 0)])
+
+        assert po_ref_no and len(row_dicts) == 1
+        integration_state.update({
+            "po_ref_no":     po_ref_no,
+            "supplier_name": supplier_name,
+            "location":      location,
+            "item_names":    [row_dicts[0]["item_name"]],
+        })
+        print(f"\n[PO] ref={po_ref_no}  qty={_EXCEED_PO_QTY}  item={row_dicts[0]['item_name']}")
+
+    def test_step2_create_gp(self, gp_page, integration_state):
+        if not integration_state.get("po_ref_no"):
+            pytest.skip("PO not created in step 1")
+
+        gp = GPPlaywrightPageItemCategory(gp_page.page)
+        items = [(integration_state["item_names"][0], _EXCEED_GP_BAGS, _EXCEED_GP_QTY)]
+        gp.fill_items_form(
+            supplier_name=integration_state["supplier_name"],
+            items=items,
+            location=integration_state["location"],
+            type_of_sale="B2B",
+            po_ref_no=integration_state["po_ref_no"],
+        )
+        gp_ref_no, _ = gp.submit_items_form(items)
+        assert gp_ref_no
+        integration_state["gp_ref_no"] = gp_ref_no
+        print(f"\n[GP] ref={gp_ref_no}  qty={_EXCEED_GP_QTY}  (matches PO qty={_EXCEED_PO_QTY})")
+
+    def test_step3_grn_exceeds_po_qty_error(self, grn_page, integration_state):
+        """Submit GRN with accepted qty=1001 > PO balance=1000 — assert toast error fires."""
+        if not integration_state.get("gp_ref_no"):
+            pytest.skip("GP not created in step 2")
+
+        page = grn_page.page
+        grn_page.open_add_form()
+        grn_page.select_supplier(integration_state["supplier_name"])
+        grn_page.select_gate_pass(integration_state["gp_ref_no"])
+        grn_page.fill_conversion_rate("1")
+        page.wait_for_timeout(800)
+
+        # Fill received qty ONE over the PO balance to trigger the error
+        grn_page.fill_received_qty_nth(0, _EXCEED_GRN_QTY)
+        page.wait_for_timeout(300)
+
+        page.locator(grn_page.SUBMIT_BTN).click()
+
+        toast = page.locator("div.swal2-popup.swal2-toast")
+        toast.wait_for(state="visible", timeout=10000)
+        toast_text = toast.inner_text().strip()
+
+        print(f"\n[GRN] Toast received: {toast_text!r}")
+        assert _EXCEED_ERROR_TEXT in toast_text, (
+            f"Expected toast to contain:\n  {_EXCEED_ERROR_TEXT!r}\n"
+            f"Got:\n  {toast_text!r}"
+        )
+        print(
+            f"  [GRN] Error toast ✓ — ERP correctly rejected "
+            f"accepted qty={_EXCEED_GRN_QTY} > PO balance={_EXCEED_PO_QTY}"
+        )
+
+        # Dismiss toast and cancel form
+        try:
+            page.wait_for_selector("div.swal2-popup.swal2-toast", state="hidden", timeout=6000)
+        except Exception:
+            pass
+        page.locator(grn_page.CANCEL_BTN).click(force=True)
+        page.wait_for_timeout(500)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TestGRNPOBalanceQuantity
+# ══════════════════════════════════════════════════════════════════════════════
+
+_BAL_PO_QTY  = 100   # total PO quantity
+_BAL_GP1_QTY = 60    # first GP takes 60
+_BAL_GP2_QTY = 40    # second GP takes remaining 40
+_BAL_GP_BAGS = 2
+
+
+@pytest.mark.integration
+class TestGRNPOBalanceQuantity:
+    """1-item PO → 2 GPs → assert PO Quantity and PO Balance Quantity in each GRN.
+
+    GRN field logic (from purchase_chain.py):
+        PO Quantity       = full PO line qty (constant across all GRNs)
+        PO Balance Qty    = PO Quantity − total already received in prior GRNs
+
+    GRN1: PO Qty = _BAL_PO_QTY,  PO Balance Qty = _BAL_PO_QTY        (nothing received yet)
+    GRN2: PO Qty = _BAL_PO_QTY,  PO Balance Qty = _BAL_PO_QTY − _BAL_GP1_QTY
+    """
+
+    def test_step1_create_po(self, po_page, integration_state):
+        total, row_dicts, supplier_name, location, po_ref_no = \
+            po_page.create_record_for_integration(item_configs=[(_BAL_PO_QTY, 0, 0)])
+
+        assert po_ref_no and len(row_dicts) == 1
+        integration_state.update({
+            "po_ref_no":     po_ref_no,
+            "supplier_name": supplier_name,
+            "location":      location,
+            "item_names":    [row_dicts[0]["item_name"]],
+        })
+        print(f"\n[PO] ref={po_ref_no}  qty={_BAL_PO_QTY}  item={row_dicts[0]['item_name']}")
+
+    def test_step2_create_gp1(self, gp_page, integration_state):
+        if not integration_state.get("po_ref_no"):
+            pytest.skip("PO not created in step 1")
+
+        gp = GPPlaywrightPageItemCategory(gp_page.page)
+        items = [(integration_state["item_names"][0], _BAL_GP_BAGS, _BAL_GP1_QTY)]
+        gp.fill_items_form(
+            supplier_name=integration_state["supplier_name"],
+            items=items,
+            location=integration_state["location"],
+            type_of_sale="B2B",
+            po_ref_no=integration_state["po_ref_no"],
+        )
+        gp_ref_no, _ = gp.submit_items_form(items)
+        assert gp_ref_no
+        integration_state["gp1_ref_no"] = gp_ref_no
+        print(f"\n[GP1] ref={gp_ref_no}  qty={_BAL_GP1_QTY}")
+
+    def test_step3_grn1_po_balance_assert(self, grn_page, integration_state):
+        """GRN1: PO Qty = full PO qty, PO Balance Qty = full PO qty (nothing received yet)."""
+        if not integration_state.get("gp1_ref_no"):
+            pytest.skip("GP1 not created in step 2")
+
+        grn_page.open_add_form()
+        grn_page.select_supplier(integration_state["supplier_name"])
+        grn_page.select_gate_pass(integration_state["gp1_ref_no"])
+        grn_page.fill_conversion_rate("1")
+        grn_page.page.wait_for_timeout(800)
+
+        po_qty     = grn_page.read_po_qty_nth(0)
+        bal_qty    = grn_page.read_po_balance_qty_nth(0)
+
+        print(f"\n[GRN1] PO Quantity={po_qty}  PO Balance Quantity={bal_qty}")
+        assert abs(po_qty - _BAL_PO_QTY) < 0.5, (
+            f"GRN1 PO Quantity: expected {_BAL_PO_QTY}, got {po_qty}"
+        )
+        assert abs(bal_qty - _BAL_PO_QTY) < 0.5, (
+            f"GRN1 PO Balance Quantity: expected {_BAL_PO_QTY} (nothing received yet), got {bal_qty}"
+        )
+        print(f"  [GRN1] PO Qty ✓ ({po_qty})  PO Balance Qty ✓ ({bal_qty})")
+
+        grn_page.fill_accepted_qty_nth(0, _BAL_GP1_QTY)
+        grn_ref_no = grn_page.submit()
+        assert grn_ref_no
+        integration_state["grn1_ref_no"] = grn_ref_no
+        print(f"\n[GRN1] ref={grn_ref_no}")
+
+    def test_step4_create_gp2(self, gp_page, integration_state):
+        if not integration_state.get("grn1_ref_no"):
+            pytest.skip("GRN1 not created in step 3")
+
+        gp = GPPlaywrightPageItemCategory(gp_page.page)
+        items = [(integration_state["item_names"][0], _BAL_GP_BAGS, _BAL_GP2_QTY)]
+        gp.fill_items_form(
+            supplier_name=integration_state["supplier_name"],
+            items=items,
+            location=integration_state["location"],
+            type_of_sale="B2B",
+            po_ref_no=integration_state["po_ref_no"],
+        )
+        gp_ref_no, _ = gp.submit_items_form(items)
+        assert gp_ref_no
+        integration_state["gp2_ref_no"] = gp_ref_no
+        print(f"\n[GP2] ref={gp_ref_no}  qty={_BAL_GP2_QTY}")
+
+    def test_step5_grn2_po_balance_assert(self, grn_page, integration_state):
+        """GRN2: PO Qty = full PO qty, PO Balance Qty = PO qty − GP1 qty already received."""
+        if not integration_state.get("gp2_ref_no"):
+            pytest.skip("GP2 not created in step 4")
+
+        grn_page.open_add_form()
+        grn_page.select_supplier(integration_state["supplier_name"])
+        grn_page.select_gate_pass(integration_state["gp2_ref_no"])
+        grn_page.fill_conversion_rate("1")
+        grn_page.page.wait_for_timeout(800)
+
+        po_qty  = grn_page.read_po_qty_nth(0)
+        bal_qty = grn_page.read_po_balance_qty_nth(0)
+        expected_balance = _BAL_PO_QTY - _BAL_GP1_QTY  # 100 - 60 = 40
+
+        print(f"\n[GRN2] PO Quantity={po_qty}  PO Balance Quantity={bal_qty}  expected_balance={expected_balance}")
+        assert abs(po_qty - _BAL_PO_QTY) < 0.5, (
+            f"GRN2 PO Quantity: expected {_BAL_PO_QTY}, got {po_qty}"
+        )
+        assert abs(bal_qty - expected_balance) < 0.5, (
+            f"GRN2 PO Balance Quantity: expected {expected_balance} "
+            f"({_BAL_PO_QTY} − {_BAL_GP1_QTY} already received), got {bal_qty}"
+        )
+        print(f"  [GRN2] PO Qty ✓ ({po_qty})  PO Balance Qty ✓ ({bal_qty} = {_BAL_PO_QTY}−{_BAL_GP1_QTY})")
+
+        grn_page.fill_accepted_qty_nth(0, _BAL_GP2_QTY)
+        grn_ref_no = grn_page.submit()
+        assert grn_ref_no
+        integration_state["grn2_ref_no"] = grn_ref_no
+        print(f"\n[GRN2] ref={grn_ref_no}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # TestCalculationAssertions
 # ══════════════════════════════════════════════════════════════════════════════
 

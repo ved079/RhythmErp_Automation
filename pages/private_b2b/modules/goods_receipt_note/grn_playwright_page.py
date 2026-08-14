@@ -13,10 +13,12 @@ class GRNPlaywrightPage(BasePlaywrightPage):
     PO_REF        = "xpath=//mat-select[.//span[contains(@class,'mat-mdc-select-placeholder') and contains(.,'Select purchase order')]]"
 
     # Item grid — all readonly except Accepted Quantity
-    GATE_PASS_QTY_INPUT = "xpath=//mat-form-field[.//mat-label[contains(.,'Gate Pass Quantity')]]//input"
-    PO_QTY_INPUT        = "xpath=//mat-form-field[.//mat-label[contains(.,'PO Quantity')]]//input"
-    RATE_INPUT          = "xpath=//mat-form-field[.//input[@placeholder='Rate']]//input"
-    ACCEPTED_QTY_INPUT  = "xpath=//mat-form-field[.//input[@placeholder='Accepted Quantity']]//input"
+    GATE_PASS_QTY_INPUT  = "xpath=//mat-form-field[.//mat-label[contains(.,'Gate Pass Quantity')]]//input"
+    PO_QTY_INPUT         = "xpath=//input[@placeholder='PO Quantity']"
+    PO_BALANCE_QTY_INPUT = "xpath=//input[@placeholder='PO Balance Quantity']"
+    RECEIVED_QTY_INPUT   = "xpath=//input[@placeholder='Received Quantity']"
+    RATE_INPUT           = "xpath=//mat-form-field[.//input[@placeholder='Rate']]//input"
+    ACCEPTED_QTY_INPUT   = "xpath=//mat-form-field[.//input[@placeholder='Accepted Quantity']]//input"
 
     # Header field — required on Agristack tenant
     CONVERSION_RATE_INPUT = "xpath=//input[@placeholder='Conversion Rate']"
@@ -141,8 +143,10 @@ class GRNPlaywrightPage(BasePlaywrightPage):
         return self._read_input_nth(self.GATE_PASS_QTY_INPUT, row_index)
 
     def read_po_qty_nth(self, row_index=0):
-        """Read remaining PO balance for this item at time of GRN creation."""
         return self._read_input_nth(self.PO_QTY_INPUT, row_index)
+
+    def read_po_balance_qty_nth(self, row_index=0):
+        return self._read_input_nth(self.PO_BALANCE_QTY_INPUT, row_index)
 
     def read_rate_nth(self, row_index=0):
         return self._read_input_nth(self.RATE_INPUT, row_index)
@@ -199,6 +203,25 @@ class GRNPlaywrightPage(BasePlaywrightPage):
 
     def read_accepted_qty_nth(self, row_index=0):
         return self._read_input_nth(self.ACCEPTED_QTY_INPUT, row_index)
+
+    def fill_received_qty_nth(self, row_index, qty):
+        """Fill the Received Quantity field for a GRN row."""
+        self.page.evaluate("""
+            ([xpath, idx, val]) => {
+                const result = document.evaluate(xpath, document, null,
+                    XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                const el = result.snapshotItem(idx);
+                if (!el) return;
+                el.focus();
+                const setter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value').set;
+                setter.call(el, val);
+                el.dispatchEvent(new Event('input', {bubbles: true}));
+                el.dispatchEvent(new Event('change', {bubbles: true}));
+                el.blur();
+            }
+        """, [self.RECEIVED_QTY_INPUT.replace("xpath=", ""), row_index, str(qty)])
+        self.page.wait_for_timeout(400)
 
     def fill_conversion_rate(self, rate="1"):
         locator = self.page.locator(self.CONVERSION_RATE_INPUT)

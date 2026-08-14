@@ -29,7 +29,7 @@ export const MODULE_TO_BATCH: Record<string, BatchTarget | null> = {
   'miscellaneous-documents': { module: 'registration', subModule: 'miscellaneous_documents', label: 'Document → Miscellaneous Documents' },
   'register-of-loan':       { module: 'registration', subModule: 'register_of_loan', label: 'Document → Register of Loan' },
   'register-charges':       { module: 'registration', subModule: 'register_charges', label: 'Document → Register Charges' },
-  'company-onboarding': { module: 'company_onboarding', subModule: 'company', label: 'Company Onboarding' },
+  'company-onboarding': { module: 'company_onboarding', subModule: 'company_onboarding', label: 'Company Onboarding' },
   uom:            { module: 'common_settings', subModule: 'uom', label: 'Common Settings → UOM' },
   'uom-conversion':  { module: 'common_settings', subModule: 'uom_conversion', label: 'Common Settings → UOM Conversion' },
   designation:    { module: 'common_settings', subModule: 'designation', label: 'Common Settings → Designation' },
