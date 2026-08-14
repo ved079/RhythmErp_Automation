@@ -2,36 +2,31 @@
 
 import random
 import string
-import time
 
-# Fixed FK IDs (from confirmed sample record)
-_PARENT_ID         = 795
-_USER_TYPE_ID      = 4
-_LEVEL             = 2
-_NATIVE_LANGUAGE   = 1959
-_OWNERSHIP_STATUS  = 1263
-_BASE_CURRENCY     = 8
-_ADDRESS_TYPE_REGISTERED = 1649
+# Constants confirmed identical across all tenants sampled
+_OWNERSHIP_STATUS           = 1263
+_BASE_CURRENCY              = 8
+_ADDRESS_TYPE_REGISTERED    = 1649
 _ADDRESS_TYPE_COMMUNICATION = 1650
-_PINCODE           = 18513
-_TALUKA            = 5322
-_DISTRICT          = 276
-_STATE             = 111
-_COUNTRY           = 8
-
-_STATES = [
-    "Maharashtra", "Karnataka", "Gujarat", "Rajasthan", "Tamil Nadu",
-    "Uttar Pradesh", "Madhya Pradesh", "Telangana", "Kerala", "Punjab",
-]
+_STATE                      = 111
+_COUNTRY                    = 8
+_DISTRICT                   = 276
+_TALUKA                     = 5318  # safe default; sniffed from existing if available
+_USER_TYPE_ID               = 4
+_LEVEL                      = 2
 
 _SUFFIXES = [
     "Traders", "Enterprises", "Industries", "Agro", "Foods", "Seeds",
     "Organics", "Commodities", "Corp", "Solutions",
 ]
 
+_PREFIXES = [
+    "Shree", "Sri", "Royal", "Golden", "Green", "Prime", "Pioneer",
+    "National", "Global", "United",
+]
+
 
 def _rand_pan() -> str:
-    """Generate a random PAN-format string (5 alpha + 4 digit + 1 alpha)."""
     return (
         "".join(random.choices(string.ascii_uppercase, k=5))
         + "".join(random.choices(string.digits, k=4))
@@ -40,7 +35,6 @@ def _rand_pan() -> str:
 
 
 def _rand_cin() -> str:
-    """Generate a CIN-format string: U + 5 digits + 2 alpha + 4 digits + PTC + 6 digits."""
     return (
         "U"
         + "".join(random.choices(string.digits, k=5))
@@ -51,9 +45,9 @@ def _rand_cin() -> str:
     )
 
 
-def _rand_email(name: str) -> str:
-    slug = name.lower().replace(" ", "").replace("'", "")[:20]
-    return f"{slug}{random.randint(100, 9999)}@example.com"
+def _rand_email(slug: str) -> str:
+    clean = slug.lower().replace(" ", "").replace("'", "")[:20]
+    return f"{clean}{random.randint(100, 9999)}@example.com"
 
 
 def _rand_phone() -> int:
@@ -64,7 +58,53 @@ def _rand_tenant_code() -> int:
     return random.randint(10000000, 99999999)
 
 
-def generate_batch_payloads(count: int = 10, existing_entries=None, config=None) -> list[dict]:
+def _sniff_from_existing(existing_entries: list) -> dict:
+    """Extract tenant-specific FK IDs from the first existing company record."""
+    sniffed = {}
+    for entry in existing_entries:
+        children = entry.get("children", [])
+        for child in children:
+            if child.get("stepper_name") == "Company Details":
+                if child.get("native_language"):
+                    sniffed["native_language"] = child["native_language"]
+                break
+            # Flat structure (listing row)
+            if "native_language" in entry:
+                sniffed["native_language"] = entry["native_language"]
+
+        # parent_id from top-level
+        if entry.get("parent_id"):
+            sniffed["parent_id"] = entry["parent_id"]
+
+        # taluka from address details
+        for child in children:
+            if child.get("stepper_name") == "Address Details":
+                for addr in child.get("details", []):
+                    if addr.get("taluka"):
+                        sniffed["taluka"] = addr["taluka"]
+                        break
+
+        if len(sniffed) >= 3:
+            break
+
+    return sniffed
+
+
+def generate_batch_payloads(
+    count: int = 10,
+    existing_entries=None,
+    config=None,
+) -> list[dict]:
+    config = config or {}
+
+    # Sniff tenant-specific IDs from existing records
+    sniffed = _sniff_from_existing(existing_entries or [])
+
+    # parent_id: config override → sniffed → no default (must be resolved)
+    parent_id = config.get("parent_id") or sniffed.get("parent_id")
+    native_language = config.get("native_language") or sniffed.get("native_language") or 1
+    taluka = config.get("taluka") or sniffed.get("taluka") or _TALUKA
+
     existing_pans = set()
     if existing_entries:
         for e in existing_entries:
@@ -74,12 +114,9 @@ def generate_batch_payloads(count: int = 10, existing_entries=None, config=None)
 
     payloads = []
     for _ in range(count):
-        first = random.choice(_STATES).split()[0]
-        suffix = random.choice(_SUFFIXES)
-        short_name = f"{first} {suffix}"
+        short_name = f"{random.choice(_PREFIXES)} {random.choice(_SUFFIXES)}"
         company_name = f"Company {short_name}"
 
-        # Unique PAN
         for _ in range(20):
             pan = _rand_pan()
             if pan not in existing_pans:
@@ -93,8 +130,8 @@ def generate_batch_payloads(count: int = 10, existing_entries=None, config=None)
             "attribute_name": "Company Onboarding",
             "name": company_name,
             "user_type_id": _USER_TYPE_ID,
-            "parent_id": _PARENT_ID,
-            "tenant_linked": [_PARENT_ID],
+            "parent_id": parent_id,
+            "tenant_linked": [parent_id] if parent_id else [],
             "level": _LEVEL,
             "is_parent": False,
             "children": [
@@ -103,7 +140,7 @@ def generate_batch_payloads(count: int = 10, existing_entries=None, config=None)
                     "is_stepper": True,
                     "details": [],
                     "children": [],
-                    "native_language": _NATIVE_LANGUAGE,
+                    "native_language": native_language,
                     "company_background": "bg",
                     "pan_no": pan,
                     "tan_no": None,
@@ -137,27 +174,27 @@ def generate_batch_payloads(count: int = 10, existing_entries=None, config=None)
                     "is_stepper": True,
                     "details": [
                         {
-                            "pincode_ref_id_id": _PINCODE,
+                            "pincode_ref_id_id": None,
                             "address_type_ref_id": _ADDRESS_TYPE_REGISTERED,
                             "address": f"{random.randint(1, 999)} Main Road",
-                            "taluka": _TALUKA,
+                            "taluka": taluka,
                             "district": _DISTRICT,
                             "state": _STATE,
                             "country": _COUNTRY,
-                            "same_as_above": True,
+                            "same_as_above": False,
                             "longitude": None,
                             "latitude": None,
                             "details": [],
                         },
                         {
-                            "pincode_ref_id_id": _PINCODE,
+                            "pincode_ref_id_id": None,
                             "address_type_ref_id": _ADDRESS_TYPE_COMMUNICATION,
                             "address": f"{random.randint(1, 999)} Main Road",
-                            "taluka": _TALUKA,
+                            "taluka": taluka,
                             "district": _DISTRICT,
                             "state": _STATE,
                             "country": _COUNTRY,
-                            "same_as_above": True,
+                            "same_as_above": False,
                             "longitude": None,
                             "latitude": None,
                             "details": [],
@@ -180,11 +217,10 @@ def generate_batch_payloads(count: int = 10, existing_entries=None, config=None)
             ],
         }
 
-        # Conflict override (concurrency mode)
-        override = (config or {}).get("_conflict_override", {})
+        # Conflict mode: override specific fields on Company Details stepper
+        override = config.get("_conflict_override", {})
         if override:
-            company_details = payload["children"][0]
-            company_details.update(override)
+            payload["children"][0].update(override)
 
         payloads.append(payload)
 
