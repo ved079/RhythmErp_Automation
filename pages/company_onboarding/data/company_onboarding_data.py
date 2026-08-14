@@ -74,28 +74,29 @@ def _sniff_from_existing(existing_entries: list) -> dict:
     sniffed = {}
     for entry in existing_entries:
         children = entry.get("children", [])
-        for child in children:
-            if child.get("stepper_name") == "Company Details":
-                if child.get("native_language"):
-                    sniffed["native_language"] = child["native_language"]
-                break
-            # Flat structure (listing row)
-            if "native_language" in entry:
-                sniffed["native_language"] = entry["native_language"]
 
         # parent_id from top-level
         if entry.get("parent_id"):
             sniffed["parent_id"] = entry["parent_id"]
 
-        # taluka from address details
         for child in children:
+            if child.get("stepper_name") == "Company Details":
+                if child.get("native_language"):
+                    sniffed["native_language"] = child["native_language"]
+
             if child.get("stepper_name") == "Address Details":
                 for addr in child.get("details", []):
                     if addr.get("taluka"):
                         sniffed["taluka"] = addr["taluka"]
-                        break
+                    if addr.get("district"):
+                        sniffed["district"] = addr["district"]
+                    if addr.get("state"):
+                        sniffed["state"] = addr["state"]
+                    if addr.get("pincode_ref_id_id"):
+                        sniffed["pincode"] = addr["pincode_ref_id_id"]
+                    break
 
-        if len(sniffed) >= 3:
+        if len(sniffed) >= 5:
             break
 
     return sniffed
@@ -114,7 +115,10 @@ def generate_batch_payloads(
     # parent_id: config override → sniffed → no default (must be resolved)
     parent_id = config.get("parent_id") or sniffed.get("parent_id")
     native_language = config.get("native_language") or sniffed.get("native_language") or 1
-    taluka = config.get("taluka") or sniffed.get("taluka") or _TALUKA
+    taluka   = config.get("taluka")   or sniffed.get("taluka")   or _TALUKA
+    district = config.get("district") or sniffed.get("district") or _DISTRICT
+    state    = config.get("state")    or sniffed.get("state")    or _STATE
+    pincode  = config.get("pincode")  or sniffed.get("pincode")  or None
 
     existing_pans = set()
     if existing_entries:
@@ -185,27 +189,27 @@ def generate_batch_payloads(
                     "is_stepper": True,
                     "details": [
                         {
-                            "pincode_ref_id_id": None,
+                            "pincode_ref_id_id": pincode,
                             "address_type_ref_id": _ADDRESS_TYPE_REGISTERED,
                             "address": f"{random.randint(1, 999)} Main Road",
                             "taluka": taluka,
-                            "district": _DISTRICT,
-                            "state": _STATE,
+                            "district": district,
+                            "state": state,
                             "country": _COUNTRY,
-                            "same_as_above": False,
+                            "same_as_above": None,
                             "longitude": None,
                             "latitude": None,
                             "details": [],
                         },
                         {
-                            "pincode_ref_id_id": None,
+                            "pincode_ref_id_id": pincode,
                             "address_type_ref_id": _ADDRESS_TYPE_COMMUNICATION,
                             "address": f"{random.randint(1, 999)} Main Road",
                             "taluka": taluka,
-                            "district": _DISTRICT,
-                            "state": _STATE,
+                            "district": district,
+                            "state": state,
                             "country": _COUNTRY,
-                            "same_as_above": False,
+                            "same_as_above": None,
                             "longitude": None,
                             "latitude": None,
                             "details": [],
