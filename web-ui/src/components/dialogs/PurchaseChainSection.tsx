@@ -1098,6 +1098,26 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
               )
             })()}
 
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {[
+                { id: '795', name: 'Jalpan Builders' },
+                { id: '666', name: 'Jay Kisan Ltd' },
+                { id: '686', name: 'Agristack Company' },
+                { id: '751', name: 'Tech Neo' },
+              ].map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setLocalTenantId(t.id)}
+                  className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors cursor-pointer ${
+                    localTenantId === t.id
+                      ? 'bg-orange-500 text-white border-orange-500'
+                      : 'bg-white dark:bg-gray-800 text-orange-600 dark:text-orange-400 border-orange-300 dark:border-orange-700 hover:bg-orange-50 dark:hover:bg-orange-900/30'
+                  }`}
+                >
+                  {t.id} · {t.name}
+                </button>
+              ))}
+            </div>
             <div className="flex items-center gap-2">
               <Input
                 type="text"

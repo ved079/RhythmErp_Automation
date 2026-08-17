@@ -466,6 +466,12 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
             kwargs["attr_number"] = attr_number
         payloads = generate_fn(**kwargs)
 
+    # Item category override: if user selected a specific category from the UI, lock it in
+    selected_item_category = (request.config or {}).get("item_category")
+    if selected_item_category and request.sub_module == "item_master":
+        for p in payloads:
+            p["item_category"] = int(selected_item_category)
+
     # Conflict mode: override specific fields on every generated payload
     conflict_override = (request.config or {}).get("_conflict_override", {})
     if conflict_override and isinstance(conflict_override, dict):
