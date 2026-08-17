@@ -9,6 +9,8 @@ Classes:
   TestPO_GRN_QC_PB_Multi_GP       — dynamic E2E: 5-item PO → random 2-5 GPs → each GP→GRN→QC→PB
   TestQCWeightToggle              — 7-9 item QC with alternating Weight/Rate toggle per row
   TestCalculationAssertions       — 1-item chain asserting QC Total Weight and PB Total Amount formulas
+  TestQCFormulaAssertions         — PO→GP→GRN→QC asserting all 7 Table 1 formula columns
+  TestPOClose                     — Create PO → close via menu → verify status=Closed → absent in GP dropdown
 
 Parallel worker design (Multi_Item_Flow)
 ─────────────────────────────────────────
@@ -2043,3 +2045,112 @@ class TestQCFormulaAssertions:
         assert qc_ref_no
         integration_state["qc_ref_no"] = qc_ref_no
         print(f"\n[QC] All formula assertions ✓  ref={qc_ref_no}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TestPOClose
+# ══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.integration
+class TestPOClose:
+    """Create a PO, close it via the row action menu, assert status=Closed,
+    then verify the closed PO does NOT appear in the GP form's PO dropdown.
+
+    Steps:
+      1. Create PO
+      2. Search PO → open more_vert menu → click Close → fill remark →
+         confirm → search again → assert status cell = 'Closed'
+      3. Open GP add form → select same supplier → open PO dropdown →
+         search for po_ref_no → assert no matching option found
+    """
+
+    def test_step1_create_po(self, po_page, integration_state):
+        total, row_dicts, supplier_name, location, po_ref_no = \
+            po_page.create_record_for_integration(item_configs=[(50, 0, 0)])
+
+        assert po_ref_no and len(row_dicts) >= 1
+        integration_state.update({
+            "po_ref_no":     po_ref_no,
+            "supplier_name": supplier_name,
+            "location":      location,
+        })
+        print(f"\n[PO] Created  ref={po_ref_no}  supplier={supplier_name}")
+
+    def test_step2_close_po_and_verify_status(self, po_page, integration_state):
+        po_ref_no = integration_state["po_ref_no"]
+
+        # Search for the PO so it's the only row visible
+        po_page.search_po(po_ref_no)
+        po_page.page.wait_for_timeout(1500)
+
+        # Open the more_vert menu and click "Close"
+        po_page.click_row_action(0, "Close")
+
+        # SweetAlert2 modal appears
+        po_page.page.wait_for_selector("div.swal2-popup.swal2-modal", timeout=10000)
+        po_page.page.locator("textarea.swal2-textarea").fill("Closing via automation test")
+        po_page.page.wait_for_timeout(300)
+
+        # Click the red Close / confirm button
+        po_page.page.locator("button.swal2-confirm").click()
+        po_page.page.wait_for_timeout(2000)
+
+        # Dismiss any follow-up alert
+        try:
+            po_page.page.wait_for_selector(".swal2-container", timeout=5000)
+            po_page.page.locator("button.swal2-confirm").click()
+            po_page.page.wait_for_selector(".swal2-container", state="hidden", timeout=5000)
+        except Exception:
+            pass
+
+        # Reload listing and re-search to get fresh status
+        po_page.navigate_to_page()
+        po_page.page.wait_for_selector("table.mat-mdc-table", timeout=20000)
+        po_page.search_po(po_ref_no)
+        po_page.page.wait_for_timeout(2000)
+
+        status_cells = po_page.page.locator(
+            "xpath=//td[contains(@class,'cdk-column-po_status')]"
+        ).all()
+        assert status_cells, "No status cells found after searching PO"
+        status_text = status_cells[0].inner_text().strip()
+        assert "Closed" in status_text, \
+            f"Expected PO status 'Closed', got '{status_text}'"
+        print(f"\n[PO] Status verified: '{status_text}'  ref={po_ref_no}")
+
+    def test_step3_closed_po_not_in_gp_dropdown(self, logged_in_page, integration_state):
+        po_ref_no     = integration_state["po_ref_no"]
+        supplier_name = integration_state["supplier_name"]
+
+        gp = GPPlaywrightPageItemCategory(logged_in_page)
+        gp.navigate_to_page()
+        gp.open_add_form()
+
+        # Select same supplier to populate PO dropdown
+        gp._select_mat_by_text(gp.SUPPLIER_NAME, supplier_name)
+        gp.page.wait_for_timeout(1500)
+
+        # Open PO dropdown and search for the closed PO ref
+        gp.page.locator(gp.PURCHASE_ORDER).click(force=True)
+        gp.page.wait_for_selector(".mat-mdc-select-panel", timeout=8000)
+
+        search = gp.page.locator(".mat-mdc-select-panel input.dd-search-input")
+        if search.count() > 0:
+            search.fill(po_ref_no)
+            gp.page.wait_for_timeout(1500)
+
+        options = gp.page.locator(
+            ".mat-mdc-select-panel mat-option span.mdc-list-item__primary-text"
+        ).all()
+        matching = [o.inner_text().strip() for o in options if po_ref_no in o.inner_text()]
+
+        # Close dropdown before asserting
+        gp.page.keyboard.press("Escape")
+        gp.page.wait_for_timeout(300)
+
+        assert not matching, \
+            f"Closed PO '{po_ref_no}' should NOT appear in GP PO dropdown, but found: {matching}"
+        print(f"\n[GP] Closed PO '{po_ref_no}' correctly absent from PO dropdown ✓")
+
+        # Navigate away to clean up the open form
+        gp.navigate_to_page()

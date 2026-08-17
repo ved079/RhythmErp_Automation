@@ -195,19 +195,19 @@ def generate_batch_payloads(
     dropdown_ids: dict = None,
     offset: int = 0,
     existing_entries: list = None,
+    config: dict = None,
 ) -> list:
     """
-    Generate UOM conversion payloads.
+    Generate UOM conversion payloads — full N×(N-1) matrix.
 
-    `count` = number of SOURCE UOMs to pick. For each chosen source,
-    entries are created to ALL other UOMs not already present in ERP.
+    count >= 9999 → all source UOMs (full matrix)
+    otherwise     → `count` randomly sampled source UOMs
 
-    count=1 → 1 source UOM → up to N-1 entries
-    count=2 → 2 source UOMs → up to 2×(N-1) entries
-    count=N → all sources  → full N×(N-1) matrix
-
-    Factor is always 1.
+    config.conversion_factor: factor applied to every pair (default 1)
     """
+    cfg = config or {}
+    factor = float(cfg.get("conversion_factor", 1) or 1)
+
     fk_ids = dropdown_ids or {}
     src_map = fk_ids.get("source_uom_code", {})
     tgt_map = fk_ids.get("target_uom_code", {})
@@ -224,9 +224,12 @@ def generate_batch_payloads(
         if src is not None and tgt is not None:
             existing_pairs.add(f"{src}:{tgt}")
 
-    # Pick `count` source UOMs (capped to available)
-    import random as _random
-    source_ids = _random.sample(all_ids, min(count, len(all_ids)))
+    # count >= 9999 means "all sources" (sent by UI's Create All Pairs button)
+    if count >= 9999:
+        source_ids = all_ids
+    else:
+        import random as _random
+        source_ids = _random.sample(all_ids, min(count, len(all_ids)))
 
     payloads = []
     for src_id in source_ids:
@@ -239,7 +242,7 @@ def generate_batch_payloads(
             payloads.append(build_uom_conversion_api_payload(
                 source_uom_code=src_id,
                 target_uom_code=tgt_id,
-                conversion_factor=1,
+                conversion_factor=factor,
             ))
 
     return payloads

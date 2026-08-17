@@ -109,6 +109,11 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
   const [itemCatLoading, setItemCatLoading] = useState(false)
   const [itemCatFetched, setItemCatFetched] = useState(false)
   const [selectedItemCat, setSelectedItemCat] = useState<{ name: string; id: number; count: number } | null>(null)
+  // UOM Conversion: all-pairs mode
+  const [uomCount, setUomCount] = useState<number | null>(null)
+  const [uomLoading, setUomLoading] = useState(false)
+  const [uomFetched, setUomFetched] = useState(false)
+  const [uomFactor, setUomFactor] = useState('1')
 
   const [cqpPreview, setCqpPreview] = useState<{ total_items: number; existing_count: number; missing: { id: number; name: string }[] } | null>(null)
   const [cqpPreviewLoading, setCqpPreviewLoading] = useState(false)
@@ -175,6 +180,8 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
       setItemCatFetched(false)
       setItemCategories([])
       setSelectedItemCat(null)
+      setUomFetched(false)
+      setUomCount(null)
     }
   }, [erpToken])
 
@@ -220,13 +227,15 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
       batchConfig = { item_range: '58-77', items_per_pb: itemsPerPb }
     } else if (target.subModule === 'po_qc_pb_flow') {
       batchConfig = { items_per_chain: qtyPerChain }
+    } else if (target.subModule === 'uom_conversion') {
+      batchConfig = { conversion_factor: parseFloat(uomFactor) || 1 }
     } else if (fillAll) {
       batchConfig = { fill_all: true }
     }
     startBatchCreate(
       target.module,
       target.subModule,
-      fillAll ? 9999 : count,
+      (fillAll || target.subModule === 'uom_conversion') ? 9999 : count,
       erpToken,
       erpTenantId,
       (event: SSEEvent) => {
@@ -289,6 +298,37 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
       fetchItemCategories()
     }
   }, [itemCatMode, erpToken, itemCatFetched, itemCatLoading, fetchItemCategories])
+
+  // UOM Conversion: fetch UOM count from ERP when module is active + token available
+  const fetchUomCount = useCallback(async () => {
+    if (!erpTokenRef.current) return
+    setUomLoading(true)
+    let n = 0
+    for (let attempt = 0; attempt < 8; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 3000))
+      try {
+        const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] ?? ''
+        const res = await fetch('/api/proxy?path=batch-create/fetch-fk', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': decodeURIComponent(csrfToken) },
+          body: JSON.stringify({ erp_token: erpTokenRef.current, erp_tenant_id: erpTenantIdRef.current, screen: 'UOM' }),
+        })
+        const data = await res.json()
+        n = (data.options ?? []).length
+        if (n > 0) break
+      } catch { /* retry */ }
+    }
+    setUomCount(n)
+    setUomFetched(true)
+    setUomLoading(false)
+  }, [])
+
+  useEffect(() => {
+    if (target?.subModule === 'uom_conversion' && erpToken && !uomFetched && !uomLoading) {
+      fetchUomCount()
+    }
+  }, [target?.subModule, erpToken, uomFetched, uomLoading, fetchUomCount])
 
   const handleFillAllPreview = useCallback(async () => {
     if (!erpToken) { onNeedsToken(); return }
@@ -546,6 +586,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
 
             {/* Controls row */}
             <div className="flex items-end gap-3 flex-wrap">
+              {target.subModule !== 'uom_conversion' && (
               <div className="space-y-1 w-20">
                 <Label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Count</Label>
                 <Input
@@ -558,6 +599,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
                   className="h-8 text-[12px]"
                 />
               </div>
+              )}
               {target.subModule === 'direct_pb_flow' && (
                 <div className="space-y-1 w-24">
                   <Label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Items / PB</Label>
@@ -592,7 +634,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
                 className="h-8 text-[12px] bg-[#3F51B5] hover:bg-[#3949AB] cursor-pointer gap-1.5"
               >
                 {running ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
-                {running ? 'Creating...' : 'Create'}
+                {running ? 'Creating...' : target.subModule === 'uom_conversion' ? 'Create All Pairs' : 'Create'}
               </Button>
               {target.subModule === 'commodity_quality_parameter' && (
                 <Button
@@ -606,6 +648,52 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
                 </Button>
               )}
             </div>
+
+            {/* UOM Conversion: all-pairs panel */}
+            {target.subModule === 'uom_conversion' && (
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 space-y-3">
+                {/* Preview line */}
+                <div className="flex items-center gap-2 text-[12px]">
+                  {uomLoading ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin text-[#3F51B5]" />
+                      <span className="text-gray-400">Fetching UOMs from ERP...</span>
+                    </>
+                  ) : uomFetched && uomCount !== null ? (
+                    <span className="text-gray-600 dark:text-gray-300">
+                      <span className="font-semibold text-[#3F51B5] dark:text-[#7986CB]">{uomCount} UOMs</span>
+                      {' '}found → up to{' '}
+                      <span className="font-semibold">{uomCount * (uomCount - 1)}</span>
+                      {' '}pairs will be created{' '}
+                      <span className="text-gray-400">(existing skipped automatically)</span>
+                    </span>
+                  ) : !erpToken ? (
+                    <span className="text-gray-400 text-[11px]">Set your ERP token to load UOM count</span>
+                  ) : (
+                    <span className="text-gray-400 text-[11px]">Loading...</span>
+                  )}
+                  {uomFetched && (
+                    <button onClick={fetchUomCount} className="ml-auto text-[11px] text-gray-400 hover:text-[#3F51B5] hover:underline cursor-pointer shrink-0">
+                      Refresh
+                    </button>
+                  )}
+                </div>
+                {/* Factor input */}
+                <div className="flex items-center gap-3">
+                  <Label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">Conversion Factor</Label>
+                  <Input
+                    type="number"
+                    min={0.0001}
+                    step="any"
+                    value={uomFactor}
+                    disabled={running}
+                    onChange={(e) => setUomFactor(e.target.value)}
+                    className="h-8 text-[12px] w-28"
+                  />
+                  <span className="text-[11px] text-gray-400">applied to all pairs</span>
+                </div>
+              </div>
+            )}
 
             {/* Item Master: category picker */}
             {target.subModule === 'item_master' && (
