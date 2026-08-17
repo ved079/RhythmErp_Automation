@@ -1701,7 +1701,6 @@ class TestCalculationAssertions:
         qc.navigate_to_page()
         qc.open_add_form()
         qc.select_supplier(integration_state["supplier_name"])
-        qc.select_item_category("Raw Materia")
         qc.select_gate_pass(integration_state["gp_ref_no"])
         qc.fill_conversion_rate(1)
 
@@ -1843,3 +1842,204 @@ class TestCalculationAssertions:
         assert pb_ref_no
         integration_state["pb_ref_no"] = pb_ref_no
         print(f"\n[PB] ref={pb_ref_no}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TestQCFormulaAssertions
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Asserts the full QC Table 1 formula chain before submitting:
+#
+#   Total Amount       = Base Rate × Received Quantity
+#   Transaction Amount = Total Amount − QC Deduction Amount − Empty Bag Amount
+#   CD Deduction Amt   = Transaction Amount × (Discount Rate / 100)
+#   Net Purchase Amt   = Transaction Amount − CD Deduction Amount
+#   Net Purchase Rate  = Net Purchase Amount / Net Qty
+#
+# Uses controlled, known inputs so every assertion has a calculable expected value.
+# Actual Value = 1 (below allowable) → QC deduction = 0 → simplifies formula chain.
+# ══════════════════════════════════════════════════════════════════════════════
+
+_FQCA_ITEM_QTY      = 50    # PO / GP / QC received qty
+_FQCA_GP_BAGS       = 2
+_FQCA_NO_OF_BAGS    = 2     # bags popup — no of bags
+_FQCA_PER_BAG_WT    = 1.0   # bags popup — per bag weight (KG)
+_FQCA_DISCOUNT_RATE = 10    # known discount rate → CD deduction = txn_amount × 10%
+_FQCA_TOLERANCE     = 1.0   # allowed floating-point rounding gap
+
+
+@pytest.mark.integration
+class TestQCFormulaAssertions:
+    """PO → GP → QC: fill with known params, assert full Table 1 formula chain pre-submit.
+
+    Keeps QC actual values below allowable (=1) so QC Deduction Amount = 0,
+    which isolates the bag deduction and discount formula paths.
+    """
+
+    def test_step1_create_po(self, po_page, integration_state):
+        total, row_dicts, supplier_name, location, po_ref_no = \
+            po_page.create_record_for_integration(item_configs=[(_FQCA_ITEM_QTY, 0, 0)])
+
+        assert po_ref_no and len(row_dicts) == 1
+        integration_state.update({
+            "po_ref_no":     po_ref_no,
+            "supplier_name": supplier_name,
+            "location":      location,
+            "item_names":    [row_dicts[0]["item_name"]],
+        })
+        print(f"\n[PO] ref={po_ref_no}  item={row_dicts[0]['item_name']}×{_FQCA_ITEM_QTY}")
+
+    def test_step2_create_gp(self, gp_page, integration_state):
+        if not integration_state.get("po_ref_no"):
+            pytest.skip("PO not created in step 1")
+
+        gp = GPPlaywrightPageItemCategory(gp_page.page)
+        items = [(integration_state["item_names"][0], _FQCA_GP_BAGS, _FQCA_ITEM_QTY)]
+        gp.fill_items_form(
+            supplier_name=integration_state["supplier_name"],
+            items=items,
+            location=integration_state["location"],
+            type_of_sale="B2B",
+            po_ref_no=integration_state["po_ref_no"],
+        )
+        gp_ref_no, _ = gp.submit_items_form(items)
+        assert gp_ref_no
+        integration_state["gp_ref_no"] = gp_ref_no
+        print(f"\n[GP] ref={gp_ref_no}  qty={_FQCA_ITEM_QTY}  bags={_FQCA_GP_BAGS}")
+
+    def test_step3_create_grn(self, grn_page, integration_state):
+        if not integration_state.get("gp_ref_no"):
+            pytest.skip("GP not created in step 2")
+
+        grn_page.open_add_form()
+        grn_page.select_supplier(integration_state["supplier_name"])
+        grn_page.select_gate_pass(integration_state["gp_ref_no"])
+        grn_page.fill_conversion_rate("1")
+        grn_page.fill_accepted_qty_nth(0, _FQCA_ITEM_QTY)
+        grn_ref_no = grn_page.submit()
+        assert grn_ref_no
+        integration_state["grn_ref_no"] = grn_ref_no
+        print(f"\n[GRN] ref={grn_ref_no}")
+
+    def test_step4_qc_formula_assert_and_submit(self, logged_in_page, integration_state):
+        """Fill QC form with known values, assert all Table 1 formulas, then submit."""
+        if not integration_state.get("grn_ref_no"):
+            pytest.skip("GRN not created in step 3")
+
+        page = logged_in_page
+        qc = QCPlaywrightPage(page)
+        qc.navigate_to_page()
+        qc.open_add_form()
+        page.wait_for_timeout(1500)
+        qc.select_supplier(integration_state["supplier_name"])
+        qc.select_gate_pass(integration_state["gp_ref_no"])
+        qc.fill_conversion_rate(1)
+        page.wait_for_timeout(500)
+
+        # Fill row: Net Qty and Discount Rate with known values
+        qc._js_fill_by_placeholder("Net Qty", _FQCA_ITEM_QTY, nth=0)
+        qc._js_fill_by_placeholder("Discount Rate", _FQCA_DISCOUNT_RATE, nth=0)
+        page.wait_for_timeout(300)
+
+        # QC params: actual=1 (below allowable) → no QC deduction
+        qc.fill_quality_parameters(actual_value=1, row=0)
+
+        # Bags popup: known no_of_bags and per_bag_weight
+        qc.fill_bags_parameter(
+            no_of_bags=_FQCA_NO_OF_BAGS,
+            per_bag_weight=_FQCA_PER_BAG_WT,
+            row=0,
+        )
+        page.wait_for_timeout(800)
+
+        # Read all computed fields from Table 1
+        f = qc.read_all_row_fields(nth=0)
+
+        print(f"\n[QC Formula] All computed fields: {f}")
+
+        # ── 1. Total Amount = Base Rate × Received Quantity ───────────────────
+        if f["base_rate"] > 0 and f["received_qty"] > 0:
+            expected_total = round(f["base_rate"] * f["received_qty"], 2)
+            assert abs(f["total_amount"] - expected_total) < _FQCA_TOLERANCE, (
+                f"Total Amount: expected base_rate({f['base_rate']}) × received_qty({f['received_qty']}) "
+                f"= {expected_total}, got {f['total_amount']}"
+            )
+            print(
+                f"  [✓] Total Amount: {f['base_rate']} × {f['received_qty']} "
+                f"= {expected_total}  (actual={f['total_amount']})"
+            )
+
+        # ── 2. Transaction Amount = Total Amount − QC Deduction − Empty Bag Amt
+        expected_txn = round(
+            f["total_amount"] - f["qc_deduction_amount"] - f["empty_bag_amount"], 2
+        )
+        assert abs(f["transaction_amount"] - expected_txn) < _FQCA_TOLERANCE, (
+            f"Transaction Amount: expected total({f['total_amount']}) "
+            f"- qc_deduction({f['qc_deduction_amount']}) "
+            f"- empty_bag({f['empty_bag_amount']}) = {expected_txn}, "
+            f"got {f['transaction_amount']}"
+        )
+        print(
+            f"  [✓] Transaction Amount: {f['total_amount']} − {f['qc_deduction_amount']} "
+            f"− {f['empty_bag_amount']} = {expected_txn}  (actual={f['transaction_amount']})"
+        )
+
+        # ── 3. CD Deduction Amount = Transaction Amount × (Discount Rate / 100)
+        expected_cd = round(f["transaction_amount"] * (_FQCA_DISCOUNT_RATE / 100), 2)
+        assert abs(f["cd_deduction_amount"] - expected_cd) < _FQCA_TOLERANCE, (
+            f"CD Deduction Amount: expected txn({f['transaction_amount']}) "
+            f"× {_FQCA_DISCOUNT_RATE}% = {expected_cd}, got {f['cd_deduction_amount']}"
+        )
+        print(
+            f"  [✓] CD Deduction Amount: {f['transaction_amount']} × {_FQCA_DISCOUNT_RATE}% "
+            f"= {expected_cd}  (actual={f['cd_deduction_amount']})"
+        )
+
+        # ── 4. Net Purchase Amount = Transaction Amount − CD Deduction Amount ─
+        expected_net = round(f["transaction_amount"] - f["cd_deduction_amount"], 2)
+        assert abs(f["net_purchase_amount"] - expected_net) < _FQCA_TOLERANCE, (
+            f"Net Purchase Amount: expected txn({f['transaction_amount']}) "
+            f"- cd({f['cd_deduction_amount']}) = {expected_net}, "
+            f"got {f['net_purchase_amount']}"
+        )
+        print(
+            f"  [✓] Net Purchase Amount: {f['transaction_amount']} − {f['cd_deduction_amount']} "
+            f"= {expected_net}  (actual={f['net_purchase_amount']})"
+        )
+
+        # ── 5. Net Purchase Rate = Net Purchase Amount / Net Qty ──────────────
+        if f["net_qty"] > 0:
+            expected_rate = round(f["net_purchase_amount"] / f["net_qty"], 2)
+            assert abs(f["net_purchase_rate"] - expected_rate) < _FQCA_TOLERANCE, (
+                f"Net Purchase Rate: expected net_purchase({f['net_purchase_amount']}) "
+                f"/ net_qty({f['net_qty']}) = {expected_rate}, got {f['net_purchase_rate']}"
+            )
+            print(
+                f"  [✓] Net Purchase Rate: {f['net_purchase_amount']} / {f['net_qty']} "
+                f"= {expected_rate}  (actual={f['net_purchase_rate']})"
+            )
+
+        # ── 6. Empty Bag Amount consistency: no_of_bags matches bags popup ────
+        assert abs(f["no_of_bags"] - _FQCA_NO_OF_BAGS) < 0.5, (
+            f"NO. of Bags: expected {_FQCA_NO_OF_BAGS}, got {f['no_of_bags']}"
+        )
+        print(f"  [✓] No of Bags: {f['no_of_bags']} (expected {_FQCA_NO_OF_BAGS})")
+
+        # ── 7. Net Qty = Received Qty − Empty Bag Weight ─────────────────────
+        if f["received_qty"] > 0:
+            expected_net_qty = round(f["received_qty"] - f["empty_bag_weight"], 2)
+            assert abs(f["net_qty"] - expected_net_qty) < _FQCA_TOLERANCE, (
+                f"Net Qty: expected received({f['received_qty']}) "
+                f"- empty_bag_weight({f['empty_bag_weight']}) = {expected_net_qty}, "
+                f"got {f['net_qty']}"
+            )
+            print(
+                f"  [✓] Net Qty: {f['received_qty']} − {f['empty_bag_weight']} "
+                f"= {expected_net_qty}  (actual={f['net_qty']})"
+            )
+
+        # All formulas passed — submit
+        qc_ref_no = qc.submit()
+        assert qc_ref_no
+        integration_state["qc_ref_no"] = qc_ref_no
+        print(f"\n[QC] All formula assertions ✓  ref={qc_ref_no}")
