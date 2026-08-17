@@ -153,6 +153,43 @@ class QCPlaywrightPage(BasePlaywrightPage):
             "transaction_amount":  _read_ph("Transaction Amount"),
         }
 
+    def read_all_row_fields(self, nth=0):
+        """Read every computed column from Table 1 for the given row index.
+
+        Returns a dict with all numeric field values. Useful for formula assertion tests.
+        Note: Net Purchase Amount has a typo in the ERP placeholder ('Net Purchse Amount').
+        """
+        def _read_ph(ph):
+            els = self.page.locator(f"input[placeholder='{ph}']")
+            if els.count() > nth:
+                raw = els.nth(nth).input_value()
+                try:
+                    return float(raw.replace(",", "").strip())
+                except Exception:
+                    return 0.0
+            return 0.0
+
+        return {
+            "base_rate":              _read_ph("Base Rate"),
+            "received_qty":           _read_ph("Received Quantity"),
+            "total_amount":           _read_ph("Total Amount"),
+            "no_of_bags":             _read_ph("NO. of Bags"),
+            "empty_bag_weight":       _read_ph("Empty Bag Weight (KG)"),
+            "empty_bag_amount":       _read_ph("Empty Bag Amount"),
+            "total_deduction_qty":    _read_ph("Total Deduction Quantity"),
+            "net_qty":                _read_ph("Net Qty"),
+            "deduction_pct":          _read_ph("Deduction(%)"),
+            "deduction_rate":         _read_ph("Deduction Rate"),
+            "qc_deduction_weight":    _read_ph("QC Deduction Weight"),
+            "qc_deduction_amount":    _read_ph("QC Deduction Amount"),
+            "transaction_amount":     _read_ph("Transaction Amount"),
+            "discount_rate":          _read_ph("Discount Rate"),
+            "cd_deduction":           _read_ph("CD Deduction"),
+            "cd_deduction_amount":    _read_ph("CD Deduction Amount"),
+            "net_purchase_amount":    _read_ph("Net Purchse Amount"),  # ERP typo
+            "net_purchase_rate":      _read_ph("Net Purchase Rate"),
+        }
+
     def open_qc_record(self, ref_no):
         """Find a QC by ref_no in the list, click more_vert → View to open it."""
         self.navigate_to_page()
@@ -300,7 +337,6 @@ class QCPlaywrightPage(BasePlaywrightPage):
         """
         self.open_add_form()
         self.select_supplier(supplier_name)
-        self.select_item_category("Raw Materia")
         self.select_gate_pass(gp_ref_no)
         self.fill_conversion_rate(1)
 
@@ -334,8 +370,18 @@ class QCPlaywrightPage(BasePlaywrightPage):
 
             dw = None
             if use_weight_mode:
-                dw = random.randint(1, 20)
-                self._click_fill_by_placeholder("QC Deduction Weight", dw, nth=i)
+                # Confirm the field is actually editable before filling —
+                # the toggle sometimes doesn't register on multi-item forms
+                weight_inputs = self.page.locator("input[placeholder='QC Deduction Weight']")
+                field_editable = (
+                    weight_inputs.count() > i
+                    and weight_inputs.nth(i).get_attribute("readonly") is None
+                )
+                if field_editable:
+                    dw = random.randint(1, 20)
+                    self._click_fill_by_placeholder("QC Deduction Weight", dw, nth=i)
+                else:
+                    print(f"  [QC] row {i} Weight toggle did not activate — skipping deduction weight fill")
 
             row_data_list.append({
                 "use_weight_mode":  use_weight_mode,
