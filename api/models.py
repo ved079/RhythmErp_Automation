@@ -9,6 +9,12 @@ from enum import Enum
 
 # --- Enums ---
 
+class FetchFkRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: Optional[str] = ""
+    screen: str
+
+
 class RunStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"

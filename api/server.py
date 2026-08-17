@@ -29,7 +29,7 @@ from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 
 from api.models import (
     ModuleListResponse, CreateRunRequest, StartRunRequest, BatchCreateRequest,
-    PurchaseChainRequest, ConcurrencyDispatchRequest, CbrTokenRequest,
+    PurchaseChainRequest, ConcurrencyDispatchRequest, CbrTokenRequest, FetchFkRequest,
 )
 from api.concurrency_dispatch import dispatch_concurrent, ping_agents
 from api.test_discovery import discover_all_modules
@@ -150,6 +150,57 @@ def batch_preview_endpoint(request: BatchCreateRequest):
     """Generate payloads without creating them — used by conflict mode."""
     payloads = _build_payloads_only(request)
     return {"payloads": payloads}
+
+
+@app.post("/api/batch-create/fetch-fk")
+def fetch_fk_endpoint(request: FetchFkRequest):
+    """Fetch FK dropdown options from the live ERP for a given screen."""
+    from common.erp_api_client import RhythmERPAPIClient
+    from common.fk_resolver import FkResolver
+
+    client = RhythmERPAPIClient(username="", password="", tenant_id=request.erp_tenant_id)
+    try:
+        client.login_from_browser(token=request.erp_token, tenant_id=request.erp_tenant_id)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Auth failed: {e}")
+
+    try:
+        resolver = FkResolver(client)
+        options = resolver.resolve(request.screen)
+        result = [{"name": k, "id": v, "count": 0} for k, v in options.items()]
+
+        # For Item Category: count how many Item Master records belong to each category
+        if request.screen == "Item Category" and result:
+            try:
+                from concurrent.futures import ThreadPoolExecutor
+                im_resp = client.list_entries("Item Master", page_size=500)
+                im_rows = (im_resp.get("screenmatlistingdata_set") or im_resp.get("results") or []) if im_resp else []
+
+                def _fetch_cat(row):
+                    iid = row.get("id")
+                    if iid is None:
+                        return None
+                    try:
+                        det = client.get_entry("Item Master", iid)
+                        return det.get("item_category") if det else None
+                    except Exception:
+                        return None
+
+                with ThreadPoolExecutor(max_workers=8) as ex:
+                    cat_ids = list(ex.map(_fetch_cat, im_rows))
+
+                counts: dict[int, int] = {}
+                for cat_id in cat_ids:
+                    if cat_id is not None:
+                        counts[int(cat_id)] = counts.get(int(cat_id), 0) + 1
+                for opt in result:
+                    opt["count"] = counts.get(opt["id"], 0)
+            except Exception:
+                pass
+
+        return {"options": result}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch {request.screen}: {e}")
 
 
 @app.post("/api/batch-create/cqp-fill-preview")

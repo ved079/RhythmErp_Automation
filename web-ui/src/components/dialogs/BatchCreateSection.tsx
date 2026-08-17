@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Database, CheckCircle2, XCircle, Play, Info, ShieldCheck, BadgeCheck, ChevronRight, ChevronDown, History, Download, RefreshCw, RotateCcw, Loader2, ListChecks } from 'lucide-react'
+import { Database, CheckCircle2, XCircle, Play, Info, ShieldCheck, BadgeCheck, ChevronRight, ChevronDown, History, Download, RefreshCw, RotateCcw, Loader2, ListChecks, Tag } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import { startBatchCreate, exportBatchExcel, fetchBatchHistory, type SSEEvent, type BatchRunSummary } from '@/lib/api'
 import { BatchCompleteDialog } from './BatchCompleteDialog'
@@ -103,6 +103,13 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
   const [cbrLocationCount, setCbrLocationCount] = useState<number | null>(null)
   const [cbrCountLoading, setCbrCountLoading] = useState(false)
+  // Item Master: category picker
+  const [itemCatMode, setItemCatMode] = useState<'random' | 'pick'>('random')
+  const [itemCategories, setItemCategories] = useState<{ name: string; id: number; count: number }[]>([])
+  const [itemCatLoading, setItemCatLoading] = useState(false)
+  const [itemCatFetched, setItemCatFetched] = useState(false)
+  const [selectedItemCat, setSelectedItemCat] = useState<{ name: string; id: number; count: number } | null>(null)
+
   const [cqpPreview, setCqpPreview] = useState<{ total_items: number; existing_count: number; missing: { id: number; name: string }[] } | null>(null)
   const [cqpPreviewLoading, setCqpPreviewLoading] = useState(false)
   const [showCqpConfirm, setShowCqpConfirm] = useState(false)
@@ -154,6 +161,23 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
       })
   }, [target?.subModule, erpToken, erpTenantId])
 
+  // Always-fresh refs so fetchItemCategories never uses a stale closure value
+  const erpTokenRef = useRef(erpToken)
+  const erpTenantIdRef = useRef(erpTenantId)
+  useEffect(() => { erpTokenRef.current = erpToken }, [erpToken])
+  useEffect(() => { erpTenantIdRef.current = erpTenantId }, [erpTenantId])
+
+  // Reset item category state when token changes so a fresh fetch runs
+  const prevTokenRef = useRef(erpToken)
+  useEffect(() => {
+    if (prevTokenRef.current !== erpToken) {
+      prevTokenRef.current = erpToken
+      setItemCatFetched(false)
+      setItemCategories([])
+      setSelectedItemCat(null)
+    }
+  }, [erpToken])
+
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [logs])
@@ -188,6 +212,8 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
     let batchConfig: Record<string, unknown> | undefined
     if (target.subModule === 'farmer') {
       batchConfig = farmerConfig
+    } else if (target.subModule === 'item_master') {
+      batchConfig = selectedItemCat ? { item_category: selectedItemCat.id } : {}
     } else if (target.subModule === 'item_attribute') {
       batchConfig = { attr_number: attrNumber }
     } else if (target.subModule === 'direct_pb_flow') {
@@ -232,6 +258,37 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
       batchConfig,
     )
   }, [target, erpToken, erpTenantId, count, itemsPerPb, qtyPerChain, farmerConfig, onNeedsToken])
+
+  const fetchItemCategories = useCallback(async () => {
+    if (!erpTokenRef.current) { onNeedsToken(); return }
+    setItemCatLoading(true)
+    let options: { name: string; id: number; count: number }[] = []
+    for (let attempt = 0; attempt < 8; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 3000))
+      try {
+        const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] ?? ''
+        const res = await fetch('/api/proxy?path=batch-create/fetch-fk', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': decodeURIComponent(csrfToken) },
+          body: JSON.stringify({ erp_token: erpTokenRef.current, erp_tenant_id: erpTenantIdRef.current, screen: 'Item Category' }),
+        })
+        const data = await res.json()
+        options = data.options ?? []
+        if (options.length > 0) break
+      } catch { /* retry */ }
+    }
+    setItemCategories(options)
+    setItemCatFetched(true)
+    setItemCatLoading(false)
+  }, [onNeedsToken])
+
+  // Auto-fetch categories when token becomes available while in pick mode
+  useEffect(() => {
+    if (itemCatMode === 'pick' && erpToken && !itemCatFetched && !itemCatLoading) {
+      fetchItemCategories()
+    }
+  }, [itemCatMode, erpToken, itemCatFetched, itemCatLoading, fetchItemCategories])
 
   const handleFillAllPreview = useCallback(async () => {
     if (!erpToken) { onNeedsToken(); return }
@@ -281,7 +338,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
   const barPercent = running ? Math.min(Math.round(((created + failed) / (count || 1)) * 100), 100) : (created + failed > 0 ? 100 : 0)
 
   return (
-    <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg overflow-hidden shadow-sm">
+    <div className="border border-gray-300 dark:border-gray-500/70 rounded-lg shadow-sm overflow-visible">
       {/* Header + tabs */}
       <div className="bg-gradient-to-r from-[#3F51B5]/[0.07] to-[#3F51B5]/[0.03] dark:from-[#3F51B5]/20 dark:to-[#3F51B5]/10 border-b border-gray-300 dark:border-gray-500/70">
         <div className="flex items-center gap-2 px-4 pt-2.5 pb-0">
@@ -549,6 +606,79 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
                 </Button>
               )}
             </div>
+
+            {/* Item Master: category picker */}
+            {target.subModule === 'item_master' && (
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <Tag className="size-3.5 text-[#3F51B5] dark:text-[#7986CB] shrink-0" />
+                  <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300">Item Category</span>
+                  <div className="flex items-center gap-1 ml-auto rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    {(['random', 'pick'] as const).map(mode => (
+                      <button
+                        key={mode}
+                        type="button"
+                        disabled={running}
+                        onClick={() => { setItemCatMode(mode); if (mode === 'pick' && !itemCatFetched) fetchItemCategories() }}
+                        className={`px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+                          itemCatMode === mode
+                            ? 'bg-[#3F51B5] text-white'
+                            : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        {mode === 'random' ? 'Random' : 'Pick'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {itemCatMode === 'pick' && (
+                  <div>
+                    {itemCatLoading ? (
+                      <div className="flex items-center gap-2 text-[11px] text-gray-400 px-1">
+                        <Loader2 className="size-3 animate-spin" />
+                        Fetching categories from ERP...
+                      </div>
+                    ) : !itemCatFetched ? (
+                      null
+                    ) : itemCategories.length === 0 ? (
+                      <div className="text-[11px] text-gray-400">
+                        No categories found.{' '}
+                        <button onClick={fetchItemCategories} className="text-[#3F51B5] hover:underline cursor-pointer">Retry</button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap gap-1.5">
+                          {itemCategories.map(cat => {
+                            const active = selectedItemCat?.id === cat.id
+                            return (
+                              <button
+                                key={cat.id}
+                                type="button"
+                                disabled={running}
+                                onClick={() => setSelectedItemCat(active ? null : cat)}
+                                className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors cursor-pointer whitespace-nowrap ${
+                                  active
+                                    ? 'bg-[#3F51B5] text-white border-[#3F51B5]'
+                                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-[#3F51B5] hover:text-[#3F51B5] dark:hover:text-[#7986CB]'
+                                }`}
+                              >
+                                {cat.name}{` · ${cat.count} items`}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {itemCatFetched && (
+                          <button onClick={fetchItemCategories} className="text-[11px] text-gray-400 hover:text-[#3F51B5] hover:underline cursor-pointer mt-1.5">
+                            Reload from ERP
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Module-specific config */}
             {target.subModule === 'farmer' && (
