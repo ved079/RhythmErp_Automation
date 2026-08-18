@@ -105,20 +105,10 @@ def build_tax_authority_api_payload(tax_name, tax_type_ref_id, country_ref_id):
 def generate_tax_authority_api_payloads(count=10, offset=0, fk_ids=None):
     """
     Generate N API payloads for Tax Authority.
-
-    Args:
-        count: Number of payloads to generate
-        offset: Start index in data pool
-        fk_ids: dict with resolved FK IDs (must include tax_type_ref_id, country_ref_id)
+    tax_type_ref_id and country_ref_id are hardcoded (no resolvable ERP screen).
     """
-    if not fk_ids:
-        raise ValueError(
-            "fk_ids is required. Resolve FK IDs via FkResolver first: "
-            "from common.fk_resolver import FkResolver"
-        )
-
-    tax_type_ids = fk_ids.get("tax_type_ref_id", {})
-    country_ids = fk_ids.get("country_ref_id", {})
+    tax_type_ids = {"GST": TAX_TYPE_REF_ID}
+    country_ids  = {"India": COUNTRY_REF_ID}
 
     payloads = []
 
@@ -167,28 +157,20 @@ def get_field_validation_rules():
     }
 
 
+TAX_TYPE_REF_ID = 93   # GST — hardcoded (no resolvable screen in ERP)
+COUNTRY_REF_ID  = 8    # India — hardcoded (no resolvable screen in ERP)
+
 def get_fk_screen_mapping():
-    """Return FK field → screen name mapping for live FkResolver resolution."""
-    return {
-        "tax_type_ref_id": "Tax Type",
-        "country_ref_id":  "Country",
-    }
+    """Tax Type and Country have no resolvable ERP list screen — IDs are hardcoded."""
+    return {}
 
 
 def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: dict = None, offset: int = 0, existing_entries: list = None) -> list:
-    """Generate a batch of unique Tax Authority API payloads, deduping against existing_entries.
-
-    Args:
-        dropdown_ids: Must contain resolved FK IDs (tax_type_ref_id, country_ref_id).
-                      Resolve via FkResolver before calling.
+    """Generate a batch of unique Tax Authority API payloads.
+    tax_type_ref_id and country_ref_id are hardcoded — no FkResolver needed.
     """
-    if not dropdown_ids:
-        raise ValueError("dropdown_ids is required. Resolve FK IDs via FkResolver first.")
-    fk_ids = dropdown_ids
     if existing_entries:
         used_names = {e.get("tax_name", "").lower().strip() for e in existing_entries if e.get("tax_name")}
-        tax_type_ids = fk_ids.get("tax_type_ref_id", {})
-        country_ids = fk_ids.get("country_ref_id", {})
         unique_payloads = []
         pool_idx = 0
         while len(unique_payloads) < count:
@@ -198,9 +180,9 @@ def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: d
                 used_names.add(name.lower().strip())
                 unique_payloads.append(build_tax_authority_api_payload(
                     tax_name=name,
-                    tax_type_ref_id=tax_type_ids.get(entry["tax_type"]),
-                    country_ref_id=country_ids.get(entry["country"]),
+                    tax_type_ref_id=TAX_TYPE_REF_ID,
+                    country_ref_id=COUNTRY_REF_ID,
                 ))
             pool_idx += 1
         return unique_payloads
-    return generate_tax_authority_api_payloads(count=count, offset=offset, fk_ids=fk_ids)
+    return generate_tax_authority_api_payloads(count=count, offset=offset)
