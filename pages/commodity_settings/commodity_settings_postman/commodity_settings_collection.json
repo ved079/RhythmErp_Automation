@@ -1210,6 +1210,231 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Item Master",
+      "item": [
+        {
+          "name": "List Item Master",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Item%20Master/?page_number=1&page_size=25&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Item%20Master",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Item Master Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Item%20Master/{{record_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Item%20Master",
+                "{{record_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Item Master",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const baseUrl  = pm.environment.get('base_url');",
+                  "const token    = pm.environment.get('token');",
+                  "const tenantId = pm.environment.get('tenant_id');",
+                  "const reqBody  = JSON.parse(pm.request.body.raw);",
+                  "",
+                  "// item_type hardcoded 113 (Farm) in batch script \u2014 locked, no screen resolution.",
+                  "",
+                  "function resolveScreen(screen, cb) {",
+                  "    pm.sendRequest({",
+                  "        url: baseUrl + '/core/dynamic-screen-wrapper/' + screen + '/?page_number=1&page_size=100&search_string=&is_excel_download=false',",
+                  "        method: 'GET',",
+                  "        header: {",
+                  "            'Authorization': 'Bearer ' + token,",
+                  "            'X-Tenant-ID': tenantId,",
+                  "            'Content-Type': 'application/json'",
+                  "        }",
+                  "    }, function(err, res) {",
+                  "        if (err) { console.error(screen + ' error:', err); cb([]); return; }",
+                  "        const data = res.json();",
+                  "        const results = data.screenmatlistingdata_set || data.results || data.data || [];",
+                  "        cb(results.map(function(r) { return r.id; }).filter(function(id) { return id != null; }));",
+                  "    });",
+                  "}",
+                  "",
+                  "// 10 parallel calls \u2014 body written only when all finish",
+                  "let pending = 10;",
+                  "function done() {",
+                  "    if (--pending === 0) pm.request.body.raw = JSON.stringify(reqBody, null, 2);",
+                  "}",
+                  "",
+                  "resolveScreen('Item%20Category', function(ids) {",
+                  "    if (ids[0] != null) reqBody.item_category = ids[0];",
+                  "    done();",
+                  "});",
+                  "",
+                  "resolveScreen('Item%20Group', function(ids) {",
+                  "    if (ids[0] != null) reqBody.item_group = ids[0];",
+                  "    done();",
+                  "});",
+                  "",
+                  "resolveScreen('Item%20Attribute1', function(ids) {",
+                  "    if (ids[0] != null) reqBody.item_attribute1 = ids[0];",
+                  "    done();",
+                  "});",
+                  "",
+                  "resolveScreen('Item%20Attribute2', function(ids) {",
+                  "    if (ids[0] != null) reqBody.item_attribute2 = ids[0];",
+                  "    done();",
+                  "});",
+                  "",
+                  "resolveScreen('Item%20Attribute3', function(ids) {",
+                  "    if (ids[0] != null) reqBody.item_attribute3 = ids[0];",
+                  "    done();",
+                  "});",
+                  "",
+                  "resolveScreen('Item%20Attribute4', function(ids) {",
+                  "    if (ids[0] != null) reqBody.item_attribute4 = ids[0];",
+                  "    done();",
+                  "});",
+                  "",
+                  "resolveScreen('Item%20Attribute5', function(ids) {",
+                  "    if (ids[0] != null) reqBody.item_attribute5 = ids[0];",
+                  "    done();",
+                  "});",
+                  "",
+                  "// UOM pool is shared for both uom and base_uom (same screen, same pool)",
+                  "resolveScreen('UOM', function(ids) {",
+                  "    if (ids[0] != null) { reqBody.uom = ids[0]; reqBody.base_uom = ids[0]; }",
+                  "    done();",
+                  "});",
+                  "",
+                  "resolveScreen('HSN%20SAC', function(ids) {",
+                  "    if (ids[0] != null) reqBody.hsn_sac_code = ids[0];",
+                  "    done();",
+                  "});",
+                  "",
+                  "// sourcing_type and item_source are FK aliases \u2014 both must be set to same id",
+                  "resolveScreen('Item%20Sourcing', function(ids) {",
+                  "    if (ids[0] != null) {",
+                  "        reqBody.sourcing_type = ids[0];",
+                  "        reqBody.item_source   = ids[0];",
+                  "    }",
+                  "    done();",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Item Master\",\n  \"name\": \"Wheat Premium Grade\",\n  \"code\": \"Wheat-Premium-Grade\",\n  \"description\": \"Premium quality wheat grain for flour milling\",\n  \"base_uom_conversion\": \"1\",\n  \"status\": true,\n  \"item_type\": 113,\n  \"item_category\": 0,\n  \"item_group\": 0,\n  \"item_attribute1\": 0,\n  \"item_attribute2\": 0,\n  \"item_attribute3\": 0,\n  \"item_attribute4\": 0,\n  \"item_attribute5\": 0,\n  \"uom\": 0,\n  \"base_uom\": 0,\n  \"hsn_sac_code\": 0,\n  \"sourcing_type\": 0,\n  \"item_source\": 0,\n  \"children\": [\n    {\n      \"stepper_name\": \"Additional Details\",\n      \"is_stepper\": true,\n      \"details\": [],\n      \"children\": [],\n      \"is_critical\": false,\n      \"include_wip_in_stock_cal\": false,\n      \"is_packing_material\": false\n    },\n    {\n      \"stepper_name\": \"Define Item Master Details\",\n      \"is_stepper\": true,\n      \"details\": [],\n      \"children\": [],\n      \"attachment_type\": null,\n      \"item_attachment\": null\n    },\n    {\n      \"stepper_name\": \"Product Order Packeging Details\",\n      \"is_stepper\": true,\n      \"details\": [],\n      \"children\": []\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
     }
   ]
 }
