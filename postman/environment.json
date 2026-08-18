@@ -1,0 +1,55 @@
+{
+  "id": "rhythm-erp-env",
+  "name": "Rhythm ERP",
+  "values": [
+    {
+      "key": "base_url",
+      "value": "https://rhythmerp.algorhythms.in",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "token",
+      "value": "your_bearer_token_here",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "tenant_id",
+      "value": "681",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "supplier_id",
+      "value": "1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "customer_id",
+      "value": "1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "employee_id",
+      "value": "1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "farmer_id",
+      "value": "1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "agent_id",
+      "value": "1",
+      "type": "default",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}
