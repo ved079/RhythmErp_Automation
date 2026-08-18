@@ -1925,11 +1925,12 @@ def build_farmer_api_payload(
         loan_detail_rows.append(row)
 
     # ── Assemble payload ──
-    # farmer_category is multiselect (array of IDs)
-    # Allow dropdown_ids to override step0_data default
-    farmer_category = ids.get("farmer_category") or step0_data.get("farmer_category", [1594])
-    if isinstance(farmer_category, int):
-        farmer_category = [farmer_category]
+    # farmer_category is a single integer FK (NOT an array) — ERP expects plain int
+    raw_cat = ids.get("farmer_category") or step0_data.get("farmer_category", 1594)
+    if isinstance(raw_cat, list):
+        farmer_category = raw_cat[0]
+    else:
+        farmer_category = int(raw_cat)
 
     payload = {
         "id": "",
@@ -1942,36 +1943,21 @@ def build_farmer_api_payload(
         "email_id": step0_data.get("email_id") or None,
         # mobile_no is integer type
         "mobile_no": step0_data.get("mobile_no"),
+        # farmer_category is a single integer (not array) — verified from live ERP
         "farmer_category": farmer_category,
-        "land_classification": step0_data.get("land_classification"),  # READONLY
         "is_member_this_fpc": step0_data.get("is_member_this_fpc", False),
         "other_fpc_name": step0_data.get("other_fpc_name") or None,
         "member_id": step0_data.get("member_id") or None,
-
-        # Additional root-level fields seen in live API response
-        "vendor_code": None,
-        "fax": None,
-        "website_link": None,
-        "attachment": None,
-        "ref_id": None,
-        "ref_type": None,
         "status": True,
 
-        # Children array with stepper objects (verified against live API)
+        # Children — order must match real ERP record:
+        # Address Details, Family Details, Additional Details, Other Details, Land Details, ...
         "children": [
             {
                 "stepper_name": "Address Details ",
                 "is_stepper": True,
                 "details": address_detail_rows,
                 "children": [],
-            },
-            {
-                "stepper_name": "Other Details",
-                "is_stepper": True,
-                "details": [],
-                "children": [],
-                "education_ref_id": other_details.get("education_ref_id"),
-                "electricity_ref_id": other_details.get("electricity_ref_id"),
             },
             {
                 "stepper_name": "Family Details",
@@ -1992,6 +1978,14 @@ def build_farmer_api_payload(
                 "religion_ref_id": additional_details.get("religion_ref_id"),
                 "category_ref_id": additional_details.get("category_ref_id"),
                 "profile_photo": None,
+            },
+            {
+                "stepper_name": "Other Details",
+                "is_stepper": True,
+                "details": [],
+                "children": [],
+                "education_ref_id": other_details.get("education_ref_id"),
+                "electricity_ref_id": other_details.get("electricity_ref_id"),
             },
             {
                 "stepper_name": "Land Details",
@@ -2181,9 +2175,7 @@ FARMER_TYPE_CONFIG = {
         ],
     },
     "borrower": {
-        # Borrower Farmer requires BOTH categories to unlock all 13 tabs:
-        # [1594] alone = 9 tabs; [1593] alone = 6 tabs; union = 13 tabs.
-        "farmer_category": [1593, 1594],
+        "farmer_category": [1594],
         "steppers": [
             "address", "other_details", "additional_details",
             "family", "land", "crop", "kyc", "vehicle",
@@ -2221,46 +2213,39 @@ def generate_batch_payloads(count: int = 10, config: dict = None) -> list:
     Args:
         count: Number of payloads to generate.
         config: Optional dict with keys:
-            - farmer_type (str): One of 'fpc_member', 'borrower', 'walkin', 'custom'.
-            - overrides (dict): Optional overrides:
-                - farmer_category (list): e.g. [1593]
-                - steppers (list): e.g. ['address', 'land']
-                - address_chain (dict): e.g. {state_ref_id_id: 98, ...}
-                - field_defaults (dict): e.g. {land_ownership: 1930}
-            - workflow (dict): Optional workflow config:
-                - verify (bool): Whether to verify after creation
-                - approve (bool): Whether to approve after verification
+            - farmer_types (list[str]): Multi-select types, e.g. ['fpc_member', 'walkin'].
+              count records are generated per selected type.
+            - farmer_type (str): Single-select fallback (legacy). One of 'fpc_member', 'borrower', 'walkin'.
+            - overrides (dict): Optional overrides.
 
     Returns:
         List of payload dicts.
     """
     cfg = config or {}
-    farmer_type = cfg.get("farmer_type", "fpc_member")
     overrides = cfg.get("overrides", {})
-    workflow = cfg.get("workflow", {})
 
-    # Resolve farmer type config
-    type_cfg = FARMER_TYPE_CONFIG.get(farmer_type, FARMER_TYPE_CONFIG["fpc_member"])
-    stepper_keys = overrides.get("steppers", type_cfg["steppers"])
-    farmer_category = overrides.get("farmer_category", type_cfg["farmer_category"])
-
-
-    # Build dropdown overrides
-    dropdown_ids = {}
-    if overrides.get("address_chain"):
-        dropdown_ids.update(overrides["address_chain"])
-    if overrides.get("field_defaults"):
-        dropdown_ids.update(overrides["field_defaults"])
-    if farmer_category:
-        dropdown_ids["farmer_category"] = farmer_category
-
-    allowed_names = {STEPPER_KEY_TO_NAME[k] for k in stepper_keys if k in STEPPER_KEY_TO_NAME}
+    farmer_types = cfg.get("farmer_types") or [cfg.get("farmer_type", "fpc_member")]
 
     payloads = []
-    for _ in range(count):
-        payload = generate_farmer_api_payload(dropdown_ids=dropdown_ids or None)
-        payload["children"] = [c for c in payload["children"] if c["stepper_name"] in allowed_names]
-        payloads.append(payload)
+    for farmer_type in farmer_types:
+        type_cfg = FARMER_TYPE_CONFIG.get(farmer_type, FARMER_TYPE_CONFIG["fpc_member"])
+        stepper_keys = overrides.get("steppers", type_cfg["steppers"])
+        farmer_category = overrides.get("farmer_category", type_cfg["farmer_category"])
+
+        dropdown_ids: dict = {}
+        if overrides.get("address_chain"):
+            dropdown_ids.update(overrides["address_chain"])
+        if overrides.get("field_defaults"):
+            dropdown_ids.update(overrides["field_defaults"])
+        if farmer_category:
+            dropdown_ids["farmer_category"] = farmer_category
+
+        allowed_names = {STEPPER_KEY_TO_NAME[k] for k in stepper_keys if k in STEPPER_KEY_TO_NAME}
+
+        for _ in range(count):
+            payload = generate_farmer_api_payload(dropdown_ids=dropdown_ids or None)
+            payload["children"] = [c for c in payload["children"] if c["stepper_name"] in allowed_names]
+            payloads.append(payload)
 
     return payloads
 
