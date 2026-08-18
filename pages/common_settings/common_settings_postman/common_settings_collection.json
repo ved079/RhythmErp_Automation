@@ -125,7 +125,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"UOM\",\n  \"uom_code\": \"FT\",\n  \"uom_description\": \"Feet\",\n  \"status\": true\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"UOM\",\n  \"uom_code\": \"BOX\",\n  \"uom_description\": \"Box\",\n  \"status\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -291,7 +291,7 @@
                   "    }, function(err, res) {",
                   "        if (err) { console.error(err); cb([]); return; }",
                   "        const data = res.json();",
-                  "        const results = data.results || data.data || [];",
+                  "        const results = data.screenmatlistingdata_set || data.results || data.data || [];",
                   "        cb(results.map(r => r.id).filter(id => id != null));",
                   "    });",
                   "}",
@@ -431,7 +431,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"bank_name\": \"State Bank of India\",\n  \"bank_code\": \"0001\",\n  \"branch_name\": \"Fort, Mumbai\",\n  \"branch_code\": \"BR0001\",\n  \"account_number\": \"990811585917\",\n  \"account_type\": 1849,\n  \"swift_number\": \"IYYMHXPKXQK\",\n  \"iban_number\": \"\",\n  \"ifsc_code\": \"SBIN0000300\",\n  \"cash_credit_limit\": 2000000,\n  \"bank_address\": \"Fort, Mumbai, State Bank of India\",\n  \"is_default_bank\": true,\n  \"status\": true,\n  \"attribute_name\": \"Bank\",\n  \"account_ref_id\": 1005\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"bank_name\": \"State Bank of India\",\n  \"bank_code\": \"0001\",\n  \"branch_name\": \"Fort, Mumbai\",\n  \"branch_code\": \"BR0001\",\n  \"account_number\": \"534937635621\",\n  \"account_type\": 1849,\n  \"swift_number\": \"ODHUOXSSFEO\",\n  \"iban_number\": \"\",\n  \"ifsc_code\": \"SBIN0000300\",\n  \"cash_credit_limit\": 2000000,\n  \"bank_address\": \"Fort, Mumbai, State Bank of India\",\n  \"is_default_bank\": true,\n  \"status\": true,\n  \"attribute_name\": \"Bank\",\n  \"account_ref_id\": 1005\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -564,7 +564,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Designation\",\n  \"name\": \"Assistant Engineer\",\n  \"description\": \"Responsible for assistant engineer duties and responsibilities\",\n  \"status\": true\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Designation\",\n  \"name\": \"Shift Supervisor\",\n  \"description\": \"Responsible for shift supervisor duties and responsibilities\",\n  \"status\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -963,7 +963,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Season\",\n  \"name\": \"Off Season\",\n  \"description\": \"Non-operational period for specific commodities\",\n  \"status\": true\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Season\",\n  \"name\": \"Varsha Ritu\",\n  \"description\": \"Rainy/monsoon season (Jul\\u2013Sep) as per Indian calendar\",\n  \"status\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1129,7 +1129,7 @@
                   "    }, function(err, res) {",
                   "        if (err) { console.error(err); cb([]); return; }",
                   "        const data = res.json();",
-                  "        const results = data.results || data.data || [];",
+                  "        const results = data.screenmatlistingdata_set || data.results || data.data || [];",
                   "        cb(results.map(r => r.id).filter(id => id != null));",
                   "    });",
                   "}",
@@ -1305,7 +1305,7 @@
                   "    }, function(err, res) {",
                   "        if (err) { console.error(err); cb([]); return; }",
                   "        const data = res.json();",
-                  "        const results = data.results || data.data || [];",
+                  "        const results = data.screenmatlistingdata_set || data.results || data.data || [];",
                   "        cb(results.map(r => r.id).filter(id => id != null));",
                   "    });",
                   "}",
@@ -1485,7 +1485,7 @@
                   "    }, function(err, res) {",
                   "        if (err) { console.error(err); cb([]); return; }",
                   "        const data = res.json();",
-                  "        const results = data.results || data.data || [];",
+                  "        const results = data.screenmatlistingdata_set || data.results || data.data || [];",
                   "        cb(results.map(r => r.id).filter(id => id != null));",
                   "    });",
                   "}",
