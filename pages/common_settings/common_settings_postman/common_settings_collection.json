@@ -1,0 +1,1339 @@
+{
+  "info": {
+    "name": "Common Settings",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Rhythm ERP Common Settings module.\n\nSetup: import + set base_url, token, tenant_id in \"Rhythm ERP Environment\".\n\nFK ID note: Some modules have tenant-specific FK IDs that must be resolved by calling the respective List endpoints first. Those fields use {{env_var}} placeholders — set them in your environment before running Create requests."
+  },
+  "item": [
+    {
+      "name": "UOM",
+      "description": "UOM CRUD — flat form, no steppers.\n\nuom_code must be unique, max 10 chars.",
+      "item": [
+        {
+          "name": "List UOM",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/UOM/?page_number=1&page_size=25&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "UOM",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get UOM Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/UOM/{{uom_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "UOM",
+                "{{uom_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create UOM",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"UOM\",\n  \"uom_code\": \"GM\",\n  \"uom_description\": \"Gram\",\n  \"status\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a new UOM. id must be empty string \"\"."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "UOM Conversion",
+      "description": "UOM Conversion CRUD — flat form, no steppers.\n\nsource_uom_code and target_uom_code are FK integer IDs resolved live from the UOM screen (tenant-specific).\nStep 1: Run \"List UOM\" to get valid IDs for your tenant.\nStep 2: Replace {{source_uom_id}} and {{target_uom_id}} in the body with actual integers.",
+      "item": [
+        {
+          "name": "List UOM Conversion",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/UOM%20Conversion/?page_number=1&page_size=25&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "UOM%20Conversion",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get UOM Conversion Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/UOM%20Conversion/{{uom_conversion_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "UOM%20Conversion",
+                "{{uom_conversion_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create UOM Conversion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"UOM Conversion\",\n  \"source_uom_code\": \"{{source_uom_id}}\",\n  \"target_uom_code\": \"{{target_uom_id}}\",\n  \"conversion_factor\": 1000.0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "IMPORTANT: source_uom_code and target_uom_code are tenant-specific integer FK IDs.\nRun \"List UOM\" first, pick two UOM IDs, then replace the env vars."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Bank",
+      "description": "Bank CRUD — flat form, no steppers.\n\naccount_type: Current=1849, Saving=1850 (hardcoded in ERP, rarely change)\naccount_ref_id: GL account/chart of accounts ID (BANK 1=1005, BANK 2=778, etc.)\nbank_name: letters and spaces only, min 10 chars\nbank_code: exactly 4 digits\nswift_number: letters only (A-Z)",
+      "item": [
+        {
+          "name": "List Bank",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Bank/?page_number=1&page_size=25&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Bank",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Bank Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Bank/{{bank_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Bank",
+                "{{bank_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Bank",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"bank_name\": \"State Bank of India\",\n  \"bank_code\": \"0001\",\n  \"branch_name\": \"Fort, Mumbai\",\n  \"branch_code\": \"BR0001\",\n  \"account_number\": \"836132114669\",\n  \"account_type\": 1849,\n  \"swift_number\": \"KPVKAFFCDUV\",\n  \"iban_number\": \"\",\n  \"ifsc_code\": \"SBIN0000300\",\n  \"cash_credit_limit\": 10000000,\n  \"bank_address\": \"Fort, Mumbai, State Bank of India\",\n  \"is_default_bank\": true,\n  \"status\": true,\n  \"attribute_name\": \"Bank\",\n  \"account_ref_id\": 1005\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a new Bank record. id must be empty string \"\".\naccount_type: 1849=Current, 1850=Saving\naccount_ref_id: GL account ID from chart of accounts (tenant-specific — verify via List)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Designation",
+      "description": "Designation CRUD — flat form, no steppers, no FK dropdowns.\n\nname: letters and spaces only (type=\"character\"). Digits/underscores/special chars rejected.",
+      "item": [
+        {
+          "name": "List Designation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Designation/?page_number=1&page_size=25&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Designation",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Designation Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Designation/{{designation_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Designation",
+                "{{designation_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Designation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Designation\",\n  \"name\": \"Regional Manager\",\n  \"description\": \"Responsible for regional manager duties and responsibilities\",\n  \"status\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a new Designation. id must be empty string \"\".\nname: letters and spaces only."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Error Code Mst",
+      "description": "Error Code Mst CRUD — flat form, no steppers.\n\nerror_code_type IDs: Farmer=643, Debit Note=216, Credit Note=215, Workflow=140\nis_qty_amount: \"Qty\" or \"Amount\"",
+      "item": [
+        {
+          "name": "List Error Code Mst",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Error%20Code%20Mst/?page_number=1&page_size=25&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Error%20Code%20Mst",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Error Code Mst Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Error%20Code%20Mst/{{error_code_mst_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Error%20Code%20Mst",
+                "{{error_code_mst_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Error Code Mst",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"error_code_type\": 643,\n  \"code\": \"FM-DOC\",\n  \"description\": \"Farmer documentation incomplete or missing\",\n  \"is_qty_amount\": \"Qty\",\n  \"attribute_name\": \"Error Code Mst\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a new Error Code Mst. id must be empty string \"\".\nerror_code_type: 643=Farmer, 216=Debit Note, 215=Credit Note, 140=Workflow"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "HSN SAC",
+      "description": "HSN SAC CRUD — flat form, no steppers.\n\nhsn_sac_type IDs: Services=212, Transportation=162, Commission=161, Commodity=159\nhsn_sac_no: 4-digit HSN code or 6-digit SAC code",
+      "item": [
+        {
+          "name": "List HSN SAC",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/HSN%20SAC/?page_number=1&page_size=25&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "HSN%20SAC",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get HSN SAC Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/HSN%20SAC/{{hsn_sac_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "HSN%20SAC",
+                "{{hsn_sac_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create HSN SAC",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"hsn_sac_no\": \"998311\",\n  \"hsn_sac_type\": 212,\n  \"hsn_sac_description\": \"Licensing services for the right to use computer software\",\n  \"attribute_name\": \"HSN SAC\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a new HSN SAC entry. id must be empty string \"\".\nhsn_sac_type: 212=Services, 162=Transportation, 161=Commission, 159=Commodity"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Season",
+      "description": "Season CRUD — flat form, no steppers, no FK dropdowns.\n\nname: letters and spaces only (type=\"character\"). Digits/underscores/special chars rejected.",
+      "item": [
+        {
+          "name": "List Season",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Season/?page_number=1&page_size=25&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Season",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Season Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Season/{{season_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Season",
+                "{{season_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Season",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Season\",\n  \"name\": \"Planting Season\",\n  \"description\": \"Active planting period for perennial crops\",\n  \"status\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a new Season. id must be empty string \"\".\nname: letters and spaces only."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tax Authority",
+      "description": "Tax Authority CRUD — flat form, no steppers.\n\ntax_type_ref_id and country_ref_id are live-resolved FK IDs (tenant-specific).\nStep 1: GET /core/dynamic-screen-wrapper/Tax%20Type/ to find tax type IDs.\nStep 2: GET /core/dynamic-screen-wrapper/Country/ to find country IDs.\nStep 3: Set {{tax_type_id}} and {{country_id}} in your Postman environment.",
+      "item": [
+        {
+          "name": "List Tax Authority",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Tax%20Authority/?page_number=1&page_size=25&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Tax%20Authority",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Tax Authority Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Tax%20Authority/{{tax_authority_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Tax%20Authority",
+                "{{tax_authority_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Tax Authority",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"tax_name\": \"CGST Authority Mumbai\",\n  \"tax_type_ref_id\": \"{{tax_type_id}}\",\n  \"country_ref_id\": \"{{country_id}}\",\n  \"attribute_name\": \"Tax Authority\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a new Tax Authority.\n\nIMPORTANT: tax_type_ref_id and country_ref_id are tenant-specific FK IDs resolved live.\nList Tax Type and Country screens first to get valid IDs."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tax Rate",
+      "description": "Tax Rate CRUD — has stepper \"Define Tax Rate Details\".\n\nAll FK IDs are live-resolved (tenant-specific):\n  tax_type_ref_id: from Tax Type screen\n  tax_authority_ref_id: from Tax Authority screen\n  hsn_sac_number (stepper detail): from HSN SAC screen\n\nStep 1: List Tax Type → get {{tax_type_id}}\nStep 2: List Tax Authority → get {{tax_authority_id}}\nStep 3: List HSN SAC → get {{hsn_sac_id}}",
+      "item": [
+        {
+          "name": "List Tax Rate",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Tax%20Rate/?page_number=1&page_size=25&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Tax%20Rate",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Tax Rate Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Tax%20Rate/{{tax_rate_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Tax%20Rate",
+                "{{tax_rate_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Tax Rate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"tax_rate_name\": \"GST Eighteen\",\n  \"tax_type_ref_id\": \"{{tax_type_id}}\",\n  \"tax_authority_ref_id\": \"{{tax_authority_id}}\",\n  \"from_date\": \"2025-04-01\",\n  \"to_date\": \"2026-03-31\",\n  \"revision_status\": \"Active\",\n  \"attribute_name\": \"Tax Rate\",\n  \"children\": [\n    {\n      \"stepper_name\": \"Define Tax Rate Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"hsn_sac_number\": \"{{hsn_sac_id}}\",\n          \"tax_rate\": 18\n        }\n      ],\n      \"children\": []\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a new Tax Rate with stepper detail lines.\n\nIMPORTANT: All FK IDs are tenant-specific and must be resolved live:\n  tax_type_ref_id → List Tax Type\n  tax_authority_ref_id → List Tax Authority\n  hsn_sac_number (in children) → List HSN SAC"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Vehicle Master",
+      "description": "Vehicle Master CRUD — flat form, no steppers.\n\nvehicle_type_id and fuel_type_ref_id are live-resolved FK IDs (tenant-specific).\nStep 1: GET /core/dynamic-screen-wrapper/Vehicle%20Type/ to find vehicle type IDs.\nStep 2: GET /core/dynamic-screen-wrapper/Fuel%20Type/ to find fuel type IDs.\nStep 3: Set {{vehicle_type_id}} and {{fuel_type_id}} in your Postman environment.",
+      "item": [
+        {
+          "name": "List Vehicle Master",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Vehicle%20Master/?page_number=1&page_size=25&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Vehicle%20Master",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Vehicle Master Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Vehicle%20Master/{{vehicle_master_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Vehicle%20Master",
+                "{{vehicle_master_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Vehicle Master",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"name\": \"Tata Ace\",\n  \"vehicle_price\": 500000,\n  \"vehicle_type_id\": \"{{vehicle_type_id}}\",\n  \"fuel_type_ref_id\": \"{{fuel_type_id}}\",\n  \"description\": \"Mini truck for intra-city goods transport\",\n  \"attribute_name\": \"Vehicle Master\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a new Vehicle Master record.\n\nIMPORTANT: vehicle_type_id and fuel_type_ref_id are tenant-specific FK IDs.\nList Vehicle Type and Fuel Type screens first to get valid IDs."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
