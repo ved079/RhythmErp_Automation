@@ -125,7 +125,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"UOM\",\n  \"uom_code\": \"BOX\",\n  \"uom_description\": \"Box\",\n  \"status\": true\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"UOM\",\n  \"uom_code\": \"ROLL\",\n  \"uom_description\": \"Roll\",\n  \"status\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -431,7 +431,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"bank_name\": \"State Bank of India\",\n  \"bank_code\": \"0001\",\n  \"branch_name\": \"Fort, Mumbai\",\n  \"branch_code\": \"BR0001\",\n  \"account_number\": \"534937635621\",\n  \"account_type\": 1849,\n  \"swift_number\": \"ODHUOXSSFEO\",\n  \"iban_number\": \"\",\n  \"ifsc_code\": \"SBIN0000300\",\n  \"cash_credit_limit\": 2000000,\n  \"bank_address\": \"Fort, Mumbai, State Bank of India\",\n  \"is_default_bank\": true,\n  \"status\": true,\n  \"attribute_name\": \"Bank\",\n  \"account_ref_id\": 1005\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"bank_name\": \"State Bank of India\",\n  \"bank_code\": \"0001\",\n  \"branch_name\": \"Fort, Mumbai\",\n  \"branch_code\": \"BR0001\",\n  \"account_number\": \"412825387705\",\n  \"account_type\": 1849,\n  \"swift_number\": \"QKFEJPKGTKG\",\n  \"iban_number\": \"\",\n  \"ifsc_code\": \"SBIN0000300\",\n  \"cash_credit_limit\": 500000,\n  \"bank_address\": \"Fort, Mumbai, State Bank of India\",\n  \"is_default_bank\": true,\n  \"status\": true,\n  \"attribute_name\": \"Bank\",\n  \"account_ref_id\": 1005\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -564,7 +564,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Designation\",\n  \"name\": \"Shift Supervisor\",\n  \"description\": \"Responsible for shift supervisor duties and responsibilities\",\n  \"status\": true\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Designation\",\n  \"name\": \"Tax Auditor\",\n  \"description\": \"Responsible for tax auditor duties and responsibilities\",\n  \"status\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -963,7 +963,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Season\",\n  \"name\": \"Varsha Ritu\",\n  \"description\": \"Rainy/monsoon season (Jul\\u2013Sep) as per Indian calendar\",\n  \"status\": true\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Season\",\n  \"name\": \"Rabi Early\",\n  \"description\": \"Early sowing window for Rabi crops (October\\u2013November)\",\n  \"status\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -978,7 +978,7 @@
     },
     {
       "name": "Tax Authority",
-      "description": "Tax Authority CRUD — flat form, no steppers.\n\nPre-request script resolves tax_type_ref_id (Tax Type) and country_ref_id (Country) live.",
+      "description": "Tax Authority CRUD — flat form, no steppers.\n\ntax_type_ref_id: 93 (GST, hardcoded)\ncountry_ref_id: 8 (India, hardcoded)",
       "item": [
         {
           "name": "List Tax Authority",
@@ -1096,59 +1096,16 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"tax_name\": \"CGST Authority Mumbai\",\n  \"tax_type_ref_id\": 0,\n  \"country_ref_id\": 0,\n  \"attribute_name\": \"Tax Authority\"\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"tax_name\": \"CGST Authority Mumbai\",\n  \"tax_type_ref_id\": 93,\n  \"country_ref_id\": 8,\n  \"attribute_name\": \"Tax Authority\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Pre-request script patches tax_type_ref_id and country_ref_id live."
+            "description": "tax_type_ref_id=93 (GST), country_ref_id=8 (India) — hardcoded."
           },
-          "response": [],
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const baseUrl = pm.environment.get('base_url');",
-                  "const token = pm.environment.get('token');",
-                  "const tenantId = pm.environment.get('tenant_id');",
-                  "const reqBody = JSON.parse(pm.request.body.raw);",
-                  "",
-                  "function resolveScreen(screen, cb) {",
-                  "    pm.sendRequest({",
-                  "        url: baseUrl + '/core/dynamic-screen-wrapper/' + screen + '/?page_number=1&page_size=100&search_string=&is_excel_download=false',",
-                  "        method: 'GET',",
-                  "        header: {",
-                  "            'Authorization': 'Bearer ' + token,",
-                  "            'X-Tenant-ID': tenantId,",
-                  "            'Content-Type': 'application/json',",
-                  "        }",
-                  "    }, function(err, res) {",
-                  "        if (err) { console.error(err); cb([]); return; }",
-                  "        const data = res.json();",
-                  "        const results = data.screenmatlistingdata_set || data.results || data.data || [];",
-                  "        cb(results.map(r => r.id).filter(id => id != null));",
-                  "    });",
-                  "}",
-                  "",
-                  "let pending = 2;",
-                  "function done() { if (--pending === 0) pm.request.body.raw = JSON.stringify(reqBody, null, 2); }",
-                  "",
-                  "resolveScreen('Tax%20Type', function(ids) {",
-                  "    if (ids[0] != null) reqBody.tax_type_ref_id = ids[0];",
-                  "    done();",
-                  "});",
-                  "resolveScreen('Country', function(ids) {",
-                  "    if (ids[0] != null) reqBody.country_ref_id = ids[0];",
-                  "    done();",
-                  "});"
-                ]
-              }
-            }
-          ]
+          "response": []
         }
       ]
     },
@@ -1272,7 +1229,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"tax_rate_name\": \"GST Eighteen\",\n  \"tax_type_ref_id\": 0,\n  \"tax_authority_ref_id\": 0,\n  \"from_date\": \"2025-04-01\",\n  \"to_date\": \"2026-03-31\",\n  \"revision_status\": \"Active\",\n  \"attribute_name\": \"Tax Rate\",\n  \"children\": [\n    {\n      \"stepper_name\": \"Define Tax Rate Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"hsn_sac_number\": 0,\n          \"tax_rate\": 18\n        }\n      ],\n      \"children\": []\n    }\n  ]\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"tax_rate_name\": \"GST Eighteen\",\n  \"tax_type_ref_id\": 93,\n  \"tax_authority_ref_id\": 0,\n  \"from_date\": \"2025-04-01\",\n  \"to_date\": \"2026-03-31\",\n  \"revision_status\": \"Active\",\n  \"attribute_name\": \"Tax Rate\",\n  \"children\": [\n    {\n      \"stepper_name\": \"Define Tax Rate Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"hsn_sac_number\": 0,\n          \"tax_rate\": 18\n        }\n      ],\n      \"children\": []\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1310,13 +1267,9 @@
                   "    });",
                   "}",
                   "",
-                  "let pending = 3;",
+                  "let pending = 2;",
                   "function done() { if (--pending === 0) pm.request.body.raw = JSON.stringify(reqBody, null, 2); }",
                   "",
-                  "resolveScreen('Tax%20Type', function(ids) {",
-                  "    if (ids[0] != null) reqBody.tax_type_ref_id = ids[0];",
-                  "    done();",
-                  "});",
                   "resolveScreen('Tax%20Authority', function(ids) {",
                   "    if (ids[0] != null) reqBody.tax_authority_ref_id = ids[0];",
                   "    done();",
@@ -1493,11 +1446,11 @@
                   "let pending = 2;",
                   "function done() { if (--pending === 0) pm.request.body.raw = JSON.stringify(reqBody, null, 2); }",
                   "",
-                  "resolveScreen('Vehicle%20Type', function(ids) {",
+                  "resolveScreen('Accounting%20Template', function(ids) {",
                   "    if (ids[0] != null) reqBody.vehicle_type_id = ids[0];",
                   "    done();",
                   "});",
-                  "resolveScreen('Fuel%20Type', function(ids) {",
+                  "resolveScreen('Ledger%20Group', function(ids) {",
                   "    if (ids[0] != null) reqBody.fuel_type_ref_id = ids[0];",
                   "    done();",
                   "});"
