@@ -94,7 +94,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
   const [authError, setAuthError] = useState(false)
   const [attrNumber, setAttrNumber] = useState(1)
   const [farmerConfig, setFarmerConfig] = useState<FarmerConfig>({
-    farmer_type: 'fpc_member',
+    farmer_types: ['fpc_member'],
     overrides: {},
   })
   const [history, setHistory] = useState<BatchRunSummary[]>([])
