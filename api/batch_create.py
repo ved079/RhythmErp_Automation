@@ -25,12 +25,12 @@ MODULE_IMPORT_PATHS = {
         "customer": "pages.registration.modules.customer.data.customer_data",
         "employee": "pages.registration.modules.employee.data.employee_data",
         "agent": "pages.registration.modules.agent.data.agent_data",
-        "directors": "pages.registration.modules.directors.data.directors_data",
-        "member": "pages.registration.modules.member.data.member_data",
-        "miscellaneous_documents": "pages.registration.modules.miscellaneous_documents.data.miscellaneous_documents_data",
-        "constituent_documents": "pages.registration.modules.constituent_documents.data.constituent_documents_data",
-        "register_of_loan": "pages.registration.modules.register_of_loan.data.register_of_loan_data",
-        "register_charges": "pages.registration.modules.register_charges.data.register_charges_data",
+        "directors": "pages.documents.modules.directors.data.directors_data",
+        "member": "pages.documents.modules.member.data.member_data",
+        "miscellaneous_documents": "pages.documents.modules.miscellaneous_documents.data.miscellaneous_documents_data",
+        "constituent_documents": "pages.documents.modules.constituent_documents.data.constituent_documents_data",
+        "register_of_loan": "pages.documents.modules.register_of_loan.data.register_of_loan_data",
+        "register_charges": "pages.documents.modules.register_charges.data.register_charges_data",
     },
     "common_settings": {
         "bank": "pages.common_settings.modules.bank.data.bank_data",
@@ -237,6 +237,14 @@ def _build_payloads_only(request: BatchCreateRequest) -> list[dict]:
         kwargs["attr_number"] = attr_number
 
     payloads = generate_fn(**kwargs)
+
+    # Tenant-universal FK pins (e.g. Customer Sale Type = "Commission", resolved live)
+    pin_fn = getattr(data_mod, "apply_tenant_fk_pins", None)
+    if callable(pin_fn):
+        try:
+            payloads = pin_fn(client, payloads)
+        except Exception:
+            pass
 
     try:
         client.close()
@@ -477,6 +485,19 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
     if conflict_override and isinstance(conflict_override, dict):
         for p in payloads:
             p.update(conflict_override)
+
+    # Tenant-universal FK pins (e.g. Customer Sale Type = "Commission", resolved live)
+    pin_fn = getattr(data_mod, "apply_tenant_fk_pins", None)
+    if callable(pin_fn):
+        try:
+            payloads = pin_fn(client, payloads)
+        except Exception as e:
+            yield _sse_event(LogEvent(
+                type="warning",
+                message=f"apply_tenant_fk_pins failed: {e}",
+                timestamp=datetime.now(timezone.utc),
+                run_id=run_id,
+            ))
     batch_size = len(payloads)
 
     yield _sse_event(LogEvent(
