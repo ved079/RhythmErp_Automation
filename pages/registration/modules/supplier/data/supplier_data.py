@@ -200,7 +200,7 @@ def generate_company_name(prefix=None):
     # Fallback (should never hit for < 1000 entries)
     ts = datetime.now().strftime("%H%M%S")
     rand = random.randint(100, 999)
-    fallback = f"{random.choice(_COMPANY_PREFIXES)} {random.choice(_COMPANY_NAMES)} {random.choice(_COMPANY_TYPES)} {ts}{rand}"
+    fallback = f"{random.choice(_COMPANY_PREFIXES)} {random.choice(_COMPANY_NAMES)} {random.choice(_COMPANY_TYPES)}"
     _generated_names.add(fallback)
     return fallback
 
