@@ -8,7 +8,7 @@ FIELD REFERENCE (flat form — no steppers):
 
   1. Loan Details             (file, optional)
   2. Sanction Date            (date, required)
-  3. Bank Name                (character, required)
+  3. Bank Name                (character, required) — sent as "name" field in API payload
      Pattern: ^[A-Za-z ]+$  — letters and spaces only
   4. Sanction Amount          (integer, required)
      Pattern: ^(?!.*[+-])[0-9]+(\\.[0-9]{1,4})?$  — positive, up to 4 decimals
@@ -187,7 +187,7 @@ def build_api_payload(data=None, fk_overrides=None):
         "id": "",
         "attribute_name": "Register of Loan",
         "sanction_date": data.get("sanction_date") or generate_date_string(),
-        "bank_name": data.get("bank_name") or generate_bank_name(),
+        "name": data.get("bank_name") or generate_bank_name(),
         "sanction_amount": data.get("sanction_amount") or generate_sanction_amount(),
         "facility_details_ref_id": fk_overrides.get("facility_details_ref_id")
                                     or data.get("facility_details_ref_id")
