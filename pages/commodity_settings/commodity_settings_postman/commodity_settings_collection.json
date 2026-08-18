@@ -1014,6 +1014,202 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Commodity Base Rate",
+      "item": [
+        {
+          "name": "List Commodity Base Rate",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Commodity%20Base%20Rate/?page_number=1&page_size=25&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Commodity%20Base%20Rate",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Commodity Base Rate Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Commodity%20Base%20Rate/{{record_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Commodity%20Base%20Rate",
+                "{{record_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Commodity Base Rate",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const baseUrl = pm.environment.get('base_url');",
+                  "const token   = pm.environment.get('token');",
+                  "const tenantId = pm.environment.get('tenant_id');",
+                  "const reqBody = JSON.parse(pm.request.body.raw);",
+                  "",
+                  "// pricing_type_ref_id is hardcoded: 118=Common, 120=Supplier",
+                  "// No screen to resolve \u2014 static ERP values.",
+                  "",
+                  "function resolveScreen(screen, cb) {",
+                  "    pm.sendRequest({",
+                  "        url: baseUrl + '/core/dynamic-screen-wrapper/' + screen + '/?page_number=1&page_size=100&search_string=&is_excel_download=false',",
+                  "        method: 'GET',",
+                  "        header: {",
+                  "            'Authorization': 'Bearer ' + token,",
+                  "            'X-Tenant-ID': tenantId,",
+                  "            'Content-Type': 'application/json'",
+                  "        }",
+                  "    }, function(err, res) {",
+                  "        if (err) { console.error(screen + ' error:', err); cb([]); return; }",
+                  "        const data = res.json();",
+                  "        const results = data.screenmatlistingdata_set || data.results || data.data || [];",
+                  "        cb(results.map(function(r) { return r.id; }).filter(function(id) { return id != null; }));",
+                  "    });",
+                  "}",
+                  "",
+                  "let pending = 3;",
+                  "function done() {",
+                  "    if (--pending === 0) pm.request.body.raw = JSON.stringify(reqBody, null, 2);",
+                  "}",
+                  "",
+                  "// location_ref_id \u2014 pick first available location",
+                  "// NOTE: unique constraint is (to_date, location_ref_id). If ids[0] already has",
+                  "// a CBR entry, the ERP will reject. Change location_ref_id to an unused one.",
+                  "resolveScreen('Location', function(ids) {",
+                  "    if (ids[0] != null) reqBody.location_ref_id = ids[0];",
+                  "    done();",
+                  "});",
+                  "",
+                  "// item_ref_id in stepper detail row \u2014 pick first item from Item Master",
+                  "resolveScreen('Item%20Master', function(ids) {",
+                  "    if (ids[0] != null && reqBody.children && reqBody.children[0] &&",
+                  "        reqBody.children[0].details && reqBody.children[0].details[0]) {",
+                  "        reqBody.children[0].details[0].item_ref_id = ids[0];",
+                  "    }",
+                  "    done();",
+                  "});",
+                  "",
+                  "// uom in stepper detail row \u2014 pick first UOM",
+                  "resolveScreen('UOM', function(ids) {",
+                  "    if (ids[0] != null && reqBody.children && reqBody.children[0] &&",
+                  "        reqBody.children[0].details && reqBody.children[0].details[0]) {",
+                  "        reqBody.children[0].details[0].uom = ids[0];",
+                  "    }",
+                  "    done();",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Commodity Base Rate\",\n  \"pricing_type_ref_id\": 118,\n  \"from_date\": \"2026-06-02T00:00:00Z\",\n  \"to_date\": \"2099-12-30T18:30:00Z\",\n  \"location_ref_id\": 0,\n  \"details\": [],\n  \"children\": [\n    {\n      \"stepper_name\": \"Define Item Rate Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"item_ref_id\": 0,\n          \"item_rate\": \"1500\",\n          \"uom\": 0\n        }\n      ],\n      \"children\": []\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
     }
   ]
 }
