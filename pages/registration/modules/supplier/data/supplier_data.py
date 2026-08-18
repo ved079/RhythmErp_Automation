@@ -91,7 +91,7 @@ _COMPANY_NAMES = [
 ]
 
 _COMPANY_TYPES = [
-    "Traders", "Enterprises", "Industries", "Trading Co.",
+    "Traders", "Enterprises", "Industries", "Trading",
     "Supply Chain", "Agro", "Packaging", "Exports",
     "Commodities", "Produce", "Foods", "Processing",
     "Grain Processors", "Oil Mills", "Spice Merchants",
@@ -99,7 +99,7 @@ _COMPANY_TYPES = [
 ]
 
 _COMPANY_SUFFIXES = [
-    "Pvt Ltd", "LLP", "Co.", "& Sons", "& Bros",
+    "Pvt Ltd", "LLP", "Sons", "Bros",
     "Associates", "Group", "Corp", "", "", "",  # empty = no suffix
 ]
 
