@@ -570,6 +570,16 @@ SUPPLY_TYPE_IDS = [135, 136, 223, 225, 1494]
 SALE_TYPE_IDS = [1264, 1265, 1266, 1267]
 #   1264 = Retail, 1265 = Wholesale, 1266 = Direct, 1267 = Consignment
 
+# Sale Type is ALWAYS pinned to "Commission" (tenant-universal). The ID differs
+# per tenant; resolve it at create time by label via apply_tenant_fk_pins().
+SALE_TYPE_COMMISSION_LABEL = "Commission"
+SALE_TYPE_COMMISSION_FALLBACK_ID = 1267
+
+# Supply Type is ALWAYS pinned to "Both" (tenant-universal). The ID differs
+# per tenant; resolve it at create time by label via apply_tenant_fk_pins().
+SUPPLY_TYPE_BOTH_LABEL = "Both"
+SUPPLY_TYPE_BOTH_FALLBACK_ID = 136  # fallback if live resolution fails
+
 ADDRESS_TYPE_IDS = [43, 42]
 #   43 = Shipping, 42 = Billing
 
@@ -594,8 +604,8 @@ PREFERRED_PAYMENT_METHOD_IDS = [53, 54, 55, 141, 143]
 COURIER_TERMS_IDS = [51, 52, 1252]
 #   Various courier terms
 
-GST_REGISTRATION_STATUS_IDS = [49, 50]
-#   49 = Registered, 50 = Unregistered
+GST_REGISTRATION_STATUS_ID = 1924  # Registered — pinned (matches Supplier + reference record)
+GST_REGISTRATION_STATUS_IDS = [1924]
 #   NOTE: The ERP shows "Registered" / "Unregistered" labels for this dropdown.
 #   This is a separate field from Gst Registration Type (Composit/Regular).
 
@@ -610,14 +620,14 @@ DEFAULT_COUNTRY_REF_ID = 8    # India
 DEFAULT_CUSTOMER_FK_IDS = {
     "ownership_status_ref_id": 7,            # Private Limited Company
     "supply_type_ref_id": 225,              # Domestic
-    "sale_type_ref_id": 1265,               # Wholesale
+    "sale_type_ref_id": SALE_TYPE_COMMISSION_FALLBACK_ID,   # Commission
     "default_currency_ref_id": 1,            # INR
     "address_type": 43,                      # Shipping
     "country_ref_id_id": 8,                  # India
     "account_type": 1849,                    # Current
     "bank_doc_id": 36,                       # Bank Statement
     "preferred_payment_method_ref_id": 55,
-    "gst_registration_status": 49,           # Registered
+    "gst_registration_status": GST_REGISTRATION_STATUS_ID,  # Registered
     "gst_registration_type": 50,             # Regular
     "payment_terms_ref_id": 131,             # Immediate
     "delivery_terms_ref_id": 129,            # Delivery
@@ -699,8 +709,7 @@ COURIER_TERMS_NAMES = {
 }
 
 GST_REGISTRATION_STATUS_NAMES = {
-    49: "Registered",
-    50: "Unregistered",
+    1924: "Registered",
 }
 
 GST_REGISTRATION_TYPE_NAMES = {
@@ -752,6 +761,7 @@ FIELD_VALIDATION_RULES = {
     "address": {"type": "character", "required": True, "max_length": 255},
     "pin_code": {"type": "character", "required": True, "max_length": 255},
     "gstin": {"type": "character", "required": False, "max_length": 255, "pattern": r"^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"},
+    "registration_number": {"type": "character", "required": False, "max_length": 255, "pattern": r"^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"},
     # Customer Bank Details (children[2].details[])
     "bank_name": {"type": "character", "required": True, "max_length": 255},
     "bank_branch_code": {"type": "character", "required": False, "max_length": 255},
@@ -777,14 +787,14 @@ def generate_random_fk_ids() -> dict:
     return {
         "ownership_status_ref_id": random.choice(OWNERSHIP_STATUS_IDS),
         "supply_type_ref_id": random.choice(SUPPLY_TYPE_IDS),
-        "sale_type_ref_id": random.choice(SALE_TYPE_IDS),
+        "sale_type_ref_id": SALE_TYPE_COMMISSION_FALLBACK_ID,
         "default_currency_ref_id": DEFAULT_CURRENCY_REF_ID,
         "address_type": random.choice(ADDRESS_TYPE_IDS),
         "country_ref_id_id": DEFAULT_COUNTRY_REF_ID,
         "account_type": random.choice(ACCOUNT_TYPE_IDS),
         "bank_doc_id": random.choice(BANK_DOC_IDS),
         "preferred_payment_method_ref_id": random.choice(PREFERRED_PAYMENT_METHOD_IDS),
-        "gst_registration_status": random.choice(GST_REGISTRATION_STATUS_IDS),
+        "gst_registration_status": GST_REGISTRATION_STATUS_ID,
         "gst_registration_type": random.choice(GST_REGISTRATION_TYPE_IDS),
         "payment_terms_ref_id": random.choice(PAYMENT_TERMS_IDS),
         "delivery_terms_ref_id": random.choice(DELIVERY_TERMS_IDS),
@@ -799,6 +809,83 @@ def generate_luhn_gstin(state_code=None):
     """
     from pages.registration.modules.supplier.data.supplier_data import generate_gstin
     return generate_gstin(state_code)
+
+
+def generate_registration_number(state_code=None):
+    """Generate a random registration number for customer address rows.
+
+    The ERP API validates the registration number checksum — random chars will
+    be REJECTED. This function produces values that pass the Luhn mod-36 check,
+    using the same shape as a GSTIN (NN + 5L + 4D + 1L + 1[1-9A-Z] + Z + checksum).
+    """
+    from pages.registration.modules.supplier.data.supplier_data import (
+        generate_registration_number as _supplier_reg,
+    )
+    return _supplier_reg(state_code)
+
+
+def _resolve_id_by_label(options_dict: dict, label: str, fallback: int) -> int:
+    """Find an FK ID by matching label (case-insensitive) in a {name: id} dict.
+
+    Args:
+        options_dict: {display_name: id} dict from FkResolver.resolve()
+        label: The label to search for (e.g. "Commission", "Both")
+        fallback: ID to return if label not found
+
+    Returns:
+        Matched integer ID, or fallback.
+    """
+    label_lower = label.strip().lower()
+    for name, fid in (options_dict or {}).items():
+        if str(name).strip().lower() == label_lower:
+            return int(fid)
+    return fallback
+
+
+def apply_tenant_fk_pins(client, payloads: list, resolved_fk_options: dict = None) -> list:
+    """Pin tenant-universal FK values onto customer payloads (in-place, returns them).
+
+    Pinned values (same on every tenant, resolved by label):
+    - sale_type_ref_id:   always "Commission"
+    - supply_type_ref_id: always "Both"
+    - gst_registration_status: always GST_REGISTRATION_STATUS_ID (Registered)
+
+    Args:
+        client: ErpApiClient with active session (used as fallback if options not provided)
+        payloads: List of customer payload dicts to mutate
+        resolved_fk_options: Dict of {field_key: {name: id}} from FkResolver (preferred).
+                             If None, falls back to get_dropdown_options on client.
+    """
+    opts = resolved_fk_options or {}
+
+    # Resolve Sale Type "Commission" — from pre-resolved options or live API
+    sale_opts = opts.get("sale_type_ref_id") or {}
+    if not sale_opts:
+        try:
+            raw = client.get_dropdown_options("Customer", "sale_type_ref_id")
+            sale_opts = {str(o.get("key", "")): int(o["id"]) for o in (raw or []) if o.get("id") is not None}
+        except Exception:
+            pass
+    sale_type_id = _resolve_id_by_label(sale_opts, SALE_TYPE_COMMISSION_LABEL, SALE_TYPE_COMMISSION_FALLBACK_ID)
+
+    # Resolve Supply Type "Both" — from pre-resolved options or live API
+    supply_opts = opts.get("supply_type_ref_id") or {}
+    if not supply_opts:
+        try:
+            raw = client.get_dropdown_options("Customer", "supply_type_ref_id")
+            supply_opts = {str(o.get("key", "")): int(o["id"]) for o in (raw or []) if o.get("id") is not None}
+        except Exception:
+            pass
+    supply_type_id = _resolve_id_by_label(supply_opts, SUPPLY_TYPE_BOTH_LABEL, SUPPLY_TYPE_BOTH_FALLBACK_ID)
+
+    for p in payloads:
+        if isinstance(p, dict):
+            p["sale_type_ref_id"] = sale_type_id
+            p["supply_type_ref_id"] = supply_type_id
+            for child in p.get("children", []) or []:
+                if isinstance(child, dict) and child.get("stepper_name") == "Additional Details":
+                    child["gst_registration_status"] = GST_REGISTRATION_STATUS_ID
+    return payloads
 
 
 def generate_realistic_email():
@@ -891,7 +978,7 @@ def build_customer_api_payload(
     # Each row gets its own independent address chain (state/district/taluka/village)
     # for maximum variety and to test cascading dropdown independence.
 
-    def _build_address_row(addr_type_id, chain):
+    def _build_address_row(addr_type_id, chain, registration_number):
         """Build one address detail row with the given address_type and chain."""
         row = {}
         row["address_type"] = addr_type_id
@@ -905,6 +992,7 @@ def build_customer_api_payload(
         pin = customer_data.get("pin_code", generate_pin_code())
         row["pin_code"] = int(pin) if pin and str(pin).isdigit() else None
         row["gstin"] = generate_luhn_gstin()
+        row["registration_number"] = registration_number
         row["same_as_above"] = None
         row["address2"] = None
         return row
@@ -912,8 +1000,10 @@ def build_customer_api_payload(
     # Row 0: Shipping (address_type=43), Row 1: Billing (address_type=42)
     shipping_chain = get_random_address_chain()
     billing_chain = get_random_address_chain()
-    shipping_address = _build_address_row(43, shipping_chain)   # 43 = Shipping
-    billing_address = _build_address_row(42, billing_chain)     # 42 = Billing
+    # Registration number is shared across both address rows (matches reference record).
+    customer_registration_number = generate_registration_number()
+    shipping_address = _build_address_row(43, shipping_chain, customer_registration_number)   # 43 = Shipping
+    billing_address = _build_address_row(42, billing_chain, customer_registration_number)     # 42 = Billing
 
     # ── Build Customer Bank Details stepper ──
     bank_detail = {}

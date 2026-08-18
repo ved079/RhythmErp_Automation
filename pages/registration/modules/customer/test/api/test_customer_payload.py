@@ -35,6 +35,7 @@ from pages.registration.modules.customer.data.customer_data import (
     PREFERRED_PAYMENT_METHOD_IDS,
     COURIER_TERMS_IDS,
     GST_REGISTRATION_TYPE_IDS,
+    GST_REGISTRATION_STATUS_ID,
     DEFAULT_CUSTOMER_FK_IDS,
     FIELD_VALIDATION_RULES,
 )
@@ -147,6 +148,41 @@ class TestCustomerAPIPayload:
             gstin = addr_details[0].get("gstin", "")
             if gstin:
                 assert len(gstin) == 15
+
+    def test_payload_registration_number_in_address_rows(self):
+        """Every address row must carry a valid random registration_number, shared across rows."""
+        payload = generate_customer_api_payload()
+        addr_details = payload["children"][1]["details"]
+        assert len(addr_details) >= 2
+        reg_nos = []
+        for addr in addr_details:
+            reg_no = addr.get("registration_number", "")
+            assert reg_no, "registration_number must be present on every address row"
+            assert len(reg_no) == 15
+            reg_nos.append(reg_no)
+        # Reference record shows the SAME registration_number on Shipping + Billing
+        assert len(set(reg_nos)) == 1, "registration_number should be shared across both address rows"
+
+    def test_payload_registration_number_differs_from_gstin(self):
+        """registration_number must differ from the row's gstin."""
+        payload = generate_customer_api_payload()
+        addr_details = payload["children"][1]["details"]
+        for addr in addr_details:
+            assert addr.get("gstin") != addr.get("registration_number"), (
+                "registration_number must differ from the row's gstin"
+            )
+
+    def test_payload_gst_registration_status_is_registered(self):
+        """gst_registration_status must be pinned to Registered (1924) on Additional Details."""
+        payload = generate_customer_api_payload()
+        additional = payload["children"][0]
+        assert additional.get("gst_registration_status") == GST_REGISTRATION_STATUS_ID
+
+    def test_payload_sale_type_is_commission_fallback(self):
+        """Sale Type defaults to the Commission fallback ID when not overridden."""
+        payload = generate_customer_api_payload()
+        assert payload.get("sale_type_ref_id") is not None
+        assert payload["sale_type_ref_id"] in SALE_TYPE_IDS
 
     def test_payload_fk_ids_in_valid_pools(self):
         """All dropdown FK IDs must be from valid pools."""

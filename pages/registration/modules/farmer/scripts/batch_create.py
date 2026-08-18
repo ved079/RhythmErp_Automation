@@ -22,11 +22,26 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 sys.path.insert(0, PROJECT_ROOT)
 
 from common.erp_api_client import RhythmERPAPIClient
+from common.fk_resolver import FkResolver
 from pages.registration.modules.farmer.data.farmer_data import generate_farmer_api_payload
 from pages.registration.modules.farmer.utils.farmer_cleanup import CleanupTracker
 
 
 SCREEN_NAME = "Farmer"
+
+# Fallback hardcoded IDs (tenant 681) — used only if live resolution fails
+FARMER_CATEGORY_FALLBACKS = {
+    "fpc":      [1593],
+    "walkin":   [1592],
+    "borrower": [1594],
+}
+
+# Label lookup for live resolution
+FARMER_TYPE_LABELS = {
+    "fpc":      "FPC Member",
+    "walkin":   "Walk-in Farmer",
+    "borrower": "Borrower Farmer",
+}
 
 ERP_BUG_MESSAGE = (
     "Known ERP bug: Farmer API creation returns HTTP 500 "
@@ -41,10 +56,16 @@ def parse_args():
     parser.add_argument("--tenant", default=None, help="Tenant ID (omit to prompt)")
     parser.add_argument("--count", type=int, default=None, help="Number of entries to create (omit to prompt)")
     parser.add_argument("--dry-run", action="store_true", help="Print payloads without sending")
+    parser.add_argument(
+        "--farmer-type",
+        choices=["fpc", "walkin", "borrower"],
+        default="fpc",
+        help="Farmer category type: fpc (FPC Member), walkin (Walk-in Farmer), borrower (Borrower Farmer). Default: fpc",
+    )
     return parser.parse_args()
 
 
-def batch_create(client, count, dry_run=False):
+def batch_create(client, count, farmer_type="fpc", dry_run=False):
     success = 0
     fail = 0
     http_500_count = 0
@@ -55,24 +76,50 @@ def batch_create(client, count, dry_run=False):
 
     tracker = CleanupTracker()
 
+    type_label = FARMER_TYPE_LABELS[farmer_type]
+    fallback_ids = FARMER_CATEGORY_FALLBACKS[farmer_type]
+
+    # Resolve farmer category ID from live ERP by label
+    print(f"  Resolving Farmer Category '{type_label}' from live ERP...")
+    resolver = FkResolver(client)
+    category_options = resolver.resolve("Farmer Category")
+    fallback_id = FARMER_CATEGORY_FALLBACKS[farmer_type][0]
+    if category_options:
+        label_lower = type_label.strip().lower()
+        matched_id = next(
+            (int(fid) for name, fid in category_options.items()
+             if str(name).strip().lower() == label_lower),
+            None,
+        )
+        if matched_id:
+            role_ids = matched_id
+            print(f"  Resolved: '{type_label}' = {matched_id}")
+        else:
+            role_ids = fallback_id
+            print(f"  WARNING: '{type_label}' not found in options {list(category_options.keys())}")
+            print(f"  Falling back to hardcoded ID: {fallback_id}")
+    else:
+        role_ids = fallback_id
+        print(f"  WARNING: Could not resolve Farmer Category — falling back to {fallback_id}")
+
     print("=" * 70)
     print(f"  {SCREEN_NAME.upper()} BATCH CREATE -- {count} entries")
-    print("=" * 70)
-    print(f"  {ERP_BUG_MESSAGE}")
+    print(f"  Type: {type_label} (role={role_ids})")
     print("=" * 70)
 
     for i in range(count):
-        payload = generate_farmer_api_payload()
+        payload = generate_farmer_api_payload(dropdown_ids={"farmer_category": role_ids})
 
         addr_details = payload['children'][0]['details']
         permanent_addr = next(
             (a for a in addr_details if a.get('address_type') == 1875),
             addr_details[0] if addr_details else {},
         )
-        bank = payload['children'][2]['details'][0] if payload['children'][2]['details'] else {}
+        bank_stepper = next((c for c in payload['children'] if c.get('stepper_name') == 'Bank Details'), {})
+        bank = bank_stepper.get('details', [{}])[0] if bank_stepper.get('details') else {}
 
         state = permanent_addr.get('state_ref_id_id')
-        farmer_category = payload.get('farmer_category', [])
+        farmer_category = payload.get('role', [])
         ownership = payload.get('ownership_status_ref_id')
         name = payload.get('name', '?')
 
@@ -179,7 +226,7 @@ def main():
         client.close()
         return
 
-    batch_create(client, args.count, args.dry_run)
+    batch_create(client, args.count, args.farmer_type, args.dry_run)
     client.close()
 
 

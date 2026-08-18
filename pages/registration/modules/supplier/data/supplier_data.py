@@ -322,6 +322,45 @@ def generate_gstin(state_code=None):
     return body + LUHN_CHARS[check]
 
 
+def generate_registration_number(state_code=None):
+    """Generate a random registration number for supplier address rows.
+
+    The ERP API validates the registration number checksum — random chars will
+    be REJECTED. This function produces values that pass the Luhn mod-36 check,
+    using the same shape as a GSTIN (NN + 5L + 4D + 1L + 1[1-9A-Z] + Z + checksum).
+
+    Args:
+        state_code: 2-digit state code (default: random 01-37)
+    """
+    LUHN_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+    if state_code is None:
+        state_code = f"{random.randint(1, 37):02d}"
+    else:
+        state_code = f"{int(state_code):02d}"
+
+    body = (
+        state_code
+        + "".join(random.choices(string.ascii_uppercase, k=5))
+        + "".join(random.choices(string.digits, k=4))
+        + random.choice(string.ascii_uppercase)
+        + random.choice("123456789" + string.ascii_uppercase[9:])
+        + "Z"
+    )
+
+    total = 0
+    for i, ch in enumerate(body):
+        val = LUHN_CHARS.index(ch)
+        if i % 2 == 1:
+            val *= 2
+            if val >= 36:
+                val -= 35
+        total += val
+
+    check = (36 - (total % 36)) % 36
+    return body + LUHN_CHARS[check]
+
+
 def generate_pin_code():
     """Generate a valid 6-digit Indian pin code."""
     return f"{random.randint(100000, 999999)}"
@@ -410,6 +449,7 @@ def generate_valid_step2_data():
         "address": generate_address(),
         "pin_code": generate_pin_code(),
         "gstin": generate_gstin(),
+        "registration_number": generate_registration_number(),
     }  # no change to step2 structure — address/gstin/pin already realistic
 
 
@@ -1097,6 +1137,7 @@ def build_supplier_api_payload(
             row["pincode_ref_id_id"] = _fk("pincode_ref_id_id")
         row["address"] = step2_data.get("address", "")
         row["gstin"] = step2_data.get("gstin", "") or None
+        row["registration_number"] = step2_data.get("registration_number", "") or None
         row["same_as_above"] = None  # API returns null, not False
         row["address2"] = None
         row["details"] = []
@@ -1282,6 +1323,7 @@ FIELD_VALIDATION_RULES = {
     "address": {"type": "character", "required": True, "max_length": 255},
     "pin_code": {"type": "character", "required": True, "max_length": 255},
     "gstin": {"type": "character", "required": False, "max_length": 255, "pattern": r"^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"},
+    "registration_number": {"type": "character", "required": False, "max_length": 255, "pattern": r"^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"},
     # Step 3 — Bank Details (children[2].details[])
     "bank_name": {"type": "character", "required": True, "max_length": 255},
     "bank_branch_code": {"type": "character", "required": False, "max_length": 255},
