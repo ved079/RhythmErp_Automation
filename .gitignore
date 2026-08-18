@@ -57,6 +57,7 @@ api/screenshots/
 # Generated reports (contain test data)
 pages/*/reports/
 pages/*/*/reports/
+pages/*/*/*/reports/
 
 # Excel/CSV data exports
 *.xlsx
