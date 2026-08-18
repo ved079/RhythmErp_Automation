@@ -154,6 +154,10 @@ def main():
         api.close()
         return
 
+    # ── Pin tenant-universal fields (Sale Type = "Commission", Supply Type = "Both") ──
+    from pages.registration.modules.customer.data.customer_data import apply_tenant_fk_pins
+    payloads = apply_tenant_fk_pins(api, payloads, resolved_fk_options=fk_ids)
+
     # ── Create entries ────────────────────────────────────────────────
     print()
     try:

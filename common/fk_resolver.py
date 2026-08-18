@@ -55,6 +55,11 @@ class FkResolver:
         "Location":           "name",
         "Item Master":        "name",
         "Quality Parameter":  "name",
+        # Customer registration screens
+        "Sale Type":          "name",
+        "Supply Type":        "name",
+        # Farmer registration screens
+        "Farmer Category":    "name",
     }
 
     def __init__(self, api_client):

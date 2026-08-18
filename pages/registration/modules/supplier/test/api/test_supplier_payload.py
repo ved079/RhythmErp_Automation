@@ -85,6 +85,19 @@ class TestSupplierAPIPayload:
             assert "state_ref_id_id" in addr
             assert "address" in addr
 
+    def test_payload_registration_number_in_address_rows(self):
+        """Every address row must carry a valid random registration_number, distinct from gstin."""
+        payload = generate_supplier_api_payload()
+        addr_details = payload["children"][1]["details"]
+        assert len(addr_details) >= 2
+        for addr in addr_details:
+            reg_no = addr.get("registration_number", "")
+            assert reg_no, "registration_number must be present on every address row"
+            assert len(reg_no) == 15
+            assert addr.get("gstin") != reg_no, (
+                "registration_number must differ from the row's gstin"
+            )
+
     def test_payload_shipping_billing_have_different_types(self):
         """Shipping and Billing address rows must have distinct address_type values."""
         payload = generate_supplier_api_payload()

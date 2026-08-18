@@ -54,7 +54,8 @@ class TestSupplierSchema:
         address_fields = {"address_type", "country_ref_id_id",
                           "state_ref_id_id", "district_ref_id_id",
                           "sub_district_ref_id_id", "village_ref_id_id",
-                          "address", "pin_code", "gstin"}
+                          "address", "pin_code", "gstin",
+                          "registration_number"}
         assert address_fields.issubset(set(FIELD_VALIDATION_RULES.keys()))
 
     def test_field_validation_rules_has_bank_fields(self):
