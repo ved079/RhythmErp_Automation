@@ -130,8 +130,8 @@ def generate_vehicle_master_api_payloads(count=10, offset=0, fk_ids=None):
             "from common.fk_resolver import FkResolver"
         )
 
-    vehicle_type_ids = fk_ids.get("vehicle_type_id", {})
-    fuel_type_ids = fk_ids.get("fuel_type_ref_id", {})
+    vt_values = list(fk_ids.get("vehicle_type_id", {}).values())
+    ft_values = list(fk_ids.get("fuel_type_ref_id", {}).values())
 
     payloads = []
 
@@ -139,8 +139,8 @@ def generate_vehicle_master_api_payloads(count=10, offset=0, fk_ids=None):
         idx = offset + i
         entry = VEHICLES[idx % len(VEHICLES)]
 
-        vt_id = vehicle_type_ids.get(entry["vehicle_type"])
-        ft_id = fuel_type_ids.get(entry["fuel_type"])
+        vt_id = vt_values[i % len(vt_values)] if vt_values else None
+        ft_id = ft_values[i % len(ft_values)] if ft_values else None
 
         payload = build_vehicle_master_api_payload(
             name=entry["name"],
@@ -212,8 +212,8 @@ def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: d
     fk_ids = dropdown_ids
     if existing_entries:
         used_names = {e.get("name", "").lower().strip() for e in existing_entries if e.get("name")}
-        vehicle_type_ids = fk_ids.get("vehicle_type_id", {})
-        fuel_type_ids = fk_ids.get("fuel_type_ref_id", {})
+        vt_values = list(fk_ids.get("vehicle_type_id", {}).values())
+        ft_values = list(fk_ids.get("fuel_type_ref_id", {}).values())
         unique_payloads = []
         pool_idx = 0
         while len(unique_payloads) < count:
@@ -224,8 +224,8 @@ def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: d
                 unique_payloads.append(build_vehicle_master_api_payload(
                     name=name,
                     vehicle_price=entry["price"],
-                    vehicle_type_id=vehicle_type_ids.get(entry["vehicle_type"]),
-                    fuel_type_ref_id=fuel_type_ids.get(entry["fuel_type"]),
+                    vehicle_type_id=vt_values[pool_idx % len(vt_values)] if vt_values else None,
+                    fuel_type_ref_id=ft_values[pool_idx % len(ft_values)] if ft_values else None,
                     description=entry["desc"],
                 ))
             pool_idx += 1
