@@ -2,7 +2,7 @@
   "info": {
     "name": "Common Settings",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Rhythm ERP Common Settings module.\n\nSetup: set base_url, token, tenant_id in your Postman environment.\n\nModules with live FK resolution (UOM Conversion, Tax Authority, Tax Rate, Vehicle Master) use pre-request scripts to fetch IDs from the ERP automatically — same flow as the batch script FkResolver. No manual ID lookup needed."
+    "description": "Rhythm ERP Common Settings module.\n\nSetup: set base_url, token, tenant_id in your Postman environment.\n\nCreate requests for UOM Conversion, Tax Authority, Tax Rate, Vehicle Master use pre-request scripts to resolve live FK IDs from the ERP and patch them directly into the request body — same flow as FkResolver in the batch script."
   },
   "item": [
     {
@@ -125,7 +125,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"UOM\",\n  \"uom_code\": \"QTL\",\n  \"uom_description\": \"Quintal\",\n  \"status\": true\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"UOM\",\n  \"uom_code\": \"FT\",\n  \"uom_description\": \"Feet\",\n  \"status\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -140,7 +140,7 @@
     },
     {
       "name": "UOM Conversion",
-      "description": "UOM Conversion CRUD — flat form, no steppers.\n\nPre-request script on Create automatically fetches live UOM IDs from the ERP (same as what the batch script does via FkResolver) and sets source_uom_id / target_uom_id.",
+      "description": "UOM Conversion CRUD — flat form, no steppers.\n\nPre-request script on Create fetches live UOM IDs from the ERP and patches source_uom_code + target_uom_code directly in the request body — same flow as FkResolver in batch script.",
       "item": [
         {
           "name": "List UOM Conversion",
@@ -258,14 +258,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"UOM Conversion\",\n  \"source_uom_code\": \"{{source_uom_id}}\",\n  \"target_uom_code\": \"{{target_uom_id}}\",\n  \"conversion_factor\": 1000.0\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"UOM Conversion\",\n  \"source_uom_code\": 0,\n  \"target_uom_code\": 0,\n  \"conversion_factor\": 1000.0\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Pre-request script resolves source_uom_code and target_uom_code live from the UOM screen — same flow as the batch script FkResolver. No manual ID lookup needed."
+            "description": "Pre-request script resolves source_uom_code and target_uom_code live from the UOM screen."
           },
           "response": [],
           "event": [
@@ -277,22 +277,32 @@
                   "const baseUrl = pm.environment.get('base_url');",
                   "const token = pm.environment.get('token');",
                   "const tenantId = pm.environment.get('tenant_id');",
+                  "const reqBody = JSON.parse(pm.request.body.raw);",
                   "",
-                  "pm.sendRequest({",
-                  "    url: baseUrl + '/core/dynamic-screen-wrapper/UOM/?page_number=1&page_size=100&search_string=&is_excel_download=false',",
-                  "    method: 'GET',",
-                  "    header: {",
-                  "        'Authorization': 'Bearer ' + token,",
-                  "        'X-Tenant-ID': tenantId,",
-                  "        'Content-Type': 'application/json',",
-                  "    }",
-                  "}, function(err, res) {",
-                  "    if (err) { console.error(err); return; }",
-                  "    const body = res.json();",
-                  "    const results = body.results || body.data || [];",
-                  "    const ids = results.map(r => r.id).filter(id => id !== undefined && id !== null);",
-                  "    if (ids[0] !== undefined) pm.environment.set('source_uom_id', ids[0]);",
-                  "    if (ids[1] !== undefined) pm.environment.set('target_uom_id', ids[1]);",
+                  "function resolveScreen(screen, cb) {",
+                  "    pm.sendRequest({",
+                  "        url: baseUrl + '/core/dynamic-screen-wrapper/' + screen + '/?page_number=1&page_size=100&search_string=&is_excel_download=false',",
+                  "        method: 'GET',",
+                  "        header: {",
+                  "            'Authorization': 'Bearer ' + token,",
+                  "            'X-Tenant-ID': tenantId,",
+                  "            'Content-Type': 'application/json',",
+                  "        }",
+                  "    }, function(err, res) {",
+                  "        if (err) { console.error(err); cb([]); return; }",
+                  "        const data = res.json();",
+                  "        const results = data.results || data.data || [];",
+                  "        cb(results.map(r => r.id).filter(id => id != null));",
+                  "    });",
+                  "}",
+                  "",
+                  "let pending = 1;",
+                  "function done() { if (--pending === 0) pm.request.body.raw = JSON.stringify(reqBody, null, 2); }",
+                  "",
+                  "resolveScreen('UOM', function(ids) {",
+                  "    if (ids[0] != null) reqBody.source_uom_code = ids[0];",
+                  "    if (ids[1] != null) reqBody.target_uom_code = ids[1];",
+                  "    done();",
                   "});"
                 ]
               }
@@ -303,7 +313,7 @@
     },
     {
       "name": "Bank",
-      "description": "Bank CRUD — flat form, no steppers.\n\naccount_type: Current=1849, Saving=1850 (hardcoded in ERP, rarely change)\naccount_ref_id: GL account/chart of accounts ID (tenant-specific)\nbank_name: letters and spaces only, min 10 chars\nbank_code: exactly 4 digits\nswift_number: letters only (A-Z)",
+      "description": "Bank CRUD — flat form, no steppers.\n\naccount_type: Current=1849, Saving=1850 (hardcoded in ERP, rarely change)\naccount_ref_id: GL account/chart of accounts ID\nbank_name: letters and spaces only, min 10 chars\nbank_code: exactly 4 digits\nswift_number: letters only (A-Z)",
       "item": [
         {
           "name": "List Bank",
@@ -421,14 +431,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"bank_name\": \"State Bank of India\",\n  \"bank_code\": \"0001\",\n  \"branch_name\": \"Fort, Mumbai\",\n  \"branch_code\": \"BR0001\",\n  \"account_number\": \"270075798682\",\n  \"account_type\": 1849,\n  \"swift_number\": \"XWVXJLLXPBE\",\n  \"iban_number\": \"\",\n  \"ifsc_code\": \"SBIN0000300\",\n  \"cash_credit_limit\": 2000000,\n  \"bank_address\": \"Fort, Mumbai, State Bank of India\",\n  \"is_default_bank\": true,\n  \"status\": true,\n  \"attribute_name\": \"Bank\",\n  \"account_ref_id\": 1005\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"bank_name\": \"State Bank of India\",\n  \"bank_code\": \"0001\",\n  \"branch_name\": \"Fort, Mumbai\",\n  \"branch_code\": \"BR0001\",\n  \"account_number\": \"990811585917\",\n  \"account_type\": 1849,\n  \"swift_number\": \"IYYMHXPKXQK\",\n  \"iban_number\": \"\",\n  \"ifsc_code\": \"SBIN0000300\",\n  \"cash_credit_limit\": 2000000,\n  \"bank_address\": \"Fort, Mumbai, State Bank of India\",\n  \"is_default_bank\": true,\n  \"status\": true,\n  \"attribute_name\": \"Bank\",\n  \"account_ref_id\": 1005\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Creates a new Bank record. id must be empty string \"\".\naccount_type: 1849=Current, 1850=Saving\naccount_ref_id: GL account ID from chart of accounts"
+            "description": "Creates a new Bank record. id must be empty string \"\"."
           },
           "response": []
         }
@@ -436,7 +446,7 @@
     },
     {
       "name": "Designation",
-      "description": "Designation CRUD — flat form, no steppers, no FK dropdowns.\n\nname: letters and spaces only (type=\"character\"). Digits/underscores/special chars rejected.",
+      "description": "Designation CRUD — flat form, no steppers, no FK dropdowns.\n\nname: letters and spaces only. Digits/underscores/special chars rejected.",
       "item": [
         {
           "name": "List Designation",
@@ -554,14 +564,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Designation\",\n  \"name\": \"Junior Accountant\",\n  \"description\": \"Responsible for junior accountant duties and responsibilities\",\n  \"status\": true\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Designation\",\n  \"name\": \"Assistant Engineer\",\n  \"description\": \"Responsible for assistant engineer duties and responsibilities\",\n  \"status\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Creates a new Designation. id must be empty string \"\"."
+            "description": "Creates a new Designation."
           },
           "response": []
         }
@@ -694,7 +704,7 @@
                 }
               }
             },
-            "description": "Creates a new Error Code Mst. id must be empty string \"\"."
+            "description": "Creates a new Error Code Mst."
           },
           "response": []
         }
@@ -827,7 +837,7 @@
                 }
               }
             },
-            "description": "Creates a new HSN SAC entry. id must be empty string \"\"."
+            "description": "Creates a new HSN SAC entry."
           },
           "response": []
         }
@@ -835,7 +845,7 @@
     },
     {
       "name": "Season",
-      "description": "Season CRUD — flat form, no steppers, no FK dropdowns.\n\nname: letters and spaces only (type=\"character\"). Digits/underscores/special chars rejected.",
+      "description": "Season CRUD — flat form, no steppers, no FK dropdowns.\n\nname: letters and spaces only. Digits/underscores/special chars rejected.",
       "item": [
         {
           "name": "List Season",
@@ -953,14 +963,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Season\",\n  \"name\": \"Kharif\",\n  \"description\": \"Monsoon cropping season (June\\u2013October), major crops: rice, cotton, soybean\",\n  \"status\": true\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Season\",\n  \"name\": \"Off Season\",\n  \"description\": \"Non-operational period for specific commodities\",\n  \"status\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Creates a new Season. id must be empty string \"\"."
+            "description": "Creates a new Season."
           },
           "response": []
         }
@@ -968,7 +978,7 @@
     },
     {
       "name": "Tax Authority",
-      "description": "Tax Authority CRUD — flat form, no steppers.\n\nPre-request script on Create resolves tax_type_ref_id (from Tax Type screen) and country_ref_id (from Country screen) live — same as FkResolver in batch script.",
+      "description": "Tax Authority CRUD — flat form, no steppers.\n\nPre-request script resolves tax_type_ref_id (Tax Type) and country_ref_id (Country) live.",
       "item": [
         {
           "name": "List Tax Authority",
@@ -1086,14 +1096,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"tax_name\": \"CGST Authority Mumbai\",\n  \"tax_type_ref_id\": \"{{tax_type_id}}\",\n  \"country_ref_id\": \"{{country_id}}\",\n  \"attribute_name\": \"Tax Authority\"\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"tax_name\": \"CGST Authority Mumbai\",\n  \"tax_type_ref_id\": 0,\n  \"country_ref_id\": 0,\n  \"attribute_name\": \"Tax Authority\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Pre-request script resolves tax_type_ref_id and country_ref_id live from ERP. No manual lookup needed."
+            "description": "Pre-request script patches tax_type_ref_id and country_ref_id live."
           },
           "response": [],
           "event": [
@@ -1105,10 +1115,11 @@
                   "const baseUrl = pm.environment.get('base_url');",
                   "const token = pm.environment.get('token');",
                   "const tenantId = pm.environment.get('tenant_id');",
+                  "const reqBody = JSON.parse(pm.request.body.raw);",
                   "",
-                  "function resolveScreen(screenName, cb) {",
+                  "function resolveScreen(screen, cb) {",
                   "    pm.sendRequest({",
-                  "        url: baseUrl + '/core/dynamic-screen-wrapper/' + screenName + '/?page_number=1&page_size=100&search_string=&is_excel_download=false',",
+                  "        url: baseUrl + '/core/dynamic-screen-wrapper/' + screen + '/?page_number=1&page_size=100&search_string=&is_excel_download=false',",
                   "        method: 'GET',",
                   "        header: {",
                   "            'Authorization': 'Bearer ' + token,",
@@ -1117,18 +1128,22 @@
                   "        }",
                   "    }, function(err, res) {",
                   "        if (err) { console.error(err); cb([]); return; }",
-                  "        const body = res.json();",
-                  "        const results = body.results || body.data || [];",
-                  "        const ids = results.map(r => r.id).filter(id => id !== undefined && id !== null);",
-                  "        cb(ids);",
+                  "        const data = res.json();",
+                  "        const results = data.results || data.data || [];",
+                  "        cb(results.map(r => r.id).filter(id => id != null));",
                   "    });",
                   "}",
                   "",
+                  "let pending = 2;",
+                  "function done() { if (--pending === 0) pm.request.body.raw = JSON.stringify(reqBody, null, 2); }",
+                  "",
                   "resolveScreen('Tax%20Type', function(ids) {",
-                  "    if (ids[0] !== undefined) pm.environment.set('tax_type_id', ids[0]);",
+                  "    if (ids[0] != null) reqBody.tax_type_ref_id = ids[0];",
+                  "    done();",
                   "});",
                   "resolveScreen('Country', function(ids) {",
-                  "    if (ids[0] !== undefined) pm.environment.set('country_id', ids[0]);",
+                  "    if (ids[0] != null) reqBody.country_ref_id = ids[0];",
+                  "    done();",
                   "});"
                 ]
               }
@@ -1139,7 +1154,7 @@
     },
     {
       "name": "Tax Rate",
-      "description": "Tax Rate CRUD — has stepper \"Define Tax Rate Details\".\n\nPre-request script on Create resolves all FK IDs live: tax_type_ref_id (Tax Type), tax_authority_ref_id (Tax Authority), hsn_sac_number (HSN SAC).",
+      "description": "Tax Rate CRUD — has stepper \"Define Tax Rate Details\".\n\nPre-request script resolves tax_type_ref_id, tax_authority_ref_id, and hsn_sac_number (stepper) live.",
       "item": [
         {
           "name": "List Tax Rate",
@@ -1257,14 +1272,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"tax_rate_name\": \"GST Eighteen\",\n  \"tax_type_ref_id\": \"{{tax_type_id}}\",\n  \"tax_authority_ref_id\": \"{{tax_authority_id}}\",\n  \"from_date\": \"2025-04-01\",\n  \"to_date\": \"2026-03-31\",\n  \"revision_status\": \"Active\",\n  \"attribute_name\": \"Tax Rate\",\n  \"children\": [\n    {\n      \"stepper_name\": \"Define Tax Rate Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"hsn_sac_number\": \"{{hsn_sac_id}}\",\n          \"tax_rate\": 18\n        }\n      ],\n      \"children\": []\n    }\n  ]\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"tax_rate_name\": \"GST Eighteen\",\n  \"tax_type_ref_id\": 0,\n  \"tax_authority_ref_id\": 0,\n  \"from_date\": \"2025-04-01\",\n  \"to_date\": \"2026-03-31\",\n  \"revision_status\": \"Active\",\n  \"attribute_name\": \"Tax Rate\",\n  \"children\": [\n    {\n      \"stepper_name\": \"Define Tax Rate Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"hsn_sac_number\": 0,\n          \"tax_rate\": 18\n        }\n      ],\n      \"children\": []\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Pre-request script resolves all FK IDs live from ERP — same as FkResolver in batch script."
+            "description": "Pre-request script patches all FK IDs live from ERP."
           },
           "response": [],
           "event": [
@@ -1276,10 +1291,11 @@
                   "const baseUrl = pm.environment.get('base_url');",
                   "const token = pm.environment.get('token');",
                   "const tenantId = pm.environment.get('tenant_id');",
+                  "const reqBody = JSON.parse(pm.request.body.raw);",
                   "",
-                  "function resolveScreen(screenName, cb) {",
+                  "function resolveScreen(screen, cb) {",
                   "    pm.sendRequest({",
-                  "        url: baseUrl + '/core/dynamic-screen-wrapper/' + screenName + '/?page_number=1&page_size=100&search_string=&is_excel_download=false',",
+                  "        url: baseUrl + '/core/dynamic-screen-wrapper/' + screen + '/?page_number=1&page_size=100&search_string=&is_excel_download=false',",
                   "        method: 'GET',",
                   "        header: {",
                   "            'Authorization': 'Bearer ' + token,",
@@ -1288,21 +1304,26 @@
                   "        }",
                   "    }, function(err, res) {",
                   "        if (err) { console.error(err); cb([]); return; }",
-                  "        const body = res.json();",
-                  "        const results = body.results || body.data || [];",
-                  "        const ids = results.map(r => r.id).filter(id => id !== undefined && id !== null);",
-                  "        cb(ids);",
+                  "        const data = res.json();",
+                  "        const results = data.results || data.data || [];",
+                  "        cb(results.map(r => r.id).filter(id => id != null));",
                   "    });",
                   "}",
                   "",
+                  "let pending = 3;",
+                  "function done() { if (--pending === 0) pm.request.body.raw = JSON.stringify(reqBody, null, 2); }",
+                  "",
                   "resolveScreen('Tax%20Type', function(ids) {",
-                  "    if (ids[0] !== undefined) pm.environment.set('tax_type_id', ids[0]);",
+                  "    if (ids[0] != null) reqBody.tax_type_ref_id = ids[0];",
+                  "    done();",
                   "});",
                   "resolveScreen('Tax%20Authority', function(ids) {",
-                  "    if (ids[0] !== undefined) pm.environment.set('tax_authority_id', ids[0]);",
+                  "    if (ids[0] != null) reqBody.tax_authority_ref_id = ids[0];",
+                  "    done();",
                   "});",
                   "resolveScreen('HSN%20SAC', function(ids) {",
-                  "    if (ids[0] !== undefined) pm.environment.set('hsn_sac_id', ids[0]);",
+                  "    if (ids[0] != null) reqBody.children[0].details[0].hsn_sac_number = ids[0];",
+                  "    done();",
                   "});"
                 ]
               }
@@ -1313,7 +1334,7 @@
     },
     {
       "name": "Vehicle Master",
-      "description": "Vehicle Master CRUD — flat form, no steppers.\n\nPre-request script on Create resolves vehicle_type_id (Vehicle Type screen) and fuel_type_ref_id (Fuel Type screen) live — same as FkResolver in batch script.",
+      "description": "Vehicle Master CRUD — flat form, no steppers.\n\nPre-request script resolves vehicle_type_id (Vehicle Type) and fuel_type_ref_id (Fuel Type) live.",
       "item": [
         {
           "name": "List Vehicle Master",
@@ -1431,14 +1452,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"name\": \"Tata Ace\",\n  \"vehicle_price\": 500000,\n  \"vehicle_type_id\": \"{{vehicle_type_id}}\",\n  \"fuel_type_ref_id\": \"{{fuel_type_id}}\",\n  \"description\": \"Mini truck for intra-city goods transport\",\n  \"attribute_name\": \"Vehicle Master\"\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"name\": \"Tata Ace\",\n  \"vehicle_price\": 500000,\n  \"vehicle_type_id\": 0,\n  \"fuel_type_ref_id\": 0,\n  \"description\": \"Mini truck for intra-city goods transport\",\n  \"attribute_name\": \"Vehicle Master\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Pre-request script resolves vehicle_type_id and fuel_type_ref_id live from ERP. No manual lookup needed."
+            "description": "Pre-request script patches vehicle_type_id and fuel_type_ref_id live."
           },
           "response": [],
           "event": [
@@ -1450,10 +1471,11 @@
                   "const baseUrl = pm.environment.get('base_url');",
                   "const token = pm.environment.get('token');",
                   "const tenantId = pm.environment.get('tenant_id');",
+                  "const reqBody = JSON.parse(pm.request.body.raw);",
                   "",
-                  "function resolveScreen(screenName, cb) {",
+                  "function resolveScreen(screen, cb) {",
                   "    pm.sendRequest({",
-                  "        url: baseUrl + '/core/dynamic-screen-wrapper/' + screenName + '/?page_number=1&page_size=100&search_string=&is_excel_download=false',",
+                  "        url: baseUrl + '/core/dynamic-screen-wrapper/' + screen + '/?page_number=1&page_size=100&search_string=&is_excel_download=false',",
                   "        method: 'GET',",
                   "        header: {",
                   "            'Authorization': 'Bearer ' + token,",
@@ -1462,18 +1484,22 @@
                   "        }",
                   "    }, function(err, res) {",
                   "        if (err) { console.error(err); cb([]); return; }",
-                  "        const body = res.json();",
-                  "        const results = body.results || body.data || [];",
-                  "        const ids = results.map(r => r.id).filter(id => id !== undefined && id !== null);",
-                  "        cb(ids);",
+                  "        const data = res.json();",
+                  "        const results = data.results || data.data || [];",
+                  "        cb(results.map(r => r.id).filter(id => id != null));",
                   "    });",
                   "}",
                   "",
+                  "let pending = 2;",
+                  "function done() { if (--pending === 0) pm.request.body.raw = JSON.stringify(reqBody, null, 2); }",
+                  "",
                   "resolveScreen('Vehicle%20Type', function(ids) {",
-                  "    if (ids[0] !== undefined) pm.environment.set('vehicle_type_id', ids[0]);",
+                  "    if (ids[0] != null) reqBody.vehicle_type_id = ids[0];",
+                  "    done();",
                   "});",
                   "resolveScreen('Fuel%20Type', function(ids) {",
-                  "    if (ids[0] !== undefined) pm.environment.set('fuel_type_id', ids[0]);",
+                  "    if (ids[0] != null) reqBody.fuel_type_ref_id = ids[0];",
+                  "    done();",
                   "});"
                 ]
               }
