@@ -1,0 +1,936 @@
+{
+  "info": {
+    "name": "Registration",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Rhythm ERP Registration module endpoints. Base URL: https://rhythmerp.algorhythms.in\n\nSetup:\n1. Import this collection\n2. Import the 'Rhythm ERP Environment' alongside it\n3. Set your token and tenant_id in the environment\n4. Run requests"
+  },
+  "item": [
+    {
+      "name": "Supplier",
+      "description": "Supplier CRUD — POST /core/dynamic-screen-wrapper/ for Create/Update, GET /Supplier/ for List, GET /Supplier/{id}/ for Detail.\n\nKey rules:\n- PAN must be unique across all suppliers (format: ABCDE1234F)\n- Both Shipping (address_type=43) AND Billing (address_type=42) rows are mandatory\n- mobile_no and bank_account_no must be integers, NOT strings\n- GSTIN must pass Luhn mod-36 checksum — random strings are rejected\n- No Delete endpoint exists in the ERP",
+      "item": [
+        {
+          "name": "List Suppliers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Supplier/?page_number=1&page_size=25&page_data_search_field=&page_data_search=&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Supplier",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "page_data_search_field",
+                  "value": ""
+                },
+                {
+                  "key": "page_data_search",
+                  "value": ""
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Returns paginated flat list of suppliers.\n\nResponse: screenmatlistingdata_set[] with id, name, mobile_no, email_id, pan_no, status.\nNo stepper children in list response — use Get Supplier Detail for full data.\n\nUse search_string to filter by name/PAN."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Supplier Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Supplier/{{supplier_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Supplier",
+                "{{supplier_id}}",
+                ""
+              ]
+            },
+            "description": "Returns full supplier record with all stepper children.\n\nchildren[0] = Additional Details (fields on stepper object, NOT inside details[])\nchildren[1] = Address Details (details[] contains Shipping + Billing rows)\nchildren[2] = Bank Details (details[] contains bank rows)\n\nSet supplier_id in the environment or replace {{supplier_id}} with an actual ID from the List response."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Supplier",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Supplier\",\n  \"party_ref_id\": null,\n  \"ownership_status_ref_id\": 7,\n  \"name\": \"Shree Ganesh Trading Co. Pvt Ltd\",\n  \"po_type_ref_id\": 25,\n  \"email_id\": \"rajesh.sharma42@gmail.com\",\n  \"mobile_no\": 9812345678,\n  \"default_currency_ref_id\": 8,\n  \"pan_no\": \"ABCDE1234F\",\n  \"is_msme_registered\": false,\n  \"status\": true,\n  \"vendor_code\": null,\n  \"fax\": null,\n  \"website_link\": null,\n  \"attachment\": null,\n  \"ref_id\": null,\n  \"ref_type\": null,\n  \"children\": [\n    {\n      \"stepper_name\": \"Additional Details\",\n      \"is_stepper\": true,\n      \"display_name_as\": \"Rajesh Sharma\",\n      \"office_no\": null,\n      \"is_gst_set_off\": true,\n      \"is_tds_applicable\": false,\n      \"gst_registration_type\": 50,\n      \"gst_registration_status\": 1924,\n      \"payment_terms_ref_id\": 26,\n      \"delivery_terms_ref_id\": 129,\n      \"mode_of_delivery_ref_id\": 30,\n      \"details\": [],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Address Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"address_type\": 43,\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 82,\n          \"district_ref_id_id\": 761,\n          \"sub_district_ref_id_id\": 14119,\n          \"village_ref_id_id\": 772475,\n          \"address\": \"42, MG Road, Industrial Area\",\n          \"gstin\": \"27ABCDE1234F1Z5\",\n          \"same_as_above\": null,\n          \"address2\": null,\n          \"details\": []\n        },\n        {\n          \"address_type\": 42,\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 82,\n          \"district_ref_id_id\": 761,\n          \"sub_district_ref_id_id\": 14119,\n          \"village_ref_id_id\": 772475,\n          \"address\": \"Plot 17, Shivaji Nagar, Market Yard\",\n          \"gstin\": \"27ABCDE1234F1Z5\",\n          \"same_as_above\": null,\n          \"address2\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Bank Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"bank_name\": \"HDFC Bank\",\n          \"bank_branch_code\": \"Mumbai Branch\",\n          \"bank_ifsc_code\": \"HDFC0123456\",\n          \"account_type\": 1849,\n          \"bank_account_holder_name\": \"Rajesh Sharma\",\n          \"bank_account_no\": 123456789012,\n          \"bank_doc_id\": 1883,\n          \"bank_attachment_path\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a new Supplier. Returns 201 on success.\n\nKey field reference:\n  ownership_status_ref_id: 7=Pvt Ltd, 8=Public Ltd, 9=LLP, 1262=Partnership, 1263=Proprietorship, 1853=Individual\n  po_type_ref_id: 25=Domestic, 24=Import\n  default_currency_ref_id: 8=INR\n  address_type: 43=Shipping, 42=Billing (BOTH required)\n  gst_registration_type: 50 (default)\n  gst_registration_status: 1924 (default)\n  payment_terms_ref_id: 26=30 Days, 27=60 Days, 131=Immediate, 549=7 Days, 550=14 Days, 551=21 Days\n  delivery_terms_ref_id: 129=Delivery, 130=Spot\n  mode_of_delivery_ref_id: 30=Truck, 31=Railway, 32=Sea, 33=Courier, 34=Air\n  account_type: 1849=Current, 1850=Saving\n  bank_doc_id: 36=Cancelled Cheque, 35=Passbook, 1883=Bank Statement\n  country_ref_id_id: 8=India\n\nCommon 400 errors:\n  - Missing Shipping or Billing address row\n  - Invalid GSTIN (fails Luhn mod-36 checksum)\n  - Duplicate PAN\n  - mobile_no sent as string instead of integer"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Supplier ⚠️ [SEE NOTE]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": 1038,\n  \"attribute_name\": \"Supplier\",\n  \"party_ref_id\": null,\n  \"ownership_status_ref_id\": 7,\n  \"name\": \"Shree Ganesh Trading Co. Pvt Ltd\",\n  \"po_type_ref_id\": 25,\n  \"email_id\": \"rajesh.sharma42@gmail.com\",\n  \"mobile_no\": 9812345678,\n  \"default_currency_ref_id\": 8,\n  \"pan_no\": \"ABCDE1234F\",\n  \"is_msme_registered\": false,\n  \"status\": true,\n  \"vendor_code\": null,\n  \"fax\": null,\n  \"website_link\": null,\n  \"attachment\": null,\n  \"ref_id\": null,\n  \"ref_type\": null,\n  \"children\": [\n    {\n      \"stepper_name\": \"Additional Details\",\n      \"is_stepper\": true,\n      \"display_name_as\": \"Rajesh Sharma\",\n      \"office_no\": null,\n      \"is_gst_set_off\": true,\n      \"is_tds_applicable\": false,\n      \"gst_registration_type\": 50,\n      \"gst_registration_status\": 1924,\n      \"payment_terms_ref_id\": 26,\n      \"delivery_terms_ref_id\": 129,\n      \"mode_of_delivery_ref_id\": 30,\n      \"details\": [],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Address Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"address_type\": 43,\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 82,\n          \"district_ref_id_id\": 761,\n          \"sub_district_ref_id_id\": 14119,\n          \"village_ref_id_id\": 772475,\n          \"address\": \"42, MG Road, Industrial Area\",\n          \"gstin\": \"27ABCDE1234F1Z5\",\n          \"same_as_above\": null,\n          \"address2\": null,\n          \"details\": []\n        },\n        {\n          \"address_type\": 42,\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 82,\n          \"district_ref_id_id\": 761,\n          \"sub_district_ref_id_id\": 14119,\n          \"village_ref_id_id\": 772475,\n          \"address\": \"Plot 17\",\n          \"gstin\": \"27ABCDE1234F1Z5\",\n          \"same_as_above\": null,\n          \"address2\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Bank Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"bank_name\": \"HDFC Bank\",\n          \"bank_branch_code\": \"Mumbai Branch\",\n          \"bank_ifsc_code\": \"HDFC0123456\",\n          \"account_type\": 1849,\n          \"bank_account_holder_name\": \"Rajesh Sharma\",\n          \"bank_account_no\": 123456789012,\n          \"bank_doc_id\": 1883,\n          \"bank_attachment_path\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "⚠️ UPDATE NOTE:\n\nHow it works:\n  Same endpoint as Create (POST /core/dynamic-screen-wrapper/)\n  Same payload structure — only difference is \"id\" set to existing supplier ID (integer) instead of empty string \"\"\n  The ERP distinguishes Create vs Update solely by the \"id\" field\n\nKnown limitation:\n  The ERP UI uses an internal encrypted endpoint (execute-query/) for updates\n  Updating via Bearer token alone may hit PAN uniqueness errors or stepper child ID conflicts\n  Most reliable update path = Python automation client update_entry(supplier_id, payload) which uses session auth\n\nTo test manually:\n  1. Run Get Supplier Detail to get the full payload for a supplier\n  2. Copy that response, set \"id\" to the supplier's integer ID\n  3. Modify the field you want to change\n  4. POST to this endpoint\n\nNo Delete:\n  The ERP has NO delete endpoint, no delete button, and no soft-delete via status=False\n  Created records are permanent — track IDs manually for any DB-level purge"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Customer",
+      "description": "Customer CRUD — POST /core/dynamic-screen-wrapper/ for Create/Update, GET /Customer/ for List, GET /Customer/{id}/ for Detail.\n\nKey differences from Supplier:\n- Root has sale_type_ref_id + supply_type_ref_id (no po_type_ref_id)\n- sale_type_ref_id must always be Commission, supply_type_ref_id must always be Both\n- Stepper 3 is 'Customer Bank Details' (not 'Bank Details')\n- GSTIN and registration_number both validated with Luhn mod-36 checksum\n- No Delete endpoint",
+      "item": [
+        {
+          "name": "List Customers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Customer/?page_number=1&page_size=25&page_data_search_field=&page_data_search=&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Customer",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "page_data_search_field",
+                  "value": ""
+                },
+                {
+                  "key": "page_data_search",
+                  "value": ""
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Returns paginated flat list of customers.\n\nResponse: screenmatlistingdata_set[] with id, name, mobile_no, email_id, pan_no, status.\nNo stepper children in list response — use Get Customer Detail for full data.\n\nUse search_string to filter by name/PAN."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Customer Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Customer/{{customer_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Customer",
+                "{{customer_id}}",
+                ""
+              ]
+            },
+            "description": "Returns full customer record with all stepper children.\n\nchildren[0] = Additional Details (fields spread directly on stepper object, NOT inside details[])\nchildren[1] = Address Details (details[] contains Shipping + Billing rows)\nchildren[2] = Customer Bank Details (details[] contains bank rows)\n\nSet customer_id in the environment or replace {{customer_id}} with an actual ID from the List response."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Customer\",\n  \"party_ref_id\": null,\n  \"ownership_status_ref_id\": 7,\n  \"name\": \"Shree Agro Foods Pvt Ltd\",\n  \"supply_type_ref_id\": 2017,\n  \"sale_type_ref_id\": 1266,\n  \"default_currency_ref_id\": 8,\n  \"email_id\": \"contact@shreeagro.com\",\n  \"mobile_no\": 9823456781,\n  \"pan_no\": \"BCDFE2345G\",\n  \"status\": true,\n  \"vendor_code\": null,\n  \"ref_id\": null,\n  \"ref_type\": null,\n  \"children\": [\n    {\n      \"stepper_name\": \"Additional Details\",\n      \"is_stepper\": true,\n      \"display_name_as\": \"Anil Mehta\",\n      \"office_no\": null,\n      \"is_tds_applicable\": false,\n      \"preferred_payment_method_ref_id\": 55,\n      \"gst_registration_status\": 1924,\n      \"gst_registration_type\": 50,\n      \"payment_terms_ref_id\": 131,\n      \"delivery_terms_ref_id\": 129,\n      \"mode_of_delivery_ref_id\": 30,\n      \"courier_terms_ref_id\": 52,\n      \"details\": [],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Address Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"address_type\": 43,\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 82,\n          \"district_ref_id_id\": 761,\n          \"sub_district_ref_id_id\": 14119,\n          \"village_ref_id_id\": 772475,\n          \"address\": \"12, Nehru Road, MIDC\",\n          \"pin_code\": \"411001\",\n          \"gstin\": \"27BCDFE2345G1Z3\",\n          \"same_as_above\": null,\n          \"address2\": null,\n          \"details\": []\n        },\n        {\n          \"address_type\": 42,\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 82,\n          \"district_ref_id_id\": 761,\n          \"sub_district_ref_id_id\": 14119,\n          \"village_ref_id_id\": 772475,\n          \"address\": \"Plot 9, Pimpri Industrial Estate\",\n          \"pin_code\": \"411018\",\n          \"gstin\": \"27BCDFE2345G1Z3\",\n          \"same_as_above\": null,\n          \"address2\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Customer Bank Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"bank_name\": \"ICICI Bank\",\n          \"bank_branch_code\": \"Pune Branch\",\n          \"bank_ifsc_code\": \"ICIC0001234\",\n          \"account_type\": 1849,\n          \"bank_account_holder_name\": \"Shree Agro Foods Pvt Ltd\",\n          \"bank_account_no\": 987654321098,\n          \"bank_doc_id\": 36,\n          \"bank_attachment_path\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a new Customer. Returns 201 on success.\n\nKey field reference:\n  ownership_status_ref_id: 7=Private Limited, 8=Public Limited, 9=Government, 1262=Partnership, 1263=Proprietorship, 1853=Individual, 5=Cooperative Society, 6=Limited\n  supply_type_ref_id: ALWAYS use 'Both' (resolve by label — ID is tenant-specific, e.g. 2017 on tenant 795)\n  sale_type_ref_id: ALWAYS use 'Commission' (resolve by label — e.g. 1266 on tenant 795)\n  default_currency_ref_id: 8=INR\n  address_type: 43=Shipping, 42=Billing (BOTH required)\n  gst_registration_status: 1924=Registered\n  gst_registration_type: 49=Unregistered, 50=Regular\n  payment_terms_ref_id: 26=30 Days, 131=Immediate, 549=7 Days, 550=14 Days, 551=21 Days\n  delivery_terms_ref_id: 129=Delivery, 130=Spot\n  mode_of_delivery_ref_id: 30=Truck, 31=Railway, 32=Sea, 33=Courier, 34=Air\n  preferred_payment_method_ref_id: 53=Cheque, 54=Cash, 55=NEFT/RTGS, 141=UPI, 143=Credit Note\n  courier_terms_ref_id: 51=FOB, 52=CIF, 1252=Ex-Works\n  account_type: 1849=Current, 1850=Saving\n  bank_doc_id: 35=Passbook, 36=Bank Statement, 1883=Cancelled Cheque\n  country_ref_id_id: 8=India\n\nCommon 400 errors:\n  - Missing Shipping or Billing address row\n  - Invalid GSTIN (fails Luhn mod-36 checksum)\n  - Duplicate PAN\n  - mobile_no or bank_account_no sent as string instead of integer\n  - supply_type or sale_type left blank"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Customer ⚠️ [SEE NOTE]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": 1050,\n  \"attribute_name\": \"Customer\",\n  \"party_ref_id\": null,\n  \"ownership_status_ref_id\": 7,\n  \"name\": \"Shree Agro Foods Pvt Ltd\",\n  \"supply_type_ref_id\": 2017,\n  \"sale_type_ref_id\": 1266,\n  \"default_currency_ref_id\": 8,\n  \"email_id\": \"contact@shreeagro.com\",\n  \"mobile_no\": 9823456781,\n  \"pan_no\": \"BCDFE2345G\",\n  \"status\": true,\n  \"vendor_code\": null,\n  \"ref_id\": null,\n  \"ref_type\": null,\n  \"children\": [\n    {\n      \"stepper_name\": \"Additional Details\",\n      \"is_stepper\": true,\n      \"display_name_as\": \"Anil Mehta\",\n      \"office_no\": null,\n      \"is_tds_applicable\": false,\n      \"preferred_payment_method_ref_id\": 55,\n      \"gst_registration_status\": 1924,\n      \"gst_registration_type\": 50,\n      \"payment_terms_ref_id\": 131,\n      \"delivery_terms_ref_id\": 129,\n      \"mode_of_delivery_ref_id\": 30,\n      \"courier_terms_ref_id\": 52,\n      \"details\": [],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Address Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"address_type\": 43,\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 82,\n          \"district_ref_id_id\": 761,\n          \"sub_district_ref_id_id\": 14119,\n          \"village_ref_id_id\": 772475,\n          \"address\": \"12, Nehru Road, MIDC\",\n          \"pin_code\": \"411001\",\n          \"gstin\": \"27BCDFE2345G1Z3\",\n          \"same_as_above\": null,\n          \"address2\": null,\n          \"details\": []\n        },\n        {\n          \"address_type\": 42,\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 82,\n          \"district_ref_id_id\": 761,\n          \"sub_district_ref_id_id\": 14119,\n          \"village_ref_id_id\": 772475,\n          \"address\": \"Plot 9, Pimpri Industrial Estate\",\n          \"pin_code\": \"411018\",\n          \"gstin\": \"27BCDFE2345G1Z3\",\n          \"same_as_above\": null,\n          \"address2\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Customer Bank Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"bank_name\": \"ICICI Bank\",\n          \"bank_branch_code\": \"Pune Branch\",\n          \"bank_ifsc_code\": \"ICIC0001234\",\n          \"account_type\": 1849,\n          \"bank_account_holder_name\": \"Shree Agro Foods Pvt Ltd\",\n          \"bank_account_no\": 987654321098,\n          \"bank_doc_id\": 36,\n          \"bank_attachment_path\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "⚠️ UPDATE NOTE:\n\nHow it works:\n  Same endpoint as Create (POST /core/dynamic-screen-wrapper/)\n  Only difference: \"id\" is set to the existing customer's integer ID (not empty string)\n\nTo test:\n  1. Run Get Customer Detail to fetch the full record\n  2. Copy the response, set top-level \"id\" to the customer's integer ID\n  3. Edit the field you want to change\n  4. POST to this endpoint\n\nKnown limitations:\n  PAN uniqueness check does NOT exclude the current record — changing other fields while keeping the same PAN may fail\n  Most reliable update path = Python automation client which uses session auth\n\nNo Delete:\n  No delete endpoint or button exists in the ERP — records are permanent"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Employee",
+      "description": "Employee CRUD — POST /core/dynamic-screen-wrapper/ for Create, GET /Employee/ for List, GET /Employee/{id}/ for Detail, PUT /Employee/{id}/ for Update.\n\nKey facts:\n- FLAT FORM: No steppers, no children array — all fields at root level\n- Required: name, email_id, mobile_no, designation, status\n- name must match ^[A-Za-z ]+$ (letters and spaces only — no digits or special chars)\n- mobile_no must be a 10-digit integer starting with 6-9\n- designation and department are FK IDs at root level (not inside children)\n- No Delete endpoint",
+      "item": [
+        {
+          "name": "List Employees",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Employee/?page_number=1&page_size=25&page_data_search_field=&page_data_search=&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Employee",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "page_data_search_field",
+                  "value": ""
+                },
+                {
+                  "key": "page_data_search",
+                  "value": ""
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Returns paginated flat list of employees.\n\nResponse: screenmatlistingdata_set[] with id, name, email_id, mobile_no, designation, status."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Employee Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Employee/{{employee_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Employee",
+                "{{employee_id}}",
+                ""
+              ]
+            },
+            "description": "Returns full employee record.\n\nFlat structure — no children array. All fields including designation and department are at root level.\n\nSet employee_id in the environment or replace {{employee_id}} with an actual ID from the List response."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Employee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Employee\",\n  \"party_ref_id\": null,\n  \"name\": \"Rajesh Sharma\",\n  \"email_id\": \"rajesh.sharma42@gmail.com\",\n  \"mobile_no\": 9812345678,\n  \"designation\": 2,\n  \"department\": 1,\n  \"status\": true,\n  \"details\": [],\n  \"children\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a new Employee. Returns 200 (listing page) on success — not 201.\n\nKey field reference:\n  designation: 1=Test Designation, 2=Farm Supervisor, 3=Warehouse Manager, 4=Quality Inspector, 5=Procurement Officer, 6=Accounts Executive, 7=Field Officer, 8=Weighbridge Operator, 9=Dispatch Coordinator, 10=Commodity Analyst, 11=Regional Manager, 12=Cashier, 13=Compliance Officer, 14=Data Entry Operator\n  department: 1=General, 2=Administration\n\nCommon 400 errors:\n  - name contains digits or special characters (only letters and spaces allowed)\n  - mobile_no is a string instead of integer\n  - mobile_no does not start with 6-9 or is not 10 digits\n  - designation is null or invalid ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Employee",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Employee/{{employee_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Employee",
+                "{{employee_id}}",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{employee_id}}\",\n  \"attribute_name\": \"Employee\",\n  \"party_ref_id\": null,\n  \"name\": \"Rajesh Sharma\",\n  \"email_id\": \"rajesh.sharma42@gmail.com\",\n  \"mobile_no\": 9812345678,\n  \"designation\": 2,\n  \"department\": 1,\n  \"status\": true,\n  \"details\": [],\n  \"children\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Updates an existing Employee.\n\nEmployee Update uses PUT /Employee/{id}/ — different from Supplier/Customer which use POST to the base endpoint.\n\nSet employee_id in the environment. Run Get Employee Detail first to get the current values, then modify what you need."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Agent",
+      "description": "Agent CRUD — POST /core/dynamic-screen-wrapper/ for Create/Update, GET /Agent/ for List, GET /Agent/{id}/ for Detail.\n\nKey facts:\n- 3 steppers: Address Details, Payment Details, Bank Details\n- Both Shipping (address_type=43) AND Billing (address_type=42) address rows required\n- Payment Details fields (payment_terms_ref_id, preferred_payment_method_ref_id) sit on the stepper object itself, NOT inside details[]\n- mobile_no and bank_account_no must be integers\n- No Delete endpoint",
+      "item": [
+        {
+          "name": "List Agents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Agent/?page_number=1&page_size=25&page_data_search_field=&page_data_search=&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Agent",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "page_data_search_field",
+                  "value": ""
+                },
+                {
+                  "key": "page_data_search",
+                  "value": ""
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Returns paginated flat list of agents.\n\nResponse: screenmatlistingdata_set[] with id, name, mobile_no, email_id, status."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Agent Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Agent/{{agent_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Agent",
+                "{{agent_id}}",
+                ""
+              ]
+            },
+            "description": "Returns full agent record with all stepper children.\n\nchildren[0] = Address Details (details[] has Shipping + Billing rows)\nchildren[1] = Payment Details (payment_terms_ref_id and preferred_payment_method_ref_id on the stepper object itself)\nchildren[2] = Bank Details (details[] has bank rows)\n\nSet agent_id in the environment or replace {{agent_id}} with an actual ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Agent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Agent\",\n  \"party_ref_id\": null,\n  \"copy_from_party\": false,\n  \"name\": \"Vijay Kulkarni\",\n  \"mobile_no\": 9834567812,\n  \"email_id\": \"vijay.kulkarni@gmail.com\",\n  \"status\": true,\n  \"children\": [\n    {\n      \"stepper_name\": \"Address Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"address_type\": 43,\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 82,\n          \"district_ref_id_id\": 761,\n          \"sub_district_ref_id_id\": 14119,\n          \"village_ref_id_id\": 772475,\n          \"address\": \"24, Gandhi Chowk, Warora\",\n          \"pin_code\": \"442907\",\n          \"same_as_above\": null,\n          \"details\": []\n        },\n        {\n          \"address_type\": 42,\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 82,\n          \"district_ref_id_id\": 761,\n          \"sub_district_ref_id_id\": 14119,\n          \"village_ref_id_id\": 772475,\n          \"address\": \"Plot 5, Industrial Zone, Chandrapur\",\n          \"pin_code\": \"442401\",\n          \"same_as_above\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Payment Details\",\n      \"is_stepper\": true,\n      \"payment_terms_ref_id\": null,\n      \"preferred_payment_method_ref_id\": null,\n      \"is_gst_set_off\": false,\n      \"details\": [],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Bank Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"bank_name\": \"State Bank of India\",\n          \"bank_branch_code\": \"Nagpur Main Branch\",\n          \"bank_ifsc_code\": \"SBIN0012345\",\n          \"account_type\": 1849,\n          \"bank_account_holder_name\": \"Vijay Kulkarni\",\n          \"bank_account_no\": 123456789012,\n          \"bank_doc_id\": 36,\n          \"bank_attachment_path\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a new Agent. Returns 201 on success.\n\nKey field reference:\n  address_type: 43=Shipping, 42=Billing (BOTH rows required)\n  country_ref_id_id: 8=India\n  account_type: 1849=Current, 1850=Saving\n  bank_doc_id: 35=Passbook, 36=Cancelled Cheque, 1883=Bank Statement\n  payment_terms_ref_id: 26=30 Days, 131=Immediate, 549=7 Days, 550=14 Days, 551=21 Days (optional)\n  preferred_payment_method_ref_id: 53=Cheque, 54=Cash, 55=NEFT/RTGS, 141=UPI, 143=Credit Note (optional)\n\nNote: Payment Details fields (payment_terms_ref_id, preferred_payment_method_ref_id, is_gst_set_off) are on the stepper object itself — NOT inside details[].\n\nCommon 400 errors:\n  - Missing Shipping or Billing address row\n  - mobile_no or bank_account_no sent as string instead of integer"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Agent ⚠️ [SEE NOTE]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": 1,\n  \"attribute_name\": \"Agent\",\n  \"party_ref_id\": null,\n  \"copy_from_party\": false,\n  \"name\": \"Vijay Kulkarni\",\n  \"mobile_no\": 9834567812,\n  \"email_id\": \"vijay.kulkarni@gmail.com\",\n  \"status\": true,\n  \"children\": [\n    {\n      \"stepper_name\": \"Address Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"address_type\": 43,\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 82,\n          \"district_ref_id_id\": 761,\n          \"sub_district_ref_id_id\": 14119,\n          \"village_ref_id_id\": 772475,\n          \"address\": \"24, Gandhi Chowk, Warora\",\n          \"pin_code\": \"442907\",\n          \"same_as_above\": null,\n          \"details\": []\n        },\n        {\n          \"address_type\": 42,\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 82,\n          \"district_ref_id_id\": 761,\n          \"sub_district_ref_id_id\": 14119,\n          \"village_ref_id_id\": 772475,\n          \"address\": \"Plot 5, Industrial Zone, Chandrapur\",\n          \"pin_code\": \"442401\",\n          \"same_as_above\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Payment Details\",\n      \"is_stepper\": true,\n      \"payment_terms_ref_id\": null,\n      \"preferred_payment_method_ref_id\": null,\n      \"is_gst_set_off\": false,\n      \"details\": [],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Bank Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"bank_name\": \"State Bank of India\",\n          \"bank_branch_code\": \"Nagpur Main Branch\",\n          \"bank_ifsc_code\": \"SBIN0012345\",\n          \"account_type\": 1849,\n          \"bank_account_holder_name\": \"Vijay Kulkarni\",\n          \"bank_account_no\": 123456789012,\n          \"bank_doc_id\": 36,\n          \"bank_attachment_path\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "⚠️ UPDATE NOTE:\n\nHow it works:\n  Same endpoint as Create (POST /core/dynamic-screen-wrapper/)\n  Only difference: \"id\" is set to the existing agent's integer ID\n\nTo test:\n  1. Run Get Agent Detail to fetch the full record\n  2. Copy the response, set top-level \"id\" to the agent's integer ID\n  3. Edit the field you want to change\n  4. POST to this endpoint\n\nNo Delete:\n  No delete endpoint exists in the ERP"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Farmer",
+      "description": "Farmer CRUD — POST /core/dynamic-screen-wrapper/ for Create/Update, GET /Farmer/ for List, GET /Farmer/{id}/ for Detail.\n\nKey rules:\n- farmer_category is a single integer FK (NOT an array)\n- Tenant-specific category IDs: 1592=Walk-in, 1593=FPC Member, 1594=Borrower Farmer\n- mobile_no and bank_account_no must be integers, NOT strings\n- Address requires BOTH Permanent (1875) AND Current (1876) rows\n- Additional Details + Other Details: fields sit on the stepper object, NOT inside details[]\n- Stepper order: Address, Family, Additional, Other, Land, Crop, KYC, Vehicle, Income, Bank, Irrigation, Award, Loan\n- Borrower Farmer = 13 steppers; FPC Member = 6; Walk-in = 3\n- No Delete endpoint exists in the ERP",
+      "item": [
+        {
+          "name": "List Farmers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Farmer/?page_number=1&page_size=25&page_data_search_field=&page_data_search=&search_string=&is_excel_download=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Farmer",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                },
+                {
+                  "key": "page_data_search_field",
+                  "value": ""
+                },
+                {
+                  "key": "page_data_search",
+                  "value": ""
+                },
+                {
+                  "key": "search_string",
+                  "value": ""
+                },
+                {
+                  "key": "is_excel_download",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Returns paginated flat list of farmers.\n\nResponse: screenmatlistingdata_set[] with id, name, mobile_no, email_id, farmer_category, status."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Farmer Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Farmer/{{farmer_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Farmer",
+                "{{farmer_id}}",
+                ""
+              ]
+            },
+            "description": "Returns full farmer record with all stepper children.\n\nSet farmer_id in the environment or replace {{farmer_id}} with an actual ID from the List response."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Farmer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Farmer\",\n  \"copy_from_party\": false,\n  \"party_ref_id\": null,\n  \"name\": \"Ramesh Kumar\",\n  \"email_id\": \"rameshkumar@example.com\",\n  \"mobile_no\": 9876543210,\n  \"farmer_category\": 1594,\n  \"is_member_this_fpc\": false,\n  \"other_fpc_name\": null,\n  \"member_id\": null,\n  \"status\": true,\n  \"children\": [\n    {\n      \"stepper_name\": \"Address Details \",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"address_type\": 1875,\n          \"address\": \"12 Gandhi Nagar\",\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 12,\n          \"district_ref_id_id\": 208,\n          \"sub_district_ref_id_id\": 13041,\n          \"village_ref_id_id\": 422660,\n          \"pin_code\": \"123456\",\n          \"details\": [],\n          \"children\": []\n        },\n        {\n          \"id\": \"\",\n          \"address_type\": 1876,\n          \"address\": \"12 Gandhi Nagar\",\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 12,\n          \"district_ref_id_id\": 208,\n          \"sub_district_ref_id_id\": 13041,\n          \"village_ref_id_id\": 422660,\n          \"pin_code\": \"123456\",\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Family Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"family_member_name\": \"Sunita Devi\",\n          \"relation\": \"Wife\",\n          \"age\": 38,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Additional Details\",\n      \"is_stepper\": true,\n      \"details\": [],\n      \"children\": [],\n      \"land_classification\": null,\n      \"password\": \"Test@123456789\",\n      \"dob\": \"1980-06-15\",\n      \"age\": 44,\n      \"gender\": 1893,\n      \"religion_ref_id\": 1913,\n      \"category_ref_id\": 1928,\n      \"profile_photo\": null\n    },\n    {\n      \"stepper_name\": \"Other Details\",\n      \"is_stepper\": true,\n      \"details\": [],\n      \"children\": [],\n      \"education_ref_id\": 1886,\n      \"electricity_ref_id\": 1890\n    },\n    {\n      \"stepper_name\": \"Land Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"land_ownership\": 1930,\n          \"survey_no\": \"SRV-001\",\n          \"area_in_hectare\": 2.5,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Crop Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"season\": 1959,\n          \"crop_ref_id\": null,\n          \"area_in_hectare\": 2.5,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"KYC Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"kyc_doc_id\": 1931,\n          \"kyc_doc_no\": \"123456789012\",\n          \"kyc_proof\": null,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Vehicle Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"vehicle_type_id\": 1935,\n          \"vehicle_no\": \"MH12AB1234\",\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Income Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"income_bracket_ref_id\": 1938,\n          \"income_source\": \"Farming\",\n          \"annual_income\": 150000,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Bank Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"account_type\": 1941,\n          \"bank_ref_id\": null,\n          \"bank_account_no\": 123456789012,\n          \"ifsc_code\": \"SBIN0001234\",\n          \"bank_doc_id\": 1944,\n          \"bank_proof\": null,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Irrigation Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"source_of_irrigation\": 1945,\n          \"method_of_irrigation\": 1952,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Award Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"award_name\": \"Best Farmer 2023\",\n          \"award_year\": 2023,\n          \"awarded_by\": \"State Government\",\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Loan Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"type_of_loan\": 1958,\n          \"loan_purpose\": \"Crop cultivation\",\n          \"availed_from\": \"State Bank of India\",\n          \"sanctioned_amount\": 100000,\n          \"present_outstanding_amount\": 50000,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates a new Farmer. id must be empty string (\"\").\n\nfarmer_category IDs (tenant-specific):\n  1592 = Walk-in Farmer (3 steppers: Address, Bank, Additional)\n  1593 = FPC Member (6 steppers)\n  1594 = Borrower Farmer (all 13 steppers)\n\nAdditional Details and Other Details: fields sit directly on the stepper object, NOT in details[].\n\nAddress: both Permanent (1875) and Current (1876) rows required.\n\ngender: 1893=Male, 1894=Female\nreligion_ref_id: 1913=Hinduism\ncategory_ref_id: 1928=OPEN\neducation_ref_id: 1886=Graduation\nelectricity_ref_id: 1890=8-12 Hour\naccount_type: 1941=Saving\nbank_doc_id: 1944=Bank Statement\nkyc_doc_id: 1931=AADHAR\nland_ownership: 1930=Owned\nseason: 1959=Kharif\nvehicle_type_id: 1935=Four Wheeler\nincome_bracket_ref_id: 1938=1-5L\nsource_of_irrigation: 1945=Well\nmethod_of_irrigation: 1952=Drip\ntype_of_loan: 1958=Term Loan"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Farmer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": 1033,\n  \"attribute_name\": \"Farmer\",\n  \"copy_from_party\": false,\n  \"party_ref_id\": null,\n  \"name\": \"Ramesh Kumar Updated\",\n  \"email_id\": \"rameshkumar@example.com\",\n  \"mobile_no\": 9876543210,\n  \"farmer_category\": 1594,\n  \"is_member_this_fpc\": false,\n  \"other_fpc_name\": null,\n  \"member_id\": null,\n  \"status\": true,\n  \"children\": [\n    {\n      \"stepper_name\": \"Address Details \",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"address_type\": 1875,\n          \"address\": \"12 Gandhi Nagar\",\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 12,\n          \"district_ref_id_id\": 208,\n          \"sub_district_ref_id_id\": 13041,\n          \"village_ref_id_id\": 422660,\n          \"pin_code\": \"123456\",\n          \"details\": [],\n          \"children\": []\n        },\n        {\n          \"id\": \"\",\n          \"address_type\": 1876,\n          \"address\": \"12 Gandhi Nagar\",\n          \"country_ref_id_id\": 8,\n          \"state_ref_id_id\": 12,\n          \"district_ref_id_id\": 208,\n          \"sub_district_ref_id_id\": 13041,\n          \"village_ref_id_id\": 422660,\n          \"pin_code\": \"123456\",\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Family Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"family_member_name\": \"Sunita Devi\",\n          \"relation\": \"Wife\",\n          \"age\": 38,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Additional Details\",\n      \"is_stepper\": true,\n      \"details\": [],\n      \"children\": [],\n      \"land_classification\": null,\n      \"password\": \"Test@123456789\",\n      \"dob\": \"1980-06-15\",\n      \"age\": 44,\n      \"gender\": 1893,\n      \"religion_ref_id\": 1913,\n      \"category_ref_id\": 1928,\n      \"profile_photo\": null\n    },\n    {\n      \"stepper_name\": \"Other Details\",\n      \"is_stepper\": true,\n      \"details\": [],\n      \"children\": [],\n      \"education_ref_id\": 1886,\n      \"electricity_ref_id\": 1890\n    },\n    {\n      \"stepper_name\": \"Land Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"land_ownership\": 1930,\n          \"survey_no\": \"SRV-001\",\n          \"area_in_hectare\": 2.5,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Crop Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"season\": 1959,\n          \"crop_ref_id\": null,\n          \"area_in_hectare\": 2.5,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"KYC Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"kyc_doc_id\": 1931,\n          \"kyc_doc_no\": \"123456789012\",\n          \"kyc_proof\": null,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Vehicle Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"vehicle_type_id\": 1935,\n          \"vehicle_no\": \"MH12AB1234\",\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Income Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"income_bracket_ref_id\": 1938,\n          \"income_source\": \"Farming\",\n          \"annual_income\": 150000,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Bank Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"account_type\": 1941,\n          \"bank_ref_id\": null,\n          \"bank_account_no\": 123456789012,\n          \"ifsc_code\": \"SBIN0001234\",\n          \"bank_doc_id\": 1944,\n          \"bank_proof\": null,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Irrigation Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"source_of_irrigation\": 1945,\n          \"method_of_irrigation\": 1952,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Award Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"award_name\": \"Best Farmer 2023\",\n          \"award_year\": 2023,\n          \"awarded_by\": \"State Government\",\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Loan Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"type_of_loan\": 1958,\n          \"loan_purpose\": \"Crop cultivation\",\n          \"availed_from\": \"State Bank of India\",\n          \"sanctioned_amount\": 100000,\n          \"present_outstanding_amount\": 50000,\n          \"details\": [],\n          \"children\": []\n        }\n      ],\n      \"children\": []\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Updates an existing Farmer. Same endpoint as Create — id must be a non-zero integer (the farmer's actual ID).\n\nReplace id: 1033 with the actual farmer ID."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
