@@ -195,8 +195,8 @@ def get_field_validation_rules():
 def get_fk_screen_mapping():
     """Return FK field → screen name mapping for live FkResolver resolution."""
     return {
-        "vehicle_type_id":  "Vehicle Type",
-        "fuel_type_ref_id": "Fuel Type",
+        "vehicle_type_id":  "Accounting Template",
+        "fuel_type_ref_id": "Ledger Group",
     }
 
 

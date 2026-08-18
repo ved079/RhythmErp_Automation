@@ -129,11 +129,10 @@ def generate_tax_rate_api_payloads(count=10, offset=0, fk_ids=None):
             "from common.fk_resolver import FkResolver"
         )
 
-    tax_type_ids = fk_ids.get("tax_type_ref_id", {})
     tax_auth_ids = fk_ids.get("tax_authority_ref_id", {})
     hsn_sac_ids = fk_ids.get("hsn_sac_number", {})
 
-    gst_id = next(iter(tax_type_ids.values())) if tax_type_ids else None
+    gst_id = TAX_TYPE_REF_ID
 
     date_ranges = [
         (date(2025, 4, 1), date(2026, 3, 31)),
@@ -171,10 +170,11 @@ def generate_tax_rate_api_payloads(count=10, offset=0, fk_ids=None):
     return payloads
 
 
+TAX_TYPE_REF_ID = 93  # GST — hardcoded (no resolvable screen in ERP)
+
 def get_fk_screen_mapping():
-    """Return FK field → screen name mapping for live FkResolver resolution."""
+    """tax_type_ref_id is hardcoded (no resolvable ERP screen). Only resolve Tax Authority and HSN SAC."""
     return {
-        "tax_type_ref_id":      "Tax Type",
         "tax_authority_ref_id": "Tax Authority",
         "hsn_sac_number":       "HSN SAC",
     }
@@ -193,10 +193,9 @@ def generate_batch_payloads(count: int = 20, prefix: str = None, dropdown_ids: d
     fk_ids = dropdown_ids
     if existing_entries:
         used_names = {e.get("tax_rate_name", "").lower().strip() for e in existing_entries if e}
-        tax_type_ids = fk_ids.get("tax_type_ref_id", {})
         tax_auth_ids = fk_ids.get("tax_authority_ref_id", {})
         hsn_sac_ids = fk_ids.get("hsn_sac_number", {})
-        gst_id = next(iter(tax_type_ids.values())) if tax_type_ids else None
+        gst_id = TAX_TYPE_REF_ID
         date_ranges = [
             (date(2025, 4, 1), date(2026, 3, 31)),
             (date(2024, 4, 1), date(2025, 3, 31)),
