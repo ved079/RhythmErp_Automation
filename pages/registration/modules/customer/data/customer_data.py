@@ -573,7 +573,7 @@ SALE_TYPE_IDS = [1264, 1265, 1266, 1267]
 # Sale Type is ALWAYS pinned to "Commission" (tenant-universal). The ID differs
 # per tenant; resolve it at create time by label via apply_tenant_fk_pins().
 SALE_TYPE_COMMISSION_LABEL = "Commission"
-SALE_TYPE_COMMISSION_FALLBACK_ID = 1267
+SALE_TYPE_COMMISSION_FALLBACK_ID = 1266
 
 # Supply Type is ALWAYS pinned to "Both" (tenant-universal). The ID differs
 # per tenant; resolve it at create time by label via apply_tenant_fk_pins().
@@ -619,7 +619,7 @@ DEFAULT_COUNTRY_REF_ID = 8    # India
 # Backward-compatible default FK IDs dict
 DEFAULT_CUSTOMER_FK_IDS = {
     "ownership_status_ref_id": 7,            # Private Limited Company
-    "supply_type_ref_id": 225,              # Domestic
+    "supply_type_ref_id": 2017,             # Both
     "sale_type_ref_id": SALE_TYPE_COMMISSION_FALLBACK_ID,   # Commission
     "default_currency_ref_id": 1,            # INR
     "address_type": 43,                      # Shipping
@@ -786,8 +786,8 @@ def generate_random_fk_ids() -> dict:
     """Generate a set of random FK IDs for Customer dropdown variety."""
     return {
         "ownership_status_ref_id": random.choice(OWNERSHIP_STATUS_IDS),
-        "supply_type_ref_id": random.choice(SUPPLY_TYPE_IDS),
-        "sale_type_ref_id": SALE_TYPE_COMMISSION_FALLBACK_ID,
+        "supply_type_ref_id": 2017,   # Both — pinned
+        "sale_type_ref_id": SALE_TYPE_COMMISSION_FALLBACK_ID,  # 1266 — pinned
         "default_currency_ref_id": DEFAULT_CURRENCY_REF_ID,
         "address_type": random.choice(ADDRESS_TYPE_IDS),
         "country_ref_id_id": DEFAULT_COUNTRY_REF_ID,
