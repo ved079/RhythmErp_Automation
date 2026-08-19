@@ -1,0 +1,134 @@
+{
+  "info": {
+    "name": "Company Onboarding",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "List Company Onboarding",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "X-Tenant-ID",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/core/dynamic-screen-wrapper/Company%20Onboarding/?page_number=1&page_size=25&search_string=&is_excel_download=false",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "core",
+            "dynamic-screen-wrapper",
+            "Company%20Onboarding",
+            ""
+          ],
+          "query": [
+            {
+              "key": "page_number",
+              "value": "1"
+            },
+            {
+              "key": "page_size",
+              "value": "25"
+            },
+            {
+              "key": "search_string",
+              "value": ""
+            },
+            {
+              "key": "is_excel_download",
+              "value": "false"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Company Onboarding Detail",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "X-Tenant-ID",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/core/dynamic-screen-wrapper/Company%20Onboarding/{{record_id}}/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "core",
+            "dynamic-screen-wrapper",
+            "Company%20Onboarding",
+            "{{record_id}}",
+            ""
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Create Company Onboarding",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "X-Tenant-ID",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Company Onboarding\",\n  \"name\": \"Company Royal Traders\",\n  \"user_type_id\": 4,\n  \"parent_id\": \"{{parent_id}}\",\n  \"tenant_linked\": [\n    \"{{parent_id}}\"\n  ],\n  \"level\": 2,\n  \"is_parent\": false,\n  \"children\": [\n    {\n      \"stepper_name\": \"Company Details\",\n      \"is_stepper\": true,\n      \"details\": [],\n      \"children\": [],\n      \"native_language\": 1959,\n      \"company_background\": \"bg\",\n      \"pan_no\": \"ABCDE1234F\",\n      \"tan_no\": null,\n      \"authentication_type\": null,\n      \"ownership_status_id\": 1263,\n      \"tenant_short_name\": \"Royal Traders\",\n      \"contact_person_name\": \"Contact 101\",\n      \"email_id\": \"royaltraders101@example.com\",\n      \"phone_no\": 9876543210,\n      \"gst_no\": null,\n      \"cin_no\": \"U12345AB2024PTC123456\",\n      \"plan_type_ref_id\": null,\n      \"is_2fa_applicable\": false,\n      \"base_currency\": 8,\n      \"tenant_code\": 12345678\n    },\n    {\n      \"stepper_name\": \"Promoters Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"remark\": \"Promoter 1001\",\n          \"promoter_name\": \"Promoter 1001\",\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Address Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"pincode_ref_id_id\": 2148,\n          \"address_type_ref_id\": 1649,\n          \"address\": \"347 Main Road\",\n          \"taluka\": 11462,\n          \"district\": 479,\n          \"state\": 98,\n          \"country\": 8,\n          \"same_as_above\": null,\n          \"longitude\": null,\n          \"latitude\": null,\n          \"details\": []\n        },\n        {\n          \"pincode_ref_id_id\": 2148,\n          \"address_type_ref_id\": 1650,\n          \"address\": \"347 Main Road\",\n          \"taluka\": 11462,\n          \"district\": 479,\n          \"state\": 98,\n          \"country\": 8,\n          \"same_as_above\": null,\n          \"longitude\": null,\n          \"latitude\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Infrastructure Details\",\n      \"is_stepper\": true,\n      \"details\": [],\n      \"children\": []\n    },\n    {\n      \"stepper_name\": \"Business Activities\",\n      \"is_stepper\": true,\n      \"details\": [],\n      \"children\": []\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/core/dynamic-screen-wrapper/",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "core",
+            "dynamic-screen-wrapper",
+            ""
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
