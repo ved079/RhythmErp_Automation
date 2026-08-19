@@ -60,26 +60,31 @@ def _rand_tenant_code() -> int:
 
 
 def enrich_existing_entries(client, existing_entries: list) -> list:
-    """Fetch full detail for the first listing row so sniffing can read nested children."""
+    """Fetch full detail for the oldest listing row so sniffing can read nested children."""
     if not existing_entries:
         return existing_entries
-    first = existing_entries[0]
-    if "children" in first:
+    if "children" in existing_entries[0]:
         return existing_entries  # already enriched
-    detail = client.get_entry("Company Onboarding", first["id"])
-    return [detail] + list(existing_entries[1:]) if detail else existing_entries
+    # Oldest entry (min id) is most likely manually-created with correct parent_id
+    oldest = min(existing_entries, key=lambda e: e.get("id", float("inf")))
+    detail = client.get_entry("Company Onboarding", oldest["id"])
+    if not detail:
+        return existing_entries
+    rest = [e for e in existing_entries if e.get("id") != oldest.get("id")]
+    return [detail] + rest
 
 
 def _sniff_from_existing(existing_entries: list) -> dict:
-    """Extract tenant-specific FK IDs from the first existing company record."""
+    """Extract tenant-specific FK IDs from existing company records."""
     sniffed = {}
+
+    # Collect all non-null parent_ids; minimum = root company (universal across tenants)
+    parent_ids = [e["parent_id"] for e in existing_entries if e.get("parent_id")]
+    if parent_ids:
+        sniffed["parent_id"] = min(parent_ids)
+
     for entry in existing_entries:
         children = entry.get("children", [])
-
-        # parent_id from top-level
-        if entry.get("parent_id"):
-            sniffed["parent_id"] = entry["parent_id"]
-
         for child in children:
             if child.get("stepper_name") == "Company Details":
                 if child.get("native_language"):

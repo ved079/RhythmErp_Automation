@@ -53,7 +53,38 @@
           ]
         }
       },
-      "response": []
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.environment.unset('co_parent_id');",
+              "pm.environment.unset('co_first_id');",
+              "",
+              "var rows = pm.response.json().screenmatlistingdata_set || [];",
+              "if (!rows.length) return;",
+              "",
+              "// Collect all parent_ids visible in listing rows \u2014 min = root company",
+              "var parentIds = [];",
+              "for (var i = 0; i < rows.length; i++) {",
+              "    if (rows[i].parent_id) parentIds.push(parseInt(rows[i].parent_id));",
+              "}",
+              "if (parentIds.length) {",
+              "    parentIds.sort(function(a, b) { return a - b; });",
+              "    pm.environment.set('co_parent_id', parentIds[0]);",
+              "    return;",
+              "}",
+              "",
+              "// Fallback: detail fetch the OLDEST company (min id) \u2014 most likely manually",
+              "// created with a correct parent_id pointing to root",
+              "var sorted = rows.slice().sort(function(a, b) { return parseInt(a.id) - parseInt(b.id); });",
+              "pm.environment.set('co_first_id', sorted[0].id);"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "Get Company Onboarding Detail",
@@ -135,11 +166,36 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "var reqBody = JSON.parse(pm.request.body.raw);",
-              "var parentId = parseInt(pm.environment.get('parent_id'));",
-              "reqBody.parent_id = parentId;",
-              "reqBody.tenant_linked = [parentId];",
-              "pm.request.body.raw = JSON.stringify(reqBody, null, 2);"
+              "var parentId = pm.environment.get('co_parent_id');",
+              "",
+              "function applyParent(pid) {",
+              "    var reqBody = JSON.parse(pm.request.body.raw);",
+              "    reqBody.parent_id = pid ? parseInt(pid) : null;",
+              "    reqBody.tenant_linked = pid ? [parseInt(pid)] : [];",
+              "    pm.request.body.raw = JSON.stringify(reqBody, null, 2);",
+              "}",
+              "",
+              "if (parentId) {",
+              "    // Already resolved by List request \u2014 use directly",
+              "    applyParent(parentId); return;",
+              "}",
+              "",
+              "// Fallback: fetch detail of first listing row to get parent_id",
+              "var firstId = pm.environment.get('co_first_id');",
+              "var baseUrl = pm.environment.get('base_url');",
+              "var token = pm.environment.get('token');",
+              "var tenantId = pm.environment.get('tenant_id');",
+              "if (!firstId) { applyParent(null); return; }",
+              "",
+              "pm.sendRequest({",
+              "    url: baseUrl + '/core/dynamic-screen-wrapper/Company%20Onboarding/' + firstId + '/',",
+              "    method: 'GET',",
+              "    header: { 'Authorization': 'Bearer ' + token, 'X-Tenant-ID': tenantId }",
+              "}, function(err, res) {",
+              "    var pid = err ? null : (res.json().parent_id || firstId);",
+              "    pm.environment.set('co_parent_id', parseInt(pid));",
+              "    applyParent(pid);",
+              "});"
             ]
           }
         }
