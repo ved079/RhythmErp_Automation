@@ -8,10 +8,11 @@ _OWNERSHIP_STATUS           = 1263
 _BASE_CURRENCY              = 8
 _ADDRESS_TYPE_REGISTERED    = 1649
 _ADDRESS_TYPE_COMMUNICATION = 1650
-_STATE                      = 111
+_STATE                      = 98
 _COUNTRY                    = 8
-_DISTRICT                   = 276
-_TALUKA                     = 5318  # safe default; sniffed from existing if available
+_DISTRICT                   = 479
+_TALUKA                     = 11462
+_PINCODE                    = 2148
 _USER_TYPE_ID               = 4
 _LEVEL                      = 2
 
@@ -114,11 +115,11 @@ def generate_batch_payloads(
 
     # parent_id: config override → sniffed → no default (must be resolved)
     parent_id = config.get("parent_id") or sniffed.get("parent_id")
-    native_language = config.get("native_language") or sniffed.get("native_language") or 1
+    native_language = 1959  # hardcoded — tenant-universal
     taluka   = config.get("taluka")   or sniffed.get("taluka")   or _TALUKA
     district = config.get("district") or sniffed.get("district") or _DISTRICT
     state    = config.get("state")    or sniffed.get("state")    or _STATE
-    pincode  = config.get("pincode")  or sniffed.get("pincode")  or None
+    pincode  = config.get("pincode")  or sniffed.get("pincode")  or _PINCODE
 
     existing_pans = set()
     if existing_entries:
