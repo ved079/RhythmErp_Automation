@@ -818,9 +818,10 @@ def _load_address_chains():
             },
             {
                 "state_ref_id_id": 98,
-                "district_ref_id_id": 505,
-                "sub_district_ref_id_id": 11544,
-                "village_ref_id_id": 317896,
+                "district_ref_id_id": 479,
+                "sub_district_ref_id_id": 11462,
+                "village_ref_id_id": None,
+                "pincode_ref_id_id": 2148,
                 "_verified": True,
             },
             {
