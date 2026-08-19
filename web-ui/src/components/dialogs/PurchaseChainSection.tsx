@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { CheckCircle2, XCircle, Play, Key, RefreshCw, Loader2, X, AlertTriangle, Wand2, Search, Star } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import { startPurchaseChain, fetchMasterData, fetchItemCategories, fetchItemsWithCqp, fillCqpItems, type SSEEvent, type MasterDataItem, type ItemCategory } from '@/lib/api'
+import { notifySuccess } from '@/lib/notify'
 
 interface Props {
   erpToken: string
@@ -416,6 +417,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             total: event.total ?? count,
             elapsed: elapsed.toFixed(1),
           })
+          notifySuccess('Purchase Chain Complete', `${event.created ?? created} created, ${event.failed ?? failed} failed`)
         }
       },
       () => {

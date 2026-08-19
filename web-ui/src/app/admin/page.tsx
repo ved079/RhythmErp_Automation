@@ -78,50 +78,47 @@ export default function AdminPage() {
   return (
     <div className="h-screen flex flex-col bg-[#F1F2F7] dark:bg-gray-900 overflow-hidden">
       {/* ─── HEADER ─────────────────────────────────── */}
-      <header className="h-[60px] bg-white dark:bg-gray-900 shrink-0 z-10 flex items-center px-4 border-b border-[#e0e0e0] dark:border-gray-700 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-        <div className="flex items-center gap-3 flex-1">
+      <header className="h-[52px] bg-white dark:bg-gray-900 shrink-0 z-10 flex items-center px-3 border-b border-gray-100 dark:border-gray-800">
+        {/* Left */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
           <Button variant="ghost" size="icon" onClick={() => s.setSidebarOpen(!s.sidebarOpen)}
-            className="size-8 cursor-pointer shrink-0 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">
-            <Menu className={`size-[18px] transition-transform duration-200 ${s.sidebarOpen ? '' : 'rotate-90'}`} />
+            className="size-7 cursor-pointer shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded">
+            <Menu className="size-4" />
           </Button>
-          <Separator orientation="vertical" className="h-5" />
-          <div className="flex items-center gap-2">
-            <Image src="/agdi-logo-new.webp" width={70} height={28} className="object-contain" alt="agDi Logo" />
-            <span className="text-[#888888] dark:text-gray-500 text-[13px] font-['Poppins'] ml-1">Admin Panel</span>
-          </div>
-          <Badge className="bg-[#6777EF] text-white text-[10px] font-semibold px-1.5 py-0 ml-1 border-0">ADMIN</Badge>
-          <Separator orientation="vertical" className="h-4 mx-2" />
-          <div className="flex items-center gap-1 text-[12px] font-['Poppins']">
-            <span className="text-[#888888] dark:text-gray-500">Admin</span>
-            <ChevronRight className="size-3 text-[#bbb] dark:text-gray-600" />
-            <span className="text-[#333333] dark:text-gray-200 font-medium">
+          <Image src="/agdi-logo-new.webp" width={60} height={24} className="object-contain shrink-0" alt="agDi Logo" />
+          <div className="hidden md:flex items-center gap-1.5 min-w-0">
+            <ChevronRight className="size-3.5 text-gray-300 dark:text-gray-600 shrink-0" />
+            <span className="text-[12px] text-gray-400 dark:text-gray-500">Admin</span>
+            <ChevronRight className="size-3 text-gray-300 dark:text-gray-600 shrink-0" />
+            <span className="text-[12px] font-semibold text-gray-700 dark:text-gray-200 truncate">
               {sidebarItems.find(i => i.id === s.activeSection)?.label ?? 'Overview'}
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        {/* Right */}
+        <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" onClick={() => setTheme(isDark ? 'light' : 'dark')}
-            className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer">
-            {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            className="size-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer rounded">
+            {isDark ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
           </Button>
           <Button variant="ghost" size="icon" onClick={() => router.push('/')}
-            className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
+            className="size-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer rounded"
             title="Back to User Panel">
-            <Home className="size-4" />
+            <Home className="size-3.5" />
           </Button>
-          <Separator orientation="vertical" className="h-5 mx-1" />
-          <div className="flex items-center gap-2">
-            <Avatar className="size-7">
-              <AvatarFallback className="bg-[#6777EF] text-white text-xs font-semibold">
+          <Separator orientation="vertical" className="h-4 mx-1" />
+          <div className="flex items-center gap-1.5">
+            <Avatar className="size-6">
+              <AvatarFallback className="bg-[#6777EF] text-white text-[10px] font-bold">
                 {userInitials}
               </AvatarFallback>
             </Avatar>
-            <div className="flex flex-col">
-              <span className="text-[12px] text-[#333333] dark:text-gray-200 font-medium max-w-[120px] truncate leading-tight">{s.user.name}</span>
-              <span className="text-[10px] text-[#888888] dark:text-gray-500 leading-tight">Admin</span>
+            <div className="hidden sm:flex flex-col leading-none">
+              <span className="text-[12px] text-gray-700 dark:text-gray-200 font-medium max-w-[100px] truncate">{s.user.name}</span>
+              <span className="text-[10px] text-gray-400 dark:text-gray-500">Admin</span>
             </div>
-            <Button variant="ghost" size="icon" onClick={s.handleLogout} className="size-7 text-[#888888] hover:text-red-500 cursor-pointer">
-              <LogOut className="size-4" />
+            <Button variant="ghost" size="icon" onClick={s.handleLogout} className="size-7 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer rounded">
+              <LogOut className="size-3.5" />
             </Button>
           </div>
         </div>

@@ -349,6 +349,8 @@ export function TestRunnerTab({
   onSelectCred,
   onOpenCredentialsScreen,
   allowedTabs,
+  onSubTabChange,
+  initialSubTab,
 }: {
   tests: TestItem[]
   testChecks: Set<string>
@@ -370,6 +372,8 @@ export function TestRunnerTab({
   onSelectCred?: (credId: string) => void
   onOpenCredentialsScreen?: () => void
   allowedTabs?: ('ui' | 'api' | 'batch')[] | null
+  onSubTabChange?: (tab: 'ui' | 'api' | 'batch') => void
+  initialSubTab?: 'ui' | 'api' | 'batch'
 }) {
   const uiTests = tests.filter((t) => !t.testType || t.testType === 'ui')
   const apiTests = tests.filter((t) => t.testType === 'api')
@@ -380,6 +384,7 @@ export function TestRunnerTab({
     !allowedTabs || allowedTabs.includes(t)
 
   const defaultTab: 'ui' | 'api' | 'batch' =
+    initialSubTab && tabAllowed(initialSubTab) ? initialSubTab :
     tabAllowed('ui') ? 'ui' : tabAllowed('batch') ? 'batch' : 'api'
 
   const [activeTab, setActiveTab] = useState<'ui' | 'api' | 'batch'>(defaultTab)
@@ -404,7 +409,7 @@ export function TestRunnerTab({
         <button
           key={t}
           type="button"
-          onClick={() => setActiveTab(t)}
+          onClick={() => { setActiveTab(t); onSubTabChange?.(t) }}
           className={`flex items-center gap-1.5 px-3.5 py-2.5 text-[12px] font-medium border-b-2 transition-colors cursor-pointer ${
             effectiveTab === t
               ? 'border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB]'

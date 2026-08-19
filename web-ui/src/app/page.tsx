@@ -15,6 +15,11 @@ import {
   updateBugReportStatus, addNotification,
   type Notification as NotifType, type BugReport,
 } from '@/lib/bug-reports'
+import {
+  getBrowserNotifyPreference, getBrowserNotifyPermission,
+  requestBrowserNotifyPermission, setBrowserNotifyPreference,
+} from '@/lib/browser-notify'
+import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -120,6 +125,39 @@ export default function Home() {
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [notifications, setNotifications] = useState<NotifType[]>([])
+  const [desktopNotifEnabled, setDesktopNotifEnabled] = useState(false)
+  const [desktopNotifGranted, setDesktopNotifGranted] = useState(false)
+
+  useEffect(() => {
+    setDesktopNotifEnabled(getBrowserNotifyPreference())
+    setDesktopNotifGranted(getBrowserNotifyPermission() === 'granted')
+  }, [])
+
+  const handleDesktopNotifToggle = useCallback(async (enabled: boolean) => {
+    if (enabled) {
+      let permission = getBrowserNotifyPermission()
+      if (permission !== 'granted') {
+        permission = await requestBrowserNotifyPermission()
+      }
+      if (permission === 'granted') {
+        setBrowserNotifyPreference(true)
+        setDesktopNotifEnabled(true)
+        setDesktopNotifGranted(true)
+        toast.success('Desktop notifications enabled', { description: 'You will get a PC notification when tasks complete.' })
+      } else if (permission === 'denied') {
+        setDesktopNotifEnabled(false)
+        setDesktopNotifGranted(false)
+        toast.error('Notifications blocked', { description: 'Enable them in your browser site settings, then try again.' })
+      } else {
+        setBrowserNotifyPreference(true)
+        setDesktopNotifEnabled(true)
+        toast('Desktop notifications enabled once you allow permission', { description: 'Check your browser permission prompt.' })
+      }
+    } else {
+      setBrowserNotifyPreference(false)
+      setDesktopNotifEnabled(false)
+    }
+  }, [])
   const [navToast, setNavToast] = useState<{ key: number; label: string; parent?: string | null } | null>(null)
   const [verifyingTicket, setVerifyingTicket] = useState<BugReport | null>(null)
   const [verifyResult, setVerifyResult] = useState<{ ticketId: string; passed: boolean } | null>(null)
@@ -615,11 +653,13 @@ export default function Home() {
         </DialogContent>
       </Dialog>
       {/* HEADER */}
-      <header className="h-[60px] bg-white dark:bg-gray-900 border-b border-[#e0e0e0] dark:border-gray-700 flex items-center px-4 shrink-0 z-10 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-        <div className="flex items-center gap-3 flex-1">
-          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)} data-tour="sidebar-toggle" className={`size-8 cursor-pointer shrink-0 transition-all duration-200 ${sidebarOpen ? 'text-[#888888] hover:text-[#333333] hover:bg-gray-100 dark:hover:bg-gray-800' : 'text-[#3F51B5] hover:text-[#3949AB] hover:bg-[#3F51B5]/10 dark:hover:bg-[#3F51B5]/20'}`} title="Toggle sidebar (Ctrl+B)"><Menu className={`size-[18px] transition-transform duration-200 ${sidebarOpen ? '' : 'rotate-90'}`} /></Button>
-          <Separator orientation="vertical" className="h-5" />
-          <div className="flex items-center gap-2"><Image src="/agdi-logo-new.webp" alt="AgDi Automation" width={70} height={28} className="object-contain" /><span className="text-[#888888] dark:text-gray-500 text-[13px]">Automation Runner</span></div>
+      <header className="h-[52px] bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 flex items-center px-3 shrink-0 z-10">
+        {/* Left */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)} data-tour="sidebar-toggle" className="size-7 cursor-pointer shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title="Toggle sidebar (Ctrl+B)">
+            <Menu className="size-4" />
+          </Button>
+          <Image src="/agdi-logo-new.webp" alt="AgDi Automation" width={60} height={24} className="object-contain shrink-0" />
           {selectedModule !== 'dashboard' && (() => {
             let modLabel = ''
             for (const m of sidebarModules) {
@@ -631,33 +671,38 @@ export default function Home() {
             }
             const TAB_LABELS: Record<string, string> = { 'test-runner': 'UI Tests', 'live-execution': 'Live Execution', 'results': 'Results', 'screenshots': 'Screenshots', 'schedule': 'Schedule', 'batch-create': 'Batch Create', 'concurrency': 'Concurrency', 'api-tests': 'API Tests' }
             return (
-              <div className="hidden md:flex items-center gap-1 text-[12px]">
-                <Separator orientation="vertical" className="h-4 mx-1" />
-                <span className="text-[#888888] dark:text-gray-500">{modLabel || selectedModule}</span>
-                <ChevronRight className="size-3 text-[#bbb] dark:text-gray-600" />
-                <span className="text-[#333333] dark:text-gray-200 font-medium">{TAB_LABELS[activeTab] ?? activeTab}</span>
+              <div className="hidden md:flex items-center gap-1.5 min-w-0">
+                <ChevronRight className="size-3.5 text-gray-300 dark:text-gray-600 shrink-0" />
+                <span className="text-[12px] text-gray-400 dark:text-gray-500 truncate max-w-[160px]">{modLabel || selectedModule}</span>
+                <ChevronRight className="size-3 text-gray-300 dark:text-gray-600 shrink-0" />
+                <span className="text-[12px] font-semibold text-gray-700 dark:text-gray-200 truncate">{TAB_LABELS[activeTab] ?? activeTab}</span>
               </div>
             )
           })()}
-          <div className="hidden md:flex items-center ml-4 bg-[#F5F5F5] dark:bg-gray-800 rounded-md px-3 py-1.5 gap-2 w-64"><Search className="size-3.5 text-[#888888] dark:text-gray-400" /><input type="text" placeholder="Search modules..." className="bg-transparent text-[13px] text-[#333333] dark:text-gray-200 placeholder:text-[#888888] dark:placeholder:text-gray-500 outline-none flex-1" onFocus={() => d.setQuickSwitcherOpen(true)} readOnly /></div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Button variant="ghost" size="icon" onClick={toggleDarkMode} data-tour="dark-mode" className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer" title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}>{darkMode ? <Sun className="size-4" /> : <Moon className="size-4" />}</Button>
-          <Button variant="ghost" size="icon" onClick={startAppTour} data-tour="help-btn" className="size-8 text-[#3F51B5] hover:text-[#3949AB] hover:bg-[#3F51B5]/10 dark:hover:bg-[#3F51B5]/20 cursor-pointer" title="Take a tour of the app"><HelpCircle className="size-4" /></Button>
-          <Button variant="ghost" size="icon" onClick={() => d.setShowShortcuts(true)} data-tour="keyboard-shortcuts" className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer" title="Keyboard shortcuts (Ctrl+/)"><Zap className="size-4" /></Button>
-          <div className="flex items-center" title={wsConnected ? 'Real-time connected' : 'Real-time disconnected — using polling'}>
-            <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-yellow-400 animate-pulse'}`} />
+        {/* Centre search */}
+        <button onClick={() => d.setQuickSwitcherOpen(true)} className="hidden md:flex items-center gap-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 h-8 w-56 text-[12px] text-gray-400 dark:text-gray-500 hover:border-gray-300 dark:hover:border-gray-600 transition-colors cursor-pointer shrink-0">
+          <Search className="size-3.5 shrink-0" />
+          <span className="flex-1 text-left">Search modules…</span>
+          <kbd className="text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1 rounded">⌘K</kbd>
+        </button>
+        {/* Right */}
+        <div className="flex items-center gap-1 ml-3">
+          <div title={wsConnected ? 'Real-time connected' : 'Real-time disconnected — using polling'} className="flex items-center px-1">
+            <div className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-green-400' : 'bg-amber-400 animate-pulse'}`} />
           </div>
+          <Button variant="ghost" size="icon" onClick={toggleDarkMode} data-tour="dark-mode" className="size-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer rounded" title={darkMode ? 'Light mode' : 'Dark mode'}>{darkMode ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}</Button>
+          <Button variant="ghost" size="icon" onClick={() => d.setShowShortcuts(true)} data-tour="keyboard-shortcuts" className="size-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer rounded" title="Keyboard shortcuts"><Zap className="size-3.5" /></Button>
           <div className="relative" data-tour="notifications">
             <Button
               variant="ghost" size="icon"
               onClick={() => { d.setNotifDropdownOpen((prev) => !prev) }}
-              className="size-8 text-[#888888] dark:text-gray-400 hover:text-[#333333] dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer relative"
+              className="size-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer relative rounded"
               title="Notifications"
             >
-              <Bell className="size-4" />
+              <Bell className="size-3.5" />
               {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-[18px] h-[18px] bg-[#3F51B5] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                <span className="absolute -top-0.5 -right-0.5 w-[15px] h-[15px] bg-[#3F51B5] text-white text-[8px] font-bold rounded-full flex items-center justify-center">
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
@@ -680,6 +725,26 @@ export default function Home() {
                         Mark all read
                       </button>
                     )}
+                  </div>
+                  {/* Desktop notifications toggle */}
+                  <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700/60 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Monitor className="size-3.5 text-[#3F51B5] shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-medium text-[#333333] dark:text-gray-100 leading-tight">Desktop notifications</p>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight truncate">
+                          {desktopNotifEnabled
+                            ? (desktopNotifGranted ? 'Ping your PC when tasks complete' : 'Pending permission')
+                            : 'Get a PC notification when tasks complete'}
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={desktopNotifEnabled}
+                      onCheckedChange={handleDesktopNotifToggle}
+                      className="shrink-0 cursor-pointer"
+                      data-tour="desktop-notif-toggle"
+                    />
                   </div>
                   {/* List */}
                   <div className="overflow-y-auto flex-1">
@@ -729,18 +794,24 @@ export default function Home() {
               </>
             )}
           </div>
-          {(user.role === 'admin' || user.role === 'qa_lead') && <Link href="/admin" className="flex items-center gap-1.5 px-2.5 h-8 text-[12px] text-[#888888] dark:text-gray-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors" title="Admin Panel"><Shield className="size-3.5" /><span className="hidden sm:inline">Admin</span></Link>}
-          <Separator orientation="vertical" className="h-5 mx-0.5" />
-          <div className="flex items-center gap-2" data-tour="user-menu">
-            <button onClick={() => d.setProfileDialogOpen(true)} className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"><Avatar className="size-7"><AvatarFallback className="bg-[#3F51B5] text-white text-xs font-semibold">{userInitials}</AvatarFallback></Avatar><div className="hidden sm:flex flex-col"><span className="text-[12px] text-[#333333] dark:text-gray-200 font-medium max-w-[120px] truncate leading-tight">{user.name}</span><span className="text-[10px] text-[#888888] dark:text-gray-500 leading-tight">{user.role}</span></div></button>
-            <Button variant="ghost" size="icon" onClick={() => setLogoutConfirmOpen(true)} data-tour="logout-btn" className="size-7 text-[#888888] hover:text-red-500 cursor-pointer" title="Sign out"><LogOut className="size-3.5" /></Button>
+          {(user.role === 'admin' || user.role === 'qa_lead') && <Link href="/admin" className="flex items-center gap-1.5 px-2 h-7 text-[11px] font-medium text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors" title="Admin Panel"><Shield className="size-3.5" /><span className="hidden sm:inline">Admin</span></Link>}
+          <Separator orientation="vertical" className="h-4 mx-1" />
+          <div className="flex items-center gap-1.5" data-tour="user-menu">
+            <button onClick={() => d.setProfileDialogOpen(true)} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer">
+              <Avatar className="size-6"><AvatarFallback className="bg-[#3F51B5] text-white text-[10px] font-bold">{userInitials}</AvatarFallback></Avatar>
+              <div className="hidden sm:flex flex-col leading-none">
+                <span className="text-[12px] text-gray-700 dark:text-gray-200 font-medium max-w-[100px] truncate">{user.name}</span>
+                <span className="text-[10px] text-gray-400 dark:text-gray-500">{user.role}</span>
+              </div>
+            </button>
+            <Button variant="ghost" size="icon" onClick={() => setLogoutConfirmOpen(true)} data-tour="logout-btn" className="size-7 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer rounded" title="Sign out"><LogOut className="size-3.5" /></Button>
           </div>
         </div>
       </header>
       {/* BODY */}
       <div className="flex flex-1 overflow-hidden">
         <div className="shrink-0 overflow-hidden h-full" style={{ width: sidebarOpen ? sidebarWidth : 0 }}>
-          <aside className="flex flex-col h-full font-['Poppins'] bg-gradient-to-b from-[#F7FBF8] via-[#EAF5EC] to-[#D6EDDC] dark:from-[#1e293b] dark:via-[#1e293b] dark:to-[#1e293b] shadow-[-1px_0px_0px_#D4E3D9] dark:shadow-[-1px_0px_0px_#334155]" style={{ width: sidebarWidth }}>
+          <aside className="flex flex-col h-full font-['Poppins'] bg-gradient-to-b from-[#F7FBF8] via-[#EAF5EC] to-[#D6EDDC] dark:from-[#13151d] dark:via-[#13151d] dark:to-[#111318] shadow-[1px_0px_0px_#D4E3D9] dark:shadow-[1px_0px_0px_#1e2030]" style={{ width: sidebarWidth }}>
             <ScrollArea className="flex-1 min-h-0" data-tour="sidebar-modules">
               <div className="py-2 px-2">
                 {sidebarModules.map((mod) => (<SidebarModuleItem key={mod.id} module={mod} activeId={selectedModule} onSelect={handleSelectModule} expandedIds={expandedIds} toggleExpand={toggleExpand} justExpandedId={justExpandedId} />))}
@@ -870,7 +941,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="flex-1 overflow-hidden min-h-0">
-                {activeTab === 'test-runner' && <div data-tour="test-runner" className="h-full"><TestRunnerTab tests={tr.tests} testChecks={tr.testChecks} toggleTestCheck={toggleTestCheck} isRunning={tr.isRunning} totalFailed={failedCount} onRun={(selectedOnly, testType) => { tr.runTests(selectedOnly, undefined, testType); setActiveTab('live-execution') }} onRunByPriority={tr.runByPriority} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds); setActiveTab('live-execution') } }} erpToken={erpToken} erpTenantId={erpTenantId} currentModuleId={selectedModule} onOpenCredentials={onOpenCredentials} onClearToken={onClearToken} showRawNames={showRawNames} credentials={erpCredentials} activeCredId={activeCredId} onSelectCred={(id) => setActiveCredId(id)} onOpenCredentialsScreen={() => setSelectedModule('credentials')} allowedTabs={user?.role === 'admin' ? null : getAllowedTabsForModule(user?.moduleAccess ?? [], selectedModule)} /></div>}
+                {(activeTab === 'test-runner' || activeTab === 'api-tests' || activeTab === 'batch-create') && <div data-tour="test-runner" className="h-full"><TestRunnerTab tests={tr.tests} testChecks={tr.testChecks} toggleTestCheck={toggleTestCheck} isRunning={tr.isRunning} totalFailed={failedCount} onRun={(selectedOnly, testType) => { tr.runTests(selectedOnly, undefined, testType); setActiveTab('live-execution') }} onRunByPriority={tr.runByPriority} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds); setActiveTab('live-execution') } }} erpToken={erpToken} erpTenantId={erpTenantId} currentModuleId={selectedModule} onOpenCredentials={onOpenCredentials} onClearToken={onClearToken} showRawNames={showRawNames} credentials={erpCredentials} activeCredId={activeCredId} onSelectCred={(id) => setActiveCredId(id)} onOpenCredentialsScreen={() => setSelectedModule('credentials')} allowedTabs={user?.role === 'admin' ? null : getAllowedTabsForModule(user?.moduleAccess ?? [], selectedModule)} onSubTabChange={(t) => setActiveTab(t === 'ui' ? 'test-runner' : t === 'api' ? 'api-tests' : 'batch-create')} initialSubTab={activeTab === 'api-tests' ? 'api' : activeTab === 'batch-create' ? 'batch' : 'ui'} /></div>}
                 {activeTab === 'live-execution' && <div data-tour="live-execution" className="h-full"><LiveExecutionTab tests={tr.tests} testGroups={tr.currentTestGroups} isRunning={tr.isRunning} runningProgress={tr.runningProgress} consoleLogs={tr.consoleLogs} showRawNames={showRawNames} onStop={tr.handleStopRun} onBack={() => setActiveTab('test-runner')} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds) } }} onScreenshotCaptured={(entry) => { tr.setScreenshotEntries((prev) => { if (prev.length >= 50) return [entry, ...prev.slice(0, 49)]; return [entry, ...prev] }) }} /></div>}
                 {activeTab === 'results' && <div data-tour="results" className="h-full"><ResultsTab tests={tr.tests} passedCount={passedCount} failedCount={failedCount} totalCount={tr.tests.length} runHistory={pd.runHistory} bugReportsList={pd.bugReportsList} onRunDetail={(run) => { d.setSelectedRunForDetail(run); d.setRunDetailDialogOpen(true) }} onCompareRuns={() => d.setRunComparisonOpen(true)} onViewAllRuns={() => d.setRunHistoryOpen(true)} onReportTest={handleQuickReport} testGroups={tr.currentTestGroups} moduleHealth={moduleHealth} moduleName={modulePath.name} currentModuleId={selectedModule} isRunning={tr.isRunning} onRerunFailed={() => { const failedIds = tr.tests.filter((t) => t.status === 'failed').map((t) => t.id); if (failedIds.length > 0) { tr.rerunTestIds(failedIds); tr.runTests(true, failedIds); setActiveTab('live-execution') } }} /></div>}
                 {activeTab === 'screenshots' && (
