@@ -7,7 +7,7 @@
   "item": [
     {
       "name": "Member",
-      "description": "Member CRUD — POST /core/dynamic-screen-wrapper/ for Create/Update.\n\nKey rules:\n- Has 1 stepper child: KYC Details (grid rows)\n- pan_no must be unique (format: ABCDE1234F)\n- mobile_no must be integer, NOT string\n- no_class_shares_held format: \"{number} {type}\" e.g. \"50 Equity\"\n- prefix_ref_id: 1895=Mrs, 1896=Mr, 1897=Ms\n- kyc_doc_id: 65=PAN, 66=AADHAR\n- No Delete endpoint exists",
+      "description": "Member CRUD \u00e2\u20ac\u201d POST /core/dynamic-screen-wrapper/ for Create/Update.\n\nKey rules:\n- Has 1 stepper child: KYC Details (grid rows)\n- pan_no must be unique (format: ABCDE1234F)\n- mobile_no must be integer, NOT string\n- no_class_shares_held format: \"{number} {type}\" e.g. \"50 Equity\"\n- prefix_ref_id: 1895=Mrs, 1896=Mr, 1897=Ms\n- kyc_doc_id: 65=PAN, 66=AADHAR\n- No Delete endpoint exists",
       "item": [
         {
           "name": "List Members",
@@ -127,7 +127,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Member\",\n  \"party_ref_id\": null,\n  \"prefix_ref_id\": 1896,\n  \"name\": \"Ramesh Patel\",\n  \"member_address\": \"330 MG Road, Aurangabad\",\n  \"foli_number\": \"FOL-2973-163404\",\n  \"pan_no\": \"EAMUP8905P\",\n  \"registration_date\": \"2025-04-03T18:30:00Z\",\n  \"no_class_shares_held\": \"8588 Deferred\",\n  \"distintive_number\": 45782,\n  \"amount_paid_on_shares\": 2109711,\n  \"date_of_allotment\": \"2026-06-24T18:30:00Z\",\n  \"date_of_cessation\": null,\n  \"percentage_of_shares\": 94,\n  \"mobile_no\": 8295405194,\n  \"is_member_director\": true,\n  \"details\": [],\n  \"children\": [\n    {\n      \"stepper_name\": \"KYC Details\",\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"kyc_doc_id\": 65,\n          \"kyc_account_no\": \"SFXQW1470Q\",\n          \"attachment_path\": null\n        }\n      ]\n    }\n  ],\n  \"kyc_doc_id\": 65\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Member\",\n  \"party_ref_id\": null,\n  \"prefix_ref_id\": 1896,\n  \"name\": \"Rekha Pillai\",\n  \"member_address\": \"118 Gandhi Nagar, Satara\",\n  \"foli_number\": \"FOL-3893-163643\",\n  \"pan_no\": \"EWWSK2830F\",\n  \"registration_date\": \"2026-06-04T18:30:00Z\",\n  \"no_class_shares_held\": \"5538 Preference\",\n  \"distintive_number\": 24056,\n  \"amount_paid_on_shares\": 9740554,\n  \"date_of_allotment\": \"2026-03-25T18:30:00Z\",\n  \"date_of_cessation\": null,\n  \"percentage_of_shares\": 42,\n  \"mobile_no\": 8296987399,\n  \"is_member_director\": false,\n  \"details\": [],\n  \"children\": [\n    {\n      \"stepper_name\": \"KYC Details\",\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"kyc_doc_id\": 65,\n          \"kyc_account_no\": \"WIUOI4872B\",\n          \"attachment_path\": null\n        }\n      ]\n    }\n  ],\n  \"kyc_doc_id\": 65\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -169,7 +169,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": 1,\n  \"attribute_name\": \"Member\",\n  \"party_ref_id\": null,\n  \"prefix_ref_id\": 1896,\n  \"name\": \"Ramesh Patel\",\n  \"member_address\": \"330 MG Road, Aurangabad\",\n  \"foli_number\": \"FOL-2973-163404\",\n  \"pan_no\": \"EAMUP8905P\",\n  \"registration_date\": \"2025-04-03T18:30:00Z\",\n  \"no_class_shares_held\": \"8588 Deferred\",\n  \"distintive_number\": 45782,\n  \"amount_paid_on_shares\": 2109711,\n  \"date_of_allotment\": \"2026-06-24T18:30:00Z\",\n  \"date_of_cessation\": null,\n  \"percentage_of_shares\": 94,\n  \"mobile_no\": 8295405194,\n  \"is_member_director\": true,\n  \"details\": [],\n  \"children\": [\n    {\n      \"stepper_name\": \"KYC Details\",\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"kyc_doc_id\": 65,\n          \"kyc_account_no\": \"SFXQW1470Q\",\n          \"attachment_path\": null\n        }\n      ]\n    }\n  ],\n  \"kyc_doc_id\": 65\n}",
+              "raw": "{\n  \"id\": 1,\n  \"attribute_name\": \"Member\",\n  \"party_ref_id\": null,\n  \"prefix_ref_id\": 1896,\n  \"name\": \"Rekha Pillai\",\n  \"member_address\": \"118 Gandhi Nagar, Satara\",\n  \"foli_number\": \"FOL-3893-163643\",\n  \"pan_no\": \"EWWSK2830F\",\n  \"registration_date\": \"2026-06-04T18:30:00Z\",\n  \"no_class_shares_held\": \"5538 Preference\",\n  \"distintive_number\": 24056,\n  \"amount_paid_on_shares\": 9740554,\n  \"date_of_allotment\": \"2026-03-25T18:30:00Z\",\n  \"date_of_cessation\": null,\n  \"percentage_of_shares\": 42,\n  \"mobile_no\": 8296987399,\n  \"is_member_director\": false,\n  \"details\": [],\n  \"children\": [\n    {\n      \"stepper_name\": \"KYC Details\",\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"kyc_doc_id\": 65,\n          \"kyc_account_no\": \"WIUOI4872B\",\n          \"attachment_path\": null\n        }\n      ]\n    }\n  ],\n  \"kyc_doc_id\": 65\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -184,7 +184,7 @@
     },
     {
       "name": "Directors",
-      "description": "Directors CRUD — POST /core/dynamic-screen-wrapper/ for Create/Update.\n\nKey rules:\n- Has 1 stepper child: KYC Details (grid rows)\n- pan_no must be unique (format: ABCDE1234F)\n- mobile_no must be integer, NOT string\n- details_of_other_directorships is required — use \"NA\" if none\n- prefix_ref_id: 1895=Mrs, 1896=Mr, 1897=Ms\n- kyc_doc_id: 65=PAN, 66=AADHAR\n- No Delete endpoint exists",
+      "description": "Directors CRUD \u00e2\u20ac\u201d POST /core/dynamic-screen-wrapper/ for Create/Update.\n\nKey rules:\n- Has 1 stepper child: KYC Details (grid rows)\n- pan_no must be unique (format: ABCDE1234F)\n- mobile_no must be integer, NOT string\n- details_of_other_directorships is required \u00e2\u20ac\u201d use \"NA\" if none\n- prefix_ref_id: 1895=Mrs, 1896=Mr, 1897=Ms\n- kyc_doc_id: 65=PAN, 66=AADHAR\n- No Delete endpoint exists",
       "item": [
         {
           "name": "List Directors",
@@ -304,7 +304,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Directors\",\n  \"copy_from_party\": null,\n  \"party_ref_id\": null,\n  \"prefix_ref_id\": 1896,\n  \"name\": \"Dinesh Reddy\",\n  \"designation\": 2,\n  \"pan_no\": \"MHQUC7215H\",\n  \"residential_address\": \"260 Market Road, Nashik\",\n  \"mobile_no\": 6634192728,\n  \"date_of_appointment\": \"2026-05-14T18:30:00Z\",\n  \"date_of_cessation\": null,\n  \"no_class_shares_held\": \"967 Preference\",\n  \"details_of_other_directorships\": \"NA\",\n  \"percentage_of_shares\": 80,\n  \"age\": 73,\n  \"qualification_ref_id\": 511,\n  \"experience_in_years\": 41,\n  \"details\": [],\n  \"children\": [\n    {\n      \"stepper_name\": \"KYC Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"kyc_doc_id\": 65,\n          \"kyc_account_no\": \"JZDGU4080A\",\n          \"attachment_path\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    }\n  ],\n  \"kyc_doc_id\": 65\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Directors\",\n  \"copy_from_party\": null,\n  \"party_ref_id\": null,\n  \"prefix_ref_id\": 1896,\n  \"name\": \"Suman Bhat\",\n  \"designation\": 2,\n  \"pan_no\": \"NIQWE2583B\",\n  \"residential_address\": \"188 Sadar Bazaar, Nanded\",\n  \"mobile_no\": 9266137063,\n  \"date_of_appointment\": \"2025-11-10T18:30:00Z\",\n  \"date_of_cessation\": null,\n  \"no_class_shares_held\": \"52 Preference\",\n  \"details_of_other_directorships\": \"NA\",\n  \"percentage_of_shares\": 4,\n  \"age\": 36,\n  \"qualification_ref_id\": 511,\n  \"experience_in_years\": 28,\n  \"details\": [],\n  \"children\": [\n    {\n      \"stepper_name\": \"KYC Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"kyc_doc_id\": 66,\n          \"kyc_account_no\": \"654522999496\",\n          \"attachment_path\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    }\n  ],\n  \"kyc_doc_id\": 65\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -346,7 +346,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": 1,\n  \"attribute_name\": \"Directors\",\n  \"copy_from_party\": null,\n  \"party_ref_id\": null,\n  \"prefix_ref_id\": 1896,\n  \"name\": \"Dinesh Reddy\",\n  \"designation\": 2,\n  \"pan_no\": \"MHQUC7215H\",\n  \"residential_address\": \"260 Market Road, Nashik\",\n  \"mobile_no\": 6634192728,\n  \"date_of_appointment\": \"2026-05-14T18:30:00Z\",\n  \"date_of_cessation\": null,\n  \"no_class_shares_held\": \"967 Preference\",\n  \"details_of_other_directorships\": \"NA\",\n  \"percentage_of_shares\": 80,\n  \"age\": 73,\n  \"qualification_ref_id\": 511,\n  \"experience_in_years\": 41,\n  \"details\": [],\n  \"children\": [\n    {\n      \"stepper_name\": \"KYC Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"kyc_doc_id\": 65,\n          \"kyc_account_no\": \"JZDGU4080A\",\n          \"attachment_path\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    }\n  ],\n  \"kyc_doc_id\": 65\n}",
+              "raw": "{\n  \"id\": 1,\n  \"attribute_name\": \"Directors\",\n  \"copy_from_party\": null,\n  \"party_ref_id\": null,\n  \"prefix_ref_id\": 1896,\n  \"name\": \"Suman Bhat\",\n  \"designation\": 2,\n  \"pan_no\": \"NIQWE2583B\",\n  \"residential_address\": \"188 Sadar Bazaar, Nanded\",\n  \"mobile_no\": 9266137063,\n  \"date_of_appointment\": \"2025-11-10T18:30:00Z\",\n  \"date_of_cessation\": null,\n  \"no_class_shares_held\": \"52 Preference\",\n  \"details_of_other_directorships\": \"NA\",\n  \"percentage_of_shares\": 4,\n  \"age\": 36,\n  \"qualification_ref_id\": 511,\n  \"experience_in_years\": 28,\n  \"details\": [],\n  \"children\": [\n    {\n      \"stepper_name\": \"KYC Details\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"id\": \"\",\n          \"kyc_doc_id\": 66,\n          \"kyc_account_no\": \"654522999496\",\n          \"attachment_path\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    }\n  ],\n  \"kyc_doc_id\": 65\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -361,7 +361,7 @@
     },
     {
       "name": "Constituent Documents",
-      "description": "Constituent Documents CRUD — flat form, no steppers.\n\nKey rules:\n- cin_no must be unique\n- cin_date is required in ISO format\n- No Delete endpoint exists",
+      "description": "Constituent Documents CRUD \u00e2\u20ac\u201d flat form, no steppers.\n\nKey rules:\n- cin_no must be unique\n- cin_date is required in ISO format\n- No Delete endpoint exists",
       "item": [
         {
           "name": "List Constituent Documents",
@@ -481,7 +481,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Constituent Documents\",\n  \"cin_no\": \"V33118EK5289TML754648\",\n  \"cin_date\": \"2024-10-27T18:30:00Z\",\n  \"details\": []\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Constituent Documents\",\n  \"cin_no\": \"Y67063RE5270CNA604745\",\n  \"cin_date\": \"2024-06-24T00:00:00Z\",\n  \"details\": [],\n  \"children\": [\n    {\n      \"stepper_name\": \"Documents\",\n      \"is_stepper\": true,\n      \"details\": [\n        {\n          \"document_name\": 1916,\n          \"upload_file\": null,\n          \"details\": []\n        }\n      ],\n      \"children\": []\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -523,7 +523,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": 1,\n  \"attribute_name\": \"Constituent Documents\",\n  \"cin_no\": \"V33118EK5289TML754648\",\n  \"cin_date\": \"2024-10-27T18:30:00Z\",\n  \"details\": []\n}",
+              "raw": "{\n  \"id\": 1,\n  \"attribute_name\": \"Constituent Documents\",\n  \"cin_no\": \"X52019KS4558TYX446496\",\n  \"cin_date\": \"2025-05-02T18:30:00Z\",\n  \"details\": []\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -538,7 +538,7 @@
     },
     {
       "name": "Miscellaneous Documents",
-      "description": "Miscellaneous Documents CRUD — flat form, no steppers.\n\nKey rules:\n- name is required (document title)\n- document_no must be integer, NOT string\n- registered_date required in ISO format\n- No Delete endpoint exists",
+      "description": "Miscellaneous Documents CRUD \u00e2\u20ac\u201d flat form, no steppers.\n\nKey rules:\n- name is required (document title)\n- document_no must be integer, NOT string\n- registered_date required in ISO format\n- No Delete endpoint exists",
       "item": [
         {
           "name": "List Miscellaneous Documents",
@@ -658,7 +658,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Miscellaneous Documents\",\n  \"name\": \"Property Deed - QLGT\",\n  \"document_no\": 34159,\n  \"registered_date\": \"2025-08-08T18:30:00Z\",\n  \"expiry_date\": \"2029-02-19T18:30:00Z\",\n  \"brief_details\": \"Supporting document for board resolution\",\n  \"attachment\": null\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Miscellaneous Documents\",\n  \"name\": \"KYC Document - JUUD\",\n  \"document_no\": 25332,\n  \"registered_date\": \"2025-03-11T18:30:00Z\",\n  \"expiry_date\": \"2029-05-23T18:30:00Z\",\n  \"brief_details\": \"Official kyc document as per regulatory requirements\",\n  \"attachment\": null\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -700,7 +700,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": 1,\n  \"attribute_name\": \"Miscellaneous Documents\",\n  \"name\": \"Property Deed - QLGT\",\n  \"document_no\": 34159,\n  \"registered_date\": \"2025-08-08T18:30:00Z\",\n  \"expiry_date\": \"2029-02-19T18:30:00Z\",\n  \"brief_details\": \"Supporting document for board resolution\",\n  \"attachment\": null\n}",
+              "raw": "{\n  \"id\": 1,\n  \"attribute_name\": \"Miscellaneous Documents\",\n  \"name\": \"KYC Document - JUUD\",\n  \"document_no\": 25332,\n  \"registered_date\": \"2025-03-11T18:30:00Z\",\n  \"expiry_date\": \"2029-05-23T18:30:00Z\",\n  \"brief_details\": \"Official kyc document as per regulatory requirements\",\n  \"attachment\": null\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -715,7 +715,7 @@
     },
     {
       "name": "Register of Loan",
-      "description": "Register of Loan CRUD — flat form, no steppers.\n\nKey rules:\n- Bank name is sent as the \"name\" field (NOT \"bank_name\")\n- facility_details_ref_id (Loan Type): 652=CC, 651=Term Loan, 1547=Non Funded\n- emi_period: 1528=Monthly, 1529=Quarterly, 1530=Half Yearly, 1531=Yearly\n- All amounts must be integers\n- No Delete endpoint exists",
+      "description": "Register of Loan CRUD \u00e2\u20ac\u201d flat form, no steppers.\n\nKey rules:\n- Bank name is sent as the \"name\" field (NOT \"bank_name\")\n- facility_details_ref_id (Loan Type): 652=CC, 651=Term Loan, 1547=Non Funded\n- emi_period: 1528=Monthly, 1529=Quarterly, 1530=Half Yearly, 1531=Yearly\n- All amounts must be integers\n- No Delete endpoint exists",
       "item": [
         {
           "name": "List Register of Loan",
@@ -835,7 +835,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Register of Loan\",\n  \"sanction_date\": \"2025-12-17T18:30:00Z\",\n  \"name\": \"Indian Bank\",\n  \"sanction_amount\": 3383215,\n  \"facility_details_ref_id\": 1547,\n  \"disbursement_amount\": 2794632,\n  \"emi_servicing_date\": \"2024-08-26T18:30:00Z\",\n  \"instalment_amount\": 83530,\n  \"reminder_period_in_days\": 7,\n  \"emi_period\": 1530,\n  \"outstanding_date\": \"2026-07-10T18:30:00Z\",\n  \"outstanding_amount\": 2022450,\n  \"is_notification_applicable\": true,\n  \"details\": [],\n  \"children\": []\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Register of Loan\",\n  \"sanction_date\": \"2025-10-14T18:30:00Z\",\n  \"name\": \"Indian Bank\",\n  \"sanction_amount\": 25692760,\n  \"facility_details_ref_id\": 651,\n  \"disbursement_amount\": 21542103,\n  \"emi_servicing_date\": \"2026-04-08T18:30:00Z\",\n  \"instalment_amount\": 470515,\n  \"reminder_period_in_days\": 15,\n  \"emi_period\": 1528,\n  \"outstanding_date\": \"2025-08-23T18:30:00Z\",\n  \"outstanding_amount\": 7669591,\n  \"is_notification_applicable\": false,\n  \"details\": [],\n  \"children\": []\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -877,7 +877,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": 1,\n  \"attribute_name\": \"Register of Loan\",\n  \"sanction_date\": \"2025-12-17T18:30:00Z\",\n  \"name\": \"Indian Bank\",\n  \"sanction_amount\": 3383215,\n  \"facility_details_ref_id\": 1547,\n  \"disbursement_amount\": 2794632,\n  \"emi_servicing_date\": \"2024-08-26T18:30:00Z\",\n  \"instalment_amount\": 83530,\n  \"reminder_period_in_days\": 7,\n  \"emi_period\": 1530,\n  \"outstanding_date\": \"2026-07-10T18:30:00Z\",\n  \"outstanding_amount\": 2022450,\n  \"is_notification_applicable\": true,\n  \"details\": [],\n  \"children\": []\n}",
+              "raw": "{\n  \"id\": 1,\n  \"attribute_name\": \"Register of Loan\",\n  \"sanction_date\": \"2025-10-14T18:30:00Z\",\n  \"name\": \"Indian Bank\",\n  \"sanction_amount\": 25692760,\n  \"facility_details_ref_id\": 651,\n  \"disbursement_amount\": 21542103,\n  \"emi_servicing_date\": \"2026-04-08T18:30:00Z\",\n  \"instalment_amount\": 470515,\n  \"reminder_period_in_days\": 15,\n  \"emi_period\": 1528,\n  \"outstanding_date\": \"2025-08-23T18:30:00Z\",\n  \"outstanding_amount\": 7669591,\n  \"is_notification_applicable\": false,\n  \"details\": [],\n  \"children\": []\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -892,7 +892,7 @@
     },
     {
       "name": "Register Charges",
-      "description": "Register Charges CRUD — flat form, no steppers.\n\nKey rules:\n- type_of_charge_ref_id: 1909=Fixed Charge, 1910=Floating Charge, 1911=Both\n- amount_secured must be integer\n- date_of_satisfaction optional (null if not satisfied)\n- No Delete endpoint exists",
+      "description": "Register Charges CRUD \u00e2\u20ac\u201d flat form, no steppers.\n\nKey rules:\n- type_of_charge_ref_id: 1909=Fixed Charge, 1910=Floating Charge, 1911=Both\n- amount_secured must be integer\n- date_of_satisfaction optional (null if not satisfied)\n- No Delete endpoint exists",
       "item": [
         {
           "name": "List Register Charges",
@@ -1012,7 +1012,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Register Charges\",\n  \"date_of_creation\": \"2026-04-17T18:30:00Z\",\n  \"date_of_modification\": \"2025-08-13T18:30:00Z\",\n  \"roc_charge_id\": \"116340466\",\n  \"type_of_charge_ref_id\": 1910,\n  \"description_of_assets_property\": \"Commercial office space\",\n  \"amount_secured\": 19123144,\n  \"charge_holder_details\": \"Indian Bank, SME Branch\",\n  \"date_of_satisfaction\": null,\n  \"details\": [],\n  \"children\": []\n}",
+              "raw": "{\n  \"id\": \"\",\n  \"attribute_name\": \"Register Charges\",\n  \"date_of_creation\": \"2026-06-11T18:30:00Z\",\n  \"date_of_modification\": \"2026-03-21T18:30:00Z\",\n  \"roc_charge_id\": \"116364318\",\n  \"type_of_charge_ref_id\": 1911,\n  \"description_of_assets_property\": \"Harvesting machinery\",\n  \"amount_secured\": 30077648.53,\n  \"charge_holder_details\": \"South Indian Bank, Corporate Office\",\n  \"date_of_satisfaction\": null,\n  \"details\": [],\n  \"children\": []\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1054,7 +1054,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": 1,\n  \"attribute_name\": \"Register Charges\",\n  \"date_of_creation\": \"2026-04-17T18:30:00Z\",\n  \"date_of_modification\": \"2025-08-13T18:30:00Z\",\n  \"roc_charge_id\": \"116340466\",\n  \"type_of_charge_ref_id\": 1910,\n  \"description_of_assets_property\": \"Commercial office space\",\n  \"amount_secured\": 19123144,\n  \"charge_holder_details\": \"Indian Bank, SME Branch\",\n  \"date_of_satisfaction\": null,\n  \"details\": [],\n  \"children\": []\n}",
+              "raw": "{\n  \"id\": 1,\n  \"attribute_name\": \"Register Charges\",\n  \"date_of_creation\": \"2026-06-11T18:30:00Z\",\n  \"date_of_modification\": \"2026-03-21T18:30:00Z\",\n  \"roc_charge_id\": \"116364318\",\n  \"type_of_charge_ref_id\": 1911,\n  \"description_of_assets_property\": \"Harvesting machinery\",\n  \"amount_secured\": 30077648.53,\n  \"charge_holder_details\": \"South Indian Bank, Corporate Office\",\n  \"date_of_satisfaction\": null,\n  \"details\": [],\n  \"children\": []\n}",
               "options": {
                 "raw": {
                   "language": "json"
