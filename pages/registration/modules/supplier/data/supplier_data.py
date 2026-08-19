@@ -947,7 +947,7 @@ _ADDRESS_CHAINS = [
         "state_ref_id_id": 98,
         "district_ref_id_id": 479,
         "sub_district_ref_id_id": 11462,
-        "village_ref_id_id": 303411,
+        "village_ref_id_id": None,
         "pincode_ref_id_id": 2148,  # verified from tenant 751 GET response (id=103) — used for both shipping and billing rows
         "_verified": True,
     },

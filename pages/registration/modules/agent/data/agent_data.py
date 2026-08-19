@@ -406,10 +406,11 @@ ADDRESS_TYPE_IDS = [43, 42]
 # 43 = Shipping, 42 = Billing
 
 COUNTRY_REF_ID = 8       # India
-STATE_REF_IDS = [82]      # Maharashtra
-DISTRICT_REF_IDS = [761]  # Pune
-SUB_DISTRICT_REF_IDS = [14119]
-VILLAGE_REF_IDS = [772475]
+STATE_REF_IDS = [98]      # Maharashtra
+DISTRICT_REF_IDS = [479]  # Pune
+SUB_DISTRICT_REF_IDS = [11462]
+VILLAGE_REF_IDS = [None]
+PINCODE_REF_IDS = [2148]
 
 PAYMENT_TERMS_IDS = [26, 27, 131, 549, 550, 551]
 # 26 = 30 Days, 27 = 60 Days, 131 = Immediate
