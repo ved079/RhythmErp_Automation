@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 import { SetTokenDialog } from '@/components/dialogs/SetTokenDialog'
 import { MODULE_TO_BATCH } from '@/components/dialogs/BatchCreateSection'
 import { startBatchCreate, saveConcurrencyRun } from '@/lib/api'
+import { notifySuccess } from '@/lib/notify'
 import type { RunHistoryItem } from '@/lib/api'
 import type { SidebarModule } from '@/components/sidebar/SidebarModuleItem'
 
@@ -518,7 +519,10 @@ export function ConcurrencyTab({ modules }: { modules: SidebarModule[] }) {
     resultsRef.current = {}
     timingRef.current = {}
 
-    // Fire-and-forget save to run history
+    // Fire-and-forget save to run history + desktop notification
+    const totalCreatedFinal = Object.values(finalResults).reduce((s, r) => s + (r?.created?.length ?? 0), 0)
+    const totalFailedFinal = Object.values(finalResults).reduce((s, r) => s + (r?.failed?.length ?? 0), 0)
+    notifySuccess('Concurrency Run Complete', `${totalCreatedFinal} created, ${totalFailedFinal} failed`)
     const pc1End = Math.max(...resultJobsRef.current.filter(j => j.side === 'pc1').map(j => finalTiming[j.id]?.endMs ?? 0), 0)
     const pc2End = Math.max(...resultJobsRef.current.filter(j => j.side === 'pc2').map(j => finalTiming[j.id]?.endMs ?? 0), 0)
     saveConcurrencyRun({

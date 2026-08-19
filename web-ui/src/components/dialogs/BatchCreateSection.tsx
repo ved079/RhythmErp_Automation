@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Database, CheckCircle2, XCircle, Play, Info, ShieldCheck, BadgeCheck, ChevronRight, ChevronDown, History, Download, RefreshCw, RotateCcw, Loader2, ListChecks, Tag } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import { startBatchCreate, exportBatchExcel, fetchBatchHistory, type SSEEvent, type BatchRunSummary } from '@/lib/api'
+import { notifySuccess } from '@/lib/notify'
 import { BatchCompleteDialog } from './BatchCompleteDialog'
 import { FarmerBatchConfig, type FarmerConfig } from './FarmerBatchConfig'
 
@@ -258,6 +259,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
         setRunning(false)
         if (runId) setBatchRunId(runId)
         setShowCompleteDialog(true)
+        notifySuccess('Batch Create Complete', `${created} created, ${failed} failed`)
       },
       (err) => {
         setLogs((prev) => [...prev, { text: `ERROR: ${err.message}`, ts: new Date(), isErr: true, isDone: false }])

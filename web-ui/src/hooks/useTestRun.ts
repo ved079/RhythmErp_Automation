@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { initialTests, testSpecGroups, type TestItem, type TestSpecItem, type TestClassGroup, type TestPriority } from '@/data/testSpecGroups'
 import type { ApiModule, TestCasesData, RunCompletionSummary } from '@/lib/api'
 import { startRun, stopRun, saveRunResults } from '@/lib/api'
+import { notifySuccess, notifyError } from '@/lib/notify'
 import { getCachedSidebarToFolderMapping } from '@/lib/module-data'
 import type { ScreenshotEntry } from '@/components/screenshot/ScreenshotGallery'
 import { getTestsForSidebarModule } from '@/lib/test-helpers'
@@ -158,6 +159,7 @@ export function useTestRun(params: UseTestRunParams) {
           }
           if (summary.total > 0) {
             saveRunResults(summary, user?.id).then((saved) => { if (saved) { loadRunHistory(); loadDashboardStats(); addNotification({ type: 'run_complete', title: `Run complete: ${summary.passed}/${summary.total} passed`, message: `${summary.module}${summary.subModule ? ' → ' + summary.subModule : ''} — ${summary.failed} failed, ${summary.passed} passed` }).catch(() => {}) } })
+            notifySuccess('Test Run Complete', `${summary.passed}/${summary.total} passed`)
           }
         },
         (err) => { setIsRunning(false); setRunningProgress(''); toast.error('Connection failed', { description: err.message, duration: 8000 }) },

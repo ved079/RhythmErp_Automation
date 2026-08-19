@@ -48,8 +48,8 @@ export function SidebarModuleItem({
   const isParentActive = activeId && hasChildren && module.children!.some((c) => c.id === activeId)
   const isChild = depth > 0
 
-  const treeLineWidth = '2.7px'
-  const treeLineColor = '#c8ccd4'
+  const treeLineWidth = '2px'
+  const treeLineColor = 'color-mix(in srgb, currentColor 18%, transparent)'
 
   return (
     <div className="relative">
@@ -98,20 +98,29 @@ export function SidebarModuleItem({
         className={`w-full flex items-center text-[14px] transition-all duration-200 cursor-pointer text-left font-['Poppins'] relative z-[1] ${
           isChild
             ? isActive
-              ? 'text-[#1B4332] dark:text-green-300 font-semibold'
-              : 'text-[#545454] dark:text-gray-300 font-medium hover:text-[#6777EF] dark:hover:text-indigo-400 hover:bg-[rgba(82,183,136,0.08)] hover:shadow-[rgba(82,183,136,0.5)_2px_0px_inset] hover:rounded-[5px]'
+              ? 'text-[#1B4332] dark:text-white rounded-[5px] font-semibold'
+              : 'text-[#545454] dark:text-gray-400 font-medium hover:text-[#6777EF] dark:hover:text-gray-200 hover:bg-[rgba(82,183,136,0.08)] dark:hover:bg-white/[0.04] hover:shadow-[rgba(82,183,136,0.5)_2px_0px_inset] hover:rounded-[5px]'
             : isActive
-              ? 'bg-gradient-to-r from-[#DFF3E3] via-[#C8E6C9] to-[#B7E4C7] dark:bg-[#1B4332]/25 text-[#1B4332] dark:text-green-300 font-semibold shadow-[rgba(34,197,94,0.25)_2px_0px_4px_inset,rgba(34,197,94,0.15)_0px_2px_6px] rounded-[5px]'
+              ? 'text-[#1B4332] dark:text-white font-semibold rounded-[5px]'
               : isParentActive
-                ? 'text-[#1B4332] dark:text-green-300 font-semibold'
-                : 'text-[#545454] dark:text-gray-300 font-medium hover:text-[#6777EF] dark:hover:text-indigo-400 hover:bg-[rgba(82,183,136,0.08)] hover:shadow-[rgba(82,183,136,0.5)_2px_0px_inset] hover:rounded-[5px]'
+                ? 'text-[#1B4332] dark:text-white font-semibold rounded-[5px]'
+                : 'text-[#545454] dark:text-gray-400 font-medium hover:text-[#6777EF] dark:hover:text-gray-200 hover:bg-[rgba(82,183,136,0.08)] dark:hover:bg-white/[0.04] hover:shadow-[rgba(82,183,136,0.5)_2px_0px_inset] hover:rounded-[5px]'
         }`}
-        style={{
-          paddingLeft: isChild ? (depth === 1 ? '48px' : '80px') : '15px',
-          paddingRight: '24px',
-          paddingTop: '7px',
-          paddingBottom: '7px',
-        }}
+        style={(() => {
+          const isDarkMode = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+          const base = {
+            paddingLeft: isChild ? (depth === 1 ? '48px' : '80px') : '15px',
+            paddingRight: '24px',
+            paddingTop: '7px',
+            paddingBottom: '7px',
+          }
+          if (!isDarkMode) {
+            if (!isChild && isActive) return { ...base, background: 'linear-gradient(to right, #DFF3E3, #C8E6C9, #B7E4C7)', boxShadow: 'rgba(34,197,94,0.25) 2px 0px 4px inset, rgba(34,197,94,0.15) 0px 2px 6px' }
+            return base
+          }
+          if (isActive || isParentActive || (isChild && isActive)) return { ...base, background: 'rgba(255,255,255,0.06)', boxShadow: '2px 0 0 0 #818cf8 inset' }
+          return base
+        })()}
       >
         {module.cartLink ? (
           <a
@@ -171,10 +180,10 @@ export function SidebarModuleItem({
           <ChevronDown
             className={`size-[18px] shrink-0 transition-transform duration-200 mr-1.5 ${
               !isExpanded ? '-rotate-90' : ''
-            } ${isActive || isParentActive ? 'text-[#1B4332] dark:text-green-300' : 'text-[#495584] dark:text-gray-400'}`}
+            } ${isActive || isParentActive ? 'text-[#1B4332] dark:text-gray-200' : 'text-[#495584] dark:text-gray-500'}`}
           />
         ) : isChild ? (
-          <span className={`w-[7px] h-[7px] rounded-full shrink-0 mr-2 ${isActive ? 'bg-[#1A56DB] dark:bg-indigo-400' : ''}`} />
+          <span className={`w-[5px] h-[5px] rounded-full shrink-0 mr-2.5 ${isActive ? 'bg-[#1A56DB] dark:bg-indigo-400' : 'bg-gray-300 dark:bg-gray-600'}`} />
         ) : (
           <span className="w-[18px] shrink-0 mr-1.5" />
         )}
