@@ -2,6 +2,7 @@
 // All data now lives in SQLite via API routes (not localStorage)
 
 import { withCsrf } from '@/lib/csrf-client'
+import { browserNotify } from '@/lib/browser-notify'
 
 export interface Reply {
   id: string
@@ -177,6 +178,7 @@ export async function addNotification(notification: Omit<Notification, 'id' | 'c
     body: JSON.stringify(notification),
   }))
   if (!res.ok) throw new Error('Failed to create notification')
+  browserNotify(notification.title, notification.message)
   return res.json()
 }
 
