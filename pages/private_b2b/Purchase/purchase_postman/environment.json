@@ -1,0 +1,241 @@
+{
+  "id": "purchase-chain-env",
+  "name": "Purchase Chain",
+  "values": [
+    {
+      "key": "base_url",
+      "value": "https://rhythmerp.algorhythms.in",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "token",
+      "value": "your_bearer_token_here",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "tenant_id",
+      "value": "795",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_sniff_status",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_ctx",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_supplier_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_supplier_po_type",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_supplier_txn_currency",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_ship_from",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_bill_from",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_supplier_payment_terms",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_supplier_delivery_terms",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_po_item_type",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_po_type",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_base_currency",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_txn_currency",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_parameter1",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_parameter2",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_parameter5",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_parameter6",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_item_ref_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_hsn_sac_no",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_uom",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_alternate_uom",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_uom_conversion",
+      "value": "1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_tax_rate",
+      "value": "0",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_qty",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_rate",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_no_of_bags",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_po_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_gp_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_gp_delivery_type",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_grn_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_qc_params",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_bags_type_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_qc_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_qc_lines",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_pb_payment_terms",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pur_pb_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}
