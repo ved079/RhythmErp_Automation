@@ -1,0 +1,1435 @@
+{
+  "info": {
+    "name": "Purchase Chain",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Rhythm ERP Purchase Chain (PO -> Gate Pass -> GRN -> QC -> Purchase Booking).\n\nStart with Setup > Discover Context: its test script mirrors ChainContextDiscoverer.discover() and writes the tenant FK values to pur_* vars plus a consolidated pur_ctx JSON (supplier with addresses, a PO-usable item from Item Master, HSN tax rate, and best-effort stored-PO header defaults). No stored PO is required.\n\nThen run the Create requests in order: PO -> GP -> GRN -> QC -> PB. Each Create stores its record id in a pur_* env var (pur_po_id, pur_gp_id, pur_grn_id, pur_qc_id, pur_pb_id) that the next Create reads, so the chain stays linked. Create requests only read pur_* vars and do NOT call the API - same pattern as pages/private_b2b/scripts/purchase_chain.py.\n\nAll endpoints match purchase_chain.py: /procure_to_pay/purchase_order/, /procure_to_pay/gate-pass/, /procure_to_pay/grn/, /procure_to_pay/quality-control/, /procure_to_pay/purchase-booking/ (list/detail/create).\n\nSetup: set base_url, token, tenant_id in your Postman environment, run Discover Context, and check pur_sniff_status. List requests are pure reads."
+  },
+  "item": [
+    {
+      "name": "Setup",
+      "description": "One-shot tenant discovery. Run Discover Context first — it resolves the supplier (with addresses), a PO-usable item (from Item Master), the HSN tax rate, and writes the tenant FK values to pur_* vars plus a consolidated pur_ctx JSON. After that, Create PO (and later the rest of the chain) just reads those vars — no stored PO is required.",
+      "item": [
+        {
+          "name": "Discover Context",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/core/dynamic-screen-wrapper/Supplier/?page_number=1&page_size=5",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "core",
+                "dynamic-screen-wrapper",
+                "Supplier",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Entry request = GET the Supplier list. The test script runs the whole tenant discovery in serial, decoupled stages (mirrors ChainContextDiscoverer.discover()): supplier (first one with ship-from + bill-from addresses), item from Item Master (HSN/UOM required), HSN tax rate, and best-effort stored-PO header defaults. Every stage is guarded independently and updates pur_sniff_status, so one failing stage never blocks the rest."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function status(m) { pm.environment.set('pur_sniff_status', m); }",
+                  "function statusMsg() { return pm.environment.get('pur_sniff_status') || ''; }",
+                  "function tryJson(res) { try { return res.json(); } catch (e) { return null; } }",
+                  "function maybeInt(k) { var v = pm.environment.get(k); if (!v || isNaN(parseInt(v, 10))) return null; return parseInt(v, 10); }",
+                  "var baseUrl = pm.environment.get('base_url');",
+                  "var token = pm.environment.get('token');",
+                  "var tenantId = pm.environment.get('tenant_id');",
+                  "var headers = { 'Authorization': 'Bearer ' + token, 'X-Tenant-ID': tenantId, 'Content-Type': 'application/json' };",
+                  "function send(url) { return new Promise(function (resolve) { pm.sendRequest({ url: url, method: 'GET', header: headers }, function (err, res) { resolve({ err: err, res: res }); }); }); }",
+                  "function jsonOf(r) { return (r && !r.err && r.res && r.res.code < 400) ? tryJson(r.res) : null; }",
+                  "async function discover() {",
+                  "    var acc = 'running';",
+                  "    function note(m) { acc += ' | ' + m; pm.environment.set('pur_sniff_status', acc); }",
+                  "    function set(name, value) { if (value !== undefined && value !== null && value !== '') pm.environment.set(name, value); }",
+                  "    pm.environment.set('pur_sniff_status', 'running');",
+                  "    try {",
+                  "        if (!pm.environment.get('pur_gp_delivery_type')) {",
+                  "            var gsr = await send(baseUrl + '/core/dynamic-screen/Gate%20Pass/');",
+                  "            var gsch = jsonOf(gsr);",
+                  "            var gfields = (gsch && gsch.screendefinition_set) || [];",
+                  "            var gdeliv = null;",
+                  "            for (var gc = 0; gc < gfields.length; gc++) {",
+                  "                if (gfields[gc].field_key === 'delivery_type') { gdeliv = gfields[gc]; break; }",
+                  "            }",
+                  "            var gopts = (gdeliv && gdeliv.filter_dropdown_raw_query) || [];",
+                  "            if (gopts.length && gopts[0].id) {",
+                  "                set('pur_gp_delivery_type', gopts[0].id);",
+                  "                note('delivery_type ' + gopts[0].id + ' from GP schema');",
+                  "            } else {",
+                  "                note('GP schema delivery_type unavailable - default 29');",
+                  "            }",
+                  "        }",
+                  "        var entry = tryJson(pm.response);",
+                  "        var supRows = (entry && entry.screenmatlistingdata_set) || [];",
+                  "        if (!supRows.length) { note('no Suppliers exist on tenant' + (entry ? '' : ' | first request failed / non-JSON - check base_url, token, tenant_id (HTTP ' + (pm.response && pm.response.code) + ')')); }",
+                  "        var taxMap = {};",
+                  "        var tr = await send(baseUrl + '/core/dynamic-screen-wrapper/Tax Rate/?page_number=1&page_size=3');",
+                  "        var tBody = jsonOf(tr);",
+                  "        var heads = (tBody && tBody.screenmatlistingdata_set) || [];",
+                  "        if (heads.length && heads[0].id) {",
+                  "            var tdr = await send(baseUrl + '/core/dynamic-screen-wrapper/Tax Rate/' + heads[0].id + '/');",
+                  "            var tdet = jsonOf(tdr);",
+                  "            if (tdet) {",
+                  "                var tchildren = tdet.children || [];",
+                  "                for (var tc = 0; tc < tchildren.length; tc++) {",
+                  "                    var trows = tchildren[tc].details || [];",
+                  "                    for (var tr2 = 0; tr2 < trows.length; tr2++) {",
+                  "                        if (trows[tr2].hsn_sac_number !== undefined && trows[tr2].hsn_sac_number !== null && trows[tr2].tax_rate !== undefined && trows[tr2].tax_rate !== null) { taxMap[String(trows[tr2].hsn_sac_number).trim()] = trows[tr2].tax_rate; }",
+                  "                    }",
+                  "                }",
+                  "            }",
+                  "        }",
+                  "        if (!pm.environment.get('pur_item_ref_id')) {",
+                  "            var il = await send(baseUrl + '/core/dynamic-screen-wrapper/Item Master/?page_number=1&page_size=10');",
+                  "            if (il.err || !il.res || il.res.code >= 400) { note('Item Master listing failed - set pur_item_ref_id manually'); }",
+                  "            else {",
+                  "                var iBody = jsonOf(il);",
+                  "                var itemList = (iBody && iBody.screenmatlistingdata_set) || [];",
+                  "                if (!itemList.length) { note('no Items in Item Master - set pur_item_ref_id manually'); }",
+                  "                var picked = null;",
+                  "                for (var ix = 0; ix < itemList.length && !picked; ix++) {",
+                  "                    var irow = itemList[ix];",
+                  "                    if (!irow.id) { continue; }",
+                  "                    var idr = await send(baseUrl + '/core/dynamic-screen-wrapper/Item Master/' + irow.id + '/');",
+                  "                    var idet = jsonOf(idr);",
+                  "                    if (!idet) { continue; }",
+                  "                    var ihsn = idet.hsn_sac_code, iuom = idet.uom, ibase = idet.base_uom;",
+                  "                    if (!ihsn || !iuom || !ibase) { note('item #' + irow.id + ' missing HSN/UOM in Item Master - trying next'); continue; }",
+                  "                    if (Object.keys(taxMap).length && !taxMap[String(ihsn).trim()]) { note('item #' + irow.id + ' HSN ' + ihsn + ' has no tax rate - trying next'); continue; }",
+                  "                    picked = { iid: irow.id, hsn: ihsn, uom: iuom, baseUom: ibase, conv: idet.base_uom_conversion || 1 };",
+                  "                }",
+                  "                if (picked) {",
+                  "                    set('pur_item_ref_id', picked.iid);",
+                  "                    set('pur_hsn_sac_no', picked.hsn);",
+                  "                    set('pur_uom', picked.baseUom);",
+                  "                    set('pur_alternate_uom', picked.uom);",
+                  "                    set('pur_uom_conversion', picked.conv);",
+                  "                    note('item #' + picked.iid + ' resolved from Item Master (hsn ' + picked.hsn + ')');",
+                  "                } else if (itemList.length) { note('no item with HSN/uom and tax coverage - set pur_item_ref_id manually'); }",
+                  "            }",
+                  "        }",
+                  "        if (!parseFloat(pm.environment.get('pur_tax_rate') || 0)) {",
+                  "            var thsn = pm.environment.get('pur_hsn_sac_no');",
+                  "            if (thsn && Object.keys(taxMap).length) {",
+                  "                var rate = taxMap[String(thsn).trim()];",
+                  "                if (rate) { set('pur_tax_rate', rate); note('tax_rate ' + rate); }",
+                  "            }",
+                  "        }",
+                  "        var poSupplier = null;",
+                  "        var plr = await send(baseUrl + '/procure_to_pay/purchase_order/?page_number=1&page_size=3');",
+                  "        if (plr.err || !plr.res || plr.res.code >= 400) { note('stored PO defaults unavailable'); }",
+                  "        else {",
+                  "            var poBody = jsonOf(plr);",
+                  "            var poRows = (poBody && (poBody.rows || poBody.screenmatlistingdata_set)) || [];",
+                  "            if (!poRows.length || !poRows[0].id) { note('no stored PO for header defaults'); }",
+                  "            else {",
+                  "                var pdr = await send(baseUrl + '/procure_to_pay/purchase_order/' + poRows[0].id + '/');",
+                  "                var po = jsonOf(pdr);",
+                  "                if (!po) { note('stored PO detail unavailable - body defaults used'); }",
+                  "                else {",
+                  "                    var poShip = po.supplier_details || null;",
+                  "                    if (po.supplier_ref_id && poShip && poShip.supplier_ship_from && poShip.supplier_bill_from) {",
+                  "                        poSupplier = { ref_id: po.supplier_ref_id, ship_from: poShip.supplier_ship_from, bill_from: poShip.supplier_bill_from, po_type: po.po_type, txn_currency: po.txn_currency, payment_terms: po.supplier_payment_terms, delivery_terms: po.supplier_delivery_terms };",
+                  "                    }",
+                  "                    if (po.parameter1 !== undefined && po.parameter1 !== null) set('pur_parameter1', po.parameter1);",
+                  "                    if (po.parameter2 !== undefined && po.parameter2 !== null) set('pur_parameter2', po.parameter2);",
+                  "                    if (po.parameter5 !== undefined && po.parameter5 !== null) set('pur_parameter5', po.parameter5);",
+                  "                    if (po.parameter6 !== undefined && po.parameter6 !== null) set('pur_parameter6', po.parameter6);",
+                  "                    if (po.po_item_type !== undefined && po.po_item_type !== null) set('pur_po_item_type', po.po_item_type);",
+                  "                    if (po.po_type !== undefined && po.po_type !== null) set('pur_po_type', po.po_type);",
+                  "                    if (po.base_currency !== undefined && po.base_currency !== null) set('pur_base_currency', po.base_currency);",
+                  "                    if (po.txn_currency !== undefined && po.txn_currency !== null) set('pur_txn_currency', po.txn_currency);",
+                  "                    var poLines = po.purchasing_order_items_details || [];",
+                  "                    if (poLines.length) {",
+                  "                        var pl = poLines[0];",
+                  "                        if (pl.item_ref_id) set('pur_item_ref_id', pl.item_ref_id);",
+                  "                        if (pl.hsn_sac_no) set('pur_hsn_sac_no', pl.hsn_sac_no);",
+                  "                        if (pl.uom) set('pur_uom', pl.uom);",
+                  "                        if (pl.alternate_uom) set('pur_alternate_uom', pl.alternate_uom);",
+                  "                        if (pl.uom_conversion) set('pur_uom_conversion', pl.uom_conversion);",
+                  "                        if (pl.tax_rate) set('pur_tax_rate', pl.tax_rate);",
+                  "                        note('item #' + pl.item_ref_id + ' seeded from stored PO line');",
+                  "                    }",
+                  "                    note('stored PO #' + poRows[0].id + ' header defaults cached');",
+                  "                }",
+                  "            }",
+                  "        }",
+                  "        if (poSupplier) {",
+                  "            set('pur_supplier_id', poSupplier.ref_id);",
+                  "            set('pur_ship_from', poSupplier.ship_from);",
+                  "            set('pur_bill_from', poSupplier.bill_from);",
+                  "            if (poSupplier.po_type) set('pur_supplier_po_type', poSupplier.po_type);",
+                  "            if (poSupplier.txn_currency) set('pur_supplier_txn_currency', poSupplier.txn_currency);",
+                  "            if (poSupplier.payment_terms) set('pur_supplier_payment_terms', poSupplier.payment_terms);",
+                  "            if (poSupplier.delivery_terms) set('pur_supplier_delivery_terms', poSupplier.delivery_terms);",
+                  "            note('supplier #' + poSupplier.ref_id + ' from stored PO (ship=' + poSupplier.ship_from + ', bill=' + poSupplier.bill_from + ')');",
+                  "        } else {",
+                  "            var supChosen = false;",
+                  "            for (var is = 0; is < supRows.length; is++) {",
+                  "                var sid = supRows[is].id;",
+                  "                if (!sid) { continue; }",
+                  "                var sdr = await send(baseUrl + '/core/dynamic-screen-wrapper/Supplier/' + sid + '/');",
+                  "                var sup = jsonOf(sdr);",
+                  "                if (!sup) { set('pur_supplier_id', sid); continue; }",
+                  "                set('pur_supplier_id', sid);",
+                  "                if (sup.po_type_ref_id) set('pur_supplier_po_type', sup.po_type_ref_id);",
+                  "                if (sup.default_currency_ref_id) set('pur_supplier_txn_currency', sup.default_currency_ref_id);",
+                  "                var shipFrom = null, billFrom = null, paymentTerms = null, deliveryTerms = null;",
+                  "                var supChildren = sup.children || [];",
+                  "                for (var sc = 0; sc < supChildren.length; sc++) {",
+                  "                    var st = supChildren[sc];",
+                  "                    var sname = (st.stepper_name || '').toLowerCase();",
+                  "                    if (sname.indexOf('address') !== -1) {",
+                  "                        var addr = st.details || [];",
+                  "                        if (addr.length >= 1 && addr[0].id) shipFrom = addr[0].id;",
+                  "                        if (addr.length >= 2 && addr[1].id) billFrom = addr[1].id;",
+                  "                    } else if (sname.indexOf('additional') !== -1) {",
+                  "                        if (st.payment_terms_ref_id) paymentTerms = st.payment_terms_ref_id;",
+                  "                        if (st.delivery_terms_ref_id) deliveryTerms = st.delivery_terms_ref_id;",
+                  "                    }",
+                  "                }",
+                  "                if (!shipFrom || !billFrom) { note('supplier #' + sid + ' skipped - missing ship/bill address'); continue; }",
+                  "                set('pur_ship_from', shipFrom);",
+                  "                set('pur_bill_from', billFrom);",
+                  "                if (paymentTerms) set('pur_supplier_payment_terms', paymentTerms);",
+                  "                if (deliveryTerms) set('pur_supplier_delivery_terms', deliveryTerms);",
+                  "                supChosen = true;",
+                  "                note('supplier #' + sid + ' resolved (ship=' + shipFrom + ', bill=' + billFrom + ')');",
+                  "                break;",
+                  "            }",
+                  "            if (!supChosen) { note('no Supplier with both ship-from and bill-from addresses; set pur_supplier_id/ship_from/bill_from manually'); }",
+                  "        }",
+                  "    } catch (e) {",
+                  "        note('Discover crashed: ' + (e && e.message ? e.message : String(e)));",
+                  "    }",
+                  "",
+                  "// QC context: quality params (CQP per item) + bag type (Packages). Needs pur_item_ref_id.",
+                  "var qcDate = new Date().toISOString().slice(0, 10);",
+                  "var qcItemId = parseInt(pm.environment.get('pur_item_ref_id'), 10);",
+                  "if (qcItemId && !pm.environment.get('pur_qc_params')) {",
+                  "    try {",
+                  "        var cqpList = jsonOf(await send(baseUrl + '/core/dynamic-screen-wrapper/Commodity%20Quality%20Parameter/?page_number=1&page_size=500'));",
+                  "        var cqpRows = (cqpList && (cqpList.screenmatlistingdata_set || cqpList.rows)) || [];",
+                  "        var cqpFound = null;",
+                  "        for (var ci = 0; ci < cqpRows.length; ci++) {",
+                  "            var crow = cqpRows[ci];",
+                  "            if (String(crow.transaction_type || '').toLowerCase().indexOf('purchase') < 0) continue;",
+                  "            var cdet = jsonOf(await send(baseUrl + '/core/dynamic-screen-wrapper/Commodity%20Quality%20Parameter/' + crow.id + '/'));",
+                  "            if (!cdet) continue;",
+                  "            var itMatch = String(cdet.item_ref_id) === String(qcItemId);",
+                  "            var actMatch = !cdet.from_date || String(cdet.from_date).slice(0, 10) <= qcDate;",
+                  "            if (itMatch && actMatch) { cqpFound = cdet; break; }",
+                  "        }",
+                  "        if (cqpFound) {",
+                  "            var cqpKids = (cqpFound.children && cqpFound.children[0] && cqpFound.children[0].details) || [];",
+                  "            if (cqpKids.length) {",
+                  "                var qcParams = cqpKids.map(function (p) {",
+                  "                    return { item_quality_parameter_ref_id: p.quality_type, actual_value: p.min_quality_value, allowable_percent: 0.0 };",
+                  "                });",
+                  "                set('pur_qc_params', JSON.stringify(qcParams));",
+                  "                note('QC quality params from CQP #' + cqpFound.id + ' (item ' + qcItemId + '): ' + qcParams.length + ' tiers');",
+                  "            } else {",
+                  "                note('CQP #' + cqpFound.id + ' for item ' + qcItemId + ' has no quality-parameter details \\u2014 Create QC uses generic params');",
+                  "            }",
+                  "        } else {",
+                  "            note('no active Purchase CQP found for item ' + qcItemId + ' \\u2014 Create QC uses generic params');",
+                  "        }",
+                  "    } catch (ce) {",
+                  "        note('CQP scan failed: ' + (ce && ce.message ? ce.message : String(ce)));",
+                  "    }",
+                  "} else if (!qcItemId || qcItemId.isNaN) {",
+                  "    note('QC params skipped \\u2014 no item yet (pur_item_ref_id not set)');",
+                  "}",
+                  "if (!pm.environment.get('pur_bags_type_id')) {",
+                  "    try {",
+                  "        var pkgList = jsonOf(await send(baseUrl + '/core/dynamic-screen-wrapper/Packages/'));",
+                  "        var pkgRows = (pkgList && (pkgList.screenmatlistingdata_set || pkgList.rows || pkgList.first_entries)) || [];",
+                  "        var pkgBest = null;",
+                  "        for (var pi = 0; pi < pkgRows.length; pi++) {",
+                  "            var pn = String(pkgRows[pi].name || pkgRows[pi].type_of_bags_ref_id || '').toLowerCase();",
+                  "            if (pn.indexOf('jute') >= 0 || pn.indexOf('joot') >= 0) { pkgBest = pkgRows[pi]; break; }",
+                  "        }",
+                  "        pkgBest = pkgBest || pkgRows[0] || null;",
+                  "        if (pkgBest) {",
+                  "            var bagId = null;",
+                  "            var pdet = jsonOf(await send(baseUrl + '/core/dynamic-screen-wrapper/Packages/' + pkgBest.id + '/'));",
+                  "            var plines = (pdet && (pdet.packages_line_details || pdet.package_details)) || [];",
+                  "            if (plines.length && plines[0].type_of_bags_ref_id) { bagId = plines[0].type_of_bags_ref_id; }",
+                  "            else { bagId = pkgBest.id; }",
+                  "            set('pur_bags_type_id', bagId);",
+                  "            note('bag type ' + bagId + ' from Packages row ' + pkgBest.id + ' (' + (pkgBest.name || pkgBest.type_of_bags_ref_id || '') + ')');",
+                  "        } else {",
+                  "            note('no Packages rows \\u2014 Create QC uses default 20');",
+                  "        }",
+                  "    } catch (pe) {",
+                  "        note('Packages scan failed: ' + (pe && pe.message ? pe.message : String(pe)));",
+                  "    }",
+                  "}",
+                  "",
+                  "// PB context: payment terms from the Purchase Booking schema (chain: supplier terms, else PB dropdown).",
+                  "if (!pm.environment.get('pur_pb_payment_terms')) {",
+                  "    try {",
+                  "        var pbt = jsonOf(await send(baseUrl + '/core/dynamic-screen/Purchase%20Booking/'));",
+                  "        var pbfields = (pbt && pbt.screendefinition_set) || [];",
+                  "        var pbf = null;",
+                  "        for (var pbi = 0; pbi < pbfields.length; pbi++) {",
+                  "            if (pbfields[pbi].field_key === 'supplier_payment_terms_ref_id') { pbf = pbfields[pbi]; break; }",
+                  "        }",
+                  "        var pbopts = (pbf && pbf.filter_dropdown_raw_query) || [];",
+                  "        if (pbopts.length && pbopts[0].id) {",
+                  "            set('pur_pb_payment_terms', pbopts[0].id);",
+                  "            note('PB payment terms ' + pbopts[0].id + ' from Purchase Booking schema');",
+                  "        } else {",
+                  "            note('Purchase Booking schema payment_terms unavailable - Create PB uses supplier payment terms or 0');",
+                  "        }",
+                  "    } catch (pbe) {",
+                  "        note('Purchase Booking schema scan failed: ' + (pbe && pbe.message ? pbe.message : String(pbe)));",
+                  "    }",
+                  "}",
+                  "    var okDeps = ['pur_supplier_id', 'pur_item_ref_id', 'pur_ship_from', 'pur_bill_from'].every(function (k) { return pm.environment.get(k); });",
+                  "    if (okDeps) { status(statusMsg().replace(/^running\\s*\\|\\s*/, 'Discover OK | ')); }",
+                  "    var ctx = {",
+                  "        v: 1,",
+                  "        supplier: { id: maybeInt('pur_supplier_id'), po_type: maybeInt('pur_supplier_po_type'), txn_currency: maybeInt('pur_supplier_txn_currency'), ship_from: maybeInt('pur_ship_from'), bill_from: maybeInt('pur_bill_from'), payment_terms: maybeInt('pur_supplier_payment_terms'), delivery_terms: maybeInt('pur_supplier_delivery_terms') },",
+                  "        item: { id: maybeInt('pur_item_ref_id'), hsn: pm.environment.get('pur_hsn_sac_no') || null, uom: maybeInt('pur_uom'), alternate_uom: maybeInt('pur_alternate_uom'), conversion: parseFloat(pm.environment.get('pur_uom_conversion') || 1), tax_rate: parseFloat(pm.environment.get('pur_tax_rate') || 0) },",
+                  "        po_defaults: { po_item_type: maybeInt('pur_po_item_type'), po_type: maybeInt('pur_po_type'), base_currency: maybeInt('pur_base_currency'), txn_currency: maybeInt('pur_txn_currency'), parameter1: maybeInt('pur_parameter1'), parameter2: maybeInt('pur_parameter2'), parameter5: maybeInt('pur_parameter5'), parameter6: maybeInt('pur_parameter6') },",
+                  "        gp: { delivery_type: maybeInt('pur_gp_delivery_type') },",
+                  "        qc: { params: pm.environment.get('pur_qc_params') ? JSON.parse(pm.environment.get('pur_qc_params')) : null, bags_type: parseInt(pm.environment.get('pur_bags_type_id') || 20, 10) },",
+                  "        pb: { payment_terms: maybeInt('pur_pb_payment_terms'), supplier_payment_terms: maybeInt('pur_supplier_payment_terms') },",
+                  "        sniff_status: pm.environment.get('pur_sniff_status') || ''",
+                  "    };",
+                  "    pm.environment.set('pur_ctx', JSON.stringify(ctx));",
+                  "    console.log('Discover done: ' + ctx.sniff_status);",
+                  "}",
+                  "discover();"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "PO",
+      "description": "Purchase Order — first step of the chain.\n\nList PO sniffs the supplier + item + header defaults from an existing PO and its Supplier, and stores them in pur_* env vars. Create PO reads those, generates a fresh qty (500-2000) / rate (500-6000), computes amount / tax / total, and saves pur_po_id.",
+      "item": [
+        {
+          "name": "List PO",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/procure_to_pay/purchase_order/?page_number=1&page_size=3",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "procure_to_pay",
+                "purchase_order",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "3"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('List PO is a pure read - run Setup > Discover Context to (re)build the pur_* tenant context. Current status: ' + (pm.environment.get('pur_sniff_status') || 'Discover not run yet'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get PO Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/procure_to_pay/purchase_order/{{pur_po_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "procure_to_pay",
+                "purchase_order",
+                "{{pur_po_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create PO",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_date\": \"2025-06-19\",\n  \"supplier_ref_id\": 0,\n  \"supplier_ref_type\": \"Supplier\",\n  \"po_item_type\": 0,\n  \"po_type\": 0,\n  \"base_currency\": 0,\n  \"txn_currency\": 0,\n  \"conversion_rate\": 1.0,\n  \"parameter1\": 0,\n  \"parameter2\": 0,\n  \"parameter3\": 25,\n  \"parameter4\": 1,\n  \"parameter5\": 0,\n  \"parameter6\": 0,\n  \"additional_details\": {\n    \"transportation_charges\": 0,\n    \"txn_currency_discount_percent\": null,\n    \"txn_currency_discount_amount\": 0,\n    \"txn_currency_interest_percent\": null,\n    \"txn_currency_interest_amount\": 0,\n    \"remark\": null\n  },\n  \"supplier_details\": {\n    \"supplier_ship_from\": 0,\n    \"supplier_bill_from\": 0\n  },\n  \"supplier_payment_terms\": 0,\n  \"supplier_delivery_terms\": 0,\n  \"tax_registration_status\": \"Registered\",\n  \"item_category\": 0,\n  \"purchasing_order_items_details\": [\n    {\n      \"item_ref_id\": 0,\n      \"hsn_sac_no\": 0,\n      \"uom\": 0,\n      \"alternate_uom\": 0,\n      \"uom_conversion\": 1.0,\n      \"alternate_quantity\": \"1\",\n      \"rate\": 0,\n      \"gst_type\": \"IGST\",\n      \"tax_rate\": 0,\n      \"txn_currency_amount_detail\": 0,\n      \"txn_currency_tax_amount_details\": 0,\n      \"total_amount\": 0,\n      \"expected_delivery_date\": \"2025-06-19\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/procure_to_pay/purchase_order/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "procure_to_pay",
+                "purchase_order",
+                ""
+              ]
+            },
+            "description": "Reads pur_* sniffed by List PO, generates a fresh qty (500-2000) and rate (500-6000), computes amount/tax/total. Test saves pur_po_id. Mirrors _po_items_from in purchase_chain.py."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var poNeed = ['pur_supplier_id', 'pur_item_ref_id', 'pur_ship_from', 'pur_bill_from'];",
+                  "var poMissing = poNeed.filter(function (k) { return !pm.environment.get(k); });",
+                  "if (poMissing.length) {",
+                  "    var sn = pm.environment.get('pur_sniff_status') || '';",
+                  "    var hint = (!sn || sn === 'running' || sn.indexOf('running') === 0) ? ' Discover appears not to have completed - re-run Setup > Discover Context and check View > Show Postman Console (Ctrl+Alt+C).' : '';",
+                  "    throw new Error('Missing PO deps: ' + poMissing.join(', ') + '. Run Setup > Discover Context first (sniff status: ' + (sn || 'Discover not run yet') + ').' + hint + ' Or set these values manually in the environment: ' + poMissing.join(', '));",
+                  "}",
+                  "function r6(v) { return Math.round(v * 1e6) / 1e6; }",
+                  "function r2(v) { return Math.round(v * 100) / 100; }",
+                  "var qty = Math.floor(500 + Math.random() * 1500);",
+                  "var rate = r2(500 + Math.random() * 5500);",
+                  "var taxRate = parseFloat(pm.environment.get('pur_tax_rate') || 0);",
+                  "var amount = r6(rate * qty);",
+                  "var tax = r6(amount * taxRate / 100);",
+                  "var total = r6(amount + tax);",
+                  "var today = new Date().toISOString().slice(0, 10);",
+                  "pm.environment.set('pur_qty', qty);",
+                  "pm.environment.set('pur_rate', rate);",
+                  "pm.environment.set('pur_no_of_bags', Math.round(qty));",
+                  "var ppo = pm.environment.get('pur_supplier_po_type') || pm.environment.get('pur_po_type');",
+                  "var txn = pm.environment.get('pur_supplier_txn_currency') || pm.environment.get('pur_txn_currency');",
+                  "var reqBody = JSON.parse(pm.request.body.raw);",
+                  "reqBody.transaction_date = today;",
+                  "reqBody.supplier_ref_id = parseInt(pm.environment.get('pur_supplier_id'));",
+                  "reqBody.supplier_ref_type = 'Supplier';",
+                  "reqBody.po_item_type = parseInt(pm.environment.get('pur_po_item_type') || 113);",
+                  "reqBody.item_category = parseInt(pm.environment.get('pur_po_item_type') || 113);",
+                  "reqBody.po_type = parseInt(ppo || 25);",
+                  "reqBody.base_currency = parseInt(pm.environment.get('pur_base_currency') || 1);",
+                  "reqBody.txn_currency = parseInt(txn || 1);",
+                  "reqBody.parameter1 = parseInt(pm.environment.get('pur_parameter1') || 1);",
+                  "reqBody.parameter2 = parseInt(pm.environment.get('pur_parameter2') || 1);",
+                  "reqBody.parameter5 = parseInt(pm.environment.get('pur_parameter5') || 1);",
+                  "reqBody.parameter6 = parseInt(pm.environment.get('pur_parameter6') || 1);",
+                  "var sf = pm.environment.get('pur_ship_from');",
+                  "var bf = pm.environment.get('pur_bill_from');",
+                  "reqBody.supplier_details.supplier_ship_from = sf ? parseInt(sf) : null;",
+                  "reqBody.supplier_details.supplier_bill_from = bf ? parseInt(bf) : null;",
+                  "var pt = pm.environment.get('pur_supplier_payment_terms');",
+                  "var dt = pm.environment.get('pur_supplier_delivery_terms');",
+                  "reqBody.supplier_payment_terms = pt ? parseInt(pt) : null;",
+                  "reqBody.supplier_delivery_terms = dt ? parseInt(dt) : null;",
+                  "var it = reqBody.purchasing_order_items_details[0];",
+                  "it.item_ref_id = parseInt(pm.environment.get('pur_item_ref_id'));",
+                  "it.hsn_sac_no = pm.environment.get('pur_hsn_sac_no') || 0;",
+                  "it.uom = parseInt(pm.environment.get('pur_uom'));",
+                  "it.alternate_uom = parseInt(pm.environment.get('pur_alternate_uom'));",
+                  "it.uom_conversion = parseFloat(pm.environment.get('pur_uom_conversion') || 1);",
+                  "it.alternate_quantity = String(qty);",
+                  "it.rate = rate;",
+                  "it.gst_type = 'IGST';",
+                  "it.tax_rate = taxRate;",
+                  "it.txn_currency_amount_detail = amount;",
+                  "it.txn_currency_tax_amount_details = tax;",
+                  "it.total_amount = total;",
+                  "it.expected_delivery_date = today;",
+                  "pm.request.body.raw = JSON.stringify(reqBody, null, 2);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var data = pm.response.json();",
+                  "var id = data.id || data.entry_id;",
+                  "if (!id) { throw new Error('PO create failed: ' + pm.response.text()); }",
+                  "pm.environment.set('pur_po_id', id);",
+                  "console.log('PO created: id=' + id + ' ref=' + (data.transaction_ref_no || ''));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "GP",
+      "description": "Gate Pass — second step, linked to the PO (po_ref_id_id).\n\nList GP sniffs delivery_type from an existing Gate Pass. Create GP reads pur_po_id + the sniffed item/UOM/HSN and saves pur_gp_id.",
+      "item": [
+        {
+          "name": "List GP",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/procure_to_pay/gate-pass/?page_number=1&page_size=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "procure_to_pay",
+                "gate-pass",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('List GP is a pure read - run Setup > Discover Context to resolve delivery_type (pur_gp_delivery_type). Current: ' + (pm.environment.get('pur_gp_delivery_type') || 'not set'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get GP Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/procure_to_pay/gate-pass/{{pur_gp_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "procure_to_pay",
+                "gate-pass",
+                "{{pur_gp_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create GP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_date\": \"2025-06-19\",\n  \"supplier_ref_id\": 0,\n  \"supplier_ref_type\": \"Supplier\",\n  \"item_type_ref_id\": 0,\n  \"delivery_type\": 0,\n  \"in_time\": \"2025-06-19T09:00:00Z\",\n  \"distance\": 50.0,\n  \"parameter1\": 0,\n  \"parameter2\": 0,\n  \"parameter5\": 0,\n  \"parameter6\": 0,\n  \"grn_check\": true,\n  \"qc_check\": true,\n  \"po_ref_id_id\": 0,\n  \"gate_pass_details\": [\n    {\n      \"item_ref_id\": 0,\n      \"no_of_bags\": 0,\n      \"alternate_quantity\": 0,\n      \"base_uom\": 0,\n      \"alternate_uom\": 0,\n      \"uom_conversion\": 1.0,\n      \"hsn_sac_no\": 0\n    }\n  ],\n  \"additional_details\": {\n    \"vehicle_no\": \"MH14KK2533\",\n    \"driver_name\": \"Test Driver\",\n    \"driver_contact_no\": 9000000000\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/procure_to_pay/gate-pass/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "procure_to_pay",
+                "gate-pass",
+                ""
+              ]
+            },
+            "description": "Linked GP (po_ref_id_id set). Reads pur_po_id + sniffed item/UOM/HSN/delivery_type. Test saves pur_gp_id. Mirrors _gp_items_from in purchase_chain.py."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var gpNeed = ['pur_po_id', 'pur_supplier_id', 'pur_item_ref_id'];",
+                  "var gpMissing = gpNeed.filter(function (k) { return !pm.environment.get(k); });",
+                  "if (gpMissing.length) {",
+                  "    var sn = pm.environment.get('pur_sniff_status') || '';",
+                  "    var hint = (!sn || sn.indexOf('running') === 0) ? ' Discover appears not to have completed - re-run Setup > Discover Context and check View > Show Postman Console (Ctrl+Alt+C).' : '';",
+                  "    throw new Error('Missing GP deps: ' + gpMissing.join(', ') + '. Run Setup > Discover Context first (sniff status: ' + (sn || 'Discover not run yet') + ').' + hint + ' Or set these values manually in the environment: ' + gpMissing.join(', '));",
+                  "}",
+                  "var qty = parseFloat(pm.environment.get('pur_qty'));",
+                  "var today = new Date().toISOString().slice(0, 10);",
+                  "var reqBody = JSON.parse(pm.request.body.raw);",
+                  "reqBody.transaction_date = today;",
+                  "reqBody.in_time = today + 'T09:00:00Z';",
+                  "reqBody.supplier_ref_id = parseInt(pm.environment.get('pur_supplier_id'));",
+                  "reqBody.supplier_ref_type = 'Supplier';",
+                  "reqBody.item_type_ref_id = parseInt(pm.environment.get('pur_po_item_type') || 113);",
+                  "reqBody.delivery_type = parseInt(pm.environment.get('pur_gp_delivery_type') || 29);",
+                  "reqBody.parameter1 = parseInt(pm.environment.get('pur_parameter1') || 1);",
+                  "reqBody.parameter2 = parseInt(pm.environment.get('pur_parameter2') || 1);",
+                  "reqBody.parameter5 = parseInt(pm.environment.get('pur_parameter5') || 1);",
+                  "reqBody.parameter6 = parseInt(pm.environment.get('pur_parameter6') || 1);",
+                  "reqBody.po_ref_id_id = parseInt(pm.environment.get('pur_po_id'));",
+                  "var it = reqBody.gate_pass_details[0];",
+                  "it.item_ref_id = parseInt(pm.environment.get('pur_item_ref_id'));",
+                  "it.no_of_bags = parseInt(pm.environment.get('pur_no_of_bags'));",
+                  "it.alternate_quantity = qty;",
+                  "it.base_uom = parseInt(pm.environment.get('pur_uom'));",
+                  "it.alternate_uom = parseInt(pm.environment.get('pur_alternate_uom'));",
+                  "it.uom_conversion = 1.0;",
+                  "it.hsn_sac_no = pm.environment.get('pur_hsn_sac_no') || 0;",
+                  "pm.request.body.raw = JSON.stringify(reqBody, null, 2);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var data = pm.response.json();",
+                  "var id = data.id || data.entry_id;",
+                  "if (!id) { throw new Error('GP create failed: ' + pm.response.text()); }",
+                  "pm.environment.set('pur_gp_id', id);",
+                  "console.log('GP created: id=' + id + ' ref=' + (data.transaction_ref_no || ''));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "GRN",
+      "description": "Goods Receipt Note — third step, linked to the GP and PO.\n\nCreate GRN reads pur_po_id + pur_gp_id and the sniffed item fields. Single-flow quantities: po_quantity = po_balance_quantity = gate_pass_quantity = qty. Test saves pur_grn_id.",
+      "item": [
+        {
+          "name": "List GRN",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/procure_to_pay/grn/?page_number=1&page_size=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "procure_to_pay",
+                "grn",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get GRN Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/procure_to_pay/grn/{{pur_grn_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "procure_to_pay",
+                "grn",
+                "{{pur_grn_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create GRN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_date\": \"2025-06-19\",\n  \"supplier_ref_id\": 0,\n  \"supplier_ref_type\": \"Supplier\",\n  \"gate_pass_ref_id_id\": 0,\n  \"po_ref_id_id\": 0,\n  \"base_currency\": 0,\n  \"txn_currency\": 0,\n  \"conversion_rate\": 1.0,\n  \"parameter1\": 0,\n  \"parameter2\": 0,\n  \"parameter5\": 0,\n  \"parameter6\": 0,\n  \"additional_details\": {},\n  \"grn_item_details\": [\n    {\n      \"item_ref_id\": 0,\n      \"hsn_sac_no\": 0,\n      \"uom\": 0,\n      \"alternate_uom\": 0,\n      \"uom_conversion\": 1.0,\n      \"alternate_received_qty\": 0,\n      \"alternate_accepted_qty\": 0,\n      \"alternate_rejected_qty\": 0.0,\n      \"rate\": 0,\n      \"no_of_bags\": 0,\n      \"gate_pass_quantity\": 0,\n      \"po_quantity\": 0,\n      \"po_balance_quantity\": 0\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/procure_to_pay/grn/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "procure_to_pay",
+                "grn",
+                ""
+              ]
+            },
+            "description": "Linked GRN (po_ref_id_id + gate_pass_ref_id_id). Reads pur_qty/pur_rate from the PO run. po_quantity = po_balance_quantity = qty (single flow). Test saves pur_grn_id. Mirrors _grn_items_from in purchase_chain.py."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var grnNeed = ['pur_po_id', 'pur_gp_id', 'pur_supplier_id', 'pur_item_ref_id'];",
+                  "var grnMissing = grnNeed.filter(function (k) { return !pm.environment.get(k); });",
+                  "if (grnMissing.length) {",
+                  "    var sn = pm.environment.get('pur_sniff_status') || '';",
+                  "    var hint = (!sn || sn.indexOf('running') === 0) ? ' Discover appears not to have completed - re-run Setup > Discover Context and check View > Show Postman Console (Ctrl+Alt+C).' : '';",
+                  "    throw new Error('Missing GRN deps: ' + grnMissing.join(', ') + '. Run Setup > Discover Context and Create PO + Create GP first (sniff status: ' + (sn || 'Discover not run yet') + ').' + hint + ' Or set these values manually in the environment: ' + grnMissing.join(', '));",
+                  "}",
+                  "var qty = parseFloat(pm.environment.get('pur_qty'));",
+                  "var rate = parseFloat(pm.environment.get('pur_rate'));",
+                  "var today = new Date().toISOString().slice(0, 10);",
+                  "var reqBody = JSON.parse(pm.request.body.raw);",
+                  "reqBody.transaction_date = today;",
+                  "reqBody.supplier_ref_id = parseInt(pm.environment.get('pur_supplier_id'));",
+                  "reqBody.supplier_ref_type = 'Supplier';",
+                  "reqBody.gate_pass_ref_id_id = parseInt(pm.environment.get('pur_gp_id'));",
+                  "reqBody.po_ref_id_id = parseInt(pm.environment.get('pur_po_id'));",
+                  "reqBody.base_currency = 1;",
+                  "reqBody.txn_currency = 1;",
+                  "reqBody.parameter1 = parseInt(pm.environment.get('pur_parameter1') || 1);",
+                  "reqBody.parameter2 = parseInt(pm.environment.get('pur_parameter2') || 1);",
+                  "reqBody.parameter5 = parseInt(pm.environment.get('pur_parameter5') || 1);",
+                  "reqBody.parameter6 = parseInt(pm.environment.get('pur_parameter6') || 1);",
+                  "var it = reqBody.grn_item_details[0];",
+                  "it.item_ref_id = parseInt(pm.environment.get('pur_item_ref_id'));",
+                  "it.hsn_sac_no = pm.environment.get('pur_hsn_sac_no') || 0;",
+                  "it.uom = parseInt(pm.environment.get('pur_uom'));",
+                  "it.alternate_uom = parseInt(pm.environment.get('pur_alternate_uom'));",
+                  "it.uom_conversion = parseFloat(pm.environment.get('pur_uom_conversion') || 1);",
+                  "it.alternate_received_qty = qty;",
+                  "it.alternate_accepted_qty = qty;",
+                  "it.alternate_rejected_qty = 0.0;",
+                  "it.rate = rate;",
+                  "it.no_of_bags = parseInt(pm.environment.get('pur_no_of_bags'));",
+                  "it.gate_pass_quantity = qty;",
+                  "it.po_quantity = qty;",
+                  "it.po_balance_quantity = qty;",
+                  "pm.request.body.raw = JSON.stringify(reqBody, null, 2);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var data = pm.response.json();",
+                  "var id = data.id || data.entry_id;",
+                  "if (!id) { throw new Error('GRN create failed: ' + pm.response.text()); }",
+                  "pm.environment.set('pur_grn_id', id);",
+                  "console.log('GRN created: id=' + id + ' ref=' + (data.transaction_ref_no || ''));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "QC",
+      "description": "Quality Check — fourth step, linked to PO + GP + GRN.\n\nList QC sniffs quality parameters (qc_parameter_details) and bag type (qc_bags_details[0].type_of_bags_ref_id) from an existing QC. Create QC ports _compute_qc_line_fields from purchase_chain.py into JS (empty bag 0-12, deduction 0-5, discount 0-5, all amounts rounded 6dp), saves pur_qc_id and the computed qc_details array (pur_qc_lines) for the PB step to mirror.",
+      "item": [
+        {
+          "name": "List QC",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/procure_to_pay/quality-control/?page_number=1&page_size=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "procure_to_pay",
+                "quality-control",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// pure read - QC params (CQP) and bags_type (Packages) are resolved by Setup > Discover Context"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get QC Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/procure_to_pay/quality-control/{{pur_qc_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "procure_to_pay",
+                "quality-control",
+                "{{pur_qc_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create QC",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_date\": \"2025-06-19\",\n  \"supplier_ref_id\": 0,\n  \"supplier_ref_type\": \"Supplier\",\n  \"item_type_ref_id\": 0,\n  \"gate_pass_ref_id_id\": 0,\n  \"grn_ref_id_id\": 0,\n  \"po_ref_id_id\": 0,\n  \"base_currency\": 0,\n  \"txn_currency\": 0,\n  \"conversion_rate\": 1.0,\n  \"parameter1\": 0,\n  \"parameter2\": 0,\n  \"parameter5\": 0,\n  \"parameter6\": 0,\n  \"vehicle_no\": null,\n  \"driver_name\": null,\n  \"qc_additional_details\": {\n    \"remark\": null\n  },\n  \"total_txn_currency_amount\": 0,\n  \"qc_details\": [\n    {\n      \"item_ref_id\": 0,\n      \"is_rate_weight_deduction\": false,\n      \"alternate_uom\": 0,\n      \"uom\": 0,\n      \"hsn_sac_no\": 0,\n      \"base_rate\": 0,\n      \"grn_qty\": 0,\n      \"alternate_rejected_qty\": 0.0,\n      \"total_amount\": 0,\n      \"no_of_bags\": 0,\n      \"empty_bag_weight\": 0,\n      \"empty_bags_txn_amount\": 0,\n      \"alternate_accepted_qty\": 0,\n      \"deduction_percent\": 0,\n      \"qc_deduction_rate\": 0,\n      \"deduction_weight\": 0,\n      \"qc_deduction_amount\": 0,\n      \"discount_rate\": 0,\n      \"c_d_deduction\": null,\n      \"txn_currency_amount\": 0,\n      \"rate\": 0,\n      \"uom_conversion\": 1.0,\n      \"qc_parameter_details\": [],\n      \"qc_bags_details\": [\n        {\n          \"type_of_bags_ref_id\": 1,\n          \"quantity_of_bags\": 1,\n          \"weight_of_bags\": 1.0,\n          \"total_weight_of_bags\": 1.0\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/procure_to_pay/quality-control/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "procure_to_pay",
+                "quality-control",
+                ""
+              ]
+            },
+            "description": "Reads pur_po_id + pur_gp_id + pur_grn_id. Computes all QC amount fields in the pre-request (port of _compute_qc_line_fields). Test saves pur_qc_id + pur_qc_lines (food for the PB step)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var qcNeed = ['pur_po_id', 'pur_gp_id', 'pur_grn_id', 'pur_supplier_id', 'pur_item_ref_id'];",
+                  "var qcMissing = qcNeed.filter(function (k) { return !pm.environment.get(k); });",
+                  "if (qcMissing.length) {",
+                  "    var sn = pm.environment.get('pur_sniff_status') || '';",
+                  "    var done = sn.indexOf('Discover OK') === 0;",
+                  "    var hint = done ? '' : ' Discover appears incomplete - run Setup > Discover Context and check the Postman Console (View > Show Postman Console, Ctrl+Alt+C).';",
+                  "    throw new Error('Missing QC deps: ' + qcMissing.join(', ') + ' Run Setup > Discover Context, then Create PO, Create GP and Create GRN in order (sniff status: ' + (sn || 'Discover not run yet') + ').' + hint + ' Or set these values manually: ' + qcMissing.join(', '));",
+                  "}",
+                  "function rnd(min, max) { return min + Math.random() * (max - min); }",
+                  "function r2(v) { return Math.round(v * 100) / 100; }",
+                  "function r6(v) { return Math.round(v * 1e6) / 1e6; }",
+                  "var baseRate = parseFloat(pm.environment.get('pur_rate'));",
+                  "var grnQty = parseFloat(pm.environment.get('pur_qty'));",
+                  "var emptyBag = r2(rnd(0, 12));",
+                  "var deductionPct = r2(rnd(0, 5));",
+                  "var discountRate = r2(rnd(0, 5));",
+                  "var noOfBags = parseInt(pm.environment.get('pur_no_of_bags'));",
+                  "var today = new Date().toISOString().slice(0, 10);",
+                  "var totalAmount = r6(baseRate * grnQty);",
+                  "var emptyBagsTxn = r6(emptyBag * baseRate);",
+                  "var acceptedQty = grnQty - emptyBag;",
+                  "var qcDeductionRate = r6(baseRate * deductionPct / 100);",
+                  "var deductionWeight = r6(grnQty * deductionPct / 100);",
+                  "var qcDeductionAmount = r6(totalAmount * deductionPct / 100);",
+                  "var subtotal = r6(totalAmount - emptyBagsTxn - qcDeductionAmount);",
+                  "var cDDeduction = discountRate ? r6(subtotal * discountRate / 100) : null;",
+                  "var txnCurrencyAmount = r6(subtotal - (cDDeduction || 0));",
+                  "var lineRate = r6(txnCurrencyAmount / acceptedQty);",
+                  "var quantityDeduction = Math.ceil(deductionWeight);",
+                  "var params = [];",
+                  "try { params = JSON.parse(pm.environment.get('pur_qc_params') || '[]'); } catch (e) { params = []; }",
+                  "if (!params.length) {",
+                  "    params = [",
+                  "        { item_quality_parameter_ref_id: 1, actual_value: 1 },",
+                  "        { item_quality_parameter_ref_id: 2, actual_value: 1 },",
+                  "        { item_quality_parameter_ref_id: 3, actual_value: 1 }",
+                  "    ];",
+                  "}",
+                  "var qcParams = params.map(function (p) {",
+                  "    return {",
+                  "        item_quality_parameter_ref_id: p.item_quality_parameter_ref_id,",
+                  "        actual_value: p.actual_value,",
+                  "        allowable_percent: 0.0,",
+                  "        quantity_deduction: quantityDeduction",
+                  "    };",
+                  "});",
+                  "var bagsType = parseInt(pm.environment.get('pur_bags_type_id') || 1);",
+                  "var reqBody = JSON.parse(pm.request.body.raw);",
+                  "reqBody.transaction_date = today;",
+                  "reqBody.supplier_ref_id = parseInt(pm.environment.get('pur_supplier_id'));",
+                  "reqBody.supplier_ref_type = 'Supplier';",
+                  "reqBody.item_type_ref_id = parseInt(pm.environment.get('pur_po_item_type') || 1);",
+                  "reqBody.gate_pass_ref_id_id = parseInt(pm.environment.get('pur_gp_id'));",
+                  "reqBody.grn_ref_id_id = parseInt(pm.environment.get('pur_grn_id'));",
+                  "reqBody.po_ref_id_id = parseInt(pm.environment.get('pur_po_id'));",
+                  "reqBody.base_currency = parseInt(pm.environment.get('pur_base_currency') || 1);",
+                  "reqBody.txn_currency = parseInt(pm.environment.get('pur_txn_currency') || 1);",
+                  "reqBody.parameter1 = parseInt(pm.environment.get('pur_parameter1') || 1);",
+                  "reqBody.parameter2 = parseInt(pm.environment.get('pur_parameter2') || 1);",
+                  "reqBody.parameter5 = parseInt(pm.environment.get('pur_parameter5') || 1);",
+                  "reqBody.parameter6 = parseInt(pm.environment.get('pur_parameter6') || 1);",
+                  "var line = reqBody.qc_details[0];",
+                  "line.item_ref_id = parseInt(pm.environment.get('pur_item_ref_id'));",
+                  "line.is_rate_weight_deduction = false;",
+                  "line.alternate_uom = parseInt(pm.environment.get('pur_alternate_uom'));",
+                  "line.uom = parseInt(pm.environment.get('pur_uom'));",
+                  "line.hsn_sac_no = pm.environment.get('pur_hsn_sac_no') || 0;",
+                  "line.base_rate = baseRate;",
+                  "line.grn_qty = grnQty;",
+                  "line.alternate_rejected_qty = 0.0;",
+                  "line.total_amount = totalAmount;",
+                  "line.no_of_bags = noOfBags;",
+                  "line.empty_bag_weight = emptyBag;",
+                  "line.empty_bags_txn_amount = emptyBagsTxn;",
+                  "line.alternate_accepted_qty = acceptedQty;",
+                  "line.deduction_percent = deductionPct;",
+                  "line.qc_deduction_rate = qcDeductionRate;",
+                  "line.deduction_weight = deductionWeight;",
+                  "line.qc_deduction_amount = qcDeductionAmount;",
+                  "line.discount_rate = discountRate;",
+                  "line.c_d_deduction = cDDeduction;",
+                  "line.txn_currency_amount = txnCurrencyAmount;",
+                  "line.rate = lineRate;",
+                  "line.uom_conversion = 1.0;",
+                  "line.qc_parameter_details = qcParams;",
+                  "line.qc_bags_details = [",
+                  "    { type_of_bags_ref_id: bagsType, quantity_of_bags: 1, weight_of_bags: 1.0, total_weight_of_bags: 1.0 }",
+                  "];",
+                  "reqBody.total_txn_currency_amount = txnCurrencyAmount;",
+                  "pm.request.body.raw = JSON.stringify(reqBody, null, 2);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var data = pm.response.json();",
+                  "var id = data.id || data.entry_id;",
+                  "if (!id) { throw new Error('QC create failed: ' + pm.response.text()); }",
+                  "pm.environment.set('pur_qc_id', id);",
+                  "var reqBody = JSON.parse(pm.request.body.raw);",
+                  "pm.environment.set('pur_qc_lines', JSON.stringify(reqBody.qc_details));",
+                  "console.log('QC created: id=' + id + ' ref=' + (data.transaction_ref_no || ''));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "PB",
+      "description": "Purchase Booking — final step, mirrors the QC lines.\n\nList PB sniffs supplier_payment_terms_ref_id from an existing Purchase Booking. Create PB reads pur_qc_id + pur_grn_id + pur_po_id and the saved pur_qc_lines, ports _pb_items_from_qc / build_pb_line / build_pb_payload from purchase_chain.py (labour 10-300, transport 0-500, random IGST vs CGST+SGST, total_txn = amount - discount + tax - labour). Test saves pur_pb_id.",
+      "item": [
+        {
+          "name": "List PB",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/procure_to_pay/purchase-booking/?page_number=1&page_size=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "procure_to_pay",
+                "purchase-booking",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_number",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// pure read - PB payment terms now resolved by Setup > Discover Context (Purchase Booking schema / supplier payment terms)"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get PB Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/procure_to_pay/purchase-booking/{{pur_pb_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "procure_to_pay",
+                "purchase-booking",
+                "{{pur_pb_id}}",
+                ""
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create PB",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_date\": \"2025-06-19\",\n  \"transaction_ref_no\": \"\",\n  \"supplier_ref_id\": 0,\n  \"tax_registration_status\": \"Registered\",\n  \"supplier_ref_type\": \"Supplier\",\n  \"qc_ref_id_id\": 0,\n  \"grn_ref_id_id\": 0,\n  \"po_ref_id_id\": 0,\n  \"supplier_payment_terms_ref_id\": 0,\n  \"base_currency\": 0,\n  \"txn_currency\": 0,\n  \"conversion_rate\": \"1\",\n  \"total_quantity\": 0,\n  \"txn_currency_amount\": 0,\n  \"txn_currency_total_amount\": 0,\n  \"txn_currency_discount_amount\": 0,\n  \"is_tds_applicable\": false,\n  \"section_ref_id\": \"0\",\n  \"tds_percent_applicable\": null,\n  \"tds_amount\": 0,\n  \"parameter5\": 0,\n  \"parameter2\": 0,\n  \"parameter1\": 0,\n  \"parameter6\": 0,\n  \"round_off_credit_amount\": 0,\n  \"round_off_debit_amount\": 0,\n  \"remark\": \"\",\n  \"posting_status\": \"\",\n  \"gst_registration_type\": null,\n  \"transportation_charges\": 0,\n  \"purchase_booking_details\": [],\n  \"grn_details\": [],\n  \"other_charges\": {\n    \"agent_ref_id\": null,\n    \"is_rate_percentage\": false,\n    \"agent_commision\": null,\n    \"agent_commision_amount\": 0\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/procure_to_pay/purchase-booking/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "procure_to_pay",
+                "purchase-booking",
+                ""
+              ]
+            },
+            "description": "Final step. Reads pur_qc_lines (saved by Create QC), replicates build_pb_line/build_pb_payload math in the pre-request, computes GST split (random IGST or CGST+SGST) and header aggregates. Test saves pur_pb_id."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var pbNeed = ['pur_po_id', 'pur_grn_id', 'pur_qc_id', 'pur_supplier_id'];",
+                  "var pbMissing = pbNeed.filter(function (k) { return !pm.environment.get(k); });",
+                  "var pbQcLines = [];",
+                  "try { pbQcLines = JSON.parse(pm.environment.get('pur_qc_lines') || '[]'); } catch (pe) { pbQcLines = []; }",
+                  "if (pbMissing.length || !pbQcLines.length) {",
+                  "    var sn2 = pm.environment.get('pur_sniff_status') || '';",
+                  "    var done2 = sn2.indexOf('Discover OK') === 0;",
+                  "    var hint2 = done2 ? '' : ' Discover appears incomplete - run Setup > Discover Context and check the Postman Console (View > Show Postman Console, Ctrl+Alt+C).';",
+                  "    throw new Error('Missing PB deps: ' + (pbMissing.length ? pbMissing.join(', ') : 'pur_qc_lines (empty - run Create QC)') + ' Run Setup > Discover Context, then Create PO, Create GP, Create GRN and Create QC in order (sniff status: ' + (sn2 || 'Discover not run yet') + ').' + hint2 + ' Or set these values manually: ' + (pbMissing.length ? pbMissing.join(', ') : 'pur_qc_lines'));",
+                  "}",
+                  "var qcLines = pbQcLines;",
+                  "function rnd(min, max) { return min + Math.random() * (max - min); }",
+                  "function r2(v) { return Math.round(v * 100) / 100; }",
+                  "function r3(v) { return Math.round(v * 1000) / 1000; }",
+                  "function r4(v) { return Math.round(v * 10000) / 10000; }",
+                  "function r6(v) { return Math.round(v * 1e6) / 1e6; }",
+                  "var taxRate = parseFloat(pm.environment.get('pur_tax_rate') || 0);",
+                  "function gstTypeForRate(rate) {",
+                  "    if (!rate) return null;",
+                  "    return Math.random() < 0.5 ? 'IGST' : 'CGST + SGST';",
+                  "}",
+                  "function splitGst(amount, rate, gstType) {",
+                  "    if (!gstType) {",
+                  "        return { igst_rate: null, igst_amount: 0.0, cgst_rate: null, cgst_amount: 0.0, sgst_rate: null, sgst_amount: 0.0, tax_amount: 0.0 };",
+                  "    }",
+                  "    if (gstType === 'IGST') {",
+                  "        var igst = r6(amount * rate / 100);",
+                  "        return { igst_rate: rate, igst_amount: igst, cgst_rate: null, cgst_amount: 0.0, sgst_rate: null, sgst_amount: 0.0, tax_amount: igst };",
+                  "    }",
+                  "    var half = rate / 2;",
+                  "    var each = r6(amount * half / 100);",
+                  "    return { igst_rate: null, igst_amount: 0.0, cgst_rate: half, cgst_amount: each, sgst_rate: half, sgst_amount: each, tax_amount: r6(each * 2) };",
+                  "}",
+                  "var roundCredit = r3(rnd(0, 1));",
+                  "var roundDebit = r3(rnd(0, 1));",
+                  "var today = new Date().toISOString().slice(0, 10);",
+                  "var isGstSetOff = taxRate > 0;",
+                  "var gstType = isGstSetOff ? gstTypeForRate(taxRate) : null;",
+                  "var lines = qcLines.map(function (qc) {",
+                  "    var labour = r2(rnd(10, 300));",
+                  "    var amountDetail = r6(parseFloat(qc.txn_currency_amount || 0) - labour);",
+                  "    var gst = splitGst(amountDetail, taxRate, gstType);",
+                  "    var discount = parseFloat(qc.c_d_deduction || 0);",
+                  "    var totalTxn = r6(amountDetail - discount + gst.tax_amount - labour);",
+                  "    return {",
+                  "        item_ref_id: qc.item_ref_id,",
+                  "        alternate_uom: qc.alternate_uom,",
+                  "        hsn_sac_no: qc.hsn_sac_no,",
+                  "        base_rate: parseFloat(qc.base_rate),",
+                  "        alternate_qty: r4(parseFloat(qc.grn_qty || 0)),",
+                  "        no_of_bags: qc.no_of_bags,",
+                  "        uom_conversion: parseFloat(qc.uom_conversion || 1),",
+                  "        empty_bag_weight: r4(parseFloat(qc.empty_bag_weight || 0)),",
+                  "        empty_bags_txn_amount: r4(parseFloat(qc.empty_bags_txn_amount || 0)),",
+                  "        alternate_net_qty: r4(parseFloat(qc.alternate_accepted_qty || 0)),",
+                  "        discount_percentage: r4(parseFloat(qc.discount_rate || 0)),",
+                  "        txn_currency_discount_amount_details: qc.c_d_deduction != null ? r6(parseFloat(qc.c_d_deduction)) : null,",
+                  "        txn_currency_amount_detail: amountDetail,",
+                  "        rate: parseFloat(qc.base_rate),",
+                  "        labour_charges: labour,",
+                  "        transport: null,",
+                  "        is_gst_set_off: isGstSetOff,",
+                  "        tax_rate: taxRate,",
+                  "        gst_type: gstType,",
+                  "        txn_currency_igst_rate: gst.igst_rate,",
+                  "        txn_currency_igst_amount: gst.igst_amount,",
+                  "        txn_currency_cgst_rate: gst.cgst_rate,",
+                  "        txn_currency_cgst_amount: gst.cgst_amount,",
+                  "        txn_currency_sgst_rate: gst.sgst_rate,",
+                  "        txn_currency_sgst_amount: gst.sgst_amount,",
+                  "        txn_currency_tax_amount: gst.tax_amount,",
+                  "        txn_currency_total_txn_amount: totalTxn,",
+                  "        uom: qc.uom,",
+                  "        round_of_credit_amount: roundCredit,",
+                  "        round_of_debit_amount: roundDebit",
+                  "    };",
+                  "});",
+                  "var reqBody = JSON.parse(pm.request.body.raw);",
+                  "reqBody.transaction_date = today;",
+                  "reqBody.supplier_ref_id = parseInt(pm.environment.get('pur_supplier_id'));",
+                  "reqBody.supplier_ref_type = 'Supplier';",
+                  "reqBody.qc_ref_id_id = parseInt(pm.environment.get('pur_qc_id'));",
+                  "reqBody.grn_ref_id_id = parseInt(pm.environment.get('pur_grn_id'));",
+                  "reqBody.po_ref_id_id = parseInt(pm.environment.get('pur_po_id'));",
+                  "var pbt = pm.environment.get('pur_supplier_payment_terms') || pm.environment.get('pur_pb_payment_terms');",
+                  "reqBody.supplier_payment_terms_ref_id = pbt ? parseInt(pbt) : 0;",
+                  "reqBody.base_currency = parseInt(pm.environment.get('pur_base_currency') || 1);",
+                  "reqBody.txn_currency = parseInt(pm.environment.get('pur_txn_currency') || 1);",
+                  "reqBody.parameter1 = parseInt(pm.environment.get('pur_parameter1') || 1);",
+                  "reqBody.parameter2 = parseInt(pm.environment.get('pur_parameter2') || 1);",
+                  "reqBody.parameter5 = parseInt(pm.environment.get('pur_parameter5') || 1);",
+                  "reqBody.parameter6 = parseInt(pm.environment.get('pur_parameter6') || 1);",
+                  "reqBody.transportation_charges = r2(rnd(0, 500));",
+                  "reqBody.round_off_credit_amount = roundCredit;",
+                  "reqBody.round_off_debit_amount = roundDebit;",
+                  "reqBody.total_quantity = r6(lines.reduce(function (s, l) { return s + parseFloat(l.alternate_net_qty); }, 0));",
+                  "reqBody.txn_currency_amount = r6(lines.reduce(function (s, l) { return s + parseFloat(l.txn_currency_amount_detail); }, 0));",
+                  "reqBody.txn_currency_total_amount = r6(lines.reduce(function (s, l) { return s + parseFloat(l.txn_currency_total_txn_amount); }, 0));",
+                  "reqBody.txn_currency_discount_amount = r6(lines.reduce(function (s, l) { return s + parseFloat(l.txn_currency_discount_amount_details || 0); }, 0));",
+                  "reqBody.purchase_booking_details = lines;",
+                  "pm.request.body.raw = JSON.stringify(reqBody, null, 2);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var data = pm.response.json();",
+                  "var id = data.id || data.entry_id;",
+                  "if (!id) { throw new Error('PB create failed: ' + pm.response.text()); }",
+                  "pm.environment.set('pur_pb_id', id);",
+                  "console.log('PB created: id=' + id + ' ref=' + (data.transaction_ref_no || ''));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
