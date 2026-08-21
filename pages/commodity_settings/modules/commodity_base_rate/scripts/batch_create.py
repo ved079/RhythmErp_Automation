@@ -417,8 +417,14 @@ def create_cbr_entry(api: ErpApiClient, pricing_type_id: int,
     detail_rows = []
     for item_name, item_id in item_map.items():
         uom_id = random.choice(uom_list) if uom_list else None
-        rate = str(random.randint(500, 5000))
-        row = {"item_ref_id": item_id, "item_rate": rate}
+        min_range = round(random.uniform(500, 2000), 2)
+        max_range = round(random.uniform(5000, 10000), 2)
+        row = {
+            "item_ref_id": item_id,
+            "minimum_range": min_range,
+            "maximum_range": max_range,
+            "details": [],
+        }
         if uom_id is not None:
             row["uom"] = uom_id
         detail_rows.append(row)

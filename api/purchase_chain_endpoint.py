@@ -75,7 +75,7 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
         timestamp=datetime.now(timezone.utc),
     ))
     try:
-        ctx = chain.get_context()
+        ctx = chain.get_context(item_category_id=request.item_category_id)
         yield _sse_event(LogEvent(
             type="log",
             message=(

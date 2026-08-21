@@ -735,10 +735,10 @@ class PurchaseChain:
         self._supply_type_id = resolve_supply_type_id(self.client) or 2
         return self._supply_type_id
 
-    def get_context(self) -> ChainContext:
+    def get_context(self, item_category_id: Optional[int] = None) -> ChainContext:
         """Return the tenant context, discovering it on first call."""
         if self._context is None:
-            self._context = ChainContextDiscoverer(self.client).discover()
+            self._context = ChainContextDiscoverer(self.client).discover(item_category_id=item_category_id)
         return self._context
 
     def get_context_for_supplier(self, supplier_ref_id: int) -> ChainContext:
@@ -1422,6 +1422,9 @@ class PurchaseChain:
 
             if "QC" in docs:
                 cqp_by_item = {it["item_ref_id"]: self._resolve_cqp_params(it["item_ref_id"]) for it in gp_items}
+                qc_overrides = dict(qc_overrides or {})
+                if item_category_id is not None:
+                    qc_overrides.setdefault("item_type_ref_id", item_category_id)
                 qc_payload = self._build_qc_payload(
                     eff_supplier, po_id, gp_id, grn_id, gp_items, qc_overrides, ctx=ctx,
                     cqp_by_item=cqp_by_item,
@@ -1722,13 +1725,15 @@ class PurchaseChain:
         total_txn = round(sum(float(l.get("txn_currency_amount") or 0.0) for l in qc_items), 6)
         header_extra = {"total_txn_currency_amount": total_txn}
         if ctx:
+            overrides = dict(overrides or {})
+            item_type_ref_id = overrides.pop("item_type_ref_id", None) or ctx.item_type_ref_id
             return build_qc_payload(
                 supplier_ref_id=supplier_ref_id,
                 gate_pass_ref_id_id=gp_id,
                 grn_ref_id_id=grn_id,
                 po_ref_id_id=po_id,
                 items=qc_items,
-                item_type_ref_id=ctx.item_type_ref_id,
+                item_type_ref_id=item_type_ref_id,
                 base_currency=ctx.base_currency,
                 txn_currency=ctx.txn_currency,
                 parameter1=ctx.parameter1,

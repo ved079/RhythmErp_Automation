@@ -241,7 +241,9 @@ def build_cbr_api_payload(pricing_type_ref_id, location_ref_id,
             {
                 "item_ref_id": ITEM_ID_MAP[item_name],
                 "uom": UOM_ID_MAP[uom_name],
-                "item_rate": str(random.randint(1000, 5000)),
+                "minimum_range": round(random.uniform(500, 2000), 2),
+                "maximum_range": round(random.uniform(5000, 10000), 2),
+                "details": [],
             }
         ]
     return {
@@ -468,7 +470,9 @@ def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None, offset=0, 
                 new_rows.append({
                     "item_ref_id": item_id,
                     "uom": uom_id,
-                    "item_rate": str(random.randint(1000, 5000)),
+                    "minimum_range": round(random.uniform(500, 2000), 2),
+                    "maximum_range": round(random.uniform(5000, 10000), 2),
+                    "details": [],
                 })
 
             payloads.append({
@@ -490,7 +494,9 @@ def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None, offset=0, 
                 detail_rows.append({
                     "item_ref_id": item_id,
                     "uom": uom_id,
-                    "item_rate": str(random.randint(1000, 5000)),
+                    "minimum_range": round(random.uniform(500, 2000), 2),
+                    "maximum_range": round(random.uniform(5000, 10000), 2),
+                    "details": [],
                 })
 
             payloads.append(build_cbr_api_payload(pt_id, loc_id, detail_rows=detail_rows))
