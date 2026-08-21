@@ -50,7 +50,9 @@ class TestCBRAPIPayload:
         row = stepper["details"][0]
         assert isinstance(row["item_ref_id"], int)
         assert isinstance(row["uom"], int)
-        assert row["item_rate"]
+        assert "minimum_range" in row
+        assert "maximum_range" in row
+        assert "details" in row
 
     def test_payload_attribute_name(self):
         """attribute_name must be exactly 'Commodity Base Rate'."""
@@ -159,7 +161,7 @@ _MOCK_EXISTING = [
             "children": [{
                 "stepper_name": "Define Item Rate Commision Details",
                 "is_stepper": True,
-                "details": [{"item_ref_id": _ITEM_IDS[0], "uom": 2, "item_rate": "1000"}],
+                "details": [{"item_ref_id": _ITEM_IDS[0], "uom": 2, "minimum_range": 1000.0, "maximum_range": 5000.0, "details": []}],
                 "children": [],
             }],
         },
@@ -182,7 +184,7 @@ _MOCK_EXISTING = [
             "children": [{
                 "stepper_name": "Define Item Rate Commision Details",
                 "is_stepper": True,
-                "details": [{"item_ref_id": _ITEM_IDS[0], "uom": 2, "item_rate": "1000"}],
+                "details": [{"item_ref_id": _ITEM_IDS[0], "uom": 2, "minimum_range": 1000.0, "maximum_range": 5000.0, "details": []}],
                 "children": [],
             }],
         },

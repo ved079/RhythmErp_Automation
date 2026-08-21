@@ -324,9 +324,10 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       setItems(itemRes)
       setCategories(catRes)
       setCqpItemIds(cqpRes)
-      const defaultCat = catRes.find((c) => c.item_count > 0) ?? catRes[0] ?? null
-      setSelectedCategoryId(defaultCat ? defaultCat.id : null)
-      const usable = poolFor(itemRes, defaultCat ? defaultCat.id : null, flow === 'gp' ? false : requireTaxRate, cqpRes)
+      const defaultCat = catRes.find((c) => c.item_count > 0)
+      const defaultCatId = defaultCat ? defaultCat.id : (catRes[0] ? catRes[0].id : null)
+      setSelectedCategoryId(defaultCatId)
+      const usable = poolFor(itemRes, selectedCategoryId ?? null, flow === 'gp' ? false : requireTaxRate, cqpRes)
       if (supRes.length > 0 && supplier === null) setSupplier(supRes[0].id)
       if (usable.length > 0 && itemIds.length === 0) {
         setItemIds(usable.slice(0, numItems).map(i => i.id))

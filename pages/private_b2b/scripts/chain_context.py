@@ -109,14 +109,14 @@ class ChainContextDiscoverer:
 
     # ── Public ────────────────────────────────────────────────────────────
 
-    def discover(self) -> ChainContext:
+    def discover(self, item_category_id: Optional[int] = None) -> ChainContext:
         """Run all discovery calls and return a fully-populated ChainContext."""
         log.info("[Discovery] Discovering tenant FK IDs from ERP API...")
 
         ctx = ChainContext(
             supplier_ref_id    = self._list_first_id("Supplier",                "supplier_ref_id"),
             item_ref_id        = self._schema_or_list("Item Master",             _PO_SCREEN, "item_ref_id"),
-            item_type_ref_id   = self._dropdown(_PO_SCREEN,  "po_item_type",     "item_type_ref_id"),
+            item_type_ref_id   = self._dropdown_po_item_type(_PO_SCREEN,  "po_item_type",     "item_type_ref_id", item_category_id),
             hsn_sac_no         = self._schema_or_list("HSN SAC",                 _PO_SCREEN, "hsn_sac_no"),
             alternate_uom      = self._dropdown(_PO_SCREEN,  "alternate_uom",    "alternate_uom"),
             base_uom           = self._dropdown(_PO_SCREEN,  "uom",              "base_uom"),
@@ -177,6 +177,42 @@ class ChainContextDiscoverer:
                         f"({opts[0].get('key', '')})"
                     )
                     return int(first_id)
+        except Exception as e:
+            log.warning(f"[Discovery] Schema error for {screen_name}.{field_key}: {e}")
+        return self._fb(fb_key)
+
+    def _dropdown_po_item_type(self, screen_name: str, field_key: str, fb_key: str, item_category_id: Optional[int] = None) -> int:
+        """
+        Return the po_item_type ID matching the selected item_category_id.
+        Falls back to first dropdown option if item_category_id is None or not found.
+        Falls back to _FALLBACKS[fb_key] if no options found.
+        """
+        try:
+            opts = self.client.get_dropdown_options(screen_name, field_key)
+            if not opts:
+                return self._fb(fb_key)
+            
+            # If item_category_id is provided, find the matching po_item_type
+            if item_category_id is not None:
+                for opt in opts:
+                    # The dropdown option key/label may contain the category ID or name
+                    # We need to match by the actual category ID
+                    opt_id = opt.get("id")
+                    if opt_id is not None and int(opt_id) == int(item_category_id):
+                        log.info(
+                            f"[Discovery] {screen_name}.{field_key} matched category {item_category_id} → {opt_id} "
+                            f"({opt.get('key', '')})"
+                        )
+                        return int(opt_id)
+            
+            # Fallback: use first option
+            first_id = opts[0].get("id")
+            if first_id is not None:
+                log.info(
+                    f"[Discovery] {screen_name}.{field_key} → first option {first_id} "
+                    f"({opts[0].get('key', '')})"
+                )
+                return int(first_id)
         except Exception as e:
             log.warning(f"[Discovery] Schema error for {screen_name}.{field_key}: {e}")
         return self._fb(fb_key)

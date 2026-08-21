@@ -316,8 +316,8 @@ def build_pb_payload(
         "txn_currency_amount": txn_currency_amount,
         "txn_currency_total_amount": txn_currency_total_amount,
         "txn_currency_discount_amount": txn_currency_discount_amount,
-        "is_tds_applicable": is_tds_applicable if is_tds_applicable is not None else False,
-        "section_ref_id": section_ref_id if section_ref_id is not None else "0",
+        "is_tds_applicable": is_tds_applicable,
+        "section_ref_id": section_ref_id,
         "tds_percent_applicable": tds_percent_applicable,
         "tds_amount": tds_amount,
         "parameter5": parameter5,       # Location
