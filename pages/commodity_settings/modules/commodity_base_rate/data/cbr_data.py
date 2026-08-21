@@ -385,7 +385,7 @@ def enrich_existing_entries(client, entries):
     return enriched
 
 
-def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None, offset=0, existing_entries=None):
+def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None, offset=0, existing_entries=None, selected_location_ids=None):
     """Generate CBR UPDATE payloads: add missing items to each location's detail grid.
 
     CBR unique constraint is (to_date, location_ref_id) — one header per location.
@@ -399,6 +399,7 @@ def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None, offset=0, 
       - uom:             {name: id}
 
     existing_entries must be enriched via enrich_existing_entries().
+    selected_location_ids: if provided, only process these location IDs.
     """
     fk_ids = dropdown_ids or {}
     loc_map = fk_ids.get("location_ref_id", {})
@@ -406,6 +407,11 @@ def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None, offset=0, 
     item_uom_map = fk_ids.get("item_uom_map", {})
     uom_map = fk_ids.get("uom", {})
     pt_id = PRICING_TYPE_ID_MAP["Common"]
+
+    # Filter to only selected locations if provided
+    if selected_location_ids:
+        selected_set = set(int(x) for x in selected_location_ids)
+        loc_map = {k: v for k, v in loc_map.items() if int(v) in selected_set}
 
     def _to_id(val, name_map):
         if val is None:

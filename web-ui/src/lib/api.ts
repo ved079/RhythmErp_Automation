@@ -296,6 +296,7 @@ export async function startBatchCreate(
   onError: (err: Error) => void,
   fixedPayloads?: Record<string, unknown>[] | null,
   config?: unknown,
+  selectedLocationIds?: number[],
 ) {
   try {
     const res = await fetch(`${PROXY}?path=batch-create`, withCsrf({
@@ -309,6 +310,7 @@ export async function startBatchCreate(
         erp_tenant_id: erpTenantId,
         ...(config ? { config } : {}),
         ...(fixedPayloads?.length ? { fixed_payloads: fixedPayloads } : {}),
+        ...(selectedLocationIds?.length ? { selected_location_ids: selectedLocationIds } : {}),
       }),
     }));
 
@@ -372,6 +374,7 @@ export async function startPurchaseChain(
   supplierRefIds?: number[],
   qcDiscount?: boolean,
   customerRefId?: number | null,
+  isRateWeightDeduction?: boolean,
 ) {
   try {
     const res = await fetch(`${PROXY}?path=purchase-chain`, withCsrf({
@@ -393,6 +396,7 @@ export async function startPurchaseChain(
         supplier_ref_ids: supplierRefIds?.length ? supplierRefIds : undefined,
         qc_discount: qcDiscount ?? false,
         customer_ref_id: customerRefId ?? null,
+        is_rate_weight_deduction: isRateWeightDeduction ?? false,
       }),
     }));
 

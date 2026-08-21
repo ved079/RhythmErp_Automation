@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Database, CheckCircle2, XCircle, Play, Info, ShieldCheck, BadgeCheck, ChevronRight, ChevronDown, History, Download, RefreshCw, RotateCcw, Loader2, ListChecks, Tag } from 'lucide-react'
+import { Database, CheckCircle2, XCircle, Play, Info, ShieldCheck, BadgeCheck, ChevronRight, ChevronDown, History, Download, RefreshCw, RotateCcw, Loader2, ListChecks, Tag, Plus } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import { startBatchCreate, exportBatchExcel, fetchBatchHistory, type SSEEvent, type BatchRunSummary } from '@/lib/api'
 import { notifySuccess } from '@/lib/notify'
@@ -102,8 +102,14 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
   const [historyLoading, setHistoryLoading] = useState(false)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
-  const [cbrLocationCount, setCbrLocationCount] = useState<number | null>(null)
-  const [cbrCountLoading, setCbrCountLoading] = useState(false)
+  const [cbrLocations, setCbrLocations] = useState<{ id: number; name: string; occupied: boolean }[]>([])
+  const [selectedLocations, setSelectedLocations] = useState<Set<number>>(new Set())
+  const [cbrLocationsLoading, setCbrLocationsLoading] = useState(false)
+  const [showCbrCreateLocations, setShowCbrCreateLocations] = useState(false)
+  const [newLocationCount, setNewLocationCount] = useState(5)
+  const [creatingLocations, setCreatingLocations] = useState(false)
+  const [cbrCreateMode, setCbrCreateMode] = useState<'auto' | 'manual'>('auto')
+  const [manualLocationInputs, setManualLocationInputs] = useState<string[]>([''])
   // Item Master: category picker
   const [itemCatMode, setItemCatMode] = useState<'random' | 'pick'>('random')
   const [itemCategories, setItemCategories] = useState<{ name: string; id: number; count: number }[]>([])
@@ -143,29 +149,45 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
 
   const target = MODULE_TO_BATCH[moduleId]
 
+  const fetchCbrLocations = useCallback(async (keepSelection = false) => {
+    if (target?.subModule !== 'commodity_base_rate' || !erpToken) return
+    setCbrLocationsLoading(true)
+    try {
+      const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] ?? ''
+      const res = await fetch('/api/proxy?path=batch-create/cbr-locations', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': decodeURIComponent(csrfToken) },
+        body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      const locs = Array.isArray(data.locations) ? data.locations : []
+      setCbrLocations(locs)
+      if (!keepSelection) {
+        const autoSelected = new Set<number>()
+        for (const loc of locs) {
+          if (!loc.occupied) autoSelected.add(loc.id)
+        }
+        setSelectedLocations(autoSelected)
+      }
+    } catch {
+      setCbrLocations([])
+      setSelectedLocations(new Set())
+    } finally {
+      setCbrLocationsLoading(false)
+    }
+  }, [target?.subModule, erpToken, erpTenantId])
+
   useEffect(() => {
     if (target?.subModule !== 'commodity_base_rate' || !erpToken) {
-      setCbrLocationCount(null)
-      setCbrCountLoading(false)
+      setCbrLocations([])
+      setSelectedLocations(new Set())
+      setCbrLocationsLoading(false)
       return
     }
-    setCbrLocationCount(null)
-    setCbrCountLoading(true)
-    fetch('/api/proxy?path=batch-create/cbr-location-count', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId }),
-    })
-      .then(r => r.json())
-      .then(data => {
-        setCbrLocationCount(typeof data.count === 'number' ? data.count : null)
-        setCbrCountLoading(false)
-      })
-      .catch(() => {
-        setCbrLocationCount(null)
-        setCbrCountLoading(false)
-      })
-  }, [target?.subModule, erpToken, erpTenantId])
+    fetchCbrLocations(false)
+  }, [target?.subModule, erpToken, erpTenantId, fetchCbrLocations])
 
   // Always-fresh refs so fetchItemCategories never uses a stale closure value
   const erpTokenRef = useRef(erpToken)
@@ -230,6 +252,8 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
       batchConfig = { items_per_chain: qtyPerChain }
     } else if (target.subModule === 'uom_conversion') {
       batchConfig = { conversion_factor: parseFloat(uomFactor) || 1 }
+    } else if (target.subModule === 'commodity_base_rate') {
+      batchConfig = { selected_location_ids: Array.from(selectedLocations) }
     } else if (fillAll) {
       batchConfig = { fill_all: true }
     }
@@ -267,8 +291,9 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
       },
       undefined,
       batchConfig,
+      target.subModule === 'commodity_base_rate' ? Array.from(selectedLocations) : undefined,
     )
-  }, [target, erpToken, erpTenantId, count, itemsPerPb, qtyPerChain, farmerConfig, onNeedsToken])
+  }, [target, erpToken, erpTenantId, count, itemsPerPb, qtyPerChain, farmerConfig, onNeedsToken, selectedLocations])
 
   const fetchItemCategories = useCallback(async () => {
     if (!erpTokenRef.current) { onNeedsToken(); return }
@@ -568,27 +593,107 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
               <span className="text-[13px] font-semibold text-gray-800 dark:text-gray-100">{target.label}</span>
             </div>
 
-            {/* CBR info banner */}
-            {target.subModule === 'commodity_base_rate' && (
-              <div className="flex items-start gap-2 rounded-md border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 px-3 py-2">
-                <Info className="size-3.5 text-sky-500 shrink-0 mt-0.5" />
-                <p className="text-[11px] text-sky-700 dark:text-sky-300 leading-relaxed">
-                  You can create up to{' '}
-                  {cbrCountLoading ? (
-                    <Loader2 className="size-3 inline animate-spin mx-0.5 text-sky-500" />
-                  ) : (
-                    <span className="font-semibold">
-                      {cbrLocationCount !== null ? cbrLocationCount : '?'}
-                    </span>
-                  )}{' '}
-                  Commodity Base Rate {cbrLocationCount === 1 ? 'entry' : 'entries'} at once — one per available location, each populated with all items at random rates.
-                </p>
+            {/* CBR location picker — only after token is entered */}
+            {target.subModule === 'commodity_base_rate' && !erpToken && (
+              <div className="flex flex-col items-center gap-3 py-6 text-gray-400 dark:text-gray-500">
+                <Info className="size-7" />
+                <span className="text-[12px] text-center">Enter your ERP token to fetch available locations.</span>
+                <Button onClick={onNeedsToken} className="h-8 text-[12px] bg-[#3F51B5] hover:bg-[#3949AB] cursor-pointer gap-1.5">
+                  Enter Token
+                </Button>
+              </div>
+            )}
+            {target.subModule === 'commodity_base_rate' && erpToken && (
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700">
+                  <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                    {cbrLocationsLoading ? 'Loading...' : `${cbrLocations.filter(l => !l.occupied).length} available`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => fetchCbrLocations(true)}
+                    disabled={cbrLocationsLoading}
+                    className="text-[10px] text-[#3F51B5] dark:text-[#7986CB] hover:underline cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`size-3 ${cbrLocationsLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </button>
+                </div>
+                {/* Body */}
+                <div className="p-2">
+                  {cbrLocationsLoading && cbrLocations.length === 0 ? (
+                    <div className="flex items-center justify-center gap-2 py-6 text-gray-400 dark:text-gray-500">
+                      <Loader2 className="size-3.5 animate-spin" />
+                      <span className="text-[11px]">Fetching locations from ERP...</span>
+                    </div>
+                  ) : (() => {
+                    const available = cbrLocations.filter(l => !l.occupied)
+                    const hasLocations = cbrLocations.length > 0
+                    if (available.length === 0) {
+                      return (
+                        <div className="space-y-3 py-2">
+                          {hasLocations && <div className="text-[11px] text-gray-400 dark:text-gray-500 text-center">All locations have CBR entries.</div>}
+                          <Button
+                            variant="outline"
+                            onClick={() => setShowCbrCreateLocations(true)}
+                            disabled={running}
+                            className="w-full h-8 text-[11px] border-dashed border-[#3F51B5]/40 text-[#3F51B5] dark:text-[#7986CB] hover:bg-[#3F51B5]/10 cursor-pointer gap-1.5"
+                          >
+                            <Plus className="size-3" />
+                            Add New Locations
+                          </Button>
+                        </div>
+                      )
+                    }
+                    return (
+                      <div className="space-y-2">
+                        <ScrollArea className="" style={{ height: Math.min(Math.ceil(available.length / 3) * 32 + 8, 160) }}>
+                          <div className="flex flex-wrap gap-1.5">
+                            {available.map(loc => {
+                              const selected = selectedLocations.has(loc.id)
+                              return (
+                                <button
+                                  key={loc.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedLocations(prev => {
+                                      const next = new Set(prev)
+                                      if (next.has(loc.id)) next.delete(loc.id)
+                                      else next.add(loc.id)
+                                      return next
+                                    })
+                                  }}
+                                  className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all cursor-pointer ${
+                                    selected
+                                      ? 'bg-[#3F51B5] dark:bg-[#5C6BC0] border-[#3F51B5] dark:border-[#5C6BC0] text-white shadow-sm'
+                                      : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-[#3F51B5]/50 dark:hover:border-[#7986CB]/50'
+                                  }`}
+                                >
+                                  {loc.name}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </ScrollArea>
+                        <div className="flex items-center justify-between border-t border-gray-100 dark:border-gray-800 pt-2">
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => setSelectedLocations(new Set(available.map(l => l.id)))} className="text-[10px] text-[#3F51B5] dark:text-[#7986CB] hover:underline cursor-pointer">Select All</button>
+                            <span className="text-gray-300 dark:text-gray-600 text-[10px]">|</span>
+                            <button type="button" onClick={() => setSelectedLocations(new Set())} className="text-[10px] text-[#3F51B5] dark:text-[#7986CB] hover:underline cursor-pointer">None</button>
+                          </div>
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500">{selectedLocations.size} selected</span>
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
               </div>
             )}
 
             {/* Controls row */}
             <div className="flex items-end gap-3 flex-wrap">
-              {target.subModule !== 'uom_conversion' && (
+              {target.subModule !== 'uom_conversion' && target.subModule !== 'commodity_base_rate' && (
               <div className="space-y-1 w-20">
                 <Label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Count</Label>
                 <Input
@@ -632,7 +737,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
               )}
               <Button
                 onClick={() => handleRun(false)}
-                disabled={running}
+                disabled={running || (target.subModule === 'commodity_base_rate' && selectedLocations.size === 0)}
                 className="h-8 text-[12px] bg-[#3F51B5] hover:bg-[#3949AB] cursor-pointer gap-1.5"
               >
                 {running ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
@@ -951,6 +1056,194 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
                         Create {cqpPreview.missing.length} entries
                       </Button>
                     )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* CBR Create Locations dialog */}
+            {showCbrCreateLocations && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-sm mx-4 p-5 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Plus className="size-4 text-[#3F51B5]" />
+                    <span className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">Add New Locations</span>
+                  </div>
+                  <div className="text-[12px] text-gray-600 dark:text-gray-300">
+                    <p>Create new Location entries in the ERP.</p>
+                  </div>
+
+                  {/* Mode toggle */}
+                  <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setCbrCreateMode('auto')}
+                      className={`flex-1 py-1.5 text-[11px] font-medium transition-colors cursor-pointer ${cbrCreateMode === 'auto' ? 'bg-[#3F51B5] text-white' : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    >
+                      Auto Generate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCbrCreateMode('manual')}
+                      className={`flex-1 py-1.5 text-[11px] font-medium transition-colors cursor-pointer ${cbrCreateMode === 'manual' ? 'bg-[#3F51B5] text-white' : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    >
+                      Enter Names
+                    </button>
+                  </div>
+
+                  {cbrCreateMode === 'auto' ? (
+                    <div className="space-y-2">
+                      <Label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">How many locations to create?</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={50}
+                        value={newLocationCount}
+                        disabled={creatingLocations}
+                        onChange={(e) => setNewLocationCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 5)))}
+                        className="h-8 text-[12px]"
+                      />
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500">Names assigned from Maharashtra locations pool.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">How many locations to create?</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={50}
+                        value={manualLocationInputs.length}
+                        disabled={creatingLocations}
+                        onChange={(e) => {
+                          const n = Math.max(1, Math.min(50, parseInt(e.target.value) || 1))
+                          setManualLocationInputs(prev => {
+                            if (n > prev.length) return [...prev, ...Array(n - prev.length).fill('')]
+                            return prev.slice(0, n)
+                          })
+                        }}
+                        className="h-8 text-[12px]"
+                      />
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                        {manualLocationInputs.map((val, i) => {
+                          const trimmed = val.trim().toLowerCase()
+                          const existsInErp = trimmed.length > 0 && cbrLocations.some(l => l.name.toLowerCase() === trimmed)
+                          const duplicateInForm = trimmed.length > 0 && manualLocationInputs.filter((n, j) => j !== i && n.trim().toLowerCase() === trimmed).length > 0
+                          const hasError = existsInErp || duplicateInForm
+                          return (
+                            <div key={i}>
+                              <Input
+                                type="text"
+                                value={val}
+                                disabled={creatingLocations}
+                                onChange={(e) => {
+                                  setManualLocationInputs(prev => {
+                                    const next = [...prev]
+                                    next[i] = e.target.value
+                                    return next
+                                  })
+                                }}
+                                placeholder={`Location ${i + 1}`}
+                                className={`h-8 text-[12px] ${hasError ? 'border-red-400 dark:border-red-500 focus:ring-red-400/50' : ''}`}
+                              />
+                              {hasError && (
+                                <p className="text-[10px] text-red-500 dark:text-red-400 mt-0.5">
+                                  {existsInErp ? 'Already exists in ERP' : 'Duplicate name'}
+                                </p>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" onClick={() => { setShowCbrCreateLocations(false); setCbrCreateMode('auto'); setManualLocationInputs(['']) }} disabled={creatingLocations} className="h-8 text-[12px] cursor-pointer">Cancel</Button>
+                    <Button
+                      onClick={async () => {
+                        setCreatingLocations(true)
+                        try {
+                          let namesToCreate: string[] = []
+                          if (cbrCreateMode === 'auto') {
+                            const LOCATION_POOL = [
+                              'Nagpur','Nashik','Kolhapur','Solapur','Amravati','Sangli','Satara','Akola',
+                              'Latur','Dhule','Nanded','Jalgaon','Thane','Kalyan','Dombivli','Bhiwandi',
+                              'Panvel','Karjat','Khopoli','Lonavala','Khandala','Igatpuri','Matheran',
+                              'Mahabaleshwar','Panchgani','Alibag','Chiplun','Ratnagiri','Guhagar','Dapoli',
+                              'Murud','Ganpatipule','Malvan','Vengurla','Sawantwadi','Amboli','Kolad','Roha',
+                              'Pen','Karad','Phaltan','Pandharpur','Miraj','Ichalkaranji','Tasgaon','Barshi',
+                              'Ausa','Nilanga','Udgir','Parbhani','Gangakhed','Sailu','Jintur','Partur',
+                              'Manwath','Hinganghat','Wardha','Pulgaon','Arvi','Umred','Bhandara','Gondia',
+                              'Tumsar','Tirora','Pauni','Chandrapur','Ballarpur','Warora','Bhadravati',
+                              'Brahmapuri','Gadchiroli','Yavatmal','Wani','Digras','Darwha','Pusad',
+                              'Umarkhed','Kinwat','Mahur','Ghatanji','Washim','Risod','Malegaon','Lonar',
+                              'Mehkar','Chikhli','Nandura','Khamgaon','Shegaon','Akot','Jalna','Paithan',
+                              'Kannad','Sillod','Bhokardan','Shirdi','Trimbak','Sinnar',
+                            ]
+                            const existingNames = new Set(cbrLocations.map(l => l.name.toLowerCase()))
+                            const availableNames = LOCATION_POOL.filter(n => !existingNames.has(n.toLowerCase()))
+                            namesToCreate = availableNames.slice(0, newLocationCount)
+                          } else {
+                            namesToCreate = manualLocationInputs.map(n => n.trim()).filter(n => n.length > 0)
+                          }
+                          if (namesToCreate.length === 0) {
+                            notifySuccess('No Names', cbrCreateMode === 'auto' ? 'All predefined location names are already in use.' : 'Enter at least one location name.')
+                            setCreatingLocations(false)
+                            return
+                          }
+                          const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] ?? ''
+                          const res = await fetch('/api/proxy?path=batch-create/cbr-create-locations', {
+                            method: 'POST',
+                            credentials: 'include',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': decodeURIComponent(csrfToken) },
+                            body: JSON.stringify({
+                              erp_token: erpToken,
+                              erp_tenant_id: erpTenantId,
+                              locations: namesToCreate.map(name => ({ name })),
+                            }),
+                          })
+                          const data = await res.json()
+                          const createdCount = (data.created ?? []).length
+                          const failedCount = (data.failed ?? []).length
+                          if (createdCount > 0) {
+                            notifySuccess('Locations Created', `${createdCount} location${createdCount !== 1 ? 's' : ''} created successfully${failedCount > 0 ? `, ${failedCount} failed` : ''}`)
+                            // Refresh location list
+                            await fetchCbrLocations(true)
+                            // Auto-select newly created locations
+                            const createdIds = new Set((data.created ?? []).map((c: { id: number }) => c.id))
+                            setSelectedLocations(prev => {
+                              const next = new Set(prev)
+                              for (const loc of cbrLocations) {
+                                if (createdIds.has(loc.id)) next.add(loc.id)
+                              }
+                              return next
+                            })
+                          } else {
+                            notifySuccess('No Locations Created', 'Failed to create locations. Check your ERP token.')
+                          }
+                        } catch {
+                          notifySuccess('Error', 'Failed to create locations. Please try again.')
+                        } finally {
+                          setCreatingLocations(false)
+                          setShowCbrCreateLocations(false)
+                          setCbrCreateMode('auto')
+                          setManualLocationInputs([''])
+                        }
+                      }}
+                      disabled={creatingLocations || (cbrCreateMode === 'manual' && (() => {
+                        const filled = manualLocationInputs.filter(n => n.trim())
+                        if (filled.length === 0) return true
+                        const erpNames = new Set(cbrLocations.map(l => l.name.toLowerCase()))
+                        return filled.some(n => {
+                          const t = n.trim().toLowerCase()
+                          return erpNames.has(t) || filled.filter(m => m.trim().toLowerCase() === t).length > 1
+                        })
+                      })())}
+                      className="h-8 text-[12px] bg-[#3F51B5] hover:bg-[#3949AB] cursor-pointer gap-1.5"
+                    >
+                      {creatingLocations ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
+                      {creatingLocations ? 'Creating...' : cbrCreateMode === 'auto' ? `Create ${newLocationCount} Location${newLocationCount !== 1 ? 's' : ''}` : `Create ${manualLocationInputs.filter(n => n.trim()).length} Location${manualLocationInputs.filter(n => n.trim()).length !== 1 ? 's' : ''}`}
+                    </Button>
                   </div>
                 </div>
               </div>

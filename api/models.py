@@ -146,11 +146,22 @@ class BatchCreateRequest(BaseModel):
     erp_tenant_id: str = "681"         # ERP tenant ID
     config: Optional[dict] = None      # Module-specific config (e.g. farmer_type, attr_number)
     fixed_payloads: Optional[list[dict]] = None  # pre-generated payloads (conflict mode); skips generation
+    selected_location_ids: Optional[list[int]] = None  # CBR: only create for these location IDs
 
 
 class CbrTokenRequest(BaseModel):
     erp_token: str
     erp_tenant_id: str = "681"
+
+
+class CbrCreateLocationItem(BaseModel):
+    name: str
+
+
+class CbrCreateLocationsRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str = "681"
+    locations: list[CbrCreateLocationItem]
 
 
 # --- Run Completion Callback Payload ---
@@ -191,6 +202,7 @@ class PurchaseChainRequest(BaseModel):
     supplier_ref_ids: Optional[list[int]] = None  # per-chain suppliers (chain i uses supplier_ref_ids[i]); falls back to supplier_ref_id
     qc_discount: bool = True             # False = skip discount in QC (discount_rate=0)
     customer_ref_id: Optional[int] = None  # Sales Order customer FK (None = auto-pick first customer)
+    is_rate_weight_deduction: bool = False  # True = QC weight-based deduction (deduction_weight × base_rate); False = rate-based ((net_of_empty_bag) × deduction_percent / 100)
 
 
 # --- Concurrency Testing ---
