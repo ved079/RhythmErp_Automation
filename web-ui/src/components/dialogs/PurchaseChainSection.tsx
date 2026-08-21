@@ -230,6 +230,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [multiGatePass, setMultiGatePass] = useState(false)
   const [gpCount, setGpCount] = useState(2)
   const [qcDiscount, setQcDiscount] = useState(false)
+  const [isRateWeightDeduction, setIsRateWeightDeduction] = useState(false)
   const [loadingData, setLoadingData] = useState(false)
   const [dataError, setDataError] = useState('')
   const [localToken, setLocalToken] = useState('')
@@ -436,8 +437,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       count > 1 ? chainSuppliers.filter((s): s is number => s != null) : [],
       qcDiscount,
       flow === 'so' && enabledDocs.has('SO') ? customer : null,
+      isRateWeightDeduction,
     )
-  }, [count, supplier, numItems, itemIds, erpToken, localToken, localTenantId, erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow, multiGatePass, gpCount, chainSuppliers, qcDiscount, customer, enabledDocs])
+  }, [count, supplier, numItems, itemIds, erpToken, localToken, localTenantId, erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow, multiGatePass, gpCount, chainSuppliers, qcDiscount, customer, enabledDocs, isRateWeightDeduction])
 
   const handleStop = useCallback(() => {
     setRunning(false)
@@ -704,6 +706,37 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             </span>
           </div>
           )}
+
+          <div className="flex flex-col gap-0.5 items-center" data-tour="pc-weight-deduction">
+            <div className="flex items-center gap-1.5 flex-wrap justify-center">
+              <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">Weight Deduction:</span>
+              <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setIsRateWeightDeduction(true)}
+                  disabled={running}
+                  className={`px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                    isRateWeightDeduction ? 'bg-[#3F51B5] text-white' : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  ON
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsRateWeightDeduction(false)}
+                  disabled={running}
+                  className={`px-2.5 py-1 text-[11px] font-semibold border-l border-gray-300 dark:border-gray-600 transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                    !isRateWeightDeduction ? 'bg-[#3F51B5] text-white' : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  OFF
+                </button>
+              </div>
+            </div>
+            <span className="text-[10px] text-gray-600 dark:text-gray-400">
+              {isRateWeightDeduction ? 'Weight × Rate deduction' : 'Rate-based % deduction'}
+            </span>
+          </div>
 
           <div className="flex flex-col gap-0.5 items-center" data-tour="pc-multigp">
             <div className="flex items-center gap-1.5 flex-wrap justify-center">
