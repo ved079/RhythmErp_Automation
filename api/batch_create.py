@@ -473,6 +473,10 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
             kwargs["existing_entries"] = existing_items
         if "config" in sig.parameters:
             kwargs["config"] = request.config
+        if request.selected_location_ids and "selected_location_ids" in sig.parameters:
+            kwargs["selected_location_ids"] = request.selected_location_ids
+        elif request.config and request.config.get("selected_location_ids") and "selected_location_ids" in sig.parameters:
+            kwargs["selected_location_ids"] = request.config["selected_location_ids"]
         attr_number = (request.config or {}).get("attr_number", 1)
         if attr_number and "attr_number" in sig.parameters:
             kwargs["attr_number"] = attr_number

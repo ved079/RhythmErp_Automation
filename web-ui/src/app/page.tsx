@@ -42,6 +42,7 @@ import { LoginPage } from '@/components/auth/LoginPage'
 import type { AuthUser, ErpCred } from '@/lib/types'
 import { SidebarModuleItem } from '@/components/sidebar/SidebarModuleItem'
 import type { SidebarModule } from '@/components/sidebar/SidebarModuleItem'
+import { getPanelPreference } from '@/components/PanelToggle'
 import Link from 'next/link'
 import Image from 'next/image'
 import type { ScreenshotEntry } from '@/components/screenshot/ScreenshotGallery'
@@ -165,7 +166,8 @@ export default function Home() {
   const { connected: wsConnected, on: wsOn } = useNotificationsSocket(user?.id)
   const { theme, setTheme } = useTheme()
   const darkMode = theme === 'dark'
-  const toggleDarkMode = useCallback(() => { setTheme(darkMode ? 'light' : 'dark') }, [darkMode, setTheme])
+  const [themeVersion, setThemeVersion] = useState(0)
+  const toggleDarkMode = useCallback(() => { setTheme(darkMode ? 'light' : 'dark'); setThemeVersion(v => v + 1) }, [darkMode, setTheme])
 
   const refreshNotifications = useCallback(async () => {
     setUnreadCount(await getUnreadNotificationCount())
@@ -400,7 +402,7 @@ export default function Home() {
   }, [])
 
   const handleLogin = useCallback((u: AuthUser) => {
-    if (u.role === 'admin') { window.location.href = '/admin'; return }
+    if (u.role === 'admin' && getPanelPreference() === 'admin') { window.location.href = '/admin'; return }
     setUser(u); setSidebarModules(filterSidebarByAccess(ALL_SIDEBAR_MODULES, u)); setSelectedModule('dashboard')
     setActiveTab('test-runner'); localStorage.removeItem('ai-nl-run')
     pd.loadVisibility()
@@ -638,7 +640,7 @@ export default function Home() {
   ]
 
   return (
-    <div className="h-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
+    <div key={themeVersion} className="h-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden" style={{ animation: 'panelFadeIn 0.3s ease-out' }}>
       <AppTour selectedModule={selectedModule} activeTab={activeTab} />
       {/* Keyboard Shortcuts Cheat Sheet */}
       <Dialog open={d.showShortcuts} onOpenChange={d.setShowShortcuts}>

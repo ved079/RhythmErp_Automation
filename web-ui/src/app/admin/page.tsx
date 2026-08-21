@@ -26,13 +26,18 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel, DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
+import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog'
 import {
   LayoutDashboard, ClipboardList, FolderTree, EyeOff, Inbox,
   Globe, Settings, Users as UsersIcon, Activity, FileText,
-  ChevronLeft, LogOut, Menu, Sun, Moon, Home, Shield, ChevronRight,
+  ChevronLeft, LogOut, Menu, Sun, Moon, Shield, ChevronRight, Bookmark, User,
 } from 'lucide-react'
+import { PanelToggle, getPanelPreference, setPanelPreference } from '@/components/PanelToggle'
 import LoadingCard from '@/components/ui/LoadingCard'
 
 export default function AdminPage() {
@@ -40,8 +45,10 @@ export default function AdminPage() {
   const searchParams = useSearchParams()
   const { theme, setTheme } = useTheme()
   const isDark = theme === 'dark'
+  const [themeVersion, setThemeVersion] = React.useState(0)
 
   const s = useAdminState()
+  const [panelPref, setPanelPref] = React.useState<'admin' | 'user'>(getPanelPreference)
 
   // Sync section from URL on mount — must be before early returns
   React.useEffect(() => {
@@ -76,7 +83,7 @@ export default function AdminPage() {
   ]
 
   return (
-    <div className="h-screen flex flex-col bg-[#F1F2F7] dark:bg-gray-900 overflow-hidden">
+    <div key={themeVersion} className="h-screen flex flex-col bg-[#F1F2F7] dark:bg-gray-900 overflow-hidden" style={{ animation: 'panelFadeIn 0.3s ease-out' }}>
       {/* ─── HEADER ─────────────────────────────────── */}
       <header className="h-[52px] bg-white dark:bg-gray-900 shrink-0 z-10 flex items-center px-3 border-b border-gray-100 dark:border-gray-800">
         {/* Left */}
@@ -97,15 +104,34 @@ export default function AdminPage() {
         </div>
         {/* Right */}
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" onClick={() => setTheme(isDark ? 'light' : 'dark')}
+          <Button variant="ghost" size="icon" onClick={() => { setTheme(isDark ? 'light' : 'dark'); setThemeVersion(v => v + 1) }}
             className="size-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer rounded">
             {isDark ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => router.push('/')}
-            className="size-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer rounded"
-            title="Back to User Panel">
-            <Home className="size-3.5" />
-          </Button>
+          <PanelToggle activePanel="admin" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon"
+                className="size-7 text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] hover:bg-[#3F51B5]/10 dark:hover:bg-[#3F51B5]/10 cursor-pointer rounded"
+                title="Set default panel on login">
+                <Bookmark className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuLabel className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">Default on login</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioGroup value={panelPref} onValueChange={(v) => { const p = v as 'admin' | 'user'; setPanelPref(p); setPanelPreference(p) }}>
+                <DropdownMenuRadioItem value="admin" className="text-[11px] cursor-pointer">
+                  <Shield className="size-3 mr-1.5" />
+                  Admin
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="user" className="text-[11px] cursor-pointer">
+                  <User className="size-3 mr-1.5" />
+                  User
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Separator orientation="vertical" className="h-4 mx-1" />
           <div className="flex items-center gap-1.5">
             <Avatar className="size-6">

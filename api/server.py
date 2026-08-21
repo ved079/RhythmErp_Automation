@@ -29,7 +29,8 @@ from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 
 from api.models import (
     ModuleListResponse, CreateRunRequest, StartRunRequest, BatchCreateRequest,
-    PurchaseChainRequest, ConcurrencyDispatchRequest, CbrTokenRequest, FetchFkRequest,
+    PurchaseChainRequest, ConcurrencyDispatchRequest, CbrTokenRequest, CbrCreateLocationsRequest,
+    FetchFkRequest,
 )
 from api.concurrency_dispatch import dispatch_concurrent, ping_agents
 from api.test_discovery import discover_all_modules
@@ -269,29 +270,112 @@ def cqp_fill_preview_endpoint(request: BatchCreateRequest):
             pass
 
 
-@app.post("/api/batch-create/cbr-location-count")
-def cbr_location_count_endpoint(request: CbrTokenRequest):
-    """Return the number of available Location options in the CBR screen schema."""
+@app.post("/api/batch-create/cbr-locations")
+def cbr_locations_endpoint(request: CbrTokenRequest):
+    """Return all locations with occupied status for CBR batch create."""
     from pages.commodity_settings.modules.commodity_base_rate.data.cbr_data import LOCATION_ID_MAP
-    fallback = len(LOCATION_ID_MAP)
+    fallback = [{"id": lid, "name": name, "occupied": False} for name, lid in LOCATION_ID_MAP.items()]
     try:
         from common.erp_api_client import RhythmERPAPIClient
         client = RhythmERPAPIClient(tenant_id=request.erp_tenant_id)
         client.login_from_browser(token=request.erp_token, tenant_id=request.erp_tenant_id)
+
+        # Get all locations from CBR schema dropdown
+        locations = []
         schema = client.get_screen_schema("Commodity Base Rate")
-        if not schema:
-            return {"count": fallback}
-        fields = client._flatten_fields(schema.get("screendefinition_set", []))
-        for field in fields:
-            if field.get("field_key") == "location_ref_id":
-                opts = field.get("filter_dropdown_raw_query", [])
-                if isinstance(opts, list) and len(opts) > 0:
-                    return {"count": len(opts)}
-                break
-        return {"count": fallback}
+        if schema:
+            fields = client._flatten_fields(schema.get("screendefinition_set", []))
+            for field in fields:
+                if field.get("field_key") == "location_ref_id":
+                    opts = field.get("filter_dropdown_raw_query", [])
+                    if isinstance(opts, list):
+                        for opt in opts:
+                            opt_id = opt.get("id")
+                            opt_key = opt.get("key")
+                            if opt_id and opt_key:
+                                locations.append({"id": int(opt_id), "name": opt_key, "occupied": False})
+                    break
+
+        if not locations:
+            locations = fallback
+
+        # Mark occupied locations
+        try:
+            existing = client.list_entries("Commodity Base Rate", page_size=500)
+            entries = existing.get("screenmatlistingdata_set", existing.get("results", []))
+            occupied_ids = set()
+            # Build name→id map for resolving string location_ref_id values
+            name_to_id = {loc["name"].lower(): loc["id"] for loc in locations}
+            for e in (entries or []):
+                loc_val = e.get("location_ref_id")
+                if loc_val is None:
+                    continue
+                loc_id = None
+                if isinstance(loc_val, (int, float)):
+                    loc_id = int(loc_val)
+                elif isinstance(loc_val, str):
+                    # Try integer parse first
+                    try:
+                        loc_id = int(loc_val)
+                    except (ValueError, TypeError):
+                        # Match by name (case-insensitive)
+                        loc_id = name_to_id.get(loc_val.lower().strip())
+                if loc_id is not None:
+                    occupied_ids.add(loc_id)
+            for loc in locations:
+                if loc["id"] in occupied_ids:
+                    loc["occupied"] = True
+        except Exception as exc:
+            print(f"[CBR] occupied detection failed: {exc}")
+
+        occupied_count = sum(1 for loc in locations if loc["occupied"])
+        return {
+            "locations": locations,
+            "occupied_count": occupied_count,
+            "available_count": len(locations) - occupied_count,
+        }
     except Exception as e:
-        print(f"[CBR] location count fetch failed: {e}")
-        return {"count": fallback}
+        print(f"[CBR] locations fetch failed: {e}")
+        return {"locations": fallback, "occupied_count": 0, "available_count": len(fallback)}
+
+
+@app.post("/api/batch-create/cbr-create-locations")
+def cbr_create_locations_endpoint(request: CbrCreateLocationsRequest):
+    """Create new Location entries in the ERP for CBR batch create."""
+    created = []
+    failed = []
+    try:
+        from common.erp_api_client import RhythmERPAPIClient
+        client = RhythmERPAPIClient(tenant_id=request.erp_tenant_id)
+        client.login_from_browser(token=request.erp_token, tenant_id=request.erp_tenant_id)
+
+        for item in request.locations:
+            payload = {
+                "id": "",
+                "attribute_name": "Location",
+                "name": item.name,
+                "description": None,
+                "details": [],
+                "children": [],
+            }
+            try:
+                result = client.create_entry(payload)
+                if result and result.get("id"):
+                    created.append({"id": result["id"], "name": item.name})
+                else:
+                    failed.append({"name": item.name, "error": "No ID in response"})
+            except Exception as e:
+                failed.append({"name": item.name, "error": str(e)[:200]})
+
+        try:
+            client.close()
+        except Exception:
+            pass
+    except Exception as e:
+        for item in request.locations:
+            failed.append({"name": item.name, "error": str(e)[:200]})
+
+    return {"created": created, "failed": failed}
 
 
 # ================================================================
