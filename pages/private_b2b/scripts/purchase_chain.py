@@ -152,6 +152,7 @@ def _compute_qc_line_fields(
     empty_bag_weight: float,
     deduction_percent: float,
     discount_rate: float,
+    is_rate_weight_deduction: bool = False,
 ) -> dict:
     """Derive every stored QC line field from the manual QC 1345 math.
 
@@ -161,7 +162,12 @@ def _compute_qc_line_fields(
       alternate_accepted_qty  = grn_qty − empty_bag_weight
       qc_deduction_rate       = base_rate × deduction_percent / 100
       deduction_weight        = grn_qty × deduction_percent / 100
-      qc_deduction_amount     = total_amount × deduction_percent / 100
+
+      is_rate_weight_deduction = False (rate mode, default):
+        qc_deduction_amount   = (total_amount − empty_bags) × deduction_percent / 100
+      is_rate_weight_deduction = True (weight mode):
+        qc_deduction_amount   = deduction_weight × base_rate
+
       subtotal                = total_amount − empty_bags − qc_deduction_amount
       c_d_deduction           = subtotal × discount_rate / 100   (None when 0)
       txn_currency_amount     = subtotal − c_d_deduction
@@ -173,7 +179,12 @@ def _compute_qc_line_fields(
     accepted_qty = grn_qty - empty_bag_weight
     qc_deduction_rate = round(base_rate * deduction_percent / 100.0, 6)
     deduction_weight = round(grn_qty * deduction_percent / 100.0, 6)
-    qc_deduction_amount = round(total_amount * deduction_percent / 100.0, 6)
+
+    if is_rate_weight_deduction:
+        qc_deduction_amount = round(deduction_weight * base_rate, 6)
+    else:
+        net_of_empty_bag = total_amount - empty_bags_txn_amount
+        qc_deduction_amount = round(net_of_empty_bag * deduction_percent / 100.0, 6)
 
     subtotal = total_amount - empty_bags_txn_amount - qc_deduction_amount
     c_d_deduction = round(subtotal * discount_rate / 100.0, 6) if discount_rate else None
@@ -377,7 +388,8 @@ def _grn_items_from(
 
 
 def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = None,
-                   bags_type_id: int = 1, qc_discount: bool = True) -> List[dict]:
+                   bags_type_id: int = 1, qc_discount: bool = True,
+                   is_rate_weight_deduction: bool = False) -> List[dict]:
     """Build QC line items matching the manual QC 1345 stored shape.
 
     Every derived amount is computed here (ERP does NOT auto-patch on POST).
@@ -412,12 +424,13 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
         deduction_percent = _rand_deduction_percent()
         discount_rate = _rand_discount_rate() if qc_discount else 0.0
         computed = _compute_qc_line_fields(
-            it["rate"], it["accepted_qty"], empty_bag_weight, deduction_percent, discount_rate
+            it["rate"], it["accepted_qty"], empty_bag_weight, deduction_percent, discount_rate,
+            is_rate_weight_deduction=is_rate_weight_deduction,
         )
         item_id = it["item_ref_id"]
         out.append({
             "item_ref_id": item_id,
-            "is_rate_weight_deduction": False,
+            "is_rate_weight_deduction": is_rate_weight_deduction,
             "alternate_uom": it.get("uom", ctx.alternate_uom if ctx else 3),
             "uom": it.get("base_uom", ctx.base_uom if ctx else 4),
             "hsn_sac_no": it["hsn_sac_no"],
@@ -1149,6 +1162,7 @@ class PurchaseChain:
         gp_count: int = 2,
         customer_ref_id: int = None,
         qc_discount: bool = True,
+        is_rate_weight_deduction: bool = False,
     ) -> dict:
         """Execute one full PO -> GP -> GRN -> QC chain.
 
@@ -1430,6 +1444,7 @@ class PurchaseChain:
                     cqp_by_item=cqp_by_item,
                     bags_type_id=self._resolve_bags_type_id(),
                     qc_discount=qc_discount,
+                    is_rate_weight_deduction=is_rate_weight_deduction,
                 )
                 qc_data = self.qc_api.create_qc(qc_payload)
                 qc_id = qc_data.get("id") or qc_data.get("entry_id") if qc_data else None
@@ -1718,9 +1733,10 @@ class PurchaseChain:
         cqp_by_item: Optional[dict] = None,
         bags_type_id: int = 1,
         qc_discount: bool = True,
+        is_rate_weight_deduction: bool = False,
     ) -> dict:
         from pages.private_b2b.modules.quality_check.data.quality_check_data import build_qc_payload
-        qc_items = _qc_items_from(items, ctx=ctx, cqp_by_item=cqp_by_item or {}, bags_type_id=bags_type_id, qc_discount=qc_discount)
+        qc_items = _qc_items_from(items, ctx=ctx, cqp_by_item=cqp_by_item or {}, bags_type_id=bags_type_id, qc_discount=qc_discount, is_rate_weight_deduction=is_rate_weight_deduction)
         overrides = overrides or {}
         total_txn = round(sum(float(l.get("txn_currency_amount") or 0.0) for l in qc_items), 6)
         header_extra = {"total_txn_currency_amount": total_txn}

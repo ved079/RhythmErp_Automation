@@ -136,6 +136,7 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
                     timestamp=datetime.now(timezone.utc),
                 ))
             kwargs["qc_discount"] = request.qc_discount
+            kwargs["is_rate_weight_deduction"] = request.is_rate_weight_deduction
             if request.customer_ref_id is not None:
                 kwargs["customer_ref_id"] = request.customer_ref_id
             # Only pass explicit overrides if the caller set them intentionally
