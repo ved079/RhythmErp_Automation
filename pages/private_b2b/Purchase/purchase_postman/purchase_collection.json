@@ -7,7 +7,7 @@
   "item": [
     {
       "name": "Setup",
-      "description": "One-shot tenant discovery. Run Discover Context first — it resolves the supplier (with addresses), a PO-usable item (from Item Master), the HSN tax rate, and writes the tenant FK values to pur_* vars plus a consolidated pur_ctx JSON. After that, Create PO (and later the rest of the chain) just reads those vars — no stored PO is required.",
+      "description": "One-shot tenant discovery. Run Discover Context first \u00e2\u20ac\u201d it resolves the supplier (with addresses), a PO-usable item (from Item Master), the HSN tax rate, and writes the tenant FK values to pur_* vars plus a consolidated pur_ctx JSON. After that, Create PO (and later the rest of the chain) just reads those vars \u00e2\u20ac\u201d no stored PO is required.",
       "item": [
         {
           "name": "Discover Context",
@@ -343,7 +343,7 @@
     },
     {
       "name": "PO",
-      "description": "Purchase Order — first step of the chain.\n\nList PO sniffs the supplier + item + header defaults from an existing PO and its Supplier, and stores them in pur_* env vars. Create PO reads those, generates a fresh qty (500-2000) / rate (500-6000), computes amount / tax / total, and saves pur_po_id.",
+      "description": "Purchase Order \u00e2\u20ac\u201d first step of the chain.\n\nList PO sniffs the supplier + item + header defaults from an existing PO and its Supplier, and stores them in pur_* env vars. Create PO reads those, generates a fresh qty (500-2000) / rate (500-6000), computes amount / tax / total, and saves pur_po_id.",
       "item": [
         {
           "name": "List PO",
@@ -557,7 +557,7 @@
     },
     {
       "name": "GP",
-      "description": "Gate Pass — second step, linked to the PO (po_ref_id_id).\n\nList GP sniffs delivery_type from an existing Gate Pass. Create GP reads pur_po_id + the sniffed item/UOM/HSN and saves pur_gp_id.",
+      "description": "Gate Pass \u00e2\u20ac\u201d second step, linked to the PO (po_ref_id_id).\n\nList GP sniffs delivery_type from an existing Gate Pass. Create GP reads pur_po_id + the sniffed item/UOM/HSN and saves pur_gp_id.",
       "item": [
         {
           "name": "List GP",
@@ -744,7 +744,7 @@
     },
     {
       "name": "GRN",
-      "description": "Goods Receipt Note — third step, linked to the GP and PO.\n\nCreate GRN reads pur_po_id + pur_gp_id and the sniffed item fields. Single-flow quantities: po_quantity = po_balance_quantity = gate_pass_quantity = qty. Test saves pur_grn_id.",
+      "description": "Goods Receipt Note \u00e2\u20ac\u201d third step, linked to the GP and PO.\n\nCreate GRN reads pur_po_id + pur_gp_id and the sniffed item fields. Single-flow quantities: po_quantity = po_balance_quantity = gate_pass_quantity = qty. Test saves pur_grn_id.",
       "item": [
         {
           "name": "List GRN",
@@ -927,7 +927,7 @@
     },
     {
       "name": "QC",
-      "description": "Quality Check — fourth step, linked to PO + GP + GRN.\n\nList QC sniffs quality parameters (qc_parameter_details) and bag type (qc_bags_details[0].type_of_bags_ref_id) from an existing QC. Create QC ports _compute_qc_line_fields from purchase_chain.py into JS (empty bag 0-12, deduction 0-5, discount 0-5, all amounts rounded 6dp), saves pur_qc_id and the computed qc_details array (pur_qc_lines) for the PB step to mirror.",
+      "description": "Quality Check \u00e2\u20ac\u201d fourth step, linked to PO + GP + GRN.\n\nList QC sniffs quality parameters (qc_parameter_details) and bag type (qc_bags_details[0].type_of_bags_ref_id) from an existing QC. Create QC ports _compute_qc_line_fields from purchase_chain.py into JS (empty bag 0-12, deduction 0-5, discount 0-5, all amounts rounded 6dp), saves pur_qc_id and the computed qc_details array (pur_qc_lines) for the PB step to mirror.",
       "item": [
         {
           "name": "List QC",
@@ -1176,7 +1176,7 @@
     },
     {
       "name": "PB",
-      "description": "Purchase Booking — final step, mirrors the QC lines.\n\nList PB sniffs supplier_payment_terms_ref_id from an existing Purchase Booking. Create PB reads pur_qc_id + pur_grn_id + pur_po_id and the saved pur_qc_lines, ports _pb_items_from_qc / build_pb_line / build_pb_payload from purchase_chain.py (labour 10-300, transport 0-500, random IGST vs CGST+SGST, total_txn = amount - discount + tax - labour). Test saves pur_pb_id.",
+      "description": "Purchase Booking \u00e2\u20ac\u201d final step, mirrors the QC lines.\n\nList PB sniffs supplier_payment_terms_ref_id from an existing Purchase Booking. Create PB reads pur_qc_id + pur_grn_id + pur_po_id and the saved pur_qc_lines, ports _pb_items_from_qc / build_pb_line / build_pb_payload from purchase_chain.py (labour 10-300, transport 0-500, random IGST vs CGST+SGST, total_txn = amount - discount + tax - labour). Test saves pur_pb_id.",
       "item": [
         {
           "name": "List PB",
@@ -1284,7 +1284,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"transaction_date\": \"2025-06-19\",\n  \"transaction_ref_no\": \"\",\n  \"supplier_ref_id\": 0,\n  \"tax_registration_status\": \"Registered\",\n  \"supplier_ref_type\": \"Supplier\",\n  \"qc_ref_id_id\": 0,\n  \"grn_ref_id_id\": 0,\n  \"po_ref_id_id\": 0,\n  \"supplier_payment_terms_ref_id\": 0,\n  \"base_currency\": 0,\n  \"txn_currency\": 0,\n  \"conversion_rate\": \"1\",\n  \"total_quantity\": 0,\n  \"txn_currency_amount\": 0,\n  \"txn_currency_total_amount\": 0,\n  \"txn_currency_discount_amount\": 0,\n  \"is_tds_applicable\": false,\n  \"section_ref_id\": \"0\",\n  \"tds_percent_applicable\": null,\n  \"tds_amount\": 0,\n  \"parameter5\": 0,\n  \"parameter2\": 0,\n  \"parameter1\": 0,\n  \"parameter6\": 0,\n  \"round_off_credit_amount\": 0,\n  \"round_off_debit_amount\": 0,\n  \"remark\": \"\",\n  \"posting_status\": \"\",\n  \"gst_registration_type\": null,\n  \"transportation_charges\": 0,\n  \"purchase_booking_details\": [],\n  \"grn_details\": [],\n  \"other_charges\": {\n    \"agent_ref_id\": null,\n    \"is_rate_percentage\": false,\n    \"agent_commision\": null,\n    \"agent_commision_amount\": 0\n  }\n}",
+              "raw": "{\n  \"transaction_date\": \"2025-06-19\",\n  \"transaction_ref_no\": \"\",\n  \"supplier_ref_id\": 0,\n  \"tax_registration_status\": \"Registered\",\n  \"supplier_ref_type\": \"Supplier\",\n  \"qc_ref_id_id\": 0,\n  \"grn_ref_id_id\": 0,\n  \"po_ref_id_id\": 0,\n  \"supplier_payment_terms_ref_id\": null,\n  \"base_currency\": 0,\n  \"txn_currency\": 0,\n  \"conversion_rate\": 1.0,\n  \"total_quantity\": 0,\n  \"txn_currency_amount\": 0,\n  \"txn_currency_total_amount\": 0,\n  \"txn_currency_discount_amount\": 0,\n  \"is_tds_applicable\": null,\n  \"section_ref_id\": 0,\n  \"tds_percent_applicable\": null,\n  \"tds_amount\": \"0.000\",\n  \"parameter5\": 0,\n  \"parameter2\": 0,\n  \"parameter1\": 0,\n  \"parameter6\": 0,\n  \"round_off_credit_amount\": 0,\n  \"round_off_debit_amount\": \"0.000\",\n  \"remark\": \"\",\n  \"posting_status\": \"Post\",\n  \"gst_registration_type\": null,\n  \"transportation_charges\": 0,\n  \"purchase_booking_details\": [],\n  \"grn_details\": [],\n  \"other_charges\": {\n    \"agent_ref_id\": null,\n    \"is_rate_percentage\": false,\n    \"agent_commision\": null,\n    \"agent_commision_amount\": 0\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1292,7 +1292,7 @@
               }
             },
             "url": {
-              "raw": "{{base_url}}/procure_to_pay/purchase-booking/",
+              "raw": "{{base_url}}/procure_to_pay/purchase-booking/?screenName=Purchase%20Booking&submission_id={{pur_pb_submission_id}}&request_method=SUBMIT",
               "host": [
                 "{{base_url}}"
               ],
@@ -1300,6 +1300,20 @@
                 "procure_to_pay",
                 "purchase-booking",
                 ""
+              ],
+              "query": [
+                {
+                  "key": "screenName",
+                  "value": "Purchase Booking"
+                },
+                {
+                  "key": "submission_id",
+                  "value": "{{pur_pb_submission_id}}"
+                },
+                {
+                  "key": "request_method",
+                  "value": "SUBMIT"
+                }
               ]
             },
             "description": "Final step. Reads pur_qc_lines (saved by Create QC), replicates build_pb_line/build_pb_payload math in the pre-request, computes GST split (random IGST or CGST+SGST) and header aggregates. Test saves pur_pb_id."
@@ -1311,6 +1325,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "// Generate a fresh UUID for this PB submission",
+                  "function generateUUID(){return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0,v=c=='x'?r:(r&0x3|0x8);return v.toString(16);})}",
+                  "pm.environment.set('pur_pb_submission_id', generateUUID());",
+                  "",
                   "var pbNeed = ['pur_po_id', 'pur_grn_id', 'pur_qc_id', 'pur_supplier_id'];",
                   "var pbMissing = pbNeed.filter(function (k) { return !pm.environment.get(k); });",
                   "var pbQcLines = [];",
@@ -1322,8 +1340,6 @@
                   "    throw new Error('Missing PB deps: ' + (pbMissing.length ? pbMissing.join(', ') : 'pur_qc_lines (empty - run Create QC)') + ' Run Setup > Discover Context, then Create PO, Create GP, Create GRN and Create QC in order (sniff status: ' + (sn2 || 'Discover not run yet') + ').' + hint2 + ' Or set these values manually: ' + (pbMissing.length ? pbMissing.join(', ') : 'pur_qc_lines'));",
                   "}",
                   "var qcLines = pbQcLines;",
-                  "function rnd(min, max) { return min + Math.random() * (max - min); }",
-                  "function r2(v) { return Math.round(v * 100) / 100; }",
                   "function r3(v) { return Math.round(v * 1000) / 1000; }",
                   "function r4(v) { return Math.round(v * 10000) / 10000; }",
                   "function r6(v) { return Math.round(v * 1e6) / 1e6; }",
@@ -1332,47 +1348,56 @@
                   "    if (!rate) return null;",
                   "    return Math.random() < 0.5 ? 'IGST' : 'CGST + SGST';",
                   "}",
+                  "// Returns floats; null for unused GST slots (not 0.0 or string \"0.000\")",
                   "function splitGst(amount, rate, gstType) {",
                   "    if (!gstType) {",
-                  "        return { igst_rate: null, igst_amount: 0.0, cgst_rate: null, cgst_amount: 0.0, sgst_rate: null, sgst_amount: 0.0, tax_amount: 0.0 };",
+                  "        return { igst_rate: null, igst_amount: null, cgst_rate: null, cgst_amount: null, sgst_rate: null, sgst_amount: null, tax_amount: 0.0 };",
                   "    }",
                   "    if (gstType === 'IGST') {",
-                  "        var igst = r6(amount * rate / 100);",
-                  "        return { igst_rate: rate, igst_amount: igst, cgst_rate: null, cgst_amount: 0.0, sgst_rate: null, sgst_amount: 0.0, tax_amount: igst };",
+                  "        var igst = r3(amount * rate / 100);",
+                  "        return { igst_rate: rate, igst_amount: igst, cgst_rate: null, cgst_amount: null, sgst_rate: null, sgst_amount: null, tax_amount: igst };",
                   "    }",
                   "    var half = rate / 2;",
-                  "    var each = r6(amount * half / 100);",
-                  "    return { igst_rate: null, igst_amount: 0.0, cgst_rate: half, cgst_amount: each, sgst_rate: half, sgst_amount: each, tax_amount: r6(each * 2) };",
+                  "    var each = r3(amount * half / 100);",
+                  "    return { igst_rate: null, igst_amount: null, cgst_rate: half, cgst_amount: each, sgst_rate: half, sgst_amount: each, tax_amount: r3(each * 2) };",
                   "}",
-                  "var roundCredit = r3(rnd(0, 1));",
-                  "var roundDebit = r3(rnd(0, 1));",
                   "var today = new Date().toISOString().slice(0, 10);",
-                  "var isGstSetOff = taxRate > 0;",
-                  "var gstType = isGstSetOff ? gstTypeForRate(taxRate) : null;",
+                  "var gstType = gstTypeForRate(taxRate);",
                   "var lines = qcLines.map(function (qc) {",
-                  "    var labour = r2(rnd(10, 300));",
-                  "    var amountDetail = r6(parseFloat(qc.txn_currency_amount || 0) - labour);",
+                  "    // qc.txn_currency_amount is already post-discount (subtracted when QC was created)",
+                  "    var amountDetail = r6(parseFloat(qc.txn_currency_amount || 0));",
                   "    var gst = splitGst(amountDetail, taxRate, gstType);",
-                  "    var discount = parseFloat(qc.c_d_deduction || 0);",
-                  "    var totalTxn = r6(amountDetail - discount + gst.tax_amount - labour);",
+                  "    // monetary cash discount (informational \u2014 NOT subtracted again; already in amountDetail)",
+                  "    var cashDiscount = parseFloat(qc.c_d_deduction || 0);",
+                  "    // total_txn = amount_detail + gst (no discount subtraction)",
+                  "    var totalTxn = r6(amountDetail + gst.tax_amount);",
+                  "    var netQty = r4(parseFloat(qc.alternate_accepted_qty || 1));",
+                  "    var baseRate = parseFloat(qc.base_rate || 0);",
                   "    return {",
                   "        item_ref_id: qc.item_ref_id,",
                   "        alternate_uom: qc.alternate_uom,",
                   "        hsn_sac_no: qc.hsn_sac_no,",
-                  "        base_rate: parseFloat(qc.base_rate),",
+                  "        uom_conversion: String(parseFloat(qc.uom_conversion || 1)),",
+                  "        empty_bags_txn_amount: parseFloat(qc.empty_bags_txn_amount || 0),",
+                  "        base_rate: baseRate,",
+                  "        alternate_gate_pass_quantity: r4(parseFloat(qc.grn_qty || 0)),",
+                  "        grn_alternate_rejected_qty: 0.0,",
                   "        alternate_qty: r4(parseFloat(qc.grn_qty || 0)),",
+                  "        total_amount: parseFloat(qc.total_amount || 0),",
                   "        no_of_bags: qc.no_of_bags,",
-                  "        uom_conversion: parseFloat(qc.uom_conversion || 1),",
                   "        empty_bag_weight: r4(parseFloat(qc.empty_bag_weight || 0)),",
-                  "        empty_bags_txn_amount: r4(parseFloat(qc.empty_bags_txn_amount || 0)),",
-                  "        alternate_net_qty: r4(parseFloat(qc.alternate_accepted_qty || 0)),",
+                  "        alternate_net_qty: netQty,",
+                  "        uom: qc.uom,",
+                  "        net_of_empty_bag_amount: parseFloat(qc.net_of_empty_bag_amount || 0),",
+                  "        alternate_deduction_weight: r4(parseFloat(qc.deduction_weight || 0)),",
+                  "        alternate_c_d_deduction: r4(parseFloat(qc.c_d_deduction || 0)),",
+                  "        qc_alternate_rejected_qty: 0.0,",
+                  "        alternate_net_purchase_qty: 0.0,",
+                  "        qc_deduction_amount: parseFloat(qc.qc_deduction_amount || 0),",
+                  "        transaction_amount_without_discount: parseFloat(qc.transaction_amount_without_discount || 0),",
                   "        discount_percentage: r4(parseFloat(qc.discount_rate || 0)),",
-                  "        txn_currency_discount_amount_details: qc.c_d_deduction != null ? r6(parseFloat(qc.c_d_deduction)) : null,",
-                  "        txn_currency_amount_detail: amountDetail,",
-                  "        rate: parseFloat(qc.base_rate),",
-                  "        labour_charges: labour,",
-                  "        transport: null,",
-                  "        is_gst_set_off: isGstSetOff,",
+                  "        txn_currency_discount_amount_details: parseFloat(cashDiscount),",
+                  "        txn_currency_amount_detail: parseFloat(amountDetail),",
                   "        tax_rate: taxRate,",
                   "        gst_type: gstType,",
                   "        txn_currency_igst_rate: gst.igst_rate,",
@@ -1381,36 +1406,54 @@
                   "        txn_currency_cgst_amount: gst.cgst_amount,",
                   "        txn_currency_sgst_rate: gst.sgst_rate,",
                   "        txn_currency_sgst_amount: gst.sgst_amount,",
-                  "        txn_currency_tax_amount: gst.tax_amount,",
-                  "        txn_currency_total_txn_amount: totalTxn,",
-                  "        uom: qc.uom,",
-                  "        round_of_credit_amount: roundCredit,",
-                  "        round_of_debit_amount: roundDebit",
+                  "        txn_currency_tax_amount: parseFloat(gst.tax_amount),",
+                  "        labour_charges: 0,",
+                  "        transport: 0,",
+                  "        advance_paid: null,",
+                  "        txn_currency_total_txn_amount: parseFloat(totalTxn),",
+                  "        rate: netQty ? r6(amountDetail / netQty) : baseRate,",
+                  "        isChecked: true",
                   "    };",
                   "});",
                   "var reqBody = JSON.parse(pm.request.body.raw);",
                   "reqBody.transaction_date = today;",
+                  "reqBody.type_of_bags_ref_id = null;",
+                  "reqBody.is_tds_applicable = null;",
+                  "reqBody.transaction_ref_no = '';",
+                  "reqBody.purchase_booking_details = lines;",
                   "reqBody.supplier_ref_id = parseInt(pm.environment.get('pur_supplier_id'));",
+                  "reqBody.qc_summary = {};",
+                  "reqBody.tax_registration_status = 'Registered';",
                   "reqBody.supplier_ref_type = 'Supplier';",
+                  "reqBody.grn_details = [];",
                   "reqBody.qc_ref_id_id = parseInt(pm.environment.get('pur_qc_id'));",
+                  "reqBody.item_quality_parameter_ref_id = null;",
+                  "reqBody.other_charges = { agent_ref_id: null, is_rate_percentage: false, agent_commision: null, agent_commision_amount: null };",
                   "reqBody.grn_ref_id_id = parseInt(pm.environment.get('pur_grn_id'));",
                   "reqBody.po_ref_id_id = parseInt(pm.environment.get('pur_po_id'));",
-                  "var pbt = pm.environment.get('pur_supplier_payment_terms') || pm.environment.get('pur_pb_payment_terms');",
-                  "reqBody.supplier_payment_terms_ref_id = pbt ? parseInt(pbt) : 0;",
-                  "reqBody.base_currency = parseInt(pm.environment.get('pur_base_currency') || 1);",
-                  "reqBody.txn_currency = parseInt(pm.environment.get('pur_txn_currency') || 1);",
-                  "reqBody.parameter1 = parseInt(pm.environment.get('pur_parameter1') || 1);",
-                  "reqBody.parameter2 = parseInt(pm.environment.get('pur_parameter2') || 1);",
-                  "reqBody.parameter5 = parseInt(pm.environment.get('pur_parameter5') || 1);",
+                  "reqBody.so_ref_id = null;",
+                  "reqBody.booking_status = 'Pending';",
                   "reqBody.parameter6 = parseInt(pm.environment.get('pur_parameter6') || 1);",
-                  "reqBody.transportation_charges = r2(rnd(0, 500));",
-                  "reqBody.round_off_credit_amount = roundCredit;",
-                  "reqBody.round_off_debit_amount = roundDebit;",
-                  "reqBody.total_quantity = r6(lines.reduce(function (s, l) { return s + parseFloat(l.alternate_net_qty); }, 0));",
-                  "reqBody.txn_currency_amount = r6(lines.reduce(function (s, l) { return s + parseFloat(l.txn_currency_amount_detail); }, 0));",
-                  "reqBody.txn_currency_total_amount = r6(lines.reduce(function (s, l) { return s + parseFloat(l.txn_currency_total_txn_amount); }, 0));",
-                  "reqBody.txn_currency_discount_amount = r6(lines.reduce(function (s, l) { return s + parseFloat(l.txn_currency_discount_amount_details || 0); }, 0));",
-                  "reqBody.purchase_booking_details = lines;",
+                  "reqBody.parameter2 = parseInt(pm.environment.get('pur_parameter2') || 1);",
+                  "reqBody.posting_status = '';",
+                  "reqBody.parameter1 = parseInt(pm.environment.get('pur_parameter1') || 1);",
+                  "reqBody.parameter5 = parseInt(pm.environment.get('pur_parameter5') || 1);",
+                  "var pbt = pm.environment.get('pur_supplier_payment_terms') || pm.environment.get('pur_pb_payment_terms');",
+                  "reqBody.supplier_payment_terms_ref_id = pbt ? parseInt(pbt) : null;",
+                  "reqBody.txn_currency = parseInt(pm.environment.get('pur_txn_currency') || 1);",
+                  "reqBody.txn_currency_amount = parseFloat(r6(lines.reduce(function (s, l) { return s + l.txn_currency_amount_detail; }, 0)));",
+                  "reqBody.section_ref_id = '0';",
+                  "reqBody.tds_percent_applicable = null;",
+                  "reqBody.tds_amount = null;",
+                  "reqBody.purchase_booking_ref_type = 144;",
+                  "reqBody.txn_currency_total_amount = parseFloat(r6(lines.reduce(function (s, l) { return s + l.txn_currency_total_txn_amount; }, 0)));",
+                  "reqBody.round_off_credit_amount = null;",
+                  "reqBody.round_off_debit_amount = null;",
+                  "reqBody.remark = '';",
+                  "reqBody.base_currency = parseInt(pm.environment.get('pur_base_currency') || 1);",
+                  "reqBody.conversion_rate = '1';",
+                  "reqBody.txn_currency_discount_amount = parseFloat(r6(lines.reduce(function (s, l) { return s + l.txn_currency_discount_amount_details; }, 0)));",
+                  "reqBody.omitted_fields = [];",
                   "pm.request.body.raw = JSON.stringify(reqBody, null, 2);"
                 ]
               }
@@ -1420,11 +1463,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "pm.test(\"PB created (201)\", function () { pm.response.to.have.status(201); });",
                   "var data = pm.response.json();",
                   "var id = data.id || data.entry_id;",
-                  "if (!id) { throw new Error('PB create failed: ' + pm.response.text()); }",
-                  "pm.environment.set('pur_pb_id', id);",
-                  "console.log('PB created: id=' + id + ' ref=' + (data.transaction_ref_no || ''));"
+                  "if (!id) { throw new Error(\"PB create response missing id: \" + pm.response.text()); }",
+                  "pm.environment.set(\"pur_pb_id\", id);",
+                  "console.log(\"PB created: id=\" + id + \" status=\" + data.status);"
                 ]
               }
             }
