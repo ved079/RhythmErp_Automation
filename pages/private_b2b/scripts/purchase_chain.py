@@ -526,11 +526,18 @@ def _pb_items_from_qc(qc_items: List[dict], items: List[dict] = None, ctx=None) 
 
     out = []
     for qc in qc_items:
-        labour = _rand_labour_charges()
-        amount_detail = round(float(qc["txn_currency_amount"] or 0.0) - labour, 6)
+        labour = 0.0
+        amount_detail = round(float(qc["txn_currency_amount"] or 0.0), 6)
         tax_rate = tax_by_item.get(qc["item_ref_id"], 0.0)
-        is_gst_set_off = tax_rate > 0.0
         gst_type = gst_type_for_rate(tax_rate)
+        discount_rate = float(qc.get("discount_rate") or 0.0)
+        # Monetary cash discount: amount_detail from QC is post-discount, so
+        # pre_discount = amount_detail / (1 - discount_rate/100)
+        # cash_discount = pre_discount - amount_detail
+        if discount_rate > 0.0:
+            cash_discount = round(amount_detail * discount_rate / (100.0 - discount_rate), 6)
+        else:
+            cash_discount = 0.0
         out.append(build_pb_line(
             item_ref_id=qc["item_ref_id"],
             hsn_sac_no=qc["hsn_sac_no"],
@@ -542,17 +549,14 @@ def _pb_items_from_qc(qc_items: List[dict], items: List[dict] = None, ctx=None) 
             empty_bag_weight=_q4(qc["empty_bag_weight"]),
             empty_bags_txn_amount=_q4(qc["empty_bags_txn_amount"]),
             alternate_net_qty=_q4(qc["alternate_accepted_qty"]),
-            discount_percentage=_q4(qc["discount_rate"]),
-            discount_amount=qc.get("c_d_deduction"),
+            discount_percentage=_q4(discount_rate),
+            discount_amount=cash_discount,
             amount_detail=amount_detail,
             labour_charges=labour,
-            transport=None,
-            is_gst_set_off=is_gst_set_off,
+            transport=0.0,
             tax_rate=tax_rate,
             gst_type=gst_type,
             uom_conversion=qc.get("uom_conversion", 1.0),
-            round_of_credit_amount=_rand_round_off(),
-            round_of_debit_amount=_rand_round_off(),
         ))
     return out
 
@@ -1788,9 +1792,8 @@ class PurchaseChain:
         overrides = overrides or {}
         supplier_ref_type = ctx.supplier_ref_type if ctx else "Supplier"
         header_extra = {
-            "transportation_charges": _rand_transport_charges(),
-            "round_off_credit_amount": _rand_round_off(),
-            "round_off_debit_amount": _rand_round_off(),
+            "round_off_credit_amount": None,
+            "round_off_debit_amount": None,
         }
         if ctx:
             return build_pb_payload(

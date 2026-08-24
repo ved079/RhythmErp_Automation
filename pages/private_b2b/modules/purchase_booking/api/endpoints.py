@@ -32,3 +32,11 @@ def build_update_url(base_url: str, entry_id) -> str:
 
 def build_schema_url(base_url: str) -> str:
     return f"{base_url.rstrip('/')}{PB_SCHEMA}"
+
+
+# Query params required by the ERP's async SUBMIT pipeline.
+# Without request_method=SUBMIT the server takes a different code path and 500s.
+CREATE_PARAMS = {
+    "screenName": SCREEN_NAME,
+    "request_method": "SUBMIT",
+}
