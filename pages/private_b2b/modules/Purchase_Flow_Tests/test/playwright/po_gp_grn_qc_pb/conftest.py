@@ -15,7 +15,7 @@ sys.path.insert(0, PROJECT_ROOT)
 LOGIN_URL = "https://rhythmerp.algorhythms.in"
 EMAIL     = "kedar@rhythmflows.com"
 PASSWORD  = "Kedar@999999"
-TENANT    = "Agristack Company ltd"
+TENANT    = "Jay Kisan Ltd"
 
 _ITEM_CATEGORY = "Raw Materia"
 

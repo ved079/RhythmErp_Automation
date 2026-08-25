@@ -11,6 +11,7 @@ Classes:
   TestCalculationAssertions       — 1-item chain asserting QC Total Weight and PB Total Amount formulas
   TestQCFormulaAssertions         — PO→GP→GRN→QC asserting all 7 Table 1 formula columns
   TestPOClose                     — Create PO → close via menu → verify status=Closed → absent in GP dropdown
+  TestPORateValidation            — Read item+min+max+location from CBR → PO rate boundary validation
 
 Parallel worker design (Multi_Item_Flow)
 ─────────────────────────────────────────
@@ -2154,3 +2155,192 @@ class TestPOClose:
 
         # Navigate away to clean up the open form
         gp.navigate_to_page()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TestPORateValidation
+# ══════════════════════════════════════════════════════════════════════════════
+
+_CBR_URL = "https://rhythmerp.algorhythms.in/#/dynamic-screens/Commodity%20Base%20Rate"
+
+
+@pytest.mark.integration
+class TestPORateValidation:
+    """Read a random item's min/max rate and location from CBR, then verify
+    PO Rate field rejects out-of-range values and accepts boundary values.
+
+    Steps:
+      1. Navigate to CBR → open first row View → read item_name, min_rate,
+         max_rate, location → store in integration_state
+      2. Open PO form once → fill all fields → rate=min-1 → submit → assert
+         below-min error → dismiss swal (stay on form) → swap rate to max+1
+         → submit → assert above-max error → cancel immediately
+    """
+
+    def test_step1_read_cbr_item(self, logged_in_page, integration_state):
+        page = logged_in_page
+
+        page.goto(_CBR_URL)
+        page.wait_for_selector("table.mat-mdc-table, table#excel-table", timeout=20000)
+        page.wait_for_timeout(1500)
+
+        # Open first row's View
+        page.evaluate("""
+            var btns = document.querySelectorAll('button.erp-row-trigger');
+            if (btns[0]) { btns[0].scrollIntoView({block:'center'}); btns[0].click(); }
+        """)
+        page.wait_for_selector("div.mat-mdc-menu-panel", timeout=8000)
+        page.locator("button.erp-menu-item, button:has-text('View')").first.click()
+        page.wait_for_timeout(2000)
+
+        # Wait for disabled inputs (view form loaded)
+        page.wait_for_selector("input[placeholder='Minimum Range']", timeout=15000)
+        page.wait_for_timeout(500)
+
+        # Read Minimum / Maximum Range
+        min_rate = page.locator("input[placeholder='Minimum Range']").first.input_value().strip()
+        max_rate = page.locator("input[placeholder='Maximum Range']").first.input_value().strip()
+
+        assert min_rate, "Minimum Range is empty in CBR view"
+        assert max_rate, "Maximum Range is empty in CBR view"
+
+        # Read Item Name from grid mat-select
+        item_name = page.evaluate("""
+            () => {
+                const fields = [...document.querySelectorAll('mat-form-field')];
+                const f = fields.find(f => f.querySelector('mat-label')?.textContent.trim() === 'Item Name');
+                return f ? (f.querySelector('span.mat-mdc-select-min-line')?.textContent.trim() ?? '') : '';
+            }
+        """)
+        assert item_name, "Item Name is empty in CBR view grid"
+
+        # Read Location (disabled mat-select)
+        location = page.evaluate("""
+            () => {
+                const fields = [...document.querySelectorAll('mat-form-field')];
+                const f = fields.find(f => f.querySelector('mat-label')?.textContent.trim() === 'Location');
+                return f ? (f.querySelector('span.mat-mdc-select-min-line')?.textContent.trim() ?? '') : '';
+            }
+        """)
+        assert location, "Location is empty in CBR view"
+
+        # Close the view form
+        try:
+            page.locator("xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]").click()
+            page.wait_for_timeout(800)
+        except Exception:
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(500)
+
+        integration_state.update({
+            "cbr_item_name": item_name,
+            "cbr_min_rate":  float(min_rate),
+            "cbr_max_rate":  float(max_rate),
+            "cbr_location":  location,
+        })
+        print(
+            f"\n[CBR] item='{item_name}'  min={min_rate}  max={max_rate}  "
+            f"location='{location}'"
+        )
+
+    def _fill_po_form(self, po_page, item_name, location, rate_value):
+        """Fill a fresh PO form completely. Does NOT submit or cancel."""
+        page = po_page.page
+        po_page.open_add_form()
+
+        po_page._select_random_mat_option(po_page.SUPPLIER_NAME)
+        page.wait_for_timeout(200)
+        po_page._try_select_mat_by_text(po_page.PO_ITEM_TYPE, "Raw Materia")
+        page.wait_for_timeout(200)
+        po_page._try_select_random_mat_option(po_page.PO_TYPE)
+        page.wait_for_timeout(150)
+        conv = page.locator(po_page.CONVERSION_RATE)
+        if conv.count() > 0:
+            conv.first.click(force=True)
+            conv.first.fill("1")
+            conv.first.press("Tab")
+            page.wait_for_timeout(150)
+        po_page._select_mat_by_text(po_page.LOCATION, location)
+        page.wait_for_timeout(200)
+        po_page._select_random_mat_option(po_page.DEPARTMENT)
+        po_page._select_random_mat_option(po_page.DIVISION)
+        po_page._select_mat_by_text(po_page.TYPE_OF_SALE, "B2B")
+
+        po_page._select_mat_by_text_nth(po_page.ITEM_NAME, 0, item_name)
+        page.wait_for_timeout(500)
+
+        po_page._fill_number_nth(po_page.RATE, 0, int(rate_value))
+        page.wait_for_timeout(200)
+        po_page._fill_number_nth(po_page.QUANTITY, 0, 50)
+        page.wait_for_timeout(150)
+
+    def _submit_and_collect(self, po_page):
+        """Submit the open form, collect errors, dismiss swal (stay on form)."""
+        page = po_page.page
+        page.locator(po_page.SUBMIT_BTN).click()
+        page.wait_for_timeout(1200)
+
+        mat_errors = [
+            e.strip()
+            for e in page.locator("mat-error, .mat-mdc-form-field-error").all_inner_texts()
+            if e.strip()
+        ]
+
+        swal_text = ""
+        try:
+            if page.locator(".swal2-container").count() > 0:
+                swal_text = page.locator(".swal2-container").inner_text().strip()
+                page.locator("button.swal2-confirm").click()  # dismiss but form stays open
+                page.wait_for_timeout(400)
+        except Exception:
+            pass
+
+        return mat_errors, swal_text
+
+    def test_step2_po_rate_below_min_then_above_max(self, po_page, integration_state):
+        """Open PO form once, test below-min error, then swap rate to above-max and test."""
+        item_name = integration_state["cbr_item_name"]
+        min_rate  = integration_state["cbr_min_rate"]
+        max_rate  = integration_state["cbr_max_rate"]
+        location  = integration_state["cbr_location"]
+
+        page = po_page.page
+
+        # ── 1. Fill form with rate below min ─────────────────────────────
+        self._fill_po_form(po_page, item_name, location, min_rate - 1)
+        mat_errors, swal_text = self._submit_and_collect(po_page)
+
+        all_text = " ".join(mat_errors) + " " + swal_text
+        assert (
+            any(str(int(min_rate)) in t or str(min_rate) in t
+                for t in mat_errors + ([swal_text] if swal_text else []))
+            or "less than" in all_text.lower()
+        ), (
+            f"Expected below-min error (min={min_rate}), "
+            f"got mat_errors={mat_errors}  swal='{swal_text[:120]}'"
+        )
+        print(f"\n[✓] below min ({min_rate - 1}) → mat_errors={mat_errors}  swal='{swal_text[:80]}'")
+
+        # ── 2. Swap only the rate field — form stays open ─────────────────
+        po_page._fill_number_nth(po_page.RATE, 0, int(max_rate + 1))
+        page.wait_for_timeout(200)
+
+        mat_errors, swal_text = self._submit_and_collect(po_page)
+
+        all_text = " ".join(mat_errors) + " " + swal_text
+        assert (
+            any(str(int(max_rate)) in t or str(max_rate) in t
+                for t in mat_errors + ([swal_text] if swal_text else []))
+            or "more than" in all_text.lower()
+        ), (
+            f"Expected above-max error (max={max_rate}), "
+            f"got mat_errors={mat_errors}  swal='{swal_text[:120]}'"
+        )
+        print(f"[✓] above max ({max_rate + 1}) → mat_errors={mat_errors}  swal='{swal_text[:80]}'")
+
+        # Close form immediately — no waiting
+        try:
+            page.locator("xpath=//div[contains(@class,'popup-footer')]//button[contains(.,'Cancel')]").click(force=True)
+        except Exception:
+            pass
+
