@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { CheckCircle2, XCircle, Play, Key, RefreshCw, Loader2, X, AlertTriangle, Wand2, Search, Star } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
-import { startPurchaseChain, fetchMasterData, fetchItemCategories, fetchItemsWithCqp, fillCqpItems, type SSEEvent, type MasterDataItem, type ItemCategory } from '@/lib/api'
+import { startPurchaseChain, fetchMasterData, fetchItemCategories, fetchItemsWithCqp, fillCqpItems, verifyJV, fetchPBList, fetchPBItems, type SSEEvent, type MasterDataItem, type ItemCategory, type JVVerifyStep, type PBListItem, type PBItemLine } from '@/lib/api'
 import { notifySuccess } from '@/lib/notify'
 
 interface Props {
@@ -17,6 +17,7 @@ interface Props {
   onNeedsToken: () => void
   onClearToken: () => void
   userId?: string
+  showJVCheck?: boolean
 }
 
 function formatTime(d: Date): string {
@@ -202,7 +203,7 @@ function poolFor(
   return pool
 }
 
-export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onClearToken, userId }: Props) {
+export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onClearToken, userId, showJVCheck = false }: Props) {
   const [count, setCount] = useState(1)
   const [chainSuppliers, setChainSuppliers] = useState<(number | null)[]>([])
   const [sameSupplier, setSameSupplier] = useState(false)
@@ -246,6 +247,20 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const startTimeRef = useRef<number>(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [elapsed, setElapsed] = useState(0)
+  // JV check mode state
+  const [pbRefNo, setPbRefNo] = useState('')
+  const [selectedPB, setSelectedPB] = useState<PBListItem | null>(null)
+  const [jvSteps, setJvSteps] = useState<JVVerifyStep[]>([])
+  const [verifying, setVerifying] = useState(false)
+  const [jvError, setJvError] = useState('')
+  const [pbList, setPbList] = useState<PBListItem[]>([])
+  const [pbListLoading, setPbListLoading] = useState(false)
+  const [pbListError, setPbListError] = useState('')
+  const [pbSearch, setPbSearch] = useState('')
+  const [pbListOpen, setPbListOpen] = useState(true)
+  const [pbItems, setPbItems] = useState<PBItemLine[]>([])
+  const [pbItemsLoading, setPbItemsLoading] = useState(false)
+
   // On mount (or when userId changes): restore this user's starred flow from localStorage.
   useEffect(() => {
     const key = userId ? `pc_starred_flow:${userId}` : 'pc_starred_flow'
@@ -438,6 +453,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       qcDiscount,
       flow === 'so' && enabledDocs.has('SO') ? customer : null,
       isRateWeightDeduction,
+      showJVCheck,
     )
   }, [count, supplier, numItems, itemIds, erpToken, localToken, localTenantId, erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow, multiGatePass, gpCount, chainSuppliers, qcDiscount, customer, enabledDocs, isRateWeightDeduction])
 
@@ -532,6 +548,452 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     const width = activeMenu.pos.width
     return { top, left, width, maxHeight }
   }, [activeMenu])
+
+  const loadPBList = useCallback(async () => {
+    const token = erpToken || localToken
+    const tenant = localTenantId || erpTenantId
+    if (!token || !tenant) return
+    setPbListLoading(true)
+    setPbListError('')
+    try {
+      const list = await fetchPBList(token, tenant)
+      setPbList(list)
+    } catch (err) {
+      setPbListError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPbListLoading(false)
+    }
+  }, [erpToken, localToken, localTenantId, erpTenantId])
+
+  const handleVerify = async (refOverride?: string) => {
+    const token = erpToken || localToken
+    const tenant = localTenantId || erpTenantId
+    const ref = (refOverride ?? pbRefNo).trim()
+    if (!token || !tenant || !ref) return
+    setVerifying(true)
+    setJvSteps([])
+    setJvError('')
+    try {
+      const res = await verifyJV(token, tenant, ref)
+      setJvSteps(res.steps)
+    } catch (err) {
+      setJvError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  if (showJVCheck) {
+    const token = erpToken || localToken
+    const tenant = localTenantId || erpTenantId
+    const canVerify = !!token && !!tenant && !!pbRefNo.trim() && !verifying
+    return (
+      <div className="relative flex flex-col h-full min-h-0 gap-4">
+        <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col min-h-0 flex-1 overflow-hidden">
+          {/* Header */}
+          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 flex items-center gap-2">
+            <Search className="size-4 text-[#3F51B5] dark:text-[#7986CB]" />
+            <span className="text-[13px] font-semibold text-gray-800 dark:text-gray-100">JV Verification</span>
+            <span className="text-[11px] text-gray-400 dark:text-gray-500">— look up a Purchase Booking's Journal Voucher</span>
+          </div>
+
+          <div ref={scrollContainerRef} className="p-4 overflow-y-auto flex-1 min-h-0 space-y-4">
+            {/* Token panel — same as full purchase flow */}
+            {showTokenInput && (
+              <div ref={tokenSectionRef} className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+                <Label className="text-[11px] text-orange-600 dark:text-orange-400 mb-1.5 block font-medium">ERP Credentials</Label>
+                <div className="flex items-center gap-2 mb-2">
+                  <Input
+                    type="password"
+                    value={localToken}
+                    onChange={(e) => setLocalToken(e.target.value)}
+                    placeholder="Paste your Bearer token here..."
+                    className={`h-9 text-[12px] flex-1 ${
+                      localToken && (localToken.startsWith('Bearer ') ? localToken.slice(7) : localToken).startsWith('eyJ') && localToken.split('.').length === 3 && localToken.length > 100
+                        ? 'border-green-400'
+                        : localToken ? 'border-red-400' : ''
+                    }`}
+                  />
+                </div>
+                {(() => {
+                  if (!localToken) return null
+                  const t = localToken.startsWith('Bearer ') ? localToken.slice(7) : localToken
+                  const isValid = t.startsWith('eyJ') && t.split('.').length === 3 && t.length > 100
+                  if (isValid) return (
+                    <p className="text-[11px] text-green-600 dark:text-green-400 flex items-center gap-1 mb-2">
+                      <span className="inline-block size-2 rounded-full bg-green-500" />
+                      Token looks valid
+                    </p>
+                  )
+                  return (
+                    <div ref={tokenErrorRef} className="mb-2 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-2.5 space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <AlertTriangle className="size-3 text-red-500 shrink-0" />
+                        <span className="text-[11px] font-semibold text-red-600 dark:text-red-400">
+                          {!t.startsWith('eyJ') ? 'Token must start with eyJ…' : 'Token format looks incorrect'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-red-500 dark:text-red-400">
+                        Copy from DevTools → Network → any request → Authorization header. Remove the "Bearer " prefix.
+                      </p>
+                    </div>
+                  )
+                })()}
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {[
+                    { id: '795', name: 'Jalpan Builders' },
+                    { id: '666', name: 'Jay Kisan Ltd' },
+                    { id: '686', name: 'Agristack Company' },
+                    { id: '751', name: 'Tech Neo' },
+                  ].map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => setLocalTenantId(t.id)}
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors cursor-pointer ${
+                        localTenantId === t.id
+                          ? 'bg-orange-500 text-white border-orange-500'
+                          : 'bg-white dark:bg-gray-800 text-orange-600 dark:text-orange-400 border-orange-300 dark:border-orange-700 hover:bg-orange-50 dark:hover:bg-orange-900/30'
+                      }`}
+                    >
+                      {t.id} · {t.name}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="text"
+                    value={localTenantId}
+                    onChange={(e) => setLocalTenantId(e.target.value)}
+                    placeholder="Tenant ID (e.g. 708, 711)"
+                    className="h-9 text-[12px] w-48"
+                  />
+                  <Button
+                    onClick={() => { setShowTokenInput(false); loadPBList() }}
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 text-[12px] cursor-pointer"
+                  >
+                    Done
+                  </Button>
+                </div>
+                <p className="text-[11px] text-orange-500 dark:text-orange-400 mt-1.5">Credentials stay in your browser session. Clear below to reset.</p>
+              </div>
+            )}
+
+            {/* PB list — only shown when token panel is closed */}
+            {!showTokenInput && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-[11px] text-gray-700 dark:text-gray-300">Select Purchase Booking</Label>
+                  <button
+                    onClick={loadPBList}
+                    disabled={pbListLoading}
+                    className="text-[11px] text-[#3F51B5] dark:text-[#7986CB] flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`size-3 ${pbListLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </button>
+                </div>
+
+                {pbListError && (
+                  <p className="text-[11px] text-red-500 dark:text-red-400 mb-2">{pbListError}</p>
+                )}
+
+                {pbListLoading && pbList.length === 0 && (
+                  <div className="flex items-center gap-2 text-[12px] text-gray-500 dark:text-gray-400 py-4">
+                    <Loader2 className="size-4 animate-spin" />
+                    Fetching purchase bookings…
+                  </div>
+                )}
+
+                {!pbListLoading && pbList.length === 0 && !pbListError && (
+                  <p className="text-[12px] text-gray-400 dark:text-gray-500 py-2">
+                    No purchase bookings found. Click Refresh or check your token.
+                  </p>
+                )}
+
+                {pbList.length > 0 && pbListOpen && (
+                  <>
+                    <Input
+                      value={pbSearch}
+                      onChange={(e) => setPbSearch(e.target.value)}
+                      placeholder="Search by ref no or supplier…"
+                      className="h-8 text-[12px] mb-2"
+                    />
+                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                      {pbList
+                        .filter(pb => {
+                          const q = pbSearch.toLowerCase()
+                          return !q || pb.ref_no.toLowerCase().includes(q) || pb.supplier.toLowerCase().includes(q)
+                        })
+                        .map((pb) => (
+                          <button
+                            key={pb.ref_no}
+                            onClick={() => {
+                              setPbRefNo(pb.ref_no); setSelectedPB(pb); setPbListOpen(false); handleVerify(pb.ref_no)
+                              if (pb.id) {
+                                setPbItemsLoading(true); setPbItems([])
+                                fetchPBItems(localToken || erpToken, localTenantId || erpTenantId, pb.id)
+                                  .then(items => setPbItems(items))
+                                  .catch(() => {})
+                                  .finally(() => setPbItemsLoading(false))
+                              }
+                            }}
+                            disabled={verifying}
+                            className="w-full text-left px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10 transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{pb.ref_no}</span>
+                              {pb.amount && (
+                                <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0 font-medium">
+                                  ₹{Number(pb.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                </span>
+                              )}
+                            </div>
+                            {pb.supplier && (
+                              <div className="mt-0.5 flex items-center justify-between gap-2">
+                                <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate font-medium">{pb.supplier}</span>
+                                {pb.date && <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{pb.date}</span>}
+                              </div>
+                            )}
+                            {(pb.division || pb.department || pb.type_of_sale || pb.location) && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {[pb.division, pb.department, pb.type_of_sale, pb.location].filter(Boolean).map((tag) => (
+                                  <span key={tag} className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </button>
+                        ))
+                      }
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Results view — shown after a PB is selected */}
+            {pbRefNo && !pbListOpen && (() => {
+              const passed = jvSteps.length > 0 && jvSteps.every(s => s.ok)
+              const failed = jvSteps.length > 0 && !passed
+              const foundStep = jvSteps.find(s => s.n === 1)
+              const fieldsStep = jvSteps.find(s => s.fields)
+              const balanceStep = jvSteps.find(s => s.detail && !s.fields)
+
+              // Build comparison rows from PB list data vs JV fields step
+              const jvCommodity = fieldsStep?.fields?.find(f => f.field === 'Commodity')?.value || '—'
+              const uniqueItems = [...new Set(pbItems.map(i => i.name))]
+              // jvCommodity may be comma-joined list for multi-item PBs
+              const jvCommodityList = jvCommodity !== '—' ? jvCommodity.split(',').map(s => s.trim().toLowerCase()) : []
+              const commodityRows: { label: string; pb: string; jv: string }[] =
+                pbItems.length > 0
+                  ? uniqueItems.map((name, idx) => {
+                      const nameL = name.trim().toLowerCase()
+                      const matchedJv = jvCommodityList.find(c => c === nameL || c.includes(nameL) || nameL.includes(c))
+                      return { label: idx === 0 ? 'Commodity' : '', pb: name, jv: matchedJv ? name : '—' }
+                    })
+                  : [{ label: 'Commodity', pb: pbItemsLoading ? 'Loading…' : '—', jv: jvCommodity }]
+
+              const compRows = selectedPB && fieldsStep ? [
+                { label: 'Division',     pb: selectedPB.division    || '—', jv: fieldsStep.fields?.find(f => f.field === 'Division')?.value    || '—' },
+                { label: 'Department',   pb: selectedPB.department  || '—', jv: fieldsStep.fields?.find(f => f.field === 'Department')?.value  || '—' },
+                { label: 'Type of Sale', pb: selectedPB.type_of_sale || '—', jv: fieldsStep.fields?.find(f => f.field === 'Type of Sale')?.value || '—' },
+                { label: 'Location',     pb: selectedPB.location    || '—', jv: fieldsStep.fields?.find(f => f.field === 'Location')?.value    || '—' },
+                ...commodityRows,
+              ] : null
+
+              return (
+                <div className="space-y-3">
+                  {/* ── Report header ── */}
+                  <div className={`rounded-xl border overflow-hidden shadow-sm ${
+                    verifying ? 'border-gray-200 dark:border-gray-700'
+                    : passed   ? 'border-emerald-200 dark:border-emerald-800/60'
+                    : failed   ? 'border-red-200 dark:border-red-800/60'
+                    : 'border-gray-200 dark:border-gray-700'
+                  }`}>
+                    <div className={`px-4 py-3 flex items-center justify-between ${
+                      passed ? 'bg-emerald-50 dark:bg-emerald-900/20'
+                      : failed ? 'bg-red-50 dark:bg-red-900/20'
+                      : 'bg-gray-50 dark:bg-gray-800'
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        {verifying
+                          ? <Loader2 className="size-5 text-[#3F51B5] animate-spin shrink-0" />
+                          : passed ? <CheckCircle2 className="size-5 text-emerald-500 shrink-0" />
+                          : failed ? <XCircle className="size-5 text-red-500 shrink-0" />
+                          : null
+                        }
+                        <div>
+                          <p className="text-[10px] font-medium uppercase tracking-widest text-gray-400 dark:text-gray-500 leading-none mb-1">JV Verification Report</p>
+                          <p className="text-[14px] font-mono font-bold text-gray-900 dark:text-gray-50 leading-none">{pbRefNo}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {!verifying && jvSteps.length > 0 && (
+                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide ${
+                            passed
+                              ? 'bg-emerald-500 text-white'
+                              : 'bg-red-500 text-white'
+                          }`}>
+                            {passed ? '✓ PASSED' : '✕ FAILED'}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => { setPbListOpen(true); setJvSteps([]); setJvError(''); setPbRefNo(''); setSelectedPB(null); setPbItems([]) }}
+                          className="text-[11px] text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] transition-colors cursor-pointer"
+                        >
+                          ← Change
+                        </button>
+                      </div>
+                    </div>
+
+                    {selectedPB && (
+                      <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-700/60 flex flex-wrap gap-x-5 gap-y-1 bg-white dark:bg-gray-800/40">
+                        {selectedPB.supplier && <span className="text-[12px] font-medium text-gray-700 dark:text-gray-200">{selectedPB.supplier}</span>}
+                        {selectedPB.amount && <span className="text-[12px] text-gray-400 dark:text-gray-500">₹{Number(selectedPB.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
+                        {selectedPB.date && <span className="text-[12px] text-gray-400 dark:text-gray-500">{selectedPB.date}</span>}
+                      </div>
+                    )}
+
+                    {verifying && (
+                      <div className="flex items-center gap-2 text-[12px] text-gray-400 dark:text-gray-500 py-10 justify-center">
+                        <Loader2 className="size-4 animate-spin" />
+                        Searching JV report pages…
+                      </div>
+                    )}
+                    {jvError && (
+                      <div className="px-4 py-3 text-[12px] text-red-600 dark:text-red-400">{jvError}</div>
+                    )}
+                  </div>
+
+                  {/* ── JV found status ── */}
+                  {foundStep && (
+                    <div className={`rounded-xl border px-4 py-3 flex items-center gap-3 ${
+                      foundStep.ok
+                        ? 'border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-900/10'
+                        : 'border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-900/10'
+                    }`}>
+                      {foundStep.ok
+                        ? <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
+                        : <XCircle className="size-4 text-red-500 shrink-0" />
+                      }
+                      <div>
+                        <p className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">Journal Voucher</p>
+                        <p className={`text-[12px] ${foundStep.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-600 dark:text-red-400'}`}>
+                          {foundStep.ok ? 'Entry found in JV report' : `Not found — ${foundStep.detail ?? ''}`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Balance check ── */}
+                  {balanceStep && (
+                    <div className={`rounded-xl border overflow-hidden ${
+                      balanceStep.ok
+                        ? 'border-emerald-200 dark:border-emerald-800/60'
+                        : 'border-red-200 dark:border-red-800/60'
+                    }`}>
+                      <div className={`px-4 py-2 flex items-center gap-2 border-b text-[11px] font-semibold uppercase tracking-wider ${
+                        balanceStep.ok
+                          ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-400'
+                          : 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800/40 text-red-600 dark:text-red-400'
+                      }`}>
+                        {balanceStep.ok ? <CheckCircle2 className="size-3.5" /> : <XCircle className="size-3.5" />}
+                        Balance Check
+                      </div>
+                      <div className="px-4 py-3 bg-white dark:bg-gray-800/40">
+                        {(() => {
+                          const m = balanceStep.detail?.match(/DR\s*=\s*([\d,]+\.?\d*)\s+\|CR\|\s*=\s*([\d,]+\.?\d*)/)
+                          if (m) return (
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1 text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800/40">
+                                <p className="text-[10px] uppercase tracking-wider text-blue-400 dark:text-blue-500 mb-1">Debit (DR)</p>
+                                <p className="text-[15px] font-bold font-mono text-blue-700 dark:text-blue-300">₹{m[1]}</p>
+                              </div>
+                              <span className={`text-[18px] font-bold shrink-0 ${balanceStep.ok ? 'text-emerald-500' : 'text-red-500'}`}>=</span>
+                              <div className="flex-1 text-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-100 dark:border-purple-800/40">
+                                <p className="text-[10px] uppercase tracking-wider text-purple-400 dark:text-purple-500 mb-1">|Credit| (CR)</p>
+                                <p className="text-[15px] font-bold font-mono text-purple-700 dark:text-purple-300">₹{m[2]}</p>
+                              </div>
+                            </div>
+                          )
+                          return <p className="text-[12px] font-mono text-gray-600 dark:text-gray-300">{balanceStep.detail}</p>
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Field comparison table ── */}
+                  {fieldsStep && (
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                      <div className="px-4 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Accounting Field Cross-check</p>
+                      </div>
+                      {/* Column headers */}
+                      <div className="grid grid-cols-[1fr_1fr_1fr_auto] px-4 py-2 bg-gray-50/60 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700/60">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Field</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">PB</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">JV</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 text-center w-10">Match</span>
+                      </div>
+                      <div className="divide-y divide-gray-100 dark:divide-gray-700/60 bg-white dark:bg-gray-800/30">
+                        {(compRows ?? fieldsStep.fields?.map(f => ({ label: f.field, pb: '—', jv: f.value })) ?? []).map((row, ri) => {
+                          const match = row.pb !== '—' && row.jv !== '—' && row.pb.trim().toLowerCase() === row.jv.trim().toLowerCase()
+                          const unknown = row.pb === '—' || row.jv === '—'
+                          return (
+                            <div key={ri} className="grid grid-cols-[1fr_1fr_1fr_auto] px-4 py-2.5 items-center gap-2">
+                              <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">{row.label}</span>
+                              <span className={`text-[12px] font-medium ${row.pb === '—' ? 'text-gray-300 dark:text-gray-600' : 'text-gray-800 dark:text-gray-100'}`}>{row.pb}</span>
+                              <span className={`text-[12px] font-medium ${row.jv === '—' ? 'text-gray-300 dark:text-gray-600' : 'text-gray-800 dark:text-gray-100'}`}>{row.jv}</span>
+                              <div className="w-10 flex justify-center">
+                                {unknown ? (
+                                  <span className="text-[10px] text-gray-300 dark:text-gray-600">—</span>
+                                ) : match ? (
+                                  <CheckCircle2 className="size-3.5 text-emerald-500" />
+                                ) : (
+                                  <XCircle className="size-3.5 text-red-500" />
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+          </div>
+
+          {/* Bottom bar */}
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700 shrink-0 flex items-center gap-2">
+            {!(erpToken || localToken) ? (
+              <Button
+                onClick={() => setShowTokenInput(true)}
+                variant="outline"
+                size="sm"
+                className="h-8 text-[12px] gap-1.5 cursor-pointer"
+              >
+                <Key className="size-3" />
+                Set Token
+              </Button>
+            ) : (
+              <button
+                onClick={() => { setLocalToken(''); setLocalTenantId(''); setJvSteps([]); setJvError(''); setPbRefNo('') }}
+                className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 hover:text-red-500 dark:hover:text-red-400 transition-colors cursor-pointer"
+                title="Clear token"
+              >
+                <CheckCircle2 className="size-3" />
+                Token set
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="relative flex flex-col h-full min-h-0 gap-4">

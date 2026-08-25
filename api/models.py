@@ -15,6 +15,17 @@ class FetchFkRequest(BaseModel):
     screen: str
 
 
+class JVVerifyRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str
+    pb_ref_no: str
+
+
+class PBListRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str
+
+
 class RunStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
@@ -203,6 +214,7 @@ class PurchaseChainRequest(BaseModel):
     qc_discount: bool = True             # False = skip discount in QC (discount_rate=0)
     customer_ref_id: Optional[int] = None  # Sales Order customer FK (None = auto-pick first customer)
     is_rate_weight_deduction: bool = False  # True = QC weight-based deduction (deduction_weight × base_rate); False = rate-based ((net_of_empty_bag) × deduction_percent / 100)
+    with_jv_check: bool = False            # True = verify JV report DR==|CR| after PB creation
 
 
 # --- Concurrency Testing ---

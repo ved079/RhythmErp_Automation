@@ -187,6 +187,37 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
                 message=f"Chain [{i + 1}] OK — {' → '.join(parts)} ({elapsed:.1f}s)",
                 timestamp=datetime.now(timezone.utc),
             ))
+
+            # ── JV check (optional) ────────────────────────────────────────
+            if request.with_jv_check and pb.get("ref") and result.get("ctx"):
+                yield _sse_event(LogEvent(
+                    type="log",
+                    message=f"JV check — verifying accounting entries for {pb['ref']}…",
+                    timestamp=datetime.now(timezone.utc),
+                ))
+                try:
+                    from pages.private_b2b.modules.journal_voucher.utils.api_jv_utils import JVAPIUtils
+                    jv_ctx = result["ctx"]
+                    jv_result = JVAPIUtils(chain.client).verify_pb(
+                        pb_ref_no=pb["ref"],
+                        division_id=jv_ctx.parameter1,
+                        department_id=jv_ctx.parameter2,
+                        type_of_sale_id=jv_ctx.parameter5,
+                        location_id=jv_ctx.parameter6,
+                    )
+                    jv_status = "✓ BALANCED" if jv_result.ok() else ("✕ UNBALANCED" if jv_result.found else "✕ NOT FOUND")
+                    yield _sse_event(LogEvent(
+                        type="log" if jv_result.ok() else "error",
+                        message=f"JV [{i + 1}] {jv_status} — {jv_result.summary()}",
+                        timestamp=datetime.now(timezone.utc),
+                    ))
+                except Exception as jv_err:
+                    yield _sse_event(LogEvent(
+                        type="error",
+                        message=f"JV check error: {jv_err}",
+                        timestamp=datetime.now(timezone.utc),
+                    ))
+
             created += 1
         except Exception as e:
             elapsed = time.time() - chain_start

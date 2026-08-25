@@ -113,9 +113,11 @@ class ChainContextDiscoverer:
         """Run all discovery calls and return a fully-populated ChainContext."""
         log.info("[Discovery] Discovering tenant FK IDs from ERP API...")
 
+        accounting_item_ids = self._discover_accounting_item_ids()
+
         ctx = ChainContext(
             supplier_ref_id    = self._list_first_id("Supplier",                "supplier_ref_id"),
-            item_ref_id        = self._schema_or_list("Item Master",             _PO_SCREEN, "item_ref_id"),
+            item_ref_id        = self._item_ref_id_filtered(accounting_item_ids),
             item_type_ref_id   = self._dropdown_po_item_type(_PO_SCREEN,  "po_item_type",     "item_type_ref_id", item_category_id),
             hsn_sac_no         = self._schema_or_list("HSN SAC",                 _PO_SCREEN, "hsn_sac_no"),
             alternate_uom      = self._dropdown(_PO_SCREEN,  "alternate_uom",    "alternate_uom"),
@@ -270,6 +272,69 @@ class ChainContextDiscoverer:
         except Exception as e:
             log.warning(f"[Discovery] {screen_name}.{field_key}: {e}")
         return None
+
+    def _discover_accounting_item_ids(self) -> set:
+        """
+        Fetch the items allowed by the Accounting Definition's Item Name filter.
+        Endpoint: GET /core/dynamic-data/get_dynamic_details_data/
+                  ?tbl_name=transaction_type_details&field_name=description
+                  &parent_id=5&field_value=Item%20Name&flag=1
+        Returns a set of int item IDs, or empty set on failure (no filtering).
+        """
+        try:
+            resp = self.client.session.get(
+                f"{self.client.BASE_URL}/core/dynamic-data/get_dynamic_details_data/",
+                params={
+                    "tbl_name": "transaction_type_details",
+                    "field_name": "description",
+                    "parent_id": "5",
+                    "field_value": "Item Name",
+                    "flag": "1",
+                },
+                timeout=30,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data and isinstance(data, list):
+                    det = data[0].get("det_query_result") or []
+                    ids = {int(r["id"]) for r in det if r.get("id") is not None}
+                    log.info(f"[Discovery] Accounting definition item IDs: {sorted(ids)}")
+                    return ids
+        except Exception as e:
+            log.warning(f"[Discovery] Could not fetch accounting item IDs: {e}")
+        return set()
+
+    def _item_ref_id_filtered(self, allowed_ids: set) -> int:
+        """
+        Return the first Item Master ID that is in *allowed_ids*.
+        Falls back to _schema_or_list behaviour (first available) when
+        allowed_ids is empty or nothing matches.
+        """
+        try:
+            resp = self.client.list_entries("Item Master", page=1, page_size=50)
+            if resp:
+                items = resp.get("screenmatlistingdata_set") or []
+                if allowed_ids:
+                    for it in items:
+                        iid = it.get("id")
+                        if iid is not None and int(iid) in allowed_ids:
+                            log.info(
+                                f"[Discovery] item_ref_id (accounting-filtered) "
+                                f"→ {iid} ({it.get('name', '')})"
+                            )
+                            return int(iid)
+                    log.warning(
+                        "[Discovery] No Item Master entry matched accounting definition IDs — "
+                        "falling back to first available"
+                    )
+                if items:
+                    first_id = items[0].get("id")
+                    if first_id is not None:
+                        log.info(f"[Discovery] item_ref_id (first) → {first_id} ({items[0].get('name', '')})")
+                        return int(first_id)
+        except Exception as e:
+            log.warning(f"[Discovery] item_ref_id_filtered error: {e}")
+        return self._schema_or_list("Item Master", _PO_SCREEN, "item_ref_id")
 
     def _discover_supplier_ref_type(self) -> str:
         """
