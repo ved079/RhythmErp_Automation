@@ -13,6 +13,7 @@ Endpoints:
   - GET  /api/test-cases    — Read test case definitions
   - POST /api/batch-create  — Batch data creation (SSE stream)
   - POST /api/purchase-chain — Create linked PO->GP->GRN->QC chain (SSE stream)
+  - POST /api/jv-verify      — Verify a Purchase Booking's Journal Voucher entry
   - GET  /api/master-data — List master data entries (Supplier, Item Master, etc.)
   - GET  /api/batch-create/{run_id}/export — Download Excel of batch results
   - GET  /api/health        — Health check
@@ -30,7 +31,7 @@ from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from api.models import (
     ModuleListResponse, CreateRunRequest, StartRunRequest, BatchCreateRequest,
     PurchaseChainRequest, ConcurrencyDispatchRequest, CbrTokenRequest, CbrCreateLocationsRequest,
-    FetchFkRequest,
+    FetchFkRequest, JVVerifyRequest, PBListRequest,
 )
 from api.concurrency_dispatch import dispatch_concurrent, ping_agents
 from api.test_discovery import discover_all_modules
@@ -446,6 +447,175 @@ def purchase_chain_endpoint(request: PurchaseChainRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
+
+
+# ================================================================
+# PB LIST ENDPOINT
+# ================================================================
+
+@app.post("/api/pb-list")
+def pb_list_endpoint(request: PBListRequest):
+    """Fetch recent Purchase Bookings for the given tenant (up to `pages` x 50 records)."""
+    import sys
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from common.erp_api_client import RhythmERPAPIClient
+
+    token = request.erp_token.replace("Bearer ", "").strip()
+    client = RhythmERPAPIClient(tenant_id=request.erp_tenant_id)
+    client.login_from_browser(token=token, tenant_id=request.erp_tenant_id)
+
+    results = []
+    for page in range(1, 3):
+        resp = client.session.get(
+            f"{client.BASE_URL}/procure_to_pay/purchase-booking/",
+            params={"page": page, "limit": 50, "filters": "", "screen_name": "Purchase Booking", "search": ""},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            break
+        data = resp.json()
+        rows = data.get("screenmatlistingdata_set") or []
+        for r in rows:
+            ref = r.get("transaction_ref_no") or ""
+            if not ref:
+                continue
+            results.append({
+                "id": r.get("id") or r.get("pk") or "",
+                "ref_no": ref,
+                "date": r.get("transaction_date") or "",
+                "supplier": r.get("supplier_ref_id") or "",
+                "amount": r.get("txn_currency_total_amount") or "",
+                "division": r.get("parameter1") or "",
+                "department": r.get("parameter2") or "",
+                "type_of_sale": r.get("parameter5") or "",
+                "location": r.get("parameter6") or "",
+            })
+        if not data.get("page_has_next"):
+            break
+
+    return JSONResponse({"pbs": results})
+
+
+# ================================================================
+# PB ITEMS ENDPOINT
+# ================================================================
+
+class PBItemsRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str
+    pb_id: str  # numeric PB id from the listing
+
+@app.post("/api/pb-items")
+def pb_items_endpoint(request: PBItemsRequest):
+    """Fetch PB detail lines and resolve item names from item master."""
+    import sys
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from common.erp_api_client import RhythmERPAPIClient
+
+    token = request.erp_token
+    if token.startswith("Bearer "):
+        token = token[7:]
+
+    client = RhythmERPAPIClient(tenant_id=request.erp_tenant_id)
+    client.login_from_browser(token=token, tenant_id=request.erp_tenant_id)
+
+    # Fetch PB detail
+    pb_resp = client.session.get(
+        f"{client.BASE_URL}/procure_to_pay/purchase-booking/{request.pb_id}/",
+        timeout=30,
+    )
+    if pb_resp.status_code != 200:
+        return JSONResponse({"items": [], "error": f"PB detail fetch failed: {pb_resp.status_code}"})
+
+    pb_data = pb_resp.json()
+    details = pb_data.get("purchase_booking_details") or []
+
+    # Collect unique item_ref_ids
+    item_ids = set(d["item_ref_id"] for d in details if d.get("item_ref_id"))
+
+    # Resolve names via Item Master detail endpoint
+    item_names: dict[int, str] = {}
+    for iid in item_ids:
+        try:
+            r = client.session.get(
+                f"{client.BASE_URL}/core/dynamic-screen-wrapper/Item%20Master/{iid}/",
+                timeout=15,
+            )
+            if r.status_code == 200:
+                item_names[iid] = r.json().get("name") or str(iid)
+        except Exception:
+            pass
+
+    items = []
+    for d in details:
+        iid = d.get("item_ref_id")
+        # Try name from item master lookup, then from inline display fields in PB detail
+        name = (
+            item_names.get(iid)
+            or d.get("item_ref_id_display")
+            or d.get("item_name")
+            or d.get("item_display")
+            or d.get("name")
+            or (str(iid) if iid else "—")
+        )
+        items.append({
+            "item_ref_id": iid,
+            "name": name,
+            "quantity": d.get("net_quantity") or d.get("quantity") or "",
+            "rate": d.get("rate") or "",
+            "amount": d.get("total_amount") or d.get("amount") or "",
+        })
+
+    return JSONResponse({"items": items})
+
+
+# ================================================================
+# JV VERIFY ENDPOINT
+# ================================================================
+
+@app.post("/api/jv-verify")
+def jv_verify_endpoint(request: JVVerifyRequest):
+    """Verify a Purchase Booking's Journal Voucher entry and return structured step results."""
+    import sys
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from pages.private_b2b.modules.journal_voucher.utils.api_jv_utils import JVAPIUtils
+    from common.erp_api_client import RhythmERPAPIClient
+
+    token = request.erp_token
+    if token.startswith("Bearer "):
+        token = token[7:]
+
+    client = RhythmERPAPIClient(tenant_id=request.erp_tenant_id)
+    client.login_from_browser(token=token, tenant_id=request.erp_tenant_id)
+    jv = JVAPIUtils(client)
+    result = jv.verify_pb(request.pb_ref_no, None, None, None, None)
+
+    steps = []
+    if result.error:
+        steps.append({"n": 1, "label": "Fetch JV report", "ok": False, "detail": result.error})
+    elif not result.found:
+        steps.append({
+            "n": 1, "label": "Fetch JV report", "ok": False,
+            "detail": f"{request.pb_ref_no} — not found in JV report",
+        })
+    else:
+        steps.append({"n": 1, "label": "Found in JV report", "ok": True, "detail": request.pb_ref_no})
+        steps.append({
+            "n": 2, "label": "Accounting fields", "ok": True,
+            "fields": [
+                {"field": "Division",     "value": result.division    or "—"},
+                {"field": "Department",   "value": result.department  or "—"},
+                {"field": "Type of Sale", "value": result.type_of_sale or "—"},
+                {"field": "Location",     "value": result.location    or "—"},
+                {"field": "Commodity",    "value": result.commodity   or "—"},
+            ],
+        })
+        steps.append({
+            "n": 3, "label": "Balance check", "ok": result.balanced,
+            "detail": f"DR = {result.debit:,.2f}   |CR| = {abs(result.credit):,.2f}",
+        })
+
+    return JSONResponse({"steps": steps, "ok": result.ok()})
 
 
 # ================================================================

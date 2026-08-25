@@ -47,6 +47,7 @@ export const ALL_SIDEBAR_MODULES: SidebarModule[] = [
         defaultExpanded: true,
         children: [
           { id: 'full-purchase-flow', label: 'Full Purchase Flow' },
+          { id: 'full-purchase-flow-jv', label: 'Full Purchase Flow + JV Check' },
           { id: 'purchase-order', label: 'Purchase Order', badge: '98 tests', badgeType: 'success' as const },
           { id: 'gate-pass', label: 'Gate Pass', badge: '56 tests', badgeType: 'success' as const },
           { id: 'goods-receipt-note', label: 'Goods Receipt Note', badge: '51 tests', badgeType: 'success' as const },

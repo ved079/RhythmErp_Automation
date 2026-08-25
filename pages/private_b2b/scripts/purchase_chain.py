@@ -752,6 +752,11 @@ class PurchaseChain:
         self._supply_type_id = resolve_supply_type_id(self.client) or 2
         return self._supply_type_id
 
+    @property
+    def last_ctx(self) -> Optional[ChainContext]:
+        """The most recently discovered ChainContext (None before first run)."""
+        return self._context
+
     def get_context(self, item_category_id: Optional[int] = None) -> ChainContext:
         """Return the tenant context, discovering it on first call."""
         if self._context is None:
@@ -1519,6 +1524,7 @@ class PurchaseChain:
         last_pb = pbs[-1] if pbs else None
         last_so = sos[-1] if sos else None
         result = {
+            "ctx": ctx,
             "po": {"id": po_id, "ref": po_ref, "data": po_data, "payload": po_payload,
                    "fetched": po_entry} if po_id else None,
             "gp": last_gp,

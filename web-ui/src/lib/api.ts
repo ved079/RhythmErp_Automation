@@ -375,6 +375,7 @@ export async function startPurchaseChain(
   qcDiscount?: boolean,
   customerRefId?: number | null,
   isRateWeightDeduction?: boolean,
+  withJVCheck?: boolean,
 ) {
   try {
     const res = await fetch(`${PROXY}?path=purchase-chain`, withCsrf({
@@ -397,6 +398,7 @@ export async function startPurchaseChain(
         qc_discount: qcDiscount ?? false,
         customer_ref_id: customerRefId ?? null,
         is_rate_weight_deduction: isRateWeightDeduction ?? false,
+        with_jv_check: withJVCheck ?? false,
       }),
     }));
 
@@ -433,6 +435,79 @@ export async function startPurchaseChain(
   } catch (err) {
     onError(err instanceof Error ? err : new Error(String(err)));
   }
+}
+
+// ─── PB List ────────────────────────────────────────────
+
+export interface PBListItem {
+  id: string | number;
+  ref_no: string;
+  date: string;
+  supplier: string;
+  amount: string | number;
+  division: string;
+  department: string;
+  type_of_sale: string;
+  location: string;
+}
+
+export interface PBItemLine {
+  item_ref_id: number | null;
+  name: string;
+  quantity: string | number;
+  rate: string | number;
+  amount: string | number;
+}
+
+export async function fetchPBList(erpToken: string, erpTenantId: string): Promise<PBListItem[]> {
+  const res = await fetch(`${PROXY}?path=pb-list`, withCsrf({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId }),
+  }))
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.pbs ?? []
+}
+
+export async function fetchPBItems(erpToken: string, erpTenantId: string, pbId: string | number): Promise<PBItemLine[]> {
+  const res = await fetch(`${PROXY}?path=pb-items`, withCsrf({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId, pb_id: String(pbId) }),
+  }))
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.items ?? []
+}
+
+// ─── JV Verify ──────────────────────────────────────────
+
+export interface JVVerifyStep {
+  n: number;
+  label: string;
+  ok: boolean;
+  detail?: string;
+  fields?: { field: string; value: string }[];
+}
+
+export interface JVVerifyResponse {
+  steps: JVVerifyStep[];
+  ok: boolean;
+}
+
+export async function verifyJV(
+  erpToken: string,
+  erpTenantId: string,
+  pbRefNo: string,
+): Promise<JVVerifyResponse> {
+  const res = await fetch(`${PROXY}?path=jv-verify`, withCsrf({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId, pb_ref_no: pbRefNo }),
+  }));
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }
 
 // ─── Run Completion Summary ─────────────────────────────
