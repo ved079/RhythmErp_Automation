@@ -615,7 +615,169 @@ def jv_verify_endpoint(request: JVVerifyRequest):
             "detail": f"DR = {result.debit:,.2f}   |CR| = {abs(result.credit):,.2f}",
         })
 
-    return JSONResponse({"steps": steps, "ok": result.ok()})
+    # Collect JV account rows — one per child row, with commodity, for commodity-grouped cross-check
+    account_rows = []
+    if result.found:
+        for row in result.child_rows:
+            name = row.get("account_name") or ""
+            dc = row.get("debit_credit_type") or row.get("dr_cr") or ""
+            commodity = row.get("commodity") or ""
+            if name:
+                account_rows.append({"account_name": name, "dr_cr": dc, "commodity": commodity})
+
+    return JSONResponse({"steps": steps, "ok": result.ok(), "account_rows": account_rows})
+
+
+# ================================================================
+# ACCOUNTING DEFINITION ENDPOINT
+# ================================================================
+
+class AccountingDefRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str
+    transaction_type_id: str = "5"  # default: Purchase Booking
+
+@app.post("/api/accounting-def")
+def accounting_def_endpoint(request: AccountingDefRequest):
+    """Fetch accounting definition for a transaction type and resolve account names."""
+    import sys
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from common.erp_api_client import RhythmERPAPIClient
+
+    token = request.erp_token
+    if token.startswith("Bearer "):
+        token = token[7:]
+
+    client = RhythmERPAPIClient(tenant_id=request.erp_tenant_id)
+    client.login_from_browser(token=token, tenant_id=request.erp_tenant_id)
+
+    # Fetch all accounting definitions
+    resp = client.session.get(
+        f"{client.BASE_URL}/core/accounting-definition/?page_number=1&page_size=100",
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        return JSONResponse({"error": f"accounting-definition fetch failed: {resp.status_code}"}, status_code=500)
+
+    definitions = resp.json()
+    target = next((d for d in definitions if str(d.get("transaction_type")) == str(request.transaction_type_id)), None)
+    if not target:
+        return JSONResponse({"error": f"No accounting definition found for transaction_type={request.transaction_type_id}"}, status_code=404)
+
+    # Operator ID → label
+    OPERATOR_LABELS: dict[int, str] = {
+        1704: "IN", 1705: "NOT IN", 1970: "IS", 1710: "AND", 1711: "OR",
+    }
+
+    from urllib.parse import quote as url_quote
+
+    # Fetch per-parameter detail (parameter_name + field_data_type) for all condition params
+    param_detail_cache: dict[int, dict] = {}
+    option_master_cache: dict[str, dict[str, str]] = {}  # screen_name → {id_str: name}
+
+    def _param_detail(pid: int) -> dict:
+        if pid in param_detail_cache:
+            return param_detail_cache[pid]
+        try:
+            r = client.session.get(
+                f"{client.BASE_URL}/core/dynamic-screen-wrapper/Accounting%20Parameter/{pid}/",
+                timeout=10,
+            )
+            if r.status_code == 200:
+                d = r.json()
+                info = {
+                    "name": d.get("parameter_name") or f"param_{pid}",
+                    "field_data_type": d.get("field_data_type") or "text",
+                }
+                param_detail_cache[pid] = info
+                return info
+        except Exception:
+            pass
+        fallback = {"name": f"param_{pid}", "field_data_type": "text"}
+        param_detail_cache[pid] = fallback
+        return fallback
+
+    def _resolve_options(param_name: str, field_data_type: str, options: list) -> list[str]:
+        # String options (e.g. ["Supplier", "Farmer"]) — no resolution needed
+        if not options or field_data_type != "dropdown":
+            return [str(o) for o in options]
+        # Check if all options are integers (IDs to resolve)
+        try:
+            int_opts = [int(o) for o in options]
+        except (ValueError, TypeError):
+            return [str(o) for o in options]
+
+        # Fetch master listing for this screen (cached)
+        if param_name not in option_master_cache:
+            id_map: dict[str, str] = {}
+            try:
+                r = client.session.get(
+                    f"{client.BASE_URL}/core/dynamic-screen-wrapper/{url_quote(param_name)}/?page_number=1&page_size=500",
+                    timeout=15,
+                )
+                if r.status_code == 200:
+                    rows = r.json().get("screenmatlistingdata_set") or r.json().get("results") or []
+                    id_map = {str(row["id"]): row.get("name", str(row["id"])) for row in rows if row.get("id")}
+            except Exception:
+                pass
+            option_master_cache[param_name] = id_map
+
+        id_map = option_master_cache[param_name]
+        return [id_map.get(str(i), str(i)) for i in int_opts]
+
+    def build_condition_text(conditions: list) -> str:
+        if not conditions:
+            return ""
+        parts: list[str] = []
+        for i, c in enumerate(conditions):
+            pid = int(c.get("parameter") or 0)
+            detail = _param_detail(pid)
+            param_name = detail["name"]
+            op = OPERATOR_LABELS.get(int(c.get("operator") or 0), str(c.get("operator")))
+            options = c.get("options") or []
+            resolved = _resolve_options(param_name, detail["field_data_type"], options)
+            options_str = ", ".join(resolved)
+            parts.append(f"{param_name} {op} [{options_str}]")
+            if i < len(conditions) - 1 and c.get("logical_operator"):
+                log_op = OPERATOR_LABELS.get(int(c.get("logical_operator") or 0), "AND")
+                parts.append(log_op)
+        return " ".join(parts)
+
+    # Resolve account_ref_id → account name
+    account_cache: dict[int, str] = {}
+    def resolve_account(ref_id: int) -> str:
+        if ref_id in account_cache:
+            return account_cache[ref_id]
+        try:
+            r = client.session.get(
+                f"{client.BASE_URL}/core/dynamic-screen-wrapper/Chart%20Of%20Account%20Definition/{ref_id}/",
+                timeout=15,
+            )
+            name = r.json().get("name") or str(ref_id) if r.status_code == 200 else str(ref_id)
+        except Exception:
+            name = str(ref_id)
+        account_cache[ref_id] = name
+        return name
+
+    details = []
+    for d in target.get("accounting_definition_detail") or []:
+        ref_id = d.get("account_ref_id")
+        conditions = d.get("conditions") or []
+        details.append({
+            "id": d.get("id"),
+            "account_ref_id": ref_id,
+            "account_name": resolve_account(ref_id) if ref_id else "—",
+            "dr_cr": d.get("dr_cr"),
+            "has_conditions": len(conditions) > 0,
+            "condition_text": build_condition_text(conditions),
+        })
+
+    return JSONResponse({
+        "id": target.get("id"),
+        "name": target.get("name"),
+        "transaction_type_id": request.transaction_type_id,
+        "details": details,
+    })
 
 
 # ================================================================

@@ -494,6 +494,7 @@ export interface JVVerifyStep {
 export interface JVVerifyResponse {
   steps: JVVerifyStep[];
   ok: boolean;
+  account_rows?: { account_name: string; dr_cr: string; commodity: string }[];
 }
 
 export async function verifyJV(
@@ -505,6 +506,38 @@ export async function verifyJV(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId, pb_ref_no: pbRefNo }),
+  }));
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ─── Accounting Definition ──────────────────────────────
+
+export interface AccountingDefDetail {
+  id: number;
+  account_ref_id: number;
+  account_name: string;
+  dr_cr: 'Debit' | 'Credit';
+  has_conditions: boolean;
+  condition_text: string;
+}
+
+export interface AccountingDefResponse {
+  id: number;
+  name: string;
+  transaction_type_id: string;
+  details: AccountingDefDetail[];
+}
+
+export async function fetchAccountingDef(
+  erpToken: string,
+  erpTenantId: string,
+  transactionTypeId = '5',
+): Promise<AccountingDefResponse> {
+  const res = await fetch(`${PROXY}?path=accounting-def`, withCsrf({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId, transaction_type_id: transactionTypeId }),
   }));
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
