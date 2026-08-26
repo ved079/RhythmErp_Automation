@@ -407,6 +407,11 @@ def batch_create_stream(request: BatchCreateRequest) -> Generator[str, None, Non
                             item_uom_map[int(iid)] = uom
                     if item_uom_map:
                         dropdown_ids["item_uom_map"] = item_uom_map
+                    # CBR: FK dropdown has stale historical IDs — replace with actual listing
+                    if request.sub_module == "commodity_base_rate" and im_rows:
+                        active_map = {str(r["id"]): int(r["id"]) for r in im_rows if r.get("id")}
+                        if active_map:
+                            dropdown_ids["item_ref_id"] = active_map
                 except Exception:
                     pass
 

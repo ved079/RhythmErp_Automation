@@ -102,7 +102,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
   const [historyLoading, setHistoryLoading] = useState(false)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
-  const [cbrLocations, setCbrLocations] = useState<{ id: number; name: string; occupied: boolean }[]>([])
+  const [cbrLocations, setCbrLocations] = useState<{ id: number; name: string; occupied: boolean; gap_count?: number }[]>([])
   const [selectedLocations, setSelectedLocations] = useState<Set<number>>(new Set())
   const [cbrLocationsLoading, setCbrLocationsLoading] = useState(false)
   const [showCbrCreateLocations, setShowCbrCreateLocations] = useState(false)
@@ -180,13 +180,14 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
   }, [target?.subModule, erpToken, erpTenantId])
 
   useEffect(() => {
-    if (target?.subModule !== 'commodity_base_rate' || !erpToken) {
+    if (target?.subModule !== 'commodity_base_rate' || !erpToken || !erpTenantId) {
       setCbrLocations([])
       setSelectedLocations(new Set())
       setCbrLocationsLoading(false)
       return
     }
-    fetchCbrLocations(false)
+    const t = setTimeout(() => fetchCbrLocations(false), 300)
+    return () => clearTimeout(t)
   }, [target?.subModule, erpToken, erpTenantId, fetchCbrLocations])
 
   // Always-fresh refs so fetchItemCategories never uses a stale closure value
@@ -284,6 +285,7 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
         if (runId) setBatchRunId(runId)
         setShowCompleteDialog(true)
         notifySuccess('Batch Create Complete', `${created} created, ${failed} failed`)
+        if (target?.subModule === 'commodity_base_rate') fetchCbrLocations(false)
       },
       (err) => {
         setLogs((prev) => [...prev, { text: `ERROR: ${err.message}`, ts: new Date(), isErr: true, isDone: false }])
@@ -608,7 +610,12 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
                 {/* Header */}
                 <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700">
                   <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
-                    {cbrLocationsLoading ? 'Loading...' : `${cbrLocations.filter(l => !l.occupied).length} available`}
+                    {cbrLocationsLoading ? 'Loading...' : (() => {
+                      const avail = cbrLocations.filter(l => !l.occupied)
+                      const withGaps = avail.filter(l => (l.gap_count ?? 0) > 0 && (l.gap_count ?? 0) < 9999)
+                      if (withGaps.length > 0) return `${avail.length} available (${withGaps.length} have gaps)`
+                      return `${avail.length} available`
+                    })()}
                   </span>
                   <button
                     type="button"
@@ -664,13 +671,18 @@ export function BatchCreateSection({ moduleId, erpToken, erpTenantId, onNeedsTok
                                       return next
                                     })
                                   }}
-                                  className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all cursor-pointer ${
+                                  className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all cursor-pointer flex items-center gap-1 ${
                                     selected
                                       ? 'bg-[#3F51B5] dark:bg-[#5C6BC0] border-[#3F51B5] dark:border-[#5C6BC0] text-white shadow-sm'
                                       : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-[#3F51B5]/50 dark:hover:border-[#7986CB]/50'
                                   }`}
                                 >
                                   {loc.name}
+                                  {loc.gap_count !== undefined && loc.gap_count > 0 && (
+                                    <span className={`text-[9px] px-1 py-0 rounded-full ${selected ? 'bg-white/20 text-white' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'}`}>
+                                      +{loc.gap_count}
+                                    </span>
+                                  )}
                                 </button>
                               )
                             })}

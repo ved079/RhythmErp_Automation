@@ -386,11 +386,11 @@ def enrich_existing_entries(client, entries):
 
 
 def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None, offset=0, existing_entries=None, selected_location_ids=None):
-    """Generate CBR UPDATE payloads: add missing items to each location's detail grid.
+    """Generate CBR payloads for locations with missing items.
 
-    CBR unique constraint is (to_date, location_ref_id) — one header per location.
-    Items go in the detail grid rows. This function updates existing records to
-    add all items not yet present in their grid.
+    For locations with no entry: creates with all items.
+    For locations with an entry but missing items: creates a NEW entry with all
+    items — the ERP auto-expires the old entry's to_date to today.
 
     Requires dropdown_ids:
       - location_ref_id: {name: id}
@@ -442,38 +442,36 @@ def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None, offset=0, 
             uom_id = random.choice(all_uom_ids)
         return uom_id
 
-    # Build map of location_id → enriched existing entry (if any)
-    existing_by_loc = {}
+    # Build map of location_id → union of covered item IDs across ALL its entries
+    covered_by_loc: dict = {}  # loc_id → set of item_ref_ids already covered
+    has_entry_loc: set = set()  # loc_ids that have at least one entry
     for entry in (existing_entries or []):
         loc_id = _to_id(entry.get("location_ref_id"), loc_map)
         if loc_id is not None:
-            existing_by_loc[loc_id] = entry
+            has_entry_loc.add(loc_id)
+            covered_by_loc.setdefault(loc_id, set()).update(
+                entry.get("_existing_item_ids", set())
+            )
 
     payloads = []
     for loc_id in loc_map.values():
-        if len(payloads) >= count:
+        if not selected_location_ids and len(payloads) >= count:
             break
 
         loc_id = int(loc_id)
-        existing = existing_by_loc.get(loc_id)
 
-        if existing and existing.get("_detail"):
-            # Location already has a record — UPDATE with any missing items
-            detail = existing["_detail"]
-            already_have = existing.get("_existing_item_ids", set())
+        if loc_id in has_entry_loc:
+            # Location has existing entries — check union of covered items
+            already_have = covered_by_loc.get(loc_id, set())
             missing_items = [iid for iid in all_item_ids if iid not in already_have]
             if not missing_items:
                 continue  # all items already present, nothing to do
 
-            existing_rows = []
-            for child in detail.get("children", []):
-                existing_rows = child.get("details", [])
-                break
-
-            new_rows = list(existing_rows)
+            # CREATE a new entry with only the missing items
+            detail_rows = []
             for item_id in missing_items:
                 uom_id = _resolve_uom_with_fallback(item_id)
-                new_rows.append({
+                detail_rows.append({
                     "item_ref_id": item_id,
                     "uom": uom_id,
                     "minimum_range": round(random.uniform(500, 2000), 2),
@@ -481,16 +479,7 @@ def generate_batch_payloads(count=20, prefix=None, dropdown_ids=None, offset=0, 
                     "details": [],
                 })
 
-            payloads.append({
-                **detail,
-                "id": existing["id"],
-                "children": [{
-                    "stepper_name": "Define Item Rate Details",
-                    "is_stepper": True,
-                    "details": new_rows,
-                    "children": [],
-                }],
-            })
+            payloads.append(build_cbr_api_payload(pt_id, loc_id, detail_rows=detail_rows))
 
         else:
             # No record for this location yet — CREATE with all items
