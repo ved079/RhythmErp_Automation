@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { CheckCircle2, XCircle, Play, Key, RefreshCw, Loader2, X, AlertTriangle, Wand2, Search, Star, FileSpreadsheet, Download } from 'lucide-react'
+import { CheckCircle2, XCircle, Play, Key, RefreshCw, Loader2, X, AlertTriangle, Wand2, Search, Star, FileSpreadsheet, Download, FileText, ChevronDown, FileBarChart2 } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import { startPurchaseChain, fetchMasterData, fetchItemCategories, fetchItemsWithCqp, fillCqpItems, verifyJV, fetchPBList, fetchPBItems, fetchAccountingDef, type SSEEvent, type MasterDataItem, type ItemCategory, type JVVerifyStep, type PBListItem, type PBItemLine, type AccountingDefDetail } from '@/lib/api'
 import { notifySuccess } from '@/lib/notify'
@@ -270,9 +270,10 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [pbListOpen, setPbListOpen] = useState(true)
   const [pbItems, setPbItems] = useState<PBItemLine[]>([])
   const [pbItemsLoading, setPbItemsLoading] = useState(false)
-  const [jvAccountRows, setJvAccountRows] = useState<{ account_name: string; dr_cr: string; commodity: string }[]>([])
+  const [jvAccountRows, setJvAccountRows] = useState<{ account_name: string; dr_cr: string; commodity: string; amount: number | null }[]>([])
   const [accountingDef, setAccountingDef] = useState<AccountingDefDetail[]>([])
   const [accountingDefLoading, setAccountingDefLoading] = useState(false)
+  const [notAppliedOpen, setNotAppliedOpen] = useState(false)
 
   // On mount (or when userId changes): restore this user's starred flow from localStorage.
   useEffect(() => {
@@ -647,47 +648,55 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     const balMatch = balanceStep?.detail?.match(/DR\s*=\s*([\d,]+\.?\d*)\s+\|CR\|\s*=\s*([\d,]+\.?\d*)/)
     const amountNum = selectedPB.amount != null ? Number(selectedPB.amount) : null
 
+    // 5 columns: Account/Label(140) | Value/DrCr(145) | Amount(95) | Condition/Value(165) | Status(90)
     const cell = (style: string, value: string | number, mergeAcross?: number) => {
       const type = typeof value === 'number' ? 'Number' : 'String'
       return `<Cell${mergeAcross != null ? ` ss:MergeAcross="${mergeAcross}"` : ''}${style ? ` ss:StyleID="${style}"` : ''}><Data ss:Type="${type}">${escXml(value)}</Data></Cell>`
     }
+    const emptyCell = (style = 'sVal') => `<Cell ss:StyleID="${style}"><Data ss:Type="String"></Data></Cell>`
 
     const rows: string[] = []
-    rows.push(`<Row ss:Height="26">${cell('sTitle', 'JV VERIFICATION REPORT', 2)}${cell(ok ? 'sPass' : 'sFail', ok ? '\u2713 PASSED' : '\u2715 FAILED')}</Row>`)
-    rows.push(`<Row>${cell('sMeta', `Document ${pbRefNo}  \u00B7  Generated ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`, 3)}</Row>`)
-    rows.push('<Row ss:Height="6"/>')
 
-    rows.push(`<Row>${cell('sSection', 'DOCUMENT DETAILS', 3)}</Row>`)
-    rows.push(`<Row>${cell('sLabel', 'Supplier')}${cell('sVal', selectedPB.supplier ?? '\u2014', 2)}</Row>`)
-    rows.push(`<Row>${cell('sLabel', 'Amount')}${amountNum != null ? cell('sMoney', amountNum) : cell('sVal', '\u2014')}${cell('sLabel', 'Date')}${cell('sVal', selectedPB.date ?? '\u2014')}</Row>`)
-    rows.push('<Row ss:Height="6"/>')
+    // Title banner (spans all 5 cols via mergeAcross=4)
+    rows.push(`<Row ss:Height="28">${cell('sTitle', 'JV VERIFICATION REPORT', 3)}${cell(ok ? 'sPass' : 'sFail', ok ? '\u2713 PASSED' : '\u2715 FAILED')}</Row>`)
+    rows.push(`<Row ss:Height="16">${cell('sMeta', `Document: ${pbRefNo}`, 2)}${cell('sMeta', `Generated: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`, 2)}</Row>`)
+    rows.push('<Row ss:Height="8"/>')
 
-    rows.push(`<Row>${cell('sSection', 'JOURNAL VOUCHER', 3)}</Row>`)
-    rows.push(`<Row>${cell('sLabel', 'JV Entry')}${cell(found ? (found.ok ? 'sPassText' : 'sFailText') : 'sDim', found ? (found.ok ? 'Entry found in JV report' : `Not found \u2014 ${found.detail ?? ''}`) : 'Not checked', 2)}</Row>`)
+    // Document Details
+    rows.push(`<Row ss:Height="19">${cell('sSection', 'DOCUMENT DETAILS', 4)}</Row>`)
+    rows.push(`<Row>${cell('sLabel', 'Supplier')}${cell('sVal', selectedPB.supplier ?? '\u2014', 3)}</Row>`)
+    rows.push(`<Row>${cell('sLabel', 'Amount')}${amountNum != null ? cell('sMoney', amountNum) : cell('sVal', '\u2014')}${cell('sLabel', 'Date')}${cell('sVal', selectedPB.date ?? '\u2014')}${emptyCell()}</Row>`)
+    rows.push('<Row ss:Height="8"/>')
+
+    // Journal Voucher
+    rows.push(`<Row ss:Height="19">${cell('sSection', 'JOURNAL VOUCHER', 4)}</Row>`)
+    rows.push(`<Row>${cell('sLabel', 'JV Entry')}${cell(found ? (found.ok ? 'sPassText' : 'sFailText') : 'sDim', found ? (found.ok ? 'Entry found in JV report' : `Not found \u2014 ${found.detail ?? ''}`) : 'Not checked', 3)}</Row>`)
     if (balMatch) {
       const drNum = Number(balMatch[1].replace(/,/g, ''))
       const crNum = Number(balMatch[2].replace(/,/g, ''))
-      rows.push(`<Row>${cell('sLabel', 'Balance Check')}${cell('sDr', drNum)}${cell('sCr', crNum)}${cell(balanceStep?.ok ? 'sPass' : 'sFail', balanceStep?.ok ? 'MATCHED' : 'MISMATCHED')}</Row>`)
+      rows.push(`<Row>${cell('sLabel', 'Balance Check')}${cell('sDr', drNum)}${cell('sCr', crNum)}${cell(balanceStep?.ok ? 'sPass' : 'sFail', balanceStep?.ok ? 'BALANCED \u2713' : 'UNBALANCED \u2715')}${emptyCell()}</Row>`)
     }
-    rows.push('<Row ss:Height="6"/>')
+    rows.push('<Row ss:Height="8"/>')
 
+    // Field Cross-Check
     const xrows = jvCompRows ?? fieldsStep?.fields?.map(f => ({ label: f.field, pb: '\u2014', jv: f.value })) ?? []
     if (xrows.length > 0) {
-      rows.push(`<Row>${cell('sSection', 'ACCOUNTING FIELD CROSS-CHECK', 3)}</Row>`)
-      rows.push(`<Row>${cell('sHead', 'Field')}${cell('sHead', 'Purchase Booking')}${cell('sHead', 'Journal Voucher')}${cell('sHead', 'Match')}</Row>`)
+      rows.push(`<Row ss:Height="19">${cell('sSection', 'ACCOUNTING FIELD CROSS-CHECK', 4)}</Row>`)
+      rows.push(`<Row>${cell('sHead', 'Field')}${cell('sHead', 'Purchase Booking')}${cell('sHeadC', '\u2194')}${cell('sHead', 'Journal Voucher')}${cell('sHeadC', 'Match')}</Row>`)
       for (const r of xrows) {
         const match = r.pb !== '\u2014' && r.jv !== '\u2014' && r.pb.trim().toLowerCase() === r.jv.trim().toLowerCase()
         const unknown = r.pb === '\u2014' || r.jv === '\u2014'
-        rows.push(`<Row>${cell(r.label ? 'sLabel' : 'sDim', r.label || '')}${cell(unknown ? 'sDim' : 'sVal', r.pb)}${cell(unknown ? 'sDim' : 'sVal', r.jv)}${cell(unknown ? 'sDimC' : match ? 'sPass' : 'sFail', unknown ? '\u2014' : match ? 'PASS' : 'FAIL')}</Row>`)
+        rows.push(`<Row>${cell(r.label ? 'sLabel' : 'sDim', r.label || '')}${cell(unknown ? 'sDim' : 'sVal', r.pb)}${emptyCell('sDimC')}${cell(unknown ? 'sDim' : 'sVal', r.jv)}${cell(unknown ? 'sDimC' : match ? 'sPass' : 'sFail', unknown ? '\u2014' : match ? 'PASS' : 'FAIL')}</Row>`)
       }
+      rows.push('<Row ss:Height="8"/>')
     }
 
-    // Accounting definition — applied rules (mirrors the on-screen section)
+    // Accounting Definition — Applied Rules
     if (jvAccountRows.length > 0 && accountingDef.length > 0) {
       const normName = (s: string) => s.trim().toLowerCase()
       const defByName = new Map<string, typeof accountingDef[0]>()
       for (const d of accountingDef) {
-        const k = normName(d.account_name)
+        const k = normName(d.account_name) + '|' + (d.dr_cr || '').toLowerCase()
         if (!defByName.has(k)) defByName.set(k, d)
       }
       const groups = new Map<string, typeof jvAccountRows>()
@@ -706,59 +715,89 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         return firstIdx === i && !jvAccountNameSet.has(k)
       })
 
-      rows.push('<Row ss:Height="6"/>')
-      rows.push(`<Row>${cell('sSection', 'ACCOUNTING DEFINITION \u2014 APPLIED RULES', 3)}</Row>`)
-      rows.push(`<Row>${cell('sHead', 'Account')}${cell('sHead', 'Dr/Cr')}${cell('sHead', 'Rule / Condition')}${cell('sHead', 'Status')}</Row>`)
+      rows.push(`<Row ss:Height="19">${cell('sSection', 'ACCOUNTING DEFINITION \u2014 APPLIED RULES', 4)}</Row>`)
+      rows.push(`<Row>${cell('sHead', 'Account')}${cell('sHeadC', 'Dr/Cr')}${cell('sHeadR', 'Amount')}${cell('sHead', 'Rule / Condition')}${cell('sHeadC', 'Status')}</Row>`)
+
       for (const commodity of sortedKeys) {
-        rows.push(`<Row>${cell('sGroup', commodity || 'Shared (all items)', 3)}</Row>`)
-        for (const row of groups.get(commodity)!) {
-          const def = defByName.get(normName(row.account_name))
+        rows.push(`<Row ss:Height="15">${cell('sGroup', commodity ? commodity.toUpperCase() : 'SHARED \u2014 all items', 4)}</Row>`)
+        const groupRows = groups.get(commodity)!
+        let groupDr = 0, groupCr = 0
+        for (const row of groupRows) {
+          const def = defByName.get(normName(row.account_name) + '|' + (row.dr_cr || '').toLowerCase())
           const drCrMatch = !!def && def.dr_cr === row.dr_cr
           const status = !def ? 'EXTRA' : drCrMatch ? 'PASS' : 'WRONG TYPE'
           const condText = def?.condition_text || (def ? 'Always applies' : '\u2014')
-          rows.push(`<Row>${cell('sVal', row.account_name)}${cell('sDim', row.dr_cr)}${cell('sCond', condText)}${cell(status === 'PASS' ? 'sPass' : status === 'EXTRA' ? 'sFail' : 'sWarn', status)}</Row>`)
+          const amtStyle = row.dr_cr === 'Debit' ? 'sDr' : 'sCr'
+          if (row.amount != null) { row.dr_cr === 'Debit' ? (groupDr += row.amount) : (groupCr += row.amount) }
+          const amtCell = row.amount != null ? cell(amtStyle, row.amount) : emptyCell('sValR')
+          rows.push(`<Row>${cell('sVal', row.account_name)}${cell('sDrCrBadge', row.dr_cr)}${amtCell}${cell('sCond', condText)}${cell(status === 'PASS' ? 'sPass' : status === 'EXTRA' ? 'sFail' : 'sWarn', status)}</Row>`)
+        }
+        if (groupRows.length > 1) {
+          rows.push(`<Row ss:Height="15">${emptyCell('sSubtotalL')}${cell('sSubtotalL', 'Subtotal')}${cell('sSubtotalR', groupDr || '')}${cell('sSubtotalR', groupCr || '')}${emptyCell('sSubtotalL')}</Row>`)
         }
       }
+
+      // Grand totals row
+      const totalDr = jvAccountRows.filter(r => r.dr_cr === 'Debit' && r.amount != null).reduce((s, r) => s + r.amount!, 0)
+      const totalCr = jvAccountRows.filter(r => r.dr_cr === 'Credit' && r.amount != null).reduce((s, r) => s + r.amount!, 0)
+      const balanced = Math.abs(totalDr - totalCr) < 0.01
+      rows.push(`<Row ss:Height="18">${cell('sTotalL', 'TOTALS', 1)}${cell('sTotalDr', totalDr)}${cell('sTotalCr', totalCr)}${cell(balanced ? 'sPass' : 'sFail', balanced ? 'DR = CR \u2713' : 'DR \u2260 CR \u2715')}</Row>`)
+
       if (notApplied.length > 0) {
-        rows.push(`<Row>${cell('sGroup', 'Not applied this transaction', 3)}</Row>`)
+        rows.push('<Row ss:Height="8"/>')
+        rows.push(`<Row ss:Height="15">${cell('sGroupMuted', 'NOT APPLIED THIS TRANSACTION', 4)}</Row>`)
+        rows.push(`<Row>${cell('sHeadMuted', 'Account')}${cell('sHeadMuted', 'Dr/Cr')}${cell('sHeadMuted', '\u2014')}${cell('sHeadMuted', 'Why not applied (condition)')}${cell('sHeadMuted', '\u2014')}</Row>`)
         for (const def of notApplied) {
-          rows.push(`<Row>${cell('sDim', def.account_name)}${cell('sDim', def.dr_cr)}${cell('sDim', def.condition_text || (def.has_conditions ? 'Conditional' : 'Always applies'))}${cell('sDimC', '\u2014')}</Row>`)
+          rows.push(`<Row>${cell('sDim', def.account_name)}${cell('sDimC', def.dr_cr)}${emptyCell('sDim')}${cell('sDim', def.condition_text || (def.has_conditions ? 'Conditional \u2014 condition not met' : 'Always applies'))}${cell('sDimC', 'n/a')}</Row>`)
         }
       }
     }
-    rows.push('<Row ss:Height="10"/>')
-    rows.push(`<Row>${cell('sMeta', 'Generated by Pacs Automation \u2014 JV Verification', 3)}</Row>`)
+    rows.push('<Row ss:Height="12"/>')
+    rows.push(`<Row ss:Height="14">${cell('sMeta', 'Generated by Pacs Automation \u2014 JV Verification Report', 4)}</Row>`)
 
+    const XL_BORDER_DARK = '<Borders><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0B0B0"/><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0B0B0"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0B0B0"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0B0B0"/></Borders>'
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <?mso-application progid="Excel.Sheet"?>
 <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
 <Styles>
-<Style ss:ID="Default" ss:Name="Normal"><Font ss:FontName="Calibri" ss:Size="11"/><Alignment ss:Vertical="Center"/></Style>
-<Style ss:ID="sTitle"><Font ss:Bold="1" ss:Size="14" ss:Color="#FFFFFF"/><Interior ss:Color="#3F51B5" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/></Style>
-<Style ss:ID="sMeta"><Font ss:Italic="1" ss:Size="9" ss:Color="#9E9E9E"/><Alignment ss:Vertical="Center" ss:Indent="1"/></Style>
-<Style ss:ID="sSection"><Font ss:Bold="1" ss:Size="10" ss:Color="#303F9F"/><Interior ss:Color="#E8EAF6" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER}</Style>
-<Style ss:ID="sLabel"><Font ss:Bold="1" ss:Size="10" ss:Color="#616161"/><Interior ss:Color="#F5F5F5" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER}</Style>
-<Style ss:ID="sVal">${XL_BORDER}</Style>
-<Style ss:ID="sMoney"><NumberFormat ss:Format="#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER}</Style>
-<Style ss:ID="sDr"><Font ss:Color="#1565C0"/><NumberFormat ss:Format="&quot;DR &quot;#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER}</Style>
-<Style ss:ID="sCr"><Font ss:Color="#6A1B9A"/><NumberFormat ss:Format="&quot;CR &quot;#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER}</Style>
-<Style ss:ID="sHead"><Font ss:Bold="1" ss:Size="10" ss:Color="#FFFFFF"/><Interior ss:Color="#5C6BC0" ss:Pattern="Solid"/><Alignment ss:Horizontal="Left" ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER}</Style>
-<Style ss:ID="sPass"><Font ss:Bold="1" ss:Size="10" ss:Color="#1B5E20"/><Interior ss:Color="#C8E6C9" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER}</Style>
-<Style ss:ID="sFail"><Font ss:Bold="1" ss:Size="10" ss:Color="#B71C1C"/><Interior ss:Color="#FFCDD2" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER}</Style>
-<Style ss:ID="sPassText"><Font ss:Bold="1" ss:Color="#2E7D32"/>${XL_BORDER}</Style>
-<Style ss:ID="sFailText"><Font ss:Bold="1" ss:Color="#C62828"/>${XL_BORDER}</Style>
-<Style ss:ID="sDim"><Font ss:Color="#BDBDBD"/>${XL_BORDER}</Style>
-<Style ss:ID="sDimC"><Font ss:Color="#BDBDBD"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER}</Style>
-<Style ss:ID="sGroup"><Font ss:Italic="1" ss:Size="10" ss:Color="#757575"/><Interior ss:Color="#FAFAFA" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER}</Style>
-<Style ss:ID="sWarn"><Font ss:Bold="1" ss:Size="10" ss:Color="#E65100"/><Interior ss:Color="#FFE0B2" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER}</Style>
-<Style ss:ID="sCond"><Font ss:FontName="Consolas" ss:Size="9" ss:Color="#8D8D8D"/>${XL_BORDER}</Style>
+<Style ss:ID="Default" ss:Name="Normal"><Font ss:FontName="Calibri" ss:Size="10" ss:Color="#212121"/><Alignment ss:Vertical="Center"/></Style>
+<Style ss:ID="sTitle"><Font ss:Bold="1" ss:Size="15" ss:Color="#FFFFFF"/><Interior ss:Color="#283593" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="2"/></Style>
+<Style ss:ID="sMeta"><Font ss:Italic="1" ss:Size="9" ss:Color="#546E7A"/><Alignment ss:Vertical="Center" ss:Indent="1"/></Style>
+<Style ss:ID="sSection"><Font ss:Bold="1" ss:Size="10" ss:Color="#1A237E"/><Interior ss:Color="#C5CAE9" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sLabel"><Font ss:Bold="1" ss:Size="10" ss:Color="#37474F"/><Interior ss:Color="#ECEFF1" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sVal"><Font ss:Color="#212121"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sValR"><Font ss:Color="#212121"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sMoney"><Font ss:Color="#212121"/><NumberFormat ss:Format="#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sDr"><Font ss:Bold="1" ss:Color="#0D47A1"/><NumberFormat ss:Format="&quot;DR  &quot;#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sCr"><Font ss:Bold="1" ss:Color="#4A148C"/><NumberFormat ss:Format="&quot;CR  &quot;#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sHead"><Font ss:Bold="1" ss:Size="10" ss:Color="#FFFFFF"/><Interior ss:Color="#3949AB" ss:Pattern="Solid"/><Alignment ss:Horizontal="Left" ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sHeadC"><Font ss:Bold="1" ss:Size="10" ss:Color="#FFFFFF"/><Interior ss:Color="#3949AB" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sHeadR"><Font ss:Bold="1" ss:Size="10" ss:Color="#FFFFFF"/><Interior ss:Color="#3949AB" ss:Pattern="Solid"/><Alignment ss:Horizontal="Right" ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sHeadMuted"><Font ss:Bold="1" ss:Size="9" ss:Color="#ECEFF1"/><Interior ss:Color="#607D8B" ss:Pattern="Solid"/><Alignment ss:Horizontal="Left" ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sPass"><Font ss:Bold="1" ss:Size="10" ss:Color="#1B5E20"/><Interior ss:Color="#A5D6A7" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sFail"><Font ss:Bold="1" ss:Size="10" ss:Color="#B71C1C"/><Interior ss:Color="#EF9A9A" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sWarn"><Font ss:Bold="1" ss:Size="10" ss:Color="#BF360C"/><Interior ss:Color="#FFCC80" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sPassText"><Font ss:Bold="1" ss:Color="#2E7D32"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sFailText"><Font ss:Bold="1" ss:Color="#C62828"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sDim"><Font ss:Color="#78909C"/><Interior ss:Color="#F9FAFB" ss:Pattern="Solid"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sDimC"><Font ss:Color="#78909C"/><Interior ss:Color="#F9FAFB" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sGroup"><Font ss:Bold="1" ss:Italic="1" ss:Size="9" ss:Color="#1A237E"/><Interior ss:Color="#E8EAF6" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sGroupMuted"><Font ss:Bold="1" ss:Italic="1" ss:Size="9" ss:Color="#546E7A"/><Interior ss:Color="#ECEFF1" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sDrCrBadge"><Font ss:Bold="1" ss:Size="9" ss:Color="#37474F"/><Interior ss:Color="#ECEFF1" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sCond"><Font ss:FontName="Consolas" ss:Size="9" ss:Color="#37474F"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sTotalL"><Font ss:Bold="1" ss:Size="10" ss:Color="#212121"/><Interior ss:Color="#CFD8DC" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sTotalDr"><Font ss:Bold="1" ss:Color="#0D47A1"/><Interior ss:Color="#BBDEFB" ss:Pattern="Solid"/><NumberFormat ss:Format="&quot;DR  &quot;#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sTotalCr"><Font ss:Bold="1" ss:Color="#4A148C"/><Interior ss:Color="#E1BEE7" ss:Pattern="Solid"/><NumberFormat ss:Format="&quot;CR  &quot;#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sSubtotalL"><Font ss:Italic="1" ss:Color="#546E7A"/><Interior ss:Color="#F5F5F5" ss:Pattern="Solid"/><Alignment ss:Horizontal="Right" ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sSubtotalR"><Font ss:Italic="1" ss:Color="#546E7A"/><Interior ss:Color="#F5F5F5" ss:Pattern="Solid"/><NumberFormat ss:Format="#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
 </Styles>
 <Worksheet ss:Name="JV Report">
-<Table ss:DefaultRowHeight="17">
-<Column ss:Width="110"/>
-<Column ss:Width="170"/>
-<Column ss:Width="170"/>
-<Column ss:Width="85"/>
+<Table ss:DefaultRowHeight="18">
+<Column ss:Width="140"/>
+<Column ss:Width="145"/>
+<Column ss:Width="95"/>
+<Column ss:Width="165"/>
+<Column ss:Width="90"/>
 ${rows.join('\n')}
 </Table>
 </Worksheet>
@@ -773,6 +812,342 @@ ${rows.join('\n')}
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
+  }, [selectedPB, jvSteps, jvCompRows, jvAccountRows, accountingDef, pbRefNo])
+
+  // PDF export — same content as the .xls export but laid out as a styled A4
+  // report (jsPDF) that opens in a new browser tab instead of downloading.
+  const exportJvPdf = useCallback(async () => {
+    const found = jvSteps.find(s => s.n === 1)
+    const fieldsStep = jvSteps.find(s => s.fields)
+    const balanceStep = jvSteps.find(s => s.detail && !s.fields)
+    if (!selectedPB || (!found && !fieldsStep)) return
+    const ok = jvSteps.length > 0 && jvSteps.every(s => s.ok)
+    const balMatch = balanceStep?.detail?.match(/DR\s*=\s*([\d,]+\.?\d*)\s+\|CR\|\s*=\s*([\d,]+\.?\d*)/)
+    const amountNum = selectedPB.amount != null ? Number(selectedPB.amount) : null
+
+    const { jsPDF } = await import('jspdf')
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+    const PW = 210, PH = 297, M = 14, CW = PW - M * 2 // 182mm content width
+
+    const safe = (v: string | number | null | undefined) =>
+      String(v ?? '')
+        .replace(/\u20B9/g, 'Rs. ').replace(/[\u2014\u2013]/g, '-').replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u201C\u201D]/g, '"').replace(/\u00B7/g, '|').replace(/\u2265/g, '>=')
+        .replace(/\u2264/g, '<=').replace(/\u00D7/g, 'x').replace(/\u00A0/g, ' ')
+        .replace(/\u2194/g, '<->').replace(/\u2260/g, '!=').replace(/\u2713/g, 'OK').replace(/\u2715/g, 'X')
+
+    const fmt = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+    // ── Palette ──
+    const NAVY: [number,number,number]    = [40, 53, 147]
+    const NAVY_D: [number,number,number]  = [26, 35, 126]
+    const HEAD_BG: [number,number,number] = [57, 73, 171]
+    const SEC_BG: [number,number,number]  = [197, 202, 233]
+    const LBL_BG: [number,number,number]  = [236, 239, 241]
+    const BDR: [number,number,number]     = [176, 176, 176]
+    const TXT: [number,number,number]     = [33, 33, 33]
+    const TXT_MED: [number,number,number] = [55, 71, 79]
+    const TXT_DIM: [number,number,number] = [84, 100, 114] // ~5.5:1 on white — muted but AA-readable
+    const DR_T: [number,number,number]    = [13, 71, 161]
+    const CR_T: [number,number,number]    = [74, 20, 140]
+    const GRN_F: [number,number,number]   = [165, 214, 167], GRN_T: [number,number,number] = [27, 94, 32]
+    const RED_F: [number,number,number]   = [239, 154, 154], RED_T: [number,number,number] = [183, 28, 28]
+    const AMB_F: [number,number,number]   = [255, 204, 128], AMB_T: [number,number,number] = [191, 54, 12]
+    const DR_F: [number,number,number]    = [187, 222, 251]
+    const CR_F: [number,number,number]    = [225, 190, 231]
+    const TOT_F: [number,number,number]   = [207, 216, 220]
+    const STATUS_S: Record<string,{fill:[number,number,number];text:[number,number,number]}|undefined> = {
+      PASS:{fill:GRN_F,text:GRN_T}, MATCHED:{fill:GRN_F,text:GRN_T}, PASSED:{fill:GRN_F,text:GRN_T},
+      FAIL:{fill:RED_F,text:RED_T}, EXTRA:{fill:RED_F,text:RED_T}, MISMATCHED:{fill:RED_F,text:RED_T}, FAILED:{fill:RED_F,text:RED_T},
+      'WRONG TYPE':{fill:AMB_F,text:AMB_T},
+    }
+
+    let y = M
+    const need = (h: number) => { if (y + h > PH - M - 8) { doc.addPage(); y = M } }
+
+    type CS = {
+      t: string; span?: number; align?: 'L'|'C'|'R'
+      color?: [number,number,number]; fill?: [number,number,number]|null
+      bold?: boolean; size?: number; mono?: boolean; lbl?: boolean
+    }
+
+    // Factory — builds a row renderer for a given column-width array (mm).
+    // Cell text wraps within its column (splitTextToSize); the row grows to
+    // fit the tallest cell (capped at MAX_LINES, then ellipsised) so content
+    // never spills into the neighbouring column.
+    const makeRow = (cols: number[]) => (cells: CS[], h = 6.5) => {
+      const PAD = 2.5
+      const MAX_LINES = 5
+      // Pass 1 — measure wrapped lines per cell (font must be set before split)
+      let colIdx = 0
+      const measured = cells.map((c) => {
+        const span = c.span ?? 1
+        const cw = cols.slice(colIdx, colIdx + span).reduce((a, b) => a + b, 0)
+        const fs = c.size ?? (c.lbl ? 8 : 9)
+        doc.setFont(c.mono ? 'courier' : 'helvetica', c.bold || c.lbl ? 'bold' : 'normal')
+        doc.setFontSize(fs)
+        let lines: string[] = doc.splitTextToSize(safe(c.t), cw - PAD * 2)
+        if (lines.length > MAX_LINES) {
+          lines = lines.slice(0, MAX_LINES)
+          lines[MAX_LINES - 1] = lines[MAX_LINES - 1].replace(/.{3}$/, '') + '...'
+        }
+        colIdx += span
+        return { c, cw, fs, lines }
+      })
+      // Row height grows to fit the tallest wrapped cell
+      const rh = Math.max(h, ...measured.map(m => m.lines.length * m.fs * 0.353 * 1.25 + 2.4))
+      need(rh)
+
+      // Pass 2 — draw
+      doc.setDrawColor(...BDR)
+      let cx = M
+      for (const { c, cw, fs, lines } of measured) {
+        if (c.fill !== null) {
+          const bg = c.fill ?? (c.lbl ? LBL_BG : null)
+          if (bg) { doc.setFillColor(...bg); doc.rect(cx, y, cw, rh, 'FD') }
+          else doc.rect(cx, y, cw, rh, 'S')
+        }
+        doc.setFont(c.mono ? 'courier' : 'helvetica', c.bold || c.lbl ? 'bold' : 'normal')
+        doc.setFontSize(fs)
+        doc.setTextColor(...(c.color ?? (c.lbl ? TXT_MED : TXT)))
+        const tx = c.align==='C' ? cx+cw/2 : c.align==='R' ? cx+cw-PAD : cx+PAD
+        const alignOpt = c.align==='C' ? 'center' as const : c.align==='R' ? 'right' as const : 'left' as const
+        const lineStep = fs * 0.353 * 1.25
+        let ly = y + (rh - lines.length * lineStep) / 2 + fs * 0.353 * 0.9
+        for (const ln of lines) {
+          doc.text(ln, tx, ly, { align: alignOpt })
+          ly += lineStep
+        }
+        cx += cw
+      }
+      y += rh
+    }
+
+    // 4-col layout for cross-check [Field | PB | JV | Match]
+    const COLS4: number[] = [42, 58, 58, 24]
+    const row4 = makeRow(COLS4)
+    // 5-col layout for AD section [Account | Dr/Cr | Amount | Condition | Status]
+    // Condition column is widest — long rule strings wrap there, never overflow.
+    const COLS5: number[] = [40, 16, 34, 70, 22]
+    const row5 = makeRow(COLS5)
+
+    const sectionHeader = (title: string) => {
+      need(14); y += 4
+      doc.setFillColor(...SEC_BG); doc.rect(M, y, CW, 7.5, 'F')
+      doc.setDrawColor(...BDR); doc.rect(M, y, CW, 7.5, 'S')
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...NAVY_D)
+      doc.text(title.toUpperCase(), M+3, y+5)
+      y += 7.5
+    }
+
+    const groupBand = (title: string, muted = false) => {
+      need(7)
+      const bg: [number,number,number] = muted ? [236,239,241] : [232,234,246]
+      const tc: [number,number,number] = muted ? TXT_DIM : NAVY_D
+      doc.setFillColor(...bg); doc.rect(M, y, CW, 6, 'F')
+      doc.setDrawColor(...BDR); doc.rect(M, y, CW, 6, 'S')
+      doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(8); doc.setTextColor(...tc)
+      doc.text(safe(title), M+3, y+4)
+      y += 6
+    }
+
+    // ── Title banner ──
+    doc.setFillColor(...NAVY); doc.rect(M, y, CW, 16, 'F')
+    doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(255,255,255)
+    doc.text('JV VERIFICATION REPORT', M+4, y+10.5)
+    const chipText = ok ? 'PASSED' : 'FAILED'
+    const st = STATUS_S[chipText]!
+    doc.setFontSize(10)
+    const chipW = doc.getTextWidth(chipText)+7
+    doc.setFillColor(...st.fill); doc.roundedRect(PW-M-chipW-2, y+4.5, chipW, 7.5, 1.5, 1.5, 'F')
+    doc.setTextColor(...st.text); doc.text(chipText, PW-M-chipW+1, y+9.5)
+    y += 16
+
+    // meta line
+    doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(...TXT_DIM)
+    y += 5
+    doc.text(safe(`Document: ${pbRefNo}   |   Generated: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`), M+1, y)
+    y += 3
+
+    // ── Document Details ──
+    sectionHeader('Document Details')
+    row4([{ t:'Supplier', lbl:true }, { t:safe(selectedPB.supplier??'-'), span:3 }])
+    row4([
+      { t:'Amount', lbl:true },
+      amountNum!=null ? { t:`Rs. ${fmt(amountNum)}`, align:'R', bold:true, color:TXT } : { t:'-', color:TXT_DIM },
+      { t:'Date', lbl:true },
+      { t:safe(selectedPB.date??'-') },
+    ])
+
+    // ── Journal Voucher ──
+    sectionHeader('Journal Voucher')
+    row4([
+      { t:'JV Entry', lbl:true },
+      found
+        ? { t: found.ok ? 'Entry found in JV report' : `Not found - ${found.detail??''}`, span:3, bold:true, color:found.ok?GRN_T:RED_T }
+        : { t:'Not checked', span:3, color:TXT_DIM },
+    ])
+    if (balMatch) {
+      const drNum = Number(balMatch[1].replace(/,/g,''))
+      const crNum = Number(balMatch[2].replace(/,/g,''))
+      const bOk = !!balanceStep?.ok
+      row4([
+        { t:'Balance Check', lbl:true },
+        { t:`DR  ${fmt(drNum)}`, mono:true, color:DR_T, size:8 },
+        { t:`CR  ${fmt(crNum)}`, mono:true, color:CR_T, size:8 },
+        { t:bOk?'BALANCED':'UNBALANCED', align:'C', bold:true, size:8, fill:bOk?GRN_F:RED_F, color:bOk?GRN_T:RED_T },
+      ])
+    }
+
+    // ── Accounting Field Cross-check ──
+    const xrows = jvCompRows ?? fieldsStep?.fields?.map(f => ({ label:f.field, pb:'\u2014', jv:f.value })) ?? []
+    if (xrows.length > 0) {
+      sectionHeader('Accounting Field Cross-check')
+      row4([
+        { t:'Field',            fill:HEAD_BG, color:[255,255,255], size:8 },
+        { t:'Purchase Booking', fill:HEAD_BG, color:[255,255,255], size:8 },
+        { t:'Journal Voucher',  fill:HEAD_BG, color:[255,255,255], size:8 },
+        { t:'Match',            fill:HEAD_BG, color:[255,255,255], size:8, align:'C' },
+      ], 7)
+      for (const r of xrows) {
+        const match = r.pb!=='\u2014' && r.jv!=='\u2014' && r.pb.trim().toLowerCase()===r.jv.trim().toLowerCase()
+        const unk = r.pb==='\u2014' || r.jv==='\u2014'
+        row4([
+          { t:r.label||'', lbl:!!r.label, color:r.label?undefined:TXT_DIM },
+          { t:safe(r.pb), color:unk?TXT_DIM:TXT },
+          { t:safe(r.jv), color:unk?TXT_DIM:TXT },
+          unk
+            ? { t:'-', align:'C', color:TXT_DIM }
+            : { t:match?'PASS':'FAIL', align:'C', bold:true, size:8, fill:match?GRN_F:RED_F, color:match?GRN_T:RED_T },
+        ])
+      }
+    }
+
+    // ── Accounting Definition — Applied Rules ──
+    if (jvAccountRows.length > 0 && accountingDef.length > 0) {
+      const normName = (s: string) => s.trim().toLowerCase()
+      const defByName = new Map<string, typeof accountingDef[0]>()
+      for (const d of accountingDef) { const k=normName(d.account_name)+'|'+(d.dr_cr||'').toLowerCase(); if(!defByName.has(k)) defByName.set(k,d) }
+      const groups = new Map<string, typeof jvAccountRows>()
+      for (const ar of jvAccountRows) { const key=ar.commodity||''; if(!groups.has(key)) groups.set(key,[]); groups.get(key)!.push(ar) }
+      const sortedKeys = [...groups.keys()].sort((a,b) => a===''?1:b===''?-1:a.localeCompare(b))
+      const jvNameSet = new Set(jvAccountRows.map(r => normName(r.account_name)))
+      const notApplied = accountingDef.filter((d,i,arr) => {
+        const k=normName(d.account_name)
+        return arr.findIndex(x=>normName(x.account_name)===k&&x.dr_cr===d.dr_cr)===i && !jvNameSet.has(k)
+      })
+
+      sectionHeader('Accounting Definition - Applied Rules')
+      row5([
+        { t:'Account',        fill:HEAD_BG, color:[255,255,255], size:8 },
+        { t:'Dr/Cr',          fill:HEAD_BG, color:[255,255,255], size:8, align:'C' },
+        { t:'Amount',         fill:HEAD_BG, color:[255,255,255], size:8, align:'R' },
+        { t:'Rule / Condition', fill:HEAD_BG, color:[255,255,255], size:8 },
+        { t:'Status',         fill:HEAD_BG, color:[255,255,255], size:8, align:'C' },
+      ], 7)
+
+      let totalDr = 0, totalCr = 0
+      for (const commodity of sortedKeys) {
+        groupBand(commodity ? commodity.toUpperCase() : 'SHARED - all items')
+        const gRows = groups.get(commodity)!
+        let gDr = 0, gCr = 0
+        for (const ar of gRows) {
+          const def = defByName.get(normName(ar.account_name)+'|'+(ar.dr_cr||'').toLowerCase())
+          const match = !!def && def.dr_cr===ar.dr_cr
+          const status = !def?'EXTRA':match?'PASS':'WRONG TYPE'
+          const cond = def?.condition_text||(def?'Always applies':'-')
+          const ss = STATUS_S[status]!
+          const isDr = ar.dr_cr==='Debit'
+          const amtCol: [number,number,number] = isDr ? DR_T : CR_T
+          if (ar.amount!=null) { isDr?(gDr+=ar.amount):(gCr+=ar.amount) }
+          row5([
+            { t:safe(ar.account_name), bold:true, color:TXT },
+            { t:safe(ar.dr_cr), color:isDr?DR_T:CR_T, size:8, align:'C', bold:true },
+            { t:ar.amount!=null?fmt(ar.amount):'-', mono:true, color:ar.amount!=null?amtCol:TXT_DIM, size:8, align:'R' },
+            { t:safe(cond), mono:true, color:TXT_MED, size:7.5 },
+            { t:status, align:'C', bold:true, size:8, fill:ss.fill, color:ss.text },
+          ])
+        }
+        totalDr+=gDr; totalCr+=gCr
+        // per-commodity subtotal when >1 rows
+        if (gRows.length>1 && (gDr>0 || gCr>0)) {
+          row5([
+            { t:'', fill:null },
+            { t:'Subtotal', size:7.5, color:TXT_DIM, span:1 },
+            { t:gDr>0?fmt(gDr):gCr>0?fmt(gCr):'-', mono:true, color:gDr>0?DR_T:CR_T, size:7.5, align:'R' },
+            { t:'', fill:null },
+            { t:'', fill:null },
+          ], 5.5)
+        }
+      }
+      // totals from the full account rows list (avoids scoping issues)
+      const tDr = jvAccountRows.filter(r=>r.dr_cr==='Debit'&&r.amount!=null).reduce((s,r)=>s+r.amount!,0)
+      const tCr = jvAccountRows.filter(r=>r.dr_cr==='Credit'&&r.amount!=null).reduce((s,r)=>s+r.amount!,0)
+      const balanced = Math.abs(tDr-tCr)<0.01
+      need(9)
+      // Draw totals bar manually for full-width control
+      need(8)
+      doc.setFillColor(...TOT_F); doc.rect(M, y, CW, 8, 'FD')
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...TXT)
+      doc.text('TOTALS', M+3, y+5.2)
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...DR_T)
+      doc.setFillColor(...DR_F); doc.rect(M+COLS5[0], y, COLS5[1]+COLS5[2], 8, 'FD')
+      doc.text(`DR  ${fmt(tDr)}`, M+COLS5[0]+COLS5[1]+COLS5[2]-2, y+5.2, { align:'right' })
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...CR_T)
+      doc.setFillColor(...CR_F); doc.rect(M+COLS5[0]+COLS5[1]+COLS5[2], y, COLS5[3], 8, 'FD')
+      doc.text(`CR  ${fmt(tCr)}`, M+COLS5[0]+COLS5[1]+COLS5[2]+COLS5[3]-2, y+5.2, { align:'right' })
+      const bSt = balanced ? GRN_F : RED_F
+      const bTc = balanced ? GRN_T : RED_T
+      const bTxt = balanced ? 'DR = CR  OK' : 'DR != CR  !'
+      doc.setFillColor(...bSt); doc.rect(M+COLS5[0]+COLS5[1]+COLS5[2]+COLS5[3], y, COLS5[4], 8, 'FD')
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...bTc)
+      doc.text(bTxt, M+COLS5[0]+COLS5[1]+COLS5[2]+COLS5[3]+COLS5[4]/2, y+5.2, { align:'center' })
+      doc.setDrawColor(...BDR); doc.rect(M, y, CW, 8, 'S')
+      y += 8
+
+      if (notApplied.length > 0) {
+        y += 3
+        groupBand('NOT APPLIED THIS TRANSACTION', true)
+        row5([
+          { t:'Account',           fill:HEAD_BG, color:[255,255,255], size:7.5 },
+          { t:'Dr/Cr',             fill:HEAD_BG, color:[255,255,255], size:7.5, align:'C' },
+          { t:'-',                 fill:HEAD_BG, color:[255,255,255], size:7.5, align:'C' },
+          { t:'Why not applied',   fill:HEAD_BG, color:[255,255,255], size:7.5 },
+          { t:'-',                 fill:HEAD_BG, color:[255,255,255], size:7.5, align:'C' },
+        ], 6)
+        for (const d of notApplied) {
+          row5([
+            { t:safe(d.account_name), color:TXT_DIM },
+            { t:safe(d.dr_cr), color:TXT_DIM, size:8, align:'C' },
+            { t:'-', color:TXT_DIM, size:8, align:'C' },
+            { t:safe(d.condition_text||(d.has_conditions?'Conditional - condition not met':'Always applies')), mono:true, color:TXT_DIM, size:7.5 },
+            { t:'n/a', color:TXT_DIM, size:8, align:'C' },
+          ])
+        }
+      }
+    }
+
+    // ── Footer ──
+    need(10); y += 5
+    doc.setDrawColor(...BDR); doc.line(M, y-1, M+CW, y-1)
+    doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(...TXT_DIM)
+    doc.text(safe(`Generated by RhythmERP Automation - JV Verification  |  ${pbRefNo}`), M, y+2)
+
+    const filename = `${pbRefNo.replace(/[\\/]/g, '-')}_JV_Report.pdf`
+    const blob = doc.output('blob')
+    const pdfUrl = URL.createObjectURL(blob)
+    const dlBtn = `<a href="${pdfUrl}" download="${filename}" style="position:fixed;top:8px;right:12px;z-index:9999;padding:6px 14px;background:#3F51B5;color:#fff;border-radius:6px;font:13px/1 sans-serif;text-decoration:none">⬇ Download</a>`
+    const win = window.open('', '_blank')
+    if (win) {
+      win.document.write(
+        `<!doctype html><html><head><title>${filename}</title></head>` +
+        `<body style="margin:0;height:100vh">${dlBtn}` +
+        `<embed src="${pdfUrl}" type="application/pdf" width="100%" height="100%"/>` +
+        `</body></html>`
+      )
+      win.document.close()
+    }
+    setTimeout(() => URL.revokeObjectURL(pdfUrl), 120_000)
   }, [selectedPB, jvSteps, jvCompRows, jvAccountRows, accountingDef, pbRefNo])
 
   if (showJVCheck) {
@@ -973,300 +1348,290 @@ ${rows.join('\n')}
               const foundStep = jvSteps.find(s => s.n === 1)
               const fieldsStep = jvSteps.find(s => s.fields)
               const balanceStep = jvSteps.find(s => s.detail && !s.fields)
+              const balM = balanceStep?.detail?.match(/DR\s*=\s*([\d,]+\.?\d*)\s+[|]CR[|]\s*=\s*([\d,]+\.?\d*)/)
+
+              const normName = (s: string) => s.trim().toLowerCase()
+              const fmtAmt = (n: number | null | undefined) =>
+                n != null ? n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'
+
+              const defByName = new Map<string, typeof accountingDef[0]>()
+              for (const d of accountingDef) {
+                const k = normName(d.account_name) + '|' + (d.dr_cr || '').toLowerCase()
+                if (!defByName.has(k)) defByName.set(k, d)
+              }
+              const groups = new Map<string, typeof jvAccountRows>()
+              for (const row of jvAccountRows) {
+                const key = row.commodity || ''
+                if (!groups.has(key)) groups.set(key, [])
+                groups.get(key)!.push(row)
+              }
+              const sortedKeys = [...groups.keys()].sort((a, b) => a===''?1:b===''?-1:a.localeCompare(b))
+              const jvNameSet = new Set(jvAccountRows.map(r => normName(r.account_name)))
+              const notApplied = accountingDef.filter((d, i, arr) => {
+                const k = normName(d.account_name)
+                return arr.findIndex(x => normName(x.account_name)===k && x.dr_cr===d.dr_cr)===i && !jvNameSet.has(k)
+              })
+              const totalDr = jvAccountRows.filter(r => r.dr_cr==='Debit').reduce((s,r)=>s+(r.amount??0),0)
+              const totalCr = jvAccountRows.filter(r => r.dr_cr==='Credit').reduce((s,r)=>s+(r.amount??0),0)
+              const hasAmounts = jvAccountRows.some(r => r.amount!=null)
+              const balanced = Math.abs(totalDr-totalCr)<0.02
+
+              const xrows = jvCompRows ?? fieldsStep?.fields?.map(f => ({ label: f.field, pb: '—', jv: f.value })) ?? []
+
+              // shared class constants
+              const SECTION_STRIP = 'px-4 py-1.5 bg-gray-100 dark:bg-gray-800/80 border-y border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400'
+              const pill = (color: 'green'|'blue'|'purple'|'red'|'gray', label: string) => {
+                const cls = {
+                  green:  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700',
+                  blue:   'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-700',
+                  purple: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200 dark:border-purple-700',
+                  red:    'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-200 dark:border-red-700',
+                  gray:   'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400 border-gray-200 dark:border-gray-600',
+                }[color]
+                return <span className={`inline-flex items-center px-1.5 py-px rounded text-[10px] font-semibold border ${cls}`}>{label}</span>
+              }
+              const statusColor = (s: string): 'green'|'red'|'gray' =>
+                s==='PASS' ? 'green' : s==='EXTRA' || s==='WRONG TYPE' ? 'red' : 'gray'
+
+              const renderCond = (condText: string) =>
+                <span className="text-[11px] text-gray-500 dark:text-gray-400">{condText || 'Always applies'}</span>
 
               return (
-                <div className="rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shadow-sm bg-white dark:bg-gray-900">
-                  {/* ── Excel-style toolbar / name box ── */}
-                  <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-[#F3F3F3] dark:bg-gray-800 border-b border-gray-300 dark:border-gray-600">
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-900 shadow-sm">
+
+                  {/* 1. Header bar */}
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-700">
                     <div className="flex items-center gap-2 min-w-0">
-                      <FileSpreadsheet className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                      <span className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 shrink-0 hidden sm:inline">JV Report</span>
-                      <span className="text-[11px] font-mono px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 rounded-sm text-gray-800 dark:text-gray-100 truncate">
-                        {pbRefNo}
-                      </span>
-                      {!verifying && jvSteps.length > 0 && (
-                        <span className={`px-2 py-0.5 rounded-sm text-[10px] font-bold tracking-wide shrink-0 border ${
-                          passed
-                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
-                            : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-300 dark:border-red-700'
-                        }`}>
-                          {passed ? '✓ PASSED' : '✕ FAILED'}
-                        </span>
-                      )}
+                      <FileBarChart2 className="size-3.5 shrink-0 text-[#3F51B5] dark:text-[#7986CB]" />
+                      <span className="text-[12px] font-mono font-bold text-gray-800 dark:text-gray-100 truncate">{pbRefNo}</span>
+                      {!verifying && jvSteps.length > 0 && (passed ? pill('green', '✓ Passed') : pill('red', '✕ Failed'))}
+                      {verifying && <Loader2 className="size-3.5 animate-spin text-[#3F51B5] shrink-0" />}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={exportJvReport}
-                        disabled={verifying || jvSteps.length === 0}
-                        className="text-[11px] flex items-center gap-1 px-2 py-0.5 rounded-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        <Download className="size-3" />
-                        .xls
+                      <button onClick={exportJvPdf} disabled={verifying || jvSteps.length === 0}
+                        className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                        <FileText className="size-3" />PDF
+                      </button>
+                      <button onClick={exportJvReport} disabled={verifying || jvSteps.length === 0}
+                        className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                        <Download className="size-3" />.xls
                       </button>
                       <button
                         onClick={() => { setPbListOpen(true); setJvSteps([]); setJvError(''); setPbRefNo(''); setSelectedPB(null); setPbItems([]) }}
-                        className="text-[11px] text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] transition-colors cursor-pointer px-1"
-                      >
-                        ← Change
+                        className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] hover:border-[#3F51B5]/50 dark:hover:border-[#7986CB]/50 transition-colors cursor-pointer">
+                        <RefreshCw className="size-3" />Change
                       </button>
                     </div>
                   </div>
 
-                  {/* ── Sheet grid ── */}
-                  <table className="w-full border-collapse text-left">
-                    <thead>
-                      <tr className="bg-gray-100 dark:bg-gray-800 select-none">
-                        <th className="border border-gray-200 dark:border-gray-700 w-8 min-w-8"></th>
-                        {['A', 'B', 'C', 'D'].map((c) => (
-                          <th key={c} className="border border-gray-200 dark:border-gray-700 text-[9px] font-normal text-gray-400 dark:text-gray-500 py-0.5 text-center">{c}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {/* R1 — document */}
-                      <tr>
-                        <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">1</td>
-                        <td className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[10px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 bg-gray-50/70 dark:bg-gray-800/40 w-32">Document</td>
-                        <td colSpan={2} className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] font-mono font-bold text-gray-900 dark:text-gray-50">{verifying ? '…' : pbRefNo}</td>
-                        <td className={`border border-gray-200 dark:border-gray-700 w-16 px-2 py-1.5 text-center ${passed ? 'bg-emerald-50 dark:bg-emerald-900/20' : failed ? 'bg-red-50 dark:bg-red-900/20' : ''}`}>
-                          {verifying
-                            ? <Loader2 className="size-3.5 animate-spin text-[#3F51B5] mx-auto" />
-                            : jvSteps.length > 0
-                              ? passed ? <CheckCircle2 className="size-3.5 text-emerald-500 mx-auto" /> : <XCircle className="size-3.5 text-red-500 mx-auto" />
-                              : null}
-                        </td>
-                      </tr>
-                      {/* R2 — supplier / amount / date */}
-                      {selectedPB && (
-                        <tr>
-                          <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">2</td>
-                          <td className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[10px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 bg-gray-50/70 dark:bg-gray-800/40">Supplier</td>
-                          <td colSpan={2} className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] font-medium text-gray-800 dark:text-gray-100">{selectedPB.supplier ?? '—'}</td>
-                          <td className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] text-right whitespace-nowrap text-gray-600 dark:text-gray-300">
-                            {selectedPB.amount ? `₹${Number(selectedPB.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}
-                            {selectedPB.date && <span className="text-gray-400 dark:text-gray-500"> · {selectedPB.date}</span>}
-                          </td>
-                        </tr>
-                      )}
-                      {/* R3 — journal voucher found */}
-                      {foundStep && (
-                        <tr>
-                          <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">3</td>
-                          <td className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[10px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 bg-gray-50/70 dark:bg-gray-800/40">Journal Voucher</td>
-                          <td colSpan={2} className={`border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] ${foundStep.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-600 dark:text-red-400'}`}>
-                            {foundStep.ok ? 'Entry found in JV report' : `Not found — ${foundStep.detail ?? ''}`}
-                          </td>
-                          <td className="border border-gray-200 dark:border-gray-700 w-16 text-center">
-                            {foundStep.ok ? <CheckCircle2 className="size-3.5 text-emerald-500 mx-auto" /> : <XCircle className="size-3.5 text-red-500 mx-auto" />}
-                          </td>
-                        </tr>
-                      )}
-                      {/* Verifying / error rows */}
-                      {verifying && (
-                        <tr>
-                          <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">{selectedPB ? '4' : '3'}</td>
-                          <td colSpan={4} className="border border-gray-200 dark:border-gray-700 px-2 py-2 text-[11px] text-gray-400 dark:text-gray-500">
-                            Searching JV report pages…
-                          </td>
-                        </tr>
-                      )}
-                      {jvError && !verifying && (
-                        <tr>
-                          <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">{selectedPB ? '4' : '3'}</td>
-                          <td colSpan={4} className="border border-gray-200 dark:border-gray-700 px-2 py-2 text-[11px] text-red-600 dark:text-red-400">
-                            {jvError}
-                          </td>
-                        </tr>
-                      )}
+                  {/* 2. Summary grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-200 dark:border-gray-700">
+                    <div className="px-4 py-3">
+                      <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">Supplier</div>
+                      <div className="text-[13px] font-medium text-gray-800 dark:text-gray-100 truncate">{selectedPB?.supplier ?? '—'}</div>
+                    </div>
+                    <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 sm:border-t-0">
+                      <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">Amount</div>
+                      <div className="text-[13px] font-mono font-medium text-gray-800 dark:text-gray-100 truncate">
+                        {selectedPB?.amount
+                          ? <>₹{Number(selectedPB.amount).toLocaleString('en-IN',{maximumFractionDigits:0})}{selectedPB.date && <span className="text-gray-400 dark:text-gray-500 font-sans font-normal"> · {selectedPB.date}</span>}</>
+                          : <span className="font-sans font-normal">{selectedPB?.date ?? '—'}</span>}
+                      </div>
+                    </div>
+                    <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 sm:border-t-0">
+                      <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">Journal Voucher</div>
+                      <div className={`text-[13px] font-medium ${foundStep ? (foundStep.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400') : 'text-gray-400 dark:text-gray-500'}`}>
+                        {foundStep ? (foundStep.ok ? '✓ Entry found' : '✕ Not found') : verifying ? 'Checking…' : '—'}
+                      </div>
+                    </div>
+                    <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 sm:border-t-0">
+                      <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">Balance Check</div>
+                      <div className={`text-[13px] font-medium ${balanceStep ? (balanceStep.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400') : 'text-gray-400 dark:text-gray-500'}`}>
+                        {balanceStep
+                          ? (balanceStep.ok
+                            ? <>✓ Matched{balM && <span className="text-[11px] font-mono font-normal ml-1 text-gray-400 dark:text-gray-500">(DR={balM[1]})</span>}</>
+                            : '✕ Unbalanced')
+                          : verifying ? 'Checking…' : '—'}
+                      </div>
+                    </div>
+                  </div>
 
-                  {/* ── R4 — balance check ── */}
-                  {balanceStep && (() => {
-                    const m = balanceStep.detail?.match(/DR\s*=\s*([\d,]+\.?\d*)\s+\|CR\|\s*=\s*([\d,]+\.?\d*)/)
-                    return (
-                      <tr>
-                        <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">4</td>
-                        <td className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[10px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 bg-gray-50/70 dark:bg-gray-800/40">Balance Check</td>
-                        {m ? (
-                          <>
-                            <td className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] font-mono text-blue-700 dark:text-blue-300">DR ₹{m[1]}</td>
-                            <td className={`border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] font-mono ${balanceStep.ok ? 'text-purple-700 dark:text-purple-300' : 'text-red-600 dark:text-red-400'}`}>
-                              {balanceStep.ok ? '=' : '≠'} CR ₹{m[2]}
-                            </td>
-                          </>
-                        ) : (
-                          <td colSpan={2} className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] font-mono text-gray-600 dark:text-gray-300">{balanceStep.detail ?? '—'}</td>
-                        )}
-                        <td className="border border-gray-200 dark:border-gray-700 w-16 text-center">
-                          {balanceStep.ok ? <CheckCircle2 className="size-3.5 text-emerald-500 mx-auto" /> : <XCircle className="size-3.5 text-red-500 mx-auto" />}
-                        </td>
-                      </tr>
-                    )
-                  })()}
+                  {/* errors */}
+                  {jvError && !verifying && (
+                    <div className="mx-4 my-3 px-3 py-2 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-[11px] text-red-600 dark:text-red-400">{jvError}</div>
+                  )}
 
-                  {/* ── Section — accounting field cross-check ── */}
-                  {fieldsStep && (
+                  {/* 3. Field cross-check — real table */}
+                  {xrows.length > 0 && (
                     <>
-                      <tr>
-                        <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">5</td>
-                        <td colSpan={4} className="border border-gray-200 dark:border-gray-700 px-2 py-1 bg-gray-100 dark:bg-gray-800 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                          Accounting Field Cross-check
-                        </td>
-                      </tr>
-                      <tr className="bg-gray-50 dark:bg-gray-800/60">
-                        <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500">6</td>
-                        <td className="border border-gray-200 dark:border-gray-700 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Field</td>
-                        <td className="border border-gray-200 dark:border-gray-700 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Purchase Booking</td>
-                        <td className="border border-gray-200 dark:border-gray-700 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Journal Voucher</td>
-                        <td className="border border-gray-200 dark:border-gray-700 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 text-center">Match</td>
-                      </tr>
-                      {(jvCompRows ?? fieldsStep.fields?.map(f => ({ label: f.field, pb: '—', jv: f.value })) ?? []).map((row, ri) => {
-                        const match = row.pb !== '—' && row.jv !== '—' && row.pb.trim().toLowerCase() === row.jv.trim().toLowerCase()
-                        const unknown = row.pb === '—' || row.jv === '—'
-                        return (
-                          <tr key={ri}>
-                            <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">{7 + ri}</td>
-                            <td className={`border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[11px] font-medium ${row.label ? 'text-gray-600 dark:text-gray-300' : ''}`}>{row.label || '\u00A0'}</td>
-                            <td className={`border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] ${row.pb === '—' ? 'text-gray-300 dark:text-gray-600' : 'text-gray-800 dark:text-gray-100'}`}>{row.pb}</td>
-                            <td className={`border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] ${row.jv === '—' ? 'text-gray-300 dark:text-gray-600' : 'text-gray-800 dark:text-gray-100'}`}>{row.jv}</td>
-                            <td className={`border border-gray-200 dark:border-gray-700 w-16 px-2 py-1.5 text-center text-[10px] font-bold ${
-                              unknown ? ''
-                              : match ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
-                              : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-                            }`}>
-                              {unknown ? '—' : match ? 'PASS' : 'FAIL'}
-                            </td>
-                          </tr>
-                        )
-                      })}
+                      <div className={SECTION_STRIP}>Field cross-check</div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-[12px]">
+                          <thead>
+                            <tr className="bg-gray-50 dark:bg-gray-800/80">
+                              {(['Field','Purchase Booking','Journal Voucher','Match'] as const).map(h => (
+                                <th key={h} className={`px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-left${h==='Match'?' w-14 text-center':''}`}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {xrows.map((row, ri) => {
+                              const match = row.pb!=='—' && row.jv!=='—' && row.pb.trim().toLowerCase()===row.jv.trim().toLowerCase()
+                              const unk = row.pb==='—' || row.jv==='—'
+                              return (
+                                <tr key={ri} className="bg-white dark:bg-gray-900 hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
+                                  <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 font-medium text-gray-700 dark:text-gray-300">{row.label||'—'}</td>
+                                  <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 ${row.pb==='—'?'text-gray-300 dark:text-gray-600':''}`}>{row.pb}</td>
+                                  <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 ${row.jv==='—'?'text-gray-300 dark:text-gray-600':''}`}>{row.jv}</td>
+                                  <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-center">
+                                    {unk ? <span className="text-gray-300 dark:text-gray-600">—</span>
+                                      : match ? <CheckCircle2 className="size-3.5 text-emerald-500 inline" />
+                                      : <XCircle className="size-3.5 text-red-500 inline" />}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </>
                   )}
 
-                  {/* ── Section — accounting definition cross-check (commodity-grouped) ── */}
-                  {(accountingDef.length > 0 || accountingDefLoading) && jvAccountRows.length > 0 && (() => {
-                    const normName = (s: string) => s.trim().toLowerCase()
-
-                    // Build def lookup: lower(account_name) → first matching def entry
-                    const defByName = new Map<string, typeof accountingDef[0]>()
-                    for (const d of accountingDef) {
-                      const k = normName(d.account_name)
-                      if (!defByName.has(k)) defByName.set(k, d)
-                    }
-
-                    // Group JV rows by commodity ('' = shared, e.g. Payable)
-                    const groups = new Map<string, typeof jvAccountRows>()
-                    for (const row of jvAccountRows) {
-                      const key = row.commodity || ''
-                      if (!groups.has(key)) groups.set(key, [])
-                      groups.get(key)!.push(row)
-                    }
-                    const sortedKeys = [...groups.keys()].sort((a, b) =>
-                      a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)
-                    )
-
-                    // AD rules that fired = any account_name present in JV rows
-                    const jvAccountNameSet = new Set(jvAccountRows.map(r => normName(r.account_name)))
-                    const notApplied = accountingDef.filter((d, i, arr) => {
-                      const k = normName(d.account_name)
-                      // deduplicate: only first occurrence per name+dr_cr
-                      const firstIdx = arr.findIndex(x => normName(x.account_name) === k && x.dr_cr === d.dr_cr)
-                      return firstIdx === i && !jvAccountNameSet.has(k)
-                    })
-
-                    const TD = 'border border-gray-200 dark:border-gray-700'
-                    const statusCls = (s: string) =>
-                      s === 'PASS'       ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
-                      : s === 'EXTRA'    ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-                      : s === 'WRONG TYPE' ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
-                      : ''
-
-                    return (
-                      <>
-                        {/* Section header — same style as "Accounting Field Cross-check" above */}
-                        <tr>
-                          <td className={`${TD} w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60`}></td>
-                          <td colSpan={4} className={`${TD} px-2 py-1 bg-gray-100 dark:bg-gray-800 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400`}>
-                            Accounting Definition — Applied Rules
-                          </td>
-                        </tr>
-                        {/* Column headers — same style as cross-check col headers */}
-                        <tr className="bg-gray-50 dark:bg-gray-800/60">
-                          <td className={`${TD} w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500`}></td>
-                          <td className={`${TD} px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400`}>Account</td>
-                          <td className={`${TD} px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400`}>Dr/Cr</td>
-                          <td className={`${TD} px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400`}>Condition</td>
-                          <td className={`${TD} px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 text-center`}>Status</td>
-                        </tr>
-
-                        {accountingDefLoading ? (
-                          <tr>
-                            <td className={`${TD} w-8`}></td>
-                            <td colSpan={4} className={`${TD} px-2 py-2 text-[11px] text-gray-400 italic`}>Loading definition…</td>
-                          </tr>
-                        ) : sortedKeys.map(commodity => {
-                          const rows = groups.get(commodity)!
-                          return (
-                            <React.Fragment key={commodity || '__shared__'}>
-                              {/* Commodity sub-header — same style as section headers but indented/lighter */}
-                              <tr>
-                                <td className={`${TD} w-8 bg-gray-50 dark:bg-gray-800/60`}></td>
-                                <td colSpan={4} className={`${TD} px-2 py-1 bg-gray-100 dark:bg-gray-800 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400`}>
-                                  {commodity || 'Shared — all items'}
-                                </td>
+                  {/* 4 + 5. Accounting entries — single continuous table */}
+                  {(jvAccountRows.length > 0 || accountingDefLoading) && (
+                    <>
+                      <div className={SECTION_STRIP}>Accounting entries</div>
+                      {accountingDefLoading ? (
+                        <div className="px-4 py-4 text-[11px] text-gray-400 dark:text-gray-500 italic flex items-center gap-2">
+                          <Loader2 className="size-3 animate-spin" />Loading accounting definition…
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse text-[12px]">
+                            <thead>
+                              <tr className="bg-gray-50 dark:bg-gray-800/80">
+                                <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-left w-12">DR/CR</th>
+                                <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-left">Account</th>
+                                <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-left w-20">Status</th>
+                                <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-left">Condition</th>
+                                <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-right w-28">Amount</th>
                               </tr>
-                              {rows.map((row, ri) => {
-                                const def = defByName.get(normName(row.account_name))
-                                const inDef = !!def
-                                const drCrMatch = inDef && def!.dr_cr === row.dr_cr
-                                const status = !inDef ? 'EXTRA' : drCrMatch ? 'PASS' : 'WRONG TYPE'
-                                const condText = def?.condition_text || (def ? 'Always applies' : '—')
+                            </thead>
+                            <tbody>
+                              {sortedKeys.map(commodity => {
+                                const rows = groups.get(commodity)!
+                                const gDr = rows.filter(r=>r.dr_cr==='Debit').reduce((s,r)=>s+(r.amount??0),0)
+                                const gCr = rows.filter(r=>r.dr_cr==='Credit').reduce((s,r)=>s+(r.amount??0),0)
+                                const hasGrpAmt = rows.some(r=>r.amount!=null)
                                 return (
-                                  <tr key={ri}>
-                                    <td className={`${TD} w-8 bg-gray-50 dark:bg-gray-800/60`}></td>
-                                    <td className={`${TD} px-2 py-1.5 text-[12px] text-gray-800 dark:text-gray-100`}>{row.account_name}</td>
-                                    <td className={`${TD} px-2 py-1.5 text-[11px] text-gray-600 dark:text-gray-300`}>{row.dr_cr}</td>
-                                    <td className={`${TD} px-2 py-1.5 text-[11px] text-gray-600 dark:text-gray-300`}>{condText}</td>
-                                    <td className={`${TD} w-20 px-2 py-1.5 text-center text-[10px] font-bold ${statusCls(status)}`}>{status}</td>
-                                  </tr>
+                                  <React.Fragment key={commodity||'__shared__'}>
+                                    <tr className="bg-indigo-50 dark:bg-indigo-950/40">
+                                      <td colSpan={5} className="px-3 py-1.5 border border-indigo-100 dark:border-indigo-900/60">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 uppercase tracking-wide">
+                                            {commodity || 'Shared — all items'}
+                                          </span>
+                                          <span className="text-[10px] font-mono text-indigo-400 dark:text-indigo-500">{rows.length} {rows.length===1?'entry':'entries'}</span>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                    {rows.map((row, ri) => {
+                                      const def = defByName.get(normName(row.account_name)+'|'+(row.dr_cr||'').toLowerCase())
+                                      const drCrMatch = !!def && def.dr_cr===row.dr_cr
+                                      const status = !def?'EXTRA':drCrMatch?'PASS':'WRONG TYPE'
+                                      const condText = def?.condition_text||(def?'Always applies':'')
+                                      const isDebit = row.dr_cr==='Debit'
+                                      return (
+                                        <tr key={ri} className="bg-white dark:bg-gray-900 hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+                                          <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-center">
+                                            {isDebit ? pill('blue','DR') : pill('purple','CR')}
+                                          </td>
+                                          <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 font-medium text-gray-800 dark:text-gray-100">{row.account_name}</td>
+                                          <td className="px-3 py-2 border border-gray-200 dark:border-gray-700">{pill(statusColor(status), status)}</td>
+                                          <td className="px-3 py-2 border border-gray-200 dark:border-gray-700">
+                                            {condText ? renderCond(condText) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                                          </td>
+                                          <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 text-right font-mono font-semibold ${isDebit?'text-blue-700 dark:text-blue-300':'text-purple-700 dark:text-purple-300'}`}>
+                                            {fmtAmt(row.amount)}
+                                          </td>
+                                        </tr>
+                                      )
+                                    })}
+                                    {hasGrpAmt && rows.length > 1 && (
+                                      <tr className="bg-gray-50 dark:bg-gray-800/50">
+                                        <td colSpan={4} className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] text-gray-400 dark:text-gray-500 font-medium">Subtotal</td>
+                                        <td className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-right font-mono text-[11px]">
+                                          {gDr>0 && <span className="text-blue-600 dark:text-blue-400">DR {fmtAmt(gDr)}</span>}
+                                          {gDr>0 && gCr>0 && <span className="text-gray-300 dark:text-gray-600 mx-1">·</span>}
+                                          {gCr>0 && <span className="text-purple-600 dark:text-purple-400">CR {fmtAmt(gCr)}</span>}
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </React.Fragment>
                                 )
                               })}
-                            </React.Fragment>
-                          )
-                        })}
+                            </tbody>
+                            {hasAmounts && (
+                              <tfoot>
+                                <tr className="bg-white dark:bg-gray-900">
+                                  <td colSpan={4} className="px-3 py-2.5 border-t-2 border border-gray-300 dark:border-gray-500 font-bold text-[12px] text-gray-700 dark:text-gray-200">Total</td>
+                                  <td className="px-3 py-2.5 border-t-2 border border-gray-300 dark:border-gray-500 text-right">
+                                    <div className="flex items-center justify-end gap-1.5 font-mono text-[12px] font-semibold">
+                                      <span className="text-blue-700 dark:text-blue-300">DR {fmtAmt(totalDr)}</span>
+                                      <span className={balanced?'text-emerald-600 dark:text-emerald-400':'text-red-500 dark:text-red-400'}>{balanced?'=':'≠'}</span>
+                                      <span className="text-purple-700 dark:text-purple-300">CR {fmtAmt(totalCr)}</span>
+                                      {balanced ? <CheckCircle2 className="size-3 text-emerald-500" /> : <XCircle className="size-3 text-red-500" />}
+                                    </div>
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            )}
+                          </table>
+                        </div>
+                      )}
 
-                        {/* Rules that did NOT fire this transaction */}
-                        {notApplied.length > 0 && (
-                          <>
-                            <tr>
-                              <td className={`${TD} w-8 bg-gray-50 dark:bg-gray-800/60`}></td>
-                              <td colSpan={4} className={`${TD} px-2 py-1 bg-gray-100 dark:bg-gray-800 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500`}>
-                                Not applied this transaction
-                              </td>
-                            </tr>
-                            {notApplied.map((def, ri) => (
-                              <tr key={`na-${ri}`}>
-                                <td className={`${TD} w-8 bg-gray-50 dark:bg-gray-800/60`}></td>
-                                <td className={`${TD} px-2 py-1.5 text-[12px] text-gray-400 dark:text-gray-500`}>{def.account_name}</td>
-                                <td className={`${TD} px-2 py-1.5 text-[11px] text-gray-400 dark:text-gray-500`}>{def.dr_cr}</td>
-                                <td className={`${TD} px-2 py-1.5 text-[11px] text-gray-400 dark:text-gray-500`}>
-                                  {def.condition_text || (def.has_conditions ? 'Conditional' : 'Always applies')}
-                                </td>
-                                <td className={`${TD} w-20 px-2 py-1.5 text-center text-[10px] text-gray-400 dark:text-gray-500`}>—</td>
-                              </tr>
-                            ))}
-                          </>
-                        )}
-                      </>
-                    )
-                  })()}
-                    </tbody>
-                  </table>
-
-                  {/* ── Sheet tab bar ── */}
-                  <div className="flex items-center px-1.5 pt-1 bg-[#F3F3F3] dark:bg-gray-800 border-t border-gray-300 dark:border-gray-600">
-                    <span className="px-3 py-0.5 text-[10px] font-medium bg-white dark:bg-gray-900 border border-b-0 border-gray-300 dark:border-gray-600 rounded-t-sm text-gray-600 dark:text-gray-300">
-                      JV_Report
-                    </span>
-                  </div>
+                      {/* 6. Not-applied rules — collapsible, own bordered table */}
+                      {notApplied.length > 0 && (
+                        <div className="border-t border-gray-100 dark:border-gray-800">
+                          <button
+                            onClick={() => setNotAppliedOpen(o => !o)}
+                            className="flex items-center gap-1.5 w-full px-4 py-2 text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors cursor-pointer"
+                          >
+                            <ChevronDown className={`size-3.5 transition-transform duration-150 ${notAppliedOpen?'rotate-180':''}`} />
+                            {notApplied.length} rule{notApplied.length!==1?'s':''} not applied this transaction
+                          </button>
+                          {notAppliedOpen && (
+                            <div className="overflow-x-auto border-t border-gray-100 dark:border-gray-800">
+                              <table className="w-full border-collapse text-[12px]">
+                                <thead>
+                                  <tr className="bg-gray-50 dark:bg-gray-800/60">
+                                    <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-left w-12">DR/CR</th>
+                                    <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-left">Account</th>
+                                    <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-left">Why not applied</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {notApplied.map((def, ri) => (
+                                    <tr key={ri} className="bg-gray-50/50 dark:bg-gray-800/20">
+                                      <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-center">
+                                        {pill('gray', def.dr_cr==='Debit'?'DR':'CR')}
+                                      </td>
+                                      <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500">{def.account_name}</td>
+                                      <td className="px-3 py-2 border border-gray-200 dark:border-gray-700">
+                                        {(def.condition_text || def.has_conditions)
+                                          ? renderCond(def.condition_text || 'Conditional — condition not met')
+                                          : <span className="text-gray-300 dark:text-gray-600 italic">Always applies</span>}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )
             })()}

@@ -300,13 +300,24 @@ def cbr_locations_endpoint(request: CbrTokenRequest):
         if not locations:
             locations = fallback
 
-        # Mark occupied locations
+        # Fetch current active items directly from Item Master listing
+        total_item_ids: set = set()
+        try:
+            im_result = client.list_entries("Item Master", page_size=500)
+            im_rows = im_result.get("screenmatlistingdata_set", im_result.get("results", []))
+            total_item_ids = {int(r["id"]) for r in im_rows if r.get("id")}
+            print(f"[CBR] {len(total_item_ids)} total items in Item Master")
+        except Exception as exc:
+            print(f"[CBR] item fetch failed (gap detection disabled): {exc}")
+
+        # Check existing CBR entries and per-location item coverage
         try:
             existing = client.list_entries("Commodity Base Rate", page_size=500)
             entries = existing.get("screenmatlistingdata_set", existing.get("results", []))
-            occupied_ids = set()
-            # Build name→id map for resolving string location_ref_id values
             name_to_id = {loc["name"].lower(): loc["id"] for loc in locations}
+
+            # Group ALL entries by location (union across multiple entries per location)
+            entries_by_loc_id: dict = {}
             for e in (entries or []):
                 loc_val = e.get("location_ref_id")
                 if loc_val is None:
@@ -315,17 +326,38 @@ def cbr_locations_endpoint(request: CbrTokenRequest):
                 if isinstance(loc_val, (int, float)):
                     loc_id = int(loc_val)
                 elif isinstance(loc_val, str):
-                    # Try integer parse first
                     try:
                         loc_id = int(loc_val)
                     except (ValueError, TypeError):
-                        # Match by name (case-insensitive)
                         loc_id = name_to_id.get(loc_val.lower().strip())
                 if loc_id is not None:
-                    occupied_ids.add(loc_id)
+                    entries_by_loc_id.setdefault(loc_id, []).append(e)
+
+            # For each location, union item_ref_ids across ALL its CBR entries
             for loc in locations:
-                if loc["id"] in occupied_ids:
+                lid = loc["id"]
+                if lid not in entries_by_loc_id:
+                    loc["gap_count"] = len(total_item_ids)
+                    continue
+
+                covered_item_ids: set = set()
+                if total_item_ids:
+                    for entry in entries_by_loc_id[lid]:
+                        try:
+                            detail = client.get_entry("Commodity Base Rate", entry["id"])
+                            for child in (detail or {}).get("children", []):
+                                for row in child.get("details", []):
+                                    iid = row.get("item_ref_id")
+                                    if iid is not None:
+                                        covered_item_ids.add(int(iid))
+                        except Exception:
+                            pass
+
+                gap = len(total_item_ids - covered_item_ids)
+                loc["gap_count"] = gap
+                if gap == 0:
                     loc["occupied"] = True
+
         except Exception as exc:
             print(f"[CBR] occupied detection failed: {exc}")
 
@@ -615,15 +647,26 @@ def jv_verify_endpoint(request: JVVerifyRequest):
             "detail": f"DR = {result.debit:,.2f}   |CR| = {abs(result.credit):,.2f}",
         })
 
-    # Collect JV account rows — one per child row, with commodity, for commodity-grouped cross-check
+    # Collect JV account rows — one per child row, with commodity + amount
     account_rows = []
     if result.found:
         for row in result.child_rows:
             name = row.get("account_name") or ""
             dc = row.get("debit_credit_type") or row.get("dr_cr") or ""
             commodity = row.get("commodity") or ""
+            if dc == "Debit":
+                amount = (row.get("transaction_debit_amount") or row.get("debit_amount")
+                          or row.get("base_debit_amount") or row.get("transaction_amount") or "")
+            else:
+                amount = (row.get("transaction_credit_amount") or row.get("credit_amount")
+                          or row.get("base_credit_amount") or row.get("transaction_amount") or "")
             if name:
-                account_rows.append({"account_name": name, "dr_cr": dc, "commodity": commodity})
+                account_rows.append({
+                    "account_name": name,
+                    "dr_cr": dc,
+                    "commodity": commodity,
+                    "amount": float(amount) if amount else None,
+                })
 
     return JSONResponse({"steps": steps, "ok": result.ok(), "account_rows": account_rows})
 
@@ -698,13 +741,12 @@ def accounting_def_endpoint(request: AccountingDefRequest):
         return fallback
 
     def _resolve_options(param_name: str, field_data_type: str, options: list) -> list[str]:
-        # String options (e.g. ["Supplier", "Farmer"]) — no resolution needed
         if not options or field_data_type != "dropdown":
             return [str(o) for o in options]
-        # Check if all options are integers (IDs to resolve)
-        try:
-            int_opts = [int(o) for o in options]
-        except (ValueError, TypeError):
+
+        # Check whether any option looks like an integer ID
+        has_int = any(str(o).strip().lstrip('-').isdigit() for o in options)
+        if not has_int:
             return [str(o) for o in options]
 
         # Fetch master listing for this screen (cached)
@@ -723,7 +765,28 @@ def accounting_def_endpoint(request: AccountingDefRequest):
             option_master_cache[param_name] = id_map
 
         id_map = option_master_cache[param_name]
-        return [id_map.get(str(i), str(i)) for i in int_opts]
+        # Resolve each option individually — integers get looked up, strings kept as-is
+        # If not in bulk map, fall back to individual detail fetch
+        result = []
+        for o in options:
+            s = str(o).strip()
+            if s.lstrip('-').isdigit():
+                name = id_map.get(s)
+                if name is None:
+                    try:
+                        r2 = client.session.get(
+                            f"{client.BASE_URL}/core/dynamic-screen-wrapper/{url_quote(param_name)}/{s}/",
+                            timeout=5,
+                        )
+                        if r2.status_code == 200:
+                            name = r2.json().get("name") or s
+                            id_map[s] = name  # cache for next time
+                    except Exception:
+                        pass
+                result.append(name if name is not None else f"#{s}")
+            else:
+                result.append(s)
+        return result
 
     def build_condition_text(conditions: list) -> str:
         if not conditions:

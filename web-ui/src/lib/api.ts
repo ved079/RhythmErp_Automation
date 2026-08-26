@@ -494,7 +494,7 @@ export interface JVVerifyStep {
 export interface JVVerifyResponse {
   steps: JVVerifyStep[];
   ok: boolean;
-  account_rows?: { account_name: string; dr_cr: string; commodity: string }[];
+  account_rows?: { account_name: string; dr_cr: string; commodity: string; amount: number | null }[];
 }
 
 export async function verifyJV(
