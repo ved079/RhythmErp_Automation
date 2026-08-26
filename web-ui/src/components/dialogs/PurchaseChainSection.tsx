@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { CheckCircle2, XCircle, Play, Key, RefreshCw, Loader2, X, AlertTriangle, Wand2, Search, Star } from 'lucide-react'
+import { CheckCircle2, XCircle, Play, Key, RefreshCw, Loader2, X, AlertTriangle, Wand2, Search, Star, FileSpreadsheet, Download } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
-import { startPurchaseChain, fetchMasterData, fetchItemCategories, fetchItemsWithCqp, fillCqpItems, verifyJV, fetchPBList, fetchPBItems, type SSEEvent, type MasterDataItem, type ItemCategory, type JVVerifyStep, type PBListItem, type PBItemLine } from '@/lib/api'
+import { startPurchaseChain, fetchMasterData, fetchItemCategories, fetchItemsWithCqp, fillCqpItems, verifyJV, fetchPBList, fetchPBItems, fetchAccountingDef, type SSEEvent, type MasterDataItem, type ItemCategory, type JVVerifyStep, type PBListItem, type PBItemLine, type AccountingDefDetail } from '@/lib/api'
 import { notifySuccess } from '@/lib/notify'
 
 interface Props {
@@ -22,6 +22,16 @@ interface Props {
 
 function formatTime(d: Date): string {
   return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+}
+
+const XL_BORDER = '<Borders><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6D6D6"/><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6D6D6"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6D6D6"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6D6D6"/></Borders>'
+
+function escXml(v: string | number | null | undefined): string {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 
 const DOC_COLORS: Record<string, string> = {
@@ -260,6 +270,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [pbListOpen, setPbListOpen] = useState(true)
   const [pbItems, setPbItems] = useState<PBItemLine[]>([])
   const [pbItemsLoading, setPbItemsLoading] = useState(false)
+  const [jvAccountRows, setJvAccountRows] = useState<{ account_name: string; dr_cr: string; commodity: string }[]>([])
+  const [accountingDef, setAccountingDef] = useState<AccountingDefDetail[]>([])
+  const [accountingDefLoading, setAccountingDefLoading] = useState(false)
 
   // On mount (or when userId changes): restore this user's starred flow from localStorage.
   useEffect(() => {
@@ -573,15 +586,194 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     setVerifying(true)
     setJvSteps([])
     setJvError('')
+    setJvAccountRows([])
+    setAccountingDef([])
     try {
-      const res = await verifyJV(token, tenant, ref)
-      setJvSteps(res.steps)
+      const [jvRes] = await Promise.all([
+        verifyJV(token, tenant, ref),
+        // Fetch accounting definition in parallel
+        (async () => {
+          setAccountingDefLoading(true)
+          try {
+            const def = await fetchAccountingDef(token, tenant, '5')
+            setAccountingDef(def.details)
+          } catch { /* silently skip */ }
+          finally { setAccountingDefLoading(false) }
+        })(),
+      ])
+      setJvSteps(jvRes.steps)
+      setJvAccountRows(jvRes.account_rows ?? [])
     } catch (err) {
       setJvError(err instanceof Error ? err.message : String(err))
     } finally {
       setVerifying(false)
     }
   }
+
+  // PB vs JV comparison rows — shared by the on-screen sheet and the export.
+  const jvCompRows = React.useMemo<{ label: string; pb: string; jv: string }[] | null>(() => {
+    const fieldsStep = jvSteps.find(s => s.fields)
+    if (!selectedPB || !fieldsStep) return null
+    const jvCommodity = fieldsStep.fields?.find(f => f.field === 'Commodity')?.value || '—'
+    const uniqueItems = [...new Set(pbItems.map(i => i.name))]
+    // jvCommodity may be comma-joined list for multi-item PBs
+    const jvCommodityList = jvCommodity !== '—' ? jvCommodity.split(',').map(s => s.trim().toLowerCase()) : []
+    const commodityRows: { label: string; pb: string; jv: string }[] =
+      pbItems.length > 0
+        ? uniqueItems.map((name, idx) => {
+            const nameL = name.trim().toLowerCase()
+            const matchedJv = jvCommodityList.find(c => c === nameL || c.includes(nameL) || nameL.includes(c))
+            return { label: idx === 0 ? 'Commodity' : '', pb: name, jv: matchedJv ? name : '—' }
+          })
+        : [{ label: 'Commodity', pb: pbItemsLoading ? 'Loading…' : '—', jv: jvCommodity }]
+    return [
+      { label: 'Division',     pb: selectedPB.division    || '—', jv: fieldsStep.fields?.find(f => f.field === 'Division')?.value    || '—' },
+      { label: 'Department',   pb: selectedPB.department  || '—', jv: fieldsStep.fields?.find(f => f.field === 'Department')?.value  || '—' },
+      { label: 'Type of Sale', pb: selectedPB.type_of_sale || '—', jv: fieldsStep.fields?.find(f => f.field === 'Type of Sale')?.value || '—' },
+      { label: 'Location',     pb: selectedPB.location    || '—', jv: fieldsStep.fields?.find(f => f.field === 'Location')?.value    || '—' },
+      ...commodityRows,
+    ]
+  }, [jvSteps, selectedPB, pbItems, pbItemsLoading])
+
+  // Export the JV verification report as a formatted Excel workbook using
+  // SpreadsheetML (XML Spreadsheet 2003) — supports fonts, fills, borders and
+  // number formats without any extra dependency.
+  const exportJvReport = useCallback(() => {
+    const found = jvSteps.find(s => s.n === 1)
+    const fieldsStep = jvSteps.find(s => s.fields)
+    const balanceStep = jvSteps.find(s => s.detail && !s.fields)
+    if (!selectedPB || (!found && !fieldsStep)) return
+    const ok = jvSteps.length > 0 && jvSteps.every(s => s.ok)
+    const balMatch = balanceStep?.detail?.match(/DR\s*=\s*([\d,]+\.?\d*)\s+\|CR\|\s*=\s*([\d,]+\.?\d*)/)
+    const amountNum = selectedPB.amount != null ? Number(selectedPB.amount) : null
+
+    const cell = (style: string, value: string | number, mergeAcross?: number) => {
+      const type = typeof value === 'number' ? 'Number' : 'String'
+      return `<Cell${mergeAcross != null ? ` ss:MergeAcross="${mergeAcross}"` : ''}${style ? ` ss:StyleID="${style}"` : ''}><Data ss:Type="${type}">${escXml(value)}</Data></Cell>`
+    }
+
+    const rows: string[] = []
+    rows.push(`<Row ss:Height="26">${cell('sTitle', 'JV VERIFICATION REPORT', 2)}${cell(ok ? 'sPass' : 'sFail', ok ? '\u2713 PASSED' : '\u2715 FAILED')}</Row>`)
+    rows.push(`<Row>${cell('sMeta', `Document ${pbRefNo}  \u00B7  Generated ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`, 3)}</Row>`)
+    rows.push('<Row ss:Height="6"/>')
+
+    rows.push(`<Row>${cell('sSection', 'DOCUMENT DETAILS', 3)}</Row>`)
+    rows.push(`<Row>${cell('sLabel', 'Supplier')}${cell('sVal', selectedPB.supplier ?? '\u2014', 2)}</Row>`)
+    rows.push(`<Row>${cell('sLabel', 'Amount')}${amountNum != null ? cell('sMoney', amountNum) : cell('sVal', '\u2014')}${cell('sLabel', 'Date')}${cell('sVal', selectedPB.date ?? '\u2014')}</Row>`)
+    rows.push('<Row ss:Height="6"/>')
+
+    rows.push(`<Row>${cell('sSection', 'JOURNAL VOUCHER', 3)}</Row>`)
+    rows.push(`<Row>${cell('sLabel', 'JV Entry')}${cell(found ? (found.ok ? 'sPassText' : 'sFailText') : 'sDim', found ? (found.ok ? 'Entry found in JV report' : `Not found \u2014 ${found.detail ?? ''}`) : 'Not checked', 2)}</Row>`)
+    if (balMatch) {
+      const drNum = Number(balMatch[1].replace(/,/g, ''))
+      const crNum = Number(balMatch[2].replace(/,/g, ''))
+      rows.push(`<Row>${cell('sLabel', 'Balance Check')}${cell('sDr', drNum)}${cell('sCr', crNum)}${cell(balanceStep?.ok ? 'sPass' : 'sFail', balanceStep?.ok ? 'MATCHED' : 'MISMATCHED')}</Row>`)
+    }
+    rows.push('<Row ss:Height="6"/>')
+
+    const xrows = jvCompRows ?? fieldsStep?.fields?.map(f => ({ label: f.field, pb: '\u2014', jv: f.value })) ?? []
+    if (xrows.length > 0) {
+      rows.push(`<Row>${cell('sSection', 'ACCOUNTING FIELD CROSS-CHECK', 3)}</Row>`)
+      rows.push(`<Row>${cell('sHead', 'Field')}${cell('sHead', 'Purchase Booking')}${cell('sHead', 'Journal Voucher')}${cell('sHead', 'Match')}</Row>`)
+      for (const r of xrows) {
+        const match = r.pb !== '\u2014' && r.jv !== '\u2014' && r.pb.trim().toLowerCase() === r.jv.trim().toLowerCase()
+        const unknown = r.pb === '\u2014' || r.jv === '\u2014'
+        rows.push(`<Row>${cell(r.label ? 'sLabel' : 'sDim', r.label || '')}${cell(unknown ? 'sDim' : 'sVal', r.pb)}${cell(unknown ? 'sDim' : 'sVal', r.jv)}${cell(unknown ? 'sDimC' : match ? 'sPass' : 'sFail', unknown ? '\u2014' : match ? 'PASS' : 'FAIL')}</Row>`)
+      }
+    }
+
+    // Accounting definition — applied rules (mirrors the on-screen section)
+    if (jvAccountRows.length > 0 && accountingDef.length > 0) {
+      const normName = (s: string) => s.trim().toLowerCase()
+      const defByName = new Map<string, typeof accountingDef[0]>()
+      for (const d of accountingDef) {
+        const k = normName(d.account_name)
+        if (!defByName.has(k)) defByName.set(k, d)
+      }
+      const groups = new Map<string, typeof jvAccountRows>()
+      for (const row of jvAccountRows) {
+        const key = row.commodity || ''
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key)!.push(row)
+      }
+      const sortedKeys = [...groups.keys()].sort((a, b) =>
+        a === '' ? 1 : b === '' ? -1 : a.localeCompare(b),
+      )
+      const jvAccountNameSet = new Set(jvAccountRows.map(r => normName(r.account_name)))
+      const notApplied = accountingDef.filter((d, i, arr) => {
+        const k = normName(d.account_name)
+        const firstIdx = arr.findIndex(x => normName(x.account_name) === k && x.dr_cr === d.dr_cr)
+        return firstIdx === i && !jvAccountNameSet.has(k)
+      })
+
+      rows.push('<Row ss:Height="6"/>')
+      rows.push(`<Row>${cell('sSection', 'ACCOUNTING DEFINITION \u2014 APPLIED RULES', 3)}</Row>`)
+      rows.push(`<Row>${cell('sHead', 'Account')}${cell('sHead', 'Dr/Cr')}${cell('sHead', 'Rule / Condition')}${cell('sHead', 'Status')}</Row>`)
+      for (const commodity of sortedKeys) {
+        rows.push(`<Row>${cell('sGroup', commodity || 'Shared (all items)', 3)}</Row>`)
+        for (const row of groups.get(commodity)!) {
+          const def = defByName.get(normName(row.account_name))
+          const drCrMatch = !!def && def.dr_cr === row.dr_cr
+          const status = !def ? 'EXTRA' : drCrMatch ? 'PASS' : 'WRONG TYPE'
+          const condText = def?.condition_text || (def ? 'Always applies' : '\u2014')
+          rows.push(`<Row>${cell('sVal', row.account_name)}${cell('sDim', row.dr_cr)}${cell('sCond', condText)}${cell(status === 'PASS' ? 'sPass' : status === 'EXTRA' ? 'sFail' : 'sWarn', status)}</Row>`)
+        }
+      }
+      if (notApplied.length > 0) {
+        rows.push(`<Row>${cell('sGroup', 'Not applied this transaction', 3)}</Row>`)
+        for (const def of notApplied) {
+          rows.push(`<Row>${cell('sDim', def.account_name)}${cell('sDim', def.dr_cr)}${cell('sDim', def.condition_text || (def.has_conditions ? 'Conditional' : 'Always applies'))}${cell('sDimC', '\u2014')}</Row>`)
+        }
+      }
+    }
+    rows.push('<Row ss:Height="10"/>')
+    rows.push(`<Row>${cell('sMeta', 'Generated by Pacs Automation \u2014 JV Verification', 3)}</Row>`)
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles>
+<Style ss:ID="Default" ss:Name="Normal"><Font ss:FontName="Calibri" ss:Size="11"/><Alignment ss:Vertical="Center"/></Style>
+<Style ss:ID="sTitle"><Font ss:Bold="1" ss:Size="14" ss:Color="#FFFFFF"/><Interior ss:Color="#3F51B5" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/></Style>
+<Style ss:ID="sMeta"><Font ss:Italic="1" ss:Size="9" ss:Color="#9E9E9E"/><Alignment ss:Vertical="Center" ss:Indent="1"/></Style>
+<Style ss:ID="sSection"><Font ss:Bold="1" ss:Size="10" ss:Color="#303F9F"/><Interior ss:Color="#E8EAF6" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER}</Style>
+<Style ss:ID="sLabel"><Font ss:Bold="1" ss:Size="10" ss:Color="#616161"/><Interior ss:Color="#F5F5F5" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER}</Style>
+<Style ss:ID="sVal">${XL_BORDER}</Style>
+<Style ss:ID="sMoney"><NumberFormat ss:Format="#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER}</Style>
+<Style ss:ID="sDr"><Font ss:Color="#1565C0"/><NumberFormat ss:Format="&quot;DR &quot;#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER}</Style>
+<Style ss:ID="sCr"><Font ss:Color="#6A1B9A"/><NumberFormat ss:Format="&quot;CR &quot;#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER}</Style>
+<Style ss:ID="sHead"><Font ss:Bold="1" ss:Size="10" ss:Color="#FFFFFF"/><Interior ss:Color="#5C6BC0" ss:Pattern="Solid"/><Alignment ss:Horizontal="Left" ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER}</Style>
+<Style ss:ID="sPass"><Font ss:Bold="1" ss:Size="10" ss:Color="#1B5E20"/><Interior ss:Color="#C8E6C9" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER}</Style>
+<Style ss:ID="sFail"><Font ss:Bold="1" ss:Size="10" ss:Color="#B71C1C"/><Interior ss:Color="#FFCDD2" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER}</Style>
+<Style ss:ID="sPassText"><Font ss:Bold="1" ss:Color="#2E7D32"/>${XL_BORDER}</Style>
+<Style ss:ID="sFailText"><Font ss:Bold="1" ss:Color="#C62828"/>${XL_BORDER}</Style>
+<Style ss:ID="sDim"><Font ss:Color="#BDBDBD"/>${XL_BORDER}</Style>
+<Style ss:ID="sDimC"><Font ss:Color="#BDBDBD"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER}</Style>
+<Style ss:ID="sGroup"><Font ss:Italic="1" ss:Size="10" ss:Color="#757575"/><Interior ss:Color="#FAFAFA" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER}</Style>
+<Style ss:ID="sWarn"><Font ss:Bold="1" ss:Size="10" ss:Color="#E65100"/><Interior ss:Color="#FFE0B2" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER}</Style>
+<Style ss:ID="sCond"><Font ss:FontName="Consolas" ss:Size="9" ss:Color="#8D8D8D"/>${XL_BORDER}</Style>
+</Styles>
+<Worksheet ss:Name="JV Report">
+<Table ss:DefaultRowHeight="17">
+<Column ss:Width="110"/>
+<Column ss:Width="170"/>
+<Column ss:Width="170"/>
+<Column ss:Width="85"/>
+${rows.join('\n')}
+</Table>
+</Worksheet>
+</Workbook>`
+
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${pbRefNo.replace(/[\\/]/g, '-')}_JV_Report.xls`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }, [selectedPB, jvSteps, jvCompRows, jvAccountRows, accountingDef, pbRefNo])
 
   if (showJVCheck) {
     const token = erpToken || localToken
@@ -782,186 +974,299 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
               const fieldsStep = jvSteps.find(s => s.fields)
               const balanceStep = jvSteps.find(s => s.detail && !s.fields)
 
-              // Build comparison rows from PB list data vs JV fields step
-              const jvCommodity = fieldsStep?.fields?.find(f => f.field === 'Commodity')?.value || '—'
-              const uniqueItems = [...new Set(pbItems.map(i => i.name))]
-              // jvCommodity may be comma-joined list for multi-item PBs
-              const jvCommodityList = jvCommodity !== '—' ? jvCommodity.split(',').map(s => s.trim().toLowerCase()) : []
-              const commodityRows: { label: string; pb: string; jv: string }[] =
-                pbItems.length > 0
-                  ? uniqueItems.map((name, idx) => {
-                      const nameL = name.trim().toLowerCase()
-                      const matchedJv = jvCommodityList.find(c => c === nameL || c.includes(nameL) || nameL.includes(c))
-                      return { label: idx === 0 ? 'Commodity' : '', pb: name, jv: matchedJv ? name : '—' }
-                    })
-                  : [{ label: 'Commodity', pb: pbItemsLoading ? 'Loading…' : '—', jv: jvCommodity }]
-
-              const compRows = selectedPB && fieldsStep ? [
-                { label: 'Division',     pb: selectedPB.division    || '—', jv: fieldsStep.fields?.find(f => f.field === 'Division')?.value    || '—' },
-                { label: 'Department',   pb: selectedPB.department  || '—', jv: fieldsStep.fields?.find(f => f.field === 'Department')?.value  || '—' },
-                { label: 'Type of Sale', pb: selectedPB.type_of_sale || '—', jv: fieldsStep.fields?.find(f => f.field === 'Type of Sale')?.value || '—' },
-                { label: 'Location',     pb: selectedPB.location    || '—', jv: fieldsStep.fields?.find(f => f.field === 'Location')?.value    || '—' },
-                ...commodityRows,
-              ] : null
-
               return (
-                <div className="space-y-3">
-                  {/* ── Report header ── */}
-                  <div className={`rounded-xl border overflow-hidden shadow-sm ${
-                    verifying ? 'border-gray-200 dark:border-gray-700'
-                    : passed   ? 'border-emerald-200 dark:border-emerald-800/60'
-                    : failed   ? 'border-red-200 dark:border-red-800/60'
-                    : 'border-gray-200 dark:border-gray-700'
-                  }`}>
-                    <div className={`px-4 py-3 flex items-center justify-between ${
-                      passed ? 'bg-emerald-50 dark:bg-emerald-900/20'
-                      : failed ? 'bg-red-50 dark:bg-red-900/20'
-                      : 'bg-gray-50 dark:bg-gray-800'
-                    }`}>
-                      <div className="flex items-center gap-3">
-                        {verifying
-                          ? <Loader2 className="size-5 text-[#3F51B5] animate-spin shrink-0" />
-                          : passed ? <CheckCircle2 className="size-5 text-emerald-500 shrink-0" />
-                          : failed ? <XCircle className="size-5 text-red-500 shrink-0" />
-                          : null
-                        }
-                        <div>
-                          <p className="text-[10px] font-medium uppercase tracking-widest text-gray-400 dark:text-gray-500 leading-none mb-1">JV Verification Report</p>
-                          <p className="text-[14px] font-mono font-bold text-gray-900 dark:text-gray-50 leading-none">{pbRefNo}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {!verifying && jvSteps.length > 0 && (
-                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide ${
-                            passed
-                              ? 'bg-emerald-500 text-white'
-                              : 'bg-red-500 text-white'
-                          }`}>
-                            {passed ? '✓ PASSED' : '✕ FAILED'}
-                          </span>
-                        )}
-                        <button
-                          onClick={() => { setPbListOpen(true); setJvSteps([]); setJvError(''); setPbRefNo(''); setSelectedPB(null); setPbItems([]) }}
-                          className="text-[11px] text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] transition-colors cursor-pointer"
-                        >
-                          ← Change
-                        </button>
-                      </div>
+                <div className="rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shadow-sm bg-white dark:bg-gray-900">
+                  {/* ── Excel-style toolbar / name box ── */}
+                  <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-[#F3F3F3] dark:bg-gray-800 border-b border-gray-300 dark:border-gray-600">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileSpreadsheet className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 shrink-0 hidden sm:inline">JV Report</span>
+                      <span className="text-[11px] font-mono px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 rounded-sm text-gray-800 dark:text-gray-100 truncate">
+                        {pbRefNo}
+                      </span>
+                      {!verifying && jvSteps.length > 0 && (
+                        <span className={`px-2 py-0.5 rounded-sm text-[10px] font-bold tracking-wide shrink-0 border ${
+                          passed
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
+                            : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-300 dark:border-red-700'
+                        }`}>
+                          {passed ? '✓ PASSED' : '✕ FAILED'}
+                        </span>
+                      )}
                     </div>
-
-                    {selectedPB && (
-                      <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-700/60 flex flex-wrap gap-x-5 gap-y-1 bg-white dark:bg-gray-800/40">
-                        {selectedPB.supplier && <span className="text-[12px] font-medium text-gray-700 dark:text-gray-200">{selectedPB.supplier}</span>}
-                        {selectedPB.amount && <span className="text-[12px] text-gray-400 dark:text-gray-500">₹{Number(selectedPB.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
-                        {selectedPB.date && <span className="text-[12px] text-gray-400 dark:text-gray-500">{selectedPB.date}</span>}
-                      </div>
-                    )}
-
-                    {verifying && (
-                      <div className="flex items-center gap-2 text-[12px] text-gray-400 dark:text-gray-500 py-10 justify-center">
-                        <Loader2 className="size-4 animate-spin" />
-                        Searching JV report pages…
-                      </div>
-                    )}
-                    {jvError && (
-                      <div className="px-4 py-3 text-[12px] text-red-600 dark:text-red-400">{jvError}</div>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={exportJvReport}
+                        disabled={verifying || jvSteps.length === 0}
+                        className="text-[11px] flex items-center gap-1 px-2 py-0.5 rounded-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <Download className="size-3" />
+                        .xls
+                      </button>
+                      <button
+                        onClick={() => { setPbListOpen(true); setJvSteps([]); setJvError(''); setPbRefNo(''); setSelectedPB(null); setPbItems([]) }}
+                        className="text-[11px] text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] transition-colors cursor-pointer px-1"
+                      >
+                        ← Change
+                      </button>
+                    </div>
                   </div>
 
-                  {/* ── JV found status ── */}
-                  {foundStep && (
-                    <div className={`rounded-xl border px-4 py-3 flex items-center gap-3 ${
-                      foundStep.ok
-                        ? 'border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-900/10'
-                        : 'border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-900/10'
-                    }`}>
-                      {foundStep.ok
-                        ? <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
-                        : <XCircle className="size-4 text-red-500 shrink-0" />
-                      }
-                      <div>
-                        <p className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">Journal Voucher</p>
-                        <p className={`text-[12px] ${foundStep.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-600 dark:text-red-400'}`}>
-                          {foundStep.ok ? 'Entry found in JV report' : `Not found — ${foundStep.detail ?? ''}`}
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                  {/* ── Sheet grid ── */}
+                  <table className="w-full border-collapse text-left">
+                    <thead>
+                      <tr className="bg-gray-100 dark:bg-gray-800 select-none">
+                        <th className="border border-gray-200 dark:border-gray-700 w-8 min-w-8"></th>
+                        {['A', 'B', 'C', 'D'].map((c) => (
+                          <th key={c} className="border border-gray-200 dark:border-gray-700 text-[9px] font-normal text-gray-400 dark:text-gray-500 py-0.5 text-center">{c}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* R1 — document */}
+                      <tr>
+                        <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">1</td>
+                        <td className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[10px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 bg-gray-50/70 dark:bg-gray-800/40 w-32">Document</td>
+                        <td colSpan={2} className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] font-mono font-bold text-gray-900 dark:text-gray-50">{verifying ? '…' : pbRefNo}</td>
+                        <td className={`border border-gray-200 dark:border-gray-700 w-16 px-2 py-1.5 text-center ${passed ? 'bg-emerald-50 dark:bg-emerald-900/20' : failed ? 'bg-red-50 dark:bg-red-900/20' : ''}`}>
+                          {verifying
+                            ? <Loader2 className="size-3.5 animate-spin text-[#3F51B5] mx-auto" />
+                            : jvSteps.length > 0
+                              ? passed ? <CheckCircle2 className="size-3.5 text-emerald-500 mx-auto" /> : <XCircle className="size-3.5 text-red-500 mx-auto" />
+                              : null}
+                        </td>
+                      </tr>
+                      {/* R2 — supplier / amount / date */}
+                      {selectedPB && (
+                        <tr>
+                          <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">2</td>
+                          <td className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[10px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 bg-gray-50/70 dark:bg-gray-800/40">Supplier</td>
+                          <td colSpan={2} className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] font-medium text-gray-800 dark:text-gray-100">{selectedPB.supplier ?? '—'}</td>
+                          <td className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] text-right whitespace-nowrap text-gray-600 dark:text-gray-300">
+                            {selectedPB.amount ? `₹${Number(selectedPB.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}
+                            {selectedPB.date && <span className="text-gray-400 dark:text-gray-500"> · {selectedPB.date}</span>}
+                          </td>
+                        </tr>
+                      )}
+                      {/* R3 — journal voucher found */}
+                      {foundStep && (
+                        <tr>
+                          <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">3</td>
+                          <td className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[10px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 bg-gray-50/70 dark:bg-gray-800/40">Journal Voucher</td>
+                          <td colSpan={2} className={`border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] ${foundStep.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-600 dark:text-red-400'}`}>
+                            {foundStep.ok ? 'Entry found in JV report' : `Not found — ${foundStep.detail ?? ''}`}
+                          </td>
+                          <td className="border border-gray-200 dark:border-gray-700 w-16 text-center">
+                            {foundStep.ok ? <CheckCircle2 className="size-3.5 text-emerald-500 mx-auto" /> : <XCircle className="size-3.5 text-red-500 mx-auto" />}
+                          </td>
+                        </tr>
+                      )}
+                      {/* Verifying / error rows */}
+                      {verifying && (
+                        <tr>
+                          <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">{selectedPB ? '4' : '3'}</td>
+                          <td colSpan={4} className="border border-gray-200 dark:border-gray-700 px-2 py-2 text-[11px] text-gray-400 dark:text-gray-500">
+                            Searching JV report pages…
+                          </td>
+                        </tr>
+                      )}
+                      {jvError && !verifying && (
+                        <tr>
+                          <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">{selectedPB ? '4' : '3'}</td>
+                          <td colSpan={4} className="border border-gray-200 dark:border-gray-700 px-2 py-2 text-[11px] text-red-600 dark:text-red-400">
+                            {jvError}
+                          </td>
+                        </tr>
+                      )}
 
-                  {/* ── Balance check ── */}
-                  {balanceStep && (
-                    <div className={`rounded-xl border overflow-hidden ${
-                      balanceStep.ok
-                        ? 'border-emerald-200 dark:border-emerald-800/60'
-                        : 'border-red-200 dark:border-red-800/60'
-                    }`}>
-                      <div className={`px-4 py-2 flex items-center gap-2 border-b text-[11px] font-semibold uppercase tracking-wider ${
-                        balanceStep.ok
-                          ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-400'
-                          : 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800/40 text-red-600 dark:text-red-400'
-                      }`}>
-                        {balanceStep.ok ? <CheckCircle2 className="size-3.5" /> : <XCircle className="size-3.5" />}
-                        Balance Check
-                      </div>
-                      <div className="px-4 py-3 bg-white dark:bg-gray-800/40">
-                        {(() => {
-                          const m = balanceStep.detail?.match(/DR\s*=\s*([\d,]+\.?\d*)\s+\|CR\|\s*=\s*([\d,]+\.?\d*)/)
-                          if (m) return (
-                            <div className="flex items-center gap-3">
-                              <div className="flex-1 text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800/40">
-                                <p className="text-[10px] uppercase tracking-wider text-blue-400 dark:text-blue-500 mb-1">Debit (DR)</p>
-                                <p className="text-[15px] font-bold font-mono text-blue-700 dark:text-blue-300">₹{m[1]}</p>
-                              </div>
-                              <span className={`text-[18px] font-bold shrink-0 ${balanceStep.ok ? 'text-emerald-500' : 'text-red-500'}`}>=</span>
-                              <div className="flex-1 text-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-100 dark:border-purple-800/40">
-                                <p className="text-[10px] uppercase tracking-wider text-purple-400 dark:text-purple-500 mb-1">|Credit| (CR)</p>
-                                <p className="text-[15px] font-bold font-mono text-purple-700 dark:text-purple-300">₹{m[2]}</p>
-                              </div>
-                            </div>
-                          )
-                          return <p className="text-[12px] font-mono text-gray-600 dark:text-gray-300">{balanceStep.detail}</p>
-                        })()}
-                      </div>
-                    </div>
-                  )}
+                  {/* ── R4 — balance check ── */}
+                  {balanceStep && (() => {
+                    const m = balanceStep.detail?.match(/DR\s*=\s*([\d,]+\.?\d*)\s+\|CR\|\s*=\s*([\d,]+\.?\d*)/)
+                    return (
+                      <tr>
+                        <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">4</td>
+                        <td className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[10px] uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 bg-gray-50/70 dark:bg-gray-800/40">Balance Check</td>
+                        {m ? (
+                          <>
+                            <td className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] font-mono text-blue-700 dark:text-blue-300">DR ₹{m[1]}</td>
+                            <td className={`border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] font-mono ${balanceStep.ok ? 'text-purple-700 dark:text-purple-300' : 'text-red-600 dark:text-red-400'}`}>
+                              {balanceStep.ok ? '=' : '≠'} CR ₹{m[2]}
+                            </td>
+                          </>
+                        ) : (
+                          <td colSpan={2} className="border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] font-mono text-gray-600 dark:text-gray-300">{balanceStep.detail ?? '—'}</td>
+                        )}
+                        <td className="border border-gray-200 dark:border-gray-700 w-16 text-center">
+                          {balanceStep.ok ? <CheckCircle2 className="size-3.5 text-emerald-500 mx-auto" /> : <XCircle className="size-3.5 text-red-500 mx-auto" />}
+                        </td>
+                      </tr>
+                    )
+                  })()}
 
-                  {/* ── Field comparison table ── */}
+                  {/* ── Section — accounting field cross-check ── */}
                   {fieldsStep && (
-                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                      <div className="px-4 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Accounting Field Cross-check</p>
-                      </div>
-                      {/* Column headers */}
-                      <div className="grid grid-cols-[1fr_1fr_1fr_auto] px-4 py-2 bg-gray-50/60 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700/60">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Field</span>
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">PB</span>
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">JV</span>
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 text-center w-10">Match</span>
-                      </div>
-                      <div className="divide-y divide-gray-100 dark:divide-gray-700/60 bg-white dark:bg-gray-800/30">
-                        {(compRows ?? fieldsStep.fields?.map(f => ({ label: f.field, pb: '—', jv: f.value })) ?? []).map((row, ri) => {
-                          const match = row.pb !== '—' && row.jv !== '—' && row.pb.trim().toLowerCase() === row.jv.trim().toLowerCase()
-                          const unknown = row.pb === '—' || row.jv === '—'
+                    <>
+                      <tr>
+                        <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">5</td>
+                        <td colSpan={4} className="border border-gray-200 dark:border-gray-700 px-2 py-1 bg-gray-100 dark:bg-gray-800 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                          Accounting Field Cross-check
+                        </td>
+                      </tr>
+                      <tr className="bg-gray-50 dark:bg-gray-800/60">
+                        <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500">6</td>
+                        <td className="border border-gray-200 dark:border-gray-700 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Field</td>
+                        <td className="border border-gray-200 dark:border-gray-700 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Purchase Booking</td>
+                        <td className="border border-gray-200 dark:border-gray-700 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Journal Voucher</td>
+                        <td className="border border-gray-200 dark:border-gray-700 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 text-center">Match</td>
+                      </tr>
+                      {(jvCompRows ?? fieldsStep.fields?.map(f => ({ label: f.field, pb: '—', jv: f.value })) ?? []).map((row, ri) => {
+                        const match = row.pb !== '—' && row.jv !== '—' && row.pb.trim().toLowerCase() === row.jv.trim().toLowerCase()
+                        const unknown = row.pb === '—' || row.jv === '—'
+                        return (
+                          <tr key={ri}>
+                            <td className="border border-gray-200 dark:border-gray-700 w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60">{7 + ri}</td>
+                            <td className={`border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[11px] font-medium ${row.label ? 'text-gray-600 dark:text-gray-300' : ''}`}>{row.label || '\u00A0'}</td>
+                            <td className={`border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] ${row.pb === '—' ? 'text-gray-300 dark:text-gray-600' : 'text-gray-800 dark:text-gray-100'}`}>{row.pb}</td>
+                            <td className={`border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-[12px] ${row.jv === '—' ? 'text-gray-300 dark:text-gray-600' : 'text-gray-800 dark:text-gray-100'}`}>{row.jv}</td>
+                            <td className={`border border-gray-200 dark:border-gray-700 w-16 px-2 py-1.5 text-center text-[10px] font-bold ${
+                              unknown ? ''
+                              : match ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
+                              : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                            }`}>
+                              {unknown ? '—' : match ? 'PASS' : 'FAIL'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </>
+                  )}
+
+                  {/* ── Section — accounting definition cross-check (commodity-grouped) ── */}
+                  {(accountingDef.length > 0 || accountingDefLoading) && jvAccountRows.length > 0 && (() => {
+                    const normName = (s: string) => s.trim().toLowerCase()
+
+                    // Build def lookup: lower(account_name) → first matching def entry
+                    const defByName = new Map<string, typeof accountingDef[0]>()
+                    for (const d of accountingDef) {
+                      const k = normName(d.account_name)
+                      if (!defByName.has(k)) defByName.set(k, d)
+                    }
+
+                    // Group JV rows by commodity ('' = shared, e.g. Payable)
+                    const groups = new Map<string, typeof jvAccountRows>()
+                    for (const row of jvAccountRows) {
+                      const key = row.commodity || ''
+                      if (!groups.has(key)) groups.set(key, [])
+                      groups.get(key)!.push(row)
+                    }
+                    const sortedKeys = [...groups.keys()].sort((a, b) =>
+                      a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)
+                    )
+
+                    // AD rules that fired = any account_name present in JV rows
+                    const jvAccountNameSet = new Set(jvAccountRows.map(r => normName(r.account_name)))
+                    const notApplied = accountingDef.filter((d, i, arr) => {
+                      const k = normName(d.account_name)
+                      // deduplicate: only first occurrence per name+dr_cr
+                      const firstIdx = arr.findIndex(x => normName(x.account_name) === k && x.dr_cr === d.dr_cr)
+                      return firstIdx === i && !jvAccountNameSet.has(k)
+                    })
+
+                    const TD = 'border border-gray-200 dark:border-gray-700'
+                    const statusCls = (s: string) =>
+                      s === 'PASS'       ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
+                      : s === 'EXTRA'    ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                      : s === 'WRONG TYPE' ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
+                      : ''
+
+                    return (
+                      <>
+                        {/* Section header — same style as "Accounting Field Cross-check" above */}
+                        <tr>
+                          <td className={`${TD} w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/60`}></td>
+                          <td colSpan={4} className={`${TD} px-2 py-1 bg-gray-100 dark:bg-gray-800 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400`}>
+                            Accounting Definition — Applied Rules
+                          </td>
+                        </tr>
+                        {/* Column headers — same style as cross-check col headers */}
+                        <tr className="bg-gray-50 dark:bg-gray-800/60">
+                          <td className={`${TD} w-8 text-center text-[9px] font-normal text-gray-400 dark:text-gray-500`}></td>
+                          <td className={`${TD} px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400`}>Account</td>
+                          <td className={`${TD} px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400`}>Dr/Cr</td>
+                          <td className={`${TD} px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400`}>Condition</td>
+                          <td className={`${TD} px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 text-center`}>Status</td>
+                        </tr>
+
+                        {accountingDefLoading ? (
+                          <tr>
+                            <td className={`${TD} w-8`}></td>
+                            <td colSpan={4} className={`${TD} px-2 py-2 text-[11px] text-gray-400 italic`}>Loading definition…</td>
+                          </tr>
+                        ) : sortedKeys.map(commodity => {
+                          const rows = groups.get(commodity)!
                           return (
-                            <div key={ri} className="grid grid-cols-[1fr_1fr_1fr_auto] px-4 py-2.5 items-center gap-2">
-                              <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">{row.label}</span>
-                              <span className={`text-[12px] font-medium ${row.pb === '—' ? 'text-gray-300 dark:text-gray-600' : 'text-gray-800 dark:text-gray-100'}`}>{row.pb}</span>
-                              <span className={`text-[12px] font-medium ${row.jv === '—' ? 'text-gray-300 dark:text-gray-600' : 'text-gray-800 dark:text-gray-100'}`}>{row.jv}</span>
-                              <div className="w-10 flex justify-center">
-                                {unknown ? (
-                                  <span className="text-[10px] text-gray-300 dark:text-gray-600">—</span>
-                                ) : match ? (
-                                  <CheckCircle2 className="size-3.5 text-emerald-500" />
-                                ) : (
-                                  <XCircle className="size-3.5 text-red-500" />
-                                )}
-                              </div>
-                            </div>
+                            <React.Fragment key={commodity || '__shared__'}>
+                              {/* Commodity sub-header — same style as section headers but indented/lighter */}
+                              <tr>
+                                <td className={`${TD} w-8 bg-gray-50 dark:bg-gray-800/60`}></td>
+                                <td colSpan={4} className={`${TD} px-2 py-1 bg-gray-100 dark:bg-gray-800 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400`}>
+                                  {commodity || 'Shared — all items'}
+                                </td>
+                              </tr>
+                              {rows.map((row, ri) => {
+                                const def = defByName.get(normName(row.account_name))
+                                const inDef = !!def
+                                const drCrMatch = inDef && def!.dr_cr === row.dr_cr
+                                const status = !inDef ? 'EXTRA' : drCrMatch ? 'PASS' : 'WRONG TYPE'
+                                const condText = def?.condition_text || (def ? 'Always applies' : '—')
+                                return (
+                                  <tr key={ri}>
+                                    <td className={`${TD} w-8 bg-gray-50 dark:bg-gray-800/60`}></td>
+                                    <td className={`${TD} px-2 py-1.5 text-[12px] text-gray-800 dark:text-gray-100`}>{row.account_name}</td>
+                                    <td className={`${TD} px-2 py-1.5 text-[11px] text-gray-600 dark:text-gray-300`}>{row.dr_cr}</td>
+                                    <td className={`${TD} px-2 py-1.5 text-[11px] text-gray-600 dark:text-gray-300`}>{condText}</td>
+                                    <td className={`${TD} w-20 px-2 py-1.5 text-center text-[10px] font-bold ${statusCls(status)}`}>{status}</td>
+                                  </tr>
+                                )
+                              })}
+                            </React.Fragment>
                           )
                         })}
-                      </div>
-                    </div>
-                  )}
+
+                        {/* Rules that did NOT fire this transaction */}
+                        {notApplied.length > 0 && (
+                          <>
+                            <tr>
+                              <td className={`${TD} w-8 bg-gray-50 dark:bg-gray-800/60`}></td>
+                              <td colSpan={4} className={`${TD} px-2 py-1 bg-gray-100 dark:bg-gray-800 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500`}>
+                                Not applied this transaction
+                              </td>
+                            </tr>
+                            {notApplied.map((def, ri) => (
+                              <tr key={`na-${ri}`}>
+                                <td className={`${TD} w-8 bg-gray-50 dark:bg-gray-800/60`}></td>
+                                <td className={`${TD} px-2 py-1.5 text-[12px] text-gray-400 dark:text-gray-500`}>{def.account_name}</td>
+                                <td className={`${TD} px-2 py-1.5 text-[11px] text-gray-400 dark:text-gray-500`}>{def.dr_cr}</td>
+                                <td className={`${TD} px-2 py-1.5 text-[11px] text-gray-400 dark:text-gray-500`}>
+                                  {def.condition_text || (def.has_conditions ? 'Conditional' : 'Always applies')}
+                                </td>
+                                <td className={`${TD} w-20 px-2 py-1.5 text-center text-[10px] text-gray-400 dark:text-gray-500`}>—</td>
+                              </tr>
+                            ))}
+                          </>
+                        )}
+                      </>
+                    )
+                  })()}
+                    </tbody>
+                  </table>
+
+                  {/* ── Sheet tab bar ── */}
+                  <div className="flex items-center px-1.5 pt-1 bg-[#F3F3F3] dark:bg-gray-800 border-t border-gray-300 dark:border-gray-600">
+                    <span className="px-3 py-0.5 text-[10px] font-medium bg-white dark:bg-gray-900 border border-b-0 border-gray-300 dark:border-gray-600 rounded-t-sm text-gray-600 dark:text-gray-300">
+                      JV_Report
+                    </span>
+                  </div>
                 </div>
               )
             })()}
