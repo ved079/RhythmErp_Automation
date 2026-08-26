@@ -199,6 +199,16 @@ class JVAPIUtils:
             log.warning("[JV] Could not decode user_id from token — using 0")
             return 0
 
+    @staticmethod
+    def _extract_purb_id(ref_no: str) -> Optional[int]:
+        """Extract numeric ID from 'PURB/2026-2027/001229' → 1229, or None if not a PURB."""
+        if not ref_no or not ref_no.startswith("PURB/"):
+            return None
+        try:
+            return int(ref_no.rsplit("/", 1)[-1])
+        except (ValueError, IndexError):
+            return None
+
     def _find_jv_entry(
         self,
         pb_ref_no: str,
@@ -208,7 +218,18 @@ class JVAPIUtils:
         type_of_sale_id: int,
         location_id: int,
     ) -> Optional[dict]:
-        """Paginate through the JV report and return the matching entry dict."""
+        """Paginate through the JV report and return the matching entry dict.
+
+        Early-exit heuristic for PURB refs: if we've seen ≥5 PURBs with IDs
+        above AND ≥5 with IDs below the target without finding it, the entry
+        is conclusively absent — no need to scan the full report.
+        """
+        target_id = self._extract_purb_id(pb_ref_no)
+        purb_above: set = set()  # PURB IDs seen that are > target_id
+        purb_below: set = set()  # PURB IDs seen that are < target_id
+        ABOVE_NEEDED = 1   # just 1 newer PURB in JV is enough to confirm newer ones exist
+        BELOW_NEEDED = 5   # 5 older PURBs confirms we've passed the target's slot
+
         for page in range(1, self.MAX_PAGES + 1):
             body = {
                 "report_name": self.REPORT_NAME,
@@ -253,9 +274,27 @@ class JVAPIUtils:
                 break
 
             for entry in entries:
-                if entry.get("ref_transaction_no") == pb_ref_no:
+                ref = entry.get("ref_transaction_no")
+                if ref == pb_ref_no:
                     log.info(f"[JV] Found {pb_ref_no} on page {page}")
                     return entry
+
+                # Track surrounding PURB IDs for early-exit heuristic
+                if target_id is not None:
+                    eid = self._extract_purb_id(ref or "")
+                    if eid is not None:
+                        if eid > target_id:
+                            purb_above.add(eid)
+                        elif eid < target_id:
+                            purb_below.add(eid)
+
+            # Early exit: 1 newer PURB in JV + 5 older ones → target slot is conclusively absent
+            if target_id is not None and len(purb_above) >= ABOVE_NEEDED and len(purb_below) >= BELOW_NEEDED:
+                log.info(
+                    f"[JV] {pb_ref_no} not found — bracketed by {len(purb_above)} above "
+                    f"and {len(purb_below)} below after page {page}"
+                )
+                break
 
             if len(entries) < self.PAGE_LIMIT:
                 break

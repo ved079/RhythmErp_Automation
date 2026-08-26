@@ -617,10 +617,26 @@ def jv_verify_endpoint(request: JVVerifyRequest):
     if token.startswith("Bearer "):
         token = token[7:]
 
+    import concurrent.futures
     client = RhythmERPAPIClient(tenant_id=request.erp_tenant_id)
     client.login_from_browser(token=token, tenant_id=request.erp_tenant_id)
     jv = JVAPIUtils(client)
-    result = jv.verify_pb(request.pb_ref_no, None, None, None, None)
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            future = ex.submit(jv.verify_pb, request.pb_ref_no, None, None, None, None)
+            result = future.result(timeout=38)
+    except concurrent.futures.TimeoutError:
+        return {
+            "steps": [{"n": 1, "label": "Fetch JV report", "ok": False, "detail": "JV report scan timed out — entry not found within 38s"}],
+            "account_rows": [],
+            "accounting_def": [],
+        }
+    except Exception as exc:
+        return {
+            "steps": [{"n": 1, "label": "Fetch JV report", "ok": False, "detail": str(exc)}],
+            "account_rows": [],
+            "accounting_def": [],
+        }
 
     steps = []
     if result.error:
