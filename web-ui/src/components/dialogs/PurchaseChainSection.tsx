@@ -632,11 +632,15 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     const pbAmtStr = selectedPB.amount != null ? fmtAmt(Number(selectedPB.amount)) : '—'
     const jvAmtStr = jvAccountRows.length > 0 ? fmtAmt(jvDr) : '—'
     // Per-item tax rows interleaved after each commodity row
-    const jvTaxRow = (keyword: string, commodity?: string) => {
+    // Match JV tax row by amount (exact) rather than fuzzy commodity name — commodity names
+    // in JV can be extended with suffixes (e.g. "DRVR U Single Layer...") that break substring matching.
+    const usedJvRows = new Set<number>()
+    const jvTaxRow = (keyword: string, pbAmt: number) => {
       const rows = jvAccountRows.filter(r => r.dr_cr === 'Debit' && r.account_name.toLowerCase().includes(keyword))
-      const match = commodity
-        ? rows.find(r => (r.commodity || '').toLowerCase().includes(commodity.toLowerCase())) ?? rows[0]
-        : rows[0]
+      const unusedRows = rows.filter((_, i) => !usedJvRows.has(i))
+      const match = unusedRows.find(r => r.amount != null && Math.abs((r.amount ?? 0) - pbAmt) < 0.02)
+        ?? unusedRows[0]
+      if (match) usedJvRows.add(rows.indexOf(match))
       return match?.amount != null ? fmtAmt(match.amount) : jvAccountRows.length > 0 ? '—' : '—'
     }
     const commodityWithTax: { label: string; pb: string; jv: string }[] = []
@@ -646,12 +650,12 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       const matchedJv = jvCommodityList.find(c => c === nameL || c.includes(nameL) || nameL.includes(c))
       commodityWithTax.push({ label: 'Commodity', pb: item.name, jv: matchedJv ? item.name : '—' })
       if (item.igst_amount != null && item.igst_amount > 0) {
-        commodityWithTax.push({ label: 'IGST Amount', pb: fmtAmt(item.igst_amount), jv: jvTaxRow('igst', item.name) })
+        commodityWithTax.push({ label: 'IGST Amount', pb: fmtAmt(item.igst_amount), jv: jvTaxRow('igst', item.igst_amount) })
       } else {
         if (item.cgst_amount != null && item.cgst_amount > 0)
-          commodityWithTax.push({ label: 'CGST Amount', pb: fmtAmt(item.cgst_amount), jv: jvTaxRow('cgst', item.name) })
+          commodityWithTax.push({ label: 'CGST Amount', pb: fmtAmt(item.cgst_amount), jv: jvTaxRow('cgst', item.cgst_amount) })
         if (item.sgst_amount != null && item.sgst_amount > 0)
-          commodityWithTax.push({ label: 'SGST Amount', pb: fmtAmt(item.sgst_amount), jv: jvTaxRow('sgst', item.name) })
+          commodityWithTax.push({ label: 'SGST Amount', pb: fmtAmt(item.sgst_amount), jv: jvTaxRow('sgst', item.sgst_amount) })
       }
     }
     const finalCommodityRows = commodityWithTax.length > 0 ? commodityWithTax : commodityRows
