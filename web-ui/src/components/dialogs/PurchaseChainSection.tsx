@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { CheckCircle2, XCircle, Play, Key, RefreshCw, Loader2, X, AlertTriangle, Wand2, Search, Star } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
+import LoadingCard from '@/components/ui/LoadingCard'
 import { startPurchaseChain, fetchMasterData, fetchItemCategories, fetchItemsWithCqp, fillCqpItems, type SSEEvent, type MasterDataItem, type ItemCategory } from '@/lib/api'
 import { notifySuccess } from '@/lib/notify'
 import { useErpToken } from '@/hooks/useErpToken'
@@ -234,6 +235,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [qcDiscount, setQcDiscount] = useState(false)
   const [isRateWeightDeduction, setIsRateWeightDeduction] = useState(false)
   const [loadingData, setLoadingData] = useState(false)
+  const [loadingSteps, setLoadingSteps] = useState<{ label: string; done: boolean }[]>([])
   const [dataError, setDataError] = useState('')
   const [showTokenInput, setShowTokenInput] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
@@ -314,12 +316,20 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
 
     setLoadingData(true)
     setDataError('')
+    const steps = [
+      { label: 'Fetching suppliers', done: false },
+      { label: 'Fetching items', done: false },
+      { label: 'Fetching categories', done: false },
+      { label: 'Fetching quality params', done: false },
+    ]
+    setLoadingSteps([...steps])
+    const tick = (i: number) => setLoadingSteps(s => s.map((x, idx) => idx === i ? { ...x, done: true } : x))
     try {
       const [supRes, itemRes, catRes, cqpRes] = await Promise.all([
-        fetchMasterData('Supplier', token, tenant),
-        fetchMasterData('Item Master', token, tenant),
-        fetchItemCategories(token, tenant),
-        fetchItemsWithCqp(token, tenant),
+        fetchMasterData('Supplier', token, tenant).then(r => { tick(0); return r }),
+        fetchMasterData('Item Master', token, tenant).then(r => { tick(1); return r }),
+        fetchItemCategories(token, tenant).then(r => { tick(2); return r }),
+        fetchItemsWithCqp(token, tenant).then(r => { tick(3); return r }),
       ])
       setSuppliers(supRes)
       setItems(itemRes)
@@ -349,6 +359,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       if (!handleAuthError(err)) setDataError(err instanceof Error ? err.message : 'Failed to load master data')
     } finally {
       setLoadingData(false)
+      setLoadingSteps([])
     }
   }, [_erpToken, _erpTenantId, requireTaxRate, flow, handleAuthError])
 
@@ -547,6 +558,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
 
   return (
     <div className="relative flex flex-col h-full min-h-0 gap-4">
+      {loadingData && loadingSteps.length > 0 && (
+        <LoadingCard message="LOADING" steps={loadingSteps} />
+      )}
       {/* Controls panel */}
       <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col min-h-0 flex-1 overflow-hidden">
         {/* Flow selector — pinned to the top of the panel */}
