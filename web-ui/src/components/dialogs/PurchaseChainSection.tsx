@@ -404,29 +404,6 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     }
   }, [erpToken, localToken, localTenantId, erpTenantId, loadMasterData])
 
-  // Keep stable refs so effects below can call the latest version without
-  // needing them as deps (avoids stale-closure flakiness on navigation)
-  const loadMasterDataRef = useRef(loadMasterData)
-  const loadPBListRef    = useRef(loadPBList)
-  useEffect(() => { loadMasterDataRef.current = loadMasterData }, [loadMasterData])
-  useEffect(() => { loadPBListRef.current    = loadPBList },    [loadPBList])
-
-  // Auto-load master data once token is available (fires on mount and whenever
-  // token first appears — guards against calling twice via fetchedRef)
-  const hasToken = !!(erpToken || localToken) && !!(localTenantId || erpTenantId)
-  useEffect(() => {
-    if (!hasToken || fetchedRef.current) return
-    loadMasterDataRef.current()
-  }, [hasToken])
-
-  // Auto-load PB list whenever the JV panel becomes visible (covers both
-  // initial mount on #full-purchase-flow-jv and navigation from full-flow)
-  useEffect(() => {
-    if (!showJVCheck || !hasToken) return
-    loadPBListRef.current()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showJVCheck])
-
   // Document order for the selected flow: full chain starts with PO,
   // standalone GP starts directly at the Gate Pass.
   const docOrder = React.useMemo(
@@ -615,6 +592,27 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       setPbListLoading(false)
     }
   }, [erpToken, localToken, localTenantId, erpTenantId, handleAuthError])
+
+  // Stable refs — always point to latest callbacks so effects don't go stale
+  const loadMasterDataRef = useRef(loadMasterData)
+  const loadPBListRef     = useRef(loadPBList)
+  useEffect(() => { loadMasterDataRef.current = loadMasterData }, [loadMasterData])
+  useEffect(() => { loadPBListRef.current     = loadPBList },     [loadPBList])
+
+  const hasToken = !!(erpToken || localToken) && !!(localTenantId || erpTenantId)
+
+  // Auto-load master data once token is available
+  useEffect(() => {
+    if (!hasToken || fetchedRef.current) return
+    loadMasterDataRef.current()
+  }, [hasToken])
+
+  // Auto-load PB list whenever JV panel becomes visible (initial mount OR navigation)
+  useEffect(() => {
+    if (!showJVCheck || !hasToken) return
+    loadPBListRef.current()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showJVCheck])
 
   const handleVerify = async (refOverride?: string) => {
     const token = erpToken || localToken
