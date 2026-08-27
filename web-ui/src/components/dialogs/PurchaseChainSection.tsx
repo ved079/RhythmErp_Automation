@@ -722,8 +722,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     const _defMap = new Map<string, typeof accountingDef[0]>()
     for (const d of accountingDef) { const k = d.account_name.trim().toLowerCase()+'|'+(d.dr_cr||'').toLowerCase(); if (!_defMap.has(k)) _defMap.set(k,d) }
     const accountRowFail = jvAccountRows.some(r => { const def=_defMap.get(r.account_name.trim().toLowerCase()+'|'+(r.dr_cr||'').toLowerCase()); return !def||def.dr_cr!==r.dr_cr })
-    const jvDrTotal = jvAccountRows.filter(r=>r.dr_cr==='Debit').reduce((s,r)=>s+(r.amount??0),0)
-    const amountMismatch = selectedPB.amount!=null && jvAccountRows.length>0 && Math.abs(Number(selectedPB.amount)-jvDrTotal)>0.02
+    const _xlCr = jvAccountRows.filter(r => r.dr_cr === 'Credit')
+    const _xlPayRow = _xlCr.find(r => r.account_name.toLowerCase().includes('payable')) ?? _xlCr.reduce<typeof _xlCr[0]|null>((b,r)=>(r.amount??0)>(b?.amount??0)?r:b,null)
+    const amountMismatch = selectedPB.amount != null && _xlPayRow?.amount != null && Math.abs(Number(selectedPB.amount) - _xlPayRow.amount) > 0.02
     const ok = jvSteps.length > 0 && jvSteps.every(s => s.ok) && !fieldMismatch && !accountRowFail && !amountMismatch
     const balMatch = balanceStep?.detail?.match(/DR\s*=\s*([\d,]+\.?\d*)\s+\|CR\|\s*=\s*([\d,]+\.?\d*)/)
     const amountNum = selectedPB.amount != null ? Number(selectedPB.amount) : null
@@ -908,8 +909,9 @@ ${rows.join('\n')}
     const _defMap = new Map<string, typeof accountingDef[0]>()
     for (const d of accountingDef) { const k = d.account_name.trim().toLowerCase()+'|'+(d.dr_cr||'').toLowerCase(); if (!_defMap.has(k)) _defMap.set(k,d) }
     const accountRowFail = jvAccountRows.some(r => { const def=_defMap.get(r.account_name.trim().toLowerCase()+'|'+(r.dr_cr||'').toLowerCase()); return !def||def.dr_cr!==r.dr_cr })
-    const jvDrTotal = jvAccountRows.filter(r=>r.dr_cr==='Debit').reduce((s,r)=>s+(r.amount??0),0)
-    const amountMismatch = selectedPB.amount!=null && jvAccountRows.length>0 && Math.abs(Number(selectedPB.amount)-jvDrTotal)>0.02
+    const _pdfCr = jvAccountRows.filter(r => r.dr_cr === 'Credit')
+    const _pdfPayRow = _pdfCr.find(r => r.account_name.toLowerCase().includes('payable')) ?? _pdfCr.reduce<typeof _pdfCr[0]|null>((b,r)=>(r.amount??0)>(b?.amount??0)?r:b,null)
+    const amountMismatch = selectedPB.amount != null && _pdfPayRow?.amount != null && Math.abs(Number(selectedPB.amount) - _pdfPayRow.amount) > 0.02
     const ok = jvSteps.length > 0 && jvSteps.every(s => s.ok) && !fieldMismatch && !accountRowFail && !amountMismatch
     const balMatch = balanceStep?.detail?.match(/DR\s*=\s*([\d,]+\.?\d*)\s+\|CR\|\s*=\s*([\d,]+\.?\d*)/)
     const amountNum = selectedPB.amount != null ? Number(selectedPB.amount) : null
@@ -1450,8 +1452,9 @@ ${rows.join('\n')}
                 return !def || def.dr_cr !== row.dr_cr  // EXTRA or WRONG TYPE
               })
               const pbAmt = selectedPB?.amount != null ? Number(selectedPB.amount) : null
-              const jvDrTotal = jvAccountRows.filter(r => r.dr_cr === 'Debit').reduce((s, r) => s + (r.amount ?? 0), 0)
-              const amountMismatch = pbAmt != null && jvAccountRows.length > 0 && Math.abs(pbAmt - jvDrTotal) > 0.02
+              const _uiCr = jvAccountRows.filter(r => r.dr_cr === 'Credit')
+              const _uiPayRow = _uiCr.find(r => r.account_name.toLowerCase().includes('payable')) ?? _uiCr.reduce<typeof _uiCr[0]|null>((b,r)=>(r.amount??0)>(b?.amount??0)?r:b,null)
+              const amountMismatch = pbAmt != null && _uiPayRow?.amount != null && Math.abs(pbAmt - _uiPayRow.amount) > 0.02
               const passed = jvSteps.length > 0 && jvSteps.every(s => s.ok) && !fieldMismatch && !accountRowFail && !amountMismatch
               const failed = jvSteps.length > 0 && !passed
               const foundStep = jvSteps.find(s => s.n === 1)
