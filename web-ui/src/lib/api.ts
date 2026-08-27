@@ -457,6 +457,10 @@ export interface PBItemLine {
   quantity: string | number;
   rate: string | number;
   amount: string | number;
+  igst_amount?: number | null;
+  cgst_amount?: number | null;
+  sgst_amount?: number | null;
+  gst_type?: string;
 }
 
 export async function fetchPBList(erpToken: string, erpTenantId: string): Promise<PBListItem[]> {

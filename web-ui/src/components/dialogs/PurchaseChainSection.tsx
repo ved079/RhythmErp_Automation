@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { CheckCircle2, XCircle, Play, Key, RefreshCw, Loader2, X, AlertTriangle, Wand2, Search, Star, FileSpreadsheet, Download, FileText, ChevronDown, FileBarChart2 } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
-import { startPurchaseChain, fetchMasterData, fetchItemCategories, fetchItemsWithCqp, fillCqpItems, verifyJV, fetchPBList, fetchPBItems, fetchAccountingDef, type SSEEvent, type MasterDataItem, type ItemCategory, type JVVerifyStep, type PBListItem, type PBItemLine, type AccountingDefDetail } from '@/lib/api'
+import { startPurchaseChain, fetchMasterData, fetchItemCategories, fetchItemsWithCqp, fillCqpItems, verifyJV, fetchPBList, fetchPBItems, fetchAccountingDef, type SSEEvent, type MasterDataItem, type ItemCategory, type JVVerifyStep, type PBListItem, type PBItemLine, type AccountingDefDetail} from '@/lib/api'
 import { notifySuccess } from '@/lib/notify'
 
 interface Props {
@@ -627,14 +627,43 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             return { label: idx === 0 ? 'Commodity' : '', pb: name, jv: matchedJv ? name : '—' }
           })
         : [{ label: 'Commodity', pb: pbItemsLoading ? 'Loading…' : '—', jv: jvCommodity }]
+    const fmtAmt = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const jvDr = jvAccountRows.filter(r => r.dr_cr === 'Debit').reduce((s, r) => s + (r.amount ?? 0), 0)
+    const pbAmtStr = selectedPB.amount != null ? fmtAmt(Number(selectedPB.amount)) : '—'
+    const jvAmtStr = jvAccountRows.length > 0 ? fmtAmt(jvDr) : '—'
+    // Per-item tax rows interleaved after each commodity row
+    const jvTaxRow = (keyword: string, commodity?: string) => {
+      const rows = jvAccountRows.filter(r => r.dr_cr === 'Debit' && r.account_name.toLowerCase().includes(keyword))
+      const match = commodity
+        ? rows.find(r => (r.commodity || '').toLowerCase().includes(commodity.toLowerCase())) ?? rows[0]
+        : rows[0]
+      return match?.amount != null ? fmtAmt(match.amount) : jvAccountRows.length > 0 ? '—' : '—'
+    }
+    const commodityWithTax: { label: string; pb: string; jv: string }[] = []
+    for (const item of pbItems.length > 0 ? pbItems : []) {
+      const nameL = item.name.trim().toLowerCase()
+      const jvCommodityList = jvCommodity !== '—' ? jvCommodity.split(',').map(s => s.trim().toLowerCase()) : []
+      const matchedJv = jvCommodityList.find(c => c === nameL || c.includes(nameL) || nameL.includes(c))
+      commodityWithTax.push({ label: 'Commodity', pb: item.name, jv: matchedJv ? item.name : '—' })
+      if (item.igst_amount != null && item.igst_amount > 0) {
+        commodityWithTax.push({ label: 'IGST Amount', pb: fmtAmt(item.igst_amount), jv: jvTaxRow('igst', item.name) })
+      } else {
+        if (item.cgst_amount != null && item.cgst_amount > 0)
+          commodityWithTax.push({ label: 'CGST Amount', pb: fmtAmt(item.cgst_amount), jv: jvTaxRow('cgst', item.name) })
+        if (item.sgst_amount != null && item.sgst_amount > 0)
+          commodityWithTax.push({ label: 'SGST Amount', pb: fmtAmt(item.sgst_amount), jv: jvTaxRow('sgst', item.name) })
+      }
+    }
+    const finalCommodityRows = commodityWithTax.length > 0 ? commodityWithTax : commodityRows
     return [
-      { label: 'Division',     pb: selectedPB.division    || '—', jv: fieldsStep.fields?.find(f => f.field === 'Division')?.value    || '—' },
-      { label: 'Department',   pb: selectedPB.department  || '—', jv: fieldsStep.fields?.find(f => f.field === 'Department')?.value  || '—' },
-      { label: 'Type of Sale', pb: selectedPB.type_of_sale || '—', jv: fieldsStep.fields?.find(f => f.field === 'Type of Sale')?.value || '—' },
-      { label: 'Location',     pb: selectedPB.location    || '—', jv: fieldsStep.fields?.find(f => f.field === 'Location')?.value    || '—' },
-      ...commodityRows,
+      { label: 'Division',            pb: selectedPB.division    || '—', jv: fieldsStep.fields?.find(f => f.field === 'Division')?.value    || '—' },
+      { label: 'Department',          pb: selectedPB.department  || '—', jv: fieldsStep.fields?.find(f => f.field === 'Department')?.value  || '—' },
+      { label: 'Type of Sale',        pb: selectedPB.type_of_sale || '—', jv: fieldsStep.fields?.find(f => f.field === 'Type of Sale')?.value || '—' },
+      { label: 'Location',            pb: selectedPB.location    || '—', jv: fieldsStep.fields?.find(f => f.field === 'Location')?.value    || '—' },
+      ...finalCommodityRows,
+      { label: 'Transaction Amount',  pb: pbAmtStr,  jv: jvAmtStr },
     ]
-  }, [jvSteps, selectedPB, pbItems, pbItemsLoading])
+  }, [jvSteps, selectedPB, pbItems, pbItemsLoading, jvAccountRows])
 
   // Export the JV verification report as a formatted Excel workbook using
   // SpreadsheetML (XML Spreadsheet 2003) — supports fonts, fills, borders and
@@ -644,7 +673,13 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     const fieldsStep = jvSteps.find(s => s.fields)
     const balanceStep = jvSteps.find(s => s.detail && !s.fields)
     if (!selectedPB || (!found && !fieldsStep)) return
-    const ok = jvSteps.length > 0 && jvSteps.every(s => s.ok)
+    const fieldMismatch = (jvCompRows ?? []).some(r => r.pb !== '—' && r.jv !== '—' && r.pb.trim().toLowerCase() !== r.jv.trim().toLowerCase())
+    const _defMap = new Map<string, typeof accountingDef[0]>()
+    for (const d of accountingDef) { const k = d.account_name.trim().toLowerCase()+'|'+(d.dr_cr||'').toLowerCase(); if (!_defMap.has(k)) _defMap.set(k,d) }
+    const accountRowFail = jvAccountRows.some(r => { const def=_defMap.get(r.account_name.trim().toLowerCase()+'|'+(r.dr_cr||'').toLowerCase()); return !def||def.dr_cr!==r.dr_cr })
+    const jvDrTotal = jvAccountRows.filter(r=>r.dr_cr==='Debit').reduce((s,r)=>s+(r.amount??0),0)
+    const amountMismatch = selectedPB.amount!=null && jvAccountRows.length>0 && Math.abs(Number(selectedPB.amount)-jvDrTotal)>0.02
+    const ok = jvSteps.length > 0 && jvSteps.every(s => s.ok) && !fieldMismatch && !accountRowFail && !amountMismatch
     const balMatch = balanceStep?.detail?.match(/DR\s*=\s*([\d,]+\.?\d*)\s+\|CR\|\s*=\s*([\d,]+\.?\d*)/)
     const amountNum = selectedPB.amount != null ? Number(selectedPB.amount) : null
 
@@ -821,7 +856,13 @@ ${rows.join('\n')}
     const fieldsStep = jvSteps.find(s => s.fields)
     const balanceStep = jvSteps.find(s => s.detail && !s.fields)
     if (!selectedPB || (!found && !fieldsStep)) return
-    const ok = jvSteps.length > 0 && jvSteps.every(s => s.ok)
+    const fieldMismatch = (jvCompRows ?? []).some(r => r.pb !== '—' && r.jv !== '—' && r.pb.trim().toLowerCase() !== r.jv.trim().toLowerCase())
+    const _defMap = new Map<string, typeof accountingDef[0]>()
+    for (const d of accountingDef) { const k = d.account_name.trim().toLowerCase()+'|'+(d.dr_cr||'').toLowerCase(); if (!_defMap.has(k)) _defMap.set(k,d) }
+    const accountRowFail = jvAccountRows.some(r => { const def=_defMap.get(r.account_name.trim().toLowerCase()+'|'+(r.dr_cr||'').toLowerCase()); return !def||def.dr_cr!==r.dr_cr })
+    const jvDrTotal = jvAccountRows.filter(r=>r.dr_cr==='Debit').reduce((s,r)=>s+(r.amount??0),0)
+    const amountMismatch = selectedPB.amount!=null && jvAccountRows.length>0 && Math.abs(Number(selectedPB.amount)-jvDrTotal)>0.02
+    const ok = jvSteps.length > 0 && jvSteps.every(s => s.ok) && !fieldMismatch && !accountRowFail && !amountMismatch
     const balMatch = balanceStep?.detail?.match(/DR\s*=\s*([\d,]+\.?\d*)\s+\|CR\|\s*=\s*([\d,]+\.?\d*)/)
     const amountNum = selectedPB.amount != null ? Number(selectedPB.amount) : null
 
@@ -846,7 +887,7 @@ ${rows.join('\n')}
     const LBL_BG: [number,number,number]  = [236, 239, 241]
     const BDR: [number,number,number]     = [176, 176, 176]
     const TXT: [number,number,number]     = [33, 33, 33]
-    const TXT_MED: [number,number,number] = [55, 71, 79]
+    const TXT_MED: [number,number,number] = [33, 33, 33] // used for condition/rule text — same as body so small mono stays readable
     const TXT_DIM: [number,number,number] = [84, 100, 114] // ~5.5:1 on white — muted but AA-readable
     const DR_T: [number,number,number]    = [13, 71, 161]
     const CR_T: [number,number,number]    = [74, 20, 140]
@@ -868,7 +909,7 @@ ${rows.join('\n')}
     type CS = {
       t: string; span?: number; align?: 'L'|'C'|'R'
       color?: [number,number,number]; fill?: [number,number,number]|null
-      bold?: boolean; size?: number; mono?: boolean; lbl?: boolean
+      bold?: boolean; italic?: boolean; size?: number; mono?: boolean; lbl?: boolean
     }
 
     // Factory — builds a row renderer for a given column-width array (mm).
@@ -884,7 +925,7 @@ ${rows.join('\n')}
         const span = c.span ?? 1
         const cw = cols.slice(colIdx, colIdx + span).reduce((a, b) => a + b, 0)
         const fs = c.size ?? (c.lbl ? 8 : 9)
-        doc.setFont(c.mono ? 'courier' : 'helvetica', c.bold || c.lbl ? 'bold' : 'normal')
+        doc.setFont(c.mono ? 'courier' : 'helvetica', (c.bold || c.lbl) && c.italic ? 'bolditalic' : c.bold || c.lbl ? 'bold' : c.italic ? 'italic' : 'normal')
         doc.setFontSize(fs)
         let lines: string[] = doc.splitTextToSize(safe(c.t), cw - PAD * 2)
         if (lines.length > MAX_LINES) {
@@ -907,7 +948,7 @@ ${rows.join('\n')}
           if (bg) { doc.setFillColor(...bg); doc.rect(cx, y, cw, rh, 'FD') }
           else doc.rect(cx, y, cw, rh, 'S')
         }
-        doc.setFont(c.mono ? 'courier' : 'helvetica', c.bold || c.lbl ? 'bold' : 'normal')
+        doc.setFont(c.mono ? 'courier' : 'helvetica', (c.bold || c.lbl) && c.italic ? 'bolditalic' : c.bold || c.lbl ? 'bold' : c.italic ? 'italic' : 'normal')
         doc.setFontSize(fs)
         doc.setTextColor(...(c.color ?? (c.lbl ? TXT_MED : TXT)))
         const tx = c.align==='C' ? cx+cw/2 : c.align==='R' ? cx+cw-PAD : cx+PAD
@@ -1055,7 +1096,8 @@ ${rows.join('\n')}
           const def = defByName.get(normName(ar.account_name)+'|'+(ar.dr_cr||'').toLowerCase())
           const match = !!def && def.dr_cr===ar.dr_cr
           const status = !def?'EXTRA':match?'PASS':'WRONG TYPE'
-          const cond = def?.condition_text||(def?'Always applies':'-')
+          const rawCond = def?.condition_text||(def?'Always applies':'-')
+          const cond = rawCond.replace(/\s+AND\s+/gi, '\nAND ')
           const ss = STATUS_S[status]!
           const isDr = ar.dr_cr==='Debit'
           const amtCol: [number,number,number] = isDr ? DR_T : CR_T
@@ -1063,8 +1105,8 @@ ${rows.join('\n')}
           row5([
             { t:safe(ar.account_name), bold:true, color:TXT },
             { t:safe(ar.dr_cr), color:isDr?DR_T:CR_T, size:8, align:'C', bold:true },
-            { t:ar.amount!=null?fmt(ar.amount):'-', mono:true, color:ar.amount!=null?amtCol:TXT_DIM, size:8, align:'R' },
-            { t:safe(cond), mono:true, color:TXT_MED, size:7.5 },
+            { t:ar.amount!=null?fmt(ar.amount):'-', bold:true, color:ar.amount!=null?amtCol:TXT_DIM, size:8, align:'R' },
+            { t:safe(cond), color:TXT, size:7.5 },
             { t:status, align:'C', bold:true, size:8, fill:ss.fill, color:ss.text },
           ])
         }
@@ -1120,7 +1162,7 @@ ${rows.join('\n')}
             { t:safe(d.account_name), color:TXT_DIM },
             { t:safe(d.dr_cr), color:TXT_DIM, size:8, align:'C' },
             { t:'-', color:TXT_DIM, size:8, align:'C' },
-            { t:safe(d.condition_text||(d.has_conditions?'Conditional - condition not met':'Always applies')), mono:true, color:TXT_DIM, size:7.5 },
+            { t:safe((d.condition_text||(d.has_conditions?'Conditional - condition not met':'Always applies')).replace(/\s+AND\s+/gi,'\nAND ')), color:TXT_DIM, size:7.5 },
             { t:'n/a', color:TXT_DIM, size:8, align:'C' },
           ])
         }
@@ -1343,7 +1385,23 @@ ${rows.join('\n')}
 
             {/* Results view — shown after a PB is selected */}
             {pbRefNo && !pbListOpen && (() => {
-              const passed = jvSteps.length > 0 && jvSteps.every(s => s.ok)
+              const fieldMismatch = (jvCompRows ?? []).some(r =>
+                r.pb !== '—' && r.jv !== '—' && r.pb.trim().toLowerCase() !== r.jv.trim().toLowerCase()
+              )
+              // computed later but needed for verdict — derive early
+              const _defByNameEarly = new Map<string, typeof accountingDef[0]>()
+              for (const d of accountingDef) {
+                const k = d.account_name.trim().toLowerCase() + '|' + (d.dr_cr || '').toLowerCase()
+                if (!_defByNameEarly.has(k)) _defByNameEarly.set(k, d)
+              }
+              const accountRowFail = jvAccountRows.some(row => {
+                const def = _defByNameEarly.get(row.account_name.trim().toLowerCase() + '|' + (row.dr_cr || '').toLowerCase())
+                return !def || def.dr_cr !== row.dr_cr  // EXTRA or WRONG TYPE
+              })
+              const pbAmt = selectedPB?.amount != null ? Number(selectedPB.amount) : null
+              const jvDrTotal = jvAccountRows.filter(r => r.dr_cr === 'Debit').reduce((s, r) => s + (r.amount ?? 0), 0)
+              const amountMismatch = pbAmt != null && jvAccountRows.length > 0 && Math.abs(pbAmt - jvDrTotal) > 0.02
+              const passed = jvSteps.length > 0 && jvSteps.every(s => s.ok) && !fieldMismatch && !accountRowFail && !amountMismatch
               const failed = jvSteps.length > 0 && !passed
               const foundStep = jvSteps.find(s => s.n === 1)
               const fieldsStep = jvSteps.find(s => s.fields)
@@ -1394,7 +1452,7 @@ ${rows.join('\n')}
                 s==='PASS' ? 'green' : s==='EXTRA' || s==='WRONG TYPE' ? 'red' : 'gray'
 
               const renderCond = (condText: string) =>
-                <span className="text-[11px] text-gray-500 dark:text-gray-400">{condText || 'Always applies'}</span>
+                <span className="text-[12px] font-medium text-gray-800 dark:text-gray-200">{condText || 'Always applies'}</span>
 
               return (
                 <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-900 shadow-sm">
@@ -1479,10 +1537,10 @@ ${rows.join('\n')}
                               const match = row.pb!=='—' && row.jv!=='—' && row.pb.trim().toLowerCase()===row.jv.trim().toLowerCase()
                               const unk = row.pb==='—' || row.jv==='—'
                               return (
-                                <tr key={ri} className="bg-white dark:bg-gray-900 hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
-                                  <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 font-medium text-gray-700 dark:text-gray-300">{row.label||'—'}</td>
-                                  <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 ${row.pb==='—'?'text-gray-300 dark:text-gray-600':''}`}>{row.pb}</td>
-                                  <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 ${row.jv==='—'?'text-gray-300 dark:text-gray-600':''}`}>{row.jv}</td>
+                                <tr key={ri} className={!unk && !match ? 'bg-red-50 dark:bg-red-900/20' : 'bg-white dark:bg-gray-900 hover:bg-gray-50/50 dark:hover:bg-gray-800/30'}>
+                                  <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 font-medium ${!unk && !match ? 'text-red-700 dark:text-red-300' : 'text-gray-700 dark:text-gray-300'}`}>{row.label||'—'}</td>
+                                  <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 font-mono ${!unk && !match ? 'text-red-600 dark:text-red-400 font-semibold' : row.pb==='—'?'text-gray-300 dark:text-gray-600':''}`}>{row.pb}</td>
+                                  <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 font-mono ${!unk && !match ? 'text-red-600 dark:text-red-400 font-semibold' : row.jv==='—'?'text-gray-300 dark:text-gray-600':''}`}>{row.jv}</td>
                                   <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-center">
                                     {unk ? <span className="text-gray-300 dark:text-gray-600">—</span>
                                       : match ? <CheckCircle2 className="size-3.5 text-emerald-500 inline" />
