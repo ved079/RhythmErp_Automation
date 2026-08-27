@@ -632,16 +632,17 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     const pbAmtStr = selectedPB.amount != null ? fmtAmt(Number(selectedPB.amount)) : '—'
     const jvAmtStr = jvAccountRows.length > 0 ? fmtAmt(jvDr) : '—'
     // Per-item tax rows interleaved after each commodity row
-    // Match JV tax row by amount (exact) rather than fuzzy commodity name — commodity names
-    // in JV can be extended with suffixes (e.g. "DRVR U Single Layer...") that break substring matching.
-    const usedJvRows = new Set<number>()
+    // Match JV tax row by amount (exact). Track used rows by absolute index into jvAccountRows
+    // so IGST and CGST/SGST lookups don't corrupt each other's "used" state.
+    const usedJvRowIndices = new Set<number>()
     const jvTaxRow = (keyword: string, pbAmt: number) => {
-      const rows = jvAccountRows.filter(r => r.dr_cr === 'Debit' && r.account_name.toLowerCase().includes(keyword))
-      const unusedRows = rows.filter((_, i) => !usedJvRows.has(i))
-      const match = unusedRows.find(r => r.amount != null && Math.abs((r.amount ?? 0) - pbAmt) < 0.02)
-        ?? unusedRows[0]
-      if (match) usedJvRows.add(rows.indexOf(match))
-      return match?.amount != null ? fmtAmt(match.amount) : jvAccountRows.length > 0 ? '—' : '—'
+      const candidates = jvAccountRows
+        .map((r, i) => ({ r, i }))
+        .filter(({ r, i }) => r.dr_cr === 'Debit' && r.account_name.toLowerCase().includes(keyword) && !usedJvRowIndices.has(i))
+      const match = candidates.find(({ r }) => r.amount != null && Math.abs((r.amount ?? 0) - pbAmt) < 0.02)
+        ?? candidates[0]
+      if (match) usedJvRowIndices.add(match.i)
+      return match?.r?.amount != null ? fmtAmt(match.r.amount) : jvAccountRows.length > 0 ? '—' : '—'
     }
     const commodityWithTax: { label: string; pb: string; jv: string }[] = []
     for (const item of pbItems.length > 0 ? pbItems : []) {
