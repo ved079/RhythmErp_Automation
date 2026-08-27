@@ -672,7 +672,7 @@ export default function Home() {
   ]
 
   return (
-    <div className="h-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
+    <div className="h-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden" style={{ animation: 'panelFadeIn 0.3s ease-out' }}>
       <AppTour selectedModule={selectedModule} activeTab={activeTab} />
       {/* Keyboard Shortcuts Cheat Sheet */}
       <Dialog open={d.showShortcuts} onOpenChange={d.setShowShortcuts}>
