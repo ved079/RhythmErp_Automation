@@ -13,54 +13,38 @@ interface Props {
 export default function LoadingCard({ message = 'LOADING', steps }: Props) {
   return (
     <div className="lc-root">
-      {/* Backdrop blur */}
       <div className="lc-backdrop" />
 
       <div className="lc-card">
-        {/* Heartbeat rings behind the spinner */}
-        <div className="lc-pulse-wrap">
-          <span className="lc-pulse lc-pulse-1" />
-          <span className="lc-pulse lc-pulse-2" />
-          <span className="lc-pulse lc-pulse-3" />
-
-          {/* Spinner ring */}
-          <div className="lc-ring-wrap">
-            <svg className="lc-ring-svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
-              <circle cx="32" cy="32" r="26" className="lc-track" strokeWidth="2.5" />
-              <circle cx="32" cy="32" r="26" className="lc-arc" strokeWidth="2.5" strokeLinecap="round"
-                strokeDasharray="163.36" strokeDashoffset="122.52" />
-            </svg>
-            {/* Inner spinning arc */}
-            <svg className="lc-ring-inner" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-              <circle cx="20" cy="20" r="14" className="lc-arc-inner" strokeWidth="2" strokeLinecap="round"
-                strokeDasharray="87.96" strokeDashoffset="70" />
-            </svg>
-            {/* Logo inside ring */}
-            <div className="lc-ring-logo">
-              <img src="/agdi-logo-new.png" alt="" className="lc-logo-inner" />
-            </div>
+        {/* Logo with orbital ring */}
+        <div className="lc-orbit-wrap">
+          <div className="lc-orbit-ring" />
+          <span className="lc-sonar lc-sonar-1" />
+          <span className="lc-sonar lc-sonar-2" />
+          <div className="lc-logo-center">
+            <img src="/agdi-logo-new.png" alt="" className="lc-logo" />
           </div>
         </div>
 
         {/* Label */}
         <p className="lc-label">{message}</p>
 
-        {/* Steps or dots */}
+        {/* Steps or bounce dots */}
         {steps && steps.length > 0 ? (
           <div className="lc-steps">
             {steps.map((step, i) => (
               <div
                 key={i}
                 className={`lc-step ${step.done ? 'lc-step-done' : 'lc-step-active'}`}
-                style={{ animationDelay: `${i * 80}ms` }}
+                style={{ animationDelay: `${i * 70}ms` }}
               >
-                <span className="lc-step-icon-wrap">
+                <span className="lc-step-icon">
                   {step.done ? (
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" className="lc-check-icon" aria-hidden="true">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" className="lc-check" aria-hidden="true">
                       <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   ) : (
-                    <span className="lc-dot-spin" />
+                    <span className="lc-spinner" />
                   )}
                 </span>
                 <span className="lc-step-text">{step.label}</span>
@@ -77,7 +61,6 @@ export default function LoadingCard({ message = 'LOADING', steps }: Props) {
       </div>
 
       <style>{`
-        /* ── Root ── */
         .lc-root {
           position: fixed;
           inset: 0;
@@ -87,96 +70,85 @@ export default function LoadingCard({ message = 'LOADING', steps }: Props) {
           z-index: 50;
           pointer-events: none;
         }
-
-        /* ── Backdrop ── */
         .lc-backdrop {
           position: absolute;
           inset: 0;
-          background: rgba(0,0,0,0.06);
-          backdrop-filter: blur(1px);
-          -webkit-backdrop-filter: blur(1px);
+          background: rgba(0,0,0,0.05);
+          backdrop-filter: blur(1.5px);
+          -webkit-backdrop-filter: blur(1.5px);
         }
-
-        /* ── Card ── */
         .lc-card {
           position: relative;
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 18px;
+          gap: 16px;
           background: var(--card);
           border: 1px solid var(--border);
-          border-radius: 20px;
+          border-radius: 22px;
           padding: 32px 48px 28px;
           box-shadow:
-            0 0 0 1px color-mix(in srgb, var(--primary) 8%, transparent),
-            0 8px 32px rgba(0,0,0,0.12),
+            0 0 0 1px color-mix(in srgb, var(--primary) 6%, transparent),
+            0 12px 40px rgba(0,0,0,0.13),
             0 2px 8px rgba(0,0,0,0.06);
           min-width: 210px;
-          animation: lc-card-breathe 3s ease-in-out infinite;
+          animation: lc-breathe 3.5s ease-in-out infinite;
         }
 
-        /* ── Pulse rings (heartbeat) ── */
-        .lc-pulse-wrap {
+        /* ── Orbital logo ── */
+        .lc-orbit-wrap {
           position: relative;
+          width: 96px;
+          height: 96px;
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 80px;
-          height: 80px;
         }
-        .lc-pulse {
+
+        /* Conic-gradient ring that spins */
+        .lc-orbit-ring {
           position: absolute;
           inset: 0;
           border-radius: 50%;
-          border: 2px solid var(--primary);
+          background: conic-gradient(
+            from 0deg,
+            var(--primary) 0deg,
+            color-mix(in srgb, var(--primary) 60%, transparent) 80deg,
+            transparent 140deg,
+            transparent 360deg
+          );
+          -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #fff calc(100% - 3px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #fff calc(100% - 3px));
+          animation: lc-orbit-spin 1.6s linear infinite;
+        }
+
+        /* Sonar pulse rings */
+        .lc-sonar {
+          position: absolute;
+          inset: 4px;
+          border-radius: 50%;
+          border: 1.5px solid var(--primary);
           opacity: 0;
-          animation: lc-heartbeat 2.4s ease-out infinite;
+          animation: lc-sonar 2.8s ease-out infinite;
         }
-        .lc-pulse-1 { animation-delay: 0s; }
-        .lc-pulse-2 { animation-delay: 0.6s; }
-        .lc-pulse-3 { animation-delay: 1.2s; }
+        .lc-sonar-1 { animation-delay: 0s; }
+        .lc-sonar-2 { animation-delay: 1.4s; }
 
-        /* ── Spinner ring ── */
-        .lc-ring-wrap {
-          position: absolute;
-          inset: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .lc-ring-svg {
-          position: absolute;
-          width: 80px;
-          height: 80px;
-          animation: lc-spin-cw 2s linear infinite;
-        }
-        .lc-ring-inner {
-          position: absolute;
-          width: 48px;
-          height: 48px;
-          animation: lc-spin-ccw 1.4s linear infinite;
-        }
-        .lc-track { stroke: var(--border); fill: none; }
-        .lc-arc   { stroke: var(--primary); fill: none; }
-        .lc-arc-inner {
-          stroke: color-mix(in srgb, var(--primary) 55%, transparent);
-          fill: none;
-        }
-
-        /* Logo inside */
-        .lc-ring-logo {
+        /* Logo */
+        .lc-logo-center {
           position: relative;
           z-index: 1;
+          width: 56px;
+          height: 56px;
+          border-radius: 14px;
+          background: var(--card);
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 30px;
-          height: 30px;
-          animation: lc-logo-pulse 2.4s ease-in-out infinite;
+          animation: lc-logo-breathe 3.5s ease-in-out infinite;
         }
-        .lc-logo-inner {
-          width: 26px;
+        .lc-logo {
+          width: 46px;
           height: auto;
           object-fit: contain;
         }
@@ -189,7 +161,7 @@ export default function LoadingCard({ message = 'LOADING', steps }: Props) {
           color: var(--primary);
           margin: 0;
           font-family: var(--font-sans, system-ui, sans-serif);
-          animation: lc-label-pulse 2.4s ease-in-out infinite;
+          animation: lc-fade-pulse 3.5s ease-in-out infinite;
         }
 
         /* ── Steps ── */
@@ -205,16 +177,11 @@ export default function LoadingCard({ message = 'LOADING', steps }: Props) {
           gap: 9px;
           font-size: 12px;
           font-family: var(--font-sans, system-ui, sans-serif);
-          animation: lc-step-in 0.25s ease both;
+          animation: lc-step-in 0.22s ease both;
         }
-        .lc-step-done {
-          color: var(--muted-foreground);
-        }
-        .lc-step-active {
-          color: var(--card-foreground);
-          font-weight: 500;
-        }
-        .lc-step-icon-wrap {
+        .lc-step-done  { color: var(--muted-foreground); }
+        .lc-step-active { color: var(--card-foreground); font-weight: 500; }
+        .lc-step-icon {
           flex-shrink: 0;
           width: 16px;
           height: 16px;
@@ -222,38 +189,31 @@ export default function LoadingCard({ message = 'LOADING', steps }: Props) {
           align-items: center;
           justify-content: center;
         }
-        .lc-check-icon {
+        .lc-check {
           color: #10b981;
-          animation: lc-check-pop 0.3s cubic-bezier(0.34,1.56,0.64,1) both;
+          animation: lc-check-pop 0.28s cubic-bezier(0.34,1.56,0.64,1) both;
         }
-        .lc-dot-spin {
+        .lc-spinner {
           display: block;
-          width: 10px;
-          height: 10px;
+          width: 11px;
+          height: 11px;
           border-radius: 50%;
-          border: 2px solid color-mix(in srgb, var(--primary) 25%, transparent);
+          border: 2px solid color-mix(in srgb, var(--primary) 22%, transparent);
           border-top-color: var(--primary);
-          animation: lc-spin-cw 0.75s linear infinite;
+          animation: lc-orbit-spin 0.7s linear infinite;
         }
-        .lc-step-text {
-          transition: opacity 0.3s, text-decoration 0.3s;
-        }
+        .lc-step-text { transition: opacity 0.25s; }
         .lc-step-done .lc-step-text {
           text-decoration: line-through;
-          text-decoration-color: color-mix(in srgb, var(--muted-foreground) 50%, transparent);
-          opacity: 0.5;
+          text-decoration-color: color-mix(in srgb, var(--muted-foreground) 40%, transparent);
+          opacity: 0.45;
         }
 
-        /* ── Dots (no-steps mode) ── */
-        .lc-dots {
-          display: flex;
-          gap: 6px;
-          align-items: center;
-        }
+        /* ── Bounce dots ── */
+        .lc-dots { display: flex; gap: 6px; align-items: center; }
         .lc-dot {
           display: inline-block;
-          width: 5px;
-          height: 5px;
+          width: 5px; height: 5px;
           border-radius: 50%;
           background: var(--border);
           animation: lc-dot-bounce 1.2s ease-in-out infinite;
@@ -263,32 +223,30 @@ export default function LoadingCard({ message = 'LOADING', steps }: Props) {
         .lc-dot-3 { animation-delay: 0.3s; }
 
         /* ── Keyframes ── */
-        @keyframes lc-heartbeat {
-          0%   { transform: scale(0.85); opacity: 0.5; }
-          30%  { opacity: 0.25; }
-          100% { transform: scale(1.55); opacity: 0; }
+        @keyframes lc-orbit-spin  { to { transform: rotate(360deg); } }
+        @keyframes lc-sonar {
+          0%   { transform: scale(0.88); opacity: 0.6; }
+          100% { transform: scale(1.5);  opacity: 0; }
         }
-        @keyframes lc-spin-cw  { to { transform: rotate(360deg); } }
-        @keyframes lc-spin-ccw { to { transform: rotate(-360deg); } }
-        @keyframes lc-card-breathe {
+        @keyframes lc-breathe {
           0%, 100% { transform: scale(1); }
-          50%      { transform: scale(1.008); }
+          50%      { transform: scale(1.007); }
         }
-        @keyframes lc-logo-pulse {
-          0%, 100% { transform: scale(1); opacity: 0.9; }
-          50%      { transform: scale(1.12); opacity: 1; }
+        @keyframes lc-logo-breathe {
+          0%, 100% { transform: scale(1); }
+          50%      { transform: scale(1.06); }
         }
-        @keyframes lc-label-pulse {
-          0%, 100% { opacity: 0.7; }
+        @keyframes lc-fade-pulse {
+          0%, 100% { opacity: 0.65; }
           50%      { opacity: 1; }
         }
         @keyframes lc-step-in {
-          from { opacity: 0; transform: translateX(-6px); }
+          from { opacity: 0; transform: translateX(-5px); }
           to   { opacity: 1; transform: translateX(0); }
         }
         @keyframes lc-check-pop {
-          from { transform: scale(0) rotate(-15deg); opacity: 0; }
-          to   { transform: scale(1) rotate(0deg);  opacity: 1; }
+          from { transform: scale(0) rotate(-20deg); opacity: 0; }
+          to   { transform: scale(1) rotate(0deg);   opacity: 1; }
         }
         @keyframes lc-dot-bounce {
           0%, 80%, 100% { transform: scale(0.75); background: var(--border); }
@@ -296,8 +254,8 @@ export default function LoadingCard({ message = 'LOADING', steps }: Props) {
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .lc-ring-svg, .lc-ring-inner, .lc-dot, .lc-dot-spin,
-          .lc-pulse, .lc-card, .lc-ring-logo, .lc-label { animation: none; }
+          .lc-orbit-ring, .lc-sonar, .lc-dot, .lc-spinner,
+          .lc-card, .lc-logo-center, .lc-label { animation: none; }
         }
       `}</style>
     </div>
