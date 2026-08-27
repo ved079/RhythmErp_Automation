@@ -338,6 +338,17 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   useEffect(() => { if (localToken) localStorage.setItem('erp_token', localToken); else localStorage.removeItem('erp_token') }, [localToken])
   useEffect(() => { if (localTenantId) localStorage.setItem('erp_tenant_id', localTenantId); else localStorage.removeItem('erp_tenant_id') }, [localTenantId])
 
+  const handleAuthError = useCallback((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.includes('401') || msg.includes('403') || msg.toLowerCase().includes('unauthorized')) {
+      setLocalToken('')
+      setLocalTenantId('')
+      onNeedsToken()
+      return true
+    }
+    return false
+  }, [onNeedsToken])
+
   // Fetch suppliers, items and item categories when credentials are available
   const loadMasterData = useCallback(async () => {
     const token = erpToken || localToken
@@ -565,17 +576,6 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     const width = activeMenu.pos.width
     return { top, left, width, maxHeight }
   }, [activeMenu])
-
-  const handleAuthError = useCallback((err: unknown) => {
-    const msg = err instanceof Error ? err.message : String(err)
-    if (msg.includes('401') || msg.includes('403') || msg.toLowerCase().includes('unauthorized')) {
-      setLocalToken('')
-      setLocalTenantId('')
-      onNeedsToken()
-      return true
-    }
-    return false
-  }, [onNeedsToken])
 
   const loadPBList = useCallback(async () => {
     const token = erpToken || localToken
