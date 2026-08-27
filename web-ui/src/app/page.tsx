@@ -32,7 +32,7 @@ import {
   Zap, Shield, MessageSquare, Bell, CalendarClock,
   Terminal, Monitor, HelpCircle, Copyright, ExternalLink,
   ChevronRight, LogOut, GitCompare, FlaskConical, BarChart2, Camera,
-  Copy, Check, Package, RotateCcw,
+  Copy, Check, Package,
 } from 'lucide-react'
 import LoadingCard from '@/components/ui/LoadingCard'
 import Spinner from '@/components/ui/Spinner'
