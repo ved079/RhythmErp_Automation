@@ -445,6 +445,8 @@ export interface PBListItem {
   date: string;
   supplier: string;
   amount: string | number;
+  taxable_amount?: string | number;
+  discount_amount?: string | number;
   division: string;
   department: string;
   type_of_sale: string;
@@ -474,7 +476,13 @@ export async function fetchPBList(erpToken: string, erpTenantId: string): Promis
   return data.pbs ?? []
 }
 
-export async function fetchPBItems(erpToken: string, erpTenantId: string, pbId: string | number): Promise<PBItemLine[]> {
+export interface PBItemsResult {
+  items: PBItemLine[];
+  taxable_amount: number | null;
+  discount_amount: number | null;
+}
+
+export async function fetchPBItems(erpToken: string, erpTenantId: string, pbId: string | number): Promise<PBItemsResult> {
   const res = await fetch(`${PROXY}?path=pb-items`, withCsrf({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -482,7 +490,7 @@ export async function fetchPBItems(erpToken: string, erpTenantId: string, pbId: 
   }))
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = await res.json()
-  return data.items ?? []
+  return { items: data.items ?? [], taxable_amount: data.taxable_amount ?? null, discount_amount: data.discount_amount ?? null }
 }
 
 // ─── JV Verify ──────────────────────────────────────────
