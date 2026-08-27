@@ -404,6 +404,19 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     }
   }, [erpToken, localToken, localTenantId, erpTenantId, loadMasterData])
 
+  // Auto-load on mount when token is already hydrated from localStorage
+  const mountedRef = useRef(false)
+  useEffect(() => {
+    if (mountedRef.current) return
+    mountedRef.current = true
+    const token = erpToken || localToken
+    const tenant = localTenantId || erpTenantId
+    if (!token || !tenant) return
+    if (!fetchedRef.current) loadMasterData()
+    if (showJVCheck) loadPBList()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Document order for the selected flow: full chain starts with PO,
   // standalone GP starts directly at the Gate Pass.
   const docOrder = React.useMemo(
@@ -1750,14 +1763,25 @@ ${rows.join('\n')}
                 Set Token
               </Button>
             ) : (
-              <button
-                onClick={() => { setLocalToken(''); setLocalTenantId(''); setJvSteps([]); setJvError(''); setPbRefNo('') }}
-                className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 hover:text-red-500 dark:hover:text-red-400 transition-colors cursor-pointer"
-                title="Clear token"
-              >
-                <CheckCircle2 className="size-3" />
-                Token set
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={loadPBList}
+                  disabled={pbListLoading}
+                  className="text-[11px] text-[#3F51B5] dark:text-[#7986CB] flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50"
+                  title="Re-fetch purchase bookings"
+                >
+                  <RefreshCw className={`size-3 ${pbListLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+                <button
+                  onClick={() => { setLocalToken(''); setLocalTenantId(''); setJvSteps([]); setJvError(''); setPbRefNo('') }}
+                  className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 hover:text-red-500 dark:hover:text-red-400 transition-colors cursor-pointer"
+                  title="Clear token"
+                >
+                  <CheckCircle2 className="size-3" />
+                  Token set
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -2464,24 +2488,35 @@ ${rows.join('\n')}
             </Button>
           )}
           {(erpToken || localToken) && (
-            <button
-              onClick={() => {
-                setLocalToken(''); setLocalTenantId('')
-                setSuppliers([]); setItems([]); setCategories([])
-                setSelectedCategoryId(null); setSupplier(null); setItemIds([])
-                setCount(1); setChainSuppliers([]); setSameSupplier(false)
-                setNumItems(2); setCustomer(null); setCustomers([])
-                setLogs([]); setCreated(0); setFailed(0); setRunSummary(null); setShowLogs(false)
-                setCqpItemIds(null); setCqpFillLog('')
-                fetchedRef.current = false
-                onClearToken()
-              }}
-              className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 hover:text-red-500 dark:hover:text-red-400 transition-colors cursor-pointer"
-              title="Clear token"
-            >
-              <CheckCircle2 className="size-3" />
-              Token set
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { fetchedRef.current = false; loadMasterData() }}
+                disabled={loadingData}
+                className="text-[11px] text-[#3F51B5] dark:text-[#7986CB] flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50"
+                title="Re-fetch suppliers, items and categories"
+              >
+                <RefreshCw className={`size-3 ${loadingData ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+              <button
+                onClick={() => {
+                  setLocalToken(''); setLocalTenantId('')
+                  setSuppliers([]); setItems([]); setCategories([])
+                  setSelectedCategoryId(null); setSupplier(null); setItemIds([])
+                  setCount(1); setChainSuppliers([]); setSameSupplier(false)
+                  setNumItems(2); setCustomer(null); setCustomers([])
+                  setLogs([]); setCreated(0); setFailed(0); setRunSummary(null); setShowLogs(false)
+                  setCqpItemIds(null); setCqpFillLog('')
+                  fetchedRef.current = false
+                  onClearToken()
+                }}
+                className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 hover:text-red-500 dark:hover:text-red-400 transition-colors cursor-pointer"
+                title="Clear token"
+              >
+                <CheckCircle2 className="size-3" />
+                Token set
+              </button>
+            </div>
           )}
           {running && (
             <span className="text-[11px] text-[#3F51B5] dark:text-[#7986CB] flex items-center gap-1 animate-pulse">
