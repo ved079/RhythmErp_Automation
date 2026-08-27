@@ -517,6 +517,11 @@ def pb_list_endpoint(request: PBListRequest):
                 "date": r.get("transaction_date") or "",
                 "supplier": r.get("supplier_ref_id") or "",
                 "amount": r.get("txn_currency_total_amount") or "",
+                "taxable_amount": r.get("txn_currency_amount_detail") or "",
+                "igst_amount": r.get("txn_currency_igst_amount") or "",
+                "cgst_amount": r.get("txn_currency_cgst_amount") or "",
+                "sgst_amount": r.get("txn_currency_sgst_amount") or "",
+                "gst_type": r.get("gst_type") or "",
                 "division": r.get("parameter1") or "",
                 "department": r.get("parameter2") or "",
                 "type_of_sale": r.get("parameter5") or "",
@@ -579,6 +584,7 @@ def pb_items_endpoint(request: PBItemsRequest):
             pass
 
     items = []
+    total_igst = total_cgst = total_sgst = 0.0
     for d in details:
         iid = d.get("item_ref_id")
         # Try name from item master lookup, then from inline display fields in PB detail
@@ -590,12 +596,20 @@ def pb_items_endpoint(request: PBItemsRequest):
             or d.get("name")
             or (str(iid) if iid else "—")
         )
+        igst = float(d.get("txn_currency_igst_amount") or 0)
+        cgst = float(d.get("txn_currency_cgst_amount") or 0)
+        sgst = float(d.get("txn_currency_sgst_amount") or 0)
+        gst_type = d.get("gst_type") or ""
         items.append({
             "item_ref_id": iid,
             "name": name,
             "quantity": d.get("net_quantity") or d.get("quantity") or "",
             "rate": d.get("rate") or "",
             "amount": d.get("total_amount") or d.get("amount") or "",
+            "igst_amount": round(igst, 3) if igst else None,
+            "cgst_amount": round(cgst, 3) if cgst else None,
+            "sgst_amount": round(sgst, 3) if sgst else None,
+            "gst_type": gst_type,
         })
 
     return JSONResponse({"items": items})
