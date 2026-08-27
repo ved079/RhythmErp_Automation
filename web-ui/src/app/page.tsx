@@ -144,8 +144,10 @@ export default function Home() {
     document.addEventListener('mouseup', onMouseUp)
   }, [sidebarWidth])
   const [showRawNames, setShowRawNames] = useState(() => typeof window !== 'undefined' && localStorage.getItem('showRawNames') === 'true')
-  const [erpToken, setErpToken] = useState('')
-  const [erpTenantId, setErpTenantId] = useState('')
+  const [erpToken, setErpToken] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('erp_token') ?? '' : '')
+  const [erpTenantId, setErpTenantId] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('erp_tenant_id') ?? '' : '')
+  useEffect(() => { if (erpToken) localStorage.setItem('erp_token', erpToken); else localStorage.removeItem('erp_token') }, [erpToken])
+  useEffect(() => { if (erpTenantId) localStorage.setItem('erp_tenant_id', erpTenantId); else localStorage.removeItem('erp_tenant_id') }, [erpTenantId])
   // ERP UI credentials (email/password for Selenium tests)
   const [erpCredentials, setErpCredentials] = useState<ErpCred[]>([])
   const [activeCredId, setActiveCredId] = useState<string | null>(null)
@@ -939,7 +941,7 @@ export default function Home() {
                 <PurchaseChainSection
                   erpToken={erpToken}
                   erpTenantId={erpTenantId || '681'}
-                  onNeedsToken={() => setSelectedModule('credentials')}
+                  onNeedsToken={() => setTokenDialogOpen(true)}
                   onClearToken={onClearToken}
                   userId={user?.id}
                   showJVCheck={selectedModule === 'full-purchase-flow-jv'}

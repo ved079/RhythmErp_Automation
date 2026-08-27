@@ -244,8 +244,8 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [isRateWeightDeduction, setIsRateWeightDeduction] = useState(false)
   const [loadingData, setLoadingData] = useState(false)
   const [dataError, setDataError] = useState('')
-  const [localToken, setLocalToken] = useState('')
-  const [localTenantId, setLocalTenantId] = useState('')
+  const [localToken, setLocalToken] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('erp_token') ?? '' : '')
+  const [localTenantId, setLocalTenantId] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('erp_tenant_id') ?? '' : '')
   const [showTokenInput, setShowTokenInput] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
   const [activeMenu, setActiveMenu] = useState<{type: 'supplier' | 'category' | 'customer' | 'item' | number | `chainSup:${number}`; pos: {top: number; left: number; width: number}} | null>(null)
@@ -335,6 +335,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     }
   }, [localToken])
 
+  useEffect(() => { if (localToken) localStorage.setItem('erp_token', localToken); else localStorage.removeItem('erp_token') }, [localToken])
+  useEffect(() => { if (localTenantId) localStorage.setItem('erp_tenant_id', localTenantId); else localStorage.removeItem('erp_tenant_id') }, [localTenantId])
+
   // Fetch suppliers, items and item categories when credentials are available
   const loadMasterData = useCallback(async () => {
     const token = erpToken || localToken
@@ -375,11 +378,11 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       }
       fetchedRef.current = true
     } catch (err) {
-      setDataError(err instanceof Error ? err.message : 'Failed to load master data')
+      if (!handleAuthError(err)) setDataError(err instanceof Error ? err.message : 'Failed to load master data')
     } finally {
       setLoadingData(false)
     }
-  }, [erpToken, localToken, localTenantId, erpTenantId, requireTaxRate, flow])
+  }, [erpToken, localToken, localTenantId, erpTenantId, requireTaxRate, flow, handleAuthError])
 
   const handleDone = useCallback(() => {
     setShowTokenInput(false)
@@ -563,6 +566,17 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     return { top, left, width, maxHeight }
   }, [activeMenu])
 
+  const handleAuthError = useCallback((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.includes('401') || msg.includes('403') || msg.toLowerCase().includes('unauthorized')) {
+      setLocalToken('')
+      setLocalTenantId('')
+      onNeedsToken()
+      return true
+    }
+    return false
+  }, [onNeedsToken])
+
   const loadPBList = useCallback(async () => {
     const token = erpToken || localToken
     const tenant = localTenantId || erpTenantId
@@ -573,11 +587,11 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       const list = await fetchPBList(token, tenant)
       setPbList(list)
     } catch (err) {
-      setPbListError(err instanceof Error ? err.message : String(err))
+      if (!handleAuthError(err)) setPbListError(err instanceof Error ? err.message : String(err))
     } finally {
       setPbListLoading(false)
     }
-  }, [erpToken, localToken, localTenantId, erpTenantId])
+  }, [erpToken, localToken, localTenantId, erpTenantId, handleAuthError])
 
   const handleVerify = async (refOverride?: string) => {
     const token = erpToken || localToken
@@ -605,7 +619,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       setJvSteps(jvRes.steps)
       setJvAccountRows(jvRes.account_rows ?? [])
     } catch (err) {
-      setJvError(err instanceof Error ? err.message : String(err))
+      if (!handleAuthError(err)) setJvError(err instanceof Error ? err.message : String(err))
     } finally {
       setVerifying(false)
     }
