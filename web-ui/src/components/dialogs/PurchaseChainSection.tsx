@@ -726,7 +726,10 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       for (const r of xrows) {
         const match = r.pb !== '\u2014' && r.jv !== '\u2014' && r.pb.trim().toLowerCase() === r.jv.trim().toLowerCase()
         const unknown = r.pb === '\u2014' || r.jv === '\u2014'
-        rows.push(`<Row>${cell(r.label ? 'sLabel' : 'sDim', r.label || '')}${cell(unknown ? 'sDim' : 'sVal', r.pb)}${emptyCell('sDimC')}${cell(unknown ? 'sDim' : 'sVal', r.jv)}${cell(unknown ? 'sDimC' : match ? 'sPass' : 'sFail', unknown ? '\u2014' : match ? 'PASS' : 'FAIL')}</Row>`)
+        const labelCell = r.indent
+          ? cell('sDim', `  \u00b7 ${r.label}`)
+          : cell(r.label ? 'sLabel' : 'sDim', r.label || '')
+        rows.push(`<Row${r.indent ? ' ss:Height="15"' : ''}>${labelCell}${cell(unknown ? 'sDim' : match ? 'sVal' : 'sFail', r.pb)}${emptyCell('sDimC')}${cell(unknown ? 'sDim' : match ? 'sVal' : 'sFail', r.jv)}${cell(unknown ? 'sDimC' : match ? 'sPass' : 'sFail', unknown ? '\u2014' : match ? 'PASS' : 'FAIL')}</Row>`)
       }
       rows.push('<Row ss:Height="8"/>')
     }
@@ -1058,14 +1061,17 @@ ${rows.join('\n')}
       for (const r of xrows) {
         const match = r.pb!=='\u2014' && r.jv!=='\u2014' && r.pb.trim().toLowerCase()===r.jv.trim().toLowerCase()
         const unk = r.pb==='\u2014' || r.jv==='\u2014'
+        const fail = !unk && !match
         row4([
-          { t:r.label||'', lbl:!!r.label, color:r.label?undefined:TXT_DIM },
-          { t:safe(r.pb), color:unk?TXT_DIM:TXT },
-          { t:safe(r.jv), color:unk?TXT_DIM:TXT },
+          r.indent
+            ? { t:`  \u00b7 ${r.label}`, color:fail?RED_T:TXT_DIM, size:7.5 }
+            : { t:r.label||'', lbl:!!r.label, color:r.label?undefined:TXT_DIM },
+          { t:safe(r.pb), color:unk?TXT_DIM:fail?RED_T:TXT, size:r.indent?7.5:undefined },
+          { t:safe(r.jv), color:unk?TXT_DIM:fail?RED_T:TXT, size:r.indent?7.5:undefined },
           unk
             ? { t:'-', align:'C', color:TXT_DIM }
             : { t:match?'PASS':'FAIL', align:'C', bold:true, size:8, fill:match?GRN_F:RED_F, color:match?GRN_T:RED_T },
-        ])
+        ], r.indent ? 5 : undefined)
       }
     }
 
