@@ -404,18 +404,28 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     }
   }, [erpToken, localToken, localTenantId, erpTenantId, loadMasterData])
 
-  // Auto-load on mount when token is already hydrated from localStorage
-  const mountedRef = useRef(false)
+  // Keep stable refs so effects below can call the latest version without
+  // needing them as deps (avoids stale-closure flakiness on navigation)
+  const loadMasterDataRef = useRef(loadMasterData)
+  const loadPBListRef    = useRef(loadPBList)
+  useEffect(() => { loadMasterDataRef.current = loadMasterData }, [loadMasterData])
+  useEffect(() => { loadPBListRef.current    = loadPBList },    [loadPBList])
+
+  // Auto-load master data once token is available (fires on mount and whenever
+  // token first appears — guards against calling twice via fetchedRef)
+  const hasToken = !!(erpToken || localToken) && !!(localTenantId || erpTenantId)
   useEffect(() => {
-    if (mountedRef.current) return
-    mountedRef.current = true
-    const token = erpToken || localToken
-    const tenant = localTenantId || erpTenantId
-    if (!token || !tenant) return
-    if (!fetchedRef.current) loadMasterData()
-    if (showJVCheck) loadPBList()
+    if (!hasToken || fetchedRef.current) return
+    loadMasterDataRef.current()
+  }, [hasToken])
+
+  // Auto-load PB list whenever the JV panel becomes visible (covers both
+  // initial mount on #full-purchase-flow-jv and navigation from full-flow)
+  useEffect(() => {
+    if (!showJVCheck || !hasToken) return
+    loadPBListRef.current()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [showJVCheck])
 
   // Document order for the selected flow: full chain starts with PO,
   // standalone GP starts directly at the Gate Pass.
