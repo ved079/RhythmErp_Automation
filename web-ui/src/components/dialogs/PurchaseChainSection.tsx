@@ -612,7 +612,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   }
 
   // PB vs JV comparison rows — shared by the on-screen sheet and the export.
-  const jvCompRows = React.useMemo<{ label: string; pb: string; jv: string }[] | null>(() => {
+  const jvCompRows = React.useMemo<{ label: string; pb: string; jv: string; indent?: boolean }[] | null>(() => {
     const fieldsStep = jvSteps.find(s => s.fields)
     if (!selectedPB || !fieldsStep) return null
     const jvCommodity = fieldsStep.fields?.find(f => f.field === 'Commodity')?.value || '—'
@@ -651,12 +651,12 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       const matchedJv = jvCommodityList.find(c => c === nameL || c.includes(nameL) || nameL.includes(c))
       commodityWithTax.push({ label: 'Commodity', pb: item.name, jv: matchedJv ? item.name : '—' })
       if (item.igst_amount != null && item.igst_amount > 0) {
-        commodityWithTax.push({ label: 'IGST Amount', pb: fmtAmt(item.igst_amount), jv: jvTaxRow('igst', item.igst_amount) })
+        commodityWithTax.push({ label: 'IGST Amount', pb: fmtAmt(item.igst_amount), jv: jvTaxRow('igst', item.igst_amount), indent: true })
       } else {
         if (item.cgst_amount != null && item.cgst_amount > 0)
-          commodityWithTax.push({ label: 'CGST Amount', pb: fmtAmt(item.cgst_amount), jv: jvTaxRow('cgst', item.cgst_amount) })
+          commodityWithTax.push({ label: 'CGST Amount', pb: fmtAmt(item.cgst_amount), jv: jvTaxRow('cgst', item.cgst_amount), indent: true })
         if (item.sgst_amount != null && item.sgst_amount > 0)
-          commodityWithTax.push({ label: 'SGST Amount', pb: fmtAmt(item.sgst_amount), jv: jvTaxRow('sgst', item.sgst_amount) })
+          commodityWithTax.push({ label: 'SGST Amount', pb: fmtAmt(item.sgst_amount), jv: jvTaxRow('sgst', item.sgst_amount), indent: true })
       }
     }
     const finalCommodityRows = commodityWithTax.length > 0 ? commodityWithTax : commodityRows
@@ -1541,11 +1541,28 @@ ${rows.join('\n')}
                             {xrows.map((row, ri) => {
                               const match = row.pb!=='—' && row.jv!=='—' && row.pb.trim().toLowerCase()===row.jv.trim().toLowerCase()
                               const unk = row.pb==='—' || row.jv==='—'
+                              const fail = !unk && !match
+                              if (row.indent) {
+                                return (
+                                  <tr key={ri} className={fail ? 'bg-red-50 dark:bg-red-900/20' : 'bg-gray-50/60 dark:bg-gray-800/30'}>
+                                    <td className={`pl-7 pr-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[11px] ${fail ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                                      <span className="mr-1 opacity-50">·</span>{row.label}
+                                    </td>
+                                    <td className={`px-3 py-1.5 border border-gray-200 dark:border-gray-700 font-mono text-[11px] ${fail ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-gray-500 dark:text-gray-400'}`}>{row.pb}</td>
+                                    <td className={`px-3 py-1.5 border border-gray-200 dark:border-gray-700 font-mono text-[11px] ${fail ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-gray-500 dark:text-gray-400'}`}>{row.jv}</td>
+                                    <td className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-center">
+                                      {unk ? <span className="text-gray-300 dark:text-gray-600">—</span>
+                                        : match ? <CheckCircle2 className="size-3 text-emerald-400 inline" />
+                                        : <XCircle className="size-3 text-red-500 inline" />}
+                                    </td>
+                                  </tr>
+                                )
+                              }
                               return (
-                                <tr key={ri} className={!unk && !match ? 'bg-red-50 dark:bg-red-900/20' : 'bg-white dark:bg-gray-900 hover:bg-gray-50/50 dark:hover:bg-gray-800/30'}>
-                                  <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 font-medium ${!unk && !match ? 'text-red-700 dark:text-red-300' : 'text-gray-700 dark:text-gray-300'}`}>{row.label||'—'}</td>
-                                  <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 font-mono ${!unk && !match ? 'text-red-600 dark:text-red-400 font-semibold' : row.pb==='—'?'text-gray-300 dark:text-gray-600':''}`}>{row.pb}</td>
-                                  <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 font-mono ${!unk && !match ? 'text-red-600 dark:text-red-400 font-semibold' : row.jv==='—'?'text-gray-300 dark:text-gray-600':''}`}>{row.jv}</td>
+                                <tr key={ri} className={fail ? 'bg-red-50 dark:bg-red-900/20' : 'bg-white dark:bg-gray-900 hover:bg-gray-50/50 dark:hover:bg-gray-800/30'}>
+                                  <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 font-medium ${fail ? 'text-red-700 dark:text-red-300' : 'text-gray-700 dark:text-gray-300'}`}>{row.label||'—'}</td>
+                                  <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 font-mono ${fail ? 'text-red-600 dark:text-red-400 font-semibold' : row.pb==='—'?'text-gray-300 dark:text-gray-600':''}`}>{row.pb}</td>
+                                  <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 font-mono ${fail ? 'text-red-600 dark:text-red-400 font-semibold' : row.jv==='—'?'text-gray-300 dark:text-gray-600':''}`}>{row.jv}</td>
                                   <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-center">
                                     {unk ? <span className="text-gray-300 dark:text-gray-600">—</span>
                                       : match ? <CheckCircle2 className="size-3.5 text-emerald-500 inline" />
