@@ -663,9 +663,14 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           })
         : [{ label: 'Commodity', pb: pbItemsLoading ? 'Loading…' : '—', jv: jvCommodity }]
     const fmtAmt = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    const jvDr = jvAccountRows.filter(r => r.dr_cr === 'Debit').reduce((s, r) => s + (r.amount ?? 0), 0)
     const pbAmtStr = selectedPB.amount != null ? fmtAmt(Number(selectedPB.amount)) : '—'
-    const jvAmtStr = jvAccountRows.length > 0 ? fmtAmt(jvDr) : '—'
+    // Use the Payable (Credit) row as JV transaction amount — it equals the actual
+    // supplier liability and excludes discount contra-entries that inflate the DR total.
+    // Fallback to the largest single credit row if "payable" isn't found by name.
+    const creditRows = jvAccountRows.filter(r => r.dr_cr === 'Credit')
+    const payableRow = creditRows.find(r => r.account_name.toLowerCase().includes('payable'))
+      ?? creditRows.reduce<typeof creditRows[0] | null>((best, r) => (r.amount ?? 0) > (best?.amount ?? 0) ? r : best, null)
+    const jvAmtStr = payableRow?.amount != null ? fmtAmt(payableRow.amount) : jvAccountRows.length > 0 ? '—' : '—'
     // Per-item tax rows interleaved after each commodity row
     // Match JV tax row by amount (exact). Track used rows by absolute index into jvAccountRows
     // so IGST and CGST/SGST lookups don't corrupt each other's "used" state.
