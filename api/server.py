@@ -518,6 +518,7 @@ def pb_list_endpoint(request: PBListRequest):
                 "supplier": r.get("supplier_ref_id") or "",
                 "amount": r.get("txn_currency_total_amount") or "",
                 "taxable_amount": r.get("txn_currency_amount_detail") or "",
+                "discount_amount": r.get("txn_currency_discount_amount") or "",
                 "igst_amount": r.get("txn_currency_igst_amount") or "",
                 "cgst_amount": r.get("txn_currency_cgst_amount") or "",
                 "sgst_amount": r.get("txn_currency_sgst_amount") or "",
@@ -612,7 +613,13 @@ def pb_items_endpoint(request: PBItemsRequest):
             "gst_type": gst_type,
         })
 
-    return JSONResponse({"items": items})
+    taxable_amount = float(pb_data.get("txn_currency_amount_detail") or 0) or None
+    discount_amount = (
+        float(pb_data.get("txn_currency_discount_amount") or 0)
+        or float(pb_data.get("txn_currency_discount_amount_details") or 0)
+        or None
+    )
+    return JSONResponse({"items": items, "taxable_amount": taxable_amount, "discount_amount": discount_amount})
 
 
 # ================================================================
