@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CheckCircle2, XCircle, Key, RefreshCw, Loader2, AlertTriangle, Search, Download, FileText, ChevronDown, FileBarChart2 } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
+import LoadingCard from '@/components/ui/LoadingCard'
 import { verifyJV, fetchPBList, fetchPBItems, fetchAccountingDef, type JVVerifyStep, type PBListItem, type PBItemLine, type AccountingDefDetail } from '@/lib/api'
 import { useErpToken } from '@/hooks/useErpToken'
 
@@ -751,7 +752,7 @@ ${rows.join('\n')}
           <span className="text-[11px] text-gray-400 dark:text-gray-500">— look up a Purchase Booking's Journal Voucher</span>
         </div>
 
-        <div ref={scrollContainerRef} className="p-4 overflow-y-auto flex-1 min-h-0 space-y-4">
+        <div ref={scrollContainerRef} className="p-4 overflow-y-auto flex-1 min-h-0 space-y-4 relative">
           {/* Token panel — same as full purchase flow */}
           {showTokenInput && (
             <div ref={tokenSectionRef} className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
@@ -854,10 +855,7 @@ ${rows.join('\n')}
               )}
 
               {pbListLoading && pbList.length === 0 && (
-                <div className="flex items-center gap-2 text-[12px] text-gray-500 dark:text-gray-400 py-4">
-                  <Loader2 className="size-4 animate-spin" />
-                  Fetching purchase bookings…
-                </div>
+                <LoadingCard message="FETCHING" steps={[{ label: 'Fetching purchase bookings', done: false }]} />
               )}
 
               {!pbListLoading && pbList.length === 0 && !pbListError && (
@@ -888,7 +886,7 @@ ${rows.join('\n')}
                             if (pb.id) {
                               setPbItemsLoading(true); setPbItems([]); setPbTaxableAmount(null); setPbDiscountAmount(null)
                               fetchPBItems(localToken || erpToken, localTenantId || erpTenantId, pb.id)
-                                .then((items: PBItemLine[]) => { setPbItems(items) })
+                                .then((result) => { setPbItems(result.items); setPbTaxableAmount(result.taxable_amount); setPbDiscountAmount(result.discount_amount) })
                                 .catch(() => {})
                                 .finally(() => setPbItemsLoading(false))
                             }
@@ -1055,6 +1053,15 @@ ${rows.join('\n')}
                     </div>
                   </div>
                 </div>
+
+                {/* verifying loading state */}
+                {verifying && jvSteps.length === 0 && (
+                  <LoadingCard message="VERIFYING" steps={[
+                    { label: 'Locating journal voucher', done: false },
+                    { label: 'Checking account entries', done: false },
+                    { label: 'Validating balance', done: false },
+                  ]} />
+                )}
 
                 {/* errors */}
                 {jvError && !verifying && (
