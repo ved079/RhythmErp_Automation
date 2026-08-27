@@ -80,20 +80,20 @@ function RestartBackendButton() {
   const [state, setState] = React.useState<'idle'|'restarting'|'ok'|'err'>('idle')
   const handle = async () => {
     setState('restarting')
-    try {
-      await fetch('/api/proxy?path=restart', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-      // poll health until back up (max 15s)
-      const t0 = Date.now()
-      while (Date.now() - t0 < 15000) {
-        await new Promise(r => setTimeout(r, 800))
-        try {
-          const r = await fetch('/api/proxy?path=health')
-          if (r.ok) { setState('ok'); setTimeout(() => setState('idle'), 2000); return }
-        } catch {}
-      }
-      setState('err')
-    } catch { setState('err') }
-    setTimeout(() => setState('idle'), 3000)
+    // Fire-and-forget — connection may drop before the response arrives
+    fetch('/api/proxy?path=restart', { method: 'POST', headers: { 'Content-Type': 'application/json' } }).catch(() => {})
+    // Wait for old process to die and new one to bind
+    await new Promise(r => setTimeout(r, 2500))
+    const t0 = Date.now()
+    while (Date.now() - t0 < 20000) {
+      try {
+        const r = await fetch('/api/proxy?path=health', { cache: 'no-store' })
+        if (r.ok) { setState('ok'); setTimeout(() => setState('idle'), 2500); return }
+      } catch {}
+      await new Promise(r => setTimeout(r, 800))
+    }
+    setState('err')
+    setTimeout(() => setState('idle'), 4000)
   }
   return (
     <button onClick={handle} disabled={state === 'restarting'}
@@ -199,8 +199,7 @@ export default function Home() {
   const { connected: wsConnected, on: wsOn } = useNotificationsSocket(user?.id)
   const { theme, setTheme } = useTheme()
   const darkMode = theme === 'dark'
-  const [themeVersion, setThemeVersion] = useState(0)
-  const toggleDarkMode = useCallback(() => { setTheme(darkMode ? 'light' : 'dark'); setThemeVersion(v => v + 1) }, [darkMode, setTheme])
+  const toggleDarkMode = useCallback(() => { setTheme(darkMode ? 'light' : 'dark') }, [darkMode, setTheme])
 
   const refreshNotifications = useCallback(async () => {
     setUnreadCount(await getUnreadNotificationCount())
@@ -673,7 +672,7 @@ export default function Home() {
   ]
 
   return (
-    <div key={themeVersion} className="h-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden" style={{ animation: 'panelFadeIn 0.3s ease-out' }}>
+    <div className="h-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
       <AppTour selectedModule={selectedModule} activeTab={activeTab} />
       {/* Keyboard Shortcuts Cheat Sheet */}
       <Dialog open={d.showShortcuts} onOpenChange={d.setShowShortcuts}>
