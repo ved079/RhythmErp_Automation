@@ -58,6 +58,7 @@ const TestRunnerTab = dynamic(() => import('@/components/test-runner/TestRunnerT
 const LiveExecutionTab = dynamic(() => import('@/components/live-execution/LiveExecutionTab').then(m => ({ default: m.LiveExecutionTab })), { ssr: false })
 const ScheduleRunsTab = dynamic(() => import('@/components/schedule/ScheduleRunsTab').then(m => ({ default: m.ScheduleRunsTab })), { ssr: false })
 const PurchaseChainSection = dynamic(() => import('@/components/dialogs/PurchaseChainSection').then(m => ({ default: m.PurchaseChainSection })), { ssr: false })
+const JVCheckSection = dynamic(() => import('@/components/dialogs/JVCheckSection').then(m => ({ default: m.JVCheckSection })), { ssr: false })
 const ResultsTab = dynamic(() => import('@/components/results/ResultsTab').then(m => ({ default: m.ResultsTab })), { ssr: false })
 const MyTicketsTab = dynamic(() => import('@/components/tickets/MyTicketsTab').then(m => ({ default: m.MyTicketsTab })), { ssr: false })
 const ReportToAdminDialog = dynamic(() => import('@/components/dialogs/ReportToAdminDialog').then(m => ({ default: m.ReportToAdminDialog })), { ssr: false })
@@ -937,14 +938,23 @@ export default function Home() {
                 </div>
               </div>
               <div className="flex-1 overflow-hidden min-h-0 p-4">
-                <PurchaseChainSection
-                  erpToken={erpToken}
-                  erpTenantId={erpTenantId || '681'}
-                  onNeedsToken={() => setTokenDialogOpen(true)}
-                  onClearToken={onClearToken}
-                  userId={user?.id}
-                  showJVCheck={selectedModule === 'full-purchase-flow-jv'}
-                />
+                {selectedModule === 'full-purchase-flow' && (
+                  <PurchaseChainSection
+                    erpToken={erpToken}
+                    erpTenantId={erpTenantId || '681'}
+                    onNeedsToken={() => setTokenDialogOpen(true)}
+                    onClearToken={onClearToken}
+                    userId={user?.id}
+                  />
+                )}
+                {selectedModule === 'full-purchase-flow-jv' && (
+                  <JVCheckSection
+                    erpToken={erpToken}
+                    erpTenantId={erpTenantId || '681'}
+                    onNeedsToken={() => setTokenDialogOpen(true)}
+                    onClearToken={onClearToken}
+                  />
+                )}
               </div>
             </div>
           )}
