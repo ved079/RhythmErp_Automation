@@ -1378,6 +1378,17 @@ def health():
     }
 
 
+@app.post("/api/restart")
+def restart_server():
+    """Dev-only: restart the FastAPI process in-place via os.execv."""
+    import threading, os, sys
+    def _do_restart():
+        import time; time.sleep(0.4)
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    threading.Thread(target=_do_restart, daemon=True).start()
+    return {"status": "restarting"}
+
+
 # ================================================================
 # CONCURRENCY TESTING ENDPOINTS
 # ================================================================

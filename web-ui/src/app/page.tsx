@@ -32,7 +32,7 @@ import {
   Zap, Shield, MessageSquare, Bell, CalendarClock,
   Terminal, Monitor, HelpCircle, Copyright, ExternalLink,
   ChevronRight, LogOut, GitCompare, FlaskConical, BarChart2, Camera,
-  Copy, Check, Package,
+  Copy, Check, Package, RotateCcw,
 } from 'lucide-react'
 import LoadingCard from '@/components/ui/LoadingCard'
 import Spinner from '@/components/ui/Spinner'
@@ -75,6 +75,37 @@ const SetTokenDialog = dynamic(() => import('@/components/dialogs/SetTokenDialog
 const ConcurrencyTab = dynamic(() => import('@/components/concurrency/ConcurrencyTab').then(m => ({ default: m.ConcurrencyTab })), { ssr: false })
 const DeploymentCheckTab = dynamic(() => import('@/components/deployment/DeploymentCheckTab').then(m => ({ default: m.DeploymentCheckTab })), { ssr: false })
 import type { RunSnapshot, ModuleHealth } from '@/lib/types'
+
+function RestartBackendButton() {
+  const [state, setState] = React.useState<'idle'|'restarting'|'ok'|'err'>('idle')
+  const handle = async () => {
+    setState('restarting')
+    try {
+      await fetch('/api/proxy?path=restart', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      // poll health until back up (max 15s)
+      const t0 = Date.now()
+      while (Date.now() - t0 < 15000) {
+        await new Promise(r => setTimeout(r, 800))
+        try {
+          const r = await fetch('/api/proxy?path=health')
+          if (r.ok) { setState('ok'); setTimeout(() => setState('idle'), 2000); return }
+        } catch {}
+      }
+      setState('err')
+    } catch { setState('err') }
+    setTimeout(() => setState('idle'), 3000)
+  }
+  return (
+    <button onClick={handle} disabled={state === 'restarting'}
+      title="Restart backend server"
+      className="flex items-center gap-1.5 px-2 h-7 text-[11px] font-medium text-gray-400 dark:text-gray-500 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+      <RotateCcw className={`size-3.5 ${state === 'restarting' ? 'animate-spin' : ''}`} />
+      <span className="hidden sm:inline">
+        {state === 'restarting' ? 'Restarting…' : state === 'ok' ? 'Ready ✓' : state === 'err' ? 'Failed' : 'Restart'}
+      </span>
+    </button>
+  )
+}
 
 export default function Home() {
   const [user, setUser] = useState<AuthUser | null>(null)
@@ -796,7 +827,10 @@ export default function Home() {
               </>
             )}
           </div>
-          {(user.role === 'admin' || user.role === 'qa_lead') && <Link href="/admin" className="flex items-center gap-1.5 px-2 h-7 text-[11px] font-medium text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors" title="Admin Panel"><Shield className="size-3.5" /><span className="hidden sm:inline">Admin</span></Link>}
+          {(user.role === 'admin' || user.role === 'qa_lead') && <>
+            <Link href="/admin" className="flex items-center gap-1.5 px-2 h-7 text-[11px] font-medium text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors" title="Admin Panel"><Shield className="size-3.5" /><span className="hidden sm:inline">Admin</span></Link>
+            <RestartBackendButton />
+          </>}
           <Separator orientation="vertical" className="h-4 mx-1" />
           <div className="flex items-center gap-1.5" data-tour="user-menu">
             <button onClick={() => d.setProfileDialogOpen(true)} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer">
