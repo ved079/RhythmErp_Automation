@@ -1380,11 +1380,16 @@ def health():
 
 @app.post("/api/restart")
 def restart_server():
-    """Dev-only: restart the FastAPI process in-place via os.execv."""
-    import threading, os, sys
+    """Dev-only: spawn a fresh server process then exit this one."""
+    import threading, os, sys, subprocess
     def _do_restart():
-        import time; time.sleep(0.4)
-        os.execv(sys.executable, [sys.executable] + sys.argv)
+        import time; time.sleep(0.5)
+        subprocess.Popen(
+            [sys.executable] + sys.argv,
+            close_fds=True,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0,
+        )
+        os._exit(0)
     threading.Thread(target=_do_restart, daemon=True).start()
     return {"status": "restarting"}
 
