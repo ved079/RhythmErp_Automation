@@ -40,6 +40,9 @@ from pages.private_b2b.modules.purchase_booking.data.purchase_booking_data impor
 from pages.private_b2b.modules.purchase_booking.utils.api_purchase_booking_utils import (
     PBAPIUtils,
 )
+from pages.private_b2b.modules.purchase_booking.utils.accounting_def_validator import (
+    AccountingDefValidator,
+)
 
 _SCREEN = "Purchase Booking"
 
@@ -176,7 +179,32 @@ def main():
     client.login_from_browser(token=token, tenant_id=args.tenant)
     api = PBAPIUtils(client)
 
+    validator = AccountingDefValidator(client)
+    ad_loaded = validator.load()
+    if not ad_loaded:
+        print("  WARNING: Could not load Accounting Definition — AD filtering will be skipped.")
+
+    # ── Derive AD-valid filters before fetching anything ─────────────────────
+    ad_valid_locs:  set[int] | None = None
+    ad_valid_types: set[str] | None = None
+    if ad_loaded:
+        ad_valid_locs  = validator.valid_location_ids()
+        ad_valid_types = validator.valid_supplier_types()
+        print(f"\n  [AD] Valid location IDs : {sorted(ad_valid_locs)}")
+        print(f"  [AD] Valid supplier types: {ad_valid_types}")
+
     desired_supplier_type_id = _SUPPLIER_TYPE_ALIASES[args.supplier_type]
+    desired_type_str = SUPPLIER_TYPE_NAMES.get(desired_supplier_type_id, str(desired_supplier_type_id))
+
+    # Validate chosen supplier type against AD before doing any network calls
+    if ad_valid_types and desired_type_str not in ad_valid_types:
+        print(
+            f"\n  ERROR: Supplier type '{desired_type_str}' is not covered by the "
+            f"Accounting Definition for this tenant.\n"
+            f"  The AD only covers: {ad_valid_types}\n"
+            f"  Re-run with --supplier-type set to one of the above."
+        )
+        sys.exit(1)
 
     print("\nResolving live FK data from ERP...")
 
@@ -204,6 +232,23 @@ def main():
     print(f"  CBR: {len(cbr_data)} location(s)")
     for loc_id, items in cbr_data.items():
         print(f"    Location {loc_id}: {len(items)} item(s) -> {list(items.keys())}")
+
+    # ── Filter CBR to only AD-valid locations ─────────────────────────────────
+    if ad_valid_locs is not None:
+        dropped = {lid: items for lid, items in cbr_data.items() if lid not in ad_valid_locs}
+        if dropped:
+            print(f"\n  [AD filter] Dropping {len(dropped)} location(s) not covered by the AD:")
+            for lid in dropped:
+                print(f"    Location {lid} — no AD debit entry targets this location")
+        cbr_data = {lid: items for lid, items in cbr_data.items() if lid in ad_valid_locs}
+        if not cbr_data:
+            print(
+                "\n  ERROR: After AD filtering, no valid locations remain.\n"
+                f"  The AD covers location IDs {sorted(ad_valid_locs)} but CBR has none of those.\n"
+                "  Either update the AD conditions in ERP or add CBR entries for the covered locations."
+            )
+            sys.exit(1)
+        print(f"  [AD filter] Using {len(cbr_data)} AD-covered location(s): {sorted(cbr_data.keys())}")
 
     # ── HSN SAC ───────────────────────────────────────────────────────────────
     hsn_ids = _resolve_dropdown(client, "hsn_sac_no")
@@ -271,6 +316,9 @@ def main():
             print(f"\n--- PB [{i+1}/{args.count}] ---")
             print(json.dumps(p, indent=2, default=str))
             print(f"  Expected total: {p['txn_currency_amount']}")
+            if ad_loaded:
+                report = validator.validate(p)
+                validator.print_report(report, pb_ref=f"PB {i+1}/{args.count}")
         print("\nDry run complete. No entries created.")
         return
 
@@ -281,6 +329,16 @@ def main():
     results = []
     for i, payload in enumerate(payloads):
         try:
+            if ad_loaded:
+                report = validator.validate(payload)
+                validator.print_report(report, pb_ref=f"PB {i+1}/{args.count}")
+                fires_count = len(report.entries_that_fire)
+                skip_count  = len(report.entries_skipped)
+                if fires_count == 0:
+                    print(f"  WARNING: No AD entries would fire for PB {i+1} — check location/supplier_type config.")
+                else:
+                    print(f"  AD check: {fires_count} entries fire, {skip_count} skipped")
+
             data = api.create_pb(payload)
             if data:
                 entry_id = data.get("id") or data.get("entry_id")
