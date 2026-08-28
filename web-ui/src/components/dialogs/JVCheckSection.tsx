@@ -4,7 +4,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CheckCircle2, XCircle, Key, RefreshCw, Loader2, AlertTriangle, Search, Download, FileText, ChevronDown, FileBarChart2 } from 'lucide-react'
+import { CheckCircle2, XCircle, Key, RefreshCw, Loader2, AlertTriangle, Search, Download, FileText, FileSpreadsheet, ChevronDown, FileBarChart2 } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import LoadingCard from '@/components/ui/LoadingCard'
 import { verifyJV, verifyInvJV, fetchPBList, fetchPBItems, fetchAccountingDef, type JVVerifyStep, type PBListItem, type PBItemLine, type AccountingDefDetail, type InvCommodityRow } from '@/lib/api'
@@ -749,6 +749,357 @@ ${rows.join('\n')}
   const [invJvRows, setInvJvRows] = useState<{ account_name: string; dr_cr: string; commodity: string; amount: number | null }[]>([])
   const [invError, setInvError] = useState('')
 
+
+  // ── Inventory JV exports ────────────────────────────────
+
+  const exportInvJvReport = useCallback(() => {
+    if (!selectedPB || invSteps.length === 0) return
+    const ok = invSteps.every(s => s.ok)
+    const pbRef = selectedPB.ref_no
+
+    const escXml = (v: string | number) => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+    const cell = (style: string, value: string | number, mergeAcross?: number) => {
+      const type = typeof value === 'number' ? 'Number' : 'String'
+      return `<Cell${mergeAcross != null ? ` ss:MergeAcross="${mergeAcross}"` : ''}${style ? ` ss:StyleID="${style}"` : ''}><Data ss:Type="${type}">${escXml(value)}</Data></Cell>`
+    }
+    const emptyCell = (style = 'sVal') => `<Cell ss:StyleID="${style}"><Data ss:Type="String"></Data></Cell>`
+    const fmtN = (n: number | null | undefined) => n != null ? n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'
+
+    const rows: string[] = []
+    rows.push(`<Row ss:Height="28">${cell('sTitle', 'INV JV VERIFICATION REPORT', 3)}${cell(ok ? 'sPass' : 'sFail', ok ? '✓ PASSED' : '✕ FAILED')}</Row>`)
+    rows.push(`<Row ss:Height="16">${cell('sMeta', `Document: ${pbRef}`, 2)}${cell('sMeta', `Generated: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`, 2)}</Row>`)
+    rows.push('<Row ss:Height="8"/>')
+
+    rows.push(`<Row ss:Height="19">${cell('sSection', 'DOCUMENT DETAILS', 4)}</Row>`)
+    rows.push(`<Row>${cell('sLabel', 'Supplier')}${cell('sVal', selectedPB.supplier ?? '—', 3)}</Row>`)
+    rows.push(`<Row>${cell('sLabel', 'Date')}${cell('sVal', selectedPB.date ?? '—')}${cell('sLabel', 'PB Ref')}${cell('sVal', pbRef)}${emptyCell()}</Row>`)
+    rows.push('<Row ss:Height="8"/>')
+
+    rows.push(`<Row ss:Height="19">${cell('sSection', 'VERIFICATION STEPS', 4)}</Row>`)
+    rows.push(`<Row>${cell('sHead', 'Step')}${cell('sHeadC', 'Result')}${cell('sHead', 'Detail', 2)}</Row>`)
+    for (const s of invSteps) {
+      rows.push(`<Row>${cell(s.ok ? 'sPassText' : 'sFailText', s.label)}${cell(s.ok ? 'sPass' : 'sFail', s.ok ? '✓ PASS' : '✕ FAIL')}${cell('sVal', s.detail ?? '', 2)}</Row>`)
+    }
+    rows.push('<Row ss:Height="8"/>')
+
+    if (invCommodityRows.length > 0) {
+      rows.push(`<Row ss:Height="19">${cell('sSection', 'PER-COMMODITY CROSS-CHECK', 4)}</Row>`)
+      rows.push(`<Row>${cell('sHead', 'Commodity')}${cell('sHeadR', 'PURB Purchase Exempt DR')}${cell('sHeadR', 'INV Closing Stock DR')}${cell('sHeadC', 'Match')}${emptyCell('sHead')}</Row>`)
+      for (const r of invCommodityRows) {
+        rows.push(`<Row>${cell('sVal', r.commodity)}${r.purb_purchase_exempt_dr != null ? cell('sDr', r.purb_purchase_exempt_dr) : emptyCell('sValR')}${r.inv_closing_stock_dr != null ? cell('sDr', r.inv_closing_stock_dr) : emptyCell('sValR')}${cell(r.match ? 'sPass' : 'sFail', r.match ? 'MATCH' : 'MISMATCH')}${emptyCell()}</Row>`)
+      }
+      const totPurb = invCommodityRows.reduce((s,r) => s + (r.purb_purchase_exempt_dr ?? 0), 0)
+      const totInv  = invCommodityRows.reduce((s,r) => s + (r.inv_closing_stock_dr  ?? 0), 0)
+      rows.push(`<Row ss:Height="18">${cell('sTotalL', 'TOTAL', 1)}${cell('sTotalDr', totPurb)}${cell('sTotalDr', totInv)}${cell(Math.abs(totPurb-totInv)<0.02?'sPass':'sFail', Math.abs(totPurb-totInv)<0.02?'DR = DR ✓':'DR ≠ DR ✕')}${emptyCell()}</Row>`)
+      rows.push('<Row ss:Height="8"/>')
+    }
+
+    if (invJvRows.length > 0) {
+      rows.push(`<Row ss:Height="19">${cell('sSection', 'INV JV ACCOUNTING ENTRIES', 4)}</Row>`)
+      rows.push(`<Row>${cell('sHead', 'Commodity')}${cell('sHead', 'Account')}${cell('sHeadC', 'Dr/Cr')}${cell('sHeadR', 'Amount')}${emptyCell('sHead')}</Row>`)
+      const groups = new Map<string, typeof invJvRows>()
+      for (const r of invJvRows) { const k = r.commodity||''; if(!groups.has(k)) groups.set(k,[]); groups.get(k)!.push(r) }
+      for (const [commodity, gRows] of groups) {
+        rows.push(`<Row ss:Height="15">${cell('sGroup', commodity ? commodity.toUpperCase() : 'SHARED', 4)}</Row>`)
+        for (const r of gRows) {
+          rows.push(`<Row>${emptyCell()}${cell('sVal', r.account_name)}${cell('sDrCrBadge', r.dr_cr)}${r.amount!=null?cell(r.dr_cr==='Debit'?'sDr':'sCr', r.amount):emptyCell('sValR')}${emptyCell()}</Row>`)
+        }
+      }
+      const tDr = invJvRows.filter(r=>r.dr_cr==='Debit'&&r.amount!=null).reduce((s,r)=>s+r.amount!,0)
+      const tCr = invJvRows.filter(r=>r.dr_cr==='Credit'&&r.amount!=null).reduce((s,r)=>s+r.amount!,0)
+      const bal = Math.abs(tDr-tCr)<0.02
+      rows.push(`<Row ss:Height="18">${cell('sTotalL', 'TOTALS', 1)}${emptyCell('sTotalL')}${cell('sTotalDr', tDr)}${cell('sTotalCr', tCr)}${cell(bal?'sPass':'sFail', bal?'DR = CR ✓':'DR ≠ CR ✕')}</Row>`)
+    }
+    rows.push('<Row ss:Height="12"/>')
+    rows.push(`<Row ss:Height="14">${cell('sMeta', 'Generated by Pacs Automation — Inventory JV Verification Report', 4)}</Row>`)
+
+    const XL_BORDER_DARK = '<Borders><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0B0B0"/><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0B0B0"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0B0B0"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B0B0B0"/></Borders>'
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles>
+<Style ss:ID="Default" ss:Name="Normal"><Font ss:FontName="Calibri" ss:Size="10" ss:Color="#212121"/><Alignment ss:Vertical="Center"/></Style>
+<Style ss:ID="sTitle"><Font ss:Bold="1" ss:Size="15" ss:Color="#FFFFFF"/><Interior ss:Color="#283593" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="2"/></Style>
+<Style ss:ID="sMeta"><Font ss:Italic="1" ss:Size="9" ss:Color="#546E7A"/><Alignment ss:Vertical="Center" ss:Indent="1"/></Style>
+<Style ss:ID="sSection"><Font ss:Bold="1" ss:Size="10" ss:Color="#1A237E"/><Interior ss:Color="#C5CAE9" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sLabel"><Font ss:Bold="1" ss:Size="10" ss:Color="#37474F"/><Interior ss:Color="#ECEFF1" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sVal"><Font ss:Color="#212121"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sValR"><Font ss:Color="#212121"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sDr"><Font ss:Bold="1" ss:Color="#0D47A1"/><NumberFormat ss:Format="&quot;DR  &quot;#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sCr"><Font ss:Bold="1" ss:Color="#4A148C"/><NumberFormat ss:Format="&quot;CR  &quot;#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sHead"><Font ss:Bold="1" ss:Size="10" ss:Color="#FFFFFF"/><Interior ss:Color="#3949AB" ss:Pattern="Solid"/><Alignment ss:Horizontal="Left" ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sHeadC"><Font ss:Bold="1" ss:Size="10" ss:Color="#FFFFFF"/><Interior ss:Color="#3949AB" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sHeadR"><Font ss:Bold="1" ss:Size="10" ss:Color="#FFFFFF"/><Interior ss:Color="#3949AB" ss:Pattern="Solid"/><Alignment ss:Horizontal="Right" ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sPass"><Font ss:Bold="1" ss:Size="10" ss:Color="#1B5E20"/><Interior ss:Color="#A5D6A7" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sFail"><Font ss:Bold="1" ss:Size="10" ss:Color="#B71C1C"/><Interior ss:Color="#EF9A9A" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sPassText"><Font ss:Bold="1" ss:Color="#2E7D32"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sFailText"><Font ss:Bold="1" ss:Color="#C62828"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sDim"><Font ss:Color="#78909C"/><Interior ss:Color="#F9FAFB" ss:Pattern="Solid"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sDimC"><Font ss:Color="#78909C"/><Interior ss:Color="#F9FAFB" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sGroup"><Font ss:Bold="1" ss:Italic="1" ss:Size="9" ss:Color="#1A237E"/><Interior ss:Color="#E8EAF6" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sDrCrBadge"><Font ss:Bold="1" ss:Size="9" ss:Color="#37474F"/><Interior ss:Color="#ECEFF1" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sTotalL"><Font ss:Bold="1" ss:Size="10" ss:Color="#212121"/><Interior ss:Color="#CFD8DC" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:Indent="1"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sTotalDr"><Font ss:Bold="1" ss:Color="#0D47A1"/><Interior ss:Color="#BBDEFB" ss:Pattern="Solid"/><NumberFormat ss:Format="&quot;DR  &quot;#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+<Style ss:ID="sTotalCr"><Font ss:Bold="1" ss:Color="#4A148C"/><Interior ss:Color="#E1BEE7" ss:Pattern="Solid"/><NumberFormat ss:Format="&quot;CR  &quot;#,##0.00"/><Alignment ss:Horizontal="Right" ss:Vertical="Center"/>${XL_BORDER_DARK}</Style>
+</Styles>
+<Worksheet ss:Name="INV JV Report">
+<Table ss:DefaultRowHeight="18">
+<Column ss:Width="160"/>
+<Column ss:Width="120"/>
+<Column ss:Width="80"/>
+<Column ss:Width="140"/>
+<Column ss:Width="80"/>
+${rows.join('\n')}
+</Table>
+</Worksheet>
+</Workbook>`
+
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${pbRef.replace(/[\\/]/g, '-')}_INV_JV_Report.xls`
+    document.body.appendChild(a); a.click(); a.remove()
+    URL.revokeObjectURL(url)
+  }, [selectedPB, invSteps, invCommodityRows, invJvRows])
+
+  const exportInvJvPdf = useCallback(async () => {
+    if (!selectedPB || invSteps.length === 0) return
+    const ok = invSteps.every(s => s.ok)
+    const pbRef = selectedPB.ref_no
+
+    const safe = (v: string | number | null | undefined) =>
+      String(v ?? '').replace(/₹/g,'Rs. ').replace(/[—–]/g,'-').replace(/['']/g,"'")
+        .replace(/[""]/g,'"').replace(/·/g,'|').replace(/≥/g,'>=').replace(/≤/g,'<=')
+        .replace(/×/g,'x').replace(/ /g,' ').replace(/↔/g,'<->').replace(/≠/g,'!=')
+        .replace(/✓/g,'OK').replace(/✕/g,'X')
+    const fmt = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+    const NAVY: [number,number,number]   = [40, 53, 147]
+    const NAVY_D: [number,number,number] = [26, 35, 126]
+    const HEAD_BG: [number,number,number]= [57, 73, 171]
+    const SEC_BG: [number,number,number] = [197, 202, 233]
+    const LBL_BG: [number,number,number] = [236, 239, 241]
+    const BDR: [number,number,number]    = [176, 176, 176]
+    const TXT: [number,number,number]    = [33, 33, 33]
+    const TXT_DIM: [number,number,number]= [84, 100, 114]
+    const DR_T: [number,number,number]   = [13, 71, 161]
+    const CR_T: [number,number,number]   = [74, 20, 140]
+    const GRN_F: [number,number,number]  = [165, 214, 167], GRN_T: [number,number,number] = [27, 94, 32]
+    const RED_F: [number,number,number]  = [239, 154, 154], RED_T: [number,number,number] = [183, 28, 28]
+    const DR_F: [number,number,number]   = [187, 222, 251]
+    const CR_F: [number,number,number]   = [225, 190, 231]
+    const TOT_F: [number,number,number]  = [207, 216, 220]
+
+    const { jsPDF } = await import('jspdf')
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+    const PW = 210, PH = 297, M = 14, CW = PW - M * 2
+
+    let y = M
+    const need = (h: number) => { if (y + h > PH - M - 8) { doc.addPage(); y = M } }
+
+    type CS = { t: string; span?: number; align?: 'L'|'C'|'R'; color?: [number,number,number]; fill?: [number,number,number]|null; bold?: boolean; italic?: boolean; size?: number; mono?: boolean; lbl?: boolean }
+    const makeRow = (cols: number[]) => (cells: CS[], h = 6.5) => {
+      const PAD = 2.5, MAX_LINES = 5
+      let colIdx = 0
+      const measured = cells.map(c => {
+        const span = c.span ?? 1
+        const cw = cols.slice(colIdx, colIdx+span).reduce((a,b)=>a+b,0)
+        const fs = c.size ?? (c.lbl ? 8 : 9)
+        doc.setFont(c.mono?'courier':'helvetica',(c.bold||c.lbl)&&c.italic?'bolditalic':c.bold||c.lbl?'bold':c.italic?'italic':'normal')
+        doc.setFontSize(fs)
+        let lines: string[] = doc.splitTextToSize(safe(c.t), cw-PAD*2)
+        if (lines.length > MAX_LINES) { lines = lines.slice(0,MAX_LINES); lines[MAX_LINES-1]=lines[MAX_LINES-1].replace(/.{3}$/,'')+'...' }
+        colIdx += span
+        return { c, cw, fs, lines }
+      })
+      const rh = Math.max(h, ...measured.map(m => m.lines.length * m.fs * 0.353 * 1.25 + 2.4))
+      need(rh)
+      doc.setDrawColor(...BDR)
+      let cx = M
+      for (const { c, cw, fs, lines } of measured) {
+        if (c.fill !== null) {
+          const bg = c.fill ?? (c.lbl ? LBL_BG : null)
+          if (bg) { doc.setFillColor(...bg); doc.rect(cx,y,cw,rh,'FD') } else doc.rect(cx,y,cw,rh,'S')
+        }
+        doc.setFont(c.mono?'courier':'helvetica',(c.bold||c.lbl)&&c.italic?'bolditalic':c.bold||c.lbl?'bold':c.italic?'italic':'normal')
+        doc.setFontSize(fs); doc.setTextColor(...(c.color ?? (c.lbl ? TXT : TXT)))
+        const tx = c.align==='C'?cx+cw/2:c.align==='R'?cx+cw-PAD:cx+PAD
+        const alignOpt = c.align==='C'?'center' as const:c.align==='R'?'right' as const:'left' as const
+        const lineStep = fs*0.353*1.25
+        let ly = y+(rh-lines.length*lineStep)/2+fs*0.353*0.9
+        for (const ln of lines) { doc.text(ln,tx,ly,{align:alignOpt}); ly+=lineStep }
+        cx += cw
+      }
+      y += rh
+    }
+
+    const COLS4: number[] = [52, 50, 50, 30]
+    const row4 = makeRow(COLS4)
+    const COLS3: number[] = [70, 70, 42]
+    const row3 = makeRow(COLS3)
+
+    const sectionHeader = (title: string) => {
+      need(14); y += 4
+      doc.setFillColor(...SEC_BG); doc.rect(M,y,CW,7.5,'F')
+      doc.setDrawColor(...BDR); doc.rect(M,y,CW,7.5,'S')
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...NAVY_D)
+      doc.text(title.toUpperCase(), M+3, y+5)
+      y += 7.5
+    }
+
+    const groupBand = (title: string) => {
+      need(7)
+      doc.setFillColor(...[232,234,246] as [number,number,number]); doc.rect(M,y,CW,6,'F')
+      doc.setDrawColor(...BDR); doc.rect(M,y,CW,6,'S')
+      doc.setFont('helvetica','bolditalic'); doc.setFontSize(8); doc.setTextColor(...NAVY_D)
+      doc.text(safe(title), M+3, y+4)
+      y += 6
+    }
+
+    // Title
+    doc.setFillColor(...NAVY); doc.rect(M,y,CW,16,'F')
+    doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(255,255,255)
+    doc.text('INV JV VERIFICATION REPORT', M+4, y+10.5)
+    const chipText = ok ? 'PASSED' : 'FAILED'
+    const chipFill = ok ? GRN_F : RED_F, chipTxt = ok ? GRN_T : RED_T
+    doc.setFontSize(10)
+    const chipW = doc.getTextWidth(chipText)+7
+    doc.setFillColor(...chipFill); doc.roundedRect(PW-M-chipW-2,y+4.5,chipW,7.5,1.5,1.5,'F')
+    doc.setTextColor(...chipTxt); doc.text(chipText, PW-M-chipW+1, y+9.5)
+    y += 16
+    doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(...TXT_DIM)
+    y += 5
+    doc.text(safe(`Document: ${pbRef}   |   Generated: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`), M+1, y)
+    y += 3
+
+    // Document Details
+    sectionHeader('Document Details')
+    row4([{ t:'Supplier', lbl:true }, { t:safe(selectedPB.supplier??'-'), span:3 }])
+    row4([{ t:'Date', lbl:true }, { t:safe(selectedPB.date??'-') }, { t:'PB Ref', lbl:true }, { t:safe(pbRef) }])
+
+    // Steps
+    sectionHeader('Verification Steps')
+    row4([
+      { t:'Step', fill:HEAD_BG, color:[255,255,255], size:8 },
+      { t:'Result', fill:HEAD_BG, color:[255,255,255], size:8, align:'C' },
+      { t:'Detail', fill:HEAD_BG, color:[255,255,255], size:8, span:2 },
+    ], 7)
+    for (const s of invSteps) {
+      row4([
+        { t:safe(s.label), bold:true, color:s.ok ? GRN_T : RED_T },
+        { t:s.ok ? 'PASS' : 'FAIL', align:'C', bold:true, size:8, fill:s.ok ? GRN_F : RED_F, color:s.ok ? GRN_T : RED_T },
+        { t:safe(s.detail ?? ''), color:TXT_DIM, size:7.5, span:2 },
+      ])
+    }
+
+    // Per-commodity
+    if (invCommodityRows.length > 0) {
+      sectionHeader('Per-Commodity Cross-Check')
+      row3([
+        { t:'Commodity', fill:HEAD_BG, color:[255,255,255], size:8 },
+        { t:'PURB Purchase Exempt DR', fill:HEAD_BG, color:[255,255,255], size:8, align:'R' },
+        { t:'INV Closing Stock DR', fill:HEAD_BG, color:[255,255,255], size:8, align:'R' },
+      ], 7)
+      // Add a 4th match column
+      const COLS4c: number[] = [76, 42, 42, 22]
+      const row4c = makeRow(COLS4c)
+      row4c([
+        { t:'Commodity', fill:HEAD_BG, color:[255,255,255], size:8 },
+        { t:'PURB Exempt DR', fill:HEAD_BG, color:[255,255,255], size:7.5, align:'R' },
+        { t:'INV Closing DR', fill:HEAD_BG, color:[255,255,255], size:7.5, align:'R' },
+        { t:'Match', fill:HEAD_BG, color:[255,255,255], size:8, align:'C' },
+      ], 7)
+      for (const r of invCommodityRows) {
+        row4c([
+          { t:safe(r.commodity), bold:true, color:TXT },
+          { t:r.purb_purchase_exempt_dr != null ? fmt(r.purb_purchase_exempt_dr) : '—', mono:true, color:DR_T, size:8, align:'R' },
+          { t:r.inv_closing_stock_dr != null ? fmt(r.inv_closing_stock_dr) : '—', mono:true, color:DR_T, size:8, align:'R' },
+          { t:r.match?'OK':'FAIL', align:'C', bold:true, size:8, fill:r.match?GRN_F:RED_F, color:r.match?GRN_T:RED_T },
+        ])
+      }
+      const totP = invCommodityRows.reduce((s,r)=>s+(r.purb_purchase_exempt_dr??0),0)
+      const totI = invCommodityRows.reduce((s,r)=>s+(r.inv_closing_stock_dr??0),0)
+      const tBal = Math.abs(totP-totI) < 0.02
+      need(9)
+      doc.setFillColor(...TOT_F); doc.rect(M,y,CW,8,'FD')
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...TXT)
+      doc.text('TOTAL', M+3, y+5.2)
+      doc.setFillColor(...DR_F); doc.rect(M+COLS4c[0],y,COLS4c[1],8,'FD')
+      doc.setTextColor(...DR_T); doc.text(fmt(totP), M+COLS4c[0]+COLS4c[1]-2, y+5.2, {align:'right'})
+      doc.setFillColor(...DR_F); doc.rect(M+COLS4c[0]+COLS4c[1],y,COLS4c[2],8,'FD')
+      doc.setTextColor(...DR_T); doc.text(fmt(totI), M+COLS4c[0]+COLS4c[1]+COLS4c[2]-2, y+5.2, {align:'right'})
+      doc.setFillColor(...(tBal?GRN_F:RED_F)); doc.rect(M+COLS4c[0]+COLS4c[1]+COLS4c[2],y,COLS4c[3],8,'FD')
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...(tBal?GRN_T:RED_T))
+      doc.text(tBal?'OK':'FAIL', M+COLS4c[0]+COLS4c[1]+COLS4c[2]+COLS4c[3]/2, y+5.2, {align:'center'})
+      doc.setDrawColor(...BDR); doc.rect(M,y,CW,8,'S')
+      y += 8
+    }
+
+    // INV JV accounting entries
+    if (invJvRows.length > 0) {
+      sectionHeader('INV JV Accounting Entries')
+      const COLS3e: number[] = [80, 28, 74]
+      const row3e = makeRow(COLS3e)
+      row3e([
+        { t:'Account', fill:HEAD_BG, color:[255,255,255], size:8 },
+        { t:'Dr/Cr', fill:HEAD_BG, color:[255,255,255], size:8, align:'C' },
+        { t:'Amount', fill:HEAD_BG, color:[255,255,255], size:8, align:'R' },
+      ], 7)
+      const groups = new Map<string, typeof invJvRows>()
+      for (const r of invJvRows) { const k=r.commodity||''; if(!groups.has(k)) groups.set(k,[]); groups.get(k)!.push(r) }
+      const sortedKeys = [...groups.keys()].sort((a,b)=>a===''?1:b===''?-1:a.localeCompare(b))
+      let tDr = 0, tCr = 0
+      for (const commodity of sortedKeys) {
+        groupBand(commodity ? commodity.toUpperCase() : 'SHARED')
+        for (const r of groups.get(commodity)!) {
+          const isDr = r.dr_cr === 'Debit'
+          if (r.amount != null) { isDr ? (tDr += r.amount) : (tCr += r.amount) }
+          row3e([
+            { t:safe(r.account_name), bold:true, color:TXT },
+            { t:safe(r.dr_cr), color:isDr?DR_T:CR_T, size:8, align:'C', bold:true },
+            { t:r.amount!=null?fmt(r.amount):'-', bold:true, color:r.amount!=null?(isDr?DR_T:CR_T):TXT_DIM, size:8, align:'R' },
+          ])
+        }
+      }
+      const bal = Math.abs(tDr-tCr)<0.02
+      need(9)
+      doc.setFillColor(...TOT_F); doc.rect(M,y,CW,8,'FD')
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...TXT)
+      doc.text('TOTALS', M+3, y+5.2)
+      doc.setFillColor(...DR_F); doc.rect(M+COLS3e[0],y,COLS3e[1],8,'FD')
+      doc.setTextColor(...DR_T); doc.text(`DR`, M+COLS3e[0]+COLS3e[1]/2, y+5.2, {align:'center'})
+      doc.setFillColor(...CR_F); doc.rect(M+COLS3e[0]+COLS3e[1],y,COLS3e[2]/2,8,'FD')
+      doc.setTextColor(...DR_T); doc.text(fmt(tDr), M+COLS3e[0]+COLS3e[1]+COLS3e[2]/2-2, y+5.2, {align:'right'})
+      doc.setFillColor(...CR_F); doc.rect(M+COLS3e[0]+COLS3e[1]+COLS3e[2]/2,y,COLS3e[2]/2,8,'FD')
+      doc.setTextColor(...CR_T); doc.text(fmt(tCr), M+COLS3e[0]+COLS3e[1]+COLS3e[2]-2, y+5.2, {align:'right'})
+      doc.setDrawColor(...BDR); doc.rect(M,y,CW,8,'S')
+      y += 8
+      need(6); y += 3
+      doc.setFont('helvetica','bold'); doc.setFontSize(9)
+      doc.setTextColor(...(bal?GRN_T:RED_T))
+      doc.text(bal ? 'DR = CR  ✓ Balanced' : 'DR ≠ CR  ✕ Unbalanced', M+3, y)
+      y += 5
+    }
+
+    // Footer
+    need(10); y += 5
+    doc.setDrawColor(...BDR); doc.line(M,y-1,M+CW,y-1)
+    doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(...TXT_DIM)
+    doc.text(safe(`Generated by RhythmERP Automation - INV JV Verification  |  ${pbRef}`), M, y+2)
+
+    const filename = `${pbRef.replace(/[\\/]/g,'-')}_INV_JV_Report.pdf`
+    const blob = doc.output('blob')
+    const pdfUrl = URL.createObjectURL(blob)
+    const dlBtn = `<a href="${pdfUrl}" download="${filename}" style="position:fixed;top:8px;right:12px;z-index:9999;padding:6px 14px;background:#3F51B5;color:#fff;border-radius:6px;font:13px/1 sans-serif;text-decoration:none">⬇ Download</a>`
+    const win = window.open('', '_blank')
+    if (win) {
+      win.document.write(`<!doctype html><html><head><title>${filename}</title></head><body style="margin:0;height:100vh">${dlBtn}<embed src="${pdfUrl}" type="application/pdf" width="100%" height="100%"/></body></html>`)
+      win.document.close()
+    }
+    setTimeout(() => URL.revokeObjectURL(pdfUrl), 120_000)
+  }, [selectedPB, invSteps, invCommodityRows, invJvRows])
+
   const handleInvVerify = async () => { if (selectedPB) handleInvVerifyFor(selectedPB) }
 
   const handleInvVerifyFor = async (pb: PBListItem) => {
@@ -884,11 +1235,27 @@ ${rows.join('\n')}
                       {!invVerifying && invSteps.length > 0 && (invPassed ? pill('green', '✓ Passed') : pill('red', '✕ Failed'))}
                       {invVerifying && <Loader2 className="size-3.5 animate-spin text-[#3F51B5] shrink-0" />}
                     </div>
-                    <button
-                      onClick={() => { setSelectedPB(null); setPbRefNo(''); setInvSteps([]); setInvCommodityRows([]); setInvJvRows([]); setInvError('') }}
-                      className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] hover:border-[#3F51B5]/50 transition-colors cursor-pointer shrink-0">
-                      <RefreshCw className="size-3" />Change
-                    </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {!invVerifying && invSteps.length > 0 && (
+                        <>
+                          <button
+                            onClick={exportInvJvPdf}
+                            className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:border-red-300 dark:hover:border-red-700 transition-colors cursor-pointer">
+                            <FileText className="size-3" />PDF
+                          </button>
+                          <button
+                            onClick={exportInvJvReport}
+                            className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-700 transition-colors cursor-pointer">
+                            <FileSpreadsheet className="size-3" />.xls
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={() => { setSelectedPB(null); setPbRefNo(''); setInvSteps([]); setInvCommodityRows([]); setInvJvRows([]); setInvError('') }}
+                        className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] hover:border-[#3F51B5]/50 transition-colors cursor-pointer">
+                        <RefreshCw className="size-3" />Change
+                      </button>
+                    </div>
                   </div>
 
                   {/* Summary grid */}
