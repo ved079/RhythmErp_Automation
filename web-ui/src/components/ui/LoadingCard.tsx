@@ -189,9 +189,16 @@ export default function LoadingCard({ message = 'LOADING', steps }: Props) {
           align-items: center;
           justify-content: center;
         }
+        .lc-step-done .lc-step-icon {
+          background: #10b981;
+          border-radius: 50%;
+          animation: lc-circle-fill 0.28s cubic-bezier(0.34,1.3,0.64,1) both;
+        }
         .lc-check {
-          color: #10b981;
-          animation: lc-check-pop 0.28s cubic-bezier(0.34,1.56,0.64,1) both;
+          color: #fff;
+          stroke-dasharray: 23;
+          stroke-dashoffset: 23;
+          animation: lc-check-draw 0.3s 0.18s ease-out forwards;
         }
         .lc-spinner {
           display: block;
@@ -244,9 +251,12 @@ export default function LoadingCard({ message = 'LOADING', steps }: Props) {
           from { opacity: 0; transform: translateX(-5px); }
           to   { opacity: 1; transform: translateX(0); }
         }
-        @keyframes lc-check-pop {
-          from { transform: scale(0) rotate(-20deg); opacity: 0; }
-          to   { transform: scale(1) rotate(0deg);   opacity: 1; }
+        @keyframes lc-circle-fill {
+          from { transform: scale(0.5); opacity: 0; }
+          to   { transform: scale(1);   opacity: 1; }
+        }
+        @keyframes lc-check-draw {
+          to { stroke-dashoffset: 0; }
         }
         @keyframes lc-dot-bounce {
           0%, 80%, 100% { transform: scale(0.75); background: var(--border); }
@@ -255,7 +265,9 @@ export default function LoadingCard({ message = 'LOADING', steps }: Props) {
 
         @media (prefers-reduced-motion: reduce) {
           .lc-orbit-ring, .lc-sonar, .lc-dot, .lc-spinner,
-          .lc-card, .lc-logo-center, .lc-label { animation: none; }
+          .lc-card, .lc-logo-center, .lc-label,
+          .lc-step-done .lc-step-icon, .lc-check { animation: none; }
+          .lc-check { stroke-dashoffset: 0; }
         }
       `}</style>
     </div>
