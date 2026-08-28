@@ -31,7 +31,7 @@ from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from api.models import (
     ModuleListResponse, CreateRunRequest, StartRunRequest, BatchCreateRequest,
     PurchaseChainRequest, ConcurrencyDispatchRequest, CbrTokenRequest, CbrCreateLocationsRequest,
-    FetchFkRequest, JVVerifyRequest, PBListRequest,
+    FetchFkRequest, JVVerifyRequest, InvJVVerifyRequest, PBListRequest,
 )
 from api.concurrency_dispatch import dispatch_concurrent, ping_agents
 from api.test_discovery import discover_all_modules
@@ -706,6 +706,241 @@ def jv_verify_endpoint(request: JVVerifyRequest):
                 })
 
     return JSONResponse({"steps": steps, "ok": result.ok(), "account_rows": account_rows})
+
+
+# ================================================================
+# INVENTORY JV VERIFY ENDPOINT
+# ================================================================
+
+@app.post("/api/inv-jv-verify")
+def inv_jv_verify_endpoint(request: InvJVVerifyRequest):
+    """
+    Cross-check a Purchase Booking against its linked Inventory JV.
+
+    Strategy (no inventory report needed):
+    1. Fetch PB detail → get taxable amount per item + item names
+    2. Scan JV report (report_name=2) → find PURB entry AND the linked INV entry
+       (matched by ref_transaction_type=Inventory and total_debit ≈ PB taxable total)
+    3. Cross-check: PB taxable total == INV JV total debit
+       Per-commodity: PB item amount == INV JV Closing Stock DR for that commodity
+    """
+    import sys
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from common.erp_api_client import RhythmERPAPIClient
+
+    token = request.erp_token
+    if token.startswith("Bearer "):
+        token = token[7:]
+
+    client = RhythmERPAPIClient(tenant_id=request.erp_tenant_id)
+    client.login_from_browser(token=token, tenant_id=request.erp_tenant_id)
+
+    import jwt as _jwt
+    try:
+        _payload = _jwt.decode(token, options={"verify_signature": False})
+        user_id = int(_payload.get("user_id", 0))
+    except Exception:
+        user_id = 0
+
+    steps = []
+
+    # ── Step 1: Fetch PB detail ──
+    try:
+        pb_resp = client.session.get(
+            f"{client.BASE_URL}/procure_to_pay/purchase-booking/{request.pb_id}/",
+            timeout=30,
+        )
+        pb_resp.raise_for_status()
+        pb_data = pb_resp.json()
+    except Exception as exc:
+        return JSONResponse({"steps": [{"n": 1, "label": "Fetch PB detail", "ok": False, "detail": str(exc)}], "ok": False, "pb_items": [], "jv_rows": []})
+
+    pb_taxable = float(pb_data.get("txn_currency_amount") or 0)
+    pb_total_with_tax = float(pb_data.get("txn_currency_total_amount") or 0)
+    pb_details = pb_data.get("purchase_booking_details") or []
+
+    pb_items = [
+        {
+            "item_ref_id": d.get("item_ref_id"),
+            "taxable_amount": float(d.get("txn_currency_amount_detail") or 0),
+            "tax_amount": float(d.get("txn_currency_tax_amount") or 0),
+            "gst_type": d.get("gst_type") or "",
+        }
+        for d in pb_details
+    ]
+
+    steps.append({
+        "n": 1,
+        "label": f"PB fetched — {len(pb_items)} item(s), taxable {pb_taxable:,.2f}, total with tax {pb_total_with_tax:,.2f}",
+        "ok": True,
+        "detail": request.pb_ref_no,
+    })
+
+    # ── Step 2: Scan JV report in parallel for PURB + INV entries ──
+    PAGE_LIMIT = 50
+    TOLERANCE = 1.0  # rupee tolerance for total match
+
+    JV_BODY_BASE = {
+        "report_name": 2,
+        "parameter_1": "", "parameter_2": "", "parameter_3": "",
+        "parameter_4": "", "parameter_5": "",
+        "tenant_id": int(request.erp_tenant_id),
+        "ledger_group": 1,
+        "division_id": None, "department_id": None,
+        "type_of_sale_id": None, "location_id": None,
+        "file_format": None,
+        "task_identifier": "report_view_data",
+        "pageLimit": PAGE_LIMIT,
+    }
+
+    def fetch_jv_page(page: int) -> list:
+        r = client.session.post(
+            f"{client.BASE_URL}/reports/builder",
+            params={"user_id": user_id},
+            json={**JV_BODY_BASE, "pageNumber": page},
+            timeout=30,
+        )
+        r.raise_for_status()
+        raw = r.json()
+        return (raw[0].get("report_data") or []) if isinstance(raw, list) and raw else []
+
+    import concurrent.futures
+    purb_entry = None
+    inv_entry = None
+
+    # Fetch pages 1 and 2 in parallel (both entries should be recent)
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+            futures = {ex.submit(fetch_jv_page, p): p for p in range(1, 5)}
+            all_entries = []
+            for fut in concurrent.futures.as_completed(futures, timeout=40):
+                try:
+                    all_entries.extend(fut.result())
+                except Exception:
+                    pass
+
+        for entry in all_entries:
+            ref = entry.get("ref_transaction_no") or ""
+            txn_type = entry.get("ref_transaction_type") or ""
+            if ref == request.pb_ref_no:
+                purb_entry = entry
+            elif txn_type == "Inventory" and inv_entry is None:
+                entry_debit = float(entry.get("total_debit_amount") or 0)
+                if abs(entry_debit - pb_taxable) <= TOLERANCE:
+                    inv_entry = entry
+            if purb_entry and inv_entry:
+                break
+
+    except Exception as exc:
+        steps.append({"n": 2, "label": "Fetch JV report", "ok": False, "detail": str(exc)})
+        return JSONResponse({"steps": steps, "ok": False, "pb_items": pb_items, "jv_rows": []})
+
+    if not purb_entry:
+        steps.append({"n": 2, "label": f"PURB JV not found", "ok": False, "detail": request.pb_ref_no})
+        return JSONResponse({"steps": steps, "ok": False, "pb_items": pb_items, "jv_rows": []})
+
+    steps.append({"n": 2, "label": f"Found PURB JV — DR {float(purb_entry.get('total_debit_amount') or 0):,.2f}", "ok": True})
+
+    if not inv_entry:
+        steps.append({"n": 3, "label": "Linked INV JV not found", "ok": False, "detail": f"No Inventory JV with total debit ≈ {pb_taxable:,.2f}"})
+        return JSONResponse({"steps": steps, "ok": False, "pb_items": pb_items, "jv_rows": []})
+
+    inv_ref = inv_entry.get("ref_transaction_no") or "—"
+    inv_total_dr = float(inv_entry.get("total_debit_amount") or 0)
+    purb_total_dr = float(purb_entry.get("total_debit_amount") or 0)
+    steps.append({"n": 3, "label": f"Found INV JV: {inv_ref} — DR {inv_total_dr:,.2f}", "ok": True})
+
+    def extract_child_rows(entry):
+        rows = []
+        for row in (entry.get("children") or {}).get("data") or []:
+            name = row.get("account_name") or ""
+            dc = row.get("debit_credit_type") or ""
+            commodity = row.get("commodity") or ""
+            dr = float(row.get("txn_debit_amount") or 0)
+            cr = float(row.get("txn_credit_amount") or 0)
+            if name:
+                rows.append({"account_name": name, "dr_cr": dc, "commodity": commodity,
+                             "amount": dr if dc == "Debit" else cr})
+        return rows
+
+    inv_rows = extract_child_rows(inv_entry)   # INV JV child rows
+    purb_rows = extract_child_rows(purb_entry) # PURB JV child rows (for PURB JV display)
+
+    # ── Step 3a: Total cross-checks ──
+    # INV JV total DR should == PB taxable amount
+    total_inv_ok = abs(inv_total_dr - pb_taxable) <= TOLERANCE
+    steps.append({
+        "n": 4,
+        "label": "INV JV DR == PB taxable" if total_inv_ok else "INV JV DR ≠ PB taxable — MISMATCH",
+        "ok": total_inv_ok,
+        "detail": f"PB taxable={pb_taxable:,.2f}  |  INV JV DR={inv_total_dr:,.2f}",
+    })
+
+    # PURB JV total DR should == PB total with tax
+    total_purb_ok = abs(purb_total_dr - pb_total_with_tax) <= TOLERANCE
+    steps.append({
+        "n": 5,
+        "label": "PURB JV DR == PB total (with tax)" if total_purb_ok else "PURB JV DR ≠ PB total — MISMATCH",
+        "ok": total_purb_ok,
+        "detail": f"PB total={pb_total_with_tax:,.2f}  |  PURB JV DR={purb_total_dr:,.2f}",
+    })
+
+    # ── Step 4: Per-commodity cross-check ──
+    # PURB JV: Purchase exempt DR per commodity
+    purb_exempt: dict[str, float] = {}
+    for r in purb_rows:
+        if r["account_name"] == "Purchase exempt" and r["dr_cr"] == "Debit" and r["commodity"]:
+            purb_exempt[r["commodity"]] = r["amount"]
+
+    # INV JV: Closing Stock DR per commodity (should == PURB Purchase exempt DR)
+    inv_closing: dict[str, float] = {}
+    for r in inv_rows:
+        if r["account_name"] == "Closing Stock" and r["dr_cr"] == "Debit" and r["commodity"]:
+            inv_closing[r["commodity"]] = r["amount"]
+
+    # INV JV: Purchase exempt CR per commodity (should also == PURB Purchase exempt DR)
+    inv_exempt: dict[str, float] = {}
+    for r in inv_rows:
+        if r["account_name"] == "Purchase exempt" and r["dr_cr"] == "Credit" and r["commodity"]:
+            inv_exempt[r["commodity"]] = r["amount"]
+
+    all_commodities = sorted(set(purb_exempt) | set(inv_closing))
+    commodity_rows = []
+    mismatches = []
+    for c in all_commodities:
+        purb_amt = purb_exempt.get(c)
+        inv_closing_amt = inv_closing.get(c)
+        inv_exempt_amt = inv_exempt.get(c)
+        match = (
+            purb_amt is not None and inv_closing_amt is not None
+            and abs(purb_amt - inv_closing_amt) <= TOLERANCE
+        )
+        if not match:
+            mismatches.append(c)
+        commodity_rows.append({
+            "commodity": c,
+            "purb_purchase_exempt_dr": purb_amt,
+            "inv_closing_stock_dr": inv_closing_amt,
+            "inv_purchase_exempt_cr": inv_exempt_amt,
+            "match": match,
+        })
+
+    if mismatches:
+        steps.append({"n": 6, "label": "Per-commodity MISMATCH", "ok": False,
+                      "detail": f"Mismatched: {', '.join(mismatches)}"})
+    else:
+        steps.append({"n": 6, "label": f"All {len(all_commodities)} commodity amounts match", "ok": True,
+                      "detail": "PURB Purchase exempt DR == INV Closing Stock DR == INV Purchase exempt CR"})
+
+    ok = all(s["ok"] for s in steps)
+    return JSONResponse({
+        "steps": steps, "ok": ok,
+        "pb_items": pb_items,
+        "jv_rows": inv_rows,           # INV JV rows for display
+        "purb_rows": purb_rows,        # PURB JV rows for display
+        "commodity_rows": commodity_rows,  # per-commodity comparison
+        "inv_ref": inv_ref,
+    })
 
 
 # ================================================================

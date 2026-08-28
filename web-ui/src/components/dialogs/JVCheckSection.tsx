@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import { CheckCircle2, XCircle, Key, RefreshCw, Loader2, AlertTriangle, Search, Download, FileText, ChevronDown, FileBarChart2 } from 'lucide-react'
 import Spinner from '@/components/ui/Spinner'
 import LoadingCard from '@/components/ui/LoadingCard'
-import { verifyJV, fetchPBList, fetchPBItems, fetchAccountingDef, type JVVerifyStep, type PBListItem, type PBItemLine, type AccountingDefDetail } from '@/lib/api'
+import { verifyJV, verifyInvJV, fetchPBList, fetchPBItems, fetchAccountingDef, type JVVerifyStep, type PBListItem, type PBItemLine, type AccountingDefDetail, type InvCommodityRow } from '@/lib/api'
 import { useErpToken } from '@/hooks/useErpToken'
 
 interface Props {
@@ -741,18 +741,344 @@ ${rows.join('\n')}
     setTimeout(() => URL.revokeObjectURL(pdfUrl), 120_000)
   }, [selectedPB, jvSteps, jvCompRows, jvAccountRows, accountingDef, pbRefNo])
 
+  // ── Inventory JV tab state ──────────────────────────────
+  const [jvTab, setJvTab] = useState<'purchase' | 'inventory'>('purchase')
+  const [invVerifying, setInvVerifying] = useState(false)
+  const [invSteps, setInvSteps] = useState<JVVerifyStep[]>([])
+  const [invCommodityRows, setInvCommodityRows] = useState<InvCommodityRow[]>([])
+  const [invJvRows, setInvJvRows] = useState<{ account_name: string; dr_cr: string; commodity: string; amount: number | null }[]>([])
+  const [invError, setInvError] = useState('')
+
+  const handleInvVerify = async () => { if (selectedPB) handleInvVerifyFor(selectedPB) }
+
+  const handleInvVerifyFor = async (pb: PBListItem) => {
+    if (!token || !tenantId) return
+    const pbDate = pb.date?.slice(0, 10) || ''
+    if (!pbDate) { setInvError('PB date not available'); return }
+    setInvVerifying(true)
+    setInvSteps([])
+    setInvCommodityRows([])
+    setInvJvRows([])
+    setInvError('')
+    try {
+      const res = await verifyInvJV(token, tenantId, pb.ref_no, pbDate, pb.id)
+      setInvSteps(res.steps)
+      setInvCommodityRows(res.commodity_rows || [])
+      setInvJvRows(res.jv_rows)
+    } catch (err) {
+      if (!handleAuthError(err)) setInvError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setInvVerifying(false)
+    }
+  }
+
   const canVerify = !!token && !!tenantId && !!pbRefNo.trim() && !verifying
   return (
     <div className="relative flex flex-col h-full min-h-0 gap-4">
       <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col min-h-0 flex-1 overflow-hidden">
         {/* Header */}
-        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 flex items-center gap-2">
-          <Search className="size-4 text-[#3F51B5] dark:text-[#7986CB]" />
-          <span className="text-[13px] font-semibold text-gray-800 dark:text-gray-100">JV Verification</span>
-          <span className="text-[11px] text-gray-400 dark:text-gray-500">— look up a Purchase Booking's Journal Voucher</span>
+        <div className="px-4 border-b border-gray-200 dark:border-gray-700 shrink-0 flex items-center gap-0 h-11">
+          <Search className="size-4 text-[#3F51B5] dark:text-[#7986CB] mr-2 shrink-0" />
+          {(['purchase', 'inventory'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setJvTab(tab)}
+              className={`h-full px-4 text-[12px] font-medium border-b-2 transition-colors cursor-pointer ${
+                jvTab === tab
+                  ? 'border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB] dark:border-[#7986CB]'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              {tab === 'purchase' ? 'Purchase Account JV' : 'Inventory Account JV'}
+            </button>
+          ))}
         </div>
 
-        <div ref={scrollContainerRef} className="p-4 overflow-y-auto flex-1 min-h-0 space-y-4 relative">
+        {jvTab === 'inventory' && (
+          <div className="p-4 overflow-y-auto flex-1 min-h-0 space-y-4">
+            {/* No PB selected — show PB list */}
+            {!selectedPB && !pbRefNo.trim() && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-[11px] text-gray-700 dark:text-gray-300">Select Purchase Booking</Label>
+                  <button onClick={loadPBList} disabled={pbListLoading} className="text-[11px] text-[#3F51B5] dark:text-[#7986CB] flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50">
+                    <RefreshCw className={`size-3 ${pbListLoading ? 'animate-spin' : ''}`} />Refresh
+                  </button>
+                </div>
+                {pbListLoading && pbList.length === 0 && <LoadingCard message="FETCHING" steps={[{ label: 'Fetching purchase bookings', done: false }]} />}
+                {pbList.length > 0 && (
+                  <>
+                    <Input value={pbSearch} onChange={(e) => setPbSearch(e.target.value)} placeholder="Search by ref no or supplier…" className="h-8 text-[12px] mb-2" />
+                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                      {pbList.filter(pb => { const q = pbSearch.toLowerCase(); return !q || pb.ref_no.toLowerCase().includes(q) || pb.supplier.toLowerCase().includes(q) }).map((pb) => (
+                        <button key={pb.ref_no} onClick={() => { setPbRefNo(pb.ref_no); setSelectedPB(pb); handleInvVerifyFor(pb) }}
+                          className="w-full text-left px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10 transition-colors cursor-pointer">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{pb.ref_no}</span>
+                            {pb.amount && <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0 font-medium">₹{Number(pb.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
+                          </div>
+                          {pb.supplier && (
+                            <div className="mt-0.5 flex items-center justify-between gap-2">
+                              <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate font-medium">{pb.supplier}</span>
+                              {pb.date && <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{pb.date}</span>}
+                            </div>
+                          )}
+                          {(pb.division || pb.department || pb.type_of_sale || pb.location) && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {[pb.division, pb.department, pb.type_of_sale, pb.location].filter(Boolean).map((tag) => (
+                                <span key={tag} className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">{tag}</span>
+                              ))}
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Results — same card layout as purchase tab */}
+            {(invVerifying || invSteps.length > 0 || invError) && (() => {
+              const invPassed = invSteps.length > 0 && invSteps.every(s => s.ok)
+              const SECTION_STRIP = 'px-4 py-1.5 bg-gray-100 dark:bg-gray-800/80 border-y border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400'
+              const pill = (color: 'green'|'blue'|'purple'|'red'|'gray', label: string) => {
+                const cls = {
+                  green:  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700',
+                  blue:   'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-700',
+                  purple: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200 dark:border-purple-700',
+                  red:    'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-200 dark:border-red-700',
+                  gray:   'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400 border-gray-200 dark:border-gray-600',
+                }[color]
+                return <span className={`inline-flex items-center px-1.5 py-px rounded text-[10px] font-semibold border ${cls}`}>{label}</span>
+              }
+              const fmtAmt = (n: number | null | undefined) =>
+                n != null ? n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'
+
+              // Group INV JV rows by commodity for the accounting entries table
+              const invGroups = new Map<string, typeof invJvRows>()
+              for (const row of invJvRows) {
+                const key = row.commodity || ''
+                if (!invGroups.has(key)) invGroups.set(key, [])
+                invGroups.get(key)!.push(row)
+              }
+              const invSortedKeys = [...invGroups.keys()].sort((a, b) => a===''?1:b===''?-1:a.localeCompare(b))
+              const invTotalDr = invJvRows.filter(r => r.dr_cr==='Debit').reduce((s,r)=>s+(r.amount??0),0)
+              const invTotalCr = invJvRows.filter(r => r.dr_cr==='Credit').reduce((s,r)=>s+(r.amount??0),0)
+              const invBalanced = Math.abs(invTotalDr - invTotalCr) < 0.02
+              const invHasAmounts = invJvRows.some(r => r.amount != null)
+
+              // Summary cards: parse step details
+              const invStep = invSteps.find(s => s.n === 3)  // Found INV JV step
+              const totalStep = invSteps.find(s => s.n === 4) // total match
+              const commodityStep = invSteps.find(s => s.n === 6) // per-commodity
+
+              return (
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-900 shadow-sm">
+
+                  {/* Header bar */}
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileBarChart2 className="size-3.5 shrink-0 text-[#3F51B5] dark:text-[#7986CB]" />
+                      <span className="text-[12px] font-mono font-bold text-gray-800 dark:text-gray-100 truncate">{selectedPB?.ref_no || pbRefNo}</span>
+                      {!invVerifying && invSteps.length > 0 && (invPassed ? pill('green', '✓ Passed') : pill('red', '✕ Failed'))}
+                      {invVerifying && <Loader2 className="size-3.5 animate-spin text-[#3F51B5] shrink-0" />}
+                    </div>
+                    <button
+                      onClick={() => { setSelectedPB(null); setPbRefNo(''); setInvSteps([]); setInvCommodityRows([]); setInvJvRows([]); setInvError('') }}
+                      className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] hover:border-[#3F51B5]/50 transition-colors cursor-pointer shrink-0">
+                      <RefreshCw className="size-3" />Change
+                    </button>
+                  </div>
+
+                  {/* Summary grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-200 dark:border-gray-700">
+                    <div className="px-4 py-3">
+                      <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">Supplier</div>
+                      <div className="text-[13px] font-medium text-gray-800 dark:text-gray-100 truncate">{selectedPB?.supplier ?? '—'}</div>
+                    </div>
+                    <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 sm:border-t-0">
+                      <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">Date</div>
+                      <div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{selectedPB?.date?.slice(0,10) ?? '—'}</div>
+                    </div>
+                    <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 sm:border-t-0">
+                      <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">Inventory JV</div>
+                      <div className={`text-[13px] font-medium ${invStep ? (invStep.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400') : 'text-gray-400 dark:text-gray-500'}`}>
+                        {invStep ? (invStep.ok ? '✓ Entry found' : '✕ Not found') : invVerifying ? 'Checking…' : '—'}
+                      </div>
+                    </div>
+                    <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 sm:border-t-0">
+                      <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">Amount Match</div>
+                      <div className={`text-[13px] font-medium ${totalStep ? (totalStep.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400') : 'text-gray-400 dark:text-gray-500'}`}>
+                        {totalStep ? (totalStep.ok ? '✓ Matched' : '✕ Mismatch') : invVerifying ? 'Checking…' : '—'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Loading */}
+                  {invVerifying && invSteps.length === 0 && (
+                    <LoadingCard message="VERIFYING" steps={[
+                      { label: 'Fetching PB detail', done: false },
+                      { label: 'Locating PURB & INV journal vouchers', done: false },
+                      { label: 'Cross-checking amounts per commodity', done: false },
+                    ]} />
+                  )}
+
+                  {/* Error */}
+                  {invError && !invVerifying && (
+                    <div className="mx-4 my-3 px-3 py-2 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-[11px] text-red-600 dark:text-red-400">{invError}</div>
+                  )}
+
+                  {/* Steps list */}
+                  {invSteps.length > 0 && (
+                    <>
+                      <div className={SECTION_STRIP}>Verification steps</div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-[12px]">
+                          <tbody>
+                            {invSteps.map((s, i) => (
+                              <tr key={i} className={s.ok ? 'bg-white dark:bg-gray-900 hover:bg-gray-50/50 dark:hover:bg-gray-800/20' : 'bg-red-50 dark:bg-red-900/20'}>
+                                <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 w-6 text-center">
+                                  {s.ok ? <CheckCircle2 className="size-3.5 text-emerald-500 inline" /> : <XCircle className="size-3.5 text-red-500 inline" />}
+                                </td>
+                                <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 font-medium ${s.ok ? 'text-gray-700 dark:text-gray-300' : 'text-red-700 dark:text-red-300'}`}>{s.label}</td>
+                                <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 text-[11px]">{s.detail ?? ''}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Per-commodity cross-check table */}
+                  {invCommodityRows.length > 0 && (
+                    <>
+                      <div className={SECTION_STRIP}>Per-commodity cross-check</div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-[12px]">
+                          <thead>
+                            <tr className="bg-gray-50 dark:bg-gray-800/80">
+                              <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-left">Commodity</th>
+                              <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-right whitespace-nowrap">PURB Purchase Exempt DR</th>
+                              <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-right whitespace-nowrap">INV Closing Stock DR</th>
+                              <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-center w-14">Match</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {invCommodityRows.map((r, i) => (
+                              <tr key={i} className={r.match ? 'bg-white dark:bg-gray-900 hover:bg-gray-50/50 dark:hover:bg-gray-800/20' : 'bg-red-50 dark:bg-red-900/20'}>
+                                <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 font-medium text-gray-700 dark:text-gray-300">{r.commodity}</td>
+                                <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-right font-mono text-blue-700 dark:text-blue-300 font-semibold">{fmtAmt(r.purb_purchase_exempt_dr)}</td>
+                                <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-right font-mono text-blue-700 dark:text-blue-300 font-semibold">{fmtAmt(r.inv_closing_stock_dr)}</td>
+                                <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-center">
+                                  {r.match ? <CheckCircle2 className="size-3.5 text-emerald-500 inline" /> : <XCircle className="size-3.5 text-red-500 inline" />}
+                                </td>
+                              </tr>
+                            ))}
+                            {invCommodityRows.length > 1 && (
+                              <tr className="bg-white dark:bg-gray-900">
+                                <td className="px-3 py-2.5 border-t-2 border border-gray-300 dark:border-gray-500 font-bold text-[12px] text-gray-700 dark:text-gray-200">Total</td>
+                                <td className="px-3 py-2.5 border-t-2 border border-gray-300 dark:border-gray-500 text-right font-mono font-semibold text-blue-700 dark:text-blue-300">
+                                  {fmtAmt(invCommodityRows.reduce((s, r) => s + (r.purb_purchase_exempt_dr ?? 0), 0))}
+                                </td>
+                                <td className="px-3 py-2.5 border-t-2 border border-gray-300 dark:border-gray-500 text-right font-mono font-semibold text-blue-700 dark:text-blue-300">
+                                  {fmtAmt(invCommodityRows.reduce((s, r) => s + (r.inv_closing_stock_dr ?? 0), 0))}
+                                </td>
+                                <td className="px-3 py-2.5 border-t-2 border border-gray-300 dark:border-gray-500 text-center">
+                                  {invCommodityRows.every(r => r.match) ? <CheckCircle2 className="size-3.5 text-emerald-500 inline" /> : <XCircle className="size-3.5 text-red-500 inline" />}
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+
+                  {/* INV JV accounting entries — grouped by commodity */}
+                  {invJvRows.length > 0 && (
+                    <>
+                      <div className={SECTION_STRIP}>INV JV accounting entries</div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-[12px]">
+                          <thead>
+                            <tr className="bg-gray-50 dark:bg-gray-800/80">
+                              <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-left w-12">DR/CR</th>
+                              <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-left">Account</th>
+                              <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-right w-32">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {invSortedKeys.map(commodity => {
+                              const rows = invGroups.get(commodity)!
+                              const gDr = rows.filter(r=>r.dr_cr==='Debit').reduce((s,r)=>s+(r.amount??0),0)
+                              const gCr = rows.filter(r=>r.dr_cr==='Credit').reduce((s,r)=>s+(r.amount??0),0)
+                              return (
+                                <React.Fragment key={commodity||'__shared__'}>
+                                  <tr className="bg-indigo-50 dark:bg-indigo-950/40">
+                                    <td colSpan={3} className="px-3 py-1.5 border border-indigo-100 dark:border-indigo-900/60">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 uppercase tracking-wide">{commodity || 'Shared'}</span>
+                                        <span className="text-[10px] font-mono text-indigo-400 dark:text-indigo-500">{rows.length} {rows.length===1?'entry':'entries'}</span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {rows.map((row, ri) => {
+                                    const isDebit = row.dr_cr === 'Debit'
+                                    return (
+                                      <tr key={ri} className="bg-white dark:bg-gray-900 hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+                                        <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-center">
+                                          {isDebit ? pill('blue','DR') : pill('purple','CR')}
+                                        </td>
+                                        <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 font-medium text-gray-800 dark:text-gray-100">{row.account_name}</td>
+                                        <td className={`px-3 py-2 border border-gray-200 dark:border-gray-700 text-right font-mono font-semibold ${isDebit?'text-blue-700 dark:text-blue-300':'text-purple-700 dark:text-purple-300'}`}>
+                                          {fmtAmt(row.amount)}
+                                        </td>
+                                      </tr>
+                                    )
+                                  })}
+                                  {rows.length > 1 && (
+                                    <tr className="bg-gray-50 dark:bg-gray-800/50">
+                                      <td colSpan={2} className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] text-gray-400 dark:text-gray-500 font-medium">Subtotal</td>
+                                      <td className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-right font-mono text-[11px]">
+                                        {gDr>0 && <span className="text-blue-600 dark:text-blue-400">DR {fmtAmt(gDr)}</span>}
+                                        {gDr>0 && gCr>0 && <span className="text-gray-300 dark:text-gray-600 mx-1">·</span>}
+                                        {gCr>0 && <span className="text-purple-600 dark:text-purple-400">CR {fmtAmt(gCr)}</span>}
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              )
+                            })}
+                          </tbody>
+                          {invHasAmounts && (
+                            <tfoot>
+                              <tr className="bg-white dark:bg-gray-900">
+                                <td colSpan={2} className="px-3 py-2.5 border-t-2 border border-gray-300 dark:border-gray-500 font-bold text-[12px] text-gray-700 dark:text-gray-200">Total</td>
+                                <td className="px-3 py-2.5 border-t-2 border border-gray-300 dark:border-gray-500 text-right">
+                                  <div className="flex items-center justify-end gap-1.5 font-mono text-[12px] font-semibold">
+                                    <span className="text-blue-700 dark:text-blue-300">DR {fmtAmt(invTotalDr)}</span>
+                                    <span className={invBalanced?'text-emerald-600 dark:text-emerald-400':'text-red-500 dark:text-red-400'}>{invBalanced?'=':'≠'}</span>
+                                    <span className="text-purple-700 dark:text-purple-300">CR {fmtAmt(invTotalCr)}</span>
+                                    {invBalanced ? <CheckCircle2 className="size-3 text-emerald-500" /> : <XCircle className="size-3 text-red-500" />}
+                                  </div>
+                                </td>
+                              </tr>
+                            </tfoot>
+                          )}
+                        </table>
+                      </div>
+                    </>
+                  )}
+
+                </div>
+              )
+            })()}
+          </div>
+        )}
+
+        {jvTab === 'purchase' && <div ref={scrollContainerRef} className="p-4 overflow-y-auto flex-1 min-h-0 space-y-4 relative">
           {/* Token panel — same as full purchase flow */}
           {showTokenInput && (
             <div ref={tokenSectionRef} className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
@@ -882,13 +1208,16 @@ ${rows.join('\n')}
                         <button
                           key={pb.ref_no}
                           onClick={() => {
-                            setPbRefNo(pb.ref_no); setSelectedPB(pb); setPbListOpen(false); handleVerify(pb.ref_no)
-                            if (pb.id) {
-                              setPbItemsLoading(true); setPbItems([]); setPbTaxableAmount(null); setPbDiscountAmount(null)
-                              fetchPBItems(localToken || erpToken, localTenantId || erpTenantId, pb.id)
-                                .then((result) => { setPbItems(result.items); setPbTaxableAmount(result.taxable_amount); setPbDiscountAmount(result.discount_amount) })
-                                .catch(() => {})
-                                .finally(() => setPbItemsLoading(false))
+                            setPbRefNo(pb.ref_no); setSelectedPB(pb); setPbListOpen(false)
+                            if (jvTab === 'purchase') {
+                              handleVerify(pb.ref_no)
+                              if (pb.id) {
+                                setPbItemsLoading(true); setPbItems([]); setPbTaxableAmount(null); setPbDiscountAmount(null)
+                                fetchPBItems(localToken || erpToken, localTenantId || erpTenantId, pb.id)
+                                  .then((result) => { setPbItems(result.items); setPbTaxableAmount(result.taxable_amount); setPbDiscountAmount(result.discount_amount) })
+                                  .catch(() => {})
+                                  .finally(() => setPbItemsLoading(false))
+                              }
                             }
                           }}
                           disabled={verifying}
@@ -1259,7 +1588,7 @@ ${rows.join('\n')}
               </div>
             )
           })()}
-        </div>
+        </div>}
 
         {/* Bottom bar */}
         <div className="p-4 border-t border-gray-200 dark:border-gray-700 shrink-0 flex items-center gap-2">

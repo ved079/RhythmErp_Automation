@@ -523,6 +523,57 @@ export async function verifyJV(
   return res.json();
 }
 
+// ─── Inventory JV Verify ─────────────────────────────────
+
+export interface InvPBItem {
+  item_ref_id: number;
+  name: string;
+  taxable_amount: number;
+}
+
+export interface InvJVRow {
+  item_name: string;
+  in_quantity: string | null;
+  in_amount: string | null;
+  closing_quantity: string | null;
+  closing_amount: string | null;
+  inv_ref_no: string;
+}
+
+export interface InvCommodityRow {
+  commodity: string;
+  purb_purchase_exempt_dr: number | null;
+  inv_closing_stock_dr: number | null;
+  inv_purchase_exempt_cr: number | null;
+  match: boolean;
+}
+
+export interface InvJVVerifyResponse {
+  steps: JVVerifyStep[];
+  ok: boolean;
+  pb_items: InvPBItem[];
+  jv_rows: { account_name: string; dr_cr: string; commodity: string; amount: number | null }[];
+  purb_rows: { account_name: string; dr_cr: string; commodity: string; amount: number | null }[];
+  commodity_rows: InvCommodityRow[];
+  inv_ref?: string;
+}
+
+export async function verifyInvJV(
+  erpToken: string,
+  erpTenantId: string,
+  pbRefNo: string,
+  pbDate: string,
+  pbId: string | number,
+): Promise<InvJVVerifyResponse> {
+  const res = await fetch(`${PROXY}?path=inv-jv-verify`, withCsrf({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId, pb_ref_no: pbRefNo, pb_date: pbDate, pb_id: String(pbId) }),
+  }));
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 // ─── Accounting Definition ──────────────────────────────
 
 export interface AccountingDefDetail {

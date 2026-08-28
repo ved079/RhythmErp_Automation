@@ -875,7 +875,7 @@ export default function Home() {
         <main className="flex-1 flex flex-col overflow-hidden bg-[#F1F2F7] dark:bg-gray-900 relative p-3">
           {navToast && <NavToast key={navToast.key} label={navToast.label} parent={navToast.parent} />}
           {/* White card wrapper — scrolls internally, browser never moves */}
-          <div className="flex flex-col flex-1 min-h-0 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
+          <div key={selectedModule} className="flex flex-col flex-1 min-h-0 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm animate-fadeIn">
           {!sidebarOpen && selectedModule !== 'dashboard' && (
             <div className="flex items-center gap-1.5 px-4 py-2 border-b border-gray-200 dark:border-gray-600/40 bg-white dark:bg-gray-900 shrink-0">
               <button onClick={handleGoHome} className="text-[12px] text-[#3F51B5] hover:text-[#3949AB] dark:text-[#7986CB] font-medium cursor-pointer transition-colors hover:underline">Dashboard</button>
