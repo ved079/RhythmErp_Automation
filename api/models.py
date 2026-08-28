@@ -21,6 +21,14 @@ class JVVerifyRequest(BaseModel):
     pb_ref_no: str
 
 
+class InvJVVerifyRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str
+    pb_ref_no: str   # e.g. PURB/2026-2027/001265
+    pb_date: str     # e.g. 2026-08-28 (YYYY-MM-DD)
+    pb_id: str       # actual DB id (e.g. "3569"), NOT the sequential ref number
+
+
 class PBListRequest(BaseModel):
     erp_token: str
     erp_tenant_id: str

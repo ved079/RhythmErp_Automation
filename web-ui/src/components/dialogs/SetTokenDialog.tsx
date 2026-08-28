@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { Key, Eye, EyeOff, AlertTriangle, Copy } from 'lucide-react'
+import { Key, Eye, EyeOff, AlertTriangle } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 
@@ -40,7 +40,7 @@ export function SetTokenDialog({ open, onClose, erpToken, setErpToken, erpTenant
             Set API Token
           </DialogTitle>
           <DialogDescription className="text-[12px] text-gray-500 dark:text-gray-400">
-            Enter your ERP bearer token and tenant ID for API test runs.
+            Enter your ERP bearer token and tenant ID.
           </DialogDescription>
         </DialogHeader>
 
@@ -65,7 +65,6 @@ export function SetTokenDialog({ open, onClose, erpToken, setErpToken, erpTenant
               </button>
             </div>
 
-            {/* Token validation warning */}
             {tokenStatus !== 'empty' && tokenStatus !== 'valid' && (
               <div className="mt-2 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3 space-y-2">
                 <div className="flex items-center gap-2">
@@ -79,17 +78,6 @@ export function SetTokenDialog({ open, onClose, erpToken, setErpToken, erpTenant
                     ? 'Copy the token from the Authorization header in DevTools — not the full "Bearer eyJ…" line, just the part after "Bearer ".'
                     : 'The token appears too short or is missing parts. A valid JWT has 3 dot-separated sections.'}
                 </p>
-                {/* Visual example */}
-                <div className="rounded-md bg-gray-900 dark:bg-gray-950 p-2.5 space-y-1.5">
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Should look like</p>
-                  <div className="flex items-start gap-2">
-                    <span className="text-[10px] text-gray-500 shrink-0 w-20">Authorization</span>
-                    <span className="text-[10px] text-emerald-400 break-all leading-relaxed">
-                      Bearer <span className="text-yellow-300">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9</span>.<span className="text-blue-300">eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjox…</span>.<span className="text-pink-300">SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c</span>
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-gray-500 mt-1">3 parts separated by dots · starts with <code className="text-yellow-300">eyJ</code> · 200+ characters</p>
-                </div>
               </div>
             )}
 
@@ -100,6 +88,7 @@ export function SetTokenDialog({ open, onClose, erpToken, setErpToken, erpTenant
               </p>
             )}
           </div>
+
           <div>
             <label className="text-[11px] text-gray-400 dark:text-gray-500 mb-1 block">Tenant ID</label>
             <input
