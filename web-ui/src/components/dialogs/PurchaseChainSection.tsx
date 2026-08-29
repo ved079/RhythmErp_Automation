@@ -1269,7 +1269,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
           {_erpToken && (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => { fetchedRef.current = false; loadMasterData() }}
+                onClick={() => { fetchedRef.current = false; setItemIds([]); loadMasterData() }}
                 disabled={loadingData}
                 className="text-[11px] text-[#3F51B5] dark:text-[#7986CB] flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50"
                 title="Re-fetch suppliers, items and categories"
