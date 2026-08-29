@@ -546,17 +546,25 @@ def _pb_items_from_qc(qc_items: List[dict], items: List[dict] = None, ctx=None) 
             cash_discount = round(amount_detail * discount_rate / (100.0 - discount_rate), 6)
         else:
             cash_discount = 0.0
+        alt_qty     = _q4(qc["grn_qty"])
+        alt_net_qty = _q4(qc["alternate_accepted_qty"])
+        base_rate_f = float(qc["base_rate"])
+        total_amount            = round(alt_qty * base_rate_f, 4)
+        net_of_empty_bag        = round(alt_net_qty * base_rate_f, 4)
+        deduction_weight        = _q4(qc.get("alternate_deduction_weight") or qc.get("deduction_weight") or 0.0)
+        qc_deduction            = _q4(qc.get("qc_deduction_amount") or 0.0)
+        txn_without_discount    = round(net_of_empty_bag - qc_deduction, 4)
         out.append(build_pb_line(
             item_ref_id=qc["item_ref_id"],
             hsn_sac_no=qc["hsn_sac_no"],
             alternate_uom=qc.get("alternate_uom", ctx.alternate_uom if ctx else 3),
             uom=qc.get("uom", ctx.base_uom if ctx else 4),
-            base_rate=qc["base_rate"],
-            alternate_qty=_q4(qc["grn_qty"]),
+            base_rate=base_rate_f,
+            alternate_qty=alt_qty,
             no_of_bags=qc["no_of_bags"],
             empty_bag_weight=_q4(qc["empty_bag_weight"]),
             empty_bags_txn_amount=_q4(qc["empty_bags_txn_amount"]),
-            alternate_net_qty=_q4(qc["alternate_accepted_qty"]),
+            alternate_net_qty=alt_net_qty,
             discount_percentage=_q4(discount_rate),
             discount_amount=cash_discount,
             amount_detail=amount_detail,
@@ -565,6 +573,12 @@ def _pb_items_from_qc(qc_items: List[dict], items: List[dict] = None, ctx=None) 
             tax_rate=tax_rate,
             gst_type=gst_type,
             uom_conversion=qc.get("uom_conversion", 1.0),
+            alternate_gate_pass_quantity=alt_qty,
+            total_amount=total_amount,
+            net_of_empty_bag_amount=net_of_empty_bag,
+            alternate_deduction_weight=deduction_weight,
+            qc_deduction_amount=qc_deduction,
+            transaction_amount_without_discount=txn_without_discount,
         ))
     return out
 
