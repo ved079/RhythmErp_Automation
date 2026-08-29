@@ -1548,8 +1548,38 @@ class PurchaseChain:
                         f"body: {_pb_body} | sent: {_sent}"
                     )
                 pb_ref = pb_data.get("transaction_ref_no", str(pb_id))
-                pbs.append({"id": pb_id, "ref": pb_ref, "data": pb_data, "payload": pb_payload})
                 log.info(f"  PB {gi}/{len(delivery_plans)} created: ID={pb_id}, ref={pb_ref}")
+
+                # Verify the PB survived async accounting (ERP rolls it back on failure).
+                # Poll up to 8s, then retry once after a 12s cooldown if rolled back.
+                _pb_confirmed = False
+                for _attempt in range(2):
+                    for _wait in (3, 5):
+                        time.sleep(_wait)
+                        _check = self.pb_api.get_pb(pb_id)
+                        if _check and _check.get("id"):
+                            _pb_confirmed = True
+                            break
+                    if _pb_confirmed:
+                        break
+                    if _attempt == 0:
+                        log.warning(
+                            f"  PB {pb_id} not found after accounting wait — ERP may have rolled it back. "
+                            f"Waiting 12s and retrying PB creation…"
+                        )
+                        time.sleep(12)
+                        pb_data = self.pb_api.create_pb(pb_payload)
+                        pb_id = pb_data.get("id") or pb_data.get("entry_id") if pb_data else None
+                        if not pb_data or not pb_id:
+                            log.warning(f"  PB retry also failed — skipping PB for this delivery.")
+                            break
+                        pb_ref = pb_data.get("transaction_ref_no", str(pb_id))
+                        log.info(f"  PB retry created: ID={pb_id}, ref={pb_ref}")
+
+                if not _pb_confirmed:
+                    log.warning(f"  PB {pb_id} still not confirmed after retry — accounting may have failed.")
+
+                pbs.append({"id": pb_id, "ref": pb_ref, "data": pb_data, "payload": pb_payload})
                 if self.delay:
                     time.sleep(self.delay)
 
