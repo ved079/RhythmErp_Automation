@@ -1571,9 +1571,9 @@ ${rows.join('\n')}
                         const q = pbSearch.toLowerCase()
                         return !q || pb.ref_no.toLowerCase().includes(q) || pb.supplier.toLowerCase().includes(q)
                       })
-                      .map((pb) => (
+                      .map((pb, _i) => (
                         <button
-                          key={pb.ref_no}
+                          key={pb.id ?? `${pb.ref_no}-${_i}`}
                           onClick={() => {
                             setPbRefNo(pb.ref_no); setSelectedPB(pb); setPbListOpen(false)
                             if (jvTab === 'purchase') {
