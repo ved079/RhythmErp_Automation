@@ -2077,8 +2077,8 @@ def setup_argparse() -> argparse.ArgumentParser:
         description="Create linked PO -> Gate Pass -> GRN chains",
     )
     parser.add_argument(
-        "--supplier", type=int, default=1,
-        help="Supplier ref ID (default 1)",
+        "--supplier", type=int, default=None,
+        help="Supplier ref ID (auto-discovers first supplier if not specified)",
     )
     parser.add_argument(
         "--count", type=int, default=1,

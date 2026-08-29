@@ -224,28 +224,33 @@ def find_existing_pb_ad(client: RhythmERPAPIClient) -> dict | None:
     )
 
 
-def _fetch_existing_details(client: RhythmERPAPIClient, ad_id: int) -> list[dict]:
-    """Fetch the full detail list for an existing AD."""
+def _fetch_existing_ad(client: RhythmERPAPIClient, ad_id: int) -> dict:
+    """Fetch full AD record (top-level + detail list)."""
     r = client.session.get(
         f"{client.BASE_URL}/core/accounting-definition/{ad_id}/",
         timeout=15,
     )
     if r.status_code == 200:
-        return r.json().get("accounting_definition_detail") or []
-    return []
+        return r.json()
+    return {}
 
 
-def _assign_existing_ids(new_details: list[dict], existing_details: list[dict]) -> None:
+def _build_from_existing(canonical_details: list[dict], existing_details: list[dict]) -> list[dict]:
     """
-    Match each new detail entry to an existing one by (dr_cr, value_name, account_ref_id)
-    and assign its id.  Matched entries are removed from the pool so each id is used once.
-    Unmatched new entries get no id (backend creates them).
-    Condition ids are also re-assigned from matched existing conditions (by parameter+operator).
-    """
-    pool = list(existing_details)  # consume as we match
+    Build the final detail list for a PUT by recycling existing entry/condition IDs.
 
-    for new_d in new_details:
-        key = (new_d.get("dr_cr"), str(new_d.get("value_name")), new_d.get("account_ref_id"))
+    The ERP PUT serializer requires every sub-record that already has an id to echo
+    that id back; new sub-records (no id) are rejected when the parent already has one.
+    Strategy: assign each canonical entry to an existing entry (by semantic match first,
+    then positional), then overlay the existing entry's id and condition ids onto the
+    canonical entry's content.
+    """
+    pool = list(existing_details)
+    result = []
+
+    for canon in canonical_details:
+        # Try semantic match: same dr_cr + value_name + account_ref_id
+        key = (canon.get("dr_cr"), str(canon.get("value_name")), canon.get("account_ref_id"))
         match = next(
             (e for e in pool
              if e.get("dr_cr") == key[0]
@@ -253,21 +258,31 @@ def _assign_existing_ids(new_details: list[dict], existing_details: list[dict]) 
              and e.get("account_ref_id") == key[2]),
             None,
         )
+        # Fallback: any leftover entry from pool (positional)
+        if match is None and pool:
+            match = pool[0]
+
         if match:
-            new_d["id"] = match["id"]
             pool.remove(match)
-            # Re-assign condition ids by (parameter, operator) match
+            # Build merged entry: canonical content + existing id
+            merged = {**canon, "id": match["id"]}
+            # Overlay canonical conditions with existing condition ids (by position)
             existing_conds = list(match.get("conditions") or [])
-            for new_c in new_d.get("conditions", []):
-                cmatch = next(
-                    (c for c in existing_conds
-                     if c.get("parameter") == new_c.get("parameter")
-                     and c.get("operator") == new_c.get("operator")),
-                    None,
-                )
-                if cmatch:
-                    new_c["id"] = cmatch["id"]
-                    existing_conds.remove(cmatch)
+            canon_conds = list(canon.get("conditions", []))
+            merged_conds = []
+            for i, cc in enumerate(canon_conds):
+                mc = dict(cc)
+                if i < len(existing_conds):
+                    mc["id"] = existing_conds[i]["id"]
+                # If no existing condition id available, omit id (new condition)
+                merged_conds.append(mc)
+            merged["conditions"] = merged_conds
+            result.append(merged)
+        else:
+            # No existing entry left — send without id (new creation)
+            result.append(canon)
+
+    return result
 
 
 def apply_ad(client: RhythmERPAPIClient, payload: dict, existing_id: int | None, dry_run: bool) -> None:
@@ -276,9 +291,12 @@ def apply_ad(client: RhythmERPAPIClient, payload: dict, existing_id: int | None,
 
     if existing_id:
         send_payload["id"] = existing_id
-        # Fetch existing sub-records and reuse their ids so the ERP serializer is happy
-        existing_details = _fetch_existing_details(client, existing_id)
-        _assign_existing_ids(send_payload.get("accounting_definition_detail", []), existing_details)
+        existing_data = _fetch_existing_ad(client, existing_id)
+        existing_details = existing_data.get("accounting_definition_detail") or []
+        send_payload["accounting_definition_detail"] = _build_from_existing(
+            send_payload.get("accounting_definition_detail", []),
+            existing_details,
+        )
 
     if dry_run:
         action = f"PUT /core/accounting-definition/{existing_id}/" if existing_id else "POST /core/accounting-definition/"
