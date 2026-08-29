@@ -224,20 +224,75 @@ def find_existing_pb_ad(client: RhythmERPAPIClient) -> dict | None:
     )
 
 
+def _fetch_existing_details(client: RhythmERPAPIClient, ad_id: int) -> list[dict]:
+    """Fetch the full detail list for an existing AD."""
+    r = client.session.get(
+        f"{client.BASE_URL}/core/accounting-definition/{ad_id}/",
+        timeout=15,
+    )
+    if r.status_code == 200:
+        return r.json().get("accounting_definition_detail") or []
+    return []
+
+
+def _assign_existing_ids(new_details: list[dict], existing_details: list[dict]) -> None:
+    """
+    Match each new detail entry to an existing one by (dr_cr, value_name, account_ref_id)
+    and assign its id.  Matched entries are removed from the pool so each id is used once.
+    Unmatched new entries get no id (backend creates them).
+    Condition ids are also re-assigned from matched existing conditions (by parameter+operator).
+    """
+    pool = list(existing_details)  # consume as we match
+
+    for new_d in new_details:
+        key = (new_d.get("dr_cr"), str(new_d.get("value_name")), new_d.get("account_ref_id"))
+        match = next(
+            (e for e in pool
+             if e.get("dr_cr") == key[0]
+             and str(e.get("value_name", "")) == key[1]
+             and e.get("account_ref_id") == key[2]),
+            None,
+        )
+        if match:
+            new_d["id"] = match["id"]
+            pool.remove(match)
+            # Re-assign condition ids by (parameter, operator) match
+            existing_conds = list(match.get("conditions") or [])
+            for new_c in new_d.get("conditions", []):
+                cmatch = next(
+                    (c for c in existing_conds
+                     if c.get("parameter") == new_c.get("parameter")
+                     and c.get("operator") == new_c.get("operator")),
+                    None,
+                )
+                if cmatch:
+                    new_c["id"] = cmatch["id"]
+                    existing_conds.remove(cmatch)
+
+
 def apply_ad(client: RhythmERPAPIClient, payload: dict, existing_id: int | None, dry_run: bool) -> None:
+    import copy
+    send_payload = copy.deepcopy(payload)
+
+    if existing_id:
+        send_payload["id"] = existing_id
+        # Fetch existing sub-records and reuse their ids so the ERP serializer is happy
+        existing_details = _fetch_existing_details(client, existing_id)
+        _assign_existing_ids(send_payload.get("accounting_definition_detail", []), existing_details)
+
     if dry_run:
         action = f"PUT /core/accounting-definition/{existing_id}/" if existing_id else "POST /core/accounting-definition/"
         print(f"\n[DRY RUN] Would {action}")
-        print(json.dumps(payload, indent=2))
+        print(json.dumps(send_payload, indent=2))
         return
 
     if existing_id:
         url = f"{client.BASE_URL}/core/accounting-definition/{existing_id}/"
-        r = client.session.put(url, json=payload, timeout=30)
+        r = client.session.put(url, json=send_payload, timeout=30)
         verb = "Updated"
     else:
         url = f"{client.BASE_URL}/core/accounting-definition/"
-        r = client.session.post(url, json=payload, timeout=30)
+        r = client.session.post(url, json=send_payload, timeout=30)
         verb = "Created"
 
     if r.status_code in (200, 201):
