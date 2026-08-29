@@ -26,6 +26,14 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from common.erp_api_client import RhythmERPAPIClient
 from common.logger import log
+from pages.private_b2b.modules.purchase_booking.utils.ad_setup import (
+    fetch_coa,
+    resolve_accounts,
+    fetch_type_of_sale_ids,
+    find_existing_pb_ad,
+    build_ad_payload,
+    apply_ad,
+)
 from pages.private_b2b.modules.purchase_order.data.purchase_order_data import (
     ITEM_NAMES as PO_ITEM_NAMES,
     UOM_NAMES as PO_UOM_NAMES,
@@ -2156,6 +2164,30 @@ def main():
         tenant=args.tenant,
         delay=args.delay,
     )
+
+    # ── Pre-flight: validate and fix Accounting Definition ────────────────────
+    sep = "-" * 60
+    print(f"\n{sep}")
+    print(f"  Pre-flight: Accounting Definition check (tenant {args.tenant})")
+    print(sep)
+    try:
+        coa = fetch_coa(chain.client)
+        accounts = resolve_accounts(coa)
+        for name, aid in accounts.items():
+            print(f"    {name:30s} -> id={aid}")
+        tos_ids = fetch_type_of_sale_ids(chain.client)
+        print(f"  Type of Sale IDs: {tos_ids}")
+        existing = find_existing_pb_ad(chain.client)
+        if existing:
+            print(f"  Found existing AD id={existing['id']} — updating to canonical structure")
+        else:
+            print("  No AD found — creating new")
+        payload = build_ad_payload(accounts, tos_ids)
+        apply_ad(chain.client, payload, existing["id"] if existing else None, dry_run=False)
+        print(f"  AD pre-flight done.\n{sep}")
+    except Exception as _ad_err:
+        print(f"  WARNING: AD pre-flight failed: {_ad_err}")
+        print(f"  Continuing — chains may produce silent accounting errors.\n{sep}")
 
     print(f"\n{'=' * 60}")
     print(f"Creating {count} purchase chain(s) - supplier={supplier} ({sname})")
