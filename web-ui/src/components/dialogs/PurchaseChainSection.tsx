@@ -260,6 +260,8 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   }, [userId])
 
   const fetchedRef = useRef(false)
+  const numItemsRef = useRef(numItems)
+  useEffect(() => { numItemsRef.current = numItems }, [numItems])
   const supplierBtnRef = useRef<HTMLButtonElement>(null)
   const categoryBtnRef = useRef<HTMLButtonElement>(null)
   const itemBtnRef = useRef<HTMLButtonElement>(null)
@@ -352,8 +354,11 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       setSelectedCategoryId(defaultCatId)
       const usable = poolFor(itemRes, selectedCategoryId ?? null, flow === 'gp' ? false : requireTaxRate, cqpRes)
       if (supRes.length > 0 && supplier === null) setSupplier(supRes[0].id)
-      if (usable.length > 0 && itemIds.length === 0) {
-        setItemIds(usable.slice(0, numItems).map(i => i.id))
+      if (usable.length > 0) {
+        setItemIds(prev => {
+          if (prev.length > 0) return prev
+          return usable.slice(0, numItemsRef.current).map(i => i.id)
+        })
       }
       // Customers drive the Sales Order header — fetch on SO flow so the
       // dropdown is populated before the user hits Run.
