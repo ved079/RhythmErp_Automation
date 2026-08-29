@@ -549,15 +549,8 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
 
   const hasToken = !!_erpToken && !!_erpTenantId
 
-  // Auto-load only on initial mount when a token is already present (no panel interaction needed).
-  // Subsequent loads happen explicitly via handleDone so the animation never fires mid-interaction.
-  const mountedRef = useRef(false)
-  useEffect(() => {
-    if (mountedRef.current) return
-    mountedRef.current = true
-    if (!hasToken || fetchedRef.current) return
-    loadMasterDataRef.current()
-  }, [hasToken])
+  // No auto-load on mount — data fetches only when the user explicitly clicks
+  // "Done" in the token panel or the Refresh button.
 
 
   return (
