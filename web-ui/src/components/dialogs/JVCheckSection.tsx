@@ -1161,8 +1161,8 @@ ${rows.join('\n')}
                   <>
                     <Input value={pbSearch} onChange={(e) => setPbSearch(e.target.value)} placeholder="Search by ref no or supplier…" className="h-8 text-[12px] mb-2" />
                     <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
-                      {pbList.filter(pb => { const q = pbSearch.toLowerCase(); return !q || pb.ref_no.toLowerCase().includes(q) || pb.supplier.toLowerCase().includes(q) }).map((pb) => (
-                        <button key={pb.ref_no} onClick={() => { setPbRefNo(pb.ref_no); setSelectedPB(pb); handleInvVerifyFor(pb) }}
+                      {pbList.filter(pb => { const q = pbSearch.toLowerCase(); return !q || pb.ref_no.toLowerCase().includes(q) || pb.supplier.toLowerCase().includes(q) }).map((pb, _i) => (
+                        <button key={pb.id ?? `${pb.ref_no}-${_i}`} onClick={() => { setPbRefNo(pb.ref_no); setSelectedPB(pb); handleInvVerifyFor(pb) }}
                           className="w-full text-left px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10 transition-colors cursor-pointer">
                           <div className="flex items-center justify-between gap-3">
                             <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{pb.ref_no}</span>
