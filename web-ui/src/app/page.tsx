@@ -43,6 +43,7 @@ import type { AuthUser, ErpCred } from '@/lib/types'
 import { SidebarModuleItem } from '@/components/sidebar/SidebarModuleItem'
 import type { SidebarModule } from '@/components/sidebar/SidebarModuleItem'
 import { getPanelPreference } from '@/components/PanelToggle'
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import Link from 'next/link'
 import Image from 'next/image'
 import type { ScreenshotEntry } from '@/components/screenshot/ScreenshotGallery'
@@ -752,23 +753,43 @@ export default function Home() {
           <kbd className="text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1 rounded">⌘K</kbd>
         </button>
         {/* Right */}
+        <TooltipProvider delayDuration={400}>
         <div className="flex items-center gap-1 ml-3">
-          <div title={wsConnected ? 'Real-time connected' : 'Real-time disconnected — using polling'} className="flex items-center px-1">
-            <div className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-green-400' : 'bg-amber-400 animate-pulse'}`} />
-          </div>
-          <Button variant="ghost" size="icon" onClick={toggleDarkMode} data-tour="dark-mode" className="size-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer rounded" title={darkMode ? 'Light mode' : 'Dark mode'}>{darkMode ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}</Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center px-1 cursor-default">
+                <div className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-green-400' : 'bg-amber-400 animate-pulse'}`} />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{wsConnected ? 'Real-time connected' : 'Real-time disconnected — using polling'}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={toggleDarkMode} data-tour="dark-mode" className="size-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer rounded">{darkMode ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}</Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{darkMode ? 'Light mode' : 'Dark mode'}</TooltipContent>
+          </Tooltip>
           {selectedModule !== 'dashboard' && (
-            <Button variant="ghost" size="icon" onClick={toggleBookmark} className={`size-7 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer rounded ${isBookmarked ? 'text-amber-500 hover:text-amber-600' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`} title={isBookmarked ? 'Remove bookmark' : 'Bookmark this page — return here on next login'}>
-              {isBookmarked ? <BookmarkCheck className="size-3.5" /> : <Bookmark className="size-3.5" />}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={toggleBookmark} className={`size-7 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer rounded ${isBookmarked ? 'text-amber-500 hover:text-amber-600' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+                  {isBookmarked ? <BookmarkCheck className="size-3.5" /> : <Bookmark className="size-3.5" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{isBookmarked ? 'Remove bookmark' : 'Bookmark this page — return here on next login'}</TooltipContent>
+            </Tooltip>
           )}
-          <Button variant="ghost" size="icon" onClick={() => d.setShowShortcuts(true)} data-tour="keyboard-shortcuts" className="size-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer rounded" title="Keyboard shortcuts"><Zap className="size-3.5" /></Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => d.setShowShortcuts(true)} data-tour="keyboard-shortcuts" className="size-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer rounded"><Zap className="size-3.5" /></Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Keyboard shortcuts</TooltipContent>
+          </Tooltip>
           <div className="relative" data-tour="notifications">
             <Button
               variant="ghost" size="icon"
               onClick={() => { d.setNotifDropdownOpen((prev) => !prev) }}
               className="size-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer relative rounded"
-              title="Notifications"
             >
               <Bell className="size-3.5" />
               {unreadCount > 0 && (
@@ -877,9 +898,15 @@ export default function Home() {
                 <span className="text-[10px] text-gray-400 dark:text-gray-500">{user.role}</span>
               </div>
             </button>
-            <Button variant="ghost" size="icon" onClick={() => setLogoutConfirmOpen(true)} data-tour="logout-btn" className="size-7 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer rounded" title="Sign out"><LogOut className="size-3.5" /></Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={() => setLogoutConfirmOpen(true)} data-tour="logout-btn" className="size-7 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer rounded"><LogOut className="size-3.5" /></Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Sign out</TooltipContent>
+            </Tooltip>
           </div>
         </div>
+        </TooltipProvider>
       </header>
       {/* BODY */}
       <div className="flex flex-1 overflow-hidden">
