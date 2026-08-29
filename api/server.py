@@ -904,6 +904,11 @@ def inv_jv_verify_endpoint(request: InvJVVerifyRequest):
         if r["account_name"] == "Purchase exempt" and r["dr_cr"] == "Credit" and r["commodity"]:
             inv_exempt[r["commodity"]] = r["amount"]
 
+    # PURB JV may use a consolidated DR entry (no per-commodity breakdown).
+    # Prefer cross-check (PURB DR == INV Closing Stock DR) when PURB has
+    # per-commodity rows; otherwise fall back to INV internal balance check
+    # (INV CR Purchase exempt == INV DR Closing Stock per commodity).
+    purb_has_per_commodity = bool(purb_exempt)
     all_commodities = sorted(set(purb_exempt) | set(inv_closing))
     commodity_rows = []
     mismatches = []
@@ -911,10 +916,16 @@ def inv_jv_verify_endpoint(request: InvJVVerifyRequest):
         purb_amt = purb_exempt.get(c)
         inv_closing_amt = inv_closing.get(c)
         inv_exempt_amt = inv_exempt.get(c)
-        match = (
-            purb_amt is not None and inv_closing_amt is not None
-            and abs(purb_amt - inv_closing_amt) <= TOLERANCE
-        )
+        inv_has_per_commodity_cr = bool(inv_exempt)
+        if purb_has_per_commodity and inv_closing_amt is not None and purb_amt is not None:
+            # Both JVs have per-commodity data — cross-check them
+            match = abs(purb_amt - inv_closing_amt) <= TOLERANCE
+        elif inv_has_per_commodity_cr and inv_closing_amt is not None and inv_exempt_amt is not None:
+            # PURB consolidated, INV has per-commodity CR — verify INV internal balance
+            match = abs(inv_closing_amt - inv_exempt_amt) <= TOLERANCE
+        else:
+            # Both JVs use consolidated entries; total check (step 3/4) already passed
+            match = inv_closing_amt is not None
         if not match:
             mismatches.append(c)
         commodity_rows.append({
@@ -929,8 +940,15 @@ def inv_jv_verify_endpoint(request: InvJVVerifyRequest):
         steps.append({"n": 6, "label": "Per-commodity MISMATCH", "ok": False,
                       "detail": f"Mismatched: {', '.join(mismatches)}"})
     else:
+        inv_has_per_commodity_cr = bool(inv_exempt)
+        if purb_has_per_commodity:
+            detail = "PURB Purchase exempt DR == INV Closing Stock DR == INV Purchase exempt CR"
+        elif inv_has_per_commodity_cr:
+            detail = "INV Closing Stock DR == INV Purchase exempt CR (PURB JV uses consolidated entry)"
+        else:
+            detail = "Closing Stock DR present per commodity (both JVs use consolidated entries; total already verified)"
         steps.append({"n": 6, "label": f"All {len(all_commodities)} commodity amounts match", "ok": True,
-                      "detail": "PURB Purchase exempt DR == INV Closing Stock DR == INV Purchase exempt CR"})
+                      "detail": detail})
 
     ok = all(s["ok"] for s in steps)
     return JSONResponse({
