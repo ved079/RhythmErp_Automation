@@ -32,7 +32,7 @@ import {
   Zap, Shield, MessageSquare, Bell, CalendarClock,
   Terminal, Monitor, HelpCircle, Copyright, ExternalLink,
   ChevronRight, LogOut, GitCompare, FlaskConical, BarChart2, Camera,
-  Copy, Check, Package,
+  Copy, Check, Package, Bookmark, BookmarkCheck,
 } from 'lucide-react'
 import LoadingCard from '@/components/ui/LoadingCard'
 import Spinner from '@/components/ui/Spinner'
@@ -436,10 +436,40 @@ export default function Home() {
 
   const handleLogin = useCallback((u: AuthUser) => {
     if (u.role === 'admin' && getPanelPreference() === 'admin') { window.location.href = '/admin'; return }
-    setUser(u); setSidebarModules(filterSidebarByAccess(ALL_SIDEBAR_MODULES, u)); setSelectedModule('dashboard')
-    setActiveTab('test-runner'); localStorage.removeItem('ai-nl-run')
+    setSidebarModules(filterSidebarByAccess(ALL_SIDEBAR_MODULES, u))
+    localStorage.removeItem('ai-nl-run')
     pd.loadVisibility()
+    const saved = localStorage.getItem(`bookmark_${u.id}`)
+    if (saved) {
+      try {
+        const { module, tab } = JSON.parse(saved)
+        setUser(u)
+        setSelectedModule(module || 'dashboard')
+        setActiveTab(tab || 'test-runner')
+        return
+      } catch { /* fall through */ }
+    }
+    setUser(u); setSelectedModule('dashboard'); setActiveTab('test-runner')
   }, [pd.loadVisibility])
+
+  const isBookmarked = user && selectedModule !== 'dashboard'
+    ? (() => { try { const s = localStorage.getItem(`bookmark_${user.id}`); if (!s) return false; const b = JSON.parse(s); return b.module === selectedModule && b.tab === activeTab } catch { return false } })()
+    : false
+
+  const toggleBookmark = useCallback(() => {
+    if (!user || selectedModule === 'dashboard') return
+    const key = `bookmark_${user.id}`
+    const existing = localStorage.getItem(key)
+    let alreadySet = false
+    try { const b = JSON.parse(existing || '{}'); alreadySet = b.module === selectedModule && b.tab === activeTab } catch { /* */ }
+    if (alreadySet) {
+      localStorage.removeItem(key)
+      toast.success('Bookmark removed')
+    } else {
+      localStorage.setItem(key, JSON.stringify({ module: selectedModule, tab: activeTab }))
+      toast.success('Page bookmarked — you\'ll land here on next login')
+    }
+  }, [user, selectedModule, activeTab])
 
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const handleLogout = useCallback(async () => {
@@ -727,6 +757,11 @@ export default function Home() {
             <div className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-green-400' : 'bg-amber-400 animate-pulse'}`} />
           </div>
           <Button variant="ghost" size="icon" onClick={toggleDarkMode} data-tour="dark-mode" className="size-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer rounded" title={darkMode ? 'Light mode' : 'Dark mode'}>{darkMode ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}</Button>
+          {selectedModule !== 'dashboard' && (
+            <Button variant="ghost" size="icon" onClick={toggleBookmark} className={`size-7 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer rounded ${isBookmarked ? 'text-amber-500 hover:text-amber-600' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`} title={isBookmarked ? 'Remove bookmark' : 'Bookmark this page — return here on next login'}>
+              {isBookmarked ? <BookmarkCheck className="size-3.5" /> : <Bookmark className="size-3.5" />}
+            </Button>
+          )}
           <Button variant="ghost" size="icon" onClick={() => d.setShowShortcuts(true)} data-tour="keyboard-shortcuts" className="size-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer rounded" title="Keyboard shortcuts"><Zap className="size-3.5" /></Button>
           <div className="relative" data-tour="notifications">
             <Button
