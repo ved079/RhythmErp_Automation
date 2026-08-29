@@ -1518,7 +1518,20 @@ class PurchaseChain:
                     time.sleep(self.delay)
 
             if "PB" in docs:
-                pb_qc_items = (qc_payload or {}).get("qc_details") or []
+                # Prefer stored QC data (ERP may recalculate fields after save).
+                # Fetching back mirrors what the user sees in the manual PB flow.
+                stored_qc = None
+                if qc_id:
+                    try:
+                        stored_qc = self.qc_api.get_qc(qc_id)
+                    except Exception:
+                        pass
+                pb_qc_items = (
+                    (stored_qc or {}).get("qc_details")
+                    or (qc_data or {}).get("qc_details")
+                    or (qc_payload or {}).get("qc_details")
+                    or []
+                )
                 pb_payload = self._build_pb_payload(
                     eff_supplier, qc_id, grn_id, po_id, gp_items, pb_overrides, ctx=ctx,
                     qc_items=pb_qc_items,

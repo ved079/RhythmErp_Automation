@@ -248,6 +248,10 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
                     ))
 
             created += 1
+            # Allow async accounting to settle before the next chain posts its
+            # inventory entries for the same items — prevents ledger lock conflicts.
+            if "PB" in (request.documents or []) and i < total_chains - 1:
+                time.sleep(4)
         except Exception as e:
             elapsed = time.time() - chain_start
             yield _sse_event(LogEvent(
