@@ -1319,7 +1319,12 @@ ${rows.join('\n')}
                   )}
 
                   {/* Per-commodity cross-check table */}
-                  {invCommodityRows.length > 0 && (
+                  {invCommodityRows.length > 0 && (() => {
+                    const purbHasPerCommodity = invCommodityRows.some(r => r.purb_purchase_exempt_dr != null)
+                    const col1Label = purbHasPerCommodity ? 'PURB Purchase Exempt DR' : 'INV Purchase Exempt CR'
+                    const col1Val = (r: InvCommodityRow) => purbHasPerCommodity ? r.purb_purchase_exempt_dr : r.inv_purchase_exempt_cr
+                    const col1Total = invCommodityRows.reduce((s, r) => s + ((purbHasPerCommodity ? r.purb_purchase_exempt_dr : r.inv_purchase_exempt_cr) ?? 0), 0)
+                    return (
                     <>
                       <div className={SECTION_STRIP}>Per-commodity cross-check</div>
                       <div className="overflow-x-auto">
@@ -1327,7 +1332,7 @@ ${rows.join('\n')}
                           <thead>
                             <tr className="bg-gray-50 dark:bg-gray-800/80">
                               <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-left">Commodity</th>
-                              <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-right whitespace-nowrap">PURB Purchase Exempt DR</th>
+                              <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-right whitespace-nowrap">{col1Label}</th>
                               <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-right whitespace-nowrap">INV Closing Stock DR</th>
                               <th className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 text-center w-14">Match</th>
                             </tr>
@@ -1336,7 +1341,7 @@ ${rows.join('\n')}
                             {invCommodityRows.map((r, i) => (
                               <tr key={i} className={r.match ? 'bg-white dark:bg-gray-900 hover:bg-gray-50/50 dark:hover:bg-gray-800/20' : 'bg-red-50 dark:bg-red-900/20'}>
                                 <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 font-medium text-gray-700 dark:text-gray-300">{r.commodity}</td>
-                                <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-right font-mono text-blue-700 dark:text-blue-300 font-semibold">{fmtAmt(r.purb_purchase_exempt_dr)}</td>
+                                <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-right font-mono text-blue-700 dark:text-blue-300 font-semibold">{fmtAmt(col1Val(r))}</td>
                                 <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-right font-mono text-blue-700 dark:text-blue-300 font-semibold">{fmtAmt(r.inv_closing_stock_dr)}</td>
                                 <td className="px-3 py-2 border border-gray-200 dark:border-gray-700 text-center">
                                   {r.match ? <CheckCircle2 className="size-3.5 text-emerald-500 inline" /> : <XCircle className="size-3.5 text-red-500 inline" />}
@@ -1347,7 +1352,7 @@ ${rows.join('\n')}
                               <tr className="bg-white dark:bg-gray-900">
                                 <td className="px-3 py-2.5 border-t-2 border border-gray-300 dark:border-gray-500 font-bold text-[12px] text-gray-700 dark:text-gray-200">Total</td>
                                 <td className="px-3 py-2.5 border-t-2 border border-gray-300 dark:border-gray-500 text-right font-mono font-semibold text-blue-700 dark:text-blue-300">
-                                  {fmtAmt(invCommodityRows.reduce((s, r) => s + (r.purb_purchase_exempt_dr ?? 0), 0))}
+                                  {fmtAmt(col1Total)}
                                 </td>
                                 <td className="px-3 py-2.5 border-t-2 border border-gray-300 dark:border-gray-500 text-right font-mono font-semibold text-blue-700 dark:text-blue-300">
                                   {fmtAmt(invCommodityRows.reduce((s, r) => s + (r.inv_closing_stock_dr ?? 0), 0))}
@@ -1361,7 +1366,7 @@ ${rows.join('\n')}
                         </table>
                       </div>
                     </>
-                  )}
+                  )})()}
 
                   {/* INV JV accounting entries — grouped by commodity */}
                   {invJvRows.length > 0 && (
