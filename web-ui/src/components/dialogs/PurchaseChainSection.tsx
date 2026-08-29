@@ -324,12 +324,24 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     ]
     setLoadingSteps([...steps])
     const tick = (i: number) => setLoadingSteps(s => s.map((x, idx) => idx === i ? { ...x, done: true } : x))
+    const fetchWithRetry = async <T,>(label: string, fn: () => Promise<T>): Promise<T> => {
+      try { return await fn() } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        if (msg.includes('502') || msg.includes('503') || msg.includes('504')) {
+          await new Promise(r => setTimeout(r, 2000))
+          try { return await fn() } catch (e2) {
+            throw new Error(`${label}: ${e2 instanceof Error ? e2.message : e2}`)
+          }
+        }
+        throw new Error(`${label}: ${msg}`)
+      }
+    }
     try {
       const [supRes, itemRes, catRes, cqpRes] = await Promise.all([
-        fetchMasterData('Supplier', token, tenant).then(r => { tick(0); return r }),
-        fetchMasterData('Item Master', token, tenant).then(r => { tick(1); return r }),
-        fetchItemCategories(token, tenant).then(r => { tick(2); return r }),
-        fetchItemsWithCqp(token, tenant).then(r => { tick(3); return r }),
+        fetchWithRetry('Supplier', () => fetchMasterData('Supplier', token, tenant)).then(r => { tick(0); return r }),
+        fetchWithRetry('Item Master', () => fetchMasterData('Item Master', token, tenant)).then(r => { tick(1); return r }),
+        fetchWithRetry('Categories', () => fetchItemCategories(token, tenant)).then(r => { tick(2); return r }),
+        fetchWithRetry('Quality Params', () => fetchItemsWithCqp(token, tenant)).then(r => { tick(3); return r }),
       ])
       setSuppliers(supRes)
       setItems(itemRes)
