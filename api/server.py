@@ -786,12 +786,25 @@ def inv_jv_verify_endpoint(request: InvJVVerifyRequest):
     PAGE_LIMIT = 50
     TOLERANCE = 1.0  # rupee tolerance for total match
 
+    # Discover all ledger group IDs dynamically; fall back to [1, 2]
+    try:
+        lg_resp = client.session.get(
+            f"{client.BASE_URL}/core/dynamic-screen-wrapper/Ledger%20Group/",
+            params={"page_number": 1, "page_size": 100, "user_id": user_id},
+            timeout=10,
+        )
+        lg_raw = lg_resp.json()
+        lg_data = lg_raw.get("screenmatlistingdata_set") or []
+        discovered = [int(row["id"]) for row in lg_data if row.get("id")]
+        LEDGER_GROUPS = discovered if discovered else [1, 2]
+    except Exception:
+        LEDGER_GROUPS = [1, 2]
+
     JV_BODY_BASE = {
         "report_name": 2,
         "parameter_1": "", "parameter_2": "", "parameter_3": "",
         "parameter_4": "", "parameter_5": "",
         "tenant_id": int(request.erp_tenant_id),
-        "ledger_group": 1,
         "division_id": None, "department_id": None,
         "type_of_sale_id": None, "location_id": None,
         "file_format": None,
@@ -799,11 +812,11 @@ def inv_jv_verify_endpoint(request: InvJVVerifyRequest):
         "pageLimit": PAGE_LIMIT,
     }
 
-    def fetch_jv_page(page: int) -> list:
+    def fetch_jv_page(ledger_group: int, page: int) -> list:
         r = client.session.post(
             f"{client.BASE_URL}/reports/builder",
             params={"user_id": user_id},
-            json={**JV_BODY_BASE, "pageNumber": page},
+            json={**JV_BODY_BASE, "ledger_group": ledger_group, "pageNumber": page},
             timeout=30,
         )
         r.raise_for_status()
@@ -814,12 +827,12 @@ def inv_jv_verify_endpoint(request: InvJVVerifyRequest):
     purb_entry = None
     inv_entry = None
 
-    # Fetch pages 1 and 2 in parallel (both entries should be recent)
+    # Fetch pages 1-4 across all ledger groups in parallel
     try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
-            futures = {ex.submit(fetch_jv_page, p): p for p in range(1, 5)}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
+            futures = {ex.submit(fetch_jv_page, lg, p): (lg, p) for lg in LEDGER_GROUPS for p in range(1, 5)}
             all_entries = []
-            for fut in concurrent.futures.as_completed(futures, timeout=40):
+            for fut in concurrent.futures.as_completed(futures, timeout=60):
                 try:
                     all_entries.extend(fut.result())
                 except Exception:
@@ -1069,13 +1082,18 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
 
     # Per-item data
     items = []
-    for d in pb_details:
+    for idx, d in enumerate(pb_details):
         igst  = float(d.get("txn_currency_igst_amount") or 0)
         cgst  = float(d.get("txn_currency_cgst_amount") or 0)
         sgst  = float(d.get("txn_currency_sgst_amount") or 0)
+        taxable = float(d.get("txn_currency_amount_detail") or 0)
+        total   = float(d.get("txn_currency_total_txn_amount") or 0)
+        gst_tot = igst + cgst + sgst
         items.append({
+            "item_no":        idx + 1,
             "item_ref_id":    d.get("item_ref_id"),
-            "taxable":        float(d.get("txn_currency_amount_detail") or 0),
+            "hsn_sac_no":     d.get("hsn_sac_no"),
+            "taxable":        taxable,
             "gross_no_disc":  float(d.get("transaction_amount_without_discount") or 0),
             "discount_pct":   float(d.get("discount_percentage") or 0),
             "discount_amt":   float(d.get("txn_currency_discount_amount_details") or 0),
@@ -1083,16 +1101,17 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
             "igst":           igst,
             "cgst":           cgst,
             "sgst":           sgst,
-            "gst_total":      igst + cgst + sgst,
+            "gst_total":      gst_tot,
             "igst_rate":      float(d.get("txn_currency_igst_rate") or 0),
             "cgst_rate":      float(d.get("txn_currency_cgst_rate") or 0),
             "sgst_rate":      float(d.get("txn_currency_sgst_rate") or 0),
             "gst_rate":       float(d.get("txn_currency_igst_rate") or d.get("txn_currency_cgst_rate") or 0),
-            "total":          float(d.get("txn_currency_total_txn_amount") or 0),
+            "total":          total,
             "empty_bags_amt": float(d.get("empty_bags_txn_amount") or 0),
             "qc_deduction":   float(d.get("qc_deduction_amount") or 0),
             "net_of_empty":   float(d.get("net_of_empty_bag_amount") or 0),
             "total_amount":   float(d.get("total_amount") or 0),  # gross = qty × rate
+            "item_ok":        abs(taxable + gst_tot - total) <= TOLERANCE if total else True,
         })
 
     pb_gst_total = sum(i["gst_total"] for i in items)
@@ -1101,12 +1120,22 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
     pb_sgst_total = sum(i["sgst"] for i in items)
 
     # ── 2. Scan JV report for both PURB and INV entries (parallel pages) ──
+    try:
+        lg_resp = client.session.get(
+            f"{client.BASE_URL}/core/dynamic-screen-wrapper/Ledger%20Group/",
+            params={"page_number": 1, "page_size": 100, "user_id": user_id},
+            timeout=10,
+        )
+        lg_data = lg_resp.json().get("screenmatlistingdata_set") or []
+        LEDGER_GROUPS = [int(row["id"]) for row in lg_data if row.get("id")] or [1, 2]
+    except Exception:
+        LEDGER_GROUPS = [1, 2]
+
     JV_BODY_BASE = {
         "report_name": 2,
         "parameter_1": "", "parameter_2": "", "parameter_3": "",
         "parameter_4": "", "parameter_5": "",
         "tenant_id": int(request.erp_tenant_id),
-        "ledger_group": 1,
         "division_id": None, "department_id": None,
         "type_of_sale_id": None, "location_id": None,
         "file_format": None,
@@ -1114,11 +1143,11 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
         "pageLimit": 50,
     }
 
-    def fetch_page(page):
+    def fetch_page(ledger_group: int, page: int):
         r = client.session.post(
             f"{client.BASE_URL}/reports/builder",
             params={"user_id": user_id},
-            json={**JV_BODY_BASE, "pageNumber": page},
+            json={**JV_BODY_BASE, "ledger_group": ledger_group, "pageNumber": page},
             timeout=30,
         )
         r.raise_for_status()
@@ -1127,24 +1156,37 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
 
     purb_entry = inv_entry = None
     try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
-            futs = {ex.submit(fetch_page, p): p for p in range(1, 5)}
-            all_entries = []
-            for fut in concurrent.futures.as_completed(futs, timeout=40):
-                try:
-                    all_entries.extend(fut.result())
-                except Exception:
-                    pass
-        for entry in all_entries:
-            ref  = entry.get("ref_transaction_no") or ""
-            ttype = entry.get("ref_transaction_type") or ""
-            if ref == request.pb_ref_no:
-                purb_entry = entry
-            elif ttype == "Inventory" and inv_entry is None:
-                if abs(float(entry.get("total_debit_amount") or 0) - pb_taxable) <= TOLERANCE:
-                    inv_entry = entry
-            if purb_entry and inv_entry:
-                break
+        # Fetch pages in waves of 8 (per ledger group × 4 pages) so we can stop
+        # early once both entries are found, rather than always fetching 20 pages.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
+            wave_size = 4  # pages per ledger group per wave
+            found = False
+            page = 1
+            while not found and page <= 20:
+                futs = {
+                    ex.submit(fetch_page, lg, p): (lg, p)
+                    for lg in LEDGER_GROUPS
+                    for p in range(page, min(page + wave_size, 21))
+                }
+                page += wave_size
+                wave_empty = True
+                for fut in concurrent.futures.as_completed(futs, timeout=60):
+                    try:
+                        entries = fut.result()
+                        if entries:
+                            wave_empty = False
+                        for entry in entries:
+                            ref   = entry.get("ref_transaction_no") or ""
+                            ttype = entry.get("ref_transaction_type") or ""
+                            if ref == request.pb_ref_no:
+                                purb_entry = entry
+                            elif ttype == "Inventory" and inv_entry is None:
+                                if abs(float(entry.get("total_debit_amount") or 0) - pb_taxable) <= TOLERANCE:
+                                    inv_entry = entry
+                    except Exception:
+                        pass
+                if wave_empty or (purb_entry and inv_entry):
+                    found = True
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"JV report scan failed: {exc}", "checks": []})
 
@@ -1173,7 +1215,7 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
     inv_rows  = extract_rows(inv_entry)
 
     # Derived PURB JV aggregates
-    purb_payable = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Credit" and "payable" in r["account_name"].lower())
+    purb_payable = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Credit" and not r["commodity"])
     purb_purchase_gst_dr = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "purchase" in r["account_name"].lower() and "discount" not in r["account_name"].lower() and "exempt" not in r["account_name"].lower())
     purb_igst_dr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "igst" in r["account_name"].lower())
     purb_cgst_dr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "cgst" in r["account_name"].lower())
@@ -1298,8 +1340,9 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
                         f"{item['taxable']:,.2f} × {item['cgst_rate']}% = {computed_c:,.2f} | CGST={actual_c:,.2f} SGST={actual_s:,.2f}",
                         "gst"))
 
-        # Discount checks
-        if pb_discount > 0:
+        # Discount checks — only when the JV actually has discount entries
+        # (trade discounts are pre-netted into taxable; no JV entry expected)
+        if pb_discount > 0 and (purb_disc_dr > 0 or purb_disc_cr > 0):
             disc_match = abs(purb_disc_dr - pb_discount) <= TOLERANCE
             checks.append(chk("discount_dr", "JV Discount DR = PB discount amount",
                 disc_match,
@@ -1366,6 +1409,7 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
         if r["dr_cr"] == "Debit":  inv_by_comm[c]["closing_dr"] += r["amount"]
 
     all_comms = sorted(set(list(purb_by_comm.keys()) + list(inv_by_comm.keys())) - {""})
+    single_comm = len(all_comms) == 1  # when only one commodity, PB total maps directly
     for c in all_comms:
         pb = purb_by_comm.get(c, {})
         iv = inv_by_comm.get(c, {})
@@ -1378,8 +1422,13 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
         i_closing = iv.get("closing_dr", 0)
         taxable_match = abs(p_taxable - i_exempt) <= TOLERANCE if (p_taxable or i_exempt) else True
         inv_bal_ok    = abs(i_exempt - i_closing) <= TOLERANCE
+        pb_taxable_comm = pb_taxable if single_comm else None
+        pb_gst_comm     = pb_gst_total if single_comm else None
+        pb_vs_purb_ok   = abs(pb_taxable_comm - p_taxable) <= TOLERANCE if pb_taxable_comm is not None else None
         commodity_rows.append({
             "commodity":         c,
+            "pb_taxable":        pb_taxable_comm,
+            "pb_gst_total":      pb_gst_comm,
             "purb_purchase_gst": p_taxable or None,
             "purb_igst":         p_igst or None,
             "purb_cgst":         p_cgst or None,
@@ -1388,6 +1437,7 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
             "inv_exempt_cr":     i_exempt or None,
             "inv_closing_dr":    i_closing or None,
             "taxable_match":     taxable_match,
+            "pb_vs_purb_ok":     pb_vs_purb_ok,
             "inv_balanced":      inv_bal_ok,
         })
 
@@ -1438,6 +1488,7 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
         "checks": checks,
         "amount_chain": amount_chain,
         "commodity_rows": commodity_rows,
+        "pb_items": items,
     })
 
 

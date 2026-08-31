@@ -545,6 +545,8 @@ export interface CrossCheckAmountChain {
 
 export interface CrossCheckCommodityRow {
   commodity: string;
+  pb_taxable: number | null;
+  pb_gst_total: number | null;
   purb_purchase_gst: number | null;
   purb_igst: number | null;
   purb_cgst: number | null;
@@ -553,7 +555,33 @@ export interface CrossCheckCommodityRow {
   inv_exempt_cr: number | null;
   inv_closing_dr: number | null;
   taxable_match: boolean;
+  pb_vs_purb_ok: boolean | null;
   inv_balanced: boolean;
+}
+
+export interface CrossCheckPBItem {
+  item_no: number;
+  item_ref_id: number;
+  hsn_sac_no: number | null;
+  taxable: number;
+  gross_no_disc: number;
+  discount_pct: number;
+  discount_amt: number;
+  gst_type: string;
+  igst: number;
+  cgst: number;
+  sgst: number;
+  gst_total: number;
+  igst_rate: number;
+  cgst_rate: number;
+  sgst_rate: number;
+  gst_rate: number;
+  total: number;
+  empty_bags_amt: number;
+  qc_deduction: number;
+  net_of_empty: number;
+  total_amount: number;
+  item_ok: boolean;
 }
 
 export interface CrossCheckResponse {
@@ -603,6 +631,7 @@ export interface CrossCheckResponse {
   checks: CrossCheckCheck[];
   amount_chain: CrossCheckAmountChain[];
   commodity_rows: CrossCheckCommodityRow[];
+  pb_items: CrossCheckPBItem[];
 }
 
 export async function crossCheckJV(

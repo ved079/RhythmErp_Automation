@@ -766,6 +766,8 @@ ${rows.join('\n')}
   const [ccResult, setCcResult] = useState<CrossCheckResponse | null>(null)
   const [ccError, setCcError] = useState('')
   const [ccFullViewOpen, setCcFullViewOpen] = useState(false)
+  const [ccShowPurbLedger, setCcShowPurbLedger] = useState(false)
+  const [ccShowInvLedger, setCcShowInvLedger] = useState(false)
   const ccExportXlsRef = useRef<(() => void) | null>(null)
   const ccExportPdfRef = useRef<(() => void) | null>(null)
   const ccOnFullViewRef = useRef<(() => void) | null>(null)
@@ -2523,165 +2525,224 @@ ${rows.join('\n')}
                           ))}
                         </div>
 
-                        {/* ── 3-source comparison table ───────────────── */}
-                        <div className="border-b border-gray-200 dark:border-gray-700">
-                          <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
-                            Amount Cross-Check — PB vs PURB JV vs INV JV
-                          </div>
-                          {/* column headers */}
-                          <div className="grid grid-cols-[1fr_auto_auto_auto_auto] text-[10px] font-semibold uppercase text-gray-400 bg-gray-50/60 dark:bg-gray-800/30 px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 gap-x-4">
-                            <span>Line</span>
-                            <span className="text-right w-24">PB</span>
-                            <span className="text-right w-24">PURB JV</span>
-                            <span className="text-right w-24">INV JV</span>
-                            <span className="w-4" />
-                          </div>
-                          {/* Taxable */}
-                          <div className={`grid grid-cols-[1fr_auto_auto_auto_auto] px-3 py-2 gap-x-4 border-b border-gray-100 dark:border-gray-800 ${taxableChk && !taxableChk.ok ? 'bg-red-50/40 dark:bg-red-900/5' : ''}`}>
-                            <div>
-                              <div className="text-[12px] font-medium text-gray-800 dark:text-gray-200">Taxable Amount</div>
-                              <div className="text-[10px] text-gray-400 mt-0.5">Purchase @gst · Closing Stock</div>
+                        {/* ── Status banner ───────────────────────────── */}
+                        {(() => {
+                          const failCount = r.checks.filter(c => !c.ok).length
+                          return (
+                            <div className={`px-4 py-2.5 flex items-center gap-3 border-b border-gray-200 dark:border-gray-700 ${failCount === 0 ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
+                              {failCount === 0
+                                ? <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
+                                : <XCircle className="size-4 text-red-500 shrink-0" />}
+                              <span className={`text-[12px] font-semibold ${failCount === 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+                                {failCount === 0 ? 'All checks passed' : `${failCount} check${failCount > 1 ? 's' : ''} failed`}
+                              </span>
+                              {failCount > 0 && (
+                                <span className="text-[11px] text-red-500 dark:text-red-400 truncate">
+                                  {r.checks.filter(c => !c.ok).map(c => c.label).join(' · ')}
+                                </span>
+                              )}
                             </div>
-                            <span className="text-right w-24 font-mono text-[12px] self-center text-gray-700 dark:text-gray-200">{fmtN(r.pb_meta.taxable)}</span>
-                            <span className="text-right w-24 font-mono text-[12px] self-center text-blue-700 dark:text-blue-300">{fmtN(r.purb_jv.purchase_gst_dr)}</span>
-                            <span className="text-right w-24 font-mono text-[12px] self-center text-rose-600 dark:text-rose-400">{fmtN(r.inv_jv.total_dr)}</span>
-                            <span className="self-center">{taxableChk && chkIcon(taxableChk.ok)}</span>
-                          </div>
-                          {/* GST */}
-                          {r.pb_meta.gst_total > 0 && (
-                            <div className={`grid grid-cols-[1fr_auto_auto_auto_auto] px-3 py-2 gap-x-4 border-b border-gray-100 dark:border-gray-800 ${gstChk && !gstChk.ok ? 'bg-red-50/40 dark:bg-red-900/5' : ''}`}>
-                              <div>
-                                <div className="text-[12px] font-medium text-gray-800 dark:text-gray-200">GST</div>
-                                <div className="text-[10px] text-gray-400 mt-0.5">
-                                  {r.purb_jv.igst_dr > 0 ? `IGST` : 'CGST + SGST'}
-                                  {r.checks.find(c=>c.id.startsWith('gst_rate_')) && (() => { const rc = r.checks.find(c=>c.id.startsWith('gst_rate_')); return rc ? ` · ${rc.label.match(/\d+\.?\d*%/)?.[0]||''}` : '' })()}
-                                </div>
+                          )
+                        })()}
+
+                        {/* ── Stat cards ─────────────────────────────── */}
+                        {(() => {
+                          const taxableChk = r.checks.find(c => c.id === 'taxable_vs_purb')
+                          const gstChk     = r.checks.find(c => c.id === 'gst_total_match')
+                          const payableChk = r.checks.find(c => c.id === 'payable_vs_pb')
+                          const cards = [
+                            { label: 'Taxable',  pb: r.pb_meta.taxable,  jv: r.purb_jv.purchase_gst_dr, chk: taxableChk, color: 'violet' },
+                            { label: 'GST',      pb: r.pb_meta.gst_total, jv: r.purb_jv.gst_dr,         chk: gstChk,     color: 'amber'  },
+                            { label: 'Payable',  pb: r.pb_meta.total,    jv: r.purb_jv.payable,          chk: payableChk, color: 'rose'   },
+                          ]
+                          return (
+                            <div className="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-200 dark:border-gray-700">
+                              {cards.map(({ label, pb, jv, chk, color }) => {
+                                const ok = chk?.ok ?? true
+                                return (
+                                  <div key={label} className={`px-3 py-3 ${!ok ? 'bg-red-50/30 dark:bg-red-900/5' : ''}`}>
+                                    <div className="flex items-center justify-between mb-1.5">
+                                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</span>
+                                      {chk && (ok
+                                        ? <CheckCircle2 className="size-3 text-emerald-500" />
+                                        : <XCircle className="size-3 text-red-500" />)}
+                                    </div>
+                                    <div className="font-mono text-[12px] font-semibold text-gray-800 dark:text-gray-100">{fmtN(pb)}</div>
+                                    <div className={`font-mono text-[11px] mt-0.5 ${ok ? 'text-gray-400' : 'text-red-500'}`}>JV {fmtN(jv)}</div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )
+                        })()}
+
+                        {/* ── Reconciliation table per commodity ──────── */}
+                        {r.commodity_rows.length > 0 && (() => {
+                          const EQ = (match: boolean | null) => (
+                            <span className={`text-[13px] font-bold select-none ${match === null ? 'text-gray-300 dark:text-gray-600' : match ? 'text-emerald-500' : 'text-red-500'}`}>
+                              {match === false ? '≠' : '='}
+                            </span>
+                          )
+                          return (
+                            <div className="border-b border-gray-200 dark:border-gray-700">
+                              <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
+                                Reconciliation — per commodity
                               </div>
-                              <span className="text-right w-24 font-mono text-[12px] self-center text-gray-700 dark:text-gray-200">{fmtN(r.pb_meta.gst_total)}</span>
-                              <span className="text-right w-24 font-mono text-[12px] self-center text-blue-700 dark:text-blue-300">{fmtN(r.purb_jv.gst_dr)}</span>
-                              <span className="text-right w-24 font-mono text-[12px] self-center text-gray-400">—</span>
-                              <span className="self-center">{gstChk && chkIcon(gstChk.ok)}</span>
-                            </div>
-                          )}
-                          {/* Payable */}
-                          <div className={`grid grid-cols-[1fr_auto_auto_auto_auto] px-3 py-2 gap-x-4 border-b border-gray-100 dark:border-gray-800 ${payableChk && !payableChk.ok ? 'bg-red-50/40 dark:bg-red-900/5' : ''}`}>
-                            <div>
-                              <div className="text-[12px] font-medium text-gray-800 dark:text-gray-200">Payable (Total)</div>
-                              <div className="text-[10px] text-gray-400 mt-0.5">Taxable + GST{r.pb_meta.tds > 0 ? ' − TDS' : ''}</div>
-                            </div>
-                            <span className="text-right w-24 font-mono text-[12px] self-center font-semibold text-gray-700 dark:text-gray-200">{fmtN(r.pb_meta.total)}</span>
-                            <span className="text-right w-24 font-mono text-[12px] self-center font-semibold text-rose-600 dark:text-rose-400">{fmtN(r.purb_jv.payable)}</span>
-                            <span className="text-right w-24 font-mono text-[12px] self-center text-gray-400">—</span>
-                            <span className="self-center">{payableChk && chkIcon(payableChk.ok)}</span>
-                          </div>
-                          {/* INV formula */}
-                          {invEqChk && (
-                            <div className={`grid grid-cols-[1fr_auto_auto_auto_auto] px-3 py-2 gap-x-4 ${!invEqChk.ok ? 'bg-red-50/40 dark:bg-red-900/5' : 'bg-blue-50/30 dark:bg-blue-900/5'}`}>
-                              <div>
-                                <div className="text-[12px] font-medium text-gray-800 dark:text-gray-200">INV = PURB − GST</div>
-                                <div className="text-[10px] text-gray-400 mt-0.5 font-mono">{fmtN(r.purb_jv.total_dr)} − {fmtN(r.purb_jv.gst_dr)} = {fmtN(r.purb_jv.total_dr - r.purb_jv.gst_dr)}</div>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-[11px] border-collapse">
+                                  <thead>
+                                    <tr className="bg-gray-50/80 dark:bg-gray-800/50 text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                                      <th className="px-3 py-2 text-left font-semibold text-[10px] uppercase tracking-wide">Commodity</th>
+                                      <th className="px-2 py-2 text-right font-semibold text-[10px] uppercase tracking-wide text-violet-500">PB Taxable</th>
+                                      <th className="px-1 py-2 text-center w-5" />
+                                      <th className="px-2 py-2 text-right font-semibold text-[10px] uppercase tracking-wide text-blue-500">PURB @GST</th>
+                                      <th className="px-1 py-2 text-center w-5" />
+                                      <th className="px-2 py-2 text-right font-semibold text-[10px] uppercase tracking-wide text-indigo-500">INV Exempt</th>
+                                      <th className="px-1 py-2 text-center w-5" />
+                                      <th className="px-2 py-2 text-right font-semibold text-[10px] uppercase tracking-wide text-indigo-400">INV Closing</th>
+                                      <th className="px-3 py-2 text-right font-semibold text-[10px] uppercase tracking-wide text-amber-500">PURB GST</th>
+                                      <th className="px-2 py-2 text-right font-semibold text-[10px] uppercase tracking-wide text-gray-400" style={{fontSize:'9px'}}>GST type</th>
+                                      <th className="px-2 py-2 text-center w-8 font-semibold text-[10px] uppercase tracking-wide">✓</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {r.commodity_rows.map((row, i) => {
+                                      const gstType = row.purb_igst ? 'IGST' : (row.purb_cgst || row.purb_sgst) ? 'CGST+SGST' : ''
+                                      const allOk = (row.pb_vs_purb_ok !== false) && row.taxable_match && row.inv_balanced
+                                      return (
+                                        <tr key={i} className={`border-b border-gray-100 dark:border-gray-800 ${!allOk ? 'bg-red-50/30 dark:bg-red-900/5' : 'hover:bg-gray-50/50 dark:hover:bg-gray-800/20'}`}>
+                                          <td className="px-3 py-2 font-medium text-gray-700 dark:text-gray-300 max-w-[120px] truncate">{row.commodity}</td>
+                                          <td className="px-2 py-2 text-right font-mono text-violet-600 dark:text-violet-400">{row.pb_taxable != null ? fmtN(row.pb_taxable) : <span className="text-gray-300">—</span>}</td>
+                                          <td className="px-1 py-2 text-center">{EQ(row.pb_vs_purb_ok)}</td>
+                                          <td className="px-2 py-2 text-right font-mono text-blue-700 dark:text-blue-300">{fmtN(row.purb_purchase_gst)}</td>
+                                          <td className="px-1 py-2 text-center">{EQ(row.taxable_match)}</td>
+                                          <td className="px-2 py-2 text-right font-mono text-indigo-600 dark:text-indigo-400">{fmtN(row.inv_exempt_cr)}</td>
+                                          <td className="px-1 py-2 text-center">{EQ(row.inv_balanced ? true : null)}</td>
+                                          <td className="px-2 py-2 text-right font-mono text-indigo-400">{fmtN(row.inv_closing_dr)}</td>
+                                          <td className="px-3 py-2 text-right font-mono text-amber-600 dark:text-amber-400">{fmtN(row.purb_gst_total)}</td>
+                                          <td className="px-2 py-2 text-right text-gray-400" style={{fontSize:'10px'}}>{gstType}</td>
+                                          <td className="px-2 py-2 text-center">{chkIcon(allOk)}</td>
+                                        </tr>
+                                      )
+                                    })}
+                                  </tbody>
+                                  <tfoot>
+                                    <tr className="bg-gray-50 dark:bg-gray-800/60 border-t border-gray-200 dark:border-gray-700 font-semibold">
+                                      <td className="px-3 py-2 text-[11px] text-gray-600 dark:text-gray-400">Total</td>
+                                      <td className="px-2 py-2 text-right font-mono text-violet-600 dark:text-violet-400 text-[11px]">
+                                        {fmtN(r.commodity_rows.reduce((s, row) => s + (row.pb_taxable ?? 0), 0))}
+                                      </td>
+                                      <td />
+                                      <td className="px-2 py-2 text-right font-mono text-blue-700 dark:text-blue-300 text-[11px]">
+                                        {fmtN(r.commodity_rows.reduce((s, row) => s + (row.purb_purchase_gst ?? 0), 0))}
+                                      </td>
+                                      <td />
+                                      <td className="px-2 py-2 text-right font-mono text-indigo-600 dark:text-indigo-400 text-[11px]">
+                                        {fmtN(r.commodity_rows.reduce((s, row) => s + (row.inv_exempt_cr ?? 0), 0))}
+                                      </td>
+                                      <td />
+                                      <td className="px-2 py-2 text-right font-mono text-indigo-400 text-[11px]">
+                                        {fmtN(r.commodity_rows.reduce((s, row) => s + (row.inv_closing_dr ?? 0), 0))}
+                                      </td>
+                                      <td className="px-3 py-2 text-right font-mono text-amber-600 dark:text-amber-400 text-[11px]">
+                                        {fmtN(r.commodity_rows.reduce((s, row) => s + (row.purb_gst_total ?? 0), 0))}
+                                      </td>
+                                      <td /><td />
+                                    </tr>
+                                    <tr className="border-t border-gray-200 dark:border-gray-700">
+                                      <td className="px-3 py-2 text-[11px] font-semibold text-gray-600 dark:text-gray-400">Payable</td>
+                                      <td colSpan={2} />
+                                      <td colSpan={2} />
+                                      <td colSpan={2} />
+                                      <td colSpan={2} />
+                                      <td colSpan={2} className="px-2 py-2 text-right">
+                                        <span className="font-mono text-[11px] text-gray-500">PB {fmtN(r.pb_meta.total)}</span>
+                                        <span className="mx-1.5 text-gray-300">=</span>
+                                        <span className={`font-mono text-[11px] font-semibold ${r.checks.find(c => c.id === 'payable_vs_pb')?.ok ? 'text-rose-600 dark:text-rose-400' : 'text-red-600'}`}>
+                                          PURB CR {fmtN(r.purb_jv.payable)}
+                                        </span>
+                                        <span className="ml-1.5 inline-flex">{chkIcon(r.checks.find(c => c.id === 'payable_vs_pb')?.ok ?? true)}</span>
+                                      </td>
+                                    </tr>
+                                  </tfoot>
+                                </table>
                               </div>
-                              <span className="self-center" />
-                              <span className="text-right w-24 font-mono text-[12px] self-center text-gray-400">total DR {fmtN(r.purb_jv.total_dr)}</span>
-                              <span className="text-right w-24 font-mono text-[12px] self-center text-rose-600 dark:text-rose-400">{fmtN(r.inv_jv.total_dr)}</span>
-                              <span className="self-center">{chkIcon(invEqChk.ok)}</span>
                             </div>
-                          )}
+                          )
+                        })()}
+
+                        {/* ── Detailed checks ──────────────────────────── */}
+                        {(() => {
+                          const groups: { label: string; ids: string[] }[] = [
+                            { label: 'Document',       ids: ['purb_found', 'inv_found', 'ref_found', 'inv_ref_found', 'purb_balanced', 'inv_balanced'] },
+                            { label: 'Dates & Period', ids: ['date_match', 'fy_match', 'period_match', 'txn_date_match', 'fiscal_year_match'] },
+                            { label: 'Amounts',        ids: ['taxable_vs_purb', 'taxable_vs_inv', 'gst_total_match', 'payable_vs_pb', 'inv_eq_purb_minus_gst'] },
+                            { label: 'GST',            ids: r.checks.filter(c => c.id.startsWith('gst_rate_') || c.id.startsWith('gst_type')).map(c => c.id) },
+                            { label: 'Discount / TDS', ids: ['discount_dr', 'discount_wash', 'discount_match', 'tds_match'] },
+                          ]
+                          const coveredIds = new Set(groups.flatMap(g => g.ids))
+                          const othersGroup = r.checks.filter(c => !coveredIds.has(c.id)).map(c => c.id)
+                          if (othersGroup.length > 0) groups.push({ label: 'Other', ids: othersGroup })
+                          return (
+                            <div className="border-b border-gray-200 dark:border-gray-700">
+                              <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
+                                Checks
+                              </div>
+                              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                                {groups.map(grp => {
+                                  const chks = r.checks.filter(c => grp.ids.includes(c.id))
+                                  if (chks.length === 0) return null
+                                  return (
+                                    <div key={grp.label} className="px-3 py-1.5">
+                                      <div className="text-[9px] font-semibold uppercase tracking-widest text-gray-300 dark:text-gray-600 mb-1">{grp.label}</div>
+                                      <div className="flex flex-col gap-1">
+                                        {chks.map(chk => (
+                                          <div key={chk.id} className="flex items-start gap-2">
+                                            {chk.ok
+                                              ? <CheckCircle2 className="size-3 text-emerald-500 shrink-0 mt-0.5" />
+                                              : <XCircle className="size-3 text-red-500 shrink-0 mt-0.5" />}
+                                            <div>
+                                              <span className={`text-[11px] ${chk.ok ? 'text-gray-600 dark:text-gray-400' : 'text-red-700 dark:text-red-400 font-medium'}`}>{chk.label}</span>
+                                              {chk.detail && !chk.ok && <div className="text-[10px] text-gray-400 font-mono mt-0.5">{chk.detail}</div>}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })()}
+
+                        {/* ── Collapsible JV ledgers ───────────────────── */}
+                        <div className="border-b border-gray-200 dark:border-gray-700 px-3 py-2 flex gap-2">
+                          <button
+                            onClick={() => setCcShowPurbLedger(v => !v)}
+                            className={`text-[11px] h-6 px-2.5 rounded border transition-colors cursor-pointer ${ccShowPurbLedger ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 hover:border-blue-300 hover:text-blue-600'}`}>
+                            {ccShowPurbLedger ? '▾' : '▸'} PURB JV
+                          </button>
+                          <button
+                            onClick={() => setCcShowInvLedger(v => !v)}
+                            className={`text-[11px] h-6 px-2.5 rounded border transition-colors cursor-pointer ${ccShowInvLedger ? 'border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 hover:border-rose-300 hover:text-rose-600'}`}>
+                            {ccShowInvLedger ? '▾' : '▸'} INV JV
+                          </button>
                         </div>
 
-                        {/* ── Failed checks callout ────────────────────── */}
-                        {failedChecks.length > 0 && (
-                          <div className="border-b border-gray-200 dark:border-gray-700">
-                            <div className="px-3 py-1.5 bg-red-50 dark:bg-red-900/20 text-[10px] font-semibold uppercase tracking-widest text-red-600 dark:text-red-400 border-b border-red-100 dark:border-red-800">
-                              Failed Checks
-                            </div>
-                            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                              {failedChecks.map(chk => (
-                                <div key={chk.id} className="px-3 py-2 flex items-start gap-2 bg-red-50/30 dark:bg-red-900/5">
-                                  <XCircle className="size-3.5 text-red-500 shrink-0 mt-0.5" />
-                                  <div>
-                                    <div className="text-[12px] text-gray-800 dark:text-gray-200">{chk.label}</div>
-                                    {chk.detail && <div className="text-[11px] text-gray-400 font-mono mt-0.5">{chk.detail}</div>}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* ── All checks compact list ──────────────────── */}
-                        {failedChecks.length === 0 && (
-                          <div className="border-b border-gray-200 dark:border-gray-700">
-                            <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
-                              All Checks Passed
-                            </div>
-                            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                              {r.checks.map(chk => (
-                                <div key={chk.id} className="px-3 py-1.5 flex items-center gap-2">
-                                  <CheckCircle2 className="size-3 text-emerald-500 shrink-0" />
-                                  <span className="text-[11px] text-gray-600 dark:text-gray-400">{chk.label}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* ── Per-commodity ────────────────────────────── */}
-                        {r.commodity_rows.length > 0 && (
-                          <div className="border-b border-gray-200 dark:border-gray-700">
-                            <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
-                              Per-Commodity — PURB Purchase@GST = INV Closing Stock
-                            </div>
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-[11px]">
-                                <thead>
-                                  <tr className="text-gray-400 border-b border-gray-100 dark:border-gray-800">
-                                    <th className="px-3 py-1.5 text-left">Commodity</th>
-                                    <th className="px-3 py-1.5 text-right">PURB Purchase@GST</th>
-                                    <th className="px-3 py-1.5 text-right">PURB GST (I/C/S)</th>
-                                    <th className="px-3 py-1.5 text-right">INV Closing DR</th>
-                                    <th className="px-3 py-1.5 text-center w-8" />
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {r.commodity_rows.map((row, i) => {
-                                    const gstParts = [
-                                      row.purb_igst ? `I ${fmtN(row.purb_igst)}` : null,
-                                      row.purb_cgst ? `C ${fmtN(row.purb_cgst)}` : null,
-                                      row.purb_sgst ? `S ${fmtN(row.purb_sgst)}` : null,
-                                    ].filter(Boolean).join(' / ')
-                                    return (
-                                      <tr key={i} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
-                                        <td className="px-3 py-1.5 font-medium text-gray-700 dark:text-gray-300">{row.commodity}</td>
-                                        <td className="px-3 py-1.5 text-right font-mono text-blue-700 dark:text-blue-300">{fmtN(row.purb_purchase_gst)}</td>
-                                        <td className="px-3 py-1.5 text-right font-mono text-gray-400 text-[10px]">{gstParts || '—'}</td>
-                                        <td className="px-3 py-1.5 text-right font-mono text-rose-600 dark:text-rose-400">{fmtN(row.inv_closing_dr)}</td>
-                                        <td className="px-3 py-1.5 text-center">{chkIcon(row.taxable_match && row.inv_balanced)}</td>
-                                      </tr>
-                                    )
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* ── PURB JV Accounting Entries (grouped by commodity) ── */}
-                        {r.purb_jv.rows.length > 0 && (() => {
-                          // group by commodity
+                        {/* PURB JV ledger (collapsible) */}
+                        {ccShowPurbLedger && r.purb_jv.rows.length > 0 && (() => {
                           const grpMap = new Map<string, typeof r.purb_jv.rows>()
                           for (const row of r.purb_jv.rows) {
                             const key = row.commodity || ''
                             if (!grpMap.has(key)) grpMap.set(key, [])
                             grpMap.get(key)!.push(row)
                           }
-                          // put empty-commodity (Payable) last
                           const keys = [...grpMap.keys()].sort((a, b) => a === '' ? 1 : b === '' ? -1 : a.localeCompare(b))
-
                           return (
                             <div className="border-b border-gray-200 dark:border-gray-700">
-                              <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
-                                PURB JV Accounting Entries · {r.pb_ref_no}
+                              <div className="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 text-[10px] font-semibold uppercase tracking-widest text-blue-600 dark:text-blue-400">
+                                PURB JV Entries · {r.pb_ref_no}
                               </div>
                               <table className="w-full text-[11px]">
                                 <thead>
@@ -2738,8 +2799,8 @@ ${rows.join('\n')}
                           )
                         })()}
 
-                        {/* ── INV JV Accounting Entries (grouped by commodity) ── */}
-                        {r.inv_jv.rows.length > 0 && (() => {
+                        {/* INV JV ledger (collapsible) */}
+                        {ccShowInvLedger && r.inv_jv.rows.length > 0 && (() => {
                           const grpMap = new Map<string, typeof r.inv_jv.rows>()
                           for (const row of r.inv_jv.rows) {
                             const key = row.commodity || ''
@@ -2747,11 +2808,10 @@ ${rows.join('\n')}
                             grpMap.get(key)!.push(row)
                           }
                           const keys = [...grpMap.keys()].sort((a, b) => a === '' ? 1 : b === '' ? -1 : a.localeCompare(b))
-
                           return (
                             <div className="border-b border-gray-200 dark:border-gray-700">
-                              <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
-                                INV JV Accounting Entries · {r.inv_ref_no || '—'}
+                              <div className="px-3 py-1.5 bg-rose-50 dark:bg-rose-900/20 text-[10px] font-semibold uppercase tracking-widest text-rose-600 dark:text-rose-400">
+                                INV JV Entries · {r.inv_ref_no || '—'}
                               </div>
                               <table className="w-full text-[11px]">
                                 <thead>
