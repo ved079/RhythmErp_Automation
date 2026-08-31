@@ -4,10 +4,11 @@ import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CheckCircle2, XCircle, Key, RefreshCw, Loader2, AlertTriangle, Search, Download, FileText, FileSpreadsheet, ChevronDown, FileBarChart2 } from 'lucide-react'
+import { CheckCircle2, XCircle, Key, RefreshCw, Loader2, AlertTriangle, Search, Download, FileText, FileSpreadsheet, ChevronDown, FileBarChart2, Maximize2, X, GitCompare } from 'lucide-react'
+import * as DialogPrimitive from '@radix-ui/react-dialog'
 import Spinner from '@/components/ui/Spinner'
 import LoadingCard from '@/components/ui/LoadingCard'
-import { verifyJV, verifyInvJV, fetchPBList, fetchPBItems, fetchAccountingDef, type JVVerifyStep, type PBListItem, type PBItemLine, type AccountingDefDetail, type InvCommodityRow } from '@/lib/api'
+import { verifyJV, verifyInvJV, fetchPBList, fetchPBItems, fetchAccountingDef, crossCheckJV, type JVVerifyStep, type PBListItem, type PBItemLine, type AccountingDefDetail, type InvCommodityRow, type PurbMeta, type CrossCheckResponse } from '@/lib/api'
 import { useErpToken } from '@/hooks/useErpToken'
 
 interface Props {
@@ -54,6 +55,8 @@ export function JVCheckSection({ erpToken, erpTenantId, onNeedsToken, onClearTok
   const [accountingDef, setAccountingDef] = useState<AccountingDefDetail[]>([])
   const [accountingDefLoading, setAccountingDefLoading] = useState(false)
   const [notAppliedOpen, setNotAppliedOpen] = useState(false)
+  const [purbMeta, setPurbMeta] = useState<PurbMeta | null>(null)
+  const [purbFullViewOpen, setPurbFullViewOpen] = useState(false)
 
   useEffect(() => {
     if (showTokenInput) {
@@ -129,6 +132,7 @@ export function JVCheckSection({ erpToken, erpTenantId, onNeedsToken, onClearTok
       ])
       setJvSteps(jvRes.steps)
       setJvAccountRows(jvRes.account_rows ?? [])
+      setPurbMeta(jvRes.purb_meta ?? null)
     } catch (err) {
       if (!handleAuthError(err)) setJvError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -742,21 +746,51 @@ ${rows.join('\n')}
   }, [selectedPB, jvSteps, jvCompRows, jvAccountRows, accountingDef, pbRefNo])
 
   // ── Inventory JV tab state ──────────────────────────────
-  const [jvTab, setJvTab] = useState<'purchase' | 'inventory'>('purchase')
+  const [jvTab, setJvTab] = useState<'purchase' | 'inventory' | 'crosscheck'>('purchase')
   const [invVerifying, setInvVerifying] = useState(false)
   const [invSteps, setInvSteps] = useState<JVVerifyStep[]>([])
   const [invCommodityRows, setInvCommodityRows] = useState<InvCommodityRow[]>([])
   const [invJvRows, setInvJvRows] = useState<{ account_name: string; dr_cr: string; commodity: string; amount: number | null }[]>([])
   const [invError, setInvError] = useState('')
   const [invJvMeta, setInvJvMeta] = useState<import('@/lib/api').JVMeta | null>(null)
+  const [fullViewOpen, setFullViewOpen] = useState(false)
+  // Inventory tab has its own PB selection, independent of purchase tab
+  const [invSelectedPB, setInvSelectedPB] = useState<PBListItem | null>(null)
+  const [invPbRefNo, setInvPbRefNo] = useState('')
 
+
+  // ── Cross-Check tab state ───────────────────────────────
+  const [ccSelectedPB, setCcSelectedPB] = useState<PBListItem | null>(null)
+  const [ccPbRefNo, setCcPbRefNo] = useState('')
+  const [ccLoading, setCcLoading] = useState(false)
+  const [ccResult, setCcResult] = useState<CrossCheckResponse | null>(null)
+  const [ccError, setCcError] = useState('')
+  const [ccFullViewOpen, setCcFullViewOpen] = useState(false)
+  const ccExportXlsRef = useRef<(() => void) | null>(null)
+  const ccExportPdfRef = useRef<(() => void) | null>(null)
+  const ccOnFullViewRef = useRef<(() => void) | null>(null)
+
+  const handleCcVerifyFor = useCallback(async (pb: PBListItem) => {
+    if (!token || !tenantId) return
+    setCcLoading(true)
+    setCcError('')
+    setCcResult(null)
+    try {
+      const res = await crossCheckJV(token, tenantId, pb.ref_no, String(pb.id))
+      setCcResult(res)
+    } catch (err) {
+      if (!handleAuthError(err)) setCcError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setCcLoading(false)
+    }
+  }, [token, tenantId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Inventory JV exports ────────────────────────────────
 
   const exportInvJvReport = useCallback(() => {
-    if (!selectedPB || invSteps.length === 0) return
+    if (!invSelectedPB || invSteps.length === 0) return
     const ok = invSteps.every(s => s.ok)
-    const pbRef = selectedPB.ref_no
+    const pbRef = invSelectedPB.ref_no
 
     const escXml = (v: string | number) => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
     const cell = (style: string, value: string | number, mergeAcross?: number) => {
@@ -772,8 +806,8 @@ ${rows.join('\n')}
     rows.push('<Row ss:Height="8"/>')
 
     rows.push(`<Row ss:Height="19">${cell('sSection', 'DOCUMENT DETAILS', 4)}</Row>`)
-    rows.push(`<Row>${cell('sLabel', 'Supplier')}${cell('sVal', selectedPB.supplier ?? '—', 3)}</Row>`)
-    rows.push(`<Row>${cell('sLabel', 'Date')}${cell('sVal', selectedPB.date ?? '—')}${cell('sLabel', 'PB Ref')}${cell('sVal', pbRef)}${emptyCell()}</Row>`)
+    rows.push(`<Row>${cell('sLabel', 'Supplier')}${cell('sVal', invSelectedPB.supplier ?? '—', 3)}</Row>`)
+    rows.push(`<Row>${cell('sLabel', 'Date')}${cell('sVal', invSelectedPB.date ?? '—')}${cell('sLabel', 'PB Ref')}${cell('sVal', pbRef)}${emptyCell()}</Row>`)
     rows.push('<Row ss:Height="8"/>')
 
     rows.push(`<Row ss:Height="19">${cell('sSection', 'VERIFICATION STEPS', 4)}</Row>`)
@@ -862,12 +896,12 @@ ${rows.join('\n')}
     a.download = `${pbRef.replace(/[\\/]/g, '-')}_INV_JV_Report.xls`
     document.body.appendChild(a); a.click(); a.remove()
     URL.revokeObjectURL(url)
-  }, [selectedPB, invSteps, invCommodityRows, invJvRows])
+  }, [invSelectedPB, invSteps, invCommodityRows, invJvRows])
 
   const exportInvJvPdf = useCallback(async () => {
-    if (!selectedPB || invSteps.length === 0) return
+    if (!invSelectedPB || invSteps.length === 0) return
     const ok = invSteps.every(s => s.ok)
-    const pbRef = selectedPB.ref_no
+    const pbRef = invSelectedPB.ref_no
 
     const safe = (v: string | number | null | undefined) =>
       String(v ?? '').replace(/₹/g,'Rs. ').replace(/[—–]/g,'-').replace(/['']/g,"'")
@@ -976,8 +1010,8 @@ ${rows.join('\n')}
 
     // Document Details
     sectionHeader('Document Details')
-    row4([{ t:'Supplier', lbl:true }, { t:safe(selectedPB.supplier??'-'), span:3 }])
-    row4([{ t:'Date', lbl:true }, { t:safe(selectedPB.date??'-') }, { t:'PB Ref', lbl:true }, { t:safe(pbRef) }])
+    row4([{ t:'Supplier', lbl:true }, { t:safe(invSelectedPB.supplier??'-'), span:3 }])
+    row4([{ t:'Date', lbl:true }, { t:safe(invSelectedPB.date??'-') }, { t:'PB Ref', lbl:true }, { t:safe(pbRef) }])
 
     // Steps
     sectionHeader('Verification Steps')
@@ -1099,9 +1133,9 @@ ${rows.join('\n')}
       win.document.close()
     }
     setTimeout(() => URL.revokeObjectURL(pdfUrl), 120_000)
-  }, [selectedPB, invSteps, invCommodityRows, invJvRows])
+  }, [invSelectedPB, invSteps, invCommodityRows, invJvRows])
 
-  const handleInvVerify = async () => { if (selectedPB) handleInvVerifyFor(selectedPB) }
+  const handleInvVerify = async () => { if (invSelectedPB) handleInvVerifyFor(invSelectedPB) }
 
   const handleInvVerifyFor = async (pb: PBListItem) => {
     if (!token || !tenantId) return
@@ -1133,17 +1167,18 @@ ${rows.join('\n')}
         {/* Header */}
         <div className="px-4 border-b border-gray-200 dark:border-gray-700 shrink-0 flex items-center gap-0 h-11">
           <Search className="size-4 text-[#3F51B5] dark:text-[#7986CB] mr-2 shrink-0" />
-          {(['purchase', 'inventory'] as const).map((tab) => (
+          {(['purchase', 'inventory', 'crosscheck'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setJvTab(tab)}
-              className={`h-full px-4 text-[12px] font-medium border-b-2 transition-colors cursor-pointer ${
+              className={`h-full px-4 text-[12px] font-medium border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
                 jvTab === tab
                   ? 'border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB] dark:border-[#7986CB]'
                   : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
             >
-              {tab === 'purchase' ? 'Purchase Account JV' : 'Inventory Account JV'}
+              {tab === 'crosscheck' && <GitCompare className="size-3" />}
+              {tab === 'purchase' ? 'Purchase Account JV' : tab === 'inventory' ? 'Inventory Account JV' : 'Cross-Check'}
             </button>
           ))}
         </div>
@@ -1151,7 +1186,7 @@ ${rows.join('\n')}
         {jvTab === 'inventory' && (
           <div className="p-4 overflow-y-auto flex-1 min-h-0 space-y-4">
             {/* No PB selected — show PB list */}
-            {!selectedPB && !pbRefNo.trim() && (
+            {!invSelectedPB && !invPbRefNo.trim() && (
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <Label className="text-[11px] text-gray-700 dark:text-gray-300">Select Purchase Booking</Label>
@@ -1165,7 +1200,7 @@ ${rows.join('\n')}
                     <Input value={pbSearch} onChange={(e) => setPbSearch(e.target.value)} placeholder="Search by ref no or supplier…" className="h-8 text-[12px] mb-2" />
                     <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
                       {pbList.filter(pb => { const q = pbSearch.toLowerCase(); return !q || pb.ref_no.toLowerCase().includes(q) || pb.supplier.toLowerCase().includes(q) }).map((pb, _i) => (
-                        <button key={pb.id ?? `${pb.ref_no}-${_i}`} onClick={() => { setPbRefNo(pb.ref_no); setSelectedPB(pb); handleInvVerifyFor(pb) }}
+                        <button key={pb.id ?? `${pb.ref_no}-${_i}`} onClick={() => { setInvPbRefNo(pb.ref_no); setInvSelectedPB(pb); handleInvVerifyFor(pb) }}
                           className="w-full text-left px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10 transition-colors cursor-pointer">
                           <div className="flex items-center justify-between gap-3">
                             <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{pb.ref_no}</span>
@@ -1234,13 +1269,18 @@ ${rows.join('\n')}
                   <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-700">
                     <div className="flex items-center gap-2 min-w-0">
                       <FileBarChart2 className="size-3.5 shrink-0 text-[#3F51B5] dark:text-[#7986CB]" />
-                      <span className="text-[12px] font-mono font-bold text-gray-800 dark:text-gray-100 truncate">{selectedPB?.ref_no || pbRefNo}</span>
+                      <span className="text-[12px] font-mono font-bold text-gray-800 dark:text-gray-100 truncate">{invSelectedPB?.ref_no || invPbRefNo}</span>
                       {!invVerifying && invSteps.length > 0 && (invPassed ? pill('green', '✓ Passed') : pill('red', '✕ Failed'))}
                       {invVerifying && <Loader2 className="size-3.5 animate-spin text-[#3F51B5] shrink-0" />}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       {!invVerifying && invSteps.length > 0 && (
                         <>
+                          <button
+                            onClick={() => setFullViewOpen(true)}
+                            className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-[#3F51B5]/40 bg-[#3F51B5]/5 text-[#3F51B5] dark:text-[#7986CB] hover:bg-[#3F51B5]/10 dark:hover:bg-[#3F51B5]/20 transition-colors cursor-pointer">
+                            <Maximize2 className="size-3" />Full View
+                          </button>
                           <button
                             onClick={exportInvJvPdf}
                             className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:border-red-300 dark:hover:border-red-700 transition-colors cursor-pointer">
@@ -1254,7 +1294,7 @@ ${rows.join('\n')}
                         </>
                       )}
                       <button
-                        onClick={() => { setSelectedPB(null); setPbRefNo(''); setInvSteps([]); setInvCommodityRows([]); setInvJvRows([]); setInvJvMeta(null); setInvError('') }}
+                        onClick={() => { setInvSelectedPB(null); setInvPbRefNo(''); setInvSteps([]); setInvCommodityRows([]); setInvJvRows([]); setInvJvMeta(null); setInvError('') }}
                         className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] hover:border-[#3F51B5]/50 transition-colors cursor-pointer">
                         <RefreshCw className="size-3" />Change
                       </button>
@@ -1265,11 +1305,11 @@ ${rows.join('\n')}
                   <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-200 dark:border-gray-700">
                     <div className="px-4 py-3">
                       <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">Supplier</div>
-                      <div className="text-[13px] font-medium text-gray-800 dark:text-gray-100 truncate">{selectedPB?.supplier ?? '—'}</div>
+                      <div className="text-[13px] font-medium text-gray-800 dark:text-gray-100 truncate">{invSelectedPB?.supplier ?? '—'}</div>
                     </div>
                     <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 sm:border-t-0">
                       <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">Date</div>
-                      <div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{selectedPB?.date?.slice(0,10) ?? '—'}</div>
+                      <div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{invSelectedPB?.date?.slice(0,10) ?? '—'}</div>
                     </div>
                     <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 sm:border-t-0">
                       <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">Inventory JV</div>
@@ -1473,6 +1513,142 @@ ${rows.join('\n')}
                         </table>
                       </div>
                     </>
+                  )}
+
+                  {/* ── Full View Portal Modal ── */}
+                  {fullViewOpen && (
+                    <DialogPrimitive.Root open={fullViewOpen} onOpenChange={setFullViewOpen}>
+                      <DialogPrimitive.Portal>
+                        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+                        <DialogPrimitive.Content className="fixed inset-4 z-50 flex flex-col bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+                          <DialogPrimitive.Title className="sr-only">JV Check Full View — {invSelectedPB?.ref_no || invPbRefNo}</DialogPrimitive.Title>
+
+                          {/* Modal header */}
+                          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-gradient-to-r from-[#3F51B5]/[0.06] to-transparent">
+                            <div className="flex items-center gap-3">
+                              <FileBarChart2 className="size-4 text-[#3F51B5] dark:text-[#7986CB]" />
+                              <span className="text-[14px] font-bold font-mono text-gray-800 dark:text-gray-100">{invSelectedPB?.ref_no || invPbRefNo}</span>
+                              {invPassed ? pill('green', '✓ Passed') : pill('red', '✕ Failed')}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button onClick={exportInvJvPdf} className="text-[11px] flex items-center gap-1 h-7 px-2.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-red-600 hover:border-red-300 transition-colors cursor-pointer"><FileText className="size-3" />PDF</button>
+                              <button onClick={exportInvJvReport} className="text-[11px] flex items-center gap-1 h-7 px-2.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-emerald-600 hover:border-emerald-300 transition-colors cursor-pointer"><FileSpreadsheet className="size-3" />.xls</button>
+                              <button onClick={() => setFullViewOpen(false)} className="size-7 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors cursor-pointer"><X className="size-4" /></button>
+                            </div>
+                          </div>
+
+                          {/* Modal body — scrollable */}
+                          <div className="flex-1 overflow-y-auto min-h-0">
+
+                            {/* Meta strip */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-200 dark:border-gray-700">
+                              <div className="px-5 py-3"><div className="text-[10px] text-gray-400 font-medium mb-0.5">Supplier</div><div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{invSelectedPB?.supplier ?? '—'}</div></div>
+                              <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-800 sm:border-t-0"><div className="text-[10px] text-gray-400 font-medium mb-0.5">PB Date</div><div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{invSelectedPB?.date?.slice(0,10) ?? '—'}</div></div>
+                              {invJvMeta && (
+                                <>
+                                  <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-800 sm:border-t-0"><div className="text-[10px] text-gray-400 font-medium mb-0.5">Fiscal Year</div><div className={`text-[13px] font-medium ${invJvMeta.purb_fiscal_year === invJvMeta.inv_fiscal_year ? 'text-gray-800 dark:text-gray-100' : 'text-red-600 dark:text-red-400'}`}>{invJvMeta.purb_fiscal_year || '—'}</div></div>
+                                  <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-800 sm:border-t-0"><div className="text-[10px] text-gray-400 font-medium mb-0.5">Period</div><div className={`text-[13px] font-medium ${invJvMeta.purb_period === invJvMeta.inv_period ? 'text-gray-800 dark:text-gray-100' : 'text-red-600 dark:text-red-400'}`}>{invJvMeta.purb_period || '—'}</div></div>
+                                </>
+                              )}
+                            </div>
+
+                            {/* Two-column layout: steps left, commodity right */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">
+
+                              {/* Left: Verification steps */}
+                              <div className="p-5">
+                                <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">Verification Steps</h3>
+                                <div className="space-y-1.5">
+                                  {invSteps.map((s, i) => (
+                                    <div key={i} className={`flex items-start gap-2.5 px-3 py-2 rounded-lg text-[12px] ${s.ok ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'bg-red-50 dark:bg-red-900/10'}`}>
+                                      {s.ok ? <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0 mt-px" /> : <XCircle className="size-3.5 text-red-500 shrink-0 mt-px" />}
+                                      <div className="min-w-0">
+                                        <div className={`font-medium leading-tight ${s.ok ? 'text-gray-700 dark:text-gray-200' : 'text-red-700 dark:text-red-300'}`}>{s.label}</div>
+                                        {s.detail && <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 font-mono truncate">{s.detail}</div>}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Right: Per-commodity + accounting entries */}
+                              <div className="p-5 space-y-5">
+                                {invCommodityRows.length > 0 && (() => {
+                                  const purbHasPerCommodity = invCommodityRows.some(r => r.purb_purchase_exempt_dr != null)
+                                  const col1Label = purbHasPerCommodity ? 'PURB Purchase Exempt DR' : 'INV Purchase Exempt CR'
+                                  const col1Val = (r: InvCommodityRow) => purbHasPerCommodity ? r.purb_purchase_exempt_dr : r.inv_purchase_exempt_cr
+                                  return (
+                                    <>
+                                      <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">Per-Commodity Cross-Check</h3>
+                                      <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                                        <table className="w-full border-collapse text-[12px]">
+                                          <thead><tr className="bg-gray-50 dark:bg-gray-800/80">
+                                            <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">Commodity</th>
+                                            <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap">{col1Label}</th>
+                                            <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap">INV Closing Stock DR</th>
+                                            <th className="px-3 py-2 text-center text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 w-12">✓</th>
+                                          </tr></thead>
+                                          <tbody>
+                                            {invCommodityRows.map((r, i) => (
+                                              <tr key={i} className={r.match ? 'hover:bg-gray-50/50 dark:hover:bg-gray-800/20' : 'bg-red-50 dark:bg-red-900/20'}>
+                                                <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-gray-700 dark:text-gray-300 font-medium text-[11px]">{r.commodity}</td>
+                                                <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-blue-700 dark:text-blue-300">{fmtAmt(col1Val(r))}</td>
+                                                <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-blue-700 dark:text-blue-300">{fmtAmt(r.inv_closing_stock_dr)}</td>
+                                                <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-center">{r.match ? <CheckCircle2 className="size-3.5 text-emerald-500 inline" /> : <XCircle className="size-3.5 text-red-500 inline" />}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </>
+                                  )
+                                })()}
+
+                                {invJvRows.length > 0 && (
+                                  <>
+                                    <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3 mt-5">INV JV Accounting Entries</h3>
+                                    <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                                      <table className="w-full border-collapse text-[12px]">
+                                        <thead><tr className="bg-gray-50 dark:bg-gray-800/80">
+                                          <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 w-12">DR/CR</th>
+                                          <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">Account</th>
+                                          <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">Amount</th>
+                                        </tr></thead>
+                                        <tbody>
+                                          {invSortedKeys.map(key => {
+                                            const rows = invGroups.get(key)!
+                                            return (
+                                              <React.Fragment key={key}>
+                                                {key && <tr><td colSpan={3} className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">{key}</td></tr>}
+                                                {rows.map((row, ri) => (
+                                                  <tr key={ri} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+                                                    <td className={`px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 font-semibold text-[11px] ${row.dr_cr === 'Debit' ? 'text-blue-700 dark:text-blue-300' : 'text-rose-600 dark:text-rose-400'}`}>{row.dr_cr === 'Debit' ? 'DR' : 'CR'}</td>
+                                                    <td className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-gray-700 dark:text-gray-300">{row.account_name}</td>
+                                                    <td className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-gray-700 dark:text-gray-300">{fmtAmt(row.amount)}</td>
+                                                  </tr>
+                                                ))}
+                                              </React.Fragment>
+                                            )
+                                          })}
+                                        </tbody>
+                                        <tfoot><tr className={`${invBalanced ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'bg-red-50 dark:bg-red-900/10'}`}>
+                                          <td colSpan={2} className="px-3 py-2 font-bold text-[11px] text-gray-700 dark:text-gray-200">Total</td>
+                                          <td className="px-3 py-2 text-right font-mono font-bold text-[11px]">
+                                            <span className="text-blue-700 dark:text-blue-300">DR {fmtAmt(invTotalDr)}</span>
+                                            <span className="mx-1 text-gray-400">=</span>
+                                            <span className="text-rose-600 dark:text-rose-400">CR {fmtAmt(invTotalCr)}</span>
+                                          </td>
+                                        </tr></tfoot>
+                                      </table>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </DialogPrimitive.Content>
+                      </DialogPrimitive.Portal>
+                    </DialogPrimitive.Root>
                   )}
 
                 </div>
@@ -1738,6 +1914,10 @@ ${rows.join('\n')}
                     {verifying && <Loader2 className="size-3.5 animate-spin text-[#3F51B5] shrink-0" />}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => setPurbFullViewOpen(true)} disabled={verifying || jvSteps.length === 0}
+                      className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-[#3F51B5]/40 bg-[#3F51B5]/5 text-[#3F51B5] dark:text-[#7986CB] hover:bg-[#3F51B5]/10 dark:hover:bg-[#3F51B5]/20 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                      <Maximize2 className="size-3" />Full View
+                    </button>
                     <button onClick={exportJvPdf} disabled={verifying || jvSteps.length === 0}
                       className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                       <FileText className="size-3" />PDF
@@ -1747,7 +1927,7 @@ ${rows.join('\n')}
                       <Download className="size-3" />.xls
                     </button>
                     <button
-                      onClick={() => { setPbListOpen(true); setJvSteps([]); setJvError(''); setPbRefNo(''); setSelectedPB(null); setPbItems([]); setPbTaxableAmount(null); setPbDiscountAmount(null) }}
+                      onClick={() => { setPbListOpen(true); setJvSteps([]); setJvError(''); setPbRefNo(''); setSelectedPB(null); setPbItems([]); setPbTaxableAmount(null); setPbDiscountAmount(null); setPurbMeta(null) }}
                       className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] hover:border-[#3F51B5]/50 dark:hover:border-[#7986CB]/50 transition-colors cursor-pointer">
                       <RefreshCw className="size-3" />Change
                     </button>
@@ -1785,6 +1965,22 @@ ${rows.join('\n')}
                     </div>
                   </div>
                 </div>
+
+                {/* Transaction date / FY / period meta row */}
+                {purbMeta && (
+                  <div className="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/30">
+                    {([
+                      { label: 'Transaction Date', val: purbMeta.transaction_date },
+                      { label: 'Fiscal Year',      val: purbMeta.fiscal_year },
+                      { label: 'Period',           val: purbMeta.period },
+                    ] as const).map(({ label, val }) => (
+                      <div key={label} className="px-4 py-2.5">
+                        <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">{label}</div>
+                        <span className="text-[11px] font-mono font-medium text-gray-700 dark:text-gray-200">{val || '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* verifying loading state */}
                 {verifying && jvSteps.length === 0 && (
@@ -1988,10 +2184,825 @@ ${rows.join('\n')}
                     )}
                   </>
                 )}
+
+              {/* ── Purchase JV Full View Modal ── */}
+              {purbFullViewOpen && (
+                <DialogPrimitive.Root open={purbFullViewOpen} onOpenChange={setPurbFullViewOpen}>
+                  <DialogPrimitive.Portal>
+                    <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+                    <DialogPrimitive.Content className="fixed inset-4 z-50 flex flex-col bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+                      <DialogPrimitive.Title className="sr-only">Purchase JV Full View — {selectedPB?.ref_no || pbRefNo}</DialogPrimitive.Title>
+
+                      {/* Modal header */}
+                      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-gradient-to-r from-[#3F51B5]/[0.06] to-transparent">
+                        <div className="flex items-center gap-3">
+                          <FileBarChart2 className="size-4 text-[#3F51B5] dark:text-[#7986CB]" />
+                          <span className="text-[14px] font-bold font-mono text-gray-800 dark:text-gray-100">{selectedPB?.ref_no || pbRefNo}</span>
+                          {passed ? pill('green', '✓ Passed') : pill('red', '✕ Failed')}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button onClick={exportJvPdf} className="text-[11px] flex items-center gap-1 h-7 px-2.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-red-600 hover:border-red-300 transition-colors cursor-pointer"><FileText className="size-3" />PDF</button>
+                          <button onClick={exportJvReport} className="text-[11px] flex items-center gap-1 h-7 px-2.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-emerald-600 hover:border-emerald-300 transition-colors cursor-pointer"><Download className="size-3" />.xls</button>
+                          <button onClick={() => setPurbFullViewOpen(false)} className="size-7 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors cursor-pointer"><X className="size-4" /></button>
+                        </div>
+                      </div>
+
+                      {/* Modal body */}
+                      <div className="flex-1 overflow-y-auto min-h-0">
+                        {/* Meta strip */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-200 dark:border-gray-700">
+                          <div className="px-5 py-3"><div className="text-[10px] text-gray-400 font-medium mb-0.5">Supplier</div><div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{selectedPB?.supplier ?? '—'}</div></div>
+                          <div className="px-5 py-3"><div className="text-[10px] text-gray-400 font-medium mb-0.5">Amount</div><div className="text-[13px] font-mono font-medium text-gray-800 dark:text-gray-100">{selectedPB?.amount ? `₹${Number(selectedPB.amount).toLocaleString('en-IN',{maximumFractionDigits:0})}` : '—'}</div></div>
+                          {purbMeta && (
+                            <>
+                              <div className="px-5 py-3"><div className="text-[10px] text-gray-400 font-medium mb-0.5">Fiscal Year</div><div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{purbMeta.fiscal_year || '—'}</div></div>
+                              <div className="px-5 py-3"><div className="text-[10px] text-gray-400 font-medium mb-0.5">Period</div><div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{purbMeta.period || '—'}</div></div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Two-column: steps left, entries right */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">
+                          {/* Left: steps + field cross-check */}
+                          <div className="p-5 space-y-4">
+                            <div>
+                              <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">Verification Steps</h3>
+                              <div className="space-y-1.5">
+                                {jvSteps.map((s, i) => (
+                                  <div key={i} className={`flex items-start gap-2.5 px-3 py-2 rounded-lg text-[12px] ${s.ok ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'bg-red-50 dark:bg-red-900/10'}`}>
+                                    {s.ok ? <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0 mt-px" /> : <XCircle className="size-3.5 text-red-500 shrink-0 mt-px" />}
+                                    <div className="min-w-0">
+                                      <div className={`font-medium leading-tight ${s.ok ? 'text-gray-700 dark:text-gray-200' : 'text-red-700 dark:text-red-300'}`}>{s.label}</div>
+                                      {s.detail && <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 font-mono">{s.detail}</div>}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            {xrows.length > 0 && (
+                              <div>
+                                <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">Field Cross-Check</h3>
+                                <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                                  <table className="w-full border-collapse text-[12px]">
+                                    <thead><tr className="bg-gray-50 dark:bg-gray-800/80">
+                                      {(['Field','PB Value','JV Value','✓'] as const).map(h => (
+                                        <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">{h}</th>
+                                      ))}
+                                    </tr></thead>
+                                    <tbody>
+                                      {xrows.map((row, ri) => {
+                                        const match = row.pb!=='—' && row.jv!=='—' && row.pb.trim().toLowerCase()===row.jv.trim().toLowerCase()
+                                        const unk = row.pb==='—' || row.jv==='—'
+                                        const fail = !unk && !match
+                                        return (
+                                          <tr key={ri} className={fail ? 'bg-red-50 dark:bg-red-900/20' : ''}>
+                                            <td className={`px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 font-medium text-[11px] ${fail?'text-red-700 dark:text-red-300':'text-gray-700 dark:text-gray-300'} ${row.indent?'pl-6':''}`}>{row.label||'—'}</td>
+                                            <td className={`px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 font-mono text-[11px] ${fail?'text-red-600 font-semibold':row.pb==='—'?'text-gray-300 dark:text-gray-600':''}`}>{row.pb}</td>
+                                            <td className={`px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 font-mono text-[11px] ${fail?'text-red-600 font-semibold':row.jv==='—'?'text-gray-300 dark:text-gray-600':''}`}>{row.jv}</td>
+                                            <td className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-center">{unk ? <span className="text-gray-300">—</span> : match ? <CheckCircle2 className="size-3 text-emerald-500 inline" /> : <XCircle className="size-3 text-red-500 inline" />}</td>
+                                          </tr>
+                                        )
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Right: accounting entries */}
+                          {jvAccountRows.length > 0 && (
+                            <div className="p-5">
+                              <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">Accounting Entries</h3>
+                              <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                                <table className="w-full border-collapse text-[12px]">
+                                  <thead><tr className="bg-gray-50 dark:bg-gray-800/80">
+                                    <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 w-12">DR/CR</th>
+                                    <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">Account</th>
+                                    <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">Amount</th>
+                                  </tr></thead>
+                                  <tbody>
+                                    {sortedKeys.map(key => {
+                                      const rows = groups.get(key)!
+                                      return (
+                                        <React.Fragment key={key}>
+                                          {key && <tr><td colSpan={3} className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">{key}</td></tr>}
+                                          {rows.map((row, ri) => (
+                                            <tr key={ri} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+                                              <td className={`px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 font-semibold text-[11px] ${row.dr_cr==='Debit'?'text-blue-700 dark:text-blue-300':'text-rose-600 dark:text-rose-400'}`}>{row.dr_cr==='Debit'?'DR':'CR'}</td>
+                                              <td className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-gray-700 dark:text-gray-300">{row.account_name}</td>
+                                              <td className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-gray-700 dark:text-gray-300">{fmtAmt(row.amount)}</td>
+                                            </tr>
+                                          ))}
+                                        </React.Fragment>
+                                      )
+                                    })}
+                                  </tbody>
+                                  <tfoot><tr className={balanced ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'bg-red-50 dark:bg-red-900/10'}>
+                                    <td colSpan={2} className="px-3 py-2 font-bold text-[11px] text-gray-700 dark:text-gray-200">Total</td>
+                                    <td className="px-3 py-2 text-right font-mono font-bold text-[11px]">
+                                      <span className="text-blue-700 dark:text-blue-300">DR {fmtAmt(totalDr)}</span>
+                                      <span className="mx-1 text-gray-400">=</span>
+                                      <span className="text-rose-600 dark:text-rose-400">CR {fmtAmt(totalCr)}</span>
+                                    </td>
+                                  </tr></tfoot>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </DialogPrimitive.Content>
+                  </DialogPrimitive.Portal>
+                </DialogPrimitive.Root>
+              )}
+
               </div>
             )
           })()}
         </div>}
+
+        {/* ── Cross-Check tab ─────────────────────────────────────── */}
+        {jvTab === 'crosscheck' && (() => {
+          const fmtN = (n: number | null | undefined) =>
+            n != null ? n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'
+
+          const passIcon = (ok: boolean) => ok
+            ? <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0" />
+            : <XCircle className="size-3.5 text-red-500 shrink-0" />
+
+          const ccPill = (ok: boolean) => ok
+            ? <span className="inline-flex items-center px-1.5 py-px rounded text-[10px] font-semibold border bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700">✓ Passed</span>
+            : <span className="inline-flex items-center px-1.5 py-px rounded text-[10px] font-semibold border bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-200 dark:border-red-700">✕ Failed</span>
+
+          return (
+            <div className="p-4 overflow-y-auto flex-1 min-h-0 space-y-4">
+              {/* PB selector */}
+              {!ccSelectedPB ? (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-[11px] text-gray-700 dark:text-gray-300">Select Purchase Booking</Label>
+                    <button onClick={loadPBList} disabled={pbListLoading} className="text-[11px] text-[#3F51B5] dark:text-[#7986CB] flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50">
+                      <RefreshCw className={`size-3 ${pbListLoading ? 'animate-spin' : ''}`} />Refresh
+                    </button>
+                  </div>
+                  {pbListLoading && pbList.length === 0 && <LoadingCard message="FETCHING" steps={[{ label: 'Fetching purchase bookings', done: false }]} />}
+                  {!token && <Button onClick={() => setShowTokenInput(true)} variant="outline" size="sm" className="h-8 text-[12px] gap-1.5 cursor-pointer"><Key className="size-3" />Set Token</Button>}
+                  {pbList.length > 0 && (
+                    <>
+                      <Input value={pbSearch} onChange={(e) => setPbSearch(e.target.value)} placeholder="Search by ref no or supplier…" className="h-8 text-[12px] mb-2" />
+                      <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                        {pbList.filter(pb => { const q = pbSearch.toLowerCase(); return !q || pb.ref_no.toLowerCase().includes(q) || pb.supplier.toLowerCase().includes(q) }).map((pb, _i) => (
+                          <button key={pb.id ?? `${pb.ref_no}-${_i}`}
+                            onClick={() => { setCcSelectedPB(pb); setCcPbRefNo(pb.ref_no); handleCcVerifyFor(pb) }}
+                            className="w-full text-left px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10 transition-colors cursor-pointer">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{pb.ref_no}</span>
+                              {pb.amount && <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0 font-medium">₹{Number(pb.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
+                            </div>
+                            {pb.supplier && (
+                              <div className="mt-0.5 flex items-center justify-between gap-2">
+                                <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate font-medium">{pb.supplier}</span>
+                                {pb.date && <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{pb.date}</span>}
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (() => {
+                const ccPassed = ccResult ? ccResult.checks.every(c => c.ok) : false
+                return (
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-900 shadow-sm">
+                  {/* Header bar */}
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <GitCompare className="size-3.5 shrink-0 text-[#3F51B5] dark:text-[#7986CB]" />
+                      <span className="text-[12px] font-mono font-bold text-gray-800 dark:text-gray-100 truncate">{ccSelectedPB.ref_no}</span>
+                      {!ccLoading && ccResult && ccPill(ccPassed)}
+                      {ccLoading && <Loader2 className="size-3.5 animate-spin text-[#3F51B5] shrink-0" />}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {!ccLoading && ccResult && (
+                        <>
+                          <button
+                            onClick={() => ccOnFullViewRef.current?.()}
+                            className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-[#3F51B5]/40 bg-[#3F51B5]/5 text-[#3F51B5] dark:text-[#7986CB] hover:bg-[#3F51B5]/10 dark:hover:bg-[#3F51B5]/20 transition-colors cursor-pointer">
+                            <Maximize2 className="size-3" />Full View
+                          </button>
+                          <button
+                            onClick={() => ccExportPdfRef.current?.()}
+                            className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:border-red-300 dark:hover:border-red-700 transition-colors cursor-pointer">
+                            <FileText className="size-3" />PDF
+                          </button>
+                          <button
+                            onClick={() => ccExportXlsRef.current?.()}
+                            className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-700 transition-colors cursor-pointer">
+                            <FileSpreadsheet className="size-3" />.xls
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={() => { setCcSelectedPB(null); setCcPbRefNo(''); setCcResult(null); setCcError('') }}
+                        className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] hover:border-[#3F51B5]/50 transition-colors cursor-pointer">
+                        <RefreshCw className="size-3" />Change
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Loading */}
+                  {ccLoading && (
+                    <LoadingCard message="VERIFYING" steps={[
+                      { label: 'Fetching PB detail', done: false },
+                      { label: 'Scanning JV report for PURB + INV entries', done: false },
+                      { label: 'Cross-checking amounts, GST, and structure', done: false },
+                    ]} />
+                  )}
+
+                  {/* Error */}
+                  {ccError && !ccLoading && (
+                    <div className="flex items-center gap-2 text-red-600 text-[12px] p-3 m-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                      <AlertTriangle className="size-4 shrink-0" />{ccError}
+                    </div>
+                  )}
+
+                  {ccResult && !ccLoading && (() => {
+                    const r = ccResult
+                    const overallOk = r.checks.every(c => c.ok)
+                    const failedChecks = r.checks.filter(c => !c.ok)
+
+                    // ── Export helpers ────────────────────────────────────
+                    const escXml = (v: string | number) => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+                    const cell = (style: string, value: string | number, mergeAcross?: number) => {
+                      const type = typeof value === 'number' ? 'Number' : 'String'
+                      return `<Cell${mergeAcross != null ? ` ss:MergeAcross="${mergeAcross}"` : ''}${style ? ` ss:StyleID="${style}"` : ''}><Data ss:Type="${type}">${escXml(value)}</Data></Cell>`
+                    }
+                    const emptyCell = () => `<Cell ss:StyleID="sVal"><Data ss:Type="String"></Data></Cell>`
+
+                    const exportCcXls = () => {
+                      const rows: string[] = []
+                      const statusText = overallOk ? '✓ PASSED' : `✕ FAILED (${failedChecks.length} issue${failedChecks.length>1?'s':''})`
+                      rows.push(`<Row ss:Height="28">${cell('sTitle','CROSS-CHECK JV REPORT',4)}${cell(overallOk?'sPass':'sFail',statusText)}</Row>`)
+                      rows.push(`<Row ss:Height="16">${cell('sMeta',`PB: ${r.pb_ref_no}`,2)}${cell('sMeta',`INV: ${r.inv_ref_no||'not found'}`,2)}${cell('sMeta',`Generated: ${new Date().toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'})}`,0)}</Row>`)
+                      rows.push('<Row ss:Height="8"/>')
+                      rows.push(`<Row ss:Height="19">${cell('sSection','AMOUNTS',5)}</Row>`)
+                      rows.push(`<Row>${cell('sLabel','')  }${cell('sLabel','Purchase Booking')}${cell('sLabel','PURB JV')}${cell('sLabel','INV JV')}${cell('sLabel','Match')}</Row>`)
+                      rows.push(`<Row>${cell('sLabel','Taxable')}${cell('sVal',r.pb_meta.taxable)}${cell('sVal',r.purb_jv.purchase_gst_dr)}${cell('sVal',r.inv_jv.total_dr)}${cell(r.checks.find(c=>c.id==='taxable_vs_purb')?.ok?'sPass':'sFail',r.checks.find(c=>c.id==='taxable_vs_purb')?.ok?'✓':'✕')}</Row>`)
+                      if (r.pb_meta.gst_total > 0) rows.push(`<Row>${cell('sLabel','GST')}${cell('sVal',r.pb_meta.gst_total)}${cell('sVal',r.purb_jv.gst_dr)}${emptyCell()}${cell(r.checks.find(c=>c.id==='gst_total_match')?.ok?'sPass':'sFail',r.checks.find(c=>c.id==='gst_total_match')?.ok?'✓':'✕')}</Row>`)
+                      rows.push(`<Row>${cell('sLabel','Payable / Total')}${cell('sVal',r.pb_meta.total)}${cell('sVal',r.purb_jv.payable)}${emptyCell()}${cell(r.checks.find(c=>c.id==='payable_vs_pb')?.ok?'sPass':'sFail',r.checks.find(c=>c.id==='payable_vs_pb')?.ok?'✓':'✕')}</Row>`)
+                      rows.push('<Row ss:Height="8"/>')
+                      rows.push(`<Row ss:Height="19">${cell('sSection','ALL CHECKS',5)}</Row>`)
+                      for (const chk of r.checks) {
+                        rows.push(`<Row>${cell('sLabel',chk.category.toUpperCase())}${cell(chk.ok?'sPass':'sFail',chk.ok?'✓ '+chk.label:'✕ '+chk.label,2)}${cell('sVal',chk.detail||'',1)}</Row>`)
+                      }
+                      const styles = `<Styles>
+                        <Style ss:ID="sTitle"><Alignment ss:Horizontal="Left"/><Font ss:Bold="1" ss:Size="13"/><Interior ss:Color="#3F51B5" ss:Pattern="Solid"/><Font ss:Color="#FFFFFF" ss:Bold="1" ss:Size="13"/></Style>
+                        <Style ss:ID="sPass"><Interior ss:Color="#D1FAE5" ss:Pattern="Solid"/><Font ss:Color="#065F46" ss:Bold="1"/></Style>
+                        <Style ss:ID="sFail"><Interior ss:Color="#FEE2E2" ss:Pattern="Solid"/><Font ss:Color="#991B1B" ss:Bold="1"/></Style>
+                        <Style ss:ID="sSection"><Font ss:Bold="1"/><Interior ss:Color="#EEF2FF" ss:Pattern="Solid"/><Font ss:Color="#3730A3" ss:Bold="1"/></Style>
+                        <Style ss:ID="sLabel"><Font ss:Bold="1" ss:Size="10"/><Interior ss:Color="#F9FAFB" ss:Pattern="Solid"/></Style>
+                        <Style ss:ID="sVal"><Alignment ss:Horizontal="Right"/><NumberFormat ss:Format="#,##0.00"/></Style>
+                        <Style ss:ID="sMeta"><Font ss:Italic="1" ss:Color="#6B7280"/></Style>
+                      </Styles>`
+                      const xml = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">${styles}<Worksheet ss:Name="Cross-Check"><Table>${rows.join('')}</Table></Worksheet></Workbook>`
+                      const blob = new Blob([xml], { type: 'application/vnd.ms-excel' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a'); a.href = url; a.download = `cross-check-${r.pb_ref_no.replace(/\//g,'-')}.xls`; a.click()
+                      URL.revokeObjectURL(url)
+                    }
+
+                    const exportCcPdf = () => {
+                      const lines: string[] = []
+                      lines.push(`CROSS-CHECK JV REPORT — ${overallOk ? 'PASSED' : 'FAILED'}`)
+                      lines.push(`PB: ${r.pb_ref_no}  |  INV: ${r.inv_ref_no||'not found'}  |  FY: ${r.purb_jv.fiscal_year}  Period: ${r.purb_jv.period}`)
+                      lines.push(`Supplier: ${ccSelectedPB!.supplier||'—'}  |  Date: ${ccSelectedPB!.date||'—'}`)
+                      lines.push('')
+                      lines.push('AMOUNTS')
+                      lines.push(`  Taxable:   PB ${fmtN(r.pb_meta.taxable)}  |  PURB JV ${fmtN(r.purb_jv.purchase_gst_dr)}  |  INV JV ${fmtN(r.inv_jv.total_dr)}`)
+                      if (r.pb_meta.gst_total > 0) lines.push(`  GST:       PB ${fmtN(r.pb_meta.gst_total)}  |  PURB JV ${fmtN(r.purb_jv.gst_dr)}`)
+                      lines.push(`  Payable:   PB ${fmtN(r.pb_meta.total)}  |  PURB JV ${fmtN(r.purb_jv.payable)}`)
+                      lines.push('')
+                      lines.push('CHECKS')
+                      for (const chk of r.checks) {
+                        lines.push(`  ${chk.ok ? '✓' : '✕'} [${chk.category}] ${chk.label}`)
+                        if (!chk.ok && chk.detail) lines.push(`      ${chk.detail}`)
+                      }
+                      const content = lines.join('\n')
+                      const win = window.open('', '_blank')
+                      if (win) { win.document.write(`<html><head><title>Cross-Check ${r.pb_ref_no}</title><style>body{font-family:monospace;font-size:12px;padding:24px;white-space:pre}</style></head><body>${content.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</body></html>`); win.document.close(); win.print() }
+                    }
+
+                    // ── Full View state (local to this IIFE via ref) ─────
+                    // We use a separate state declared at component level
+                    const chkIcon = (ok: boolean) => ok
+                      ? <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0" />
+                      : <XCircle className="size-3.5 text-red-500 shrink-0" />
+
+                    // ── Summary numbers ──────────────────────────────────
+                    const taxableChk = r.checks.find(c => c.id === 'taxable_vs_purb')
+                    const gstChk     = r.checks.find(c => c.id === 'gst_total_match')
+                    const payableChk = r.checks.find(c => c.id === 'payable_vs_pb')
+                    const invEqChk   = r.checks.find(c => c.id === 'inv_eq_purb_minus_gst')
+
+                    return (
+                      <>
+                        {/* ── Compact amount summary grid ─────────────── */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-200 dark:border-gray-700">
+                          {[
+                            { label: 'Supplier', value: ccSelectedPB!.supplier ?? '—', mono: false },
+                            { label: 'Date', value: ccSelectedPB!.date ?? '—', mono: false },
+                            { label: 'FY / Period', value: `${r.purb_jv.fiscal_year} · ${r.purb_jv.period}`, mono: false },
+                            { label: 'INV JV Ref', value: r.inv_ref_no || 'Not found', mono: true },
+                          ].map(({ label, value, mono }) => (
+                            <div key={label} className="px-4 py-3">
+                              <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">{label}</div>
+                              <div className={`text-[13px] font-medium text-gray-800 dark:text-gray-100 truncate ${mono ? 'font-mono text-[11px]' : ''}`}>{value}</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* ── 3-source comparison table ───────────────── */}
+                        <div className="border-b border-gray-200 dark:border-gray-700">
+                          <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
+                            Amount Cross-Check — PB vs PURB JV vs INV JV
+                          </div>
+                          {/* column headers */}
+                          <div className="grid grid-cols-[1fr_auto_auto_auto_auto] text-[10px] font-semibold uppercase text-gray-400 bg-gray-50/60 dark:bg-gray-800/30 px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 gap-x-4">
+                            <span>Line</span>
+                            <span className="text-right w-24">PB</span>
+                            <span className="text-right w-24">PURB JV</span>
+                            <span className="text-right w-24">INV JV</span>
+                            <span className="w-4" />
+                          </div>
+                          {/* Taxable */}
+                          <div className={`grid grid-cols-[1fr_auto_auto_auto_auto] px-3 py-2 gap-x-4 border-b border-gray-100 dark:border-gray-800 ${taxableChk && !taxableChk.ok ? 'bg-red-50/40 dark:bg-red-900/5' : ''}`}>
+                            <div>
+                              <div className="text-[12px] font-medium text-gray-800 dark:text-gray-200">Taxable Amount</div>
+                              <div className="text-[10px] text-gray-400 mt-0.5">Purchase @gst · Closing Stock</div>
+                            </div>
+                            <span className="text-right w-24 font-mono text-[12px] self-center text-gray-700 dark:text-gray-200">{fmtN(r.pb_meta.taxable)}</span>
+                            <span className="text-right w-24 font-mono text-[12px] self-center text-blue-700 dark:text-blue-300">{fmtN(r.purb_jv.purchase_gst_dr)}</span>
+                            <span className="text-right w-24 font-mono text-[12px] self-center text-rose-600 dark:text-rose-400">{fmtN(r.inv_jv.total_dr)}</span>
+                            <span className="self-center">{taxableChk && chkIcon(taxableChk.ok)}</span>
+                          </div>
+                          {/* GST */}
+                          {r.pb_meta.gst_total > 0 && (
+                            <div className={`grid grid-cols-[1fr_auto_auto_auto_auto] px-3 py-2 gap-x-4 border-b border-gray-100 dark:border-gray-800 ${gstChk && !gstChk.ok ? 'bg-red-50/40 dark:bg-red-900/5' : ''}`}>
+                              <div>
+                                <div className="text-[12px] font-medium text-gray-800 dark:text-gray-200">GST</div>
+                                <div className="text-[10px] text-gray-400 mt-0.5">
+                                  {r.purb_jv.igst_dr > 0 ? `IGST` : 'CGST + SGST'}
+                                  {r.checks.find(c=>c.id.startsWith('gst_rate_')) && (() => { const rc = r.checks.find(c=>c.id.startsWith('gst_rate_')); return rc ? ` · ${rc.label.match(/\d+\.?\d*%/)?.[0]||''}` : '' })()}
+                                </div>
+                              </div>
+                              <span className="text-right w-24 font-mono text-[12px] self-center text-gray-700 dark:text-gray-200">{fmtN(r.pb_meta.gst_total)}</span>
+                              <span className="text-right w-24 font-mono text-[12px] self-center text-blue-700 dark:text-blue-300">{fmtN(r.purb_jv.gst_dr)}</span>
+                              <span className="text-right w-24 font-mono text-[12px] self-center text-gray-400">—</span>
+                              <span className="self-center">{gstChk && chkIcon(gstChk.ok)}</span>
+                            </div>
+                          )}
+                          {/* Payable */}
+                          <div className={`grid grid-cols-[1fr_auto_auto_auto_auto] px-3 py-2 gap-x-4 border-b border-gray-100 dark:border-gray-800 ${payableChk && !payableChk.ok ? 'bg-red-50/40 dark:bg-red-900/5' : ''}`}>
+                            <div>
+                              <div className="text-[12px] font-medium text-gray-800 dark:text-gray-200">Payable (Total)</div>
+                              <div className="text-[10px] text-gray-400 mt-0.5">Taxable + GST{r.pb_meta.tds > 0 ? ' − TDS' : ''}</div>
+                            </div>
+                            <span className="text-right w-24 font-mono text-[12px] self-center font-semibold text-gray-700 dark:text-gray-200">{fmtN(r.pb_meta.total)}</span>
+                            <span className="text-right w-24 font-mono text-[12px] self-center font-semibold text-rose-600 dark:text-rose-400">{fmtN(r.purb_jv.payable)}</span>
+                            <span className="text-right w-24 font-mono text-[12px] self-center text-gray-400">—</span>
+                            <span className="self-center">{payableChk && chkIcon(payableChk.ok)}</span>
+                          </div>
+                          {/* INV formula */}
+                          {invEqChk && (
+                            <div className={`grid grid-cols-[1fr_auto_auto_auto_auto] px-3 py-2 gap-x-4 ${!invEqChk.ok ? 'bg-red-50/40 dark:bg-red-900/5' : 'bg-blue-50/30 dark:bg-blue-900/5'}`}>
+                              <div>
+                                <div className="text-[12px] font-medium text-gray-800 dark:text-gray-200">INV = PURB − GST</div>
+                                <div className="text-[10px] text-gray-400 mt-0.5 font-mono">{fmtN(r.purb_jv.total_dr)} − {fmtN(r.purb_jv.gst_dr)} = {fmtN(r.purb_jv.total_dr - r.purb_jv.gst_dr)}</div>
+                              </div>
+                              <span className="self-center" />
+                              <span className="text-right w-24 font-mono text-[12px] self-center text-gray-400">total DR {fmtN(r.purb_jv.total_dr)}</span>
+                              <span className="text-right w-24 font-mono text-[12px] self-center text-rose-600 dark:text-rose-400">{fmtN(r.inv_jv.total_dr)}</span>
+                              <span className="self-center">{chkIcon(invEqChk.ok)}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* ── Failed checks callout ────────────────────── */}
+                        {failedChecks.length > 0 && (
+                          <div className="border-b border-gray-200 dark:border-gray-700">
+                            <div className="px-3 py-1.5 bg-red-50 dark:bg-red-900/20 text-[10px] font-semibold uppercase tracking-widest text-red-600 dark:text-red-400 border-b border-red-100 dark:border-red-800">
+                              Failed Checks
+                            </div>
+                            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                              {failedChecks.map(chk => (
+                                <div key={chk.id} className="px-3 py-2 flex items-start gap-2 bg-red-50/30 dark:bg-red-900/5">
+                                  <XCircle className="size-3.5 text-red-500 shrink-0 mt-0.5" />
+                                  <div>
+                                    <div className="text-[12px] text-gray-800 dark:text-gray-200">{chk.label}</div>
+                                    {chk.detail && <div className="text-[11px] text-gray-400 font-mono mt-0.5">{chk.detail}</div>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── All checks compact list ──────────────────── */}
+                        {failedChecks.length === 0 && (
+                          <div className="border-b border-gray-200 dark:border-gray-700">
+                            <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
+                              All Checks Passed
+                            </div>
+                            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                              {r.checks.map(chk => (
+                                <div key={chk.id} className="px-3 py-1.5 flex items-center gap-2">
+                                  <CheckCircle2 className="size-3 text-emerald-500 shrink-0" />
+                                  <span className="text-[11px] text-gray-600 dark:text-gray-400">{chk.label}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── Per-commodity ────────────────────────────── */}
+                        {r.commodity_rows.length > 0 && (
+                          <div className="border-b border-gray-200 dark:border-gray-700">
+                            <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
+                              Per-Commodity — PURB Purchase@GST = INV Closing Stock
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-[11px]">
+                                <thead>
+                                  <tr className="text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                                    <th className="px-3 py-1.5 text-left">Commodity</th>
+                                    <th className="px-3 py-1.5 text-right">PURB Purchase@GST</th>
+                                    <th className="px-3 py-1.5 text-right">PURB GST (I/C/S)</th>
+                                    <th className="px-3 py-1.5 text-right">INV Closing DR</th>
+                                    <th className="px-3 py-1.5 text-center w-8" />
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {r.commodity_rows.map((row, i) => {
+                                    const gstParts = [
+                                      row.purb_igst ? `I ${fmtN(row.purb_igst)}` : null,
+                                      row.purb_cgst ? `C ${fmtN(row.purb_cgst)}` : null,
+                                      row.purb_sgst ? `S ${fmtN(row.purb_sgst)}` : null,
+                                    ].filter(Boolean).join(' / ')
+                                    return (
+                                      <tr key={i} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+                                        <td className="px-3 py-1.5 font-medium text-gray-700 dark:text-gray-300">{row.commodity}</td>
+                                        <td className="px-3 py-1.5 text-right font-mono text-blue-700 dark:text-blue-300">{fmtN(row.purb_purchase_gst)}</td>
+                                        <td className="px-3 py-1.5 text-right font-mono text-gray-400 text-[10px]">{gstParts || '—'}</td>
+                                        <td className="px-3 py-1.5 text-right font-mono text-rose-600 dark:text-rose-400">{fmtN(row.inv_closing_dr)}</td>
+                                        <td className="px-3 py-1.5 text-center">{chkIcon(row.taxable_match && row.inv_balanced)}</td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── PURB JV Accounting Entries (grouped by commodity) ── */}
+                        {r.purb_jv.rows.length > 0 && (() => {
+                          // group by commodity
+                          const grpMap = new Map<string, typeof r.purb_jv.rows>()
+                          for (const row of r.purb_jv.rows) {
+                            const key = row.commodity || ''
+                            if (!grpMap.has(key)) grpMap.set(key, [])
+                            grpMap.get(key)!.push(row)
+                          }
+                          // put empty-commodity (Payable) last
+                          const keys = [...grpMap.keys()].sort((a, b) => a === '' ? 1 : b === '' ? -1 : a.localeCompare(b))
+
+                          return (
+                            <div className="border-b border-gray-200 dark:border-gray-700">
+                              <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
+                                PURB JV Accounting Entries · {r.pb_ref_no}
+                              </div>
+                              <table className="w-full text-[11px]">
+                                <thead>
+                                  <tr className="bg-gray-50/60 dark:bg-gray-800/30 text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                                    <th className="px-3 py-1.5 text-left w-10">DR/CR</th>
+                                    <th className="px-3 py-1.5 text-left">Account</th>
+                                    <th className="px-3 py-1.5 text-right">Amount</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {keys.map(key => {
+                                    const rows = grpMap.get(key)!
+                                    const subDr = rows.filter(r => r.dr_cr === 'Debit').reduce((s, r) => s + r.amount, 0)
+                                    const subCr = rows.filter(r => r.dr_cr === 'Credit').reduce((s, r) => s + r.amount, 0)
+                                    return (
+                                      <React.Fragment key={key || '__payable__'}>
+                                        {key && (
+                                          <tr className="bg-gray-50 dark:bg-gray-800/50">
+                                            <td colSpan={2} className="px-3 py-1 text-[10px] font-semibold text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                                              {key} <span className="font-normal text-gray-400">· {rows.length} {rows.length === 1 ? 'entry' : 'entries'}</span>
+                                            </td>
+                                            <td className="px-3 py-1 text-[10px] text-right text-gray-400 border-b border-gray-100 dark:border-gray-800 font-mono">
+                                              {subDr > 0 && <span className="text-blue-600 dark:text-blue-400">DR {fmtN(subDr)}</span>}
+                                              {subDr > 0 && subCr > 0 && <span className="mx-1">·</span>}
+                                              {subCr > 0 && <span className="text-rose-500">CR {fmtN(subCr)}</span>}
+                                            </td>
+                                          </tr>
+                                        )}
+                                        {rows.map((row, ri) => (
+                                          <tr key={ri} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+                                            <td className={`px-3 py-1.5 font-semibold ${row.dr_cr === 'Debit' ? 'text-blue-700 dark:text-blue-300' : 'text-rose-600 dark:text-rose-400'}`}>
+                                              {row.dr_cr === 'Debit' ? 'DR' : 'CR'}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-gray-700 dark:text-gray-300">{row.account_name}</td>
+                                            <td className="px-3 py-1.5 text-right font-mono text-gray-700 dark:text-gray-300">{fmtN(row.amount)}</td>
+                                          </tr>
+                                        ))}
+                                      </React.Fragment>
+                                    )
+                                  })}
+                                </tbody>
+                                <tfoot>
+                                  <tr className={`${r.checks.find(c => c.id === 'purb_balanced')?.ok ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'bg-red-50 dark:bg-red-900/10'}`}>
+                                    <td colSpan={2} className="px-3 py-2 font-bold text-[11px] text-gray-700 dark:text-gray-200">Total</td>
+                                    <td className="px-3 py-2 text-right font-mono font-bold text-[11px]">
+                                      <span className="text-blue-700 dark:text-blue-300">DR {fmtN(r.purb_jv.total_dr)}</span>
+                                      <span className="mx-1 text-gray-400">=</span>
+                                      <span className="text-rose-600 dark:text-rose-400">CR {fmtN(r.purb_jv.payable)}</span>
+                                    </td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          )
+                        })()}
+
+                        {/* ── INV JV Accounting Entries (grouped by commodity) ── */}
+                        {r.inv_jv.rows.length > 0 && (() => {
+                          const grpMap = new Map<string, typeof r.inv_jv.rows>()
+                          for (const row of r.inv_jv.rows) {
+                            const key = row.commodity || ''
+                            if (!grpMap.has(key)) grpMap.set(key, [])
+                            grpMap.get(key)!.push(row)
+                          }
+                          const keys = [...grpMap.keys()].sort((a, b) => a === '' ? 1 : b === '' ? -1 : a.localeCompare(b))
+
+                          return (
+                            <div className="border-b border-gray-200 dark:border-gray-700">
+                              <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
+                                INV JV Accounting Entries · {r.inv_ref_no || '—'}
+                              </div>
+                              <table className="w-full text-[11px]">
+                                <thead>
+                                  <tr className="bg-gray-50/60 dark:bg-gray-800/30 text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                                    <th className="px-3 py-1.5 text-left w-10">DR/CR</th>
+                                    <th className="px-3 py-1.5 text-left">Account</th>
+                                    <th className="px-3 py-1.5 text-right">Amount</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {keys.map(key => {
+                                    const rows = grpMap.get(key)!
+                                    const subDr = rows.filter(r => r.dr_cr === 'Debit').reduce((s, r) => s + r.amount, 0)
+                                    const subCr = rows.filter(r => r.dr_cr === 'Credit').reduce((s, r) => s + r.amount, 0)
+                                    return (
+                                      <React.Fragment key={key || '__inv_other__'}>
+                                        {key && (
+                                          <tr className="bg-gray-50 dark:bg-gray-800/50">
+                                            <td colSpan={2} className="px-3 py-1 text-[10px] font-semibold text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                                              {key} <span className="font-normal text-gray-400">· {rows.length} {rows.length === 1 ? 'entry' : 'entries'}</span>
+                                            </td>
+                                            <td className="px-3 py-1 text-[10px] text-right text-gray-400 border-b border-gray-100 dark:border-gray-800 font-mono">
+                                              {subDr > 0 && <span className="text-blue-600 dark:text-blue-400">DR {fmtN(subDr)}</span>}
+                                              {subDr > 0 && subCr > 0 && <span className="mx-1">·</span>}
+                                              {subCr > 0 && <span className="text-rose-500">CR {fmtN(subCr)}</span>}
+                                            </td>
+                                          </tr>
+                                        )}
+                                        {rows.map((row, ri) => (
+                                          <tr key={ri} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+                                            <td className={`px-3 py-1.5 font-semibold ${row.dr_cr === 'Debit' ? 'text-blue-700 dark:text-blue-300' : 'text-rose-600 dark:text-rose-400'}`}>
+                                              {row.dr_cr === 'Debit' ? 'DR' : 'CR'}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-gray-700 dark:text-gray-300">{row.account_name}</td>
+                                            <td className="px-3 py-1.5 text-right font-mono text-gray-700 dark:text-gray-300">{fmtN(row.amount)}</td>
+                                          </tr>
+                                        ))}
+                                      </React.Fragment>
+                                    )
+                                  })}
+                                </tbody>
+                                <tfoot>
+                                  <tr className={`${r.checks.find(c => c.id === 'inv_balanced')?.ok ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'bg-red-50 dark:bg-red-900/10'}`}>
+                                    <td colSpan={2} className="px-3 py-2 font-bold text-[11px] text-gray-700 dark:text-gray-200">Total</td>
+                                    <td className="px-3 py-2 text-right font-mono font-bold text-[11px]">
+                                      <span className="text-blue-700 dark:text-blue-300">DR {fmtN(r.inv_jv.closing_dr)}</span>
+                                      <span className="mx-1 text-gray-400">=</span>
+                                      <span className="text-rose-600 dark:text-rose-400">CR {fmtN(r.inv_jv.exempt_cr)}</span>
+                                    </td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          )
+                        })()}
+
+                        {/* ── Full View modal (same shell as Purchase + INV tabs) ── */}
+                        {ccFullViewOpen && (
+                          <DialogPrimitive.Root open={ccFullViewOpen} onOpenChange={setCcFullViewOpen}>
+                            <DialogPrimitive.Portal>
+                              <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+                              <DialogPrimitive.Content className="fixed inset-4 z-50 flex flex-col bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+                                <DialogPrimitive.Title className="sr-only">Cross-Check Full View — {r.pb_ref_no}</DialogPrimitive.Title>
+
+                                {/* Modal header */}
+                                <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-gradient-to-r from-[#3F51B5]/[0.06] to-transparent">
+                                  <div className="flex items-center gap-3">
+                                    <GitCompare className="size-4 text-[#3F51B5] dark:text-[#7986CB]" />
+                                    <span className="text-[14px] font-bold font-mono text-gray-800 dark:text-gray-100">{r.pb_ref_no}</span>
+                                    {overallOk ? ccPill(true) : ccPill(false)}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button onClick={exportCcPdf} className="text-[11px] flex items-center gap-1 h-7 px-2.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-red-600 hover:border-red-300 transition-colors cursor-pointer"><FileText className="size-3" />PDF</button>
+                                    <button onClick={exportCcXls} className="text-[11px] flex items-center gap-1 h-7 px-2.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-emerald-600 hover:border-emerald-300 transition-colors cursor-pointer"><FileSpreadsheet className="size-3" />.xls</button>
+                                    <button onClick={() => setCcFullViewOpen(false)} className="size-7 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors cursor-pointer"><X className="size-4" /></button>
+                                  </div>
+                                </div>
+
+                                {/* Modal body */}
+                                <div className="flex-1 overflow-y-auto min-h-0">
+                                  {/* Meta strip */}
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-200 dark:border-gray-700">
+                                    <div className="px-5 py-3"><div className="text-[10px] text-gray-400 font-medium mb-0.5">Supplier</div><div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{ccSelectedPB!.supplier ?? '—'}</div></div>
+                                    <div className="px-5 py-3"><div className="text-[10px] text-gray-400 font-medium mb-0.5">PB Date</div><div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{ccSelectedPB!.date?.slice(0,10) ?? '—'}</div></div>
+                                    <div className="px-5 py-3"><div className="text-[10px] text-gray-400 font-medium mb-0.5">Fiscal Year</div><div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{r.purb_jv.fiscal_year || '—'}</div></div>
+                                    <div className="px-5 py-3"><div className="text-[10px] text-gray-400 font-medium mb-0.5">Period</div><div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{r.purb_jv.period || '—'}</div></div>
+                                  </div>
+
+                                  {/* Two-column: checks left, JV entries right */}
+                                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">
+
+                                    {/* Left: all checks */}
+                                    <div className="p-5 space-y-4">
+                                      <div>
+                                        <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">Verification Checks</h3>
+                                        <div className="space-y-1.5">
+                                          {r.checks.map((chk, i) => (
+                                            <div key={i} className={`flex items-start gap-2.5 px-3 py-2 rounded-lg text-[12px] ${chk.ok ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'bg-red-50 dark:bg-red-900/10'}`}>
+                                              {chk.ok ? <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0 mt-px" /> : <XCircle className="size-3.5 text-red-500 shrink-0 mt-px" />}
+                                              <div className="min-w-0">
+                                                <div className={`font-medium leading-tight ${chk.ok ? 'text-gray-700 dark:text-gray-200' : 'text-red-700 dark:text-red-300'}`}>{chk.label}</div>
+                                                {chk.detail && <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 font-mono">{chk.detail}</div>}
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+
+                                      {/* Amount chain */}
+                                      {r.amount_chain.length > 0 && (
+                                        <div>
+                                          <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">Amount Chain</h3>
+                                          <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                                            <table className="w-full border-collapse text-[12px]">
+                                              <thead><tr className="bg-gray-50 dark:bg-gray-800/80">
+                                                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">Line</th>
+                                                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">PB</th>
+                                                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">PURB JV</th>
+                                                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">INV JV</th>
+                                                <th className="px-3 py-2 text-center text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 w-8">✓</th>
+                                              </tr></thead>
+                                              <tbody>
+                                                {r.amount_chain.map((row, i) => {
+                                                  const isEq = row.sign === 'eq'
+                                                  return (
+                                                    <tr key={i} className={isEq ? 'bg-blue-50/40 dark:bg-blue-900/5' : 'hover:bg-gray-50/50 dark:hover:bg-gray-800/20'}>
+                                                      <td className={`px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 ${isEq ? 'font-semibold text-blue-700 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}>
+                                                        <span className="font-mono text-gray-400 mr-1">{row.sign === 'minus' ? '−' : row.sign === 'plus' ? '+' : row.sign === 'eq' ? '=' : ' '}</span>
+                                                        {row.label}
+                                                        {row.note && <span className="ml-1 text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-800 px-1 rounded">{row.note}</span>}
+                                                      </td>
+                                                      <td className={`px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-right font-mono ${isEq ? 'font-semibold text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}>{fmtN(Math.abs(row.amount))}</td>
+                                                      <td className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-gray-400">{row.cross?.purb != null ? fmtN(row.cross.purb) : '—'}</td>
+                                                      <td className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-gray-400">{row.cross?.inv != null ? fmtN(row.cross.inv) : '—'}</td>
+                                                      <td className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-center">{row.ok != null ? (row.ok ? <CheckCircle2 className="size-3.5 text-emerald-500 inline" /> : <XCircle className="size-3.5 text-red-500 inline" />) : null}</td>
+                                                    </tr>
+                                                  )
+                                                })}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Right: PURB entries + INV entries + per-commodity */}
+                                    <div className="p-5 space-y-5">
+                                      {[
+                                        { title: `PURB JV Accounting Entries · ${r.pb_ref_no}`, rows: r.purb_jv.rows, totalDr: r.purb_jv.total_dr, balanced: r.checks.find(c=>c.id==='purb_balanced')?.ok ?? true },
+                                        { title: `INV JV Accounting Entries · ${r.inv_ref_no||'—'}`, rows: r.inv_jv.rows, totalDr: r.inv_jv.total_dr, balanced: r.checks.find(c=>c.id==='inv_balanced')?.ok ?? true },
+                                      ].map(({ title, rows, totalDr, balanced }) => {
+                                        if (rows.length === 0) return null
+                                        const grp = new Map<string, typeof rows>()
+                                        for (const row of rows) {
+                                          const k = row.commodity || ''
+                                          if (!grp.has(k)) grp.set(k, [])
+                                          grp.get(k)!.push(row)
+                                        }
+                                        const sortedK = [...grp.keys()].sort((a,b)=>a===''?1:b===''?-1:a.localeCompare(b))
+                                        const totDr = rows.filter(r=>r.dr_cr==='Debit').reduce((s,r)=>s+r.amount,0)
+                                        const totCr = rows.filter(r=>r.dr_cr==='Credit').reduce((s,r)=>s+r.amount,0)
+                                        return (
+                                          <div key={title}>
+                                            <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">{title}</h3>
+                                            <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                                              <table className="w-full border-collapse text-[12px]">
+                                                <thead><tr className="bg-gray-50 dark:bg-gray-800/80">
+                                                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 w-12">DR/CR</th>
+                                                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">Account</th>
+                                                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">Amount</th>
+                                                </tr></thead>
+                                                <tbody>
+                                                  {sortedK.map(key => {
+                                                    const krows = grp.get(key)!
+                                                    return (
+                                                      <React.Fragment key={key}>
+                                                        {key && <tr><td colSpan={3} className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">{key}</td></tr>}
+                                                        {krows.map((row, ri) => (
+                                                          <tr key={ri} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+                                                            <td className={`px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 font-semibold text-[11px] ${row.dr_cr==='Debit'?'text-blue-700 dark:text-blue-300':'text-rose-600 dark:text-rose-400'}`}>{row.dr_cr==='Debit'?'DR':'CR'}</td>
+                                                            <td className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-gray-700 dark:text-gray-300">{row.account_name}</td>
+                                                            <td className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-gray-700 dark:text-gray-300">{fmtN(row.amount)}</td>
+                                                          </tr>
+                                                        ))}
+                                                      </React.Fragment>
+                                                    )
+                                                  })}
+                                                </tbody>
+                                                <tfoot><tr className={balanced ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'bg-red-50 dark:bg-red-900/10'}>
+                                                  <td colSpan={2} className="px-3 py-2 font-bold text-[11px] text-gray-700 dark:text-gray-200">Total</td>
+                                                  <td className="px-3 py-2 text-right font-mono font-bold text-[11px]">
+                                                    <span className="text-blue-700 dark:text-blue-300">DR {fmtN(totDr)}</span>
+                                                    <span className="mx-1 text-gray-400">=</span>
+                                                    <span className="text-rose-600 dark:text-rose-400">CR {fmtN(totCr)}</span>
+                                                  </td>
+                                                </tr></tfoot>
+                                              </table>
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+
+                                      {/* Per-commodity */}
+                                      {r.commodity_rows.length > 0 && (
+                                        <div>
+                                          <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">Per-Commodity Cross-Check</h3>
+                                          <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                                            <table className="w-full border-collapse text-[12px]">
+                                              <thead><tr className="bg-gray-50 dark:bg-gray-800/80">
+                                                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">Commodity</th>
+                                                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap">PURB Purchase@GST</th>
+                                                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap">PURB GST</th>
+                                                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap">INV Closing DR</th>
+                                                <th className="px-3 py-2 text-center text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 w-12">✓</th>
+                                              </tr></thead>
+                                              <tbody>
+                                                {r.commodity_rows.map((row, i) => {
+                                                  const gstTotal = (row.purb_igst ?? 0) + (row.purb_cgst ?? 0) + (row.purb_sgst ?? 0)
+                                                  return (
+                                                    <tr key={i} className={(row.taxable_match && row.inv_balanced) ? 'hover:bg-gray-50/50 dark:hover:bg-gray-800/20' : 'bg-red-50 dark:bg-red-900/20'}>
+                                                      <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-gray-700 dark:text-gray-300 font-medium text-[11px]">{row.commodity}</td>
+                                                      <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-blue-700 dark:text-blue-300">{fmtN(row.purb_purchase_gst)}</td>
+                                                      <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-gray-500">{gstTotal > 0 ? fmtN(gstTotal) : '—'}</td>
+                                                      <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-blue-700 dark:text-blue-300">{fmtN(row.inv_closing_dr)}</td>
+                                                      <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-center">{(row.taxable_match && row.inv_balanced) ? <CheckCircle2 className="size-3.5 text-emerald-500 inline" /> : <XCircle className="size-3.5 text-red-500 inline" />}</td>
+                                                    </tr>
+                                                  )
+                                                })}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </DialogPrimitive.Content>
+                            </DialogPrimitive.Portal>
+                          </DialogPrimitive.Root>
+                        )}
+
+                        {(ccExportXlsRef.current = exportCcXls, ccExportPdfRef.current = exportCcPdf, ccOnFullViewRef.current = () => setCcFullViewOpen(true), null)}
+                      </>
+                    )
+                  })()}
+                </div>
+              )
+              })()}
+            </div>
+          )
+        })()}
 
         {/* Bottom bar */}
         <div className="p-4 border-t border-gray-200 dark:border-gray-700 shrink-0 flex items-center gap-2">
@@ -2017,12 +3028,12 @@ ${rows.join('\n')}
                 Refresh
               </button>
               <button
-                onClick={() => { setLocalToken(''); setLocalTenantId(''); setJvSteps([]); setJvError(''); setPbRefNo('') }}
+                onClick={() => setShowTokenInput(true)}
                 className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 hover:text-red-500 dark:hover:text-red-400 transition-colors cursor-pointer"
-                title="Clear token"
+                title="Click to change or clear token"
               >
                 <CheckCircle2 className="size-3" />
-                Token set
+                Token set · Change
               </button>
             </div>
           )}
