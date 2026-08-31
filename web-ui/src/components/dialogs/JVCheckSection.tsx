@@ -2576,6 +2576,29 @@ ${rows.join('\n')}
                           ))}
                         </div>
 
+                        {/* ── JV not-found gate ───────────────────────── */}
+                        {(!r.purb_jv.found || !r.inv_jv.found) && (
+                          <div className="p-4 border-b border-gray-200 dark:border-gray-700 space-y-2">
+                            <div className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">Cross-check incomplete — JV(s) not found in report</div>
+                            {[
+                              { label: 'Purchase Account JV (PURB JV)', found: r.purb_jv.found, ref: r.pb_ref_no },
+                              { label: 'Inventory JV (INV JV)',          found: r.inv_jv.found,  ref: r.inv_ref_no || 'linked INV JV' },
+                            ].map(({ label, found, ref }) => (
+                              <div key={label} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border ${found ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10' : 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10'}`}>
+                                {found ? <CkDot /> : <XCircle className="size-3.5 text-red-500 shrink-0 mt-0.5" />}
+                                <div>
+                                  <div className={`text-[12px] font-semibold ${found ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>{label}</div>
+                                  <div className="text-[10px] text-gray-400 dark:text-gray-500 font-mono mt-0.5">{found ? `Found · ${ref}` : `Not found in JV report for ${ref}`}</div>
+                                </div>
+                              </div>
+                            ))}
+                            <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">Both JVs must be present in the JV report for the cross-check to pass. Check that the JVs have been posted and are visible in the report for the correct ledger group and fiscal year.</div>
+                          </div>
+                        )}
+
+                        {/* ── Everything below requires both JVs found ─── */}
+                        {r.purb_jv.found && r.inv_jv.found && <>
+
                         {/* ── Metric cards ────────────────────────────── */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50/40 dark:bg-gray-800/20">
                           {([
@@ -2898,6 +2921,8 @@ ${rows.join('\n')}
                             )
                           })}
                         </div>
+
+                        </>}
 
                         {/* ── Full View modal ── */}
                         {ccFullViewOpen && (
