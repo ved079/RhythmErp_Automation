@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CheckCircle2, XCircle, Key, RefreshCw, Loader2, AlertTriangle, Search, Download, FileText, FileSpreadsheet, ChevronDown, FileBarChart2, Maximize2, X, GitCompare } from 'lucide-react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
+import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import Spinner from '@/components/ui/Spinner'
 import LoadingCard from '@/components/ui/LoadingCard'
 import { verifyJV, verifyInvJV, fetchPBList, fetchPBItems, fetchAccountingDef, crossCheckJV, type JVVerifyStep, type PBListItem, type PBItemLine, type AccountingDefDetail, type InvCommodityRow, type PurbMeta, type CrossCheckResponse } from '@/lib/api'
@@ -766,8 +767,9 @@ ${rows.join('\n')}
   const [ccResult, setCcResult] = useState<CrossCheckResponse | null>(null)
   const [ccError, setCcError] = useState('')
   const [ccFullViewOpen, setCcFullViewOpen] = useState(false)
-  const [ccShowPurbLedger, setCcShowPurbLedger] = useState(false)
-  const [ccShowInvLedger, setCcShowInvLedger] = useState(false)
+  const [ccJvTab, setCcJvTab] = useState<'purb'|'inv'>('purb')
+  const [ccGroupsCollapsed, setCcGroupsCollapsed] = useState<Set<string>>(new Set(['Amounts','GST','Discount / TDS','Other']))
+  const [ccFvCollapsed, setCcFvCollapsed] = useState<Set<string>>(new Set(['Document','Dates & Period','Amounts','GST','Discount / TDS','Other']))
   const ccExportXlsRef = useRef<(() => void) | null>(null)
   const ccExportPdfRef = useRef<(() => void) | null>(null)
   const ccOnFullViewRef = useRef<(() => void) | null>(null)
@@ -2508,544 +2510,687 @@ ${rows.join('\n')}
                     const payableChk = r.checks.find(c => c.id === 'payable_vs_pb')
                     const invEqChk   = r.checks.find(c => c.id === 'inv_eq_purb_minus_gst')
 
+                    // Checkmark dot — small green circle with a tick
+                    const CkDot = () => (
+                      <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:12,height:12,borderRadius:'50%',background:'#059669',flexShrink:0}}>
+                        <span style={{display:'block',width:'3.5px',height:'6px',border:'solid #fff',borderWidth:'0 1.25px 1.25px 0',transform:'rotate(45deg)',marginTop:'-0.5px'}} />
+                      </span>
+                    )
+
+                    const CellTip = ({ children, jv, account, entryType, description }: {
+                      children: React.ReactNode
+                      jv: string
+                      account: string
+                      entryType: 'Debit' | 'Credit'
+                      description: string
+                    }) => (
+                      <TooltipPrimitive.Provider delayDuration={200}>
+                        <TooltipPrimitive.Root>
+                          <TooltipPrimitive.Trigger asChild>
+                            <span className="cursor-help underline decoration-dotted decoration-gray-300 dark:decoration-gray-600 underline-offset-2">{children}</span>
+                          </TooltipPrimitive.Trigger>
+                          <TooltipPrimitive.Portal>
+                            <TooltipPrimitive.Content
+                              side="top" align="center" sideOffset={6}
+                              className="z-[200] max-w-[240px] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl p-3 text-left"
+                            >
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">{jv}</span>
+                                <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${entryType === 'Debit' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400'}`}>{entryType}</span>
+                              </div>
+                              <div className="text-[12px] font-semibold text-gray-800 dark:text-gray-100 mb-1">{account}</div>
+                              <div className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">{description}</div>
+                              <TooltipPrimitive.Arrow className="fill-white dark:fill-gray-900" />
+                            </TooltipPrimitive.Content>
+                          </TooltipPrimitive.Portal>
+                        </TooltipPrimitive.Root>
+                      </TooltipPrimitive.Provider>
+                    )
+
+                    const checkGroups: { label: string; ids: string[] }[] = [
+                      { label: 'Document',       ids: ['purb_found','inv_found','ref_found','inv_ref_found','purb_balanced','inv_balanced'] },
+                      { label: 'Dates & Period', ids: ['date_match','fy_match','period_match','txn_date_match','fiscal_year_match'] },
+                      { label: 'Amounts',        ids: ['taxable_vs_purb','taxable_vs_inv','gst_total_match','payable_vs_pb','inv_eq_purb_minus_gst'] },
+                      { label: 'GST',            ids: r.checks.filter(c=>c.id.startsWith('gst_rate_')||c.id.startsWith('gst_type')).map(c=>c.id) },
+                      { label: 'Discount / TDS', ids: ['discount_dr','discount_wash','discount_match','tds_match'] },
+                    ]
+                    const coveredIds = new Set(checkGroups.flatMap(g=>g.ids))
+                    const others = r.checks.filter(c=>!coveredIds.has(c.id)).map(c=>c.id)
+                    if (others.length > 0) checkGroups.push({ label: 'Other', ids: others })
+                    const allGroupsOpen = checkGroups.every(g=>!ccGroupsCollapsed.has(g.label))
+
                     return (
                       <>
-                        {/* ── Compact amount summary grid ─────────────── */}
+                        {/* ── Metadata row ────────────────────────────── */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-200 dark:border-gray-700">
-                          {[
+                          {([
                             { label: 'Supplier', value: ccSelectedPB!.supplier ?? '—', mono: false },
                             { label: 'Date', value: ccSelectedPB!.date ?? '—', mono: false },
                             { label: 'FY / Period', value: `${r.purb_jv.fiscal_year} · ${r.purb_jv.period}`, mono: false },
                             { label: 'INV JV Ref', value: r.inv_ref_no || 'Not found', mono: true },
-                          ].map(({ label, value, mono }) => (
+                          ] as const).map(({ label, value, mono }) => (
                             <div key={label} className="px-4 py-3">
-                              <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5">{label}</div>
-                              <div className={`text-[13px] font-medium text-gray-800 dark:text-gray-100 truncate ${mono ? 'font-mono text-[11px]' : ''}`}>{value}</div>
+                              <div className="text-[10px] font-semibold uppercase tracking-wider mb-0.5 text-gray-400 dark:text-gray-500">{label}</div>
+                              <div className={`text-[13px] font-semibold text-gray-800 dark:text-gray-100 truncate ${mono ? 'font-mono text-[11px]' : ''}`}>{value}</div>
                             </div>
                           ))}
                         </div>
 
-                        {/* ── Status banner ───────────────────────────── */}
-                        {(() => {
-                          const failCount = r.checks.filter(c => !c.ok).length
-                          return (
-                            <div className={`px-4 py-2.5 flex items-center gap-3 border-b border-gray-200 dark:border-gray-700 ${failCount === 0 ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
-                              {failCount === 0
-                                ? <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
-                                : <XCircle className="size-4 text-red-500 shrink-0" />}
-                              <span className={`text-[12px] font-semibold ${failCount === 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
-                                {failCount === 0 ? 'All checks passed' : `${failCount} check${failCount > 1 ? 's' : ''} failed`}
-                              </span>
-                              {failCount > 0 && (
-                                <span className="text-[11px] text-red-500 dark:text-red-400 truncate">
-                                  {r.checks.filter(c => !c.ok).map(c => c.label).join(' · ')}
-                                </span>
-                              )}
-                            </div>
-                          )
-                        })()}
-
-                        {/* ── Stat cards ─────────────────────────────── */}
-                        {(() => {
-                          const taxableChk = r.checks.find(c => c.id === 'taxable_vs_purb')
-                          const gstChk     = r.checks.find(c => c.id === 'gst_total_match')
-                          const payableChk = r.checks.find(c => c.id === 'payable_vs_pb')
-                          const cards = [
-                            { label: 'Taxable',  pb: r.pb_meta.taxable,  jv: r.purb_jv.purchase_gst_dr, chk: taxableChk, color: 'violet' },
-                            { label: 'GST',      pb: r.pb_meta.gst_total, jv: r.purb_jv.gst_dr,         chk: gstChk,     color: 'amber'  },
-                            { label: 'Payable',  pb: r.pb_meta.total,    jv: r.purb_jv.payable,          chk: payableChk, color: 'rose'   },
-                          ]
-                          return (
-                            <div className="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-200 dark:border-gray-700">
-                              {cards.map(({ label, pb, jv, chk, color }) => {
-                                const ok = chk?.ok ?? true
-                                return (
-                                  <div key={label} className={`px-3 py-3 ${!ok ? 'bg-red-50/30 dark:bg-red-900/5' : ''}`}>
-                                    <div className="flex items-center justify-between mb-1.5">
-                                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</span>
-                                      {chk && (ok
-                                        ? <CheckCircle2 className="size-3 text-emerald-500" />
-                                        : <XCircle className="size-3 text-red-500" />)}
-                                    </div>
-                                    <div className="font-mono text-[12px] font-semibold text-gray-800 dark:text-gray-100">{fmtN(pb)}</div>
-                                    <div className={`font-mono text-[11px] mt-0.5 ${ok ? 'text-gray-400' : 'text-red-500'}`}>JV {fmtN(jv)}</div>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )
-                        })()}
-
-                        {/* ── Reconciliation table per commodity ──────── */}
-                        {r.commodity_rows.length > 0 && (() => {
-                          const EQ = (match: boolean | null) => (
-                            <span className={`text-[13px] font-bold select-none ${match === null ? 'text-gray-300 dark:text-gray-600' : match ? 'text-emerald-500' : 'text-red-500'}`}>
-                              {match === false ? '≠' : '='}
-                            </span>
-                          )
-                          return (
-                            <div className="border-b border-gray-200 dark:border-gray-700">
-                              <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
-                                Reconciliation — per commodity
+                        {/* ── Metric cards ────────────────────────────── */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50/40 dark:bg-gray-800/20">
+                          {([
+                            { label: 'Taxable',       tag: 'PURB JV',  pbLabel: 'PB Taxable',   jvLabel: 'Purchase @GST DR', pb: r.pb_meta.taxable,    jv: r.purb_jv.purchase_gst_dr, chkId: 'taxable_vs_purb',  color: 'gray',   pbTip: { jv: 'Purchase Booking', account: 'txn_currency_amount', entryType: 'Debit' as const, description: 'The taxable value of goods from the Purchase Booking — before GST is added.' }, jvTip: { jv: 'PURB JV', account: 'Purchase @gst', entryType: 'Debit' as const, description: 'Sum of all Purchase @gst Debit entries in the Purchase Account JV. Should match PB taxable exactly.' } },
+                            { label: 'GST',           tag: 'PURB JV',  pbLabel: 'PB GST Total', jvLabel: 'GST DR',           pb: r.pb_meta.gst_total,  jv: r.purb_jv.gst_dr,          chkId: 'gst_total_match',  color: 'amber',  pbTip: { jv: 'Purchase Booking', account: 'GST breakdown', entryType: 'Debit' as const, description: 'Total GST on the PB — sum of IGST or CGST+SGST across all line items.' }, jvTip: { jv: 'PURB JV', account: 'Input IGST / CGST / SGST', entryType: 'Debit' as const, description: 'Total GST input tax credit debited in the PURB JV. Must equal the PB GST total.' } },
+                            { label: 'Payable',       tag: 'PURB JV',  pbLabel: 'PB Total',     jvLabel: 'Payable CR',       pb: r.pb_meta.total,      jv: r.purb_jv.payable,         chkId: 'payable_vs_pb',    color: 'teal',   pbTip: { jv: 'Purchase Booking', account: 'Total with tax', entryType: 'Debit' as const, description: 'Total amount payable to supplier — Taxable + GST. This is what gets paid.' }, jvTip: { jv: 'PURB JV', account: 'Payable', entryType: 'Credit' as const, description: 'Accounts Payable Credit in the PURB JV — the liability created toward the supplier. Must equal PB total.' } },
+                            { label: 'Closing Stock', tag: 'INV JV',   pbLabel: 'PB Taxable',   jvLabel: 'Closing Stock DR', pb: r.pb_meta.taxable,    jv: r.inv_jv.closing_dr,       chkId: 'taxable_vs_inv',   color: 'violet', pbTip: { jv: 'Purchase Booking', account: 'txn_currency_amount', entryType: 'Debit' as const, description: 'The taxable value of goods — GST excluded. This is the value goods should enter inventory at.' }, jvTip: { jv: 'INV JV', account: 'Closing Stock', entryType: 'Debit' as const, description: 'Total Closing Stock Debit in the Inventory JV — goods received into inventory. Must equal PB taxable.' } },
+                          ] as const).map(({ label, tag, pbLabel, jvLabel, pb, jv, chkId, color, pbTip, jvTip }) => {
+                            const chk = r.checks.find(c=>c.id===chkId)
+                            const ok = chk?.ok ?? true
+                            const accent = {
+                              gray:   { border: 'border-gray-200 dark:border-gray-700',     bg: 'bg-white dark:bg-gray-900',          tag: 'text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800',              label: 'text-gray-500 dark:text-gray-400',     val: 'text-gray-800 dark:text-gray-100',         jv: 'text-gray-400 dark:text-gray-500' },
+                              amber:  { border: 'border-amber-200 dark:border-amber-800/60', bg: 'bg-amber-50/50 dark:bg-amber-900/10', tag: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30',       label: 'text-amber-600 dark:text-amber-400',   val: 'text-amber-600 dark:text-amber-400',       jv: 'text-amber-500/60 dark:text-amber-500/60' },
+                              teal:   { border: 'border-teal-200 dark:border-teal-800',      bg: 'bg-teal-50/60 dark:bg-teal-900/20',  tag: 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/30',          label: 'text-teal-600 dark:text-teal-400',     val: 'text-teal-700 dark:text-teal-300',         jv: 'text-teal-500/60 dark:text-teal-400/60' },
+                              violet: { border: 'border-violet-200 dark:border-violet-800/60', bg: 'bg-violet-50/50 dark:bg-violet-900/10', tag: 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30', label: 'text-violet-600 dark:text-violet-400', val: 'text-violet-700 dark:text-violet-300',     jv: 'text-violet-500/60 dark:text-violet-400/60' },
+                            }[color]
+                            return (
+                              <div key={label} className={`rounded-lg border p-3 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${accent.border} ${accent.bg}`}>
+                                {/* Top row: tag + status */}
+                                <div className="flex items-center justify-between mb-2.5">
+                                  <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${accent.tag}`}>{tag}</span>
+                                  {ok ? <CkDot /> : <XCircle className="size-3 text-red-500 shrink-0" />}
+                                </div>
+                                {/* Card title */}
+                                <div className={`text-[11px] font-bold uppercase tracking-wide mb-2.5 ${accent.label}`}>{label}</div>
+                                {/* Divider */}
+                                <div className={`h-px mb-2.5 ${ok ? 'bg-gray-100 dark:bg-gray-800' : 'bg-red-200 dark:bg-red-800/40'}`} />
+                                {/* PB value */}
+                                <div className="text-[9px] text-gray-400 dark:text-gray-500 mb-0.5">{pbLabel}</div>
+                                <div className={`font-mono text-[14px] font-bold leading-tight ${accent.val}`}>
+                                  <CellTip {...pbTip}>{fmtN(pb)}</CellTip>
+                                </div>
+                                {/* JV value */}
+                                <div className="text-[9px] text-gray-400 dark:text-gray-500 mt-2 mb-0.5">{jvLabel}</div>
+                                <div className={`font-mono text-[11px] font-semibold ${ok ? accent.jv : 'text-red-500 dark:text-red-400'}`}>
+                                  <CellTip {...jvTip}>{fmtN(jv)}</CellTip>
+                                </div>
                               </div>
-                              <div className="overflow-x-auto">
-                                <table className="w-full text-[11px] border-collapse">
-                                  <thead>
-                                    <tr className="bg-gray-50/80 dark:bg-gray-800/50 text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                                      <th className="px-3 py-2 text-left font-semibold text-[10px] uppercase tracking-wide">Commodity</th>
-                                      <th className="px-2 py-2 text-right font-semibold text-[10px] uppercase tracking-wide text-violet-500">PB Taxable</th>
-                                      <th className="px-1 py-2 text-center w-5" />
-                                      <th className="px-2 py-2 text-right font-semibold text-[10px] uppercase tracking-wide text-blue-500">PURB @GST</th>
-                                      <th className="px-1 py-2 text-center w-5" />
-                                      <th className="px-2 py-2 text-right font-semibold text-[10px] uppercase tracking-wide text-indigo-500">INV Exempt</th>
-                                      <th className="px-1 py-2 text-center w-5" />
-                                      <th className="px-2 py-2 text-right font-semibold text-[10px] uppercase tracking-wide text-indigo-400">INV Closing</th>
-                                      <th className="px-3 py-2 text-right font-semibold text-[10px] uppercase tracking-wide text-amber-500">PURB GST</th>
-                                      <th className="px-2 py-2 text-right font-semibold text-[10px] uppercase tracking-wide text-gray-400" style={{fontSize:'9px'}}>GST type</th>
-                                      <th className="px-2 py-2 text-center w-8 font-semibold text-[10px] uppercase tracking-wide">✓</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {r.commodity_rows.map((row, i) => {
-                                      const gstType = row.purb_igst ? 'IGST' : (row.purb_cgst || row.purb_sgst) ? 'CGST+SGST' : ''
-                                      const allOk = (row.pb_vs_purb_ok !== false) && row.taxable_match && row.inv_balanced
-                                      return (
-                                        <tr key={i} className={`border-b border-gray-100 dark:border-gray-800 ${!allOk ? 'bg-red-50/30 dark:bg-red-900/5' : 'hover:bg-gray-50/50 dark:hover:bg-gray-800/20'}`}>
-                                          <td className="px-3 py-2 font-medium text-gray-700 dark:text-gray-300 max-w-[120px] truncate">{row.commodity}</td>
-                                          <td className="px-2 py-2 text-right font-mono text-violet-600 dark:text-violet-400">{row.pb_taxable != null ? fmtN(row.pb_taxable) : <span className="text-gray-300">—</span>}</td>
-                                          <td className="px-1 py-2 text-center">{EQ(row.pb_vs_purb_ok)}</td>
-                                          <td className="px-2 py-2 text-right font-mono text-blue-700 dark:text-blue-300">{fmtN(row.purb_purchase_gst)}</td>
-                                          <td className="px-1 py-2 text-center">{EQ(row.taxable_match)}</td>
-                                          <td className="px-2 py-2 text-right font-mono text-indigo-600 dark:text-indigo-400">{fmtN(row.inv_exempt_cr)}</td>
-                                          <td className="px-1 py-2 text-center">{EQ(row.inv_balanced ? true : null)}</td>
-                                          <td className="px-2 py-2 text-right font-mono text-indigo-400">{fmtN(row.inv_closing_dr)}</td>
-                                          <td className="px-3 py-2 text-right font-mono text-amber-600 dark:text-amber-400">{fmtN(row.purb_gst_total)}</td>
-                                          <td className="px-2 py-2 text-right text-gray-400" style={{fontSize:'10px'}}>{gstType}</td>
-                                          <td className="px-2 py-2 text-center">{chkIcon(allOk)}</td>
-                                        </tr>
-                                      )
-                                    })}
-                                  </tbody>
-                                  <tfoot>
-                                    <tr className="bg-gray-50 dark:bg-gray-800/60 border-t border-gray-200 dark:border-gray-700 font-semibold">
-                                      <td className="px-3 py-2 text-[11px] text-gray-600 dark:text-gray-400">Total</td>
-                                      <td className="px-2 py-2 text-right font-mono text-violet-600 dark:text-violet-400 text-[11px]">
-                                        {fmtN(r.commodity_rows.reduce((s, row) => s + (row.pb_taxable ?? 0), 0))}
-                                      </td>
-                                      <td />
-                                      <td className="px-2 py-2 text-right font-mono text-blue-700 dark:text-blue-300 text-[11px]">
-                                        {fmtN(r.commodity_rows.reduce((s, row) => s + (row.purb_purchase_gst ?? 0), 0))}
-                                      </td>
-                                      <td />
-                                      <td className="px-2 py-2 text-right font-mono text-indigo-600 dark:text-indigo-400 text-[11px]">
-                                        {fmtN(r.commodity_rows.reduce((s, row) => s + (row.inv_exempt_cr ?? 0), 0))}
-                                      </td>
-                                      <td />
-                                      <td className="px-2 py-2 text-right font-mono text-indigo-400 text-[11px]">
-                                        {fmtN(r.commodity_rows.reduce((s, row) => s + (row.inv_closing_dr ?? 0), 0))}
-                                      </td>
-                                      <td className="px-3 py-2 text-right font-mono text-amber-600 dark:text-amber-400 text-[11px]">
-                                        {fmtN(r.commodity_rows.reduce((s, row) => s + (row.purb_gst_total ?? 0), 0))}
-                                      </td>
-                                      <td /><td />
-                                    </tr>
-                                    <tr className="border-t border-gray-200 dark:border-gray-700">
-                                      <td className="px-3 py-2 text-[11px] font-semibold text-gray-600 dark:text-gray-400">Payable</td>
-                                      <td colSpan={2} />
-                                      <td colSpan={2} />
-                                      <td colSpan={2} />
-                                      <td colSpan={2} />
-                                      <td colSpan={2} className="px-2 py-2 text-right">
-                                        <span className="font-mono text-[11px] text-gray-500">PB {fmtN(r.pb_meta.total)}</span>
-                                        <span className="mx-1.5 text-gray-300">=</span>
-                                        <span className={`font-mono text-[11px] font-semibold ${r.checks.find(c => c.id === 'payable_vs_pb')?.ok ? 'text-rose-600 dark:text-rose-400' : 'text-red-600'}`}>
-                                          PURB CR {fmtN(r.purb_jv.payable)}
-                                        </span>
-                                        <span className="ml-1.5 inline-flex">{chkIcon(r.checks.find(c => c.id === 'payable_vs_pb')?.ok ?? true)}</span>
-                                      </td>
-                                    </tr>
-                                  </tfoot>
-                                </table>
-                              </div>
-                            </div>
-                          )
-                        })()}
-
-                        {/* ── Detailed checks ──────────────────────────── */}
-                        {(() => {
-                          const groups: { label: string; ids: string[] }[] = [
-                            { label: 'Document',       ids: ['purb_found', 'inv_found', 'ref_found', 'inv_ref_found', 'purb_balanced', 'inv_balanced'] },
-                            { label: 'Dates & Period', ids: ['date_match', 'fy_match', 'period_match', 'txn_date_match', 'fiscal_year_match'] },
-                            { label: 'Amounts',        ids: ['taxable_vs_purb', 'taxable_vs_inv', 'gst_total_match', 'payable_vs_pb', 'inv_eq_purb_minus_gst'] },
-                            { label: 'GST',            ids: r.checks.filter(c => c.id.startsWith('gst_rate_') || c.id.startsWith('gst_type')).map(c => c.id) },
-                            { label: 'Discount / TDS', ids: ['discount_dr', 'discount_wash', 'discount_match', 'tds_match'] },
-                          ]
-                          const coveredIds = new Set(groups.flatMap(g => g.ids))
-                          const othersGroup = r.checks.filter(c => !coveredIds.has(c.id)).map(c => c.id)
-                          if (othersGroup.length > 0) groups.push({ label: 'Other', ids: othersGroup })
-                          return (
-                            <div className="border-b border-gray-200 dark:border-gray-700">
-                              <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
-                                Checks
-                              </div>
-                              <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                                {groups.map(grp => {
-                                  const chks = r.checks.filter(c => grp.ids.includes(c.id))
-                                  if (chks.length === 0) return null
-                                  return (
-                                    <div key={grp.label} className="px-3 py-1.5">
-                                      <div className="text-[9px] font-semibold uppercase tracking-widest text-gray-300 dark:text-gray-600 mb-1">{grp.label}</div>
-                                      <div className="flex flex-col gap-1">
-                                        {chks.map(chk => (
-                                          <div key={chk.id} className="flex items-start gap-2">
-                                            {chk.ok
-                                              ? <CheckCircle2 className="size-3 text-emerald-500 shrink-0 mt-0.5" />
-                                              : <XCircle className="size-3 text-red-500 shrink-0 mt-0.5" />}
-                                            <div>
-                                              <span className={`text-[11px] ${chk.ok ? 'text-gray-600 dark:text-gray-400' : 'text-red-700 dark:text-red-400 font-medium'}`}>{chk.label}</span>
-                                              {chk.detail && !chk.ok && <div className="text-[10px] text-gray-400 font-mono mt-0.5">{chk.detail}</div>}
-                                            </div>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )
-                        })()}
-
-                        {/* ── Collapsible JV ledgers ───────────────────── */}
-                        <div className="border-b border-gray-200 dark:border-gray-700 px-3 py-2 flex gap-2">
-                          <button
-                            onClick={() => setCcShowPurbLedger(v => !v)}
-                            className={`text-[11px] h-6 px-2.5 rounded border transition-colors cursor-pointer ${ccShowPurbLedger ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 hover:border-blue-300 hover:text-blue-600'}`}>
-                            {ccShowPurbLedger ? '▾' : '▸'} PURB JV
-                          </button>
-                          <button
-                            onClick={() => setCcShowInvLedger(v => !v)}
-                            className={`text-[11px] h-6 px-2.5 rounded border transition-colors cursor-pointer ${ccShowInvLedger ? 'border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 hover:border-rose-300 hover:text-rose-600'}`}>
-                            {ccShowInvLedger ? '▾' : '▸'} INV JV
-                          </button>
+                            )
+                          })}
                         </div>
 
-                        {/* PURB JV ledger (collapsible) */}
-                        {ccShowPurbLedger && r.purb_jv.rows.length > 0 && (() => {
-                          const grpMap = new Map<string, typeof r.purb_jv.rows>()
-                          for (const row of r.purb_jv.rows) {
-                            const key = row.commodity || ''
-                            if (!grpMap.has(key)) grpMap.set(key, [])
-                            grpMap.get(key)!.push(row)
-                          }
-                          const keys = [...grpMap.keys()].sort((a, b) => a === '' ? 1 : b === '' ? -1 : a.localeCompare(b))
-                          return (
-                            <div className="border-b border-gray-200 dark:border-gray-700">
-                              <div className="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 text-[10px] font-semibold uppercase tracking-widest text-blue-600 dark:text-blue-400">
-                                PURB JV Entries · {r.pb_ref_no}
-                              </div>
-                              <table className="w-full text-[11px]">
+                        {/* ── Formula strip ────────────────────────────── */}
+                        <div className="px-3 py-2.5 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 flex flex-wrap items-center justify-center gap-x-6 gap-y-1.5">
+                          {/* a + b = c */}
+                          <div className="flex items-center gap-1.5 text-[11px]">
+                            {[
+                              { text: 'Taxable',  color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300',           delay: 0   },
+                              { text: '+',        color: 'text-gray-400 dark:text-gray-500 font-bold',                               delay: 80  },
+                              { text: 'GST',      color: 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',      delay: 160 },
+                              { text: '=',        color: 'text-gray-400 dark:text-gray-500 font-bold',                               delay: 240 },
+                              { text: 'Payable',  color: 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400',         delay: 320 },
+                            ].map(({ text, color, delay }) => (
+                              <span key={text} className={`font-semibold opacity-0 ${color.includes('bg-') ? 'px-2 py-0.5 rounded-md' : ''} ${color}`}
+                                style={{ animation: `fadeIn 0.3s ease forwards`, animationDelay: `${delay}ms` }}>{text}</span>
+                            ))}
+                          </div>
+                          {/* separator */}
+                          <span className="text-gray-200 dark:text-gray-700 text-[14px] font-thin select-none opacity-0" style={{ animation: 'fadeIn 0.3s ease forwards', animationDelay: '360ms' }}>·</span>
+                          {/* a = d */}
+                          <div className="flex items-center gap-1.5 text-[11px]">
+                            {[
+                              { text: 'Taxable',       color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300',             delay: 400 },
+                              { text: '=',             color: 'text-gray-400 dark:text-gray-500 font-bold',                                 delay: 480 },
+                              { text: 'Closing Stock', color: 'bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400',    delay: 560 },
+                            ].map(({ text, color, delay }) => (
+                              <span key={text} className={`font-semibold opacity-0 ${color.includes('bg-') ? 'px-2 py-0.5 rounded-md' : ''} ${color}`}
+                                style={{ animation: `fadeIn 0.3s ease forwards`, animationDelay: `${delay}ms` }}>{text}</span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* ── Reconciliation table ─────────────────────── */}
+                        {r.commodity_rows.length > 0 && (
+                          <div className="border-b border-gray-200 dark:border-gray-700">
+                            <div className="px-4 py-2 bg-gray-50 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                              <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Reconciliation — per commodity</span>
+                              <span className="text-[10px] text-gray-400">{r.commodity_rows.length} items</span>
+                            </div>
+                            {/* Commodity formula strip */}
+                            <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 flex items-center justify-center gap-1.5 text-[11px]">
+                              {([
+                                { text: 'PURB @GST',    color: 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400',       delay: 0   },
+                                { text: '=',            color: 'text-gray-400 dark:text-gray-500 font-bold',                             delay: 80  },
+                                { text: 'INV Exempt',   color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300',          delay: 160 },
+                                { text: '=',            color: 'text-gray-400 dark:text-gray-500 font-bold',                             delay: 240 },
+                                { text: 'INV Closing',  color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300',          delay: 320 },
+                                { text: '·',            color: 'text-gray-300 dark:text-gray-700 mx-1',                                  delay: 380 },
+                                { text: 'PURB GST',     color: 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',    delay: 440 },
+                                { text: '=',            color: 'text-gray-400 dark:text-gray-500 font-bold',                             delay: 520 },
+                                { text: 'rate × PURB @GST', color: 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400',     delay: 600 },
+                              ] as const).map(({ text, color, delay }) => (
+                                <span key={`${text}-${delay}`} className={`font-semibold opacity-0 ${color.includes('bg-') ? 'px-2 py-0.5 rounded-md' : ''} ${color}`}
+                                  style={{ animation: 'fadeIn 0.3s ease forwards', animationDelay: `${delay}ms` }}>{text}</span>
+                              ))}
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-[11px]" style={{borderCollapse:'separate',borderSpacing:0}}>
                                 <thead>
-                                  <tr className="bg-gray-50/60 dark:bg-gray-800/30 text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                                    <th className="px-3 py-1.5 text-left w-10">DR/CR</th>
-                                    <th className="px-3 py-1.5 text-left">Account</th>
-                                    <th className="px-3 py-1.5 text-right">Amount</th>
+                                  <tr className="bg-gray-50 dark:bg-gray-800/50 text-gray-400">
+                                    <th className="px-3 py-2 text-left font-semibold text-[10px] uppercase tracking-wide min-w-[150px]">Commodity</th>
+                                    <th className="px-3 py-2 text-right font-semibold text-[10px] uppercase tracking-wide min-w-[110px] text-teal-600 dark:text-teal-400">PURB @GST</th>
+                                    <th className="px-3 py-2 text-right font-semibold text-[10px] uppercase tracking-wide min-w-[110px]">INV Exempt</th>
+                                    <th className="px-3 py-2 text-right font-semibold text-[10px] uppercase tracking-wide min-w-[110px]">INV Closing</th>
+                                    <th className="px-3 py-2 text-right font-semibold text-[10px] uppercase tracking-wide min-w-[100px] text-amber-600 dark:text-amber-400">PURB GST</th>
+                                    <th className="px-3 py-2 text-center font-semibold text-[10px] uppercase tracking-wide min-w-[80px]">GST Type</th>
+                                    <th className="w-7" />
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {keys.map(key => {
-                                    const rows = grpMap.get(key)!
-                                    const subDr = rows.filter(r => r.dr_cr === 'Debit').reduce((s, r) => s + r.amount, 0)
-                                    const subCr = rows.filter(r => r.dr_cr === 'Credit').reduce((s, r) => s + r.amount, 0)
+                                  {r.commodity_rows.map((row, i) => {
+                                    const gstType = row.purb_igst ? 'IGST' : (row.purb_cgst || row.purb_sgst) ? 'CGST+SGST' : ''
+                                    const isIgst = gstType === 'IGST'
+                                    const allOk = (row.pb_vs_purb_ok !== false) && row.taxable_match && row.inv_balanced
+                                    const base = row.purb_purchase_gst ?? 0
+                                    const gstTotal = row.purb_gst_total ?? 0
+                                    const rate = base > 0 ? Math.round((gstTotal / base) * 100 * 10) / 10 : null
                                     return (
-                                      <React.Fragment key={key || '__payable__'}>
-                                        {key && (
-                                          <tr className="bg-gray-50 dark:bg-gray-800/50">
-                                            <td colSpan={2} className="px-3 py-1 text-[10px] font-semibold text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
-                                              {key} <span className="font-normal text-gray-400">· {rows.length} {rows.length === 1 ? 'entry' : 'entries'}</span>
-                                            </td>
-                                            <td className="px-3 py-1 text-[10px] text-right text-gray-400 border-b border-gray-100 dark:border-gray-800 font-mono">
-                                              {subDr > 0 && <span className="text-blue-600 dark:text-blue-400">DR {fmtN(subDr)}</span>}
-                                              {subDr > 0 && subCr > 0 && <span className="mx-1">·</span>}
-                                              {subCr > 0 && <span className="text-rose-500">CR {fmtN(subCr)}</span>}
-                                            </td>
-                                          </tr>
-                                        )}
-                                        {rows.map((row, ri) => (
-                                          <tr key={ri} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
-                                            <td className={`px-3 py-1.5 font-semibold ${row.dr_cr === 'Debit' ? 'text-blue-700 dark:text-blue-300' : 'text-rose-600 dark:text-rose-400'}`}>
-                                              {row.dr_cr === 'Debit' ? 'DR' : 'CR'}
-                                            </td>
-                                            <td className="px-3 py-1.5 text-gray-700 dark:text-gray-300">{row.account_name}</td>
-                                            <td className="px-3 py-1.5 text-right font-mono text-gray-700 dark:text-gray-300">{fmtN(row.amount)}</td>
-                                          </tr>
-                                        ))}
-                                      </React.Fragment>
+                                      <tr key={i} className={`border-b border-gray-100 dark:border-gray-800 transition-colors ${allOk ? 'hover:bg-gray-50/50 dark:hover:bg-gray-800/20' : 'bg-red-50/40 dark:bg-red-900/10'}`}>
+                                        <td className="px-3 py-2 font-medium text-gray-700 dark:text-gray-300 max-w-[200px] truncate" title={row.commodity}>{row.commodity}</td>
+                                        <td className="px-3 py-2 text-right font-mono text-teal-600 dark:text-teal-400">
+                                          <CellTip jv="PURB JV" account="Purchase @gst" entryType="Debit" description="Cost of goods at GST-inclusive price. Debited when the Purchase Account JV is posted.">
+                                            {row.purb_purchase_gst != null ? fmtN(row.purb_purchase_gst) : '—'}
+                                          </CellTip>
+                                        </td>
+                                        <td className="px-3 py-2 text-right font-mono text-gray-500 dark:text-gray-400">
+                                          <CellTip jv="INV JV" account="Purchase exempt" entryType="Credit" description="Closes out the purchase on the inventory side. Must equal PURB @GST for the commodity.">
+                                            {fmtN(row.inv_exempt_cr)}
+                                          </CellTip>
+                                        </td>
+                                        <td className="px-3 py-2 text-right font-mono text-gray-500 dark:text-gray-400">
+                                          <CellTip jv="INV JV" account="Closing Stock" entryType="Debit" description="Moves goods into inventory (Closing Stock). Must equal Purchase exempt CR — confirming the INV JV is self-balanced per commodity.">
+                                            {fmtN(row.inv_closing_dr)}
+                                          </CellTip>
+                                        </td>
+                                        <td className="px-3 py-2 text-right">
+                                          <CellTip jv="PURB JV" account={isIgst ? 'Input IGST' : 'Input CGST + Input SGST'} entryType="Debit" description={`GST input tax credit claimed on this commodity. Computed as ${rate != null ? `${rate}%` : 'rate'} of Purchase @gst value.`}>
+                                            <div className="font-mono text-amber-600 dark:text-amber-400">{fmtN(gstTotal)}</div>
+                                            {rate != null && base > 0 && (
+                                              <div className="text-[9px] text-gray-400 dark:text-gray-500 font-mono mt-0.5">{rate}% × {fmtN(base)}</div>
+                                            )}
+                                          </CellTip>
+                                        </td>
+                                        <td className="px-3 py-2 text-center">
+                                          {gstType && <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${isIgst ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' : 'bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400'}`}>{gstType}</span>}
+                                        </td>
+                                        <td className="px-1.5 text-center">{allOk ? <CkDot /> : <XCircle className="size-3 text-red-500 inline" />}</td>
+                                      </tr>
                                     )
                                   })}
                                 </tbody>
                                 <tfoot>
-                                  <tr className={`${r.checks.find(c => c.id === 'purb_balanced')?.ok ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'bg-red-50 dark:bg-red-900/10'}`}>
-                                    <td colSpan={2} className="px-3 py-2 font-bold text-[11px] text-gray-700 dark:text-gray-200">Total</td>
-                                    <td className="px-3 py-2 text-right font-mono font-bold text-[11px]">
-                                      <span className="text-blue-700 dark:text-blue-300">DR {fmtN(r.purb_jv.total_dr)}</span>
-                                      <span className="mx-1 text-gray-400">=</span>
-                                      <span className="text-rose-600 dark:text-rose-400">CR {fmtN(r.purb_jv.payable)}</span>
+                                  <tr className="bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 font-semibold">
+                                    <td className="px-3 py-2 text-[11px] text-gray-600 dark:text-gray-400">Total</td>
+                                    <td className="px-3 py-2 text-right font-mono text-teal-600 dark:text-teal-400 text-[11px]">{fmtN(r.commodity_rows.reduce((s,row)=>s+(row.purb_purchase_gst??0),0))}</td>
+                                    <td className="px-3 py-2 text-right font-mono text-gray-500 dark:text-gray-400 text-[11px]">{fmtN(r.commodity_rows.reduce((s,row)=>s+(row.inv_exempt_cr??0),0))}</td>
+                                    <td className="px-3 py-2 text-right font-mono text-gray-500 dark:text-gray-400 text-[11px]">{fmtN(r.commodity_rows.reduce((s,row)=>s+(row.inv_closing_dr??0),0))}</td>
+                                    <td className="px-3 py-2 text-right font-mono text-amber-600 dark:text-amber-400 text-[11px]">{fmtN(r.commodity_rows.reduce((s,row)=>s+(row.purb_gst_total??0),0))}</td>
+                                    <td /><td />
+                                  </tr>
+                                  <tr className="border-t border-gray-100 dark:border-gray-800">
+                                    <td className="px-3 py-2 text-[11px] font-semibold text-gray-600 dark:text-gray-400" colSpan={4}>Payable</td>
+                                    <td colSpan={3} className="px-3 py-2 text-right">
+                                      <span className="font-mono text-[10px] text-gray-400">PB {fmtN(r.pb_meta.total)}</span>
+                                      <span className="mx-1 text-gray-300">=</span>
+                                      <span className={`font-mono text-[10px] font-bold ${r.checks.find(c=>c.id==='payable_vs_pb')?.ok ? 'text-rose-600 dark:text-rose-400' : 'text-red-600'}`}>PURB CR {fmtN(r.purb_jv.payable)}</span>
+                                      <span className="ml-1.5 inline-flex align-middle">{r.checks.find(c=>c.id==='payable_vs_pb')?.ok ? <CkDot /> : <XCircle className="size-3 text-red-500 inline" />}</span>
                                     </td>
                                   </tr>
                                 </tfoot>
                               </table>
                             </div>
-                          )
-                        })()}
+                          </div>
+                        )}
 
-                        {/* INV JV ledger (collapsible) */}
-                        {ccShowInvLedger && r.inv_jv.rows.length > 0 && (() => {
-                          const grpMap = new Map<string, typeof r.inv_jv.rows>()
-                          for (const row of r.inv_jv.rows) {
-                            const key = row.commodity || ''
-                            if (!grpMap.has(key)) grpMap.set(key, [])
-                            grpMap.get(key)!.push(row)
-                          }
-                          const keys = [...grpMap.keys()].sort((a, b) => a === '' ? 1 : b === '' ? -1 : a.localeCompare(b))
-                          return (
-                            <div className="border-b border-gray-200 dark:border-gray-700">
-                              <div className="px-3 py-1.5 bg-rose-50 dark:bg-rose-900/20 text-[10px] font-semibold uppercase tracking-widest text-rose-600 dark:text-rose-400">
-                                INV JV Entries · {r.inv_ref_no || '—'}
-                              </div>
-                              <table className="w-full text-[11px]">
-                                <thead>
-                                  <tr className="bg-gray-50/60 dark:bg-gray-800/30 text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                                    <th className="px-3 py-1.5 text-left w-10">DR/CR</th>
-                                    <th className="px-3 py-1.5 text-left">Account</th>
-                                    <th className="px-3 py-1.5 text-right">Amount</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {keys.map(key => {
-                                    const rows = grpMap.get(key)!
-                                    const subDr = rows.filter(r => r.dr_cr === 'Debit').reduce((s, r) => s + r.amount, 0)
-                                    const subCr = rows.filter(r => r.dr_cr === 'Credit').reduce((s, r) => s + r.amount, 0)
-                                    return (
-                                      <React.Fragment key={key || '__inv_other__'}>
-                                        {key && (
-                                          <tr className="bg-gray-50 dark:bg-gray-800/50">
-                                            <td colSpan={2} className="px-3 py-1 text-[10px] font-semibold text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
-                                              {key} <span className="font-normal text-gray-400">· {rows.length} {rows.length === 1 ? 'entry' : 'entries'}</span>
-                                            </td>
-                                            <td className="px-3 py-1 text-[10px] text-right text-gray-400 border-b border-gray-100 dark:border-gray-800 font-mono">
-                                              {subDr > 0 && <span className="text-blue-600 dark:text-blue-400">DR {fmtN(subDr)}</span>}
-                                              {subDr > 0 && subCr > 0 && <span className="mx-1">·</span>}
-                                              {subCr > 0 && <span className="text-rose-500">CR {fmtN(subCr)}</span>}
-                                            </td>
-                                          </tr>
-                                        )}
-                                        {rows.map((row, ri) => (
-                                          <tr key={ri} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
-                                            <td className={`px-3 py-1.5 font-semibold ${row.dr_cr === 'Debit' ? 'text-blue-700 dark:text-blue-300' : 'text-rose-600 dark:text-rose-400'}`}>
-                                              {row.dr_cr === 'Debit' ? 'DR' : 'CR'}
-                                            </td>
-                                            <td className="px-3 py-1.5 text-gray-700 dark:text-gray-300">{row.account_name}</td>
-                                            <td className="px-3 py-1.5 text-right font-mono text-gray-700 dark:text-gray-300">{fmtN(row.amount)}</td>
-                                          </tr>
-                                        ))}
-                                      </React.Fragment>
-                                    )
-                                  })}
-                                </tbody>
-                                <tfoot>
-                                  <tr className={`${r.checks.find(c => c.id === 'inv_balanced')?.ok ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'bg-red-50 dark:bg-red-900/10'}`}>
-                                    <td colSpan={2} className="px-3 py-2 font-bold text-[11px] text-gray-700 dark:text-gray-200">Total</td>
-                                    <td className="px-3 py-2 text-right font-mono font-bold text-[11px]">
-                                      <span className="text-blue-700 dark:text-blue-300">DR {fmtN(r.inv_jv.closing_dr)}</span>
-                                      <span className="mx-1 text-gray-400">=</span>
-                                      <span className="text-rose-600 dark:text-rose-400">CR {fmtN(r.inv_jv.exempt_cr)}</span>
-                                    </td>
-                                  </tr>
-                                </tfoot>
-                              </table>
+                        {/* ── Checks accordion ─────────────────────────── */}
+                        <div className="border-b border-gray-200 dark:border-gray-700">
+                          <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Validation Checks</span>
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400">
+                                {r.checks.filter(c=>c.ok).length}/{r.checks.length} passed
+                              </span>
                             </div>
-                          )
-                        })()}
+                            <button
+                              onClick={() => setCcGroupsCollapsed(allGroupsOpen ? new Set(checkGroups.map(g=>g.label)) : new Set())}
+                              className="text-[10px] font-medium text-teal-600 dark:text-teal-400 hover:underline cursor-pointer"
+                            >
+                              {allGroupsOpen ? 'Collapse all' : 'Expand all'}
+                            </button>
+                          </div>
+                          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {checkGroups.map(grp => {
+                              const chks = r.checks.filter(c=>grp.ids.includes(c.id))
+                              if (chks.length === 0) return null
+                              const isOpen = !ccGroupsCollapsed.has(grp.label)
+                              const grpOk = chks.every(c=>c.ok)
+                              return (
+                                <div key={grp.label}>
+                                  <button
+                                    onClick={() => {
+                                      const next = new Set(ccGroupsCollapsed)
+                                      if (isOpen) next.add(grp.label); else next.delete(grp.label)
+                                      setCcGroupsCollapsed(next)
+                                    }}
+                                    className="w-full px-4 py-2.5 flex items-center justify-between hover:bg-gray-50/50 dark:hover:bg-gray-800/20 transition-colors cursor-pointer text-left"
+                                  >
+                                    <div className="flex items-center gap-2.5">
+                                      <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-200">{grp.label}</span>
+                                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${grpOk ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'}`}>
+                                        {chks.length}
+                                      </span>
+                                    </div>
+                                    <ChevronDown className={`size-3 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                                  </button>
+                                  {isOpen && (
+                                    <div className="px-4 pb-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+                                      {chks.map(chk => (
+                                        <div key={chk.id} className="flex items-start gap-2 py-0.5">
+                                          {chk.ok ? <CkDot /> : <XCircle className="size-3 text-red-500 shrink-0 mt-0.5" />}
+                                          <div>
+                                            <span className={`text-[11px] leading-relaxed ${chk.ok ? 'text-gray-600 dark:text-gray-400' : 'text-red-700 dark:text-red-400 font-medium'}`}>{chk.label}</span>
+                                            {chk.detail && !chk.ok && <div className="text-[10px] text-gray-400 font-mono mt-0.5">{chk.detail}</div>}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
 
-                        {/* ── Full View modal (same shell as Purchase + INV tabs) ── */}
+                        {/* ── JV Entries — tabbed PURB / INV ───────────── */}
+                        <div>
+                          <div className="flex border-b border-gray-200 dark:border-gray-700">
+                            {(['purb','inv'] as const).map(tab => (
+                              <button
+                                key={tab}
+                                onClick={() => setCcJvTab(tab)}
+                                className={`px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider transition-colors cursor-pointer relative ${ccJvTab === tab ? 'text-teal-600 dark:text-teal-400' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+                              >
+                                {tab === 'purb' ? 'PURB JV' : 'INV JV'}
+                                {ccJvTab === tab && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-500 rounded-t-sm" />}
+                              </button>
+                            ))}
+                          </div>
+                          {(['purb','inv'] as const).map(tab => {
+                            const jvRows = tab === 'purb' ? r.purb_jv.rows : r.inv_jv.rows
+                            const totDr  = jvRows.filter(x=>x.dr_cr==='Debit').reduce((s,x)=>s+x.amount,0)
+                            const totCr  = jvRows.filter(x=>x.dr_cr==='Credit').reduce((s,x)=>s+x.amount,0)
+                            const balanced = r.checks.find(c=>c.id===(tab==='purb'?'purb_balanced':'inv_balanced'))?.ok ?? true
+                            const grpMap = new Map<string, typeof jvRows>()
+                            for (const row of jvRows) {
+                              const k = row.commodity || ''
+                              if (!grpMap.has(k)) grpMap.set(k, [])
+                              grpMap.get(k)!.push(row)
+                            }
+                            const sortedKeys = [...grpMap.keys()].sort((a,b)=>a===''?1:b===''?-1:a.localeCompare(b))
+                            return (
+                              <div key={tab} className={ccJvTab !== tab ? 'hidden' : 'overflow-x-auto'}>
+                                {jvRows.length === 0 ? (
+                                  <div className="px-4 py-6 text-center text-[12px] text-gray-400">No entries found</div>
+                                ) : (
+                                  <table className="w-full text-[11px]" style={{borderCollapse:'separate',borderSpacing:0}}>
+                                    <thead>
+                                      <tr className="bg-gray-50 dark:bg-gray-800/50 text-gray-400">
+                                        <th className="px-4 py-2 text-left w-14 font-semibold text-[10px] uppercase tracking-wide">DR/CR</th>
+                                        <th className="px-4 py-2 text-left font-semibold text-[10px] uppercase tracking-wide">Account</th>
+                                        <th className="px-4 py-2 text-right font-semibold text-[10px] uppercase tracking-wide">Amount</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {sortedKeys.map(key => {
+                                        const krows = grpMap.get(key)!
+                                        const subDr = krows.filter(x=>x.dr_cr==='Debit').reduce((s,x)=>s+x.amount,0)
+                                        const subCr = krows.filter(x=>x.dr_cr==='Credit').reduce((s,x)=>s+x.amount,0)
+                                        return (
+                                          <React.Fragment key={key||'__other__'}>
+                                            {key && (
+                                              <tr className="bg-gray-50/80 dark:bg-gray-800/40">
+                                                <td colSpan={2} className="px-4 py-1.5 text-[10px] font-semibold text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                                                  {key} <span className="font-normal text-gray-400">· {krows.length} {krows.length===1?'entry':'entries'}</span>
+                                                </td>
+                                                <td className="px-4 py-1.5 text-[10px] text-right font-mono border-b border-gray-100 dark:border-gray-800">
+                                                  {subDr > 0 && <span className="text-blue-600 dark:text-blue-400 font-semibold">DR {fmtN(subDr)}</span>}
+                                                  {subDr > 0 && subCr > 0 && <span className="text-gray-300 mx-1">·</span>}
+                                                  {subCr > 0 && <span className="text-rose-500 dark:text-rose-400 font-semibold">CR {fmtN(subCr)}</span>}
+                                                </td>
+                                              </tr>
+                                            )}
+                                            {krows.map((row, ri) => (
+                                              <tr key={ri} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/20 transition-colors">
+                                                <td className={`px-4 py-1.5 pl-7 font-semibold ${row.dr_cr==='Debit' ? 'text-blue-700 dark:text-blue-300' : 'text-rose-600 dark:text-rose-400'}`}>
+                                                  {row.dr_cr==='Debit' ? 'DR' : 'CR'}
+                                                </td>
+                                                <td className="px-4 py-1.5 text-gray-700 dark:text-gray-300">{row.account_name}</td>
+                                                <td className="px-4 py-1.5 text-right font-mono text-gray-700 dark:text-gray-300">{fmtN(row.amount)}</td>
+                                              </tr>
+                                            ))}
+                                          </React.Fragment>
+                                        )
+                                      })}
+                                    </tbody>
+                                    <tfoot>
+                                      <tr className={`border-t-2 font-semibold border-gray-200 dark:border-gray-700 ${balanced ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'bg-red-50 dark:bg-red-900/10'}`}>
+                                        <td colSpan={2} className="px-4 py-2 text-[11px] text-gray-700 dark:text-gray-200">Total</td>
+                                        <td className="px-4 py-2 text-right font-mono text-[11px]">
+                                          <span className="text-blue-700 dark:text-blue-300">DR {fmtN(totDr)}</span>
+                                          <span className="mx-1.5 text-gray-300">=</span>
+                                          <span className="text-rose-600 dark:text-rose-400">CR {fmtN(totCr)}</span>
+                                          {Math.abs(totDr-totCr) < 0.01 && <span className="ml-1.5 inline-flex align-middle"><CkDot /></span>}
+                                        </td>
+                                      </tr>
+                                    </tfoot>
+                                  </table>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+
+                        {/* ── Full View modal ── */}
                         {ccFullViewOpen && (
                           <DialogPrimitive.Root open={ccFullViewOpen} onOpenChange={setCcFullViewOpen}>
                             <DialogPrimitive.Portal>
-                              <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-                              <DialogPrimitive.Content className="fixed inset-4 z-50 flex flex-col bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+                              <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+                              <DialogPrimitive.Content className="fixed inset-3 z-50 flex flex-col bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
                                 <DialogPrimitive.Title className="sr-only">Cross-Check Full View — {r.pb_ref_no}</DialogPrimitive.Title>
 
-                                {/* Modal header */}
-                                <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-gradient-to-r from-[#3F51B5]/[0.06] to-transparent">
+                                {/* Header */}
+                                <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-gradient-to-r from-teal-500/[0.06] to-transparent">
                                   <div className="flex items-center gap-3">
-                                    <GitCompare className="size-4 text-[#3F51B5] dark:text-[#7986CB]" />
-                                    <span className="text-[14px] font-bold font-mono text-gray-800 dark:text-gray-100">{r.pb_ref_no}</span>
-                                    {overallOk ? ccPill(true) : ccPill(false)}
+                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-teal-50 dark:bg-teal-900/30 shrink-0">
+                                      <GitCompare className="size-3.5 text-teal-600 dark:text-teal-400" />
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center gap-2.5">
+                                        <span className="text-[14px] font-bold font-mono text-gray-800 dark:text-gray-100">{r.pb_ref_no}</span>
+                                        {overallOk
+                                          ? <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"><CkDot />Passed</span>
+                                          : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800"><XCircle className="size-2.5" />Failed</span>}
+                                      </div>
+                                      <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">PURB × PURB JV × INV JV reconciliation</div>
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <button onClick={exportCcPdf} className="text-[11px] flex items-center gap-1 h-7 px-2.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-red-600 hover:border-red-300 transition-colors cursor-pointer"><FileText className="size-3" />PDF</button>
-                                    <button onClick={exportCcXls} className="text-[11px] flex items-center gap-1 h-7 px-2.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-emerald-600 hover:border-emerald-300 transition-colors cursor-pointer"><FileSpreadsheet className="size-3" />.xls</button>
-                                    <button onClick={() => setCcFullViewOpen(false)} className="size-7 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors cursor-pointer"><X className="size-4" /></button>
+                                  <div className="flex items-center gap-1.5">
+                                    <button onClick={exportCcPdf} className="text-[11px] flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-red-600 hover:border-red-300 dark:hover:border-red-800 transition-colors cursor-pointer"><FileText className="size-3" />PDF</button>
+                                    <button onClick={exportCcXls} className="text-[11px] flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-emerald-600 hover:border-emerald-300 dark:hover:border-emerald-800 transition-colors cursor-pointer"><FileSpreadsheet className="size-3" />.xls</button>
+                                    <button onClick={() => setCcFullViewOpen(false)} className="size-7 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors cursor-pointer"><X className="size-4" /></button>
                                   </div>
                                 </div>
 
-                                {/* Modal body */}
-                                <div className="flex-1 overflow-y-auto min-h-0">
-                                  {/* Meta strip */}
-                                  <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-200 dark:border-gray-700">
-                                    <div className="px-5 py-3"><div className="text-[10px] text-gray-400 font-medium mb-0.5">Supplier</div><div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{ccSelectedPB!.supplier ?? '—'}</div></div>
-                                    <div className="px-5 py-3"><div className="text-[10px] text-gray-400 font-medium mb-0.5">PB Date</div><div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{ccSelectedPB!.date?.slice(0,10) ?? '—'}</div></div>
-                                    <div className="px-5 py-3"><div className="text-[10px] text-gray-400 font-medium mb-0.5">Fiscal Year</div><div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{r.purb_jv.fiscal_year || '—'}</div></div>
-                                    <div className="px-5 py-3"><div className="text-[10px] text-gray-400 font-medium mb-0.5">Period</div><div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">{r.purb_jv.period || '—'}</div></div>
-                                  </div>
-
-                                  {/* Two-column: checks left, JV entries right */}
-                                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">
-
-                                    {/* Left: all checks */}
-                                    <div className="p-5 space-y-4">
-                                      <div>
-                                        <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">Verification Checks</h3>
-                                        <div className="space-y-1.5">
-                                          {r.checks.map((chk, i) => (
-                                            <div key={i} className={`flex items-start gap-2.5 px-3 py-2 rounded-lg text-[12px] ${chk.ok ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'bg-red-50 dark:bg-red-900/10'}`}>
-                                              {chk.ok ? <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0 mt-px" /> : <XCircle className="size-3.5 text-red-500 shrink-0 mt-px" />}
-                                              <div className="min-w-0">
-                                                <div className={`font-medium leading-tight ${chk.ok ? 'text-gray-700 dark:text-gray-200' : 'text-red-700 dark:text-red-300'}`}>{chk.label}</div>
-                                                {chk.detail && <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 font-mono">{chk.detail}</div>}
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-
-                                      {/* Amount chain */}
-                                      {r.amount_chain.length > 0 && (
-                                        <div>
-                                          <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">Amount Chain</h3>
-                                          <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-                                            <table className="w-full border-collapse text-[12px]">
-                                              <thead><tr className="bg-gray-50 dark:bg-gray-800/80">
-                                                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">Line</th>
-                                                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">PB</th>
-                                                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">PURB JV</th>
-                                                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">INV JV</th>
-                                                <th className="px-3 py-2 text-center text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 w-8">✓</th>
-                                              </tr></thead>
-                                              <tbody>
-                                                {r.amount_chain.map((row, i) => {
-                                                  const isEq = row.sign === 'eq'
-                                                  return (
-                                                    <tr key={i} className={isEq ? 'bg-blue-50/40 dark:bg-blue-900/5' : 'hover:bg-gray-50/50 dark:hover:bg-gray-800/20'}>
-                                                      <td className={`px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 ${isEq ? 'font-semibold text-blue-700 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}>
-                                                        <span className="font-mono text-gray-400 mr-1">{row.sign === 'minus' ? '−' : row.sign === 'plus' ? '+' : row.sign === 'eq' ? '=' : ' '}</span>
-                                                        {row.label}
-                                                        {row.note && <span className="ml-1 text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-800 px-1 rounded">{row.note}</span>}
-                                                      </td>
-                                                      <td className={`px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-right font-mono ${isEq ? 'font-semibold text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}>{fmtN(Math.abs(row.amount))}</td>
-                                                      <td className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-gray-400">{row.cross?.purb != null ? fmtN(row.cross.purb) : '—'}</td>
-                                                      <td className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-gray-400">{row.cross?.inv != null ? fmtN(row.cross.inv) : '—'}</td>
-                                                      <td className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-center">{row.ok != null ? (row.ok ? <CheckCircle2 className="size-3.5 text-emerald-500 inline" /> : <XCircle className="size-3.5 text-red-500 inline" />) : null}</td>
-                                                    </tr>
-                                                  )
-                                                })}
-                                              </tbody>
-                                            </table>
-                                          </div>
-                                        </div>
-                                      )}
+                                {/* Meta strip */}
+                                <div className="grid grid-cols-2 sm:grid-cols-5 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-gray-50/40 dark:bg-gray-800/20">
+                                  {([
+                                    { label: 'Supplier',   value: ccSelectedPB!.supplier ?? '—' },
+                                    { label: 'Date',       value: ccSelectedPB!.date?.slice(0,10) ?? '—' },
+                                    { label: 'FY / Period',value: `${r.purb_jv.fiscal_year} · ${r.purb_jv.period}` },
+                                    { label: 'INV JV Ref', value: r.inv_ref_no || 'Not found', mono: true },
+                                    { label: 'Checks',     value: `${r.checks.filter(c=>c.ok).length}/${r.checks.length} passed`, ok: overallOk },
+                                  ] as { label: string; value: string; mono?: boolean; ok?: boolean }[]).map(({ label, value, mono, ok }) => (
+                                    <div key={label} className="px-4 py-2.5">
+                                      <div className="text-[10px] font-semibold uppercase tracking-wider mb-0.5 text-gray-400 dark:text-gray-500">{label}</div>
+                                      <div className={`text-[12px] font-semibold truncate ${mono ? 'font-mono text-[11px]' : ''} ${ok === true ? 'text-emerald-600 dark:text-emerald-400' : ok === false ? 'text-red-600 dark:text-red-400' : 'text-gray-800 dark:text-gray-100'}`}>{value}</div>
                                     </div>
+                                  ))}
+                                </div>
 
-                                    {/* Right: PURB entries + INV entries + per-commodity */}
-                                    <div className="p-5 space-y-5">
-                                      {[
-                                        { title: `PURB JV Accounting Entries · ${r.pb_ref_no}`, rows: r.purb_jv.rows, totalDr: r.purb_jv.total_dr, balanced: r.checks.find(c=>c.id==='purb_balanced')?.ok ?? true },
-                                        { title: `INV JV Accounting Entries · ${r.inv_ref_no||'—'}`, rows: r.inv_jv.rows, totalDr: r.inv_jv.total_dr, balanced: r.checks.find(c=>c.id==='inv_balanced')?.ok ?? true },
-                                      ].map(({ title, rows, totalDr, balanced }) => {
-                                        if (rows.length === 0) return null
-                                        const grp = new Map<string, typeof rows>()
-                                        for (const row of rows) {
-                                          const k = row.commodity || ''
-                                          if (!grp.has(k)) grp.set(k, [])
-                                          grp.get(k)!.push(row)
-                                        }
-                                        const sortedK = [...grp.keys()].sort((a,b)=>a===''?1:b===''?-1:a.localeCompare(b))
-                                        const totDr = rows.filter(r=>r.dr_cr==='Debit').reduce((s,r)=>s+r.amount,0)
-                                        const totCr = rows.filter(r=>r.dr_cr==='Credit').reduce((s,r)=>s+r.amount,0)
+                                {/* Metric cards */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-gray-50/40 dark:bg-gray-800/20">
+                                  {([
+                                    { label: 'Taxable',       tag: 'PURB JV',  pbLabel: 'PB Taxable',   jvLabel: 'Purchase @GST DR', pb: r.pb_meta.taxable,    jv: r.purb_jv.purchase_gst_dr, chkId: 'taxable_vs_purb',  color: 'gray'   },
+                                    { label: 'GST',           tag: 'PURB JV',  pbLabel: 'PB GST Total', jvLabel: 'GST DR',           pb: r.pb_meta.gst_total,  jv: r.purb_jv.gst_dr,          chkId: 'gst_total_match',  color: 'amber'  },
+                                    { label: 'Payable',       tag: 'PURB JV',  pbLabel: 'PB Total',     jvLabel: 'Payable CR',       pb: r.pb_meta.total,      jv: r.purb_jv.payable,         chkId: 'payable_vs_pb',    color: 'teal'   },
+                                    { label: 'Closing Stock', tag: 'INV JV',   pbLabel: 'PB Taxable',   jvLabel: 'Closing Stock DR', pb: r.pb_meta.taxable,    jv: r.inv_jv.closing_dr,       chkId: 'taxable_vs_inv',   color: 'violet' },
+                                  ] as const).map(({ label, tag, pbLabel, jvLabel, pb, jv, chkId, color }) => {
+                                    const chk = r.checks.find(c=>c.id===chkId)
+                                    const ok  = chk?.ok ?? true
+                                    const accent = {
+                                      gray:   { border: 'border-gray-200 dark:border-gray-700',       bg: 'bg-white dark:bg-gray-900',            tag: 'text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800',                label: 'text-gray-500 dark:text-gray-400',     val: 'text-gray-800 dark:text-gray-100',     jv: 'text-gray-400 dark:text-gray-500' },
+                                      amber:  { border: 'border-amber-200 dark:border-amber-800/60',  bg: 'bg-amber-50/50 dark:bg-amber-900/10',  tag: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30',         label: 'text-amber-600 dark:text-amber-400',   val: 'text-amber-600 dark:text-amber-400',   jv: 'text-amber-500/60 dark:text-amber-500/60' },
+                                      teal:   { border: 'border-teal-200 dark:border-teal-800',       bg: 'bg-teal-50/60 dark:bg-teal-900/20',    tag: 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/30',           label: 'text-teal-600 dark:text-teal-400',     val: 'text-teal-700 dark:text-teal-300',     jv: 'text-teal-500/60 dark:text-teal-400/60' },
+                                      violet: { border: 'border-violet-200 dark:border-violet-800/60', bg: 'bg-violet-50/50 dark:bg-violet-900/10', tag: 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30', label: 'text-violet-600 dark:text-violet-400', val: 'text-violet-700 dark:text-violet-300',  jv: 'text-violet-500/60 dark:text-violet-400/60' },
+                                    }[color]
+                                    return (
+                                      <div key={label} className={`rounded-lg border p-3 ${accent.border} ${accent.bg}`}>
+                                        <div className="flex items-center justify-between mb-2.5">
+                                          <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${accent.tag}`}>{tag}</span>
+                                          {ok ? <CkDot /> : <XCircle className="size-3 text-red-500 shrink-0" />}
+                                        </div>
+                                        <div className={`text-[11px] font-bold uppercase tracking-wide mb-2.5 ${accent.label}`}>{label}</div>
+                                        <div className={`h-px mb-2.5 ${ok ? 'bg-gray-100 dark:bg-gray-800' : 'bg-red-200 dark:bg-red-800/40'}`} />
+                                        <div className="text-[9px] text-gray-400 dark:text-gray-500 mb-0.5">{pbLabel}</div>
+                                        <div className={`font-mono text-[14px] font-bold leading-tight ${accent.val}`}>{fmtN(pb)}</div>
+                                        <div className="text-[9px] text-gray-400 dark:text-gray-500 mt-2 mb-0.5">{jvLabel}</div>
+                                        <div className={`font-mono text-[11px] font-semibold ${ok ? accent.jv : 'text-red-500 dark:text-red-400'}`}>{fmtN(jv)}</div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+
+                                {/* Body: checks left | JV entries right */}
+                                <div className="flex-1 overflow-hidden min-h-0 grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">
+
+                                  {/* Left: grouped checks + amount chain */}
+                                  <div className="overflow-y-auto min-h-0">
+                                    {/* Checks accordion */}
+                                    <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between sticky top-0 z-10">
+                                      <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Validation Checks</span>
+                                    </div>
+                                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                                      {checkGroups.map(grp => {
+                                        const chks = r.checks.filter(c=>grp.ids.includes(c.id))
+                                        if (chks.length === 0) return null
+                                        const grpOk = chks.every(c=>c.ok)
+                                        const isOpen = !ccFvCollapsed.has(grp.label)
                                         return (
-                                          <div key={title}>
-                                            <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">{title}</h3>
-                                            <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-                                              <table className="w-full border-collapse text-[12px]">
-                                                <thead><tr className="bg-gray-50 dark:bg-gray-800/80">
-                                                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 w-12">DR/CR</th>
-                                                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">Account</th>
-                                                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">Amount</th>
-                                                </tr></thead>
-                                                <tbody>
-                                                  {sortedK.map(key => {
-                                                    const krows = grp.get(key)!
-                                                    return (
-                                                      <React.Fragment key={key}>
-                                                        {key && <tr><td colSpan={3} className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/60 text-[10px] font-semibold text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">{key}</td></tr>}
-                                                        {krows.map((row, ri) => (
-                                                          <tr key={ri} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
-                                                            <td className={`px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 font-semibold text-[11px] ${row.dr_cr==='Debit'?'text-blue-700 dark:text-blue-300':'text-rose-600 dark:text-rose-400'}`}>{row.dr_cr==='Debit'?'DR':'CR'}</td>
-                                                            <td className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-gray-700 dark:text-gray-300">{row.account_name}</td>
-                                                            <td className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-gray-700 dark:text-gray-300">{fmtN(row.amount)}</td>
-                                                          </tr>
-                                                        ))}
-                                                      </React.Fragment>
-                                                    )
-                                                  })}
-                                                </tbody>
-                                                <tfoot><tr className={balanced ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'bg-red-50 dark:bg-red-900/10'}>
-                                                  <td colSpan={2} className="px-3 py-2 font-bold text-[11px] text-gray-700 dark:text-gray-200">Total</td>
-                                                  <td className="px-3 py-2 text-right font-mono font-bold text-[11px]">
-                                                    <span className="text-blue-700 dark:text-blue-300">DR {fmtN(totDr)}</span>
-                                                    <span className="mx-1 text-gray-400">=</span>
-                                                    <span className="text-rose-600 dark:text-rose-400">CR {fmtN(totCr)}</span>
-                                                  </td>
-                                                </tr></tfoot>
-                                              </table>
-                                            </div>
+                                          <div key={grp.label}>
+                                            <button
+                                              onClick={() => { const next = new Set(ccFvCollapsed); isOpen ? next.add(grp.label) : next.delete(grp.label); setCcFvCollapsed(next) }}
+                                              className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors cursor-pointer text-left"
+                                            >
+                                              <ChevronDown className={`size-3 text-gray-400 transition-transform shrink-0 ${isOpen ? '' : '-rotate-90'}`} />
+                                              <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400 flex-1">{grp.label}</span>
+                                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${grpOk ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'}`}>{chks.length}</span>
+                                              {grpOk ? <CkDot /> : <XCircle className="size-3 text-red-500 shrink-0" />}
+                                            </button>
+                                            {isOpen && (
+                                              <div className="px-4 pb-3 space-y-1.5">
+                                                {chks.map(chk => (
+                                                  <div key={chk.id} className={`flex items-start gap-2.5 px-3 py-2 rounded-lg ${chk.ok ? 'bg-emerald-50/60 dark:bg-emerald-900/10' : 'bg-red-50 dark:bg-red-900/10'}`}>
+                                                    {chk.ok ? <CkDot /> : <XCircle className="size-3 text-red-500 shrink-0 mt-0.5" />}
+                                                    <div className="min-w-0">
+                                                      <div className={`text-[11px] font-medium leading-tight ${chk.ok ? 'text-gray-700 dark:text-gray-200' : 'text-red-700 dark:text-red-300'}`}>{chk.label}</div>
+                                                      {chk.detail && <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 font-mono">{chk.detail}</div>}
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
                                           </div>
                                         )
                                       })}
+                                    </div>
 
-                                      {/* Per-commodity */}
-                                      {r.commodity_rows.length > 0 && (
-                                        <div>
-                                          <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-3">Per-Commodity Cross-Check</h3>
-                                          <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-                                            <table className="w-full border-collapse text-[12px]">
-                                              <thead><tr className="bg-gray-50 dark:bg-gray-800/80">
-                                                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700">Commodity</th>
-                                                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap">PURB Purchase@GST</th>
-                                                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap">PURB GST</th>
-                                                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap">INV Closing DR</th>
-                                                <th className="px-3 py-2 text-center text-[10px] font-semibold uppercase text-gray-400 border-b border-gray-200 dark:border-gray-700 w-12">✓</th>
-                                              </tr></thead>
+                                    {/* Amount chain */}
+                                    {r.amount_chain.length > 0 && (
+                                      <div className="border-t border-gray-200 dark:border-gray-700">
+                                        <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-800 sticky top-0 z-10">
+                                          <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Amount Chain</span>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                          <table className="w-full text-[11px]" style={{borderCollapse:'separate',borderSpacing:0}}>
+                                            <thead>
+                                              <tr className="bg-gray-50 dark:bg-gray-800/50 text-gray-400">
+                                                <th className="px-3 py-2 text-left font-semibold text-[10px] uppercase tracking-wide">Line</th>
+                                                <th className="px-3 py-2 text-right font-semibold text-[10px] uppercase tracking-wide">PB</th>
+                                                <th className="px-3 py-2 text-right font-semibold text-[10px] uppercase tracking-wide">PURB JV</th>
+                                                <th className="px-3 py-2 text-right font-semibold text-[10px] uppercase tracking-wide">INV JV</th>
+                                                <th className="w-8" />
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {r.amount_chain.map((row, i) => {
+                                                const isEq = row.sign === 'eq'
+                                                return (
+                                                  <tr key={i} className={`border-b border-gray-100 dark:border-gray-800 ${isEq ? 'bg-teal-50/40 dark:bg-teal-900/10' : 'hover:bg-gray-50/50 dark:hover:bg-gray-800/20'}`}>
+                                                    <td className={`px-3 py-1.5 ${isEq ? 'font-semibold text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400'}`}>
+                                                      <span className="font-mono text-gray-400 mr-1">{row.sign==='minus'?'−':row.sign==='plus'?'+':row.sign==='eq'?'=':' '}</span>
+                                                      {row.label}
+                                                      {row.note && <span className="ml-1 text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-800 px-1 rounded">{row.note}</span>}
+                                                    </td>
+                                                    <td className={`px-3 py-1.5 text-right font-mono ${isEq ? 'font-semibold text-teal-700 dark:text-teal-300' : 'text-gray-700 dark:text-gray-300'}`}>{fmtN(Math.abs(row.amount))}</td>
+                                                    <td className="px-3 py-1.5 text-right font-mono text-gray-400">{row.cross?.purb != null ? fmtN(row.cross.purb) : '—'}</td>
+                                                    <td className="px-3 py-1.5 text-right font-mono text-gray-400">{row.cross?.inv != null ? fmtN(row.cross.inv) : '—'}</td>
+                                                    <td className="px-2 py-1.5 text-center">{row.ok != null ? (row.ok ? <CkDot /> : <XCircle className="size-3 text-red-500 inline" />) : null}</td>
+                                                  </tr>
+                                                )
+                                              })}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Right: tabbed JV entries + recon table */}
+                                  <div className="overflow-y-auto min-h-0 flex flex-col">
+                                    {/* JV tabs */}
+                                    <div className="flex border-b border-gray-200 dark:border-gray-700 shrink-0 sticky top-0 z-10 bg-white dark:bg-gray-900">
+                                      {(['purb','inv'] as const).map(tab => (
+                                        <button
+                                          key={tab}
+                                          onClick={() => setCcJvTab(tab)}
+                                          className={`px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider transition-colors cursor-pointer relative ${ccJvTab === tab ? 'text-teal-600 dark:text-teal-400' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+                                        >
+                                          {tab === 'purb' ? `PURB JV · ${r.pb_ref_no}` : `INV JV · ${r.inv_ref_no||'—'}`}
+                                          {ccJvTab === tab && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-500 rounded-t-sm" />}
+                                        </button>
+                                      ))}
+                                    </div>
+
+                                    {(['purb','inv'] as const).map(tab => {
+                                      const jvRows = tab === 'purb' ? r.purb_jv.rows : r.inv_jv.rows
+                                      const totDr  = jvRows.filter(x=>x.dr_cr==='Debit').reduce((s,x)=>s+x.amount,0)
+                                      const totCr  = jvRows.filter(x=>x.dr_cr==='Credit').reduce((s,x)=>s+x.amount,0)
+                                      const balanced = r.checks.find(c=>c.id===(tab==='purb'?'purb_balanced':'inv_balanced'))?.ok ?? true
+                                      const grpMap = new Map<string, typeof jvRows>()
+                                      for (const row of jvRows) {
+                                        const k = row.commodity || ''
+                                        if (!grpMap.has(k)) grpMap.set(k, [])
+                                        grpMap.get(k)!.push(row)
+                                      }
+                                      const sortedKeys = [...grpMap.keys()].sort((a,b)=>a===''?1:b===''?-1:a.localeCompare(b))
+                                      return (
+                                        <div key={tab} className={ccJvTab !== tab ? 'hidden' : 'overflow-x-auto'}>
+                                          {jvRows.length === 0 ? (
+                                            <div className="px-4 py-10 text-center text-[12px] text-gray-400">No entries found</div>
+                                          ) : (
+                                            <table className="w-full text-[11px]" style={{borderCollapse:'separate',borderSpacing:0}}>
+                                              <thead className="sticky top-0 z-10">
+                                                <tr className="bg-gray-50 dark:bg-gray-800/80 text-gray-400">
+                                                  <th className="px-4 py-2 text-left w-14 font-semibold text-[10px] uppercase tracking-wide">DR/CR</th>
+                                                  <th className="px-4 py-2 text-left font-semibold text-[10px] uppercase tracking-wide">Account</th>
+                                                  <th className="px-4 py-2 text-right font-semibold text-[10px] uppercase tracking-wide">Amount</th>
+                                                </tr>
+                                              </thead>
                                               <tbody>
-                                                {r.commodity_rows.map((row, i) => {
-                                                  const gstTotal = (row.purb_igst ?? 0) + (row.purb_cgst ?? 0) + (row.purb_sgst ?? 0)
+                                                {sortedKeys.map(key => {
+                                                  const krows = grpMap.get(key)!
+                                                  const subDr = krows.filter(x=>x.dr_cr==='Debit').reduce((s,x)=>s+x.amount,0)
+                                                  const subCr = krows.filter(x=>x.dr_cr==='Credit').reduce((s,x)=>s+x.amount,0)
                                                   return (
-                                                    <tr key={i} className={(row.taxable_match && row.inv_balanced) ? 'hover:bg-gray-50/50 dark:hover:bg-gray-800/20' : 'bg-red-50 dark:bg-red-900/20'}>
-                                                      <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-gray-700 dark:text-gray-300 font-medium text-[11px]">{row.commodity}</td>
-                                                      <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-blue-700 dark:text-blue-300">{fmtN(row.purb_purchase_gst)}</td>
-                                                      <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-gray-500">{gstTotal > 0 ? fmtN(gstTotal) : '—'}</td>
-                                                      <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-right font-mono text-blue-700 dark:text-blue-300">{fmtN(row.inv_closing_dr)}</td>
-                                                      <td className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-center">{(row.taxable_match && row.inv_balanced) ? <CheckCircle2 className="size-3.5 text-emerald-500 inline" /> : <XCircle className="size-3.5 text-red-500 inline" />}</td>
-                                                    </tr>
+                                                    <React.Fragment key={key||'__other__'}>
+                                                      {key && (
+                                                        <tr className="bg-gray-50/80 dark:bg-gray-800/40">
+                                                          <td colSpan={2} className="px-4 py-1.5 text-[10px] font-semibold text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                                                            {key} <span className="font-normal text-gray-400">· {krows.length} {krows.length===1?'entry':'entries'}</span>
+                                                          </td>
+                                                          <td className="px-4 py-1.5 text-[10px] text-right font-mono border-b border-gray-100 dark:border-gray-800">
+                                                            {subDr > 0 && <span className="text-blue-600 dark:text-blue-400 font-semibold">DR {fmtN(subDr)}</span>}
+                                                            {subDr > 0 && subCr > 0 && <span className="text-gray-300 mx-1">·</span>}
+                                                            {subCr > 0 && <span className="text-rose-500 dark:text-rose-400 font-semibold">CR {fmtN(subCr)}</span>}
+                                                          </td>
+                                                        </tr>
+                                                      )}
+                                                      {krows.map((row, ri) => (
+                                                        <tr key={ri} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/20 transition-colors">
+                                                          <td className={`px-4 py-1.5 pl-7 font-semibold ${row.dr_cr==='Debit'?'text-blue-700 dark:text-blue-300':'text-rose-600 dark:text-rose-400'}`}>
+                                                            {row.dr_cr==='Debit'?'DR':'CR'}
+                                                          </td>
+                                                          <td className="px-4 py-1.5 text-gray-700 dark:text-gray-300">{row.account_name}</td>
+                                                          <td className="px-4 py-1.5 text-right font-mono text-gray-700 dark:text-gray-300">{fmtN(row.amount)}</td>
+                                                        </tr>
+                                                      ))}
+                                                    </React.Fragment>
                                                   )
                                                 })}
                                               </tbody>
+                                              <tfoot>
+                                                <tr className={`border-t-2 font-semibold border-gray-200 dark:border-gray-700 ${balanced?'bg-emerald-50 dark:bg-emerald-900/10':'bg-red-50 dark:bg-red-900/10'}`}>
+                                                  <td colSpan={2} className="px-4 py-2 text-[11px] text-gray-700 dark:text-gray-200">Total</td>
+                                                  <td className="px-4 py-2 text-right font-mono text-[11px]">
+                                                    <span className="text-blue-700 dark:text-blue-300">DR {fmtN(totDr)}</span>
+                                                    <span className="mx-1.5 text-gray-300">=</span>
+                                                    <span className="text-rose-600 dark:text-rose-400">CR {fmtN(totCr)}</span>
+                                                    {Math.abs(totDr-totCr) < 0.01 && <span className="ml-1.5 inline-flex align-middle"><CkDot /></span>}
+                                                  </td>
+                                                </tr>
+                                              </tfoot>
                                             </table>
-                                          </div>
+                                          )}
                                         </div>
-                                      )}
-                                    </div>
+                                      )
+                                    })}
+
+                                    {/* Per-commodity recon */}
+                                    {r.commodity_rows.length > 0 && (
+                                      <div className="border-t border-gray-200 dark:border-gray-700 shrink-0">
+                                        <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/40 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                                          <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Per-Commodity</span>
+                                          <span className="text-[10px] text-gray-400">{r.commodity_rows.length} items</span>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                          <table className="w-full text-[11px]" style={{borderCollapse:'separate',borderSpacing:0}}>
+                                            <thead>
+                                              <tr className="bg-gray-50 dark:bg-gray-800/50 text-gray-400">
+                                                <th className="px-3 py-2 text-left font-semibold text-[10px] uppercase tracking-wide">Commodity</th>
+                                                <th className="px-3 py-2 text-right font-semibold text-[10px] uppercase tracking-wide text-teal-600 dark:text-teal-400">PURB @GST</th>
+                                                <th className="px-3 py-2 text-right font-semibold text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">GST</th>
+                                                <th className="px-3 py-2 text-right font-semibold text-[10px] uppercase tracking-wide">INV Closing</th>
+                                                <th className="w-7" />
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {r.commodity_rows.map((row, i) => {
+                                                const gstTotal = (row.purb_igst??0)+(row.purb_cgst??0)+(row.purb_sgst??0)
+                                                const allOk = (row.pb_vs_purb_ok !== false) && row.taxable_match && row.inv_balanced
+                                                return (
+                                                  <tr key={i} className={`border-b border-gray-100 dark:border-gray-800 transition-colors ${allOk?'hover:bg-gray-50/50 dark:hover:bg-gray-800/20':'bg-red-50/40 dark:bg-red-900/10'}`}>
+                                                    <td className="px-3 py-1.5 font-medium text-gray-700 dark:text-gray-300 max-w-[180px] truncate" title={row.commodity}>{row.commodity}</td>
+                                                    <td className="px-3 py-1.5 text-right font-mono text-teal-600 dark:text-teal-400">{fmtN(row.purb_purchase_gst)}</td>
+                                                    <td className="px-3 py-1.5 text-right font-mono text-amber-600 dark:text-amber-400">{gstTotal > 0 ? fmtN(gstTotal) : '—'}</td>
+                                                    <td className="px-3 py-1.5 text-right font-mono text-gray-500 dark:text-gray-400">{fmtN(row.inv_closing_dr)}</td>
+                                                    <td className="px-1.5 text-center">{allOk ? <CkDot /> : <XCircle className="size-3 text-red-500 inline" />}</td>
+                                                  </tr>
+                                                )
+                                              })}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </DialogPrimitive.Content>
