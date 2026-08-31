@@ -566,8 +566,11 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
 
   const hasToken = !!_erpToken && !!_erpTenantId
 
-  // No auto-load on mount — data fetches only when the user explicitly clicks
-  // "Done" in the token panel or the Refresh button.
+  // Auto-load once on mount if the token is already present (e.g. from localStorage).
+  useEffect(() => {
+    if (!fetchedRef.current) loadMasterDataRef.current()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
 
   return (
