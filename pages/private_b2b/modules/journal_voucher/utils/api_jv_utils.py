@@ -233,79 +233,92 @@ class JVAPIUtils:
         above AND ≥5 with IDs below the target without finding it, the entry
         is conclusively absent — no need to scan the full report.
         """
+        # Discover all ledger groups from ERP; fall back to [1, 2] if unavailable
+        try:
+            lg_resp = self.client.session.get(
+                f"{self.client.BASE_URL}/core/dynamic-screen-wrapper/Ledger%20Group/",
+                params={"page_number": 1, "page_size": 100, "user_id": user_id},
+                timeout=10,
+            )
+            lg_data = lg_resp.json().get("screenmatlistingdata_set") or []
+            ledger_groups = [int(row["id"]) for row in lg_data if row.get("id")] or [1, 2]
+        except Exception:
+            ledger_groups = [1, 2]
+
         target_id = self._extract_purb_id(pb_ref_no)
-        purb_above: set = set()  # PURB IDs seen that are > target_id
-        purb_below: set = set()  # PURB IDs seen that are < target_id
         ABOVE_NEEDED = 1   # just 1 newer PURB in JV is enough to confirm newer ones exist
         BELOW_NEEDED = 5   # 5 older PURBs confirms we've passed the target's slot
 
-        for page in range(1, self.MAX_PAGES + 1):
-            body = {
-                "report_name": self.REPORT_NAME,
-                "parameter_1": "",
-                "parameter_2": "",
-                "parameter_3": "",
-                "parameter_4": "",
-                "parameter_5": "",
-                "tenant_id": int(self.client.tenant_id),
-                "ledger_group": 1,
-                # null filters = fetch all; matching is done in code by ref_transaction_no
-                # passing actual IDs would exclude PBs on different locations/divisions
-                "division_id": None,
-                "department_id": None,
-                "type_of_sale_id": None,
-                "location_id": None,
-                "file_format": None,
-                "task_identifier": "report_view_data",
-                "pageLimit": self.PAGE_LIMIT,
-                "pageNumber": page,
-            }
+        for ledger_group in ledger_groups:
+            purb_above: set = set()
+            purb_below: set = set()
+            for page in range(1, self.MAX_PAGES + 1):
+                body = {
+                    "report_name": self.REPORT_NAME,
+                    "parameter_1": "",
+                    "parameter_2": "",
+                    "parameter_3": "",
+                    "parameter_4": "",
+                    "parameter_5": "",
+                    "tenant_id": int(self.client.tenant_id),
+                    "ledger_group": ledger_group,
+                    # null filters = fetch all; matching is done in code by ref_transaction_no
+                    # passing actual IDs would exclude PBs on different locations/divisions
+                    "division_id": None,
+                    "department_id": None,
+                    "type_of_sale_id": None,
+                    "location_id": None,
+                    "file_format": None,
+                    "task_identifier": "report_view_data",
+                    "pageLimit": self.PAGE_LIMIT,
+                    "pageNumber": page,
+                }
 
-            resp = self.client.session.post(
-                f"{self.client.BASE_URL}/reports/builder",
-                params={"user_id": user_id},
-                json=body,
-                timeout=30,
-            )
-            resp.raise_for_status()
-            raw = resp.json()
-
-            # Response: list[0]["report_data"] holds the JV entries
-            if isinstance(raw, list) and raw:
-                entries = raw[0].get("report_data") or []
-            elif isinstance(raw, dict):
-                entries = raw.get("report_data") or raw.get("data") or raw.get("results") or []
-            else:
-                entries = []
-
-            if not entries:
-                log.info(f"[JV] No entries at page {page} — stopping")
-                break
-
-            for entry in entries:
-                ref = entry.get("ref_transaction_no")
-                if ref == pb_ref_no:
-                    log.info(f"[JV] Found {pb_ref_no} on page {page}")
-                    return entry
-
-                # Track surrounding PURB IDs for early-exit heuristic
-                if target_id is not None:
-                    eid = self._extract_purb_id(ref or "")
-                    if eid is not None:
-                        if eid > target_id:
-                            purb_above.add(eid)
-                        elif eid < target_id:
-                            purb_below.add(eid)
-
-            # Early exit: 1 newer PURB in JV + 5 older ones → target slot is conclusively absent
-            if target_id is not None and len(purb_above) >= ABOVE_NEEDED and len(purb_below) >= BELOW_NEEDED:
-                log.info(
-                    f"[JV] {pb_ref_no} not found — bracketed by {len(purb_above)} above "
-                    f"and {len(purb_below)} below after page {page}"
+                resp = self.client.session.post(
+                    f"{self.client.BASE_URL}/reports/builder",
+                    params={"user_id": user_id},
+                    json=body,
+                    timeout=30,
                 )
-                break
+                resp.raise_for_status()
+                raw = resp.json()
 
-            if len(entries) < self.PAGE_LIMIT:
-                break
+                # Response: list[0]["report_data"] holds the JV entries
+                if isinstance(raw, list) and raw:
+                    entries = raw[0].get("report_data") or []
+                elif isinstance(raw, dict):
+                    entries = raw.get("report_data") or raw.get("data") or raw.get("results") or []
+                else:
+                    entries = []
+
+                if not entries:
+                    log.info(f"[JV] No entries at page {page} (lg={ledger_group}) — stopping")
+                    break
+
+                for entry in entries:
+                    ref = entry.get("ref_transaction_no")
+                    if ref == pb_ref_no:
+                        log.info(f"[JV] Found {pb_ref_no} on page {page} (lg={ledger_group})")
+                        return entry
+
+                    # Track surrounding PURB IDs for early-exit heuristic
+                    if target_id is not None:
+                        eid = self._extract_purb_id(ref or "")
+                        if eid is not None:
+                            if eid > target_id:
+                                purb_above.add(eid)
+                            elif eid < target_id:
+                                purb_below.add(eid)
+
+                # Early exit: 1 newer PURB in JV + 5 older ones → target slot is conclusively absent
+                if target_id is not None and len(purb_above) >= ABOVE_NEEDED and len(purb_below) >= BELOW_NEEDED:
+                    log.info(
+                        f"[JV] {pb_ref_no} not found in lg={ledger_group} — bracketed by "
+                        f"{len(purb_above)} above and {len(purb_below)} below after page {page}"
+                    )
+                    break
+
+                if len(entries) < self.PAGE_LIMIT:
+                    break
 
         return None

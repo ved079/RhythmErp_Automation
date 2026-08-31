@@ -88,7 +88,8 @@ async function proxyRequest(req: NextRequest) {
     // Longer timeout for regular calls (45s — absorbs Render cold starts),
     // very long for streams (10min)
     const isStreamRequest = isStreamPath || path.startsWith("screenshot") || path.startsWith("batch-create")
-    const timeoutMs = isStreamRequest ? 600_000 : 45_000;
+    const isLongRequest = path.startsWith("cross-check-jv")
+    const timeoutMs = isStreamRequest ? 600_000 : isLongRequest ? 120_000 : 45_000;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
