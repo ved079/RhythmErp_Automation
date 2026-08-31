@@ -748,6 +748,7 @@ ${rows.join('\n')}
   const [invCommodityRows, setInvCommodityRows] = useState<InvCommodityRow[]>([])
   const [invJvRows, setInvJvRows] = useState<{ account_name: string; dr_cr: string; commodity: string; amount: number | null }[]>([])
   const [invError, setInvError] = useState('')
+  const [invJvMeta, setInvJvMeta] = useState<import('@/lib/api').JVMeta | null>(null)
 
 
   // ── Inventory JV exports ────────────────────────────────
@@ -1110,12 +1111,14 @@ ${rows.join('\n')}
     setInvSteps([])
     setInvCommodityRows([])
     setInvJvRows([])
+    setInvJvMeta(null)
     setInvError('')
     try {
       const res = await verifyInvJV(token, tenantId, pb.ref_no, pbDate, pb.id)
       setInvSteps(res.steps)
       setInvCommodityRows(res.commodity_rows || [])
       setInvJvRows(res.jv_rows)
+      setInvJvMeta(res.jv_meta || null)
     } catch (err) {
       if (!handleAuthError(err)) setInvError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -1251,7 +1254,7 @@ ${rows.join('\n')}
                         </>
                       )}
                       <button
-                        onClick={() => { setSelectedPB(null); setPbRefNo(''); setInvSteps([]); setInvCommodityRows([]); setInvJvRows([]); setInvError('') }}
+                        onClick={() => { setSelectedPB(null); setPbRefNo(''); setInvSteps([]); setInvCommodityRows([]); setInvJvRows([]); setInvJvMeta(null); setInvError('') }}
                         className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] hover:border-[#3F51B5]/50 transition-colors cursor-pointer">
                         <RefreshCw className="size-3" />Change
                       </button>
@@ -1281,6 +1284,34 @@ ${rows.join('\n')}
                       </div>
                     </div>
                   </div>
+                  {/* Date / FY / Period cross-check row */}
+                  {invJvMeta && (
+                    <div className="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/30">
+                      {([
+                        { label: 'Transaction Date', purb: invJvMeta.purb_txn_date, inv: invJvMeta.inv_txn_date },
+                        { label: 'Fiscal Year',      purb: invJvMeta.purb_fiscal_year, inv: invJvMeta.inv_fiscal_year },
+                        { label: 'Period',           purb: invJvMeta.purb_period, inv: invJvMeta.inv_period },
+                      ] as const).map(({ label, purb, inv }) => {
+                        const match = purb && inv && purb === inv
+                        return (
+                          <div key={label} className="px-4 py-2.5">
+                            <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium mb-0.5 flex items-center gap-1">
+                              {label}
+                              {purb && inv && (match
+                                ? <CheckCircle2 className="size-3 text-emerald-500 shrink-0" />
+                                : <XCircle className="size-3 text-red-500 shrink-0" />)}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11px] font-mono text-gray-700 dark:text-gray-200">{purb || '—'}</span>
+                              {purb && inv && purb !== inv && (
+                                <span className="text-[10px] text-red-500 font-mono">≠ {inv}</span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
 
                   {/* Loading */}
                   {invVerifying && invSteps.length === 0 && (
