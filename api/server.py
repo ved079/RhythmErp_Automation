@@ -850,6 +850,47 @@ def inv_jv_verify_endpoint(request: InvJVVerifyRequest):
     purb_total_dr = float(purb_entry.get("total_debit_amount") or 0)
     steps.append({"n": 3, "label": f"Found INV JV: {inv_ref} — DR {inv_total_dr:,.2f}", "ok": True})
 
+    # ── Step 3b: Date / period cross-checks ──
+    purb_txn_date  = purb_entry.get("transaction_date") or ""
+    purb_fy        = purb_entry.get("fiscal_year") or ""
+    purb_period    = purb_entry.get("period") or ""
+    inv_txn_date   = inv_entry.get("transaction_date") or ""
+    inv_fy         = inv_entry.get("fiscal_year") or ""
+    inv_period     = inv_entry.get("period") or ""
+
+    date_ok   = bool(purb_txn_date) and purb_txn_date == inv_txn_date
+    fy_ok     = bool(purb_fy)       and purb_fy       == inv_fy
+    period_ok = bool(purb_period)   and purb_period    == inv_period
+
+    steps.append({
+        "n": "3a",
+        "label": "Transaction dates match" if date_ok else "Transaction date MISMATCH",
+        "ok": date_ok,
+        "detail": f"PURB={purb_txn_date}  |  INV={inv_txn_date}",
+    })
+    steps.append({
+        "n": "3b",
+        "label": "Fiscal years match" if fy_ok else "Fiscal year MISMATCH",
+        "ok": fy_ok,
+        "detail": f"PURB={purb_fy}  |  INV={inv_fy}",
+    })
+    steps.append({
+        "n": "3c",
+        "label": "Periods match" if period_ok else "Period MISMATCH",
+        "ok": period_ok,
+        "detail": f"PURB={purb_period}  |  INV={inv_period}",
+    })
+
+    # Surface date/period fields for header display
+    jv_meta = {
+        "purb_txn_date": purb_txn_date,
+        "purb_fiscal_year": purb_fy,
+        "purb_period": purb_period,
+        "inv_txn_date": inv_txn_date,
+        "inv_fiscal_year": inv_fy,
+        "inv_period": inv_period,
+    }
+
     def extract_child_rows(entry):
         rows = []
         for row in (entry.get("children") or {}).get("data") or []:
@@ -954,10 +995,11 @@ def inv_jv_verify_endpoint(request: InvJVVerifyRequest):
     return JSONResponse({
         "steps": steps, "ok": ok,
         "pb_items": pb_items,
-        "jv_rows": inv_rows,           # INV JV rows for display
-        "purb_rows": purb_rows,        # PURB JV rows for display
-        "commodity_rows": commodity_rows,  # per-commodity comparison
+        "jv_rows": inv_rows,
+        "purb_rows": purb_rows,
+        "commodity_rows": commodity_rows,
         "inv_ref": inv_ref,
+        "jv_meta": jv_meta,
     })
 
 

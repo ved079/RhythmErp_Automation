@@ -548,6 +548,15 @@ export interface InvCommodityRow {
   match: boolean;
 }
 
+export interface JVMeta {
+  purb_txn_date: string;
+  purb_fiscal_year: string;
+  purb_period: string;
+  inv_txn_date: string;
+  inv_fiscal_year: string;
+  inv_period: string;
+}
+
 export interface InvJVVerifyResponse {
   steps: JVVerifyStep[];
   ok: boolean;
@@ -556,6 +565,7 @@ export interface InvJVVerifyResponse {
   purb_rows: { account_name: string; dr_cr: string; commodity: string; amount: number | null }[];
   commodity_rows: InvCommodityRow[];
   inv_ref?: string;
+  jv_meta?: JVMeta;
 }
 
 export async function verifyInvJV(
