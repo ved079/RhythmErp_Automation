@@ -705,7 +705,13 @@ def jv_verify_endpoint(request: JVVerifyRequest):
                     "amount": float(amount) if amount else None,
                 })
 
-    return JSONResponse({"steps": steps, "ok": result.ok(), "account_rows": account_rows})
+    purb_meta = {
+        "transaction_date": result.transaction_date,
+        "fiscal_year": result.fiscal_year,
+        "period": result.period,
+    } if result.found else None
+
+    return JSONResponse({"steps": steps, "ok": result.ok(), "account_rows": account_rows, "purb_meta": purb_meta})
 
 
 # ================================================================
@@ -1006,6 +1012,434 @@ def inv_jv_verify_endpoint(request: InvJVVerifyRequest):
 # ================================================================
 # ACCOUNTING DEFINITION ENDPOINT
 # ================================================================
+
+# ================================================================
+# FULL CROSS-CHECK ENDPOINT  (PB ↔ PURB JV ↔ INV JV)
+# ================================================================
+
+class CrossCheckRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str
+    pb_ref_no: str
+    pb_id: str
+
+@app.post("/api/cross-check-jv")
+def cross_check_jv_endpoint(request: CrossCheckRequest):
+    """
+    Complete cross-check: PB detail ↔ PURB JV ↔ INV JV.
+    Returns amount chain, per-commodity breakdown, and all verification checks.
+    """
+    import sys, concurrent.futures
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from common.erp_api_client import RhythmERPAPIClient
+    import jwt as _jwt
+
+    token = request.erp_token
+    if token.startswith("Bearer "):
+        token = token[7:]
+
+    client = RhythmERPAPIClient(tenant_id=request.erp_tenant_id)
+    client.login_from_browser(token=token, tenant_id=request.erp_tenant_id)
+
+    try:
+        _payload = _jwt.decode(token, options={"verify_signature": False})
+        user_id = int(_payload.get("user_id", 0))
+    except Exception:
+        user_id = 0
+
+    TOLERANCE = 1.0
+
+    # ── 1. Fetch PB detail ──────────────────────────────────────────
+    try:
+        pb_resp = client.session.get(
+            f"{client.BASE_URL}/procure_to_pay/purchase-booking/{request.pb_id}/",
+            timeout=30,
+        )
+        pb_resp.raise_for_status()
+        pb_data = pb_resp.json()
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"PB fetch failed: {exc}", "checks": []})
+
+    pb_taxable        = float(pb_data.get("txn_currency_amount") or 0)
+    pb_total          = float(pb_data.get("txn_currency_total_amount") or 0)
+    pb_discount       = float(pb_data.get("txn_currency_discount_amount") or 0)
+    pb_tds            = float(pb_data.get("tds_amount") or 0)
+    pb_txn_date       = pb_data.get("transaction_date") or ""
+    pb_details        = pb_data.get("purchase_booking_details") or []
+
+    # Per-item data
+    items = []
+    for d in pb_details:
+        igst  = float(d.get("txn_currency_igst_amount") or 0)
+        cgst  = float(d.get("txn_currency_cgst_amount") or 0)
+        sgst  = float(d.get("txn_currency_sgst_amount") or 0)
+        items.append({
+            "item_ref_id":    d.get("item_ref_id"),
+            "taxable":        float(d.get("txn_currency_amount_detail") or 0),
+            "gross_no_disc":  float(d.get("transaction_amount_without_discount") or 0),
+            "discount_pct":   float(d.get("discount_percentage") or 0),
+            "discount_amt":   float(d.get("txn_currency_discount_amount_details") or 0),
+            "gst_type":       d.get("gst_type") or "",
+            "igst":           igst,
+            "cgst":           cgst,
+            "sgst":           sgst,
+            "gst_total":      igst + cgst + sgst,
+            "igst_rate":      float(d.get("txn_currency_igst_rate") or 0),
+            "cgst_rate":      float(d.get("txn_currency_cgst_rate") or 0),
+            "sgst_rate":      float(d.get("txn_currency_sgst_rate") or 0),
+            "gst_rate":       float(d.get("txn_currency_igst_rate") or d.get("txn_currency_cgst_rate") or 0),
+            "total":          float(d.get("txn_currency_total_txn_amount") or 0),
+            "empty_bags_amt": float(d.get("empty_bags_txn_amount") or 0),
+            "qc_deduction":   float(d.get("qc_deduction_amount") or 0),
+            "net_of_empty":   float(d.get("net_of_empty_bag_amount") or 0),
+            "total_amount":   float(d.get("total_amount") or 0),  # gross = qty × rate
+        })
+
+    pb_gst_total = sum(i["gst_total"] for i in items)
+    pb_igst_total = sum(i["igst"] for i in items)
+    pb_cgst_total = sum(i["cgst"] for i in items)
+    pb_sgst_total = sum(i["sgst"] for i in items)
+
+    # ── 2. Scan JV report for both PURB and INV entries (parallel pages) ──
+    JV_BODY_BASE = {
+        "report_name": 2,
+        "parameter_1": "", "parameter_2": "", "parameter_3": "",
+        "parameter_4": "", "parameter_5": "",
+        "tenant_id": int(request.erp_tenant_id),
+        "ledger_group": 1,
+        "division_id": None, "department_id": None,
+        "type_of_sale_id": None, "location_id": None,
+        "file_format": None,
+        "task_identifier": "report_view_data",
+        "pageLimit": 50,
+    }
+
+    def fetch_page(page):
+        r = client.session.post(
+            f"{client.BASE_URL}/reports/builder",
+            params={"user_id": user_id},
+            json={**JV_BODY_BASE, "pageNumber": page},
+            timeout=30,
+        )
+        r.raise_for_status()
+        raw = r.json()
+        return (raw[0].get("report_data") or []) if isinstance(raw, list) and raw else []
+
+    purb_entry = inv_entry = None
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+            futs = {ex.submit(fetch_page, p): p for p in range(1, 5)}
+            all_entries = []
+            for fut in concurrent.futures.as_completed(futs, timeout=40):
+                try:
+                    all_entries.extend(fut.result())
+                except Exception:
+                    pass
+        for entry in all_entries:
+            ref  = entry.get("ref_transaction_no") or ""
+            ttype = entry.get("ref_transaction_type") or ""
+            if ref == request.pb_ref_no:
+                purb_entry = entry
+            elif ttype == "Inventory" and inv_entry is None:
+                if abs(float(entry.get("total_debit_amount") or 0) - pb_taxable) <= TOLERANCE:
+                    inv_entry = entry
+            if purb_entry and inv_entry:
+                break
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"JV report scan failed: {exc}", "checks": []})
+
+    # ── 3. Extract PURB JV rows ──────────────────────────────────────
+    def extract_rows(entry):
+        if not entry:
+            return []
+        rows = []
+        for row in (entry.get("children") or {}).get("data") or []:
+            name = row.get("account_name") or ""
+            dc   = row.get("debit_credit_type") or row.get("dr_cr") or ""
+            comm = row.get("commodity") or ""
+            if dc == "Debit":
+                raw = (row.get("transaction_debit_amount") or row.get("debit_amount")
+                       or row.get("base_debit_amount") or row.get("txn_debit_amount")
+                       or row.get("transaction_amount") or 0)
+            else:
+                raw = (row.get("transaction_credit_amount") or row.get("credit_amount")
+                       or row.get("base_credit_amount") or row.get("txn_credit_amount")
+                       or row.get("transaction_amount") or 0)
+            amt = float(raw) if raw else 0
+            rows.append({"account_name": name, "dr_cr": dc, "commodity": comm, "amount": amt})
+        return rows
+
+    purb_rows = extract_rows(purb_entry)
+    inv_rows  = extract_rows(inv_entry)
+
+    # Derived PURB JV aggregates
+    purb_payable = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Credit" and "payable" in r["account_name"].lower())
+    purb_purchase_gst_dr = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "purchase" in r["account_name"].lower() and "discount" not in r["account_name"].lower() and "exempt" not in r["account_name"].lower())
+    purb_igst_dr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "igst" in r["account_name"].lower())
+    purb_cgst_dr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "cgst" in r["account_name"].lower())
+    purb_sgst_dr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "sgst" in r["account_name"].lower())
+    purb_gst_dr   = purb_igst_dr + purb_cgst_dr + purb_sgst_dr
+    purb_disc_dr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit"  and "discount" in r["account_name"].lower())
+    purb_disc_cr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Credit" and "discount" in r["account_name"].lower())
+    purb_total_dr = float(purb_entry.get("total_debit_amount") or 0) if purb_entry else 0
+
+    # Derived INV JV aggregates
+    inv_exempt_cr       = sum(r["amount"] for r in inv_rows if r["dr_cr"] == "Credit")
+    inv_closing_stock_dr = sum(r["amount"] for r in inv_rows if r["dr_cr"] == "Debit")
+    inv_total_dr        = float(inv_entry.get("total_debit_amount") or 0) if inv_entry else 0
+    inv_ref_no          = (inv_entry.get("ref_transaction_no") or "") if inv_entry else ""
+    inv_txn_date        = (inv_entry.get("transaction_date") or "") if inv_entry else ""
+    inv_fy              = (inv_entry.get("fiscal_year") or "") if inv_entry else ""
+    inv_period          = (inv_entry.get("period") or "") if inv_entry else ""
+
+    purb_txn_date = (purb_entry.get("transaction_date") or "") if purb_entry else ""
+    purb_fy       = (purb_entry.get("fiscal_year") or "") if purb_entry else ""
+    purb_period   = (purb_entry.get("period") or "") if purb_entry else ""
+
+    # ── 4. Build checks list ─────────────────────────────────────────
+    def chk(id_, label, ok, detail="", category="amount"):
+        return {"id": id_, "label": label, "ok": ok, "detail": detail, "category": category}
+
+    checks = []
+
+    # Existence
+    checks.append(chk("purb_found",   "PURB JV found in report",       purb_entry is not None,  request.pb_ref_no,                 "existence"))
+    checks.append(chk("inv_found",    "INV JV found in report",         inv_entry  is not None,  inv_ref_no or "Not found",         "existence"))
+
+    if purb_entry and inv_entry:
+        # Date / FY / Period
+        date_ok   = bool(purb_txn_date) and purb_txn_date == inv_txn_date
+        fy_ok     = bool(purb_fy)       and purb_fy == inv_fy
+        period_ok = bool(purb_period)   and purb_period == inv_period
+        checks.append(chk("date_match",   "Transaction dates match",        date_ok,   f"PURB={purb_txn_date} | INV={inv_txn_date}",   "date"))
+        checks.append(chk("fy_match",     "Fiscal years match",              fy_ok,     f"PURB={purb_fy} | INV={inv_fy}",               "date"))
+        checks.append(chk("period_match", "Periods match",                   period_ok, f"PURB={purb_period} | INV={inv_period}",       "date"))
+
+        # Core amount: INV = PURB total − GST
+        inv_equals_purb_minus_gst = abs(inv_total_dr - (purb_total_dr - purb_gst_dr)) <= TOLERANCE
+        checks.append(chk("inv_eq_purb_minus_gst", "INV total = PURB total − GST",
+            inv_equals_purb_minus_gst,
+            f"INV={inv_total_dr:,.2f}  |  PURB({purb_total_dr:,.2f}) − GST({purb_gst_dr:,.2f}) = {purb_total_dr-purb_gst_dr:,.2f}",
+            "amount"))
+
+        # PB taxable matches PURB Purchase @gst DR
+        taxable_match = abs(pb_taxable - purb_purchase_gst_dr) <= TOLERANCE
+        checks.append(chk("taxable_vs_purb", "PB taxable = PURB Purchase @gst DR",
+            taxable_match,
+            f"PB taxable={pb_taxable:,.2f} | JV Purchase @gst={purb_purchase_gst_dr:,.2f}",
+            "amount"))
+
+        # PB taxable matches INV total
+        taxable_vs_inv = abs(pb_taxable - inv_total_dr) <= TOLERANCE
+        checks.append(chk("taxable_vs_inv", "PB taxable = INV JV total DR",
+            taxable_vs_inv,
+            f"PB taxable={pb_taxable:,.2f} | INV DR={inv_total_dr:,.2f}",
+            "amount"))
+
+        # Payable = PB total
+        payable_match = abs(purb_payable - pb_total) <= TOLERANCE
+        checks.append(chk("payable_vs_pb", "PURB Payable CR = PB total",
+            payable_match,
+            f"JV Payable={purb_payable:,.2f} | PB total={pb_total:,.2f}",
+            "amount"))
+
+        # INV internal balance: Purchase exempt CR = Closing Stock DR
+        inv_internal_ok = abs(inv_exempt_cr - inv_closing_stock_dr) <= TOLERANCE
+        checks.append(chk("inv_balanced", "INV JV: Purchase exempt CR = Closing Stock DR",
+            inv_internal_ok,
+            f"Purchase exempt CR={inv_exempt_cr:,.2f} | Closing Stock DR={inv_closing_stock_dr:,.2f}",
+            "structure"))
+
+        # PURB JV balanced
+        purb_cr_total = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Credit")
+        purb_dr_total = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit")
+        purb_balanced = abs(purb_dr_total - purb_cr_total) <= TOLERANCE
+        checks.append(chk("purb_balanced", "PURB JV balanced (DR = CR)",
+            purb_balanced,
+            f"DR={purb_dr_total:,.2f} | CR={purb_cr_total:,.2f}",
+            "structure"))
+
+        # GST: PB total GST = PURB JV total GST DR
+        if pb_gst_total > 0 or purb_gst_dr > 0:
+            gst_match = abs(pb_gst_total - purb_gst_dr) <= TOLERANCE
+            checks.append(chk("gst_total_match", "PB GST total = PURB JV GST DR",
+                gst_match,
+                f"PB GST={pb_gst_total:,.2f} | JV GST={purb_gst_dr:,.2f}",
+                "gst"))
+            # CGST = SGST check
+            if pb_cgst_total > 0 or purb_cgst_dr > 0:
+                cgst_sgst_eq = abs(purb_cgst_dr - purb_sgst_dr) <= TOLERANCE
+                checks.append(chk("cgst_eq_sgst", "CGST = SGST (intra-state requirement)",
+                    cgst_sgst_eq,
+                    f"CGST={purb_cgst_dr:,.2f} | SGST={purb_sgst_dr:,.2f}",
+                    "gst"))
+            # GST rate verification per item
+            # For IGST items: check taxable × igst_rate = IGST
+            # For CGST+SGST items: check taxable × cgst_rate = CGST and CGST = SGST
+            for idx, item in enumerate(items):
+                pfx = f"Item {idx+1} " if len(items) > 1 else ""
+                if item["igst"] > 0 and item["cgst"] == 0 and item["igst_rate"] > 0:
+                    computed = round(item["taxable"] * item["igst_rate"] / 100, 2)
+                    actual   = round(item["igst"], 2)
+                    rate_ok  = abs(computed - actual) <= 1.0
+                    checks.append(chk(f"gst_rate_{idx}",
+                        f"{pfx}IGST rate ({item['igst_rate']}%): taxable × rate = IGST", rate_ok,
+                        f"{item['taxable']:,.2f} × {item['igst_rate']}% = {computed:,.2f} | actual IGST={actual:,.2f}",
+                        "gst"))
+                elif item["cgst"] > 0 and item["cgst_rate"] > 0:
+                    computed_c = round(item["taxable"] * item["cgst_rate"] / 100, 2)
+                    actual_c   = round(item["cgst"], 2)
+                    actual_s   = round(item["sgst"], 2)
+                    cgst_ok    = abs(computed_c - actual_c) <= 1.0
+                    eq_ok      = abs(actual_c - actual_s) <= 1.0
+                    rate_ok    = cgst_ok and eq_ok
+                    checks.append(chk(f"gst_rate_{idx}",
+                        f"{pfx}CGST/SGST rate ({item['cgst_rate']}%): taxable × rate = CGST = SGST", rate_ok,
+                        f"{item['taxable']:,.2f} × {item['cgst_rate']}% = {computed_c:,.2f} | CGST={actual_c:,.2f} SGST={actual_s:,.2f}",
+                        "gst"))
+
+        # Discount checks
+        if pb_discount > 0:
+            disc_match = abs(purb_disc_dr - pb_discount) <= TOLERANCE
+            checks.append(chk("discount_dr", "JV Discount DR = PB discount amount",
+                disc_match,
+                f"JV Discount DR={purb_disc_dr:,.2f} | PB discount={pb_discount:,.2f}",
+                "discount"))
+            disc_wash = abs(purb_disc_dr - purb_disc_cr) <= TOLERANCE
+            checks.append(chk("discount_wash", "Discount is wash entry (DR = CR)",
+                disc_wash,
+                f"Discount DR={purb_disc_dr:,.2f} | CR={purb_disc_cr:,.2f}",
+                "discount"))
+
+    # ── 5. Build amount chain ────────────────────────────────────────
+    amount_chain = []
+    if items:
+        gross_total = sum(i["total_amount"] for i in items)
+        empty_total = sum(i["empty_bags_amt"] for i in items)
+        qc_total    = sum(i["qc_deduction"] for i in items)
+        if gross_total > 0:
+            amount_chain.append({"label": "Gross (qty × rate)", "amount": gross_total, "sign": None, "source": "PB"})
+        if empty_total > 0:
+            amount_chain.append({"label": "− Empty bags deduction", "amount": -empty_total, "sign": "minus", "source": "PB"})
+        if qc_total > 0:
+            amount_chain.append({"label": "− QC deduction", "amount": -qc_total, "sign": "minus", "source": "PB"})
+        if pb_discount > 0:
+            amount_chain.append({"label": "− Discount", "amount": -pb_discount, "sign": "minus", "source": "PB", "note": f"{items[0]['discount_pct']}%" if len(items)==1 and items[0]['discount_pct'] else ""})
+        amount_chain.append({"label": "= Taxable (Purchase @gst)", "amount": pb_taxable, "sign": "eq", "source": "PB",
+            "cross": {"purb": purb_purchase_gst_dr, "inv": inv_total_dr},
+            "ok": abs(pb_taxable - purb_purchase_gst_dr) <= TOLERANCE and abs(pb_taxable - inv_total_dr) <= TOLERANCE})
+        if pb_gst_total > 0:
+            gst_label = "+ GST"
+            if pb_igst_total > 0 and pb_cgst_total == 0:
+                gst_label = f"+ IGST ({items[0]['gst_rate']}%)" if len(items) == 1 else "+ IGST"
+            elif pb_cgst_total > 0:
+                gst_label = "+ CGST + SGST"
+            amount_chain.append({"label": gst_label, "amount": pb_gst_total, "sign": "plus", "source": "PB",
+                "cross": {"purb": purb_gst_dr},
+                "ok": abs(pb_gst_total - purb_gst_dr) <= TOLERANCE})
+        if pb_tds > 0:
+            amount_chain.append({"label": "− TDS", "amount": -pb_tds, "sign": "minus", "source": "PB"})
+        amount_chain.append({"label": "= Payable", "amount": pb_total, "sign": "eq", "source": "PB",
+            "cross": {"purb": purb_payable},
+            "ok": abs(pb_total - purb_payable) <= TOLERANCE})
+
+    # ── 6. Per-commodity cross-check ─────────────────────────────────
+    commodity_rows = []
+    # Group PURB rows by commodity
+    purb_by_comm = {}
+    for r in purb_rows:
+        c = r["commodity"] or ""
+        if c not in purb_by_comm:
+            purb_by_comm[c] = {"purchase_gst": 0, "igst": 0, "cgst": 0, "sgst": 0}
+        name_l = r["account_name"].lower()
+        if "purchase" in name_l and "discount" not in name_l and "exempt" not in name_l and r["dr_cr"] == "Debit":
+            purb_by_comm[c]["purchase_gst"] += r["amount"]
+        if "igst" in name_l and r["dr_cr"] == "Debit": purb_by_comm[c]["igst"] += r["amount"]
+        if "cgst" in name_l and r["dr_cr"] == "Debit": purb_by_comm[c]["cgst"] += r["amount"]
+        if "sgst" in name_l and r["dr_cr"] == "Debit": purb_by_comm[c]["sgst"] += r["amount"]
+    inv_by_comm = {}
+    for r in inv_rows:
+        c = r["commodity"] or ""
+        if c not in inv_by_comm:
+            inv_by_comm[c] = {"exempt_cr": 0, "closing_dr": 0}
+        if r["dr_cr"] == "Credit": inv_by_comm[c]["exempt_cr"] += r["amount"]
+        if r["dr_cr"] == "Debit":  inv_by_comm[c]["closing_dr"] += r["amount"]
+
+    all_comms = sorted(set(list(purb_by_comm.keys()) + list(inv_by_comm.keys())) - {""})
+    for c in all_comms:
+        pb = purb_by_comm.get(c, {})
+        iv = inv_by_comm.get(c, {})
+        p_taxable = pb.get("purchase_gst", 0)
+        p_igst    = pb.get("igst", 0)
+        p_cgst    = pb.get("cgst", 0)
+        p_sgst    = pb.get("sgst", 0)
+        p_gst     = p_igst + p_cgst + p_sgst
+        i_exempt  = iv.get("exempt_cr", 0)
+        i_closing = iv.get("closing_dr", 0)
+        taxable_match = abs(p_taxable - i_exempt) <= TOLERANCE if (p_taxable or i_exempt) else True
+        inv_bal_ok    = abs(i_exempt - i_closing) <= TOLERANCE
+        commodity_rows.append({
+            "commodity":         c,
+            "purb_purchase_gst": p_taxable or None,
+            "purb_igst":         p_igst or None,
+            "purb_cgst":         p_cgst or None,
+            "purb_sgst":         p_sgst or None,
+            "purb_gst_total":    p_gst or None,
+            "inv_exempt_cr":     i_exempt or None,
+            "inv_closing_dr":    i_closing or None,
+            "taxable_match":     taxable_match,
+            "inv_balanced":      inv_bal_ok,
+        })
+
+    ok_overall = purb_entry is not None and inv_entry is not None and all(c["ok"] for c in checks)
+    return JSONResponse({
+        "ok": ok_overall,
+        "pb_ref_no": request.pb_ref_no,
+        "inv_ref_no": inv_ref_no,
+        "pb_meta": {
+            "transaction_date": pb_txn_date,
+            "fiscal_year": purb_fy,
+            "period": purb_period,
+            "taxable": pb_taxable,
+            "total": pb_total,
+            "discount": pb_discount,
+            "tds": pb_tds,
+            "gst_total": pb_gst_total,
+            "igst": pb_igst_total,
+            "cgst": pb_cgst_total,
+            "sgst": pb_sgst_total,
+            "item_count": len(items),
+        },
+        "purb_jv": {
+            "found": purb_entry is not None,
+            "transaction_date": purb_txn_date,
+            "fiscal_year": purb_fy,
+            "period": purb_period,
+            "total_dr": purb_total_dr,
+            "payable": purb_payable,
+            "purchase_gst_dr": purb_purchase_gst_dr,
+            "gst_dr": purb_gst_dr,
+            "igst_dr": purb_igst_dr,
+            "cgst_dr": purb_cgst_dr,
+            "sgst_dr": purb_sgst_dr,
+            "rows": purb_rows,
+        },
+        "inv_jv": {
+            "found": inv_entry is not None,
+            "ref_no": inv_ref_no,
+            "transaction_date": inv_txn_date,
+            "fiscal_year": inv_fy,
+            "period": inv_period,
+            "total_dr": inv_total_dr,
+            "exempt_cr": inv_exempt_cr,
+            "closing_dr": inv_closing_stock_dr,
+            "rows": inv_rows,
+        },
+        "checks": checks,
+        "amount_chain": amount_chain,
+        "commodity_rows": commodity_rows,
+    })
+
 
 class AccountingDefRequest(BaseModel):
     erp_token: str

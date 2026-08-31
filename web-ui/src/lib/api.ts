@@ -503,10 +503,121 @@ export interface JVVerifyStep {
   fields?: { field: string; value: string }[];
 }
 
+export interface PurbMeta {
+  transaction_date: string;
+  fiscal_year: string;
+  period: string;
+}
+
 export interface JVVerifyResponse {
   steps: JVVerifyStep[];
   ok: boolean;
   account_rows?: { account_name: string; dr_cr: string; commodity: string; amount: number | null }[];
+  purb_meta?: PurbMeta;
+}
+
+// ── Cross-Check types ──────────────────────────────────────────────────────
+
+export interface CrossCheckJvRow {
+  account_name: string;
+  dr_cr: string;
+  commodity: string;
+  amount: number;
+}
+
+export interface CrossCheckCheck {
+  id: string;
+  label: string;
+  ok: boolean;
+  detail: string;
+  category: string;
+}
+
+export interface CrossCheckAmountChain {
+  label: string;
+  amount: number;
+  sign: string | null;
+  source: string;
+  note?: string;
+  cross?: { purb?: number; inv?: number };
+  ok?: boolean;
+}
+
+export interface CrossCheckCommodityRow {
+  commodity: string;
+  purb_purchase_gst: number | null;
+  purb_igst: number | null;
+  purb_cgst: number | null;
+  purb_sgst: number | null;
+  purb_gst_total: number | null;
+  inv_exempt_cr: number | null;
+  inv_closing_dr: number | null;
+  taxable_match: boolean;
+  inv_balanced: boolean;
+}
+
+export interface CrossCheckResponse {
+  ok: boolean;
+  error?: string;
+  pb_ref_no: string;
+  inv_ref_no: string;
+  pb_meta: {
+    transaction_date: string;
+    fiscal_year: string;
+    period: string;
+    taxable: number;
+    total: number;
+    discount: number;
+    tds: number;
+    gst_total: number;
+    igst: number;
+    cgst: number;
+    sgst: number;
+    item_count: number;
+  };
+  purb_jv: {
+    found: boolean;
+    transaction_date: string;
+    fiscal_year: string;
+    period: string;
+    total_dr: number;
+    payable: number;
+    purchase_gst_dr: number;
+    gst_dr: number;
+    igst_dr: number;
+    cgst_dr: number;
+    sgst_dr: number;
+    rows: CrossCheckJvRow[];
+  };
+  inv_jv: {
+    found: boolean;
+    ref_no: string;
+    transaction_date: string;
+    fiscal_year: string;
+    period: string;
+    total_dr: number;
+    exempt_cr: number;
+    closing_dr: number;
+    rows: CrossCheckJvRow[];
+  };
+  checks: CrossCheckCheck[];
+  amount_chain: CrossCheckAmountChain[];
+  commodity_rows: CrossCheckCommodityRow[];
+}
+
+export async function crossCheckJV(
+  erpToken: string,
+  erpTenantId: string,
+  pbRefNo: string,
+  pbId: string,
+): Promise<CrossCheckResponse> {
+  const res = await fetch(`${PROXY}?path=cross-check-jv`, withCsrf({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId, pb_ref_no: pbRefNo, pb_id: pbId }),
+  }));
+  if (!res.ok) throw new Error(`cross-check-jv failed: ${res.status}`);
+  return res.json();
 }
 
 export async function verifyJV(

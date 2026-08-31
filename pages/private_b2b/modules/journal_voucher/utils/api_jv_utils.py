@@ -46,6 +46,9 @@ class JVVerificationResult:
         commodity: Optional[str] = None,   # from the Debit row
         child_rows: Optional[List[dict]] = None,
         error: Optional[str] = None,
+        transaction_date: Optional[str] = None,
+        fiscal_year: Optional[str] = None,
+        period: Optional[str] = None,
     ):
         self.pb_ref_no = pb_ref_no
         self.found = found
@@ -59,6 +62,9 @@ class JVVerificationResult:
         self.commodity = commodity
         self.child_rows = child_rows or []
         self.error = error
+        self.transaction_date = transaction_date or ""
+        self.fiscal_year = fiscal_year or ""
+        self.period = period or ""
 
     def ok(self) -> bool:
         return self.found and self.balanced is True
@@ -151,6 +157,9 @@ class JVAPIUtils:
             location=location,
             commodity=commodity,
             child_rows=child_rows,
+            transaction_date=entry.get("transaction_date") or "",
+            fiscal_year=entry.get("fiscal_year") or "",
+            period=entry.get("period") or "",
         )
         log.info(f"[JV] {result.summary()}")
         return result
