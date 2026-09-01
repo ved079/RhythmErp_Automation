@@ -767,6 +767,8 @@ ${rows.join('\n')}
   const [ccResult, setCcResult] = useState<CrossCheckResponse | null>(null)
   const [ccError, setCcError] = useState('')
   const [ccFullViewOpen, setCcFullViewOpen] = useState(false)
+  const [ccFailToast, setCcFailToast] = useState<{ refNo: string; result: CrossCheckResponse } | null>(null)
+  const ccFailToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [ccJvTab, setCcJvTab] = useState<'purb'|'inv'>('purb')
   const [ccGroupsCollapsed, setCcGroupsCollapsed] = useState<Set<string>>(new Set(['Amounts','GST','Discount / TDS','Other']))
   const [ccFvCollapsed, setCcFvCollapsed] = useState<Set<string>>(new Set(['Document','Dates & Period','Amounts','GST','Discount / TDS','Other']))
@@ -779,9 +781,16 @@ ${rows.join('\n')}
     setCcLoading(true)
     setCcError('')
     setCcResult(null)
+    setCcFailToast(null)
     try {
       const res = await crossCheckJV(token, tenantId, pb.ref_no, String(pb.id))
       setCcResult(res)
+      const failed = !res.checks.every(c => c.ok) || !res.purb_jv.found || !res.inv_jv.found
+      if (failed) {
+        setCcFailToast({ refNo: pb.ref_no, result: res })
+        if (ccFailToastTimer.current) clearTimeout(ccFailToastTimer.current)
+        ccFailToastTimer.current = setTimeout(() => setCcFailToast(null), 6000)
+      }
     } catch (err) {
       if (!handleAuthError(err)) setCcError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -2566,7 +2575,7 @@ ${rows.join('\n')}
                           {([
                             { label: 'Supplier', value: ccSelectedPB!.supplier ?? '—', mono: false },
                             { label: 'Date', value: ccSelectedPB!.date ?? '—', mono: false },
-                            { label: 'FY / Period', value: `${r.purb_jv.fiscal_year} · ${r.purb_jv.period}`, mono: false },
+                            { label: 'FY / Period', value: r.purb_jv?.fiscal_year ? `${r.purb_jv.fiscal_year} · ${r.purb_jv.period}` : '—', mono: false },
                             { label: 'INV JV Ref', value: r.inv_ref_no || 'Not found', mono: true },
                           ] as const).map(({ label, value, mono }) => (
                             <div key={label} className="px-4 py-3">
@@ -2977,10 +2986,12 @@ ${rows.join('\n')}
                                     { label: 'Taxable',       tag: 'PURB JV',  pbLabel: 'PB Taxable',   jvLabel: 'Purchase @GST DR', pb: r.pb_meta.taxable,    jv: r.purb_jv.purchase_gst_dr, chkId: 'taxable_vs_purb',  color: 'gray'   },
                                     { label: 'GST',           tag: 'PURB JV',  pbLabel: 'PB GST Total', jvLabel: 'GST DR',           pb: r.pb_meta.gst_total,  jv: r.purb_jv.gst_dr,          chkId: 'gst_total_match',  color: 'amber'  },
                                     { label: 'Payable',       tag: 'PURB JV',  pbLabel: 'PB Total',     jvLabel: 'Payable CR',       pb: r.pb_meta.total,      jv: r.purb_jv.payable,         chkId: 'payable_vs_pb',    color: 'teal'   },
-                                    { label: 'Closing Stock', tag: 'INV JV',   pbLabel: 'PB Taxable',   jvLabel: 'Closing Stock DR', pb: r.pb_meta.taxable,    jv: r.inv_jv.closing_dr,       chkId: 'taxable_vs_inv',   color: 'violet' },
+                                    { label: 'Closing Stock', tag: 'INV JV',   pbLabel: 'PB Taxable',   jvLabel: 'Closing Stock DR', pb: r.pb_meta.taxable,    jv: r.inv_jv?.closing_dr ?? null, chkId: 'taxable_vs_inv',   color: 'violet' },
                                   ] as const).map(({ label, tag, pbLabel, jvLabel, pb, jv, chkId, color }) => {
                                     const chk = r.checks.find(c=>c.id===chkId)
-                                    const ok  = chk?.ok ?? true
+                                    const isInvCard = tag === 'INV JV'
+                                    const invMissing = isInvCard && !r.inv_jv.found
+                                    const ok  = invMissing ? false : (chk?.ok ?? true)
                                     const accent = {
                                       gray:   { border: 'border-gray-200 dark:border-gray-700',       bg: 'bg-white dark:bg-gray-900',            tag: 'text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800',                label: 'text-gray-500 dark:text-gray-400',     val: 'text-gray-800 dark:text-gray-100',     jv: 'text-gray-400 dark:text-gray-500' },
                                       amber:  { border: 'border-amber-200 dark:border-amber-800/60',  bg: 'bg-amber-50/50 dark:bg-amber-900/10',  tag: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30',         label: 'text-amber-600 dark:text-amber-400',   val: 'text-amber-600 dark:text-amber-400',   jv: 'text-amber-500/60 dark:text-amber-500/60' },
@@ -2988,17 +2999,19 @@ ${rows.join('\n')}
                                       violet: { border: 'border-violet-200 dark:border-violet-800/60', bg: 'bg-violet-50/50 dark:bg-violet-900/10', tag: 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30', label: 'text-violet-600 dark:text-violet-400', val: 'text-violet-700 dark:text-violet-300',  jv: 'text-violet-500/60 dark:text-violet-400/60' },
                                     }[color]
                                     return (
-                                      <div key={label} className={`rounded-lg border p-3 ${accent.border} ${accent.bg}`}>
+                                      <div key={label} className={`rounded-lg border p-3 relative overflow-hidden ${invMissing ? 'border-rose-200 dark:border-rose-800/50 bg-rose-50/40 dark:bg-rose-900/10' : `${accent.border} ${accent.bg}`}`}>
                                         <div className="flex items-center justify-between mb-2.5">
-                                          <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${accent.tag}`}>{tag}</span>
-                                          {ok ? <CkDot /> : <XCircle className="size-3 text-red-500 shrink-0" />}
+                                          <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${invMissing ? 'text-rose-500 bg-rose-50 dark:bg-rose-900/30' : accent.tag}`}>{tag}</span>
+                                          {invMissing ? <XCircle className="size-3 text-rose-500 shrink-0" /> : ok ? <CkDot /> : <XCircle className="size-3 text-red-500 shrink-0" />}
                                         </div>
-                                        <div className={`text-[11px] font-bold uppercase tracking-wide mb-2.5 ${accent.label}`}>{label}</div>
-                                        <div className={`h-px mb-2.5 ${ok ? 'bg-gray-100 dark:bg-gray-800' : 'bg-red-200 dark:bg-red-800/40'}`} />
+                                        <div className={`text-[11px] font-bold uppercase tracking-wide mb-2.5 ${invMissing ? 'text-rose-500 dark:text-rose-400' : accent.label}`}>{label}</div>
+                                        <div className={`h-px mb-2.5 ${(!ok || invMissing) ? 'bg-red-200 dark:bg-red-800/40' : 'bg-gray-100 dark:bg-gray-800'}`} />
                                         <div className="text-[9px] text-gray-400 dark:text-gray-500 mb-0.5">{pbLabel}</div>
-                                        <div className={`font-mono text-[14px] font-bold leading-tight ${accent.val}`}>{fmtN(pb)}</div>
+                                        <div className={`font-mono text-[14px] font-bold leading-tight ${invMissing ? 'text-gray-400 dark:text-gray-500' : accent.val}`}>{fmtN(pb)}</div>
                                         <div className="text-[9px] text-gray-400 dark:text-gray-500 mt-2 mb-0.5">{jvLabel}</div>
-                                        <div className={`font-mono text-[11px] font-semibold ${ok ? accent.jv : 'text-red-500 dark:text-red-400'}`}>{fmtN(jv)}</div>
+                                        {invMissing
+                                          ? <div className="text-[10px] font-semibold text-rose-500 dark:text-rose-400">INV JV not found</div>
+                                          : <div className={`font-mono text-[11px] font-semibold ${ok ? accent.jv : 'text-red-500 dark:text-red-400'}`}>{fmtN(jv)}</div>}
                                       </div>
                                     )
                                   })}
@@ -3099,7 +3112,9 @@ ${rows.join('\n')}
                                           onClick={() => setCcJvTab(tab)}
                                           className={`px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider transition-colors cursor-pointer relative ${ccJvTab === tab ? 'text-teal-600 dark:text-teal-400' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
                                         >
-                                          {tab === 'purb' ? `PURB JV · ${r.pb_ref_no}` : `INV JV · ${r.inv_ref_no||'—'}`}
+                                          {tab === 'purb'
+                                            ? `PURB JV · ${r.pb_ref_no}`
+                                            : <span className="flex items-center gap-1.5">{`INV JV · ${r.inv_ref_no||'—'}`}{!r.inv_jv.found && <span className="inline-block size-1.5 rounded-full bg-rose-500 shrink-0" />}</span>}
                                           {ccJvTab === tab && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-500 rounded-t-sm" />}
                                         </button>
                                       ))}
@@ -3120,7 +3135,15 @@ ${rows.join('\n')}
                                       return (
                                         <div key={tab} className={ccJvTab !== tab ? 'hidden' : 'overflow-x-auto'}>
                                           {jvRows.length === 0 ? (
-                                            <div className="px-4 py-10 text-center text-[12px] text-gray-400">No entries found</div>
+                                            tab === 'inv' && !r.inv_jv.found ? (
+                                              <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
+                                                <XCircle className="size-8 text-rose-400/60" />
+                                                <div className="text-[13px] font-semibold text-rose-500 dark:text-rose-400">INV JV not found</div>
+                                                <div className="text-[11px] text-gray-400 max-w-[220px] leading-relaxed">No Inventory JV linked to this Purchase Booking was found in the JV report.</div>
+                                              </div>
+                                            ) : (
+                                              <div className="px-4 py-10 text-center text-[12px] text-gray-400">No entries found</div>
+                                            )
                                           ) : (
                                             <table className="w-full text-[11px]" style={{borderCollapse:'separate',borderSpacing:0}}>
                                               <thead className="sticky top-0 z-10">
@@ -3269,6 +3292,99 @@ ${rows.join('\n')}
           )}
         </div>
       </div>
+
+      {/* ── Cross-check failure card (LoadingCard style) ─────────────── */}
+      {ccFailToast && (() => {
+        const { refNo, result: r } = ccFailToast
+        const dismiss = () => { setCcFailToast(null); if (ccFailToastTimer.current) clearTimeout(ccFailToastTimer.current) }
+        const failedChecks = r.checks.filter(c => !c.ok)
+        const missingPurb = !r.purb_jv.found
+        const missingInv = !r.inv_jv.found
+        const items: { label: string; level: 'error' | 'warn' }[] = [
+          ...(missingPurb ? [{ label: 'PURB JV not found in report', level: 'error' as const }] : []),
+          ...(missingInv  ? [{ label: 'INV JV not found in report',  level: 'error' as const }] : []),
+          ...failedChecks.map(c => ({
+            label: c.label + (c.detail ? ` — ${c.detail}` : ''),
+            level: 'warn' as const,
+          })),
+        ]
+        return (
+          <>
+            {/* backdrop */}
+            <div className="fixed inset-0 z-[290] bg-black/20 backdrop-blur-[1.5px]" onClick={dismiss} />
+            {/* card — matches LoadingCard structure */}
+            <div className="fixed inset-0 z-[300] flex items-center justify-center pointer-events-none">
+              <div
+                className="pointer-events-auto flex flex-col items-center gap-4 bg-[var(--card)] border border-[var(--border)] rounded-[22px] px-12 py-8 shadow-[0_0_0_1px_color-mix(in_srgb,#f43f5e_8%,transparent),0_12px_40px_rgba(0,0,0,0.18)] min-w-[220px]"
+                style={{ animation: 'lc-breathe 3.5s ease-in-out infinite, fadeIn 0.25s cubic-bezier(.22,1,.36,1) forwards' }}
+              >
+                {/* orbital logo — rose ring for failure */}
+                <div className="relative w-24 h-24 flex items-center justify-center">
+                  {/* spinning conic ring in rose */}
+                  <div className="absolute inset-0 rounded-full" style={{
+                    background: 'conic-gradient(from 0deg, #f43f5e 0deg, color-mix(in srgb, #f43f5e 60%, transparent) 80deg, transparent 140deg, transparent 360deg)',
+                    WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 3px), #fff calc(100% - 3px))',
+                    mask: 'radial-gradient(farthest-side, transparent calc(100% - 3px), #fff calc(100% - 3px))',
+                    animation: 'lc-orbit-spin 1.6s linear infinite',
+                  }} />
+                  {/* sonar pulses */}
+                  <span className="absolute inset-1 rounded-full border border-rose-400/40" style={{ animation: 'lc-sonar 2.8s ease-out infinite', animationDelay: '0s' }} />
+                  <span className="absolute inset-1 rounded-full border border-rose-400/40" style={{ animation: 'lc-sonar 2.8s ease-out infinite', animationDelay: '1.4s' }} />
+                  {/* logo center */}
+                  <div className="relative z-10 w-14 h-14 rounded-[14px] bg-[var(--card)] flex items-center justify-center" style={{ animation: 'lc-logo-breathe 3.5s ease-in-out infinite' }}>
+                    <img src="/agdi-logo-new.png" alt="" className="w-[46px] h-auto object-contain" />
+                  </div>
+                </div>
+
+                {/* label */}
+                <p className="text-[10px] font-bold tracking-[0.22em] text-rose-500 m-0" style={{ animation: 'lc-fade-pulse 3.5s ease-in-out infinite' }}>
+                  CROSS-CHECK FAILED
+                </p>
+
+                {/* ref */}
+                <p className="text-[11px] font-mono text-[var(--muted-foreground)] -mt-2">{refNo}</p>
+
+                {/* failed items — same step layout as LoadingCard */}
+                {items.length > 0 && (
+                  <div className="flex flex-col gap-2 w-full">
+                    {items.map((item, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-2.5 text-[12px]"
+                        style={{ animation: 'lc-step-in 0.22s ease both', animationDelay: `${i * 70}ms` }}
+                      >
+                        <span className="shrink-0 w-4 h-4 flex items-center justify-center">
+                          {item.level === 'error'
+                            ? <XCircle className="size-3.5 text-rose-500" />
+                            : <AlertTriangle className="size-3.5 text-amber-400" />}
+                        </span>
+                        <span className={item.level === 'error' ? 'text-rose-400 font-medium' : 'text-[var(--card-foreground)]'}>
+                          {item.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* actions */}
+                <div className="flex gap-2 w-full mt-1">
+                  <button onClick={dismiss} className="flex-1 py-2 rounded-xl bg-rose-500 text-white text-[12px] font-semibold hover:bg-rose-600 transition-colors">
+                    View Details
+                  </button>
+                  <button onClick={dismiss} className="flex-1 py-2 rounded-xl bg-[var(--muted)] border border-[var(--border)] text-[var(--muted-foreground)] text-[12px] font-semibold hover:opacity-80 transition-opacity">
+                    Dismiss
+                  </button>
+                </div>
+
+                {/* timer bar */}
+                <div className="w-full h-0.5 bg-[var(--border)] rounded-full overflow-hidden -mb-2">
+                  <div className="h-full bg-rose-500 rounded-full" style={{ animation: 'toastTimer 6s linear forwards' }} />
+                </div>
+              </div>
+            </div>
+          </>
+        )
+      })()}
     </div>
   )
 }
