@@ -23,6 +23,7 @@ from pages.private_b2b.modules.payment.api.endpoints import (
     build_list_url,
     build_bank_list_url,
     build_bank_get_url,
+    build_bank_put_url,
 )
 
 
@@ -92,6 +93,48 @@ class PaymentAPIUtils:
         chosen = defaults[0] if defaults else banks[0]
         log.info(f"  Payment: selected bank #{chosen['id']} ({chosen['name']})")
         return chosen["id"]
+
+    def ensure_bank_balance(self, bank_id: int, required_amount: float) -> bool:
+        """Ensure the bank's bal_cash_credit_limit covers required_amount.
+
+        If the current limit is already sufficient, does nothing and returns True.
+        If it's less, PATCHes the bank to set the limit to required_amount × 2
+        (headroom for multiple chains) and returns True on success, False on failure.
+        """
+        url = build_bank_get_url(self.client.BASE_URL, bank_id)
+        resp = self.client.session.get(url, headers=self.client.session.headers, timeout=15)
+        if resp.status_code != 200:
+            log.warning(f"  PYMT: could not fetch bank #{bank_id} to check balance ({resp.status_code})")
+            return False
+
+        bank = resp.json()
+        current_limit = float(bank.get("bal_cash_credit_limit") or 0)
+        if current_limit >= required_amount:
+            log.info(f"  PYMT: bank #{bank_id} limit {current_limit:.2f} ≥ required {required_amount:.2f} — OK")
+            return True
+
+        new_limit = required_amount * 2
+        log.info(
+            f"  PYMT: bank #{bank_id} limit {current_limit:.2f} < required {required_amount:.2f} "
+            f"— bumping to {new_limit:.2f}"
+        )
+        # PUT full bank record back with updated limit (ERP requires full payload)
+        put_payload = dict(bank)
+        put_payload["bal_cash_credit_limit"] = str(int(new_limit))
+        put_url = build_bank_put_url(self.client.BASE_URL, bank_id)
+        put_resp = self.client.session.put(
+            put_url,
+            headers=self.client.session.headers,
+            json=put_payload,
+            timeout=15,
+        )
+        if put_resp.status_code in (200, 201):
+            log.info(f"  PYMT: bank #{bank_id} limit updated successfully")
+            return True
+        log.warning(
+            f"  PYMT: bank limit update failed (HTTP {put_resp.status_code}): {put_resp.text[:200]}"
+        )
+        return False
 
     def _fetch_all_banks(self) -> List[dict]:
         """Fetch all bank records from the dynamic-screen-wrapper."""
