@@ -400,7 +400,8 @@ def _grn_items_from(
 
 def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = None,
                    bags_type_id: int = 1, qc_discount: bool = True,
-                   is_rate_weight_deduction: bool = False) -> List[dict]:
+                   is_rate_weight_deduction: bool = False,
+                   kg_to_uom_factors: Optional[dict] = None) -> List[dict]:
     """Build QC line items matching the manual QC 1345 stored shape.
 
     Every derived amount is computed here (ERP does NOT auto-patch on POST).
@@ -471,7 +472,12 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
                     "type_of_bags_ref_id": bags_type_id,
                     "quantity_of_bags": 1,
                     "weight_of_bags": 1.0,
-                    "total_weight_of_bags": 1.0,
+                    "total_weight_of_bags": round(
+                        it["accepted_qty"] / (kg_to_uom_factors or {}).get(
+                            it.get("uom", ctx.alternate_uom if ctx else 3), 1.0
+                        ),
+                        4,
+                    ),
                 }
             ],
         })
@@ -850,6 +856,86 @@ class PurchaseChain:
         except Exception as exc:
             log.warning(f"  CBR rate fetch failed, using random rates: {exc}")
             return {}
+
+    def _resolve_kg_uom_id(self) -> Optional[int]:
+        """Return the live ERP ID for the 'KG' UOM entry in this tenant."""
+        from common.fk_resolver import FkResolver
+        try:
+            uom_map = FkResolver(self.client).resolve("UOM")
+            return uom_map.get("KG") or uom_map.get("Kg") or uom_map.get("kg")
+        except Exception as exc:
+            log.warning(f"  UOM FK resolve failed: {exc}")
+            return None
+
+    def _ensure_kg_uom_conversions(self, item_uom_ids: list) -> dict:
+        """Return {uom_id: factor} for KG→uom_id conversions, creating missing ones.
+
+        Resolves KG's ERP ID dynamically for the current tenant (no hardcoded IDs).
+        For each item UOM in item_uom_ids that is not KG itself, checks whether a
+        KG→uom_id conversion exists. If missing, creates it with factor=1.0.
+        """
+        kg_id = self._resolve_kg_uom_id()
+        if kg_id is None:
+            log.warning("  UOM pre-flight: could not resolve KG UOM ID — skipping total_weight calc")
+            return {}
+
+        item_uom_ids = [u for u in set(item_uom_ids) if u and u != kg_id]
+        if not item_uom_ids:
+            return {}
+
+        from pages.common_settings.modules.uom_conversion.data.uom_conversion_data import (
+            build_uom_conversion_api_payload,
+        )
+
+        # Fetch all existing conversions where source = KG
+        try:
+            listing = self.client.list_entries("UOM Conversion", page_size=500)
+            rows = (listing or {}).get("screenmatlistingdata_set",
+                    (listing or {}).get("results", []))
+        except Exception as exc:
+            log.warning(f"  UOM Conversion listing failed: {exc}")
+            rows = []
+
+        existing: dict = {}  # {target_uom_id: factor}
+        for row in (rows or []):
+            src = row.get("source_uom_code")
+            tgt = row.get("target_uom_code")
+            factor = row.get("conversion_factor")
+            if src is None or tgt is None or factor is None:
+                continue
+            try:
+                src, tgt, factor = int(src), int(tgt), float(factor)
+            except (TypeError, ValueError):
+                continue
+            if src == kg_id:
+                existing[tgt] = factor
+
+        result: dict = dict(existing)
+
+        for uom_id in item_uom_ids:
+            if uom_id in existing:
+                continue
+            log.info(f"  UOM pre-flight: KG→{uom_id} not found — creating with factor=1.0")
+            payload = build_uom_conversion_api_payload(
+                source_uom_code=kg_id,
+                target_uom_code=uom_id,
+                conversion_factor=1.0,
+            )
+            try:
+                resp = self.client.create_entry(payload)
+                created_factor = 1.0
+                if resp:
+                    try:
+                        created_factor = float(resp.get("conversion_factor", 1.0))
+                    except (TypeError, ValueError):
+                        pass
+                result[uom_id] = created_factor
+                log.info(f"  UOM pre-flight: KG→{uom_id} created (factor={created_factor})")
+            except Exception as exc:
+                log.warning(f"  UOM pre-flight: failed to create KG→{uom_id}: {exc} — total_weight will use 1.0")
+                result[uom_id] = 1.0
+
+        return result
 
     @staticmethod
     def _err_detail(api_utils, payload: dict = None) -> str:
@@ -1399,6 +1485,15 @@ class PurchaseChain:
                 if cbr_max is not None:
                     it["rate"] = cbr_max
 
+        # Pre-flight: ensure KG→item_UOM conversions exist for bags total_weight
+        if "QC" in docs:
+            item_uom_ids = [it.get("uom") or it.get("alternate_uom") for it in items]
+            kg_to_uom_factors = self._ensure_kg_uom_conversions(
+                [u for u in item_uom_ids if u is not None]
+            )
+        else:
+            kg_to_uom_factors = {}
+
         po_id = po_ref = po_data = po_payload = po_entry = None
         gp_id = gp_ref = gp_data = gp_payload = None
         grn_id = grn_ref = grn_data = grn_payload = None
@@ -1406,14 +1501,15 @@ class PurchaseChain:
         pb_id = pb_ref = pb_data = pb_payload = None
         so_id = so_ref = so_data = so_payload = None
 
-        # Sales Order header inputs — resolved once per chain (per-GP lines are
-        # built from each GP's own QC, but the customer/type/terms are shared).
-        so_customer = customer_ref_id if customer_ref_id is not None else (getattr(ctx, "customer_ref_id", None) if ctx else None)
-        if so_customer is None:
-            so_customer = self._resolve_customer_ref_id()
-        so_customer_details = self._resolve_customer_details(so_customer)
-        so_type_id = self._resolve_so_type_id()
-        so_supply_id = self._resolve_supply_type_id()
+        # Sales Order header inputs — only resolved when SO is in the flow.
+        so_customer = so_customer_details = so_type_id = so_supply_id = None
+        if "SO" in docs:
+            so_customer = customer_ref_id if customer_ref_id is not None else (getattr(ctx, "customer_ref_id", None) if ctx else None)
+            if so_customer is None:
+                so_customer = self._resolve_customer_ref_id()
+            so_customer_details = self._resolve_customer_details(so_customer)
+            so_type_id = self._resolve_so_type_id()
+            so_supply_id = self._resolve_supply_type_id()
 
         # ---------------------------------------------------------------
         # 1. Purchase Order
@@ -1535,6 +1631,7 @@ class PurchaseChain:
                     bags_type_id=self._resolve_bags_type_id(),
                     qc_discount=qc_discount,
                     is_rate_weight_deduction=is_rate_weight_deduction,
+                    kg_to_uom_factors=kg_to_uom_factors,
                 )
                 qc_data = self.qc_api.create_qc(qc_payload)
                 qc_id = qc_data.get("id") or qc_data.get("entry_id") if qc_data else None
@@ -1655,6 +1752,7 @@ class PurchaseChain:
                     if bank_id is None:
                         log.warning("  PYMT: no bank account found — skipping payment")
                     else:
+                        self.payment_api.ensure_bank_balance(bank_id, pb_total)
                         _pb_rec = _pb_check or pb_data or {}
                         pb_txn_date = _pb_rec.get("transaction_date") or None
                         _conv = _pb_rec.get("conversion_rate", 1.0)
@@ -1918,9 +2016,10 @@ class PurchaseChain:
         bags_type_id: int = 1,
         qc_discount: bool = True,
         is_rate_weight_deduction: bool = False,
+        kg_to_uom_factors: Optional[dict] = None,
     ) -> dict:
         from pages.private_b2b.modules.quality_check.data.quality_check_data import build_qc_payload
-        qc_items = _qc_items_from(items, ctx=ctx, cqp_by_item=cqp_by_item or {}, bags_type_id=bags_type_id, qc_discount=qc_discount, is_rate_weight_deduction=is_rate_weight_deduction)
+        qc_items = _qc_items_from(items, ctx=ctx, cqp_by_item=cqp_by_item or {}, bags_type_id=bags_type_id, qc_discount=qc_discount, is_rate_weight_deduction=is_rate_weight_deduction, kg_to_uom_factors=kg_to_uom_factors)
         overrides = overrides or {}
         total_txn = round(sum(float(l.get("txn_currency_amount") or 0.0) for l in qc_items), 6)
         header_extra = {"total_txn_currency_amount": total_txn}
