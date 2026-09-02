@@ -231,6 +231,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [requireTaxRate, setRequireTaxRate] = useState(true)
   const [starredFlow, setStarredFlow] = useState<'po' | 'gp' | 'so' | null>(null)
   const [flow, setFlow] = useState<'po' | 'gp' | 'so'>('po')
+  const [supplierType, setSupplierType] = useState<'Supplier' | 'Farmer'>('Supplier')
   const [multiGatePass, setMultiGatePass] = useState(false)
   const [gpCount, setGpCount] = useState(2)
   const [qcDiscount, setQcDiscount] = useState(false)
@@ -319,8 +320,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
 
     setLoadingData(true)
     setDataError('')
+    const entityLabel = flow === 'gp' && supplierType === 'Farmer' ? 'farmers' : 'suppliers'
     const steps = [
-      { label: 'Fetching suppliers', done: false },
+      { label: `Fetching ${entityLabel}`, done: false },
       { label: 'Fetching items', done: false },
       { label: 'Fetching categories', done: false },
       { label: 'Fetching quality params', done: false },
@@ -340,8 +342,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       }
     }
     try {
+      const supplierEntity = flow === 'gp' && supplierType === 'Farmer' ? 'Farmer' : 'Supplier'
       const [supRes, itemRes, catRes, cqpRes] = await Promise.all([
-        fetchWithRetry('Supplier', () => fetchMasterData('Supplier', token, tenant)).then(r => { tick(0); return r }),
+        fetchWithRetry(supplierEntity, () => fetchMasterData(supplierEntity, token, tenant)).then(r => { tick(0); return r }),
         fetchWithRetry('Item Master', () => fetchMasterData('Item Master', token, tenant)).then(r => { tick(1); return r }),
         fetchWithRetry('Categories', () => fetchItemCategories(token, tenant)).then(r => { tick(2); return r }),
         fetchWithRetry('Quality Params', () => fetchItemsWithCqp(token, tenant)).then(r => { tick(3); return r }),
@@ -379,7 +382,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       setLoadingData(false)
       setLoadingSteps([])
     }
-  }, [_erpToken, _erpTenantId, requireTaxRate, flow, handleAuthError])
+  }, [_erpToken, _erpTenantId, requireTaxRate, flow, supplierType, handleAuthError])
 
   const handleDone = useCallback(() => {
     setShowTokenInput(false)
@@ -466,8 +469,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       flow === 'so' && enabledDocs.has('SO') ? customer : null,
       isRateWeightDeduction,
       false,
+      flow === 'gp' ? supplierType : 'Supplier',
     )
-  }, [count, supplier, numItems, itemIds, _erpToken, _erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow, multiGatePass, gpCount, chainSuppliers, qcDiscount, customer, enabledDocs, isRateWeightDeduction])
+  }, [count, supplier, numItems, itemIds, _erpToken, _erpTenantId, activeDocs, selectedCategoryId, requireTaxRate, flow, multiGatePass, gpCount, chainSuppliers, qcDiscount, customer, enabledDocs, isRateWeightDeduction, supplierType])
 
   const handleStop = useCallback(() => {
     setRunning(false)
@@ -535,6 +539,15 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
       resetItemsFromPool(catItems, numItems)
     }
   }, [requireTaxRate, selectedCategoryId, flow])
+
+  // Re-fetch master data when supplierType changes in the gp flow
+  useEffect(() => {
+    if (fetchedRef.current && flow === 'gp') {
+      setSupplier(null)
+      fetchedRef.current = false
+      loadMasterDataRef.current()
+    }
+  }, [supplierType, flow])
 
   const selectedSupplier = suppliers.find((s) => s.id === supplier)
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId)
@@ -683,6 +696,39 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
             </div>
             <span className="text-[10px] text-gray-600 dark:text-gray-400">Click a document to customize the flow</span>
           </div>
+
+          {flow === 'gp' && (
+          <div className="flex flex-col gap-0.5 items-center">
+            <div className="flex items-center gap-1.5 flex-wrap justify-center">
+              <span className="text-[12px] text-gray-700 dark:text-gray-300 shrink-0">Party:</span>
+              <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setSupplierType('Supplier')}
+                  disabled={running}
+                  className={`px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                    supplierType === 'Supplier' ? 'bg-[#3F51B5] text-white' : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  Supplier
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSupplierType('Farmer')}
+                  disabled={running}
+                  className={`px-2.5 py-1 text-[11px] font-semibold border-l border-gray-300 dark:border-gray-600 transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                    supplierType === 'Farmer' ? 'bg-[#3F51B5] text-white' : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  Farmer
+                </button>
+              </div>
+            </div>
+            <span className="text-[10px] text-gray-600 dark:text-gray-400">
+              {supplierType === 'Farmer' ? 'GST-unregistered, no tax rate' : 'Regular supplier with GST'}
+            </span>
+          </div>
+          )}
 
           {flow !== 'gp' && (
           <>
@@ -873,7 +919,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
 
           {/* Supplier selector */}
           <div className="relative" data-tour="pc-supplier">
-            <Label className="text-[11px] text-gray-700 dark:text-gray-300 mb-1 block">Supplier</Label>
+            <Label className="text-[11px] text-gray-700 dark:text-gray-300 mb-1 block">{flow === 'gp' ? supplierType : 'Supplier'}</Label>
             {loadingData && suppliers.length === 0 ? (
               <div className="h-9 flex items-center text-[12px] text-gray-600 dark:text-gray-400 gap-1.5">
                 <Loader2 className="size-3 animate-spin" />

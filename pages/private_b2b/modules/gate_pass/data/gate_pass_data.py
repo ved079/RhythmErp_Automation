@@ -91,6 +91,7 @@ PARAMETER_IDS = [1, 2]
 
 def build_gp_payload(
     supplier_ref_id: int = 1,
+    supplier_ref_type: str = "Supplier",
     item_type_ref_id: int = 113,
     delivery_type: int = 29,
     agent_ref_id: int = None,
@@ -147,7 +148,7 @@ def build_gp_payload(
     payload = {
         "transaction_date": transaction_date,
         "supplier_ref_id": supplier_ref_id,
-        "supplier_ref_type": "Supplier",
+        "supplier_ref_type": supplier_ref_type,
         "item_type_ref_id": item_type_ref_id,
         "delivery_type": delivery_type,
         "in_time": in_time,

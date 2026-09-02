@@ -168,6 +168,7 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
             kwargs["is_rate_weight_deduction"] = request.is_rate_weight_deduction
             kwargs["payment_method"] = request.payment_method
             kwargs["payment_post"] = request.payment_post
+            kwargs["supplier_ref_type"] = request.supplier_ref_type
             if request.customer_ref_id is not None:
                 kwargs["customer_ref_id"] = request.customer_ref_id
             # Only pass explicit overrides if the caller set them intentionally
