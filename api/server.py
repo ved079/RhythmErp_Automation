@@ -1154,7 +1154,18 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
         raw = r.json()
         return (raw[0].get("report_data") or []) if isinstance(raw, list) and raw else []
 
+    def _jv_status(entry) -> str:
+        if not entry:
+            return ""
+        for key in ("status", "posting_status", "posting_type", "post_status"):
+            val = (entry.get(key) or "").strip()
+            if val:
+                return val
+        return ""
+
     purb_entry = inv_entry = None
+    purb_candidates: list = []   # all entries matching the PURB ref
+    inv_candidates: list  = []   # all INV entries matching the amount
     try:
         # Fetch pages in waves of 8 (per ledger group × 4 pages) so we can stop
         # early once both entries are found, rather than always fetching 20 pages.
@@ -1179,16 +1190,35 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
                             ref   = entry.get("ref_transaction_no") or ""
                             ttype = entry.get("ref_transaction_type") or ""
                             if ref == request.pb_ref_no:
-                                purb_entry = entry
-                            elif ttype == "Inventory" and inv_entry is None:
+                                purb_candidates.append(entry)
+                            elif ttype == "Inventory":
                                 if abs(float(entry.get("total_debit_amount") or 0) - pb_taxable) <= TOLERANCE:
-                                    inv_entry = entry
+                                    inv_candidates.append(entry)
                     except Exception:
                         pass
-                if wave_empty or (purb_entry and inv_entry):
+                # Stop early only once we have at least one posted PURB and one INV
+                have_purb = any(_jv_status(e).lower() == "post" for e in purb_candidates) or purb_candidates
+                have_inv  = bool(inv_candidates)
+                if wave_empty or (have_purb and have_inv):
                     found = True
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"JV report scan failed: {exc}", "checks": []})
+
+    # Among all PURB candidates, prefer the Posted entry; fall back to any
+    def _pick_purb(candidates: list):
+        posted = [e for e in candidates if _jv_status(e).lower() == "post"]
+        return posted[0] if posted else (candidates[0] if candidates else None)
+
+    # Among all INV candidates, prefer the one whose date matches the PURB date
+    def _pick_inv(candidates: list, purb_date: str):
+        if not candidates:
+            return None
+        date_match = [e for e in candidates if (e.get("transaction_date") or "") == purb_date]
+        return date_match[0] if date_match else candidates[0]
+
+    purb_entry = _pick_purb(purb_candidates)
+    purb_txn_date_for_inv = (purb_entry.get("transaction_date") or "") if purb_entry else ""
+    inv_entry  = _pick_inv(inv_candidates, purb_txn_date_for_inv)
 
     # ── 3. Extract PURB JV rows ──────────────────────────────────────
     def extract_rows(entry):
@@ -1256,6 +1286,9 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
     purb_fy       = (purb_entry.get("fiscal_year") or "") if purb_entry else ""
     purb_period   = (purb_entry.get("period") or "") if purb_entry else ""
 
+    purb_status = _jv_status(purb_entry)
+    inv_status  = _jv_status(inv_entry)
+
     # ── 4. Build checks list ─────────────────────────────────────────
     def chk(id_, label, ok, detail="", category="amount"):
         return {"id": id_, "label": label, "ok": ok, "detail": detail, "category": category}
@@ -1265,6 +1298,16 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
     # Existence
     checks.append(chk("purb_found",   "PURB JV found in report",       purb_entry is not None,  request.pb_ref_no,                 "existence"))
     checks.append(chk("inv_found",    "INV JV found in report",         inv_entry  is not None,  inv_ref_no or "Not found",         "existence"))
+
+    # Status — must be Post, not Unpost/Draft
+    if purb_entry:
+        purb_posted = purb_status.lower() == "post"
+        checks.append(chk("purb_posted", "PURB JV is posted (not reversed/unposted)",
+            purb_posted, f"Status: {purb_status or 'unknown'}", "existence"))
+    if inv_entry:
+        inv_posted = inv_status.lower() == "post"
+        checks.append(chk("inv_posted", "INV JV is posted (not reversed/unposted)",
+            inv_posted, f"Status: {inv_status or 'unknown'}", "existence"))
 
     if purb_entry and inv_entry:
         # Date / FY / Period
@@ -1484,6 +1527,7 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
         },
         "purb_jv": {
             "found": purb_entry is not None,
+            "status": purb_status,
             "transaction_date": purb_txn_date,
             "fiscal_year": purb_fy,
             "period": purb_period,
@@ -1498,6 +1542,7 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
         },
         "inv_jv": {
             "found": inv_entry is not None,
+            "status": inv_status,
             "ref_no": inv_ref_no,
             "transaction_date": inv_txn_date,
             "fiscal_year": inv_fy,
