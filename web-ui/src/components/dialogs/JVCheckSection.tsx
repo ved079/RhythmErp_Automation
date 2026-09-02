@@ -2486,25 +2486,277 @@ ${rows.join('\n')}
                       URL.revokeObjectURL(url)
                     }
 
-                    const exportCcPdf = () => {
-                      const lines: string[] = []
-                      lines.push(`CROSS-CHECK JV REPORT — ${overallOk ? 'PASSED' : 'FAILED'}`)
-                      lines.push(`PB: ${r.pb_ref_no}  |  INV: ${r.inv_ref_no||'not found'}  |  FY: ${r.purb_jv.fiscal_year}  Period: ${r.purb_jv.period}`)
-                      lines.push(`Supplier: ${ccSelectedPB!.supplier||'—'}  |  Date: ${ccSelectedPB!.date||'—'}`)
-                      lines.push('')
-                      lines.push('AMOUNTS')
-                      lines.push(`  Taxable:   PB ${fmtN(r.pb_meta.taxable)}  |  PURB JV ${fmtN(r.purb_jv.purchase_gst_dr)}  |  INV JV ${fmtN(r.inv_jv.total_dr)}`)
-                      if (r.pb_meta.gst_total > 0) lines.push(`  GST:       PB ${fmtN(r.pb_meta.gst_total)}  |  PURB JV ${fmtN(r.purb_jv.gst_dr)}`)
-                      lines.push(`  Payable:   PB ${fmtN(r.pb_meta.total)}  |  PURB JV ${fmtN(r.purb_jv.payable)}`)
-                      lines.push('')
-                      lines.push('CHECKS')
-                      for (const chk of r.checks) {
-                        lines.push(`  ${chk.ok ? '✓' : '✕'} [${chk.category}] ${chk.label}`)
-                        if (!chk.ok && chk.detail) lines.push(`      ${chk.detail}`)
+                    const exportCcPdf = async () => {
+                      const { jsPDF } = await import('jspdf')
+                      const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+                      const PW = 210, PH = 297, M = 14, CW = PW - M * 2
+
+                      const safe = (v: string | number | null | undefined) =>
+                        String(v ?? '')
+                          .replace(/₹/g,'Rs. ').replace(/[—–]/g,'-').replace(/['']/g,"'")
+                          .replace(/[""]/g,'"').replace(/·/g,'|').replace(/×/g,'x')
+                          .replace(/ /g,' ').replace(/≠/g,'!=').replace(/✓/g,'OK').replace(/✕/g,'X')
+
+                      const fmt = (n: number | null | undefined) =>
+                        n != null ? n.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}) : '-'
+
+                      // ── Palette (matches JV + INV JV PDF) ──
+                      const NAVY: [number,number,number]    = [40,53,147]
+                      const NAVY_D: [number,number,number]  = [26,35,126]
+                      const HEAD_BG: [number,number,number] = [57,73,171]
+                      const SEC_BG: [number,number,number]  = [197,202,233]
+                      const BDR: [number,number,number]     = [176,176,176]
+                      const TXT: [number,number,number]     = [33,33,33]
+                      const TXT_DIM: [number,number,number] = [84,100,114]
+                      const DR_T: [number,number,number]    = [13,71,161]
+                      const CR_T: [number,number,number]    = [74,20,140]
+                      const GRN_F: [number,number,number]   = [165,214,167], GRN_T: [number,number,number] = [27,94,32]
+                      const RED_F: [number,number,number]   = [239,154,154], RED_T: [number,number,number] = [183,28,28]
+                      const AMB_F: [number,number,number]   = [255,224,178], AMB_T: [number,number,number] = [191,54,12]
+                      const TOT_F: [number,number,number]   = [207,216,220]
+                      const DR_F: [number,number,number]    = [187,222,251]
+                      const CR_F: [number,number,number]    = [225,190,231]
+
+                      let y = M
+                      const need = (h: number) => { if (y + h > PH - M - 8) { doc.addPage(); y = M } }
+
+                      type CS = { t: string; span?: number; align?: 'L'|'C'|'R'; color?: [number,number,number]; fill?: [number,number,number]|null; bold?: boolean; italic?: boolean; size?: number; mono?: boolean; lbl?: boolean }
+                      const makeRow = (cols: number[]) => (cells: CS[], h = 6.5) => {
+                        const PAD = 2.5; const MAX_LINES = 5; let colIdx = 0
+                        const measured = cells.map(c => {
+                          const span = c.span ?? 1
+                          const cw = cols.slice(colIdx, colIdx+span).reduce((a,b)=>a+b,0)
+                          const fs = c.size ?? (c.lbl ? 8 : 9)
+                          doc.setFont(c.mono?'courier':'helvetica', c.bold||c.lbl ? 'bold' : c.italic ? 'italic' : 'normal')
+                          doc.setFontSize(fs)
+                          let lines: string[] = doc.splitTextToSize(safe(c.t), cw - PAD*2)
+                          if (lines.length > MAX_LINES) lines = lines.slice(0, MAX_LINES)
+                          colIdx += span
+                          return { c, cw, fs, lines }
+                        })
+                        const rh = Math.max(h, ...measured.map(m => m.lines.length * m.fs * 0.353 * 1.25 + 2.4))
+                        need(rh)
+                        doc.setDrawColor(...BDR)
+                        let cx = M
+                        for (const { c, cw, fs, lines } of measured) {
+                          if (c.fill !== null) {
+                            const bg = c.fill ?? (c.lbl ? [236,239,241] as [number,number,number] : null)
+                            if (bg) { doc.setFillColor(...bg); doc.rect(cx, y, cw, rh, 'FD') }
+                            else doc.rect(cx, y, cw, rh, 'S')
+                          }
+                          doc.setFont(c.mono?'courier':'helvetica', c.bold||c.lbl ? 'bold' : c.italic ? 'italic' : 'normal')
+                          doc.setFontSize(fs)
+                          doc.setTextColor(...(c.color ?? TXT))
+                          const tx = c.align==='C' ? cx+cw/2 : c.align==='R' ? cx+cw-PAD : cx+PAD
+                          const alignOpt = c.align==='C' ? 'center' as const : c.align==='R' ? 'right' as const : 'left' as const
+                          const lineStep = fs*0.353*1.25; let ly = y + (rh - lines.length*lineStep)/2 + fs*0.353*0.9
+                          for (const ln of lines) { doc.text(ln, tx, ly, { align: alignOpt }); ly += lineStep }
+                          cx += cw
+                        }
+                        y += rh
                       }
-                      const content = lines.join('\n')
+
+                      const sectionHeader = (title: string) => {
+                        need(14); y += 4
+                        doc.setFillColor(...SEC_BG); doc.rect(M, y, CW, 7.5, 'F')
+                        doc.setDrawColor(...BDR); doc.rect(M, y, CW, 7.5, 'S')
+                        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...NAVY_D)
+                        doc.text(title.toUpperCase(), M+3, y+5); y += 7.5
+                      }
+
+                      const groupBand = (title: string) => {
+                        need(7)
+                        doc.setFillColor(232,234,246); doc.rect(M, y, CW, 6, 'F')
+                        doc.setDrawColor(...BDR); doc.rect(M, y, CW, 6, 'S')
+                        doc.setFont('helvetica','bolditalic'); doc.setFontSize(8); doc.setTextColor(...NAVY_D)
+                        doc.text(safe(title), M+3, y+4); y += 6
+                      }
+
+                      // ── Title banner ──
+                      doc.setFillColor(...NAVY); doc.rect(M, y, CW, 16, 'F')
+                      doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(255,255,255)
+                      doc.text('CROSS-CHECK JV REPORT', M+4, y+7)
+                      doc.setFontSize(9)
+                      doc.text(overallOk ? 'PASSED' : 'FAILED', M+CW-4, y+7, { align:'right' })
+                      doc.setFont('helvetica','normal'); doc.setFontSize(8)
+                      doc.text(safe(`PB: ${r.pb_ref_no}  |  PURB JV  |  INV: ${r.inv_ref_no||'not found'}`), M+4, y+13)
+                      doc.text(safe(`${ccSelectedPB!.supplier||'—'}  |  ${ccSelectedPB!.date||'—'}  |  FY: ${r.purb_jv?.fiscal_year||'—'}  Period: ${r.purb_jv?.period||'—'}`), M+CW-4, y+13, { align:'right' })
+                      y += 16
+
+                      // ── Amounts ──
+                      sectionHeader('Amounts')
+                      const COLS_AMT: number[] = [46, 46, 46, 44]
+                      const rowAmt = makeRow(COLS_AMT)
+                      rowAmt([
+                        { t:'', fill:HEAD_BG },
+                        { t:'PB', fill:HEAD_BG, color:[255,255,255], bold:true, align:'R' },
+                        { t:'PURB JV', fill:HEAD_BG, color:[255,255,255], bold:true, align:'R' },
+                        { t:'INV JV', fill:HEAD_BG, color:[255,255,255], bold:true, align:'R' },
+                      ], 6)
+                      const amtRows: {label:string; pb:number|null; purb:number|null; inv:number|null}[] = [
+                        { label:'Taxable (Purchase @GST)', pb:r.pb_meta.taxable, purb:r.purb_jv?.purchase_gst_dr??null, inv:r.inv_jv?.total_dr??null },
+                        ...(r.pb_meta.gst_total > 0 ? [{ label:'GST', pb:r.pb_meta.gst_total, purb:r.purb_jv?.gst_dr??null, inv:null }] : []),
+                        { label:'Payable', pb:r.pb_meta.total, purb:r.purb_jv?.payable??null, inv:null },
+                      ]
+                      for (const a of amtRows) {
+                        rowAmt([
+                          { t:a.label, lbl:true },
+                          { t:fmt(a.pb), color:TXT, align:'R', mono:true, bold:true },
+                          { t:a.purb!=null?fmt(a.purb):'-', color:a.purb!=null?DR_T:TXT_DIM, align:'R', mono:true },
+                          { t:a.inv!=null?fmt(a.inv):'-', color:a.inv!=null?DR_T:TXT_DIM, align:'R', mono:true },
+                        ])
+                      }
+
+                      // ── Checks ──
+                      sectionHeader('Validation Checks')
+                      const COLS_CHK: number[] = [12, 120, 50]
+                      const rowChk = makeRow(COLS_CHK)
+                      rowChk([
+                        { t:'', fill:HEAD_BG },
+                        { t:'Check', fill:HEAD_BG, color:[255,255,255], bold:true },
+                        { t:'Detail', fill:HEAD_BG, color:[255,255,255], bold:true },
+                      ], 6)
+
+                      // Group checks by category
+                      const catMap = new Map<string, typeof r.checks>()
+                      for (const chk of r.checks) {
+                        const cat = chk.category || 'other'
+                        if (!catMap.has(cat)) catMap.set(cat, [])
+                        catMap.get(cat)!.push(chk)
+                      }
+                      for (const [cat, chks] of catMap) {
+                        groupBand(cat.toUpperCase())
+                        for (const chk of chks) {
+                          const st = chk.ok ? { fill:GRN_F, text:GRN_T } : { fill:RED_F, text:RED_T }
+                          rowChk([
+                            { t:chk.ok ? 'OK' : 'X', fill:st.fill, color:st.text, bold:true, align:'C', size:8 },
+                            { t:chk.label, color:TXT },
+                            { t:chk.detail||'', color:chk.ok?TXT_DIM:RED_T, size:8, italic:true },
+                          ])
+                        }
+                      }
+
+                      // ── PURB JV Entries ──
+                      if (r.purb_jv?.found && r.purb_jv.rows?.length > 0) {
+                        sectionHeader('PURB JV Accounting Entries')
+                        const COLS_JV: number[] = [16, 80, 86]
+                        const rowJv = makeRow(COLS_JV)
+                        rowJv([
+                          { t:'DR/CR', fill:HEAD_BG, color:[255,255,255], bold:true, align:'C', size:8 },
+                          { t:'Account', fill:HEAD_BG, color:[255,255,255], bold:true, size:8 },
+                          { t:'Amount', fill:HEAD_BG, color:[255,255,255], bold:true, align:'R', size:8 },
+                        ], 6)
+                        const grpMap = new Map<string, typeof r.purb_jv.rows>()
+                        for (const row of r.purb_jv.rows) {
+                          const k = row.commodity || ''
+                          if (!grpMap.has(k)) grpMap.set(k, [])
+                          grpMap.get(k)!.push(row)
+                        }
+                        let tDr = 0, tCr = 0
+                        for (const [comm, rows] of grpMap) {
+                          groupBand(comm ? comm.toUpperCase() : 'SHARED')
+                          for (const row of rows) {
+                            const isDr = row.dr_cr === 'Debit'
+                            if (row.amount != null) { isDr ? (tDr += row.amount) : (tCr += row.amount) }
+                            rowJv([
+                              { t:isDr?'DR':'CR', color:isDr?DR_T:CR_T, bold:true, align:'C', size:8 },
+                              { t:safe(row.account_name), color:TXT },
+                              { t:fmt(row.amount), color:isDr?DR_T:CR_T, align:'R', mono:true },
+                            ])
+                          }
+                        }
+                        need(9)
+                        doc.setFillColor(...TOT_F); doc.rect(M, y, CW, 8, 'FD')
+                        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...TXT)
+                        doc.text('TOTALS', M+3, y+5.2)
+                        doc.setFillColor(...DR_F); doc.rect(M+COLS_JV[0]+COLS_JV[1], y, COLS_JV[2]/2, 8, 'FD')
+                        doc.setTextColor(...DR_T); doc.text(`DR ${fmt(tDr)}`, M+COLS_JV[0]+COLS_JV[1]+COLS_JV[2]/2-2, y+5.2, { align:'right' })
+                        doc.setFillColor(...CR_F); doc.rect(M+COLS_JV[0]+COLS_JV[1]+COLS_JV[2]/2, y, COLS_JV[2]/2, 8, 'FD')
+                        doc.setTextColor(...CR_T); doc.text(`CR ${fmt(tCr)}`, M+CW-2, y+5.2, { align:'right' })
+                        doc.setDrawColor(...BDR); doc.rect(M, y, CW, 8, 'S'); y += 8
+                      }
+
+                      // ── INV JV Entries ──
+                      if (r.inv_jv?.found && r.inv_jv.rows?.length > 0) {
+                        sectionHeader('INV JV Accounting Entries')
+                        const COLS_IJV: number[] = [16, 80, 86]
+                        const rowIJv = makeRow(COLS_IJV)
+                        rowIJv([
+                          { t:'DR/CR', fill:HEAD_BG, color:[255,255,255], bold:true, align:'C', size:8 },
+                          { t:'Account', fill:HEAD_BG, color:[255,255,255], bold:true, size:8 },
+                          { t:'Amount', fill:HEAD_BG, color:[255,255,255], bold:true, align:'R', size:8 },
+                        ], 6)
+                        const iGrp = new Map<string, typeof r.inv_jv.rows>()
+                        for (const row of r.inv_jv.rows) {
+                          const k = row.commodity || ''
+                          if (!iGrp.has(k)) iGrp.set(k, [])
+                          iGrp.get(k)!.push(row)
+                        }
+                        let tDr = 0, tCr = 0
+                        for (const [comm, rows] of iGrp) {
+                          groupBand(comm ? comm.toUpperCase() : 'SHARED')
+                          for (const row of rows) {
+                            const isDr = row.dr_cr === 'Debit'
+                            if (row.amount != null) { isDr ? (tDr += row.amount) : (tCr += row.amount) }
+                            rowIJv([
+                              { t:isDr?'DR':'CR', color:isDr?DR_T:CR_T, bold:true, align:'C', size:8 },
+                              { t:safe(row.account_name), color:TXT },
+                              { t:fmt(row.amount), color:isDr?DR_T:CR_T, align:'R', mono:true },
+                            ])
+                          }
+                        }
+                        need(9)
+                        doc.setFillColor(...TOT_F); doc.rect(M, y, CW, 8, 'FD')
+                        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...TXT)
+                        doc.text('TOTALS', M+3, y+5.2)
+                        doc.setFillColor(...DR_F); doc.rect(M+COLS_IJV[0]+COLS_IJV[1], y, COLS_IJV[2]/2, 8, 'FD')
+                        doc.setTextColor(...DR_T); doc.text(`DR ${fmt(tDr)}`, M+COLS_IJV[0]+COLS_IJV[1]+COLS_IJV[2]/2-2, y+5.2, { align:'right' })
+                        doc.setFillColor(...CR_F); doc.rect(M+COLS_IJV[0]+COLS_IJV[1]+COLS_IJV[2]/2, y, COLS_IJV[2]/2, 8, 'FD')
+                        doc.setTextColor(...CR_T); doc.text(`CR ${fmt(tCr)}`, M+CW-2, y+5.2, { align:'right' })
+                        doc.setDrawColor(...BDR); doc.rect(M, y, CW, 8, 'S'); y += 8
+                      }
+
+                      // ── Per-commodity reconciliation ──
+                      if (r.commodity_rows?.length > 0) {
+                        sectionHeader('Per-Commodity Reconciliation')
+                        const COLS_COM: number[] = [52, 32, 32, 32, 34]
+                        const rowCom = makeRow(COLS_COM)
+                        rowCom([
+                          { t:'Commodity', fill:HEAD_BG, color:[255,255,255], bold:true, size:8 },
+                          { t:'PURB @GST', fill:HEAD_BG, color:[255,255,255], bold:true, align:'R', size:8 },
+                          { t:'GST', fill:HEAD_BG, color:[255,255,255], bold:true, align:'R', size:8 },
+                          { t:'INV Exempt', fill:HEAD_BG, color:[255,255,255], bold:true, align:'R', size:8 },
+                          { t:'INV Closing', fill:HEAD_BG, color:[255,255,255], bold:true, align:'R', size:8 },
+                        ], 6)
+                        for (const row of r.commodity_rows) {
+                          const purbOk = row.purb_purchase_gst != null && row.inv_exempt_cr != null && Math.abs(row.purb_purchase_gst - row.inv_exempt_cr) < 0.02
+                          const invOk  = row.inv_exempt_cr != null && row.inv_closing_dr != null && Math.abs(row.inv_exempt_cr - row.inv_closing_dr) < 0.02
+                          rowCom([
+                            { t:safe(row.commodity), bold:true, color:TXT },
+                            { t:fmt(row.purb_purchase_gst), color:DR_T, align:'R', mono:true },
+                            { t:fmt(row.purb_gst_total), color:[74,20,140] as [number,number,number], align:'R', mono:true },
+                            { t:fmt(row.inv_exempt_cr), color:purbOk?GRN_T:RED_T, align:'R', mono:true },
+                            { t:fmt(row.inv_closing_dr), color:invOk?GRN_T:RED_T, align:'R', mono:true },
+                          ])
+                        }
+                      }
+
+                      // ── Footer ──
+                      need(10); y += 5
+                      doc.setDrawColor(...BDR); doc.line(M, y-1, M+CW, y-1)
+                      doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(...TXT_DIM)
+                      doc.text(safe(`Generated by RhythmERP Automation - Cross-Check JV  |  ${r.pb_ref_no}`), M, y+2)
+
+                      const filename = `${r.pb_ref_no.replace(/[\\/]/g,'-')}_CrossCheck_Report.pdf`
+                      const blob = doc.output('blob')
+                      const pdfUrl = URL.createObjectURL(blob)
+                      const dlBtn = `<a href="${pdfUrl}" download="${filename}" style="position:fixed;top:8px;right:12px;z-index:9999;padding:6px 14px;background:#3F51B5;color:#fff;border-radius:6px;font:13px/1 sans-serif;text-decoration:none">&#x2B07; Download</a>`
                       const win = window.open('', '_blank')
-                      if (win) { win.document.write(`<html><head><title>Cross-Check ${r.pb_ref_no}</title><style>body{font-family:monospace;font-size:12px;padding:24px;white-space:pre}</style></head><body>${content.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</body></html>`); win.document.close(); win.print() }
+                      if (win) {
+                        win.document.write(`<!doctype html><html><head><title>${filename}</title></head><body style="margin:0;height:100vh">${dlBtn}<embed src="${pdfUrl}" type="application/pdf" width="100%" height="100%"/></body></html>`)
+                        win.document.close()
+                      }
+                      setTimeout(() => URL.revokeObjectURL(pdfUrl), 120_000)
                     }
 
                     // ── Full View state (local to this IIFE via ref) ─────
@@ -2586,7 +2838,7 @@ ${rows.join('\n')}
                         </div>
 
                         {/* ── JV not-found gate ───────────────────────── */}
-                        {(!r.purb_jv.found || !r.inv_jv.found) && (
+                        {(!r.purb_jv?.found || !r.inv_jv?.found) && (
                           <div className="p-4 border-b border-gray-200 dark:border-gray-700 space-y-2">
                             <div className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">Cross-check incomplete — JV(s) not found in report</div>
                             {[
@@ -2606,7 +2858,7 @@ ${rows.join('\n')}
                         )}
 
                         {/* ── Everything below requires both JVs found ─── */}
-                        {r.purb_jv.found && r.inv_jv.found && <>
+                        {r.purb_jv?.found && r.inv_jv?.found && <>
 
                         {/* ── Metric cards ────────────────────────────── */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50/40 dark:bg-gray-800/20">

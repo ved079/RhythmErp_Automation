@@ -1216,7 +1216,7 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
 
     # Derived PURB JV aggregates
     purb_payable = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Credit" and not r["commodity"])
-    purb_purchase_gst_dr = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "purchase" in r["account_name"].lower() and "discount" not in r["account_name"].lower() and "exempt" not in r["account_name"].lower())
+    purb_purchase_gst_dr = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "purchase" in r["account_name"].lower() and "discount" not in r["account_name"].lower())
     purb_igst_dr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "igst" in r["account_name"].lower())
     purb_cgst_dr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "cgst" in r["account_name"].lower())
     purb_sgst_dr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "sgst" in r["account_name"].lower())
@@ -1395,7 +1395,7 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
         if c not in purb_by_comm:
             purb_by_comm[c] = {"purchase_gst": 0, "igst": 0, "cgst": 0, "sgst": 0}
         name_l = r["account_name"].lower()
-        if "purchase" in name_l and "discount" not in name_l and "exempt" not in name_l and r["dr_cr"] == "Debit":
+        if "purchase" in name_l and "discount" not in name_l and r["dr_cr"] == "Debit":
             purb_by_comm[c]["purchase_gst"] += r["amount"]
         if "igst" in name_l and r["dr_cr"] == "Debit": purb_by_comm[c]["igst"] += r["amount"]
         if "cgst" in name_l and r["dr_cr"] == "Debit": purb_by_comm[c]["cgst"] += r["amount"]
