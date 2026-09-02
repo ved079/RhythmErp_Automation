@@ -34,6 +34,7 @@ def build_payment_payload(
     payment_method_ref_id: int = 53,
     payment_type_ref_id: int = 151,
     payment_date: Optional[str] = None,
+    pb_transaction_date: Optional[str] = None,
     post: bool = True,
 ) -> dict:
     """Build a Payment payload for one Purchase Booking.
@@ -46,9 +47,12 @@ def build_payment_payload(
         payment_method_ref_id: 53=Cash (default), 54=Cheque, etc.
         payment_type_ref_id: 151=Regular (default), 152=Advance.
         payment_date: ISO date string; defaults to today.
+        pb_transaction_date: The PB's own transaction_date (used as
+            purchase_expense_booking_date in the payment detail row).
         post: When True, sets posting_status="Post" (create + post in one step).
     """
     txn_date = payment_date or date.today().isoformat()
+    pb_date = pb_transaction_date or txn_date
     payload = {
         "payment_date": txn_date,
         "payment_type_ref_id": payment_type_ref_id,
@@ -61,6 +65,8 @@ def build_payment_payload(
                 "purchase_expense_booking_ref_id": pb_id,
                 "purchase_expense_booking_amount": pb_amount,
                 "txn_currency_amount_detail": pb_amount,
+                "purchase_expense_booking_ref_type": "Supplier",
+                "purchase_expense_booking_date": pb_date,
             }
         ],
     }

@@ -1603,12 +1603,14 @@ class PurchaseChain:
                     if bank_id is None:
                         log.warning("  PYMT: no bank account found — skipping payment")
                     else:
-                        pymt_payload = build_payment_payload(
+                        pb_txn_date = (_pb_check or pb_data or {}).get("transaction_date") or None
+                    pymt_payload = build_payment_payload(
                             supplier_ref_id=eff_supplier,
                             pb_id=pb_id,
                             pb_amount=pb_total,
                             bank_account_id=bank_id,
                             payment_method_ref_id=payment_method,
+                            pb_transaction_date=pb_txn_date,
                             post=payment_post,
                         )
                         pymt_data = self.payment_api.create_payment(pymt_payload)
