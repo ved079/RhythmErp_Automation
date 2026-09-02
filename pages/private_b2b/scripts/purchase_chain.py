@@ -1604,7 +1604,7 @@ class PurchaseChain:
                         log.warning("  PYMT: no bank account found — skipping payment")
                     else:
                         pb_txn_date = (_pb_check or pb_data or {}).get("transaction_date") or None
-                    pymt_payload = build_payment_payload(
+                        pymt_payload = build_payment_payload(
                             supplier_ref_id=eff_supplier,
                             pb_id=pb_id,
                             pb_amount=pb_total,
