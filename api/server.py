@@ -1215,14 +1215,32 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
     inv_rows  = extract_rows(inv_entry)
 
     # Derived PURB JV aggregates
-    purb_payable = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Credit" and not r["commodity"])
-    purb_purchase_gst_dr = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "purchase" in r["account_name"].lower() and "discount" not in r["account_name"].lower())
+    # Role-based classification — independent of tenant account naming conventions:
+    #   GST entries  : commodity Debits whose account contains igst / cgst / sgst
+    #   Discount     : entries whose account contains "discount"
+    #   Taxable base : all remaining commodity Debits (covers "Purchase @GST",
+    #                  "Purchase exempt", "Raw Material Purchase", etc.)
+    #   Payable      : non-commodity Credits (Sundry Creditors / Payable account)
+    def _is_gst(name: str) -> bool:
+        n = name.lower()
+        return "igst" in n or "cgst" in n or "sgst" in n
+
+    def _is_discount(name: str) -> bool:
+        return "discount" in name.lower()
+
+    purb_payable = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Credit" and not r["commodity"] and not _is_discount(r["account_name"]))
     purb_igst_dr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "igst" in r["account_name"].lower())
     purb_cgst_dr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "cgst" in r["account_name"].lower())
     purb_sgst_dr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit" and "sgst" in r["account_name"].lower())
     purb_gst_dr   = purb_igst_dr + purb_cgst_dr + purb_sgst_dr
-    purb_disc_dr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit"  and "discount" in r["account_name"].lower())
-    purb_disc_cr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Credit" and "discount" in r["account_name"].lower())
+    purb_disc_dr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Debit"  and _is_discount(r["account_name"]))
+    purb_disc_cr  = sum(r["amount"] for r in purb_rows if r["dr_cr"] == "Credit" and _is_discount(r["account_name"]))
+    # Taxable = all commodity Debits that are not GST and not Discount
+    purb_purchase_gst_dr = sum(
+        r["amount"] for r in purb_rows
+        if r["dr_cr"] == "Debit" and r["commodity"]
+        and not _is_gst(r["account_name"]) and not _is_discount(r["account_name"])
+    )
     purb_total_dr = float(purb_entry.get("total_debit_amount") or 0) if purb_entry else 0
 
     # Derived INV JV aggregates
@@ -1394,12 +1412,16 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
         c = r["commodity"] or ""
         if c not in purb_by_comm:
             purb_by_comm[c] = {"purchase_gst": 0, "igst": 0, "cgst": 0, "sgst": 0}
-        name_l = r["account_name"].lower()
-        if "purchase" in name_l and "discount" not in name_l and r["dr_cr"] == "Debit":
+        if r["dr_cr"] != "Debit":
+            continue
+        if _is_gst(r["account_name"]):
+            if "igst" in r["account_name"].lower(): purb_by_comm[c]["igst"] += r["amount"]
+            if "cgst" in r["account_name"].lower(): purb_by_comm[c]["cgst"] += r["amount"]
+            if "sgst" in r["account_name"].lower(): purb_by_comm[c]["sgst"] += r["amount"]
+        elif _is_discount(r["account_name"]):
+            pass  # discount entries excluded from taxable base
+        elif c:  # commodity Debit that is not GST/discount = taxable base
             purb_by_comm[c]["purchase_gst"] += r["amount"]
-        if "igst" in name_l and r["dr_cr"] == "Debit": purb_by_comm[c]["igst"] += r["amount"]
-        if "cgst" in name_l and r["dr_cr"] == "Debit": purb_by_comm[c]["cgst"] += r["amount"]
-        if "sgst" in name_l and r["dr_cr"] == "Debit": purb_by_comm[c]["sgst"] += r["amount"]
     inv_by_comm = {}
     for r in inv_rows:
         c = r["commodity"] or ""
