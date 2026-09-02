@@ -1378,6 +1378,12 @@ class PurchaseChain:
         # values can belong to a different supplier and cause an HTTP 500 on PO
         # create. Raises a clear error if the chosen supplier has no address.
         supplier_det = None
+        # Pre-flight: ensure the payment bank has enough headroom before the chain runs.
+        if "PYMT" in docs:
+            _pre_bank_id = self.payment_api.resolve_bank_account(payment_method)
+            if _pre_bank_id is not None:
+                self.payment_api.ensure_bank_balance(_pre_bank_id, 1_000_000_000_000)
+
         if "PO" in docs:
             supplier_det = self._resolve_supplier_details(eff_supplier)
 
@@ -1752,7 +1758,6 @@ class PurchaseChain:
                     if bank_id is None:
                         log.warning("  PYMT: no bank account found — skipping payment")
                     else:
-                        self.payment_api.ensure_bank_balance(bank_id, pb_total)
                         _pb_rec = _pb_check or pb_data or {}
                         pb_txn_date = _pb_rec.get("transaction_date") or None
                         _conv = _pb_rec.get("conversion_rate", 1.0)
