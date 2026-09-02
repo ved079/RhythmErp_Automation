@@ -542,12 +542,12 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
 
   // Re-fetch master data when supplierType changes in the gp flow
   useEffect(() => {
-    if (fetchedRef.current && flow === 'gp') {
-      setSupplier(null)
-      fetchedRef.current = false
-      loadMasterDataRef.current()
-    }
-  }, [supplierType, flow])
+    if (!fetchedRef.current || flow !== 'gp') return
+    setSupplier(null)
+    fetchedRef.current = false
+    loadMasterData()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supplierType])
 
   const selectedSupplier = suppliers.find((s) => s.id === supplier)
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId)
