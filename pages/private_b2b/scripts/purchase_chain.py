@@ -189,7 +189,7 @@ def _compute_qc_line_fields(
     empty_bags_txn_amount = round(empty_bag_weight * base_rate, 6)
     accepted_qty = grn_qty - empty_bag_weight
     qc_deduction_rate = round(base_rate * deduction_percent / 100.0, 6)
-    deduction_weight = round(grn_qty * deduction_percent / 100.0, 6)
+    deduction_weight = round(accepted_qty * deduction_percent / 100.0, 6)
 
     if is_rate_weight_deduction:
         qc_deduction_amount = round(deduction_weight * base_rate, 6)
@@ -424,7 +424,7 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
         cqp = cqp_by_item.get(item_id)
         if cqp:
             return [
-                {"item_quality_parameter_ref_id": p["quality_type"], "actual_value": p["min_quality_value"]}
+                {"item_quality_parameter_ref_id": p["quality_type"], "actual_value": round(float(p["min_quality_value"] or 0), 2)}
                 for p in cqp
                 if p.get("quality_type") is not None
             ]
