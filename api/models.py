@@ -223,6 +223,8 @@ class PurchaseChainRequest(BaseModel):
     customer_ref_id: Optional[int] = None  # Sales Order customer FK (None = auto-pick first customer)
     is_rate_weight_deduction: bool = False  # True = QC weight-based deduction (deduction_weight × base_rate); False = rate-based ((net_of_empty_bag) × deduction_percent / 100)
     with_jv_check: bool = False            # True = verify JV report DR==|CR| after PB creation
+    payment_method: int = 53              # 53=Cash, 54=Cheque, 55=DD, 141=IMPS, 143=RTGS
+    payment_post: bool = True             # True = create+post in one step (posting_status="Post")
 
 
 # --- Concurrency Testing ---
