@@ -2386,7 +2386,7 @@ ${rows.join('\n')}
                   )}
                 </div>
               ) : (() => {
-                const ccPassed = ccResult ? ccResult.checks.every(c => c.ok) : false
+                const ccPassed = ccResult ? (ccResult.checks.every(c => c.ok) && !!ccResult.purb_jv?.found && !!ccResult.inv_jv?.found) : false
                 return (
                 <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-900 shadow-sm">
                   {/* Header bar */}
@@ -2443,7 +2443,7 @@ ${rows.join('\n')}
 
                   {ccResult && !ccLoading && (() => {
                     const r = ccResult
-                    const overallOk = r.checks.every(c => c.ok)
+                    const overallOk = r.checks.every(c => c.ok) && !!r.purb_jv?.found && !!r.inv_jv?.found
                     const failedChecks = r.checks.filter(c => !c.ok)
 
                     // ── Export helpers ────────────────────────────────────
@@ -2828,13 +2828,19 @@ ${rows.join('\n')}
                             { label: 'Supplier', value: ccSelectedPB!.supplier ?? '—', mono: false },
                             { label: 'Date', value: ccSelectedPB!.date ?? '—', mono: false },
                             { label: 'FY / Period', value: r.purb_jv?.fiscal_year ? `${r.purb_jv.fiscal_year} · ${r.purb_jv.period}` : '—', mono: false },
+                            { label: 'PURB JV Status', value: r.purb_jv?.status || '—', mono: false },
                             { label: 'INV JV Ref', value: r.inv_ref_no || 'Not found', mono: true },
-                          ] as const).map(({ label, value, mono }) => (
+                          ] as const).map(({ label, value, mono }) => {
+                            const isStatus = label === 'PURB JV Status'
+                            const isUnpost = isStatus && value.toLowerCase() === 'unpost'
+                            const isPost   = isStatus && value.toLowerCase() === 'post'
+                            return (
                             <div key={label} className="px-4 py-3">
                               <div className="text-[10px] font-semibold uppercase tracking-wider mb-0.5 text-gray-400 dark:text-gray-500">{label}</div>
-                              <div className={`text-[13px] font-semibold text-gray-800 dark:text-gray-100 truncate ${mono ? 'font-mono text-[11px]' : ''}`}>{value}</div>
+                              <div className={`text-[13px] font-semibold truncate ${mono ? 'font-mono text-[11px]' : ''} ${isUnpost ? 'text-rose-600 dark:text-rose-400' : isPost ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-800 dark:text-gray-100'}`}>{value}</div>
                             </div>
-                          ))}
+                            )
+                          })}
                         </div>
 
                         {/* ── JV not-found gate ───────────────────────── */}
@@ -2842,8 +2848,8 @@ ${rows.join('\n')}
                           <div className="p-4 border-b border-gray-200 dark:border-gray-700 space-y-2">
                             <div className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">Cross-check incomplete — JV(s) not found in report</div>
                             {[
-                              { label: 'Purchase Account JV (PURB JV)', found: r.purb_jv.found, ref: r.pb_ref_no },
-                              { label: 'Inventory JV (INV JV)',          found: r.inv_jv.found,  ref: r.inv_ref_no || 'linked INV JV' },
+                              { label: 'Purchase Account JV (PURB JV)', found: r.purb_jv?.found, ref: r.pb_ref_no },
+                              { label: 'Inventory JV (INV JV)',          found: r.inv_jv?.found,  ref: r.inv_ref_no || 'linked INV JV' },
                             ].map(({ label, found, ref }) => (
                               <div key={label} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border ${found ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10' : 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10'}`}>
                                 {found ? <CkDot /> : <XCircle className="size-3.5 text-red-500 shrink-0 mt-0.5" />}
@@ -3219,17 +3225,22 @@ ${rows.join('\n')}
                                 {/* Meta strip */}
                                 <div className="grid grid-cols-2 sm:grid-cols-5 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-gray-50/40 dark:bg-gray-800/20">
                                   {([
-                                    { label: 'Supplier',   value: ccSelectedPB!.supplier ?? '—' },
-                                    { label: 'Date',       value: ccSelectedPB!.date?.slice(0,10) ?? '—' },
-                                    { label: 'FY / Period',value: `${r.purb_jv.fiscal_year} · ${r.purb_jv.period}` },
-                                    { label: 'INV JV Ref', value: r.inv_ref_no || 'Not found', mono: true },
-                                    { label: 'Checks',     value: `${r.checks.filter(c=>c.ok).length}/${r.checks.length} passed`, ok: overallOk },
-                                  ] as { label: string; value: string; mono?: boolean; ok?: boolean }[]).map(({ label, value, mono, ok }) => (
+                                    { label: 'Supplier',        value: ccSelectedPB!.supplier ?? '—' },
+                                    { label: 'Date',            value: ccSelectedPB!.date?.slice(0,10) ?? '—' },
+                                    { label: 'FY / Period',     value: r.purb_jv?.fiscal_year ? `${r.purb_jv.fiscal_year} · ${r.purb_jv.period}` : '—' },
+                                    { label: 'PURB JV Status',  value: r.purb_jv?.status || '—', status: true },
+                                    { label: 'INV JV Ref',      value: r.inv_ref_no || 'Not found', mono: true },
+                                    { label: 'Checks',          value: `${r.checks.filter(c=>c.ok).length}/${r.checks.length} passed`, ok: overallOk },
+                                  ] as { label: string; value: string; mono?: boolean; ok?: boolean; status?: boolean }[]).map(({ label, value, mono, ok, status }) => {
+                                    const isUnpost = status && value.toLowerCase() === 'unpost'
+                                    const isPost   = status && value.toLowerCase() === 'post'
+                                    return (
                                     <div key={label} className="px-4 py-2.5">
                                       <div className="text-[10px] font-semibold uppercase tracking-wider mb-0.5 text-gray-400 dark:text-gray-500">{label}</div>
-                                      <div className={`text-[12px] font-semibold truncate ${mono ? 'font-mono text-[11px]' : ''} ${ok === true ? 'text-emerald-600 dark:text-emerald-400' : ok === false ? 'text-red-600 dark:text-red-400' : 'text-gray-800 dark:text-gray-100'}`}>{value}</div>
+                                      <div className={`text-[12px] font-semibold truncate ${mono ? 'font-mono text-[11px]' : ''} ${isUnpost ? 'text-rose-600 dark:text-rose-400' : isPost ? 'text-emerald-600 dark:text-emerald-400' : ok === true ? 'text-emerald-600 dark:text-emerald-400' : ok === false ? 'text-red-600 dark:text-red-400' : 'text-gray-800 dark:text-gray-100'}`}>{value}</div>
                                     </div>
-                                  ))}
+                                    )
+                                  })}
                                 </div>
 
                                 {/* Metric cards */}
@@ -3242,7 +3253,7 @@ ${rows.join('\n')}
                                   ] as const).map(({ label, tag, pbLabel, jvLabel, pb, jv, chkId, color }) => {
                                     const chk = r.checks.find(c=>c.id===chkId)
                                     const isInvCard = tag === 'INV JV'
-                                    const invMissing = isInvCard && !r.inv_jv.found
+                                    const invMissing = isInvCard && !r.inv_jv?.found
                                     const ok  = invMissing ? false : (chk?.ok ?? true)
                                     const accent = {
                                       gray:   { border: 'border-gray-200 dark:border-gray-700',       bg: 'bg-white dark:bg-gray-900',            tag: 'text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800',                label: 'text-gray-500 dark:text-gray-400',     val: 'text-gray-800 dark:text-gray-100',     jv: 'text-gray-400 dark:text-gray-500' },
@@ -3366,7 +3377,7 @@ ${rows.join('\n')}
                                         >
                                           {tab === 'purb'
                                             ? `PURB JV · ${r.pb_ref_no}`
-                                            : <span className="flex items-center gap-1.5">{`INV JV · ${r.inv_ref_no||'—'}`}{!r.inv_jv.found && <span className="inline-block size-1.5 rounded-full bg-rose-500 shrink-0" />}</span>}
+                                            : <span className="flex items-center gap-1.5">{`INV JV · ${r.inv_ref_no||'—'}`}{!r.inv_jv?.found && <span className="inline-block size-1.5 rounded-full bg-rose-500 shrink-0" />}</span>}
                                           {ccJvTab === tab && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-500 rounded-t-sm" />}
                                         </button>
                                       ))}
@@ -3387,7 +3398,7 @@ ${rows.join('\n')}
                                       return (
                                         <div key={tab} className={ccJvTab !== tab ? 'hidden' : 'overflow-x-auto'}>
                                           {jvRows.length === 0 ? (
-                                            tab === 'inv' && !r.inv_jv.found ? (
+                                            tab === 'inv' && !r.inv_jv?.found ? (
                                               <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
                                                 <XCircle className="size-8 text-rose-400/60" />
                                                 <div className="text-[13px] font-semibold text-rose-500 dark:text-rose-400">INV JV not found</div>
@@ -3550,8 +3561,8 @@ ${rows.join('\n')}
         const { refNo, result: r } = ccFailToast
         const dismiss = () => { setCcFailToast(null); if (ccFailToastTimer.current) clearTimeout(ccFailToastTimer.current) }
         const failedChecks = r.checks.filter(c => !c.ok)
-        const missingPurb = !r.purb_jv.found
-        const missingInv = !r.inv_jv.found
+        const missingPurb = !r.purb_jv?.found
+        const missingInv = !r.inv_jv?.found
         const items: { label: string; level: 'error' | 'warn' }[] = [
           ...(missingPurb ? [{ label: 'PURB JV not found in report', level: 'error' as const }] : []),
           ...(missingInv  ? [{ label: 'INV JV not found in report',  level: 'error' as const }] : []),

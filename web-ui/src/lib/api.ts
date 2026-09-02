@@ -607,6 +607,7 @@ export interface CrossCheckResponse {
   };
   purb_jv: {
     found: boolean;
+    status: string;
     transaction_date: string;
     fiscal_year: string;
     period: string;
@@ -621,6 +622,7 @@ export interface CrossCheckResponse {
   };
   inv_jv: {
     found: boolean;
+    status: string;
     ref_no: string;
     transaction_date: string;
     fiscal_year: string;
