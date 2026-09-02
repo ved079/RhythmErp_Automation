@@ -26,12 +26,13 @@ function formatTime(d: Date): string {
 }
 
 const DOC_COLORS: Record<string, string> = {
-  PO:  'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
-  GP:  'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  GRN: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
-  QC:  'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-  PB:  'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
-  SO:  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  PO:   'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+  GP:   'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  GRN:  'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
+  QC:   'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  PB:   'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
+  SO:   'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  PYMT: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
 }
 
 function DocPill({ label, id }: { label: string; id?: string }) {
@@ -209,7 +210,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const [count, setCount] = useState(1)
   const [chainSuppliers, setChainSuppliers] = useState<(number | null)[]>([])
   const [sameSupplier, setSameSupplier] = useState(false)
-  const [enabledDocs, setEnabledDocs] = useState<Set<string>>(new Set(['PO', 'GP', 'GRN', 'QC', 'PB']))
+  const [enabledDocs, setEnabledDocs] = useState<Set<string>>(new Set(['PO', 'GP', 'GRN', 'QC', 'PB', 'PYMT']))
   const [supplier, setSupplier] = useState<number | null>(null)
   const [numItems, setNumItems] = useState(2)
   const [itemIds, setItemIds] = useState<number[]>([])
@@ -255,7 +256,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
     if (saved) {
       setStarredFlow(saved)
       setFlow(saved)
-      setEnabledDocs(new Set(saved === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO'] : saved === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
+      setEnabledDocs(new Set(saved === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO', 'PYMT'] : saved === 'gp' ? ['GP', 'GRN', 'QC', 'PB', 'PYMT'] : ['PO', 'GP', 'GRN', 'QC', 'PB', 'PYMT']))
     }
   }, [userId])
 
@@ -392,10 +393,10 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
   const docOrder = React.useMemo(
     () =>
       flow === 'gp'
-        ? ['GP', 'GRN', 'QC', 'PB']
+        ? ['GP', 'GRN', 'QC', 'PB', 'PYMT']
         : flow === 'so'
-          ? ['PO', 'GP', 'GRN', 'QC', 'SO', 'PB']
-          : ['PO', 'GP', 'GRN', 'QC', 'PB'],
+          ? ['PO', 'GP', 'GRN', 'QC', 'SO', 'PB', 'PYMT']
+          : ['PO', 'GP', 'GRN', 'QC', 'PB', 'PYMT'],
     [flow],
   )
 
@@ -583,9 +584,9 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
         {/* Flow selector — pinned to the top of the panel */}
         <div className="grid grid-cols-3 border-b border-gray-300 dark:border-gray-600 shrink-0" data-tour="pc-flow">
           {([
-            { id: 'po', label: 'PO → GP → GRN → QC → PB' },
-            { id: 'so', label: 'PO → GP → GRN → QC → SO → PB' },
-            { id: 'gp', label: 'GP → GRN → QC → PB' },
+            { id: 'po', label: 'PO → GP → GRN → QC → PB → PYMT' },
+            { id: 'so', label: 'PO → GP → GRN → QC → SO → PB → PYMT' },
+            { id: 'gp', label: 'GP → GRN → QC → PB → PYMT' },
           ] as const).map((f, i) => (
             <div
               key={f.id}
@@ -600,7 +601,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                 onClick={() => {
                   setFlow(f.id)
                   setMultiGatePass(false)
-                  setEnabledDocs(new Set(f.id === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO'] : f.id === 'gp' ? ['GP', 'GRN', 'QC', 'PB'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
+                  setEnabledDocs(new Set(f.id === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO', 'PYMT'] : f.id === 'gp' ? ['GP', 'GRN', 'QC', 'PB', 'PYMT'] : ['PO', 'GP', 'GRN', 'QC', 'PB', 'PYMT']))
                 }}
                 disabled={running}
                 className={`flex-1 px-3 pl-2 pr-7 py-2 text-[11px] font-medium transition-colors cursor-pointer disabled:cursor-not-allowed text-center ${
@@ -789,7 +790,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                   type="button"
                   onClick={() => {
                     setMultiGatePass(true)
-                    setEnabledDocs(new Set(flow === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
+                    setEnabledDocs(new Set(flow === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO', 'PYMT'] : ['PO', 'GP', 'GRN', 'QC', 'PB', 'PYMT']))
                   }}
                   disabled={running}
                   className={`px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed ${
@@ -802,7 +803,7 @@ export function PurchaseChainSection({ erpToken, erpTenantId, onNeedsToken, onCl
                   type="button"
                   onClick={() => {
                     setMultiGatePass(false)
-                    setEnabledDocs(new Set(flow === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO'] : ['PO', 'GP', 'GRN', 'QC', 'PB']))
+                    setEnabledDocs(new Set(flow === 'so' ? ['PO', 'GP', 'GRN', 'QC', 'SO', 'PYMT'] : ['PO', 'GP', 'GRN', 'QC', 'PB', 'PYMT']))
                   }}
                   disabled={running}
                   className={`px-2.5 py-1 text-[11px] font-semibold border-l border-gray-300 dark:border-gray-600 transition-colors cursor-pointer disabled:cursor-not-allowed ${

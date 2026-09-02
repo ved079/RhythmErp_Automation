@@ -79,6 +79,9 @@ from pages.private_b2b.modules.purchase_booking.utils.api_purchase_booking_utils
 from pages.private_b2b.modules.sales_order.utils.api_sales_order_utils import (
     SOAPIUtils,
 )
+from pages.private_b2b.modules.payment.utils.api_payment_utils import PaymentAPIUtils
+from pages.private_b2b.modules.payment.data.payment_data import build_payment_payload
+from pages.private_b2b.modules.payment.api.endpoints import PAYMENT_METHOD_CASH
 from pages.private_b2b.scripts.chain_context import ChainContext, ChainContextDiscoverer
 
 from pages.commodity_settings.modules.commodity_quality_parameter.data.commodity_quality_parameter_data import (
@@ -667,6 +670,7 @@ class PurchaseChain:
         self.qc_api = QCAPIUtils(self.client)
         self.pb_api = PBAPIUtils(self.client)
         self.so_api = SOAPIUtils(self.client)
+        self.payment_api = PaymentAPIUtils(self.client)
 
         self.results: List[dict] = []
         self._context: Optional[ChainContext] = None  # discovered lazily
@@ -1194,6 +1198,8 @@ class PurchaseChain:
         customer_ref_id: int = None,
         qc_discount: bool = True,
         is_rate_weight_deduction: bool = False,
+        payment_method: int = PAYMENT_METHOD_CASH,
+        payment_post: bool = True,
     ) -> dict:
         """Execute one full PO -> GP -> GRN -> QC chain.
 
@@ -1414,6 +1420,7 @@ class PurchaseChain:
         qcs = []
         pbs = []
         sos = []
+        payments = []
         po_quantity_by_item = {it["item_ref_id"]: it["quantity"] for it in items}
         received_so_far: dict = {}
         for gi, gp_items in enumerate(delivery_plans, start=1):
@@ -1583,6 +1590,42 @@ class PurchaseChain:
                 if self.delay:
                     time.sleep(self.delay)
 
+            if "PYMT" in docs and pb_id:
+                # Fetch the confirmed PB to get its final total amount.
+                _pb_check = self.pb_api.get_pb(pb_id)
+                pb_total = float(
+                    (_pb_check or pb_data or {}).get("txn_currency_total_amount") or 0.0
+                )
+                if pb_total <= 0:
+                    log.warning(f"  PYMT: PB #{pb_id} has zero/unknown amount — skipping payment")
+                else:
+                    bank_id = self.payment_api.resolve_bank_account(payment_method)
+                    if bank_id is None:
+                        log.warning("  PYMT: no bank account found — skipping payment")
+                    else:
+                        pymt_payload = build_payment_payload(
+                            supplier_ref_id=eff_supplier,
+                            pb_id=pb_id,
+                            pb_amount=pb_total,
+                            bank_account_id=bank_id,
+                            payment_method_ref_id=payment_method,
+                            post=payment_post,
+                        )
+                        pymt_data = self.payment_api.create_payment(pymt_payload)
+                        pymt_id = pymt_data.get("id") or pymt_data.get("entry_id") if pymt_data else None
+                        if not pymt_data or not pymt_id:
+                            _pr = self.payment_api._last_response
+                            _pb_body = _pr.text[:400] if _pr is not None else "no response"
+                            raise RuntimeError(
+                                f"Payment {gi} creation failed "
+                                f"(HTTP {self.payment_api._last_status}); body: {_pb_body}"
+                            )
+                        pymt_ref = pymt_data.get("transaction_ref_no", str(pymt_id))
+                        payments.append({"id": pymt_id, "ref": pymt_ref, "data": pymt_data, "payload": pymt_payload})
+                        log.info(f"  PYMT {gi}/{len(delivery_plans)} created: ID={pymt_id}, ref={pymt_ref}")
+                        if self.delay:
+                            time.sleep(self.delay)
+
         last_gp = gps[-1] if gps else None
         last_grn = grns[-1] if grns else None
         last_qc = qcs[-1] if qcs else None
@@ -1602,6 +1645,8 @@ class PurchaseChain:
             "pbs": pbs,
             "so": last_so,
             "sos": sos,
+            "payment": payments[-1] if payments else None,
+            "payments": payments,
         }
         self.results.append(result)
         return result
