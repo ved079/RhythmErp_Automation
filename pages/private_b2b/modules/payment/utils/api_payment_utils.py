@@ -10,12 +10,14 @@ Payment creation uses a direct POST (no SUBMIT pipeline):
 Passing posting_status="Post" in the payload creates AND posts in one step.
 """
 
+import uuid
 from typing import Optional, List
 
 from common.erp_api_client import RhythmERPAPIClient
 from common.logger import log
 from pages.private_b2b.modules.payment.api.endpoints import (
     PAYMENT_METHOD_CASH,
+    SCREEN_NAME,
     build_create_url,
     build_get_url,
     build_list_url,
@@ -35,10 +37,16 @@ class PaymentAPIUtils:
         self._bank_cache: dict = {}
 
     def create_payment(self, payload: dict) -> Optional[dict]:
-        """POST a payment. Returns the response JSON or None on failure."""
+        """Submit a Payment via the ERP's async SUBMIT pipeline (same as PB)."""
+        submission_id = str(uuid.uuid4())
         url = build_create_url(self.client.BASE_URL)
+        params = {
+            "screenName": SCREEN_NAME,
+            "request_method": "SUBMIT",
+            "submission_id": submission_id,
+        }
         resp = self.client.session.post(
-            url, headers=self.client.session.headers, json=payload, timeout=30
+            url, headers=self.client.session.headers, json=payload, params=params, timeout=30
         )
         self._last_response = resp
         self._last_status = resp.status_code
