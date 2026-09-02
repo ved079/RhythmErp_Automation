@@ -225,6 +225,7 @@ class PurchaseChainRequest(BaseModel):
     with_jv_check: bool = False            # True = verify JV report DR==|CR| after PB creation
     payment_method: int = 53              # 53=Cash, 54=Cheque, 55=DD, 141=IMPS, 143=RTGS
     payment_post: bool = True             # True = create+post in one step (posting_status="Post")
+    supplier_ref_type: str = "Supplier"   # "Supplier" or "Farmer"
 
 
 # --- Concurrency Testing ---

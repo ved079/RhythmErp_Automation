@@ -813,6 +813,41 @@ class PurchaseChain:
     # Per-entity resolution helpers
     # ------------------------------------------------------------------
 
+    def _fetch_cbr_max_rates(self) -> dict:
+        """Return {item_ref_id: max_rate} from all active Commodity Base Rate entries.
+
+        Fetches the listing then gets each entry's detail to read per-item grid
+        rows. Returns an empty dict on any failure so the caller falls back to
+        the random rate.
+        """
+        try:
+            listing = self.client.list_entries("Commodity Base Rate", page_size=500)
+            entries = (listing or {}).get("screenmatlistingdata_set",
+                       (listing or {}).get("results", []))
+            rates: dict = {}
+            for e in (entries or []):
+                try:
+                    detail = self.client.get_entry("Commodity Base Rate", e["id"])
+                    for child in (detail or {}).get("children", []):
+                        for row in child.get("details", []):
+                            iid = row.get("item_ref_id")
+                            raw = row.get("item_rate") or row.get("rate")
+                            if iid is None or raw is None:
+                                continue
+                            try:
+                                rate = float(raw)
+                            except (TypeError, ValueError):
+                                continue
+                            iid = int(iid)
+                            if iid not in rates or rate > rates[iid]:
+                                rates[iid] = rate
+                except Exception:
+                    continue
+            return rates
+        except Exception as exc:
+            log.warning(f"  CBR rate fetch failed, using random rates: {exc}")
+            return {}
+
     @staticmethod
     def _err_detail(api_utils, payload: dict = None) -> str:
         """Human-readable failure detail from the last API call."""
@@ -1200,6 +1235,7 @@ class PurchaseChain:
         is_rate_weight_deduction: bool = False,
         payment_method: int = PAYMENT_METHOD_CASH,
         payment_post: bool = True,
+        supplier_ref_type: str = "Supplier",
     ) -> dict:
         """Execute one full PO -> GP -> GRN -> QC chain.
 
@@ -1228,6 +1264,8 @@ class PurchaseChain:
         # Resolve context — discover once per PurchaseChain instance
         if ctx is None:
             ctx = self.get_context()
+        if supplier_ref_type != "Supplier":
+            ctx = replace(ctx, supplier_ref_type=supplier_ref_type)
 
         # Which documents to create — default to full chain
         docs = set(d.upper() for d in documents) if documents else {"PO", "GP", "GRN", "QC"}
@@ -1346,6 +1384,14 @@ class PurchaseChain:
                 + "."
             )
         items = _generate_chain_items(num_items=len(item_data), item_data=item_data)
+
+        # For farmer flow: override each item's rate with the CBR maximum rate
+        if supplier_ref_type == "Farmer":
+            cbr_rates = self._fetch_cbr_max_rates()
+            for it in items:
+                cbr_max = cbr_rates.get(it["item_ref_id"])
+                if cbr_max is not None:
+                    it["rate"] = cbr_max
 
         po_id = po_ref = po_data = po_payload = po_entry = None
         gp_id = gp_ref = gp_data = gp_payload = None
@@ -1792,6 +1838,7 @@ class PurchaseChain:
 
         kwargs = dict(
             supplier_ref_id=supplier_ref_id,
+            supplier_ref_type=ctx.supplier_ref_type if ctx else "Supplier",
             items=gp_items,
             # item_type_ref_id = selected Item Category id first (stored shape).
             # Fall back to ctx/legacy only when no category was resolved.
