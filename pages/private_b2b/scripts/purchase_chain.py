@@ -789,7 +789,9 @@ class PurchaseChain:
             self._context = ChainContextDiscoverer(self.client).discover(item_category_id=item_category_id)
         return self._context
 
-    def get_context_for_supplier(self, supplier_ref_id: int) -> ChainContext:
+    def get_context_for_supplier(
+        self, supplier_ref_id: int, supplier_ref_type: str = "Supplier"
+    ) -> ChainContext:
         """Return the tenant context with supplier-scoped fields re-resolved.
 
         Clones the shared context and overlays the chosen supplier's own
@@ -798,11 +800,12 @@ class PurchaseChain:
         per id, so repeated calls for the same supplier are cheap.
         """
         ctx = self.get_context()
-        det = self._resolve_supplier_details(supplier_ref_id)
+        det = self._resolve_supplier_details(supplier_ref_id, screen=supplier_ref_type)
         pb_terms = det.get("payment_terms") or ctx.pb_payment_terms
         return replace(
             ctx,
             supplier_ref_id=supplier_ref_id,
+            supplier_ref_type=supplier_ref_type,
             supplier_ship_from=det.get("ship_from") or ctx.supplier_ship_from,
             supplier_bill_from=det.get("bill_from") or ctx.supplier_bill_from,
             payment_terms=det.get("payment_terms") or ctx.payment_terms,
@@ -864,30 +867,33 @@ class PurchaseChain:
             detail += f" | sent: {json.dumps(payload, default=str)[:600]}"
         return detail
 
-    def _resolve_supplier_details(self, supplier_ref_id: int) -> dict:
-        """Resolve supplier-specific addresses/terms from the Supplier detail record.
+    def _resolve_supplier_details(
+        self, supplier_ref_id: int, screen: str = "Supplier"
+    ) -> dict:
+        """Resolve supplier/farmer-specific addresses/terms from the ERP detail record.
 
-        ship_from / bill_from MUST come from the chosen supplier — the generic
-        first-dropdown values can point at another supplier's address and cause
-        an HTTP 500 on PO create. Raises a clear error when the supplier has no
+        ship_from / bill_from MUST come from the chosen party — the generic
+        first-dropdown values can point at another party's address and cause
+        an HTTP 500 on GP create. Raises a clear error when the party has no
         registered address so we never send a bogus FK silently.
         """
-        if supplier_ref_id in self._supplier_cache:
-            return self._supplier_cache[supplier_ref_id]
+        cache_key = (screen, supplier_ref_id)
+        if cache_key in self._supplier_cache:
+            return self._supplier_cache[cache_key]
 
         detail = None
         for attempt in range(4):
-            detail = self.client.get_entry("Supplier", supplier_ref_id)
+            detail = self.client.get_entry(screen, supplier_ref_id)
             if detail:
                 break
             log.warning(
-                f"  Supplier detail fetch failed for #{supplier_ref_id} "
+                f"  {screen} detail fetch failed for #{supplier_ref_id} "
                 f"(attempt {attempt + 1}/4) — retrying"
             )
             time.sleep(0.4 * (attempt + 1))
         if not detail:
             raise RuntimeError(
-                f"Supplier #{supplier_ref_id} not found in ERP — cannot create PO."
+                f"{screen} #{supplier_ref_id} not found in ERP — cannot create GP."
             )
 
         out = {
@@ -923,8 +929,8 @@ class PurchaseChain:
                 f"— cannot create PO. Pick a supplier with a registered address."
             )
 
-        log.info(f"  Supplier #{supplier_ref_id} resolved: {out}")
-        self._supplier_cache[supplier_ref_id] = out
+        log.info(f"  {screen} #{supplier_ref_id} resolved: {out}")
+        self._supplier_cache[cache_key] = out
         return out
 
     def _resolve_item_detail(self, item_ref_id: int) -> Optional[dict]:

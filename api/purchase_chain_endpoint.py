@@ -152,7 +152,9 @@ def purchase_chain_stream(request: PurchaseChainRequest) -> Generator[str, None,
             )
             # Option A: per-supplier context so addresses + payment terms are
             # resolved for the chain's own supplier, not the default one.
-            kwargs["ctx"] = chain.get_context_for_supplier(chain_supplier)
+            kwargs["ctx"] = chain.get_context_for_supplier(
+                chain_supplier, supplier_ref_type=request.supplier_ref_type
+            )
             if request.multi_gate_pass:
                 kwargs["multi_gate_pass"] = True
                 kwargs["gp_count"] = max(1, request.gp_count)
