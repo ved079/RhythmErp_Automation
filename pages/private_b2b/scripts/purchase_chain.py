@@ -1603,15 +1603,24 @@ class PurchaseChain:
                     if bank_id is None:
                         log.warning("  PYMT: no bank account found — skipping payment")
                     else:
-                        pb_txn_date = (_pb_check or pb_data or {}).get("transaction_date") or None
+                        _pb_rec = _pb_check or pb_data or {}
+                        pb_txn_date = _pb_rec.get("transaction_date") or None
+                        _conv = _pb_rec.get("conversion_rate", 1.0)
                         pymt_payload = build_payment_payload(
-                            supplier_ref_id=eff_supplier,
+                            party_ref_id=_pb_rec.get("supplier_ref_id") or eff_supplier,
                             pb_id=pb_id,
                             pb_amount=pb_total,
                             bank_account_id=bank_id,
-                            payment_method_ref_id=payment_method,
                             pb_transaction_date=pb_txn_date,
+                            payment_method_ref_id=payment_method,
                             post=payment_post,
+                            txn_currency=_pb_rec.get("txn_currency") or (ctx.txn_currency if ctx else 8),
+                            base_currency=_pb_rec.get("base_currency") or (ctx.txn_currency if ctx else 8),
+                            conversion_rate=str(_conv) if _conv else "1.000000",
+                            parameter1=_pb_rec.get("parameter1") or (ctx.parameter1 if ctx else 1),
+                            parameter2=_pb_rec.get("parameter2") or (ctx.parameter2 if ctx else 1),
+                            parameter5=_pb_rec.get("parameter5") or (ctx.parameter5 if ctx else 1),
+                            parameter6=_pb_rec.get("parameter6") or (ctx.parameter6 if ctx else 1),
                         )
                         pymt_data = self.payment_api.create_payment(pymt_payload)
                         pymt_id = pymt_data.get("id") or pymt_data.get("entry_id") if pymt_data else None
