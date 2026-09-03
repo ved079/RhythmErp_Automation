@@ -2972,6 +2972,7 @@ ${rows.join('\n')}
                                     <th className="px-3 py-2 text-right font-semibold text-[10px] uppercase tracking-wide min-w-[110px]">INV Closing</th>
                                     <th className="px-3 py-2 text-right font-semibold text-[10px] uppercase tracking-wide min-w-[100px] text-amber-600 dark:text-amber-400">PURB GST</th>
                                     <th className="px-3 py-2 text-center font-semibold text-[10px] uppercase tracking-wide min-w-[80px]">GST Type</th>
+                                    <th className="px-3 py-2 text-left font-semibold text-[10px] uppercase tracking-wide min-w-[180px]">Purchase Account Match</th>
                                     <th className="w-7" />
                                   </tr>
                                 </thead>
@@ -2979,7 +2980,7 @@ ${rows.join('\n')}
                                   {r.commodity_rows.map((row, i) => {
                                     const gstType = row.purb_igst ? 'IGST' : (row.purb_cgst || row.purb_sgst) ? 'CGST+SGST' : ''
                                     const isIgst = gstType === 'IGST'
-                                    const allOk = (row.pb_vs_purb_ok !== false) && row.taxable_match && row.inv_balanced
+                                    const allOk = (row.pb_vs_purb_ok !== false) && row.taxable_match && row.inv_balanced && row.account_match !== false
                                     const base = row.purb_purchase_gst ?? 0
                                     const gstTotal = row.purb_gst_total ?? 0
                                     const rate = base > 0 ? Math.round((gstTotal / base) * 100 * 10) / 10 : null
@@ -3012,6 +3013,18 @@ ${rows.join('\n')}
                                         <td className="px-3 py-2 text-center">
                                           {gstType && <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${isIgst ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' : 'bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400'}`}>{gstType}</span>}
                                         </td>
+                                        <td className="px-3 py-2">
+                                          {row.account_match === null ? (
+                                            <span className="text-gray-400 text-[10px]">—</span>
+                                          ) : row.account_match ? (
+                                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">{row.purb_purchase_account}</span>
+                                          ) : (
+                                            <div className="text-[10px]">
+                                              <div className="text-rose-600 dark:text-rose-400 font-semibold">PURB: {row.purb_purchase_account || '—'}</div>
+                                              <div className="text-rose-500 dark:text-rose-500">INV: {row.inv_purchase_account || '—'}</div>
+                                            </div>
+                                          )}
+                                        </td>
                                         <td className="px-1.5 text-center">{allOk ? <CkDot /> : <XCircle className="size-3 text-red-500 inline" />}</td>
                                       </tr>
                                     )
@@ -3024,7 +3037,7 @@ ${rows.join('\n')}
                                     <td className="px-3 py-2 text-right font-mono text-gray-500 dark:text-gray-400 text-[11px]">{fmtN(r.commodity_rows.reduce((s,row)=>s+(row.inv_exempt_cr??0),0))}</td>
                                     <td className="px-3 py-2 text-right font-mono text-gray-500 dark:text-gray-400 text-[11px]">{fmtN(r.commodity_rows.reduce((s,row)=>s+(row.inv_closing_dr??0),0))}</td>
                                     <td className="px-3 py-2 text-right font-mono text-amber-600 dark:text-amber-400 text-[11px]">{fmtN(r.commodity_rows.reduce((s,row)=>s+(row.purb_gst_total??0),0))}</td>
-                                    <td /><td />
+                                    <td /><td /><td />
                                   </tr>
                                   <tr className="border-t border-gray-100 dark:border-gray-800">
                                     <td className="px-3 py-2 text-[11px] font-semibold text-gray-600 dark:text-gray-400" colSpan={4}>Payable</td>
@@ -3486,7 +3499,7 @@ ${rows.join('\n')}
                                             <tbody>
                                               {r.commodity_rows.map((row, i) => {
                                                 const gstTotal = (row.purb_igst??0)+(row.purb_cgst??0)+(row.purb_sgst??0)
-                                                const allOk = (row.pb_vs_purb_ok !== false) && row.taxable_match && row.inv_balanced
+                                                const allOk = (row.pb_vs_purb_ok !== false) && row.taxable_match && row.inv_balanced && row.account_match !== false
                                                 return (
                                                   <tr key={i} className={`border-b border-gray-100 dark:border-gray-800 transition-colors ${allOk?'hover:bg-gray-50/50 dark:hover:bg-gray-800/20':'bg-red-50/40 dark:bg-red-900/10'}`}>
                                                     <td className="px-3 py-1.5 font-medium text-gray-700 dark:text-gray-300 max-w-[180px] truncate" title={row.commodity}>{row.commodity}</td>

@@ -559,6 +559,9 @@ export interface CrossCheckCommodityRow {
   taxable_match: boolean;
   pb_vs_purb_ok: boolean | null;
   inv_balanced: boolean;
+  purb_purchase_account: string | null;
+  inv_purchase_account: string | null;
+  account_match: boolean | null;
 }
 
 export interface CrossCheckPBItem {
