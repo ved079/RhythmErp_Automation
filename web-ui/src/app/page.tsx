@@ -60,6 +60,7 @@ const LiveExecutionTab = dynamic(() => import('@/components/live-execution/LiveE
 const ScheduleRunsTab = dynamic(() => import('@/components/schedule/ScheduleRunsTab').then(m => ({ default: m.ScheduleRunsTab })), { ssr: false })
 const PurchaseChainSection = dynamic(() => import('@/components/dialogs/PurchaseChainSection').then(m => ({ default: m.PurchaseChainSection })), { ssr: false })
 const JVCheckSection = dynamic(() => import('@/components/dialogs/JVCheckSection').then(m => ({ default: m.JVCheckSection })), { ssr: false })
+const QCFormulaSection = dynamic(() => import('@/components/dialogs/QCFormulaSection').then(m => ({ default: m.QCFormulaSection })), { ssr: false })
 const ResultsTab = dynamic(() => import('@/components/results/ResultsTab').then(m => ({ default: m.ResultsTab })), { ssr: false })
 const MyTicketsTab = dynamic(() => import('@/components/tickets/MyTicketsTab').then(m => ({ default: m.MyTicketsTab })), { ssr: false })
 const ReportToAdminDialog = dynamic(() => import('@/components/dialogs/ReportToAdminDialog').then(m => ({ default: m.ReportToAdminDialog })), { ssr: false })
@@ -1020,6 +1021,16 @@ export default function Home() {
               </div>
             </div>
           )}
+          {selectedModule === 'qc-formula-check' && (
+            <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-6">
+              <QCFormulaSection
+                erpToken={erpToken}
+                erpTenantId={erpTenantId || '681'}
+                onNeedsToken={() => setTokenDialogOpen(true)}
+                onClearToken={onClearToken}
+              />
+            </div>
+          )}
           {selectedModule === 'credentials' && (
             <CredentialsScreen
               erpCredentials={erpCredentials}
@@ -1045,7 +1056,7 @@ export default function Home() {
           {activeTab === 'concurrency' && (
             <ConcurrencyTab modules={sidebarModules} />
           )}
-          {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && selectedModule !== 'deployment-check' && selectedModule !== 'full-purchase-flow' && selectedModule !== 'full-purchase-flow-jv' && selectedModule !== 'credentials' && activeTab !== 'concurrency' && (
+          {selectedModule !== 'dashboard' && selectedModule !== 'my-tickets' && selectedModule !== 'deployment-check' && selectedModule !== 'full-purchase-flow' && selectedModule !== 'full-purchase-flow-jv' && selectedModule !== 'qc-formula-check' && selectedModule !== 'credentials' && activeTab !== 'concurrency' && (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="border-b border-gray-300 dark:border-gray-500/70 bg-gray-50/50 dark:bg-gray-800/30 shrink-0" data-tour="tab-bar">
                 <div className="flex items-center h-10 px-4 gap-0">
