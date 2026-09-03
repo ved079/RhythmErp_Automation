@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
-import { Poppins, Roboto } from "next/font/google";
+import { JetBrains_Mono, Poppins, Roboto } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -37,7 +43,7 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
       </head>
       <body
-        className={`${poppins.variable} ${roboto.variable} antialiased bg-background text-foreground`}
+        className={`${jetbrainsMono.variable} ${poppins.variable} ${roboto.variable} antialiased bg-background text-foreground`}
       >
         <ThemeProvider
           attribute="class"
