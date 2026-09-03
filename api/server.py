@@ -1449,12 +1449,12 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
 
     # ── 6. Per-commodity cross-check ─────────────────────────────────
     commodity_rows = []
-    # Group PURB rows by commodity
+    # Group PURB rows by commodity — track purchase account name too
     purb_by_comm = {}
     for r in purb_rows:
         c = r["commodity"] or ""
         if c not in purb_by_comm:
-            purb_by_comm[c] = {"purchase_gst": 0, "igst": 0, "cgst": 0, "sgst": 0}
+            purb_by_comm[c] = {"purchase_gst": 0, "igst": 0, "cgst": 0, "sgst": 0, "purchase_account": None}
         if r["dr_cr"] != "Debit":
             continue
         if _is_gst(r["account_name"]):
@@ -1465,16 +1465,24 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
             pass  # discount entries excluded from taxable base
         elif c:  # commodity Debit that is not GST/discount = taxable base
             purb_by_comm[c]["purchase_gst"] += r["amount"]
+            if purb_by_comm[c]["purchase_account"] is None:
+                purb_by_comm[c]["purchase_account"] = r["account_name"]
+
     inv_by_comm = {}
     for r in inv_rows:
         c = r["commodity"] or ""
         if c not in inv_by_comm:
-            inv_by_comm[c] = {"exempt_cr": 0, "closing_dr": 0}
-        if r["dr_cr"] == "Credit": inv_by_comm[c]["exempt_cr"] += r["amount"]
-        if r["dr_cr"] == "Debit":  inv_by_comm[c]["closing_dr"] += r["amount"]
+            inv_by_comm[c] = {"exempt_cr": 0, "closing_dr": 0, "purchase_account": None}
+        if r["dr_cr"] == "Credit":
+            inv_by_comm[c]["exempt_cr"] += r["amount"]
+            if inv_by_comm[c]["purchase_account"] is None:
+                inv_by_comm[c]["purchase_account"] = r["account_name"]
+        if r["dr_cr"] == "Debit":
+            inv_by_comm[c]["closing_dr"] += r["amount"]
 
     all_comms = sorted(set(list(purb_by_comm.keys()) + list(inv_by_comm.keys())) - {""})
     single_comm = len(all_comms) == 1  # when only one commodity, PB total maps directly
+    account_mismatches = []
     for c in all_comms:
         pb = purb_by_comm.get(c, {})
         iv = inv_by_comm.get(c, {})
@@ -1485,26 +1493,53 @@ def cross_check_jv_endpoint(request: CrossCheckRequest):
         p_gst     = p_igst + p_cgst + p_sgst
         i_exempt  = iv.get("exempt_cr", 0)
         i_closing = iv.get("closing_dr", 0)
+        purb_acc  = pb.get("purchase_account") or ""
+        inv_acc   = iv.get("purchase_account") or ""
         taxable_match = abs(p_taxable - i_exempt) <= TOLERANCE if (p_taxable or i_exempt) else True
         inv_bal_ok    = abs(i_exempt - i_closing) <= TOLERANCE
         pb_taxable_comm = pb_taxable if single_comm else None
         pb_gst_comm     = pb_gst_total if single_comm else None
         pb_vs_purb_ok   = abs(pb_taxable_comm - p_taxable) <= TOLERANCE if pb_taxable_comm is not None else None
+        # Account name match check
+        acc_match = (purb_acc.lower() == inv_acc.lower()) if purb_acc and inv_acc else None
+        if acc_match is False:
+            account_mismatches.append(
+                f"{c}: PURB DR='{purb_acc}' vs INV CR='{inv_acc}'"
+            )
         commodity_rows.append({
-            "commodity":         c,
-            "pb_taxable":        pb_taxable_comm,
-            "pb_gst_total":      pb_gst_comm,
-            "purb_purchase_gst": p_taxable or None,
-            "purb_igst":         p_igst or None,
-            "purb_cgst":         p_cgst or None,
-            "purb_sgst":         p_sgst or None,
-            "purb_gst_total":    p_gst or None,
-            "inv_exempt_cr":     i_exempt or None,
-            "inv_closing_dr":    i_closing or None,
-            "taxable_match":     taxable_match,
-            "pb_vs_purb_ok":     pb_vs_purb_ok,
-            "inv_balanced":      inv_bal_ok,
+            "commodity":          c,
+            "pb_taxable":         pb_taxable_comm,
+            "pb_gst_total":       pb_gst_comm,
+            "purb_purchase_gst":  p_taxable or None,
+            "purb_igst":          p_igst or None,
+            "purb_cgst":          p_cgst or None,
+            "purb_sgst":          p_sgst or None,
+            "purb_gst_total":     p_gst or None,
+            "inv_exempt_cr":      i_exempt or None,
+            "inv_closing_dr":     i_closing or None,
+            "taxable_match":      taxable_match,
+            "pb_vs_purb_ok":      pb_vs_purb_ok,
+            "inv_balanced":       inv_bal_ok,
+            "purb_purchase_account": purb_acc or None,
+            "inv_purchase_account":  inv_acc or None,
+            "account_match":      acc_match,
         })
+
+    # Add top-level account match check
+    if purb_entry and inv_entry and all_comms:
+        acc_ok = len(account_mismatches) == 0
+        detail = (
+            "All commodities: PURB purchase DR account = INV purchase CR account"
+            if acc_ok else
+            " | ".join(account_mismatches)
+        )
+        checks.append(chk(
+            "purchase_account_match",
+            "PURB purchase DR account = INV purchase CR account (per commodity)",
+            acc_ok,
+            detail,
+            "structure"
+        ))
 
     ok_overall = purb_entry is not None and inv_entry is not None and all(c["ok"] for c in checks)
     return JSONResponse({
