@@ -467,8 +467,8 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
                 {
                     "type_of_bags_ref_id": bags_type_id,
                     "quantity_of_bags": 1,
-                    "weight_of_bags": it["empty_bag_weight"],
-                    "total_weight_of_bags": it["empty_bag_weight"],
+                    "weight_of_bags": empty_bag_weight,
+                    "total_weight_of_bags": empty_bag_weight,
                 }
             ],
         })
