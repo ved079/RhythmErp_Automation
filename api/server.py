@@ -626,27 +626,63 @@ def pb_items_endpoint(request: PBItemsRequest):
 # QC FETCH ENDPOINT
 # ================================================================
 
+class QCListRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str
+
 class QCFetchRequest(BaseModel):
     erp_token: str
     erp_tenant_id: str
     qc_id: str
 
-@app.post("/api/qc-fetch")
-def qc_fetch_endpoint(request: QCFetchRequest):
-    """Fetch a Quality Check record by ID for formula validation."""
+def _make_client(token: str, tenant_id: str):
     import sys
     sys.path.insert(0, str(PROJECT_ROOT))
     from common.erp_api_client import RhythmERPAPIClient
+    t = token[7:] if token.startswith("Bearer ") else token
+    client = RhythmERPAPIClient(tenant_id=tenant_id)
+    client.login_from_browser(token=t, tenant_id=tenant_id)
+    return client
 
-    token = request.erp_token
-    if token.startswith("Bearer "):
-        token = token[7:]
+@app.post("/api/qc-list")
+def qc_list_endpoint(request: QCListRequest):
+    """Fetch recent Quality Check records for the given tenant."""
+    client = _make_client(request.erp_token, request.erp_tenant_id)
+    results = []
+    for page in range(1, 3):
+        resp = client.session.get(
+            f"{client.BASE_URL}/procure_to_pay/quality-control/",
+            params={"page": page, "limit": 50, "filters": "", "screen_name": "QC", "search": ""},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            print(f"[QC-LIST] status={resp.status_code} body={resp.text[:300]}")
+            break
+        data = resp.json()
+        print(f"[QC-LIST] page={page} keys={list(data.keys())} raw_sample={str(data)[:400]}")
+        rows = data.get("screenmatlistingdata_set") or data.get("results") or []
+        for r in rows:
+            ref = r.get("transaction_ref_no") or ""
+            if not ref:
+                continue
+            results.append({
+                "id": r.get("id") or r.get("pk") or "",
+                "ref_no": ref,
+                "date": r.get("transaction_date") or "",
+                "supplier": r.get("supplier_ref_id") or "",
+                "amount": r.get("total_txn_currency_amount") or "",
+            })
+        if not data.get("page_has_next"):
+            break
+    print(f"[QC-LIST] returning {len(results)} records")
+    return JSONResponse({"qcs": results})
 
-    client = RhythmERPAPIClient(tenant_id=request.erp_tenant_id)
-    client.login_from_browser(token=token, tenant_id=request.erp_tenant_id)
-
+@app.post("/api/qc-fetch")
+def qc_fetch_endpoint(request: QCFetchRequest):
+    """Fetch a Quality Check record by ID for formula validation."""
+    client = _make_client(request.erp_token, request.erp_tenant_id)
     resp = client.session.get(
-        f"{client.BASE_URL}/procure_to_pay/quality-check/{request.qc_id}/",
+        f"{client.BASE_URL}/procure_to_pay/quality-control/{request.qc_id}/",
         timeout=30,
     )
     if resp.status_code != 200:
