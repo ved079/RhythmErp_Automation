@@ -1862,7 +1862,7 @@ class PurchaseChain:
             return v
 
         po_type       = _pick("po_type",       "po_type",       "po_type",       25)
-        txn_currency  = _pick("txn_currency",  "txn_currency",  "txn_currency",  1)
+        txn_currency  = _pick("txn_currency",  "txn_currency",  "txn_currency",  8)
         base_currency = _pick(None, "base_currency", "base_currency", 1)
         payment_terms = _pick("payment_terms", None, "payment_terms", None)
         delivery_terms = _pick("delivery_terms", None, "delivery_terms", None)

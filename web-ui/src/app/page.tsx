@@ -1022,13 +1022,25 @@ export default function Home() {
             </div>
           )}
           {selectedModule === 'qc-formula-check' && (
-            <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-6">
-              <QCFormulaSection
-                erpToken={erpToken}
-                erpTenantId={erpTenantId || '681'}
-                onNeedsToken={() => setTokenDialogOpen(true)}
-                onClearToken={onClearToken}
-              />
+            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="border-b border-gray-300 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-800/30 shrink-0">
+                <div className="flex items-center h-10 px-4 gap-0">
+                  <div className="flex items-center gap-1.5 px-4 h-full text-[12px] font-medium border-b-2 border-[#3F51B5] text-[#3F51B5] dark:text-[#7986CB] bg-white dark:bg-gray-900">
+                    <CheckCircle2 className="size-4 text-[#3F51B5]" />
+                    <h3 className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">QC Formula Validator</h3>
+                  </div>
+                  <div className="flex-1" />
+                  <span className="text-[12px] text-gray-400 dark:text-gray-500 mr-4">Module: <span className="text-gray-600 dark:text-gray-300 font-medium">QC Formula Validator</span></span>
+                </div>
+              </div>
+              <div className="flex-1 overflow-hidden min-h-0 p-4">
+                <QCFormulaSection
+                  erpToken={erpToken}
+                  erpTenantId={erpTenantId || '681'}
+                  onNeedsToken={() => setTokenDialogOpen(true)}
+                  onClearToken={onClearToken}
+                />
+              </div>
             </div>
           )}
           {selectedModule === 'credentials' && (

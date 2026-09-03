@@ -4,7 +4,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CheckCircle2, XCircle, Key, RefreshCw, Loader2, AlertTriangle, Search, Download, FileText, FileSpreadsheet, ChevronDown, FileBarChart2, Maximize2, X, GitCompare } from 'lucide-react'
+import { CheckCircle2, XCircle, Key, RefreshCw, Loader2, AlertTriangle, Search, Download, FileText, FileSpreadsheet, ChevronDown, FileBarChart2, Maximize2, X, GitCompare, CheckSquare, Square, ListChecks } from 'lucide-react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import Spinner from '@/components/ui/Spinner'
@@ -58,6 +58,20 @@ export function JVCheckSection({ erpToken, erpTenantId, onNeedsToken, onClearTok
   const [notAppliedOpen, setNotAppliedOpen] = useState(false)
   const [purbMeta, setPurbMeta] = useState<PurbMeta | null>(null)
   const [purbFullViewOpen, setPurbFullViewOpen] = useState(false)
+
+  // Multi-select bulk verify state — Purchase tab
+  const [multiSelectPurchase, setMultiSelectPurchase] = useState(false)
+  const [selectedPBIds, setSelectedPBIds] = useState<Set<string | number>>(new Set())
+  const [bulkResults, setBulkResults] = useState<{ pb: PBListItem; ok: boolean; error?: string; steps?: JVVerifyStep[] }[]>([])
+  const [bulkRunning, setBulkRunning] = useState(false)
+  const [bulkOpen, setBulkOpen] = useState(false)
+
+  // Multi-select bulk verify state — Inventory tab
+  const [multiSelectInv, setMultiSelectInv] = useState(false)
+  const [selectedInvPBIds, setSelectedInvPBIds] = useState<Set<string | number>>(new Set())
+  const [bulkInvResults, setBulkInvResults] = useState<{ pb: PBListItem; ok: boolean; error?: string; steps?: JVVerifyStep[] }[]>([])
+  const [bulkInvRunning, setBulkInvRunning] = useState(false)
+  const [bulkInvOpen, setBulkInvOpen] = useState(false)
 
   useEffect(() => {
     if (showTokenInput) {
@@ -139,6 +153,47 @@ export function JVCheckSection({ erpToken, erpTenantId, onNeedsToken, onClearTok
     } finally {
       setVerifying(false)
     }
+  }
+
+  const handleBulkVerify = async () => {
+    if (!token || !tenantId || selectedPBIds.size === 0) return
+    const selected = pbList.filter(pb => selectedPBIds.has(pb.id ?? pb.ref_no))
+    setBulkRunning(true)
+    setBulkResults([])
+    setBulkOpen(true)
+    const results: typeof bulkResults = []
+    for (const pb of selected) {
+      try {
+        const jvRes = await verifyJV(token, tenantId, pb.ref_no)
+        const hasError = jvRes.steps.some(s => !s.ok)
+        results.push({ pb, ok: !hasError, steps: jvRes.steps })
+      } catch (err) {
+        results.push({ pb, ok: false, error: err instanceof Error ? err.message : String(err) })
+      }
+      setBulkResults([...results])
+    }
+    setBulkRunning(false)
+  }
+
+  const handleBulkInvVerify = async () => {
+    if (!token || !tenantId || selectedInvPBIds.size === 0) return
+    const selected = pbList.filter(pb => selectedInvPBIds.has(pb.id ?? pb.ref_no))
+    setBulkInvRunning(true)
+    setBulkInvResults([])
+    setBulkInvOpen(true)
+    const results: typeof bulkInvResults = []
+    for (const pb of selected) {
+      const pbDate = pb.date?.slice(0, 10) || ''
+      try {
+        const res = await verifyInvJV(token, tenantId, pb.ref_no, pbDate, pb.id)
+        const hasError = res.steps.some(s => !s.ok)
+        results.push({ pb, ok: !hasError, steps: res.steps })
+      } catch (err) {
+        results.push({ pb, ok: false, error: err instanceof Error ? err.message : String(err) })
+      }
+      setBulkInvResults([...results])
+    }
+    setBulkInvRunning(false)
   }
 
   // PB vs JV comparison rows — shared by the on-screen sheet and the export.
@@ -768,6 +823,20 @@ ${rows.join('\n')}
   const [ccError, setCcError] = useState('')
   const [ccFullViewOpen, setCcFullViewOpen] = useState(false)
   const [ccFailToast, setCcFailToast] = useState<{ refNo: string; result: CrossCheckResponse } | null>(null)
+
+  // ── Bulk cross-check state ──────────────────────────────
+  type BulkResult = { pb: PBListItem; result: CrossCheckResponse | null; error: string; done: boolean }
+  const [ccBulkMode, setCcBulkMode] = useState(false)
+  const [ccSelectedIds, setCcSelectedIds] = useState<Set<number | string>>(new Set())
+  const [ccBulkRunning, setCcBulkRunning] = useState(false)
+  const [ccBulkResults, setCcBulkResults] = useState<BulkResult[]>([])
+  const [ccBulkProgress, setCcBulkProgress] = useState(0)
+  const ccBulkAbort = useRef(false)
+  const ccBulkFromView = useRef(false)
+  const ccBulkViewIndex = useRef<number>(-1)    // index in sortedBulkResults the user clicked View on
+  const ccRunBtnRef = useRef<HTMLDivElement>(null)
+  const ccBulkResultsRef = useRef<HTMLDivElement>(null)
+  const ccBulkRowRefs = useRef<(HTMLDivElement | null)[]>([])
   const ccFailToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [ccJvTab, setCcJvTab] = useState<'purb'|'inv'>('purb')
   const [ccGroupsCollapsed, setCcGroupsCollapsed] = useState<Set<string>>(new Set(['Amounts','GST','Discount / TDS','Other']))
@@ -1203,39 +1272,114 @@ ${rows.join('\n')}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <Label className="text-[11px] text-gray-700 dark:text-gray-300">Select Purchase Booking</Label>
-                  <button onClick={loadPBList} disabled={pbListLoading} className="text-[11px] text-[#3F51B5] dark:text-[#7986CB] flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50">
-                    <RefreshCw className={`size-3 ${pbListLoading ? 'animate-spin' : ''}`} />Refresh
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {multiSelectInv && selectedInvPBIds.size > 0 && (
+                      <>
+                        <button onClick={handleBulkInvVerify} disabled={bulkInvRunning}
+                          className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded bg-[#3F51B5] text-white hover:bg-[#303F9F] disabled:opacity-50 cursor-pointer">
+                          <ListChecks className="size-3" />
+                          {bulkInvRunning ? 'Verifying…' : `Verify Selected (${selectedInvPBIds.size})`}
+                        </button>
+                        <button onClick={() => setSelectedInvPBIds(new Set())} className="text-[11px] text-gray-400 hover:text-gray-600 cursor-pointer">Clear</button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => { setMultiSelectInv(v => !v); setSelectedInvPBIds(new Set()) }}
+                      className={`text-[11px] flex items-center gap-1 px-2 py-0.5 rounded border transition-colors cursor-pointer ${multiSelectInv ? 'border-[#3F51B5] text-[#3F51B5] bg-[#3F51B5]/5' : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-[#3F51B5] hover:text-[#3F51B5]'}`}>
+                      <ListChecks className="size-3" /> Multi-select
+                    </button>
+                    <button onClick={loadPBList} disabled={pbListLoading} className="text-[11px] text-[#3F51B5] dark:text-[#7986CB] flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50">
+                      <RefreshCw className={`size-3 ${pbListLoading ? 'animate-spin' : ''}`} />Refresh
+                    </button>
+                  </div>
                 </div>
                 {pbListLoading && pbList.length === 0 && <LoadingCard message="FETCHING" steps={[{ label: 'Fetching purchase bookings', done: false }]} />}
                 {pbList.length > 0 && (
                   <>
-                    <Input value={pbSearch} onChange={(e) => setPbSearch(e.target.value)} placeholder="Search by ref no or supplier…" className="h-8 text-[12px] mb-2" />
+                    <div className="flex items-center gap-2 mb-2">
+                      <Input value={pbSearch} onChange={(e) => setPbSearch(e.target.value)} placeholder="Search by ref no or supplier…" className="h-8 text-[12px] flex-1" />
+                      {multiSelectInv && (() => {
+                        const filteredPbs = pbList.filter(pb => { const q = pbSearch.toLowerCase(); return !q || pb.ref_no.toLowerCase().includes(q) || pb.supplier.toLowerCase().includes(q) })
+                        const allSel = filteredPbs.length > 0 && filteredPbs.every(pb => selectedInvPBIds.has(pb.id ?? pb.ref_no))
+                        return (
+                          <button onClick={() => allSel ? setSelectedInvPBIds(new Set()) : setSelectedInvPBIds(new Set(filteredPbs.map(pb => pb.id ?? pb.ref_no)))}
+                            className="text-[11px] flex items-center gap-1 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-[#3F51B5] transition-colors cursor-pointer shrink-0">
+                            {allSel ? <CheckSquare className="size-3.5 text-[#3F51B5]" /> : <Square className="size-3.5" />}
+                            {allSel ? 'Deselect all' : 'Select all'}
+                          </button>
+                        )
+                      })()}
+                    </div>
                     <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
-                      {pbList.filter(pb => { const q = pbSearch.toLowerCase(); return !q || pb.ref_no.toLowerCase().includes(q) || pb.supplier.toLowerCase().includes(q) }).map((pb, _i) => (
-                        <button key={pb.id ?? `${pb.ref_no}-${_i}`} onClick={() => { setInvPbRefNo(pb.ref_no); setInvSelectedPB(pb); handleInvVerifyFor(pb) }}
-                          className="w-full text-left px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10 transition-colors cursor-pointer">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{pb.ref_no}</span>
-                            {pb.amount && <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0 font-medium">₹{Number(pb.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
+                      {pbList.filter(pb => { const q = pbSearch.toLowerCase(); return !q || pb.ref_no.toLowerCase().includes(q) || pb.supplier.toLowerCase().includes(q) }).map((pb, _i) => {
+                        const pbKey = pb.id ?? pb.ref_no
+                        const checked = selectedInvPBIds.has(pbKey)
+                        return (
+                          <div key={pb.id ?? `${pb.ref_no}-${_i}`}
+                            onClick={multiSelectInv ? () => setSelectedInvPBIds(prev => { const n = new Set(prev); n.has(pbKey) ? n.delete(pbKey) : n.add(pbKey); return n }) : undefined}
+                            className={`flex items-start gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10 transition-colors ${multiSelectInv ? 'cursor-pointer' : ''} ${checked ? 'bg-[#3F51B5]/5 dark:bg-[#3F51B5]/10' : ''}`}>
+                            {multiSelectInv && (
+                              <button onClick={(e) => { e.stopPropagation(); setSelectedInvPBIds(prev => { const n = new Set(prev); n.has(pbKey) ? n.delete(pbKey) : n.add(pbKey); return n }) }}
+                                className="mt-0.5 shrink-0 cursor-pointer text-[#3F51B5]">
+                                {checked ? <CheckSquare className="size-3.5" /> : <Square className="size-3.5 text-gray-300 dark:text-gray-600" />}
+                              </button>
+                            )}
+                            <button onClick={() => { setInvPbRefNo(pb.ref_no); setInvSelectedPB(pb); handleInvVerifyFor(pb) }} className="flex-1 text-left cursor-pointer">
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{pb.ref_no}</span>
+                                {pb.amount && <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0 font-medium">₹{Number(pb.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
+                              </div>
+                              {pb.supplier && (
+                                <div className="mt-0.5 flex items-center justify-between gap-2">
+                                  <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate font-medium">{pb.supplier}</span>
+                                  {pb.date && <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{pb.date}</span>}
+                                </div>
+                              )}
+                              {(pb.division || pb.department || pb.type_of_sale || pb.location) && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {[pb.division, pb.department, pb.type_of_sale, pb.location].filter(Boolean).map((tag) => (
+                                    <span key={tag} className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">{tag}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </button>
                           </div>
-                          {pb.supplier && (
-                            <div className="mt-0.5 flex items-center justify-between gap-2">
-                              <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate font-medium">{pb.supplier}</span>
-                              {pb.date && <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{pb.date}</span>}
-                            </div>
-                          )}
-                          {(pb.division || pb.department || pb.type_of_sale || pb.location) && (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {[pb.division, pb.department, pb.type_of_sale, pb.location].filter(Boolean).map((tag) => (
-                                <span key={tag} className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">{tag}</span>
-                              ))}
-                            </div>
-                          )}
-                        </button>
-                      ))}
+                        )
+                      })}
                     </div>
                   </>
+                )}
+
+                {/* Bulk inv results panel */}
+                {bulkInvOpen && bulkInvResults.length > 0 && (
+                  <div className="mt-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                      <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-1.5">
+                        <ListChecks className="size-3.5" /> Bulk INV JV Results
+                      </span>
+                      <div className="flex items-center gap-3 text-[10px] text-gray-500">
+                        <span className="text-green-600 font-medium">{bulkInvResults.filter(r => r.ok).length} passed</span>
+                        <span className="text-red-500 font-medium">{bulkInvResults.filter(r => !r.ok).length} failed</span>
+                        {!bulkInvRunning && <button onClick={() => setBulkInvOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer ml-1"><X className="size-3" /></button>}
+                      </div>
+                    </div>
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-48 overflow-y-auto">
+                      {bulkInvResults.map((r, i) => (
+                        <div key={i} className="flex items-center gap-2 px-3 py-2">
+                          {r.ok ? <CheckCircle2 className="size-3.5 text-green-500 shrink-0" /> : <XCircle className="size-3.5 text-red-500 shrink-0" />}
+                          <span className="text-[11px] font-mono font-semibold text-gray-800 dark:text-gray-100 w-32 shrink-0">{r.pb.ref_no}</span>
+                          <span className="text-[11px] text-gray-500 truncate">{r.pb.supplier}</span>
+                          {r.error && <span className="text-[11px] text-red-500 truncate ml-auto shrink-0">{r.error}</span>}
+                          {!r.ok && !r.error && <span className="text-[11px] text-red-400 ml-auto shrink-0">{r.steps?.find(s => !s.ok)?.detail ?? 'Check failed'}</span>}
+                        </div>
+                      ))}
+                      {bulkInvRunning && (
+                        <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-gray-400">
+                          <Loader2 className="size-3 animate-spin" /> Verifying…
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -1758,14 +1902,27 @@ ${rows.join('\n')}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <Label className="text-[11px] text-gray-700 dark:text-gray-300">Select Purchase Booking</Label>
-                <button
-                  onClick={loadPBList}
-                  disabled={pbListLoading}
-                  className="text-[11px] text-[#3F51B5] dark:text-[#7986CB] flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`size-3 ${pbListLoading ? 'animate-spin' : ''}`} />
-                  Refresh
-                </button>
+                <div className="flex items-center gap-2">
+                  {multiSelectPurchase && selectedPBIds.size > 0 && (
+                    <>
+                      <button onClick={handleBulkVerify} disabled={bulkRunning}
+                        className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded bg-[#3F51B5] text-white hover:bg-[#303F9F] disabled:opacity-50 cursor-pointer">
+                        <ListChecks className="size-3" />
+                        {bulkRunning ? 'Verifying…' : `Verify Selected (${selectedPBIds.size})`}
+                      </button>
+                      <button onClick={() => setSelectedPBIds(new Set())} className="text-[11px] text-gray-400 hover:text-gray-600 cursor-pointer">Clear</button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => { setMultiSelectPurchase(v => !v); setSelectedPBIds(new Set()) }}
+                    className={`text-[11px] flex items-center gap-1 px-2 py-0.5 rounded border transition-colors cursor-pointer ${multiSelectPurchase ? 'border-[#3F51B5] text-[#3F51B5] bg-[#3F51B5]/5' : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-[#3F51B5] hover:text-[#3F51B5]'}`}>
+                    <ListChecks className="size-3" /> Multi-select
+                  </button>
+                  <button onClick={loadPBList} disabled={pbListLoading}
+                    className="text-[11px] text-[#3F51B5] dark:text-[#7986CB] flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50">
+                    <RefreshCw className={`size-3 ${pbListLoading ? 'animate-spin' : ''}`} /> Refresh
+                  </button>
+                </div>
               </div>
 
               {pbListError && (
@@ -1784,66 +1941,143 @@ ${rows.join('\n')}
 
               {pbList.length > 0 && pbListOpen && (
                 <>
-                  <Input
-                    value={pbSearch}
-                    onChange={(e) => setPbSearch(e.target.value)}
-                    placeholder="Search by ref no or supplier…"
-                    className="h-8 text-[12px] mb-2"
-                  />
+                  <div className="flex items-center gap-2 mb-2">
+                    <Input value={pbSearch} onChange={(e) => setPbSearch(e.target.value)} placeholder="Search by ref no or supplier…" className="h-8 text-[12px] flex-1" />
+                    {multiSelectPurchase && (() => {
+                      const filteredPbs = pbList.filter(pb => { const q = pbSearch.toLowerCase(); return !q || pb.ref_no.toLowerCase().includes(q) || pb.supplier.toLowerCase().includes(q) })
+                      const allSel = filteredPbs.length > 0 && filteredPbs.every(pb => selectedPBIds.has(pb.id ?? pb.ref_no))
+                      return (
+                        <button onClick={() => allSel ? setSelectedPBIds(new Set()) : setSelectedPBIds(new Set(filteredPbs.map(pb => pb.id ?? pb.ref_no)))}
+                          className="text-[11px] flex items-center gap-1 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-[#3F51B5] transition-colors cursor-pointer shrink-0">
+                          {allSel ? <CheckSquare className="size-3.5 text-[#3F51B5]" /> : <Square className="size-3.5" />}
+                          {allSel ? 'Deselect all' : 'Select all'}
+                        </button>
+                      )
+                    })()}
+                  </div>
                   <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
                     {pbList
                       .filter(pb => {
                         const q = pbSearch.toLowerCase()
                         return !q || pb.ref_no.toLowerCase().includes(q) || pb.supplier.toLowerCase().includes(q)
                       })
-                      .map((pb, _i) => (
-                        <button
-                          key={pb.id ?? `${pb.ref_no}-${_i}`}
-                          onClick={() => {
-                            setPbRefNo(pb.ref_no); setSelectedPB(pb); setPbListOpen(false)
-                            if (jvTab === 'purchase') {
-                              handleVerify(pb.ref_no)
-                              if (pb.id) {
-                                setPbItemsLoading(true); setPbItems([]); setPbTaxableAmount(null); setPbDiscountAmount(null)
-                                fetchPBItems(localToken || erpToken, localTenantId || erpTenantId, pb.id)
-                                  .then((result) => { setPbItems(result.items); setPbTaxableAmount(result.taxable_amount); setPbDiscountAmount(result.discount_amount) })
-                                  .catch(() => {})
-                                  .finally(() => setPbItemsLoading(false))
-                              }
-                            }
-                          }}
-                          disabled={verifying}
-                          className="w-full text-left px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10 transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{pb.ref_no}</span>
-                            {pb.amount && (
-                              <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0 font-medium">
-                                ₹{Number(pb.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                              </span>
+                      .map((pb, _i) => {
+                        const pbKey = pb.id ?? pb.ref_no
+                        const checked = selectedPBIds.has(pbKey)
+                        return (
+                          <div
+                            key={pb.id ?? `${pb.ref_no}-${_i}`}
+                            onClick={multiSelectPurchase ? () => setSelectedPBIds(prev => { const n = new Set(prev); n.has(pbKey) ? n.delete(pbKey) : n.add(pbKey); return n }) : undefined}
+                            className={`flex items-start gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10 transition-colors ${multiSelectPurchase ? 'cursor-pointer' : ''} ${checked ? 'bg-[#3F51B5]/5 dark:bg-[#3F51B5]/10' : ''}`}
+                          >
+                            {multiSelectPurchase && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setSelectedPBIds(prev => {
+                                    const next = new Set(prev)
+                                    if (next.has(pbKey)) next.delete(pbKey)
+                                    else next.add(pbKey)
+                                    return next
+                                  })
+                                }}
+                                className="mt-0.5 shrink-0 cursor-pointer text-[#3F51B5]"
+                              >
+                                {checked
+                                  ? <CheckSquare className="size-3.5" />
+                                  : <Square className="size-3.5 text-gray-300 dark:text-gray-600" />}
+                              </button>
                             )}
+                            <button
+                              onClick={() => {
+                                setPbRefNo(pb.ref_no); setSelectedPB(pb); setPbListOpen(false)
+                                if (jvTab === 'purchase') {
+                                  handleVerify(pb.ref_no)
+                                  if (pb.id) {
+                                    setPbItemsLoading(true); setPbItems([]); setPbTaxableAmount(null); setPbDiscountAmount(null)
+                                    fetchPBItems(localToken || erpToken, localTenantId || erpTenantId, pb.id)
+                                      .then((result) => { setPbItems(result.items); setPbTaxableAmount(result.taxable_amount); setPbDiscountAmount(result.discount_amount) })
+                                      .catch(() => {})
+                                      .finally(() => setPbItemsLoading(false))
+                                  }
+                                }
+                              }}
+                              disabled={verifying}
+                              className="flex-1 text-left cursor-pointer disabled:opacity-50"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{pb.ref_no}</span>
+                                {pb.amount && (
+                                  <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0 font-medium">
+                                    ₹{Number(pb.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                  </span>
+                                )}
+                              </div>
+                              {pb.supplier && (
+                                <div className="mt-0.5 flex items-center justify-between gap-2">
+                                  <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate font-medium">{pb.supplier}</span>
+                                  {pb.date && <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{pb.date}</span>}
+                                </div>
+                              )}
+                              {(pb.division || pb.department || pb.type_of_sale || pb.location) && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {[pb.division, pb.department, pb.type_of_sale, pb.location].filter(Boolean).map((tag) => (
+                                    <span key={tag} className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </button>
                           </div>
-                          {pb.supplier && (
-                            <div className="mt-0.5 flex items-center justify-between gap-2">
-                              <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate font-medium">{pb.supplier}</span>
-                              {pb.date && <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{pb.date}</span>}
-                            </div>
-                          )}
-                          {(pb.division || pb.department || pb.type_of_sale || pb.location) && (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {[pb.division, pb.department, pb.type_of_sale, pb.location].filter(Boolean).map((tag) => (
-                                <span key={tag} className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </button>
-                      ))
+                        )
+                      })
                     }
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {/* Bulk verify results panel */}
+          {bulkOpen && bulkResults.length > 0 && (
+            <div className="mt-4 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-1.5">
+                  <ListChecks className="size-3.5" /> Bulk JV Check Results
+                </span>
+                <div className="flex items-center gap-3 text-[10px] text-gray-500">
+                  <span className="text-green-600 font-medium">{bulkResults.filter(r => r.ok).length} passed</span>
+                  <span className="text-red-500 font-medium">{bulkResults.filter(r => !r.ok).length} failed</span>
+                  {!bulkRunning && (
+                    <button onClick={() => setBulkOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer ml-1">
+                      <X className="size-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-52 overflow-y-auto">
+                {bulkResults.map((r, i) => (
+                  <div key={i} className="flex items-center gap-2 px-3 py-2">
+                    {r.ok
+                      ? <CheckCircle2 className="size-3.5 text-green-500 shrink-0" />
+                      : <XCircle className="size-3.5 text-red-500 shrink-0" />}
+                    <span className="text-[11px] font-mono font-semibold text-gray-800 dark:text-gray-100 w-32 shrink-0">{r.pb.ref_no}</span>
+                    <span className="text-[11px] text-gray-500 truncate">{r.pb.supplier}</span>
+                    {r.error && <span className="text-[11px] text-red-500 truncate ml-auto shrink-0">{r.error}</span>}
+                    {!r.ok && !r.error && (
+                      <span className="text-[11px] text-red-400 ml-auto shrink-0">
+                        {r.steps?.find(s => !s.ok)?.detail ?? 'Check failed'}
+                      </span>
+                    )}
+                  </div>
+                ))}
+                {bulkRunning && (
+                  <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-gray-400">
+                    <Loader2 className="size-3 animate-spin" /> Verifying…
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -2348,6 +2582,63 @@ ${rows.join('\n')}
             ? <span className="inline-flex items-center px-1.5 py-px rounded text-[10px] font-semibold border bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700">✓ Passed</span>
             : <span className="inline-flex items-center px-1.5 py-px rounded text-[10px] font-semibold border bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-200 dark:border-red-700">✕ Failed</span>
 
+          const filteredCcPbs = pbList.filter(pb => { const q = pbSearch.toLowerCase(); return !q || pb.ref_no.toLowerCase().includes(q) || pb.supplier.toLowerCase().includes(q) })
+          const allSelected = filteredCcPbs.length > 0 && filteredCcPbs.every(pb => ccSelectedIds.has(pb.id ?? pb.ref_no))
+          const someSelected = filteredCcPbs.some(pb => ccSelectedIds.has(pb.id ?? pb.ref_no))
+
+          const toggleSelectAll = () => {
+            if (allSelected) {
+              setCcSelectedIds(new Set())
+            } else {
+              setCcSelectedIds(new Set(filteredCcPbs.map(pb => pb.id ?? pb.ref_no)))
+              setTimeout(() => ccRunBtnRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
+            }
+          }
+
+          const toggleOne = (pb: PBListItem) => {
+            const key = pb.id ?? pb.ref_no
+            setCcSelectedIds(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+          }
+
+          const runBulk = async () => {
+            const selected = filteredCcPbs.filter(pb => ccSelectedIds.has(pb.id ?? pb.ref_no))
+            if (!selected.length) return
+            ccBulkAbort.current = false
+            ccBulkRowRefs.current = []
+            setCcBulkRunning(true)
+            setCcBulkProgress(0)
+            const results: BulkResult[] = selected.map(pb => ({ pb, result: null, error: '', done: false }))
+            setCcBulkResults([...results])
+            // Scroll to results panel after it mounts
+            setTimeout(() => ccBulkResultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80)
+            for (let i = 0; i < selected.length; i++) {
+              if (ccBulkAbort.current) break
+              const pb = selected[i]
+              // Scroll active row into view inside the results list
+              setTimeout(() => ccBulkRowRefs.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
+              try {
+                const res = await crossCheckJV(token, tenantId, pb.ref_no, String(pb.id))
+                results[i] = { pb, result: res, error: '', done: true }
+              } catch (e: unknown) {
+                results[i] = { pb, result: null, error: e instanceof Error ? e.message : 'Failed', done: true }
+              }
+              setCcBulkResults([...results])
+              setCcBulkProgress(i + 1)
+            }
+            setCcBulkRunning(false)
+          }
+
+          const isPassed = (r: BulkResult) =>
+            r.result ? (r.result.checks.every(c => c.ok) && !!r.result.purb_jv?.found && !!r.result.inv_jv?.found) : false
+
+          const sortedBulkResults = [...ccBulkResults].sort((a, b) => {
+            if (!a.done && b.done) return 1
+            if (a.done && !b.done) return -1
+            if (isPassed(a) && !isPassed(b)) return 1
+            if (!isPassed(a) && isPassed(b)) return -1
+            return 0
+          })
+
           return (
             <div className="p-4 overflow-y-auto flex-1 min-h-0 space-y-4">
               {/* PB selector */}
@@ -2355,33 +2646,142 @@ ${rows.join('\n')}
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <Label className="text-[11px] text-gray-700 dark:text-gray-300">Select Purchase Booking</Label>
-                    <button onClick={loadPBList} disabled={pbListLoading} className="text-[11px] text-[#3F51B5] dark:text-[#7986CB] flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50">
-                      <RefreshCw className={`size-3 ${pbListLoading ? 'animate-spin' : ''}`} />Refresh
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {pbList.length > 0 && (
+                        <button onClick={() => { setCcBulkMode(m => !m); setCcSelectedIds(new Set()); setCcBulkResults([]) }}
+                          className={`text-[11px] flex items-center gap-1 px-2 py-0.5 rounded border transition-colors cursor-pointer ${ccBulkMode ? 'border-[#3F51B5] text-[#3F51B5] bg-[#3F51B5]/5' : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-[#3F51B5] hover:text-[#3F51B5]'}`}>
+                          <ListChecks className="size-3" />Multi-select
+                        </button>
+                      )}
+                      <button onClick={loadPBList} disabled={pbListLoading} className="text-[11px] text-[#3F51B5] dark:text-[#7986CB] flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50">
+                        <RefreshCw className={`size-3 ${pbListLoading ? 'animate-spin' : ''}`} />Refresh
+                      </button>
+                    </div>
                   </div>
                   {pbListLoading && pbList.length === 0 && <LoadingCard message="FETCHING" steps={[{ label: 'Fetching purchase bookings', done: false }]} />}
                   {!token && <Button onClick={() => setShowTokenInput(true)} variant="outline" size="sm" className="h-8 text-[12px] gap-1.5 cursor-pointer"><Key className="size-3" />Set Token</Button>}
                   {pbList.length > 0 && (
                     <>
-                      <Input value={pbSearch} onChange={(e) => setPbSearch(e.target.value)} placeholder="Search by ref no or supplier…" className="h-8 text-[12px] mb-2" />
-                      <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
-                        {pbList.filter(pb => { const q = pbSearch.toLowerCase(); return !q || pb.ref_no.toLowerCase().includes(q) || pb.supplier.toLowerCase().includes(q) }).map((pb, _i) => (
-                          <button key={pb.id ?? `${pb.ref_no}-${_i}`}
-                            onClick={() => { setCcSelectedPB(pb); setCcPbRefNo(pb.ref_no); handleCcVerifyFor(pb) }}
-                            className="w-full text-left px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10 transition-colors cursor-pointer">
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{pb.ref_no}</span>
-                              {pb.amount && <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0 font-medium">₹{Number(pb.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
-                            </div>
-                            {pb.supplier && (
-                              <div className="mt-0.5 flex items-center justify-between gap-2">
-                                <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate font-medium">{pb.supplier}</span>
-                                {pb.date && <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{pb.date}</span>}
-                              </div>
-                            )}
+                      <div className="flex items-center gap-2 mb-2">
+                        <Input value={pbSearch} onChange={(e) => setPbSearch(e.target.value)} placeholder="Search by ref no or supplier…" className="h-8 text-[12px] flex-1" />
+                        {ccBulkMode && (
+                          <button onClick={toggleSelectAll} className="text-[11px] flex items-center gap-1 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-[#3F51B5] transition-colors cursor-pointer shrink-0">
+                            {allSelected ? <CheckSquare className="size-3.5 text-[#3F51B5]" /> : <Square className="size-3.5" />}
+                            {allSelected ? 'Deselect all' : 'Select all'}
                           </button>
-                        ))}
+                        )}
                       </div>
+                      <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                        {filteredCcPbs.map((pb, _i) => {
+                          const key = pb.id ?? pb.ref_no
+                          const isChecked = ccSelectedIds.has(key)
+                          return ccBulkMode ? (
+                            <div key={key} onClick={() => toggleOne(pb)}
+                              className={`w-full text-left px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 cursor-pointer transition-colors flex items-center gap-2.5 ${isChecked ? 'bg-[#3F51B5]/5 dark:bg-[#3F51B5]/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}>
+                              {isChecked ? <CheckSquare className="size-4 text-[#3F51B5] shrink-0" /> : <Square className="size-4 text-gray-300 dark:text-gray-600 shrink-0" />}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{pb.ref_no}</span>
+                                  {pb.amount && <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0 font-medium">₹{Number(pb.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
+                                </div>
+                                {pb.supplier && (
+                                  <div className="mt-0.5 flex items-center justify-between gap-2">
+                                    <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate font-medium">{pb.supplier}</span>
+                                    {pb.date && <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{pb.date}</span>}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <button key={key}
+                              onClick={() => { setCcSelectedPB(pb); setCcPbRefNo(pb.ref_no); handleCcVerifyFor(pb) }}
+                              className="w-full text-left px-3 py-2 border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-[#3F51B5]/5 dark:hover:bg-[#3F51B5]/10 transition-colors cursor-pointer">
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100 shrink-0">{pb.ref_no}</span>
+                                {pb.amount && <span className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0 font-medium">₹{Number(pb.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
+                              </div>
+                              {pb.supplier && (
+                                <div className="mt-0.5 flex items-center justify-between gap-2">
+                                  <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate font-medium">{pb.supplier}</span>
+                                  {pb.date && <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{pb.date}</span>}
+                                </div>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {/* Bulk action bar */}
+                      {ccBulkMode && ccSelectedIds.size > 0 && (
+                        <div ref={ccRunBtnRef} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-[#3F51B5]/5 border border-[#3F51B5]/20">
+                          <span className="text-[12px] text-[#3F51B5] dark:text-[#7986CB] font-semibold">{ccSelectedIds.size} PB{ccSelectedIds.size > 1 ? 's' : ''} selected</span>
+                          <div className="flex items-center gap-2">
+                            {ccBulkRunning ? (
+                              <div className="flex items-center gap-2">
+                                <Loader2 className="size-3.5 animate-spin text-[#3F51B5]" />
+                                <span className="text-[11px] text-gray-500">{ccBulkProgress} / {ccSelectedIds.size}</span>
+                                <button onClick={() => { ccBulkAbort.current = true }} className="text-[11px] text-red-500 hover:underline cursor-pointer">Stop</button>
+                              </div>
+                            ) : (
+                              <Button onClick={runBulk} size="sm" className="h-7 text-[11px] gap-1.5 cursor-pointer bg-[#3F51B5] hover:bg-[#303f9f]">
+                                <GitCompare className="size-3" />Run Cross-Check
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {/* Progress bar */}
+                      {ccBulkRunning && (
+                        <div className="h-1 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                          <div className="h-full bg-[#3F51B5] transition-all duration-300 rounded-full" style={{ width: `${(ccBulkProgress / ccSelectedIds.size) * 100}%` }} />
+                        </div>
+                      )}
+                      {/* Bulk results table */}
+                      {ccBulkResults.length > 0 && (
+                        <div ref={ccBulkResultsRef} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                          <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                            <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Bulk Results</span>
+                            <span className="text-[10px] text-gray-400">
+                              {sortedBulkResults.filter(r => r.done && isPassed(r)).length} passed · {sortedBulkResults.filter(r => r.done && !isPassed(r)).length} failed
+                            </span>
+                          </div>
+                          <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-72 overflow-y-auto">
+                            {sortedBulkResults.map((br, i) => {
+                              const passed = isPassed(br)
+                              const firstFail = br.result?.checks.find(c => !c.ok)
+                              return (
+                                <div key={i} ref={el => { ccBulkRowRefs.current[i] = el }}
+                                  className={`flex items-center gap-2.5 px-3 py-2 ${!br.done ? 'opacity-50' : passed ? '' : 'bg-red-50/40 dark:bg-red-900/10'}`}>
+                                  <div className="shrink-0">
+                                    {!br.done ? <Loader2 className="size-3.5 animate-spin text-[#3F51B5]" /> : passed ? <CheckCircle2 className="size-3.5 text-emerald-500" /> : <XCircle className="size-3.5 text-red-500" />}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[12px] font-mono font-semibold text-gray-800 dark:text-gray-100">{br.pb.ref_no}</span>
+                                      <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{br.pb.supplier}</span>
+                                    </div>
+                                    {br.done && !passed && (
+                                      <div className="text-[10px] text-red-500 dark:text-red-400 mt-0.5 truncate">
+                                        {br.error || (firstFail ? firstFail.label + (firstFail.detail ? ` — ${firstFail.detail}` : '') : 'Check failed')}
+                                      </div>
+                                    )}
+                                  </div>
+                                  {br.done && br.result && (
+                                    <button onClick={() => {
+                                      ccBulkFromView.current = true
+                                      ccBulkViewIndex.current = i
+                                      setCcSelectedPB(br.pb)
+                                      setCcPbRefNo(br.pb.ref_no)
+                                      setCcResult(br.result)
+                                    }} className="text-[10px] text-[#3F51B5] hover:underline shrink-0 cursor-pointer">
+                                      View
+                                    </button>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -2417,11 +2817,28 @@ ${rows.join('\n')}
                           </button>
                         </>
                       )}
-                      <button
-                        onClick={() => { setCcSelectedPB(null); setCcPbRefNo(''); setCcResult(null); setCcError('') }}
-                        className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] hover:border-[#3F51B5]/50 transition-colors cursor-pointer">
-                        <RefreshCw className="size-3" />Change
-                      </button>
+                      {ccBulkFromView.current ? (
+                        <button
+                          onClick={() => {
+                            const idx = ccBulkViewIndex.current
+                            ccBulkFromView.current = false
+                            setCcSelectedPB(null); setCcPbRefNo(''); setCcResult(null); setCcError('')
+                            // Scroll back to the row the user came from
+                            setTimeout(() => {
+                              ccBulkResultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                              setTimeout(() => ccBulkRowRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200)
+                            }, 50)
+                          }}
+                          className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-[#3F51B5]/40 bg-[#3F51B5]/5 text-[#3F51B5] dark:text-[#7986CB] hover:bg-[#3F51B5]/10 transition-colors cursor-pointer">
+                          ← Back to results
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => { setCcSelectedPB(null); setCcPbRefNo(''); setCcResult(null); setCcError('') }}
+                          className="text-[11px] flex items-center gap-1 h-7 px-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-[#3F51B5] dark:hover:text-[#7986CB] hover:border-[#3F51B5]/50 transition-colors cursor-pointer">
+                          <RefreshCw className="size-3" />Change
+                        </button>
+                      )}
                     </div>
                   </div>
 

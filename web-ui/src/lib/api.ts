@@ -497,6 +497,25 @@ export async function fetchPBItems(erpToken: string, erpTenantId: string, pbId: 
 
 // ─── QC Fetch ───────────────────────────────────────────
 
+export interface QCListItem {
+  id: string | number
+  ref_no: string
+  date: string
+  supplier: string
+  amount: string
+}
+
+export async function fetchQCList(erpToken: string, erpTenantId: string): Promise<QCListItem[]> {
+  const res = await fetch(`${PROXY}?path=qc-list`, withCsrf({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId }),
+  }))
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.qcs ?? []
+}
+
 export async function fetchQC(erpToken: string, erpTenantId: string, qcId: string): Promise<any> {
   const res = await fetch(`${PROXY}?path=qc-fetch`, withCsrf({
     method: 'POST',
