@@ -137,16 +137,12 @@ def _rand_rate() -> float:
 # Realistic ranges for QC "user inputs" (empty bag weight / deduction /
 # discount). The manual QC 1345 used 0–12 kg bags, 2–3% deductions, 0–5%
 # discounts; these stay dynamic per run.
-_EMPTY_BAG_MIN = 0.0
-_EMPTY_BAG_MAX = 12.0
+_WEIGHT_PER_BAG_KG = 1.0  # standard PP/jute bag weight; 1 bag row in bags detail
 _DEDUCTION_MIN = 0.0
 _DEDUCTION_MAX = 5.0
 _DISCOUNT_MIN = 0.0
 _DISCOUNT_MAX = 5.0
 
-
-def _rand_empty_bag_weight() -> float:
-    return round(random.uniform(_EMPTY_BAG_MIN, _EMPTY_BAG_MAX), 2)
 
 
 def _rand_deduction_percent() -> float:
@@ -432,7 +428,7 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
 
     out = []
     for it in items:
-        empty_bag_weight = _rand_empty_bag_weight()
+        empty_bag_weight = _WEIGHT_PER_BAG_KG
         deduction_percent = _rand_deduction_percent()
         discount_rate = _rand_discount_rate() if qc_discount else 0.0
         computed = _compute_qc_line_fields(
@@ -471,13 +467,8 @@ def _qc_items_from(items: List[dict], ctx=None, cqp_by_item: Optional[dict] = No
                 {
                     "type_of_bags_ref_id": bags_type_id,
                     "quantity_of_bags": 1,
-                    "weight_of_bags": 1.0,
-                    "total_weight_of_bags": round(
-                        it["accepted_qty"] / (kg_to_uom_factors or {}).get(
-                            it.get("uom", ctx.alternate_uom if ctx else 3), 1.0
-                        ),
-                        4,
-                    ),
+                    "weight_of_bags": it["empty_bag_weight"],
+                    "total_weight_of_bags": it["empty_bag_weight"],
                 }
             ],
         })
