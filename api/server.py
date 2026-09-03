@@ -623,6 +623,38 @@ def pb_items_endpoint(request: PBItemsRequest):
 
 
 # ================================================================
+# QC FETCH ENDPOINT
+# ================================================================
+
+class QCFetchRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str
+    qc_id: str
+
+@app.post("/api/qc-fetch")
+def qc_fetch_endpoint(request: QCFetchRequest):
+    """Fetch a Quality Check record by ID for formula validation."""
+    import sys
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from common.erp_api_client import RhythmERPAPIClient
+
+    token = request.erp_token
+    if token.startswith("Bearer "):
+        token = token[7:]
+
+    client = RhythmERPAPIClient(tenant_id=request.erp_tenant_id)
+    client.login_from_browser(token=token, tenant_id=request.erp_tenant_id)
+
+    resp = client.session.get(
+        f"{client.BASE_URL}/procure_to_pay/quality-check/{request.qc_id}/",
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        return JSONResponse({"error": f"QC fetch failed: {resp.status_code}"}, status_code=resp.status_code)
+    return JSONResponse(resp.json())
+
+
+# ================================================================
 # JV VERIFY ENDPOINT
 # ================================================================
 
