@@ -66,10 +66,10 @@ function validateQCLine(line: any): CheckRow[] {
     ? r(accepted_qty * discount_rate / 100)
     : r((accepted_qty - stored_deduction_weight) * discount_rate / 100)
   const stored_cd_deduction_qty = parseFloat(line.c_d_deduction ?? 0)
-  // Rate-based: ERP computes cash discount as txn_without_discount × discount% (stored c_d_deduction has 3dp precision loss)
-  // Weight-based: ERP treats cash discount as a weight qty (accepted_qty × discount%) × base_rate
+  // Rate-based: ERP computes cash discount as txn_without_discount × discount% (higher precision)
+  // Weight-based: ERP rounds c_d_deduction to 3dp first, then × rate — use stored value to match
   const cash_discount_amount = isRateWeight
-    ? r(r(accepted_qty * discount_rate / 100) * base_rate)
+    ? r(stored_cd_deduction_qty * base_rate)
     : r(exp_txn_without_discount * discount_rate / 100)
 
   // txn_currency_amount = net − stored_ded_wt×rate − cash_discount (always weight-path for ded component)
@@ -93,7 +93,7 @@ function validateQCLine(line: any): CheckRow[] {
     chk('transaction_amount_without_discount', 'net_of_empty_bag − qc_deduction', exp_txn_without_discount, parseFloat(line.transaction_amount_without_discount ?? 0)),
     ...(discount_rate > 0 ? [
       chk('c_d_deduction', isRateWeight ? 'accepted_qty × discount% / 100' : '(accepted_qty − ded_wt) × discount% / 100', exp_cd_deduction_qty, stored_cd_deduction_qty),
-      chk('cash_discount_deduction_amount', isRateWeight ? 'accepted_qty × discount% × rate' : 'txn_without_discount × discount%', cash_discount_amount, parseFloat(line.cash_discount_deduction_amount ?? 0)),
+      chk('cash_discount_deduction_amount', isRateWeight ? 'stored_c_d_deduction × base_rate' : 'txn_without_discount × discount%', cash_discount_amount, parseFloat(line.cash_discount_deduction_amount ?? 0)),
     ] : []),
     chk('txn_currency_amount', 'purchase_before_CD − cash_discount', txn_currency_amount, parseFloat(line.txn_currency_amount ?? 0), 'ERP stores rounded to 2dp'),
   ]
@@ -144,14 +144,15 @@ function validateQCParams(line: any, cqpRanges: CQPRange[]): CheckRow[] {
 function validateBags(line: any): CheckRow[] {
   const empty_bag_weight = parseFloat(line.empty_bag_weight ?? 0)
   const bagDetails: any[] = line.qc_bags_details ?? []
-  // uom_conversion_kg is often 0 in ERP data, making stored total_weight_of_bags unreliable.
-  // Cross-check the raw bag entries (qty × wt_per_bag) against the line's empty_bag_weight instead.
-  const computedBagWeight = bagDetails.reduce(
-    (s: number, b: any) => s + parseFloat(b.quantity_of_bags ?? 0) * parseFloat(b.weight_of_bags ?? 0),
-    0
-  )
+  // When uom_conversion_kg > 0 use qty × wt × conv; when 0 trust stored total_weight_of_bags
+  const computedBagWeight = bagDetails.reduce((s: number, b: any) => {
+    const qty = parseFloat(b.quantity_of_bags ?? 0)
+    const wt = parseFloat(b.weight_of_bags ?? 0)
+    const conv = parseFloat(b.uom_conversion_kg ?? 0)
+    return s + (conv > 0 ? qty * wt * conv : parseFloat(b.total_weight_of_bags ?? 0))
+  }, 0)
   return [
-    chk('total_weight_of_bags', 'Σ(bag_qty × wt_per_bag) = Line empty_bag_wt', r(computedBagWeight), r(empty_bag_weight)),
+    chk('total_weight_of_bags', 'Σ(bag_qty × wt_per_bag × uom_conv) = Line empty_bag_wt', r(computedBagWeight), r(empty_bag_weight)),
   ]
 }
 
