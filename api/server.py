@@ -701,15 +701,23 @@ def qc_cqp_master_endpoint(request: QCCqpMasterRequest):
     client = _make_client(request.erp_token, request.erp_tenant_id)
     target_ids = set(int(i) for i in request.item_ref_ids)
     result = {}
-    # List all CQP entries to find entry_ids for the requested items
+    # item_ref_id is NOT in the listing row — must fetch each entry detail to find it
     listing = client.list_entries("Commodity Quality Parameter", page_size=500)
     rows = (listing or {}).get("screenmatlistingdata_set") or []
     for row in rows:
-        item_id = row.get("item_ref_id")
+        if not target_ids:
+            break
+        entry_id = row.get("id")
+        if not entry_id:
+            continue
+        detail = client.get_entry("Commodity Quality Parameter", entry_id) or {}
+        item_id = detail.get("item_ref_id")
+        try:
+            item_id = int(item_id)
+        except (TypeError, ValueError):
+            continue
         if item_id not in target_ids:
             continue
-        entry_id = row.get("id")
-        detail = client.get_entry("Commodity Quality Parameter", entry_id) or {}
         ranges = []
         for child in (detail.get("children") or []):
             for d in (child.get("details") or []):
@@ -722,8 +730,6 @@ def qc_cqp_master_endpoint(request: QCCqpMasterRequest):
                 })
         result[str(item_id)] = ranges
         target_ids.discard(item_id)
-        if not target_ids:
-            break
     return JSONResponse(result)
 
 

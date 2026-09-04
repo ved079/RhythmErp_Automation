@@ -303,6 +303,8 @@ export function QCFormulaSection({ erpToken, erpTenantId, onNeedsToken, onClearT
   const [fetching, setFetching] = useState(false)
   const [fetchError, setFetchError] = useState('')
   const [cqpMasters, setCqpMasters] = useState<Record<string, CQPRange[]>>({})
+  const [cqpLoading, setCqpLoading] = useState(false)
+  const [cqpError, setCqpError] = useState('')
 
   const bulkResultsRef = useRef<HTMLDivElement>(null)
   const bulkRowRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -356,10 +358,15 @@ export function QCFormulaSection({ erpToken, erpTenantId, onNeedsToken, onClearT
       const data = await fetchQC(token!, tenantId, String(qc.id))
       if (data.error) throw new Error(data.error)
       setQcData(data)
-      // Fetch CQP masters for all unique items in this QC (fire-and-forget, non-blocking)
+      // Fetch CQP masters for all unique items in this QC (non-blocking, shows after QC renders)
       const itemIds: number[] = [...new Set<number>((data.qc_details ?? []).map((l: any) => l.item_ref_id).filter(Boolean))]
       if (itemIds.length > 0) {
-        fetchCQPMasters(token!, tenantId, itemIds).then(masters => setCqpMasters(masters)).catch(() => {})
+        setCqpLoading(true)
+        setCqpError('')
+        fetchCQPMasters(token!, tenantId, itemIds)
+          .then(masters => setCqpMasters(masters))
+          .catch(err => setCqpError(err instanceof Error ? err.message : String(err)))
+          .finally(() => setCqpLoading(false))
       }
     } catch (err) {
       if (!handleAuthError(err)) setFetchError(err instanceof Error ? err.message : String(err))
@@ -684,6 +691,17 @@ export function QCFormulaSection({ erpToken, erpTenantId, onNeedsToken, onClearT
                 {fetchError && (
                   <div className="flex items-center gap-2 text-[12px] text-red-600">
                     <AlertTriangle className="w-4 h-4 shrink-0" /> {fetchError}
+                  </div>
+                )}
+
+                {cqpLoading && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 px-1">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Fetching quality parameter master…
+                  </div>
+                )}
+                {cqpError && (
+                  <div className="flex items-center gap-2 text-[11px] text-amber-600 dark:text-amber-400 px-1">
+                    <AlertTriangle className="w-3 h-3 shrink-0" /> CQP master: {cqpError}
                   </div>
                 )}
 
