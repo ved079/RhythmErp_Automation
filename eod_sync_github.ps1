@@ -1,12 +1,11 @@
 #
 # .SYNOPSIS
-#     EOD Sync Script
-#     Pushes github/rhythmerp_integration to ALL branches across ALL remotes.
-#     Every branch on every remote becomes identical to your source of truth.
+#     EOD Sync — GitHub only
+#     Pushes rhythmerp_integration to all branches on github + github-private.
 #
 # .USAGE
-#     Normal run  : .\eod_sync.ps1
-#     Preview only: .\eod_sync.ps1 -DryRun
+#     Normal run  : .\eod_sync_github.ps1
+#     Preview only: .\eod_sync_github.ps1 -DryRun
 #
 
 param(
@@ -18,7 +17,7 @@ param(
 $sourceRemote = "github"
 $sourceBranch = "rhythmerp_integration"
 
-$preferredGithubUser = "vedant665"   # <-- change if you ever switch accounts
+$preferredGithubUser = "vedant665"
 
 $targetBranches = @(
     "main",
@@ -28,37 +27,20 @@ $targetBranches = @(
     "vedant_backup_branch"
 )
 
-$remotes = [System.Collections.ArrayList]@("github", "github-private")
+$remotes = @("github", "github-private")
 
 # ── PIN THE GITHUB ACCOUNT ─────────────────────────────────────────────────────
-# Tells Git Credential Manager to always use this account for github.com,
-# so you never see the "Select an account" popup again.
 
 Write-Host ""
 Write-Host "-- Pinning GitHub credential to '$preferredGithubUser'..." -ForegroundColor DarkGray
-
 git config --global credential.https://github.com.username $preferredGithubUser
-
-# Also set it as an env-var that GCM respects mid-session
 $env:GCM_CREDENTIAL_ACCOUNT = $preferredGithubUser
-
 Write-Host "   Done. All GitHub operations will use '$preferredGithubUser'." -ForegroundColor DarkGray
 
-# ── GITLAB CHECK ───────────────────────────────────────────────────────────────
-
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Cyan
-Write-Host "   EOD SYNC  --  Source of Truth: github/rhythmerp_integration" -ForegroundColor Cyan
+Write-Host "   EOD SYNC (GitHub)  --  Source: github/rhythmerp_integration" -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Cyan
-Write-Host ""
-
-$gitlabAnswer = Read-Host "Are you on the work network? Include gitlab in sync? [y/n]"
-if ($gitlabAnswer.Trim().ToLower() -eq "y") {
-    $remotes.Add("gitlab") | Out-Null
-    Write-Host ">> Gitlab included." -ForegroundColor Green
-} else {
-    Write-Host ">> Gitlab skipped. Run again on work network to sync it." -ForegroundColor Yellow
-}
 
 if ($DryRun) {
     Write-Host ""
@@ -70,26 +52,14 @@ if ($DryRun) {
 Write-Host ""
 Write-Host "-- Step 1: Fetching latest from '$sourceRemote'..." -ForegroundColor Yellow
 git fetch $sourceRemote
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "FAILED: Could not fetch from '$sourceRemote'. Check your internet and try again." -ForegroundColor Red
-    exit 1
-}
+if ($LASTEXITCODE -ne 0) { Write-Host "FAILED: Could not fetch from '$sourceRemote'." -ForegroundColor Red; exit 1 }
 
 Write-Host "-- Step 2: Switching to '$sourceBranch' and pulling latest..." -ForegroundColor Yellow
 git checkout $sourceBranch
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "FAILED: Could not checkout '$sourceBranch'. Make sure it exists locally." -ForegroundColor Red
-    exit 1
-}
+if ($LASTEXITCODE -ne 0) { Write-Host "FAILED: Could not checkout '$sourceBranch'." -ForegroundColor Red; exit 1 }
 
 git pull $sourceRemote $sourceBranch
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "FAILED: Pull failed. Resolve issues on '$sourceBranch' before syncing." -ForegroundColor Red
-    exit 1
-}
+if ($LASTEXITCODE -ne 0) { Write-Host "FAILED: Pull failed. Resolve issues before syncing." -ForegroundColor Red; exit 1 }
 
 Write-Host "OK: Local '$sourceBranch' is up to date with '$sourceRemote'." -ForegroundColor Green
 
@@ -98,23 +68,18 @@ Write-Host "OK: Local '$sourceBranch' is up to date with '$sourceRemote'." -Fore
 Write-Host ""
 Write-Host "-- Step 3: Pushing to all branches on all remotes..." -ForegroundColor Yellow
 
-$failCount   = 0
+$failCount    = 0
 $successCount = 0
-$skipCount   = 0
+$skipCount    = 0
 
 foreach ($remote in $remotes) {
     Write-Host ""
     Write-Host "  Remote: $remote" -ForegroundColor Cyan
     Write-Host "  ------------------------------" -ForegroundColor DarkGray
-
-    # Refresh remote-tracking refs before checking what branches actually exist.
-    # Without this, a brand-new or recently-changed remote can show false SKIPs
-    # because the local cache of refs/remotes/<remote>/* is stale or empty.
     Write-Host "    (refreshing $remote refs...)" -ForegroundColor DarkGray
     git fetch $remote --quiet 2>$null
 
     foreach ($branch in $targetBranches) {
-
         $trackingRef = "refs/remotes/$remote/$branch"
         git show-ref --verify --quiet $trackingRef 2>$null
         if ($LASTEXITCODE -ne 0) {
@@ -128,7 +93,6 @@ foreach ($remote in $remotes) {
         } else {
             Write-Host "    Pushing --> $remote/$branch ..." -ForegroundColor Yellow
             git push $remote "${sourceBranch}:${branch}" --force
-
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "    DONE: $remote/$branch synced." -ForegroundColor Green
                 $successCount++
@@ -144,16 +108,14 @@ foreach ($remote in $remotes) {
 
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Cyan
-
 if ($DryRun) {
     Write-Host "Dry run done. Run without -DryRun to actually sync." -ForegroundColor Magenta
 } elseif ($failCount -eq 0) {
-    Write-Host "EOD Sync complete!  Pushed: $successCount  Skipped: $skipCount  Failed: 0" -ForegroundColor Green
+    Write-Host "EOD Sync (GitHub) complete!  Pushed: $successCount  Skipped: $skipCount  Failed: 0" -ForegroundColor Green
     Write-Host "All branches match rhythmerp_integration." -ForegroundColor Green
 } else {
     Write-Host "Sync finished. Pushed: $successCount  Skipped: $skipCount  Failed: $failCount" -ForegroundColor Yellow
     Write-Host "Check the errors above." -ForegroundColor Yellow
 }
-
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host ""
