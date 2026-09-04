@@ -1,3 +1,7 @@
+# Sync scripts (personal workflow, not for repo)
+eod_sync_github.ps1
+eod_sync_gitlab.ps1
+
 # Dependencies
 node_modules/
 
