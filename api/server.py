@@ -720,8 +720,13 @@ def qc_cqp_master_endpoint(request: QCCqpMasterRequest):
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
         futures = {ex.submit(fetch_detail, eid): eid for eid in entry_ids}
+        pending = set(futures.keys())
         for future in concurrent.futures.as_completed(futures):
-            detail = future.result()
+            pending.discard(future)
+            try:
+                detail = future.result()
+            except Exception:
+                continue
             item_id = detail.get("item_ref_id")
             try:
                 item_id = int(item_id)
@@ -737,11 +742,15 @@ def qc_cqp_master_endpoint(request: QCCqpMasterRequest):
                         "max": d.get("max_quality_value"),
                         "multiplier": float(mult) if mult is not None else 0.0,
                     })
-            # store in cache regardless of whether we needed it
             _cqp_cache.setdefault(request.erp_tenant_id, {})[str(item_id)] = ranges
             if item_id in remaining:
                 result[str(item_id)] = ranges
                 remaining.discard(item_id)
+            if not remaining:
+                # Cancel any futures that haven't started yet
+                for f in pending:
+                    f.cancel()
+                break
     return JSONResponse(result)
 
 
