@@ -30,7 +30,8 @@ const TOLERANCE = 0.05
 function r(v: number, dp = 6) { return Math.round(v * 10 ** dp) / 10 ** dp }
 
 function chk(field: string, formula: string, expected: number, actual: number, note?: string): CheckRow {
-  return { field, formula, expected, actual, ok: Math.abs(expected - actual) <= TOLERANCE, note }
+  // NaN expected = CQP not yet loaded; treat as pending (ok=true so it doesn't inflate fail count)
+  return { field, formula, expected, actual, ok: isNaN(expected) || Math.abs(expected - actual) <= TOLERANCE, note }
 }
 
 function validateQCLine(line: any): CheckRow[] {
@@ -129,13 +130,14 @@ function calcTieredDeduction(actualVal: number, allowable: number, ranges: CQPRa
   }
 }
 
-function validateQCParams(line: any, cqpRanges: CQPRange[]): CheckRow[] {
+function validateQCParams(line: any, cqpRanges: CQPRange[] | undefined): CheckRow[] {
   const params: any[] = line.qc_parameter_details ?? []
   return params.map((p, i) => {
     const qualityType = p.item_quality_parameter_ref_id
     const actualVal = parseFloat(p.actual_value ?? 0)
     const allowable = parseFloat(p.allowable_percent ?? 0)
     const storedDed = parseFloat(p.quantity_deduction ?? 0)
+    if (!cqpRanges) return chk(`param_${i + 1} (type ${qualityType})`, '…', NaN, storedDed)
     const { deduction: expDed, formulaStr } = calcTieredDeduction(actualVal, allowable, cqpRanges, qualityType)
     return chk(`param_${i + 1} (type ${qualityType})`, formulaStr, expDed, storedDed)
   })
@@ -179,11 +181,12 @@ function ChecksTable({ rows, revealStart, revealedCount }: { rows: CheckRow[], r
         const revealed = (revealStart + i) < revealedCount
         const diff = Math.abs(row.expected - row.actual)
         const isAmber = row.ok && diff > 0.000001
-        const isFail = !row.ok
-        const isExact = row.ok && diff < 5e-7
+        const isPending = isNaN(row.expected)
+        const isFail = !row.ok && !isPending
+        const isExact = row.ok && !isPending && diff < 5e-7
         return (
           <div key={i}
-            className={`grid items-center border-b border-gray-100 dark:border-gray-800 last:border-0 ${isAmber ? 'bg-amber-50/60 dark:bg-amber-900/10' : isFail ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}
+            className={`grid items-center border-b border-gray-100 dark:border-gray-800 last:border-0 ${isPending ? '' : isAmber ? 'bg-amber-50/60 dark:bg-amber-900/10' : isFail ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}
             style={{ gridTemplateColumns: COLS, gap: '10px', padding: '7px 13px' }}>
 
             {/* .td-n — mono 9.5px dim */}
@@ -202,7 +205,12 @@ function ChecksTable({ rows, revealStart, revealedCount }: { rows: CheckRow[], r
             <div className="font-mono text-[10px] text-gray-500 dark:text-gray-400 overflow-hidden text-ellipsis whitespace-nowrap">{row.formula}</div>
 
             {/* .td-exact spans 4/6 for exact-pass; else .td-exp + .td-act */}
-            {isExact ? (
+            {isPending ? (
+              <>
+                <div className="font-mono text-[11px] text-gray-300 dark:text-gray-600 text-right">…</div>
+                <div className="font-mono text-[11px] text-right text-gray-700 dark:text-gray-200">{row.actual.toFixed(4)}</div>
+              </>
+            ) : isExact ? (
               <div className="font-mono text-[11px] text-gray-400 dark:text-gray-500 text-right" style={{ gridColumn: '4/6' }}>{row.actual.toFixed(4)}</div>
             ) : (
               <>
@@ -213,9 +221,11 @@ function ChecksTable({ rows, revealStart, revealedCount }: { rows: CheckRow[], r
 
             {/* .td-ic */}
             <div className="flex items-center justify-center">
-              {revealed
-                ? (row.ok ? <CheckCircle2 className={`size-3.5 ${isAmber ? 'text-amber-500' : 'text-emerald-500'}`} /> : <XCircle className="size-3.5 text-red-500" />)
-                : <Loader2 className="size-3 animate-spin text-gray-300 dark:text-gray-600" />}
+              {isPending
+                ? <Loader2 className="size-3 animate-spin text-gray-300 dark:text-gray-600" />
+                : revealed
+                  ? (row.ok ? <CheckCircle2 className={`size-3.5 ${isAmber ? 'text-amber-500' : 'text-emerald-500'}`} /> : <XCircle className="size-3.5 text-red-500" />)
+                  : <Loader2 className="size-3 animate-spin text-gray-300 dark:text-gray-600" />}
             </div>
           </div>
         )
@@ -735,7 +745,7 @@ export function QCFormulaSection({ erpToken, erpTenantId, onNeedsToken, onClearT
                         const qcRows = validateQCLine(line)
                         const bagRows = validateBags(line)
                         const itemRanges = cqpMasters[String(line.item_ref_id)]
-                        const paramRows = itemRanges ? validateQCParams(line, itemRanges) : []
+                        const paramRows = validateQCParams(line, itemRanges)
                         const qcStart = offset
                         const bagStart = offset + qcRows.length
                         const paramStart = bagStart + bagRows.length
