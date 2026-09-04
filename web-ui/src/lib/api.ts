@@ -526,6 +526,27 @@ export async function fetchQC(erpToken: string, erpTenantId: string, qcId: strin
   return res.json()
 }
 
+export interface CQPRange {
+  quality_type: number
+  min: number
+  max: number
+  multiplier: number
+}
+
+export async function fetchCQPMasters(
+  erpToken: string,
+  erpTenantId: string,
+  itemRefIds: number[],
+): Promise<Record<string, CQPRange[]>> {
+  const res = await fetch(`${PROXY}?path=qc-cqp-master`, withCsrf({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId, item_ref_ids: itemRefIds }),
+  }))
+  if (!res.ok) throw new Error(`CQP master fetch failed: HTTP ${res.status}`)
+  return res.json()
+}
+
 // ─── JV Verify ──────────────────────────────────────────
 
 export interface JVVerifyStep {

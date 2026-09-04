@@ -690,6 +690,43 @@ def qc_fetch_endpoint(request: QCFetchRequest):
     return JSONResponse(resp.json())
 
 
+class QCCqpMasterRequest(BaseModel):
+    erp_token: str
+    erp_tenant_id: str
+    item_ref_ids: list
+
+@app.post("/api/qc-cqp-master")
+def qc_cqp_master_endpoint(request: QCCqpMasterRequest):
+    """Fetch Commodity Quality Parameter range tables for the given item_ref_ids."""
+    client = _make_client(request.erp_token, request.erp_tenant_id)
+    target_ids = set(int(i) for i in request.item_ref_ids)
+    result = {}
+    # List all CQP entries to find entry_ids for the requested items
+    listing = client.list_entries("Commodity Quality Parameter", page_size=500)
+    rows = (listing or {}).get("screenmatlistingdata_set") or []
+    for row in rows:
+        item_id = row.get("item_ref_id")
+        if item_id not in target_ids:
+            continue
+        entry_id = row.get("id")
+        detail = client.get_entry("Commodity Quality Parameter", entry_id) or {}
+        ranges = []
+        for child in (detail.get("children") or []):
+            for d in (child.get("details") or []):
+                mult = d.get("multiplier")
+                ranges.append({
+                    "quality_type": d.get("quality_type"),
+                    "min": d.get("min_quality_value"),
+                    "max": d.get("max_quality_value"),
+                    "multiplier": float(mult) if mult is not None else 0.0,
+                })
+        result[str(item_id)] = ranges
+        target_ids.discard(item_id)
+        if not target_ids:
+            break
+    return JSONResponse(result)
+
+
 # ================================================================
 # JV VERIFY ENDPOINT
 # ================================================================
