@@ -532,9 +532,10 @@ export function QCFormulaSection({ erpToken, erpTenantId, onNeedsToken, onClearT
       const data = await fetchQC(token!, tenantId, String(qc.id))
       if (data.error) throw new Error(data.error)
       setQcData(data)
-      // Fetch CQP masters for all unique items in this QC (non-blocking, shows after QC renders)
+      // Fetch CQP masters only if any line has quality params
+      const hasParams = (data.qc_details ?? []).some((l: any) => (l.qc_parameter_details ?? []).length > 0)
       const itemIds: number[] = [...new Set<number>((data.qc_details ?? []).map((l: any) => l.item_ref_id).filter(Boolean))]
-      if (itemIds.length > 0) {
+      if (hasParams && itemIds.length > 0) {
         setCqpLoading(true)
         setCqpError('')
         fetchCQPMasters(token!, tenantId, itemIds)
@@ -868,18 +869,20 @@ export function QCFormulaSection({ erpToken, erpTenantId, onNeedsToken, onClearT
                   </div>
                 )}
 
-                {cqpLoading && (
-                  <div className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 px-1">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Fetching quality parameter master…
-                  </div>
-                )}
                 {cqpError && (
                   <div className="flex items-center gap-2 text-[11px] text-amber-600 dark:text-amber-400 px-1">
                     <AlertTriangle className="w-3 h-3 shrink-0" /> CQP master: {cqpError}
                   </div>
                 )}
 
-                {qcData && (() => {
+                {cqpLoading && !cqpError && (
+                  <LoadingCard message="LOADING" steps={[
+                    { label: 'Fetching quality parameter master', done: false },
+                    { label: 'Running formula checks', done: false },
+                  ]} />
+                )}
+
+                {qcData && !cqpLoading && (() => {
                   let offset = 0
                   return (
                     <>
