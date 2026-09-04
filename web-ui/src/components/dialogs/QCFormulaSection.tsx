@@ -206,10 +206,23 @@ function validateBags(line: any): CheckRow[] {
     const qty = parseFloat(b.quantity_of_bags ?? 0)
     const wt = parseFloat(b.weight_of_bags ?? 0)
     const conv = parseFloat(b.uom_conversion_kg ?? 0)
-    return s + (conv > 0 ? qty * wt * conv : parseFloat(b.total_weight_of_bags ?? 0))
+    const stored = parseFloat(b.total_weight_of_bags ?? 0)
+    // conv > 0: weight_of_bags is in a sub-unit, convert to kg
+    // conv = 0: weight_of_bags is already in kg; use stored total as fallback if non-zero
+    const contrib = conv > 0 ? qty * wt * conv : (stored > 0 ? stored : qty * wt)
+    return s + contrib
   }, 0)
   const bagCalc = bagDetails.length === 1
-    ? (() => { const b = bagDetails[0]; const qty = parseFloat(b.quantity_of_bags??0); const wt = parseFloat(b.weight_of_bags??0); const conv = parseFloat(b.uom_conversion_kg??0); return conv > 0 ? `${qty} × ${wt} kg × ${conv}` : `${parseFloat(b.total_weight_of_bags??0)} kg (stored)` })()
+    ? (() => {
+        const b = bagDetails[0]
+        const qty = parseFloat(b.quantity_of_bags ?? 0)
+        const wt = parseFloat(b.weight_of_bags ?? 0)
+        const conv = parseFloat(b.uom_conversion_kg ?? 0)
+        const stored = parseFloat(b.total_weight_of_bags ?? 0)
+        if (conv > 0) return `${qty} × ${wt} kg × ${conv}`
+        if (stored > 0) return `${stored} kg (stored)`
+        return `${qty} × ${wt} kg`
+      })()
     : `${bagDetails.length} bag types`
   return [
     chk('total_weight_of_bags', 'Σ(bag_qty × wt_per_bag × uom_conv)', bagCalc, r(computedBagWeight), r(empty_bag_weight)),
