@@ -218,38 +218,57 @@ function validateBags(line: any): CheckRow[] {
 
 // ── Formula info popover ──────────────────────────────────
 function FormulaInfoButton({ tooltip }: { tooltip: React.ReactNode }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
-    if (!open) return
+    if (!pos) return
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (popRef.current && !popRef.current.contains(e.target as Node) &&
+          btnRef.current && !btnRef.current.contains(e.target as Node)) {
+        setPos(null)
+      }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [open])
+  }, [pos])
+
+  function handleClick(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (pos) { setPos(null); return }
+    const r = btnRef.current!.getBoundingClientRect()
+    const popW = 320
+    const left = Math.min(r.right + 8, window.innerWidth - popW - 12)
+    setPos({ top: r.top, left })
+  }
+
   return (
-    <div ref={ref} className="relative inline-flex">
+    <>
       <button
-        onClick={e => { e.stopPropagation(); setOpen(v => !v) }}
+        ref={btnRef}
+        onClick={handleClick}
         className="flex items-center justify-center w-4 h-4 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-500 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800/60 transition-colors shrink-0"
-        title="Explain formula"
       >
         <Info className="w-2.5 h-2.5" />
       </button>
-      {open && (
-        <div className="absolute left-6 top-0 z-50 w-80 rounded-xl bg-gray-900 border border-gray-700 shadow-2xl p-4"
-          onClick={e => e.stopPropagation()}>
+      {pos && (
+        <div
+          ref={popRef}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, width: 320, zIndex: 9999 }}
+          className="rounded-xl bg-gray-900 border border-gray-700 shadow-2xl p-4"
+          onClick={e => e.stopPropagation()}
+        >
           <div className="flex items-center justify-between mb-3">
             <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400">Formula explained</span>
-            <button onClick={() => setOpen(false)} className="text-gray-500 hover:text-gray-300 transition-colors">
+            <button onClick={() => setPos(null)} className="text-gray-500 hover:text-gray-300 transition-colors">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
           {tooltip}
         </div>
       )}
-    </div>
+    </>
   )
 }
 
