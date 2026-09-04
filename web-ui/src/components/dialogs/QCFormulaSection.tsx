@@ -99,6 +99,36 @@ function validateQCLine(line: any): CheckRow[] {
   ]
 }
 
+function calcTieredDeduction(actualVal: number, allowable: number, ranges: CQPRange[], qualityType: number): { deduction: number; formulaStr: string } {
+  // Each range above the allowable contributes independently (tiered stacking).
+  // The lower bound of each tier's contribution is max(allowable, prev_range_max).
+  const tiers = ranges
+    .filter(rng => rng.quality_type === qualityType)
+    .sort((a, b) => a.min - b.min)
+
+  let deduction = 0
+  let prevMax = 0
+  const tierParts: string[] = []
+
+  for (const tier of tiers) {
+    if (tier.multiplier === 0) { prevMax = tier.max; continue }
+    const low = Math.max(allowable, prevMax)
+    const high = Math.min(actualVal, tier.max)
+    if (high > low) {
+      const contrib = r((high - low) * tier.multiplier)
+      deduction = r(deduction + contrib)
+      tierParts.push(`(${high}−${low})×${tier.multiplier}`)
+    }
+    prevMax = tier.max
+    if (actualVal <= tier.max) break
+  }
+
+  return {
+    deduction,
+    formulaStr: tierParts.length > 0 ? tierParts.join(' + ') : `excess(${actualVal}−${allowable}) × mult(0)`,
+  }
+}
+
 function validateQCParams(line: any, cqpRanges: CQPRange[]): CheckRow[] {
   const params: any[] = line.qc_parameter_details ?? []
   return params.map((p, i) => {
@@ -106,17 +136,8 @@ function validateQCParams(line: any, cqpRanges: CQPRange[]): CheckRow[] {
     const actualVal = parseFloat(p.actual_value ?? 0)
     const allowable = parseFloat(p.allowable_percent ?? 0)
     const storedDed = parseFloat(p.quantity_deduction ?? 0)
-    // Look up the range for this quality_type that contains actualVal
-    const range = cqpRanges.find(rng => rng.quality_type === qualityType && actualVal >= rng.min && actualVal <= rng.max)
-    const mult = range?.multiplier ?? 0
-    const excess = Math.max(0, actualVal - allowable)
-    const expDed = r(excess * mult)
-    return chk(
-      `param_${i + 1} (type ${qualityType})`,
-      `excess(${actualVal}−${allowable}) × mult(${mult})`,
-      expDed,
-      storedDed,
-    )
+    const { deduction: expDed, formulaStr } = calcTieredDeduction(actualVal, allowable, cqpRanges, qualityType)
+    return chk(`param_${i + 1} (type ${qualityType})`, formulaStr, expDed, storedDed)
   })
 }
 
