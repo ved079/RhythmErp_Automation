@@ -533,18 +533,32 @@ export interface CQPRange {
   multiplier: number
 }
 
+// Module-level session cache: tenantId → itemRefId → ranges
+const _cqpSessionCache: Record<string, Record<string, CQPRange[]>> = {}
+
 export async function fetchCQPMasters(
   erpToken: string,
   erpTenantId: string,
   itemRefIds: number[],
 ): Promise<Record<string, CQPRange[]>> {
+  const tenantCache = _cqpSessionCache[erpTenantId] ?? {}
+  const cached: Record<string, CQPRange[]> = {}
+  const missing: number[] = []
+  for (const id of itemRefIds) {
+    if (tenantCache[String(id)]) cached[String(id)] = tenantCache[String(id)]
+    else missing.push(id)
+  }
+  if (missing.length === 0) return cached
+
   const res = await fetch(`${PROXY}?path=qc-cqp-master`, withCsrf({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId, item_ref_ids: itemRefIds }),
+    body: JSON.stringify({ erp_token: erpToken, erp_tenant_id: erpTenantId, item_ref_ids: missing }),
   }))
   if (!res.ok) throw new Error(`CQP master fetch failed: HTTP ${res.status}`)
-  return res.json()
+  const fresh: Record<string, CQPRange[]> = await res.json()
+  _cqpSessionCache[erpTenantId] = { ...tenantCache, ...fresh }
+  return { ...cached, ...fresh }
 }
 
 // ─── JV Verify ──────────────────────────────────────────
