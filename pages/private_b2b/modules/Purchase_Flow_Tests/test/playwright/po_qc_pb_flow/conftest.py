@@ -21,9 +21,9 @@ from pages.private_b2b.modules.qc.qc_playwright_page import QCPlaywrightPage
 from pages.private_b2b.modules.purchase_booking.pb_playwright_page import PBPlaywrightPage
 
 LOGIN_URL = os.environ.get("RHYTHMERP_LOGIN_URL", "https://rhythmerp.algorhythms.in")
-EMAIL     = os.environ.get("RHYTHMERP_PO_QC_PB_EMAIL",    "kedar@rhythmflows.com")
-PASSWORD  = os.environ.get("RHYTHMERP_PO_QC_PB_PASSWORD", "Kedar@999999")
-TENANT    = os.environ.get("RHYTHMERP_PO_QC_PB_TENANT",   "Ganesh Agrotech Pvt Ltd.")
+EMAIL     = os.environ.get("RHYTHMERP_PO_QC_PB_EMAIL",    "Bhagyesh123@admin.com")
+PASSWORD  = os.environ.get("RHYTHMERP_PO_QC_PB_PASSWORD", "Saii@123456abc")
+TENANT    = os.environ.get("RHYTHMERP_PO_QC_PB_TENANT",   "Janardhan FPC")
 
 
 def pytest_configure(config):
