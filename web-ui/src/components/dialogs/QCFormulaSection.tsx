@@ -4,7 +4,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CheckCircle2, XCircle, Loader2, AlertTriangle, RefreshCw, Key, CheckSquare, Square, ListChecks, X, Eye } from 'lucide-react'
+import { CheckCircle2, XCircle, Loader2, AlertTriangle, RefreshCw, Key, CheckSquare, Square, ListChecks, X, Eye, Info } from 'lucide-react'
 import { fetchQCList, fetchQC, fetchCQPMasters, type QCListItem, type CQPRange } from '@/lib/api'
 import { useErpToken } from '@/hooks/useErpToken'
 import LoadingCard from '@/components/ui/LoadingCard'
@@ -160,19 +160,35 @@ function validateQCParams(line: any, cqpRanges: CQPRange[] | undefined): CheckRo
     const allowable = parseFloat(p.allowable_percent ?? 0)
     const storedDed = parseFloat(p.quantity_deduction ?? 0)
     const tieredTooltip = (
-      <div className="text-[10px] leading-relaxed space-y-[6px]">
-        <div className="font-semibold text-gray-200 text-[11px]">Tiered deduction formula</div>
-        <div className="text-gray-400">Like income-tax brackets — each slice of excess is penalised at its own rate, not the highest rate on everything.</div>
-        <div className="border-t border-gray-700 pt-[6px] space-y-[3px]">
-          <div><span className="text-gray-300 font-medium">actual</span> — measured quality value ({actualVal})</div>
-          <div><span className="text-gray-300 font-medium">allowable</span> — max permitted by contract ({allowable})</div>
-          <div><span className="text-gray-300 font-medium">mult</span> — per-range penalty multiplier from CQP master</div>
+      <div className="space-y-3">
+        <div>
+          <div className="font-semibold text-white text-[12px] mb-1">How is this calculated?</div>
+          <div className="text-gray-400 text-[11px] leading-relaxed">
+            Works like tax slabs — the excess above the allowable limit is split into ranges, and each range has its own penalty rate.
+          </div>
         </div>
-        <div className="border-t border-gray-700 pt-[6px]">
-          <div className="text-gray-300 font-medium mb-[2px]">How it computes:</div>
-          <div className="font-mono text-[9px] text-gray-400">For each range above allowable:</div>
-          <div className="font-mono text-[9px] text-amber-300">(min(actual, range_max) − max(allowable, prev_max)) × mult</div>
-          <div className="font-mono text-[9px] text-gray-400 mt-[2px]">Sum all contributing ranges → quantity deduction %</div>
+        <div className="bg-gray-800 rounded-md p-2.5 space-y-1.5">
+          <div className="flex items-baseline gap-2">
+            <span className="text-blue-400 font-semibold text-[11px] w-20 shrink-0">Actual</span>
+            <span className="text-gray-300 text-[11px]">Measured quality value <span className="text-white font-semibold">({actualVal})</span></span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-blue-400 font-semibold text-[11px] w-20 shrink-0">Allowable</span>
+            <span className="text-gray-300 text-[11px]">Max limit set in the contract <span className="text-white font-semibold">({allowable})</span></span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-blue-400 font-semibold text-[11px] w-20 shrink-0">Mult</span>
+            <span className="text-gray-300 text-[11px]">Penalty rate per unit of excess, from CQP master</span>
+          </div>
+        </div>
+        <div>
+          <div className="text-gray-400 text-[10px] uppercase tracking-wide font-semibold mb-1.5">Step by step</div>
+          <div className="space-y-1 text-[11px] text-gray-300">
+            <div className="flex gap-2"><span className="text-gray-600 font-mono">1.</span>Find how much actual exceeds allowable</div>
+            <div className="flex gap-2"><span className="text-gray-600 font-mono">2.</span>Split that excess across CQP ranges</div>
+            <div className="flex gap-2"><span className="text-gray-600 font-mono">3.</span>Multiply each slice by its range's penalty rate</div>
+            <div className="flex gap-2"><span className="text-gray-600 font-mono">4.</span>Add them all up → quantity deduction %</div>
+          </div>
         </div>
       </div>
     )
@@ -198,6 +214,43 @@ function validateBags(line: any): CheckRow[] {
   return [
     chk('total_weight_of_bags', 'Σ(bag_qty × wt_per_bag × uom_conv)', bagCalc, r(computedBagWeight), r(empty_bag_weight)),
   ]
+}
+
+// ── Formula info popover ──────────────────────────────────
+function FormulaInfoButton({ tooltip }: { tooltip: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+  return (
+    <div ref={ref} className="relative inline-flex">
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(v => !v) }}
+        className="flex items-center justify-center w-4 h-4 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-500 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800/60 transition-colors shrink-0"
+        title="Explain formula"
+      >
+        <Info className="w-2.5 h-2.5" />
+      </button>
+      {open && (
+        <div className="absolute left-6 top-0 z-50 w-80 rounded-xl bg-gray-900 border border-gray-700 shadow-2xl p-4"
+          onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400">Formula explained</span>
+            <button onClick={() => setOpen(false)} className="text-gray-500 hover:text-gray-300 transition-colors">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          {tooltip}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── Checks table ─────────────────────────────────────────
@@ -239,13 +292,9 @@ function ChecksTable({ rows, revealStart, revealedCount }: { rows: CheckRow[], r
 
             {/* Formula = Calculation */}
             <div className="px-3 py-[11px] flex flex-col gap-[3px] border-r border-gray-100 dark:border-gray-800 min-w-0">
-              <span className={`text-[11px] font-semibold text-gray-700 dark:text-gray-200 leading-snug ${row.tooltip ? 'relative group/tip cursor-help' : ''}`}>
+              <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-200 leading-snug flex items-center gap-1.5">
                 {row.formula}
-                {row.tooltip && (
-                  <span className="pointer-events-none absolute left-0 bottom-full mb-2 z-50 hidden group-hover/tip:block w-72 rounded-lg bg-gray-900 dark:bg-gray-800 border border-gray-700 shadow-xl px-3 py-3 text-gray-300">
-                    {row.tooltip}
-                  </span>
-                )}
+                {row.tooltip && <FormulaInfoButton tooltip={row.tooltip} />}
               </span>
               {row.calc && row.calc !== '…' && (
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 leading-snug">= {row.calc}</span>
