@@ -21,6 +21,7 @@ Endpoints:
 
 import os
 import json
+import concurrent.futures
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -695,41 +696,52 @@ class QCCqpMasterRequest(BaseModel):
     erp_tenant_id: str
     item_ref_ids: list
 
+# tenant_id → {item_ref_id (str) → [ranges]}  — in-process cache, lives for server lifetime
+_cqp_cache: dict[str, dict] = {}
+
 @app.post("/api/qc-cqp-master")
 def qc_cqp_master_endpoint(request: QCCqpMasterRequest):
-    """Fetch Commodity Quality Parameter range tables for the given item_ref_ids."""
-    client = _make_client(request.erp_token, request.erp_tenant_id)
+    """Fetch CQP range tables for given item_ref_ids. Parallel detail fetches + server-side cache."""
     target_ids = set(int(i) for i in request.item_ref_ids)
-    result = {}
+    cached = _cqp_cache.get(request.erp_tenant_id, {})
+    result = {k: v for k, v in cached.items() if int(k) in target_ids}
+    remaining = target_ids - {int(k) for k in result}
+    if not remaining:
+        return JSONResponse(result)
+
+    client = _make_client(request.erp_token, request.erp_tenant_id)
     # item_ref_id is NOT in the listing row — must fetch each entry detail to find it
     listing = client.list_entries("Commodity Quality Parameter", page_size=500)
     rows = (listing or {}).get("screenmatlistingdata_set") or []
-    for row in rows:
-        if not target_ids:
-            break
-        entry_id = row.get("id")
-        if not entry_id:
-            continue
-        detail = client.get_entry("Commodity Quality Parameter", entry_id) or {}
-        item_id = detail.get("item_ref_id")
-        try:
-            item_id = int(item_id)
-        except (TypeError, ValueError):
-            continue
-        if item_id not in target_ids:
-            continue
-        ranges = []
-        for child in (detail.get("children") or []):
-            for d in (child.get("details") or []):
-                mult = d.get("multiplier")
-                ranges.append({
-                    "quality_type": d.get("quality_type"),
-                    "min": d.get("min_quality_value"),
-                    "max": d.get("max_quality_value"),
-                    "multiplier": float(mult) if mult is not None else 0.0,
-                })
-        result[str(item_id)] = ranges
-        target_ids.discard(item_id)
+    entry_ids = [row.get("id") for row in rows if row.get("id")]
+
+    def fetch_detail(entry_id):
+        return client.get_entry("Commodity Quality Parameter", entry_id) or {}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
+        futures = {ex.submit(fetch_detail, eid): eid for eid in entry_ids}
+        for future in concurrent.futures.as_completed(futures):
+            detail = future.result()
+            item_id = detail.get("item_ref_id")
+            try:
+                item_id = int(item_id)
+            except (TypeError, ValueError):
+                continue
+            ranges = []
+            for child in (detail.get("children") or []):
+                for d in (child.get("details") or []):
+                    mult = d.get("multiplier")
+                    ranges.append({
+                        "quality_type": d.get("quality_type"),
+                        "min": d.get("min_quality_value"),
+                        "max": d.get("max_quality_value"),
+                        "multiplier": float(mult) if mult is not None else 0.0,
+                    })
+            # store in cache regardless of whether we needed it
+            _cqp_cache.setdefault(request.erp_tenant_id, {})[str(item_id)] = ranges
+            if item_id in remaining:
+                result[str(item_id)] = ranges
+                remaining.discard(item_id)
     return JSONResponse(result)
 
 
